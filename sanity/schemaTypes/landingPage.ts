@@ -11,6 +11,13 @@ export const landingPage = defineType({
       type: 'string',
     }),
     defineField({
+      name: 'backgroundImage',
+      title: 'Background Image',
+      type: 'image',
+      options: {hotspot: true},
+    }),
+
+    defineField({
       name: 'subtitle',
       title: 'Subtitle',
       type: 'text',

@@ -1,57 +1,161 @@
-import {client} from '../sanity/lib/sanity'
+import {client} from '../sanity/lib/client'
+
+// If you already have sanity/lib/image.ts (urlFor), you can use it.
+// Otherwise this page will still work without a background image.
+import {urlFor} from '../sanity/lib/image'
 
 const query = `
   *[_type == "landingPage"][0]{
     title,
     subtitle,
     ctaText,
-    ctaHref
+    ctaHref,
+    backgroundImage
   }
 `
 
 export default async function Home() {
   const data = await client.fetch(query)
 
-  if (!data) {
-    return (
-      <main style={{padding: 48}}>
-        <p>No landing page content found.</p>
-      </main>
-    )
-  }
+  const bgUrl =
+    data?.backgroundImage
+      ? urlFor(data.backgroundImage).width(2400).height(1400).quality(80).url()
+      : null
 
   return (
     <main
       style={{
-        maxWidth: 720,
-        margin: '0 auto',
-        padding: '120px 24px',
-        textAlign: 'center',
+        minHeight: '100svh',
+        position: 'relative',
+        overflow: 'hidden',
+        backgroundColor: '#050506',
+        color: 'rgba(255,255,255,0.92)',
       }}
     >
-      <h1 style={{fontSize: 48, lineHeight: 1.1, marginBottom: 24}}>
-        {data.title}
-      </h1>
+      {/* Background */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage: bgUrl
+            ? `url(${bgUrl})`
+            : `radial-gradient(1200px 800px at 20% 20%, rgba(255,255,255,0.10), transparent 60%),
+               radial-gradient(900px 700px at 80% 40%, rgba(255,255,255,0.06), transparent 55%),
+               linear-gradient(180deg, #050506 0%, #0b0b10 70%, #050506 100%)`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          filter: bgUrl ? 'saturate(0.9) contrast(1.05)' : undefined,
+          transform: 'scale(1.03)',
+        }}
+      />
 
-      <p style={{fontSize: 20, opacity: 0.85, marginBottom: 40}}>
-        {data.subtitle}
-      </p>
+      {/* Dark overlay for readability */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background:
+            'linear-gradient(180deg, rgba(0,0,0,0.70) 0%, rgba(0,0,0,0.55) 40%, rgba(0,0,0,0.78) 100%)',
+        }}
+      />
 
-      {data.ctaText && data.ctaHref && (
-        <a
-          href={data.ctaHref}
+      {/* Content */}
+      <div
+        style={{
+          position: 'relative',
+          minHeight: '100svh',
+          display: 'grid',
+          placeItems: 'center',
+          padding: '96px 24px',
+        }}
+      >
+        <section
           style={{
-            display: 'inline-block',
-            padding: '14px 22px',
-            borderRadius: 999,
-            border: '1px solid currentColor',
-            textDecoration: 'none',
-            fontSize: 16,
+            width: '100%',
+            maxWidth: 840,
+            textAlign: 'center',
           }}
         >
-          {data.ctaText}
-        </a>
-      )}
+          <p
+            style={{
+              letterSpacing: '0.22em',
+              textTransform: 'uppercase',
+              fontSize: 12,
+              opacity: 0.75,
+              marginBottom: 18,
+            }}
+          >
+            Member-owned media space
+          </p>
+
+          <h1
+            style={{
+              fontSize: 'clamp(40px, 6vw, 72px)',
+              lineHeight: 1.02,
+              margin: 0,
+              marginBottom: 18,
+              textWrap: 'balance',
+            }}
+          >
+            {data?.title ?? 'Coming soon'}
+          </h1>
+
+          <p
+            style={{
+              fontSize: 'clamp(16px, 2.2vw, 22px)',
+              lineHeight: 1.5,
+              opacity: 0.85,
+              margin: '0 auto 34px',
+              maxWidth: 720,
+              textWrap: 'pretty',
+            }}
+          >
+            {data?.subtitle ?? 'A new home for audio and video—built for members, not platforms.'}
+          </p>
+
+          {data?.ctaText && data?.ctaHref && (
+            <div style={{display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap'}}>
+              <a
+                href={data.ctaHref}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '14px 20px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(255,255,255,0.28)',
+                  background: 'rgba(255,255,255,0.06)',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
+                  textDecoration: 'none',
+                  color: 'rgba(255,255,255,0.92)',
+                  fontSize: 16,
+                }}
+              >
+                {data.ctaText}
+              </a>
+            </div>
+          )}
+
+          <div
+            style={{
+              marginTop: 44,
+              display: 'flex',
+              justifyContent: 'center',
+              gap: 14,
+              flexWrap: 'wrap',
+              opacity: 0.75,
+              fontSize: 13,
+            }}
+          >
+            <span>Secure identity</span>
+            <span>•</span>
+            <span>Explicit entitlements</span>
+            <span>•</span>
+            <span>Token-gated playback</span>
+          </div>
+        </section>
+      </div>
     </main>
   )
 }
