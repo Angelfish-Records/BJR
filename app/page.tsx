@@ -77,18 +77,6 @@ export default async function Home() {
             textAlign: 'center',
           }}
         >
-          <p
-            style={{
-              letterSpacing: '0.22em',
-              textTransform: 'uppercase',
-              fontSize: 12,
-              opacity: 0.75,
-              marginBottom: 18,
-            }}
-          >
-            Member-owned media space
-          </p>
-
           <h1
             style={{
               fontSize: 'clamp(40px, 6vw, 72px)',
