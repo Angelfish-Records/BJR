@@ -6,7 +6,7 @@ import {urlFor} from '../sanity/lib/image'
 import EarlyAccessForm from './EarlyAccessForm'
 
 const query = `
-  *[_type == "landingPage"][0]{
+  *[_id == "landingPage"][0]{
     title,
     subtitle,
     ctaText,
