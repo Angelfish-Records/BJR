@@ -9,6 +9,7 @@ export const landingPage = defineType({
       name: 'title',
       title: 'Title',
       type: 'string',
+      validation: (Rule) => Rule.required(),
     }),
     defineField({
       name: 'backgroundImage',
@@ -16,7 +17,6 @@ export const landingPage = defineType({
       type: 'image',
       options: {hotspot: true},
     }),
-
     defineField({
       name: 'subtitle',
       title: 'Subtitle',
