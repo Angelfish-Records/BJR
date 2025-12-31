@@ -3,6 +3,7 @@ import {client} from '../sanity/lib/client'
 // If you already have sanity/lib/image.ts (urlFor), you can use it.
 // Otherwise this page will still work without a background image.
 import {urlFor} from '../sanity/lib/image'
+import EarlyAccessForm from './EarlyAccessForm'
 
 const query = `
   *[_type == "landingPage"][0]{
@@ -112,6 +113,8 @@ export default async function Home() {
           >
             {data?.subtitle ?? 'A new home for audio and video—built for members, not platforms.'}
           </p>
+
+            <EarlyAccessForm />
 
           {data?.ctaText && data?.ctaHref && (
             <div style={{display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap'}}>
