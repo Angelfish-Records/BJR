@@ -114,31 +114,30 @@ export default async function Home() {
             {data?.subtitle ?? 'A new home for audio and video—built for members, not platforms.'}
           </p>
 
-            <EarlyAccessForm />
+          <div style={{display: 'grid', justifyItems: 'center', gap: 14}}>
+  <EarlyAccessForm />
 
-          {data?.ctaText && data?.ctaHref && (
-            <div style={{display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap'}}>
-              <a
-                href={data.ctaHref}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '14px 20px',
-                  borderRadius: 999,
-                  border: '1px solid rgba(255,255,255,0.28)',
-                  background: 'rgba(255,255,255,0.06)',
-                  backdropFilter: 'blur(8px)',
-                  WebkitBackdropFilter: 'blur(8px)',
-                  textDecoration: 'none',
-                  color: 'rgba(255,255,255,0.92)',
-                  fontSize: 16,
-                }}
-              >
-                {data.ctaText}
-              </a>
-            </div>
-          )}
+  {data?.ctaText && data?.ctaHref && (
+    <a
+      href={data.ctaHref}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '10px 14px',
+        borderRadius: 999,
+        border: '1px solid rgba(255,255,255,0.22)',
+        background: 'transparent',
+        textDecoration: 'none',
+        color: 'rgba(255,255,255,0.82)',
+        fontSize: 14,
+      }}
+    >
+      {data.ctaText}
+    </a>
+  )}
+</div>
+
 
           <div
             style={{
