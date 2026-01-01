@@ -1,26 +1,13 @@
 import 'server-only'
+import crypto from 'crypto'
 import {sql} from '@vercel/postgres'
-
-export type EventType =
-  | 'member_created'
-  | 'marketing_opt_in'
-  | 'marketing_opt_out'
-  | 'entitlement_granted'
-  | 'entitlement_revoked'
-  | 'access_allowed'
-  | 'access_denied'
-  | 'debug'
-
-export type EventSource =
-  | 'landing_form'
-  | 'server'
-  | 'admin'
-  | 'stripe' // future
-  | 'clerk'  // future
-  | 'mux'    // future
-  | 'unknown'
+import {EVENT_SOURCES, EVENT_TYPES, type AccessAction, type EventSource, type EventType} from './vocab'
 
 export type EventPayload = Record<string, unknown>
+
+export function newCorrelationId(): string {
+  return crypto.randomUUID()
+}
 
 export async function logMemberEvent(params: {
   memberId?: string | null
@@ -28,29 +15,115 @@ export async function logMemberEvent(params: {
   source?: EventSource | string
   payload?: EventPayload
   occurredAt?: Date
+  correlationId?: string | null
 }): Promise<void> {
   const {
     memberId = null,
     eventType,
-    source = 'unknown',
+    source = EVENT_SOURCES.UNKNOWN,
     payload = {},
     occurredAt,
+    correlationId = null,
   } = params
 
-  // Fail-closed and never break the main flow because logging failed.
-  // (You’ll still see errors in server logs.)
   try {
     await sql`
-      insert into member_events (member_id, event_type, occurred_at, source, payload)
+      insert into member_events (member_id, event_type, occurred_at, source, payload, correlation_id)
       values (
         ${memberId ? (memberId as string) : null}::uuid,
         ${eventType},
         ${occurredAt ? occurredAt.toISOString() : null}::timestamptz,
         ${source},
-        ${JSON.stringify(payload)}::jsonb
+        ${JSON.stringify(payload)}::jsonb,
+        ${correlationId}::uuid
       )
     `
   } catch (err) {
     console.error('member_events insert failed', {eventType, source, memberId, err})
   }
+}
+
+/* ---- semantic wrappers (keep your event stream consistent) ---- */
+
+export async function logMemberCreated(params: {
+  memberId: string
+  source?: EventSource | string
+  correlationId?: string | null
+  payload?: EventPayload
+}) {
+  return logMemberEvent({
+    memberId: params.memberId,
+    eventType: EVENT_TYPES.MEMBER_CREATED,
+    source: params.source ?? EVENT_SOURCES.SERVER,
+    correlationId: params.correlationId ?? null,
+    payload: params.payload ?? {},
+  })
+}
+
+export async function logEntitlementGranted(params: {
+  memberId: string
+  entitlementKey: string
+  scopeId?: string | null
+  source?: EventSource | string
+  correlationId?: string | null
+  payload?: EventPayload
+}) {
+  return logMemberEvent({
+    memberId: params.memberId,
+    eventType: EVENT_TYPES.ENTITLEMENT_GRANTED,
+    source: params.source ?? EVENT_SOURCES.SERVER,
+    correlationId: params.correlationId ?? null,
+    payload: {
+      entitlement_key: params.entitlementKey,
+      scope_id: params.scopeId ?? null,
+      ...(params.payload ?? {}),
+    },
+  })
+}
+
+export async function logEntitlementRevoked(params: {
+  memberId: string
+  entitlementKey: string
+  scopeId?: string | null
+  source?: EventSource | string
+  correlationId?: string | null
+  payload?: EventPayload
+}) {
+  return logMemberEvent({
+    memberId: params.memberId,
+    eventType: EVENT_TYPES.ENTITLEMENT_REVOKED,
+    source: params.source ?? EVENT_SOURCES.SERVER,
+    correlationId: params.correlationId ?? null,
+    payload: {
+      entitlement_key: params.entitlementKey,
+      scope_id: params.scopeId ?? null,
+      ...(params.payload ?? {}),
+    },
+  })
+}
+
+export async function logAccessDecision(params: {
+  memberId: string
+  allowed: boolean
+  action: AccessAction | string
+  resource: {kind: string; id?: string | null}
+  requiredEntitlements: string[]
+  matchedEntitlement?: {key: string; scope_id: string | null} | null
+  reason?: string | null
+  source?: EventSource | string
+  correlationId?: string | null
+}) {
+  return logMemberEvent({
+    memberId: params.memberId,
+    eventType: params.allowed ? EVENT_TYPES.ACCESS_ALLOWED : EVENT_TYPES.ACCESS_DENIED,
+    source: params.source ?? EVENT_SOURCES.SERVER,
+    correlationId: params.correlationId ?? null,
+    payload: {
+      action: params.action,
+      resource: params.resource,
+      required_entitlements: params.requiredEntitlements,
+      matched_entitlement: params.matchedEntitlement ?? null,
+      reason: params.reason ?? null,
+    },
+  })
 }
