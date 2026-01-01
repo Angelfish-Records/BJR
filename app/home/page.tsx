@@ -1,128 +1,63 @@
-import React from 'react'
+import type {Metadata} from 'next'
 
 import {client} from '../../sanity/lib/client'
 import {urlFor} from '../../sanity/lib/image'
 import EarlyAccessForm from '../EarlyAccessForm'
 
-import {ensureMemberByEmail, normalizeEmail} from '../../lib/members'
-import {hasAnyEntitlement, listCurrentEntitlementKeys} from '../../lib/entitlements'
-import {ENT, deriveTier, pickAccent} from '../../lib/vocab'
-
-type ShadowHomeDoc = {
-  title?: string
-  subtitle?: string
-  backgroundImage?: unknown
-  primaryCtaText?: string
-  primaryCtaHref?: string
-  secondaryCtaText?: string
-  secondaryCtaHref?: string
-  sections?: Array<{heading?: string; body?: string; gatedHint?: string}>
-}
-
-type SiteFlagsDoc = {
-  shadowHomeEnabled?: boolean
-  shadowHomeRoute?: string
-}
-
-const siteFlagsQuery = `
-  *[_id == "siteFlags"][0]{
-    shadowHomeEnabled,
-    shadowHomeRoute
-  }
-`
-
-const shadowHomeQuery = `
-  *[_type == "shadowHomePage" && slug.current == $slug][0]{
+const landingQuery = `
+  *[_id == "landingPage"][0]{
     title,
     subtitle,
-    backgroundImage,
-    primaryCtaText,
-    primaryCtaHref,
-    secondaryCtaText,
-    secondaryCtaHref,
-    sections[]{
-      heading,
-      body,
-      gatedHint
-    }
+    ctaText,
+    ctaHref,
+    backgroundImage
   }
 `
 
-export default async function ShadowHome({
-  searchParams,
-}: {
-  searchParams?: Record<string, string | string[] | undefined>
-}) {
-  const isProd = process.env.NODE_ENV === 'production'
+const dupesQuery = `
+  count(*[_type == "landingPage" && _id != "landingPage"])
+`
 
-  const emailParam = searchParams?.email
-  const emailRaw = Array.isArray(emailParam) ? emailParam[0] : emailParam
-  const email =
-    !isProd && emailRaw && emailRaw.includes('@') ? normalizeEmail(emailRaw) : null
+export async function generateMetadata(): Promise<Metadata> {
+  const data = await client.fetch(
+    `*[_id == "landingPage"][0]{ title, subtitle }`,
+    {},
+    {next: {tags: ['landingPage']}}
+  )
 
-  const [flags, page] = await Promise.all([
-    client.fetch<SiteFlagsDoc>(siteFlagsQuery, {}, {next: {tags: ['siteFlags']}}),
-    client.fetch<ShadowHomeDoc>(
-      shadowHomeQuery,
-      {slug: 'home'},
-      {next: {tags: ['shadowHome']}}
-    ),
+  return {
+    title: data?.title ?? 'Angelfish',
+    description: data?.subtitle ?? 'A member-owned, platform-agnostic media system.',
+  }
+}
+
+export default async function Home() {
+  const [data, dupesCount] = await Promise.all([
+    client.fetch(landingQuery, {}, {next: {tags: ['landingPage']}}),
+    client.fetch(dupesQuery),
   ])
 
-  const enabled = flags?.shadowHomeEnabled !== false
-
-  let member:
-    | null
-    | {
-        id: string
-        created: boolean
-        email: string
-      } = null
-
-  let entitlementKeys: string[] = []
-  let tier: string = 'none'
-  let accent = '#8b8bff'
-  let accentLabel = 'default'
-
-  if (email) {
-    const ensured = await ensureMemberByEmail({
-      email,
-      source: 'shadow_home_soft_identity',
-      sourceDetail: {route: '/home'},
-    })
-
-    member = {id: ensured.id, created: ensured.created, email}
-
-    entitlementKeys = await listCurrentEntitlementKeys(ensured.id)
-
-    tier = deriveTier(entitlementKeys)
-    const picked = pickAccent(entitlementKeys)
-    accent = picked.accent
-    accentLabel = picked.label
+  if (dupesCount > 0) {
+    console.error(
+      `Sanity warning: ${dupesCount} rogue landingPage documents exist. Homepage is using the singleton.`
+    )
   }
 
-  // With side-effect grants in entitlementOps:
-  // FREE_MEMBER ⇒ ENT.pageView('home') (and optionally theme default),
-  // so /home can gate solely on the granular entitlement.
-  const canSeeMemberBox =
-    member && (await hasAnyEntitlement(member.id, [ENT.pageView('home')]))
-
   const bgUrl =
-    page?.backgroundImage
-      ? urlFor(page.backgroundImage).width(2400).height(1400).quality(80).url()
+    data?.backgroundImage
+      ? urlFor(data.backgroundImage).width(2400).height(1400).quality(80).url()
       : null
 
-  const mainStyle = {
-    minHeight: '100svh',
-    position: 'relative',
-    overflow: 'hidden',
-    backgroundColor: '#050506',
-    color: 'rgba(255,255,255,0.92)',
-    ['--accent']: accent,
-  } as React.CSSProperties
-
   return (
-    <main style={mainStyle}>
+    <main
+      style={{
+        minHeight: '100svh',
+        position: 'relative',
+        overflow: 'hidden',
+        backgroundColor: '#050506',
+        color: 'rgba(255,255,255,0.92)',
+      }}
+    >
       {/* Background */}
       <div
         style={{
@@ -130,7 +65,7 @@ export default async function ShadowHome({
           inset: 0,
           backgroundImage: bgUrl
             ? `url(${bgUrl})`
-            : `radial-gradient(1200px 800px at 20% 20%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 60%),
+            : `radial-gradient(1200px 800px at 20% 20%, rgba(255,255,255,0.10), transparent 60%),
                radial-gradient(900px 700px at 80% 40%, rgba(255,255,255,0.06), transparent 55%),
                linear-gradient(180deg, #050506 0%, #0b0b10 70%, #050506 100%)`,
           backgroundSize: 'cover',
@@ -140,7 +75,7 @@ export default async function ShadowHome({
         }}
       />
 
-      {/* Dark overlay */}
+      {/* Dark overlay for readability */}
       <div
         style={{
           position: 'absolute',
@@ -149,23 +84,6 @@ export default async function ShadowHome({
             'linear-gradient(180deg, rgba(0,0,0,0.70) 0%, rgba(0,0,0,0.55) 40%, rgba(0,0,0,0.78) 100%)',
         }}
       />
-
-      {/* Flag ribbon */}
-      {!enabled && (
-        <div
-          style={{
-            position: 'relative',
-            zIndex: 2,
-            padding: '10px 14px',
-            background: 'rgba(255,255,255,0.06)',
-            borderBottom: '1px solid rgba(255,255,255,0.10)',
-            fontSize: 13,
-            color: 'rgba(255,255,255,0.80)',
-          }}
-        >
-          Shadow homepage is currently disabled via Site Flags.
-        </div>
-      )}
 
       {/* Content */}
       <div
@@ -177,185 +95,73 @@ export default async function ShadowHome({
           padding: '96px 24px',
         }}
       >
-        <section style={{width: '100%', maxWidth: 980, textAlign: 'center'}}>
-          <div style={{display: 'grid', gap: 18}}>
-            <h1
-              style={{
-                fontSize: 'clamp(38px, 5.6vw, 70px)',
-                lineHeight: 1.02,
-                margin: 0,
-                textWrap: 'balance',
-              }}
-            >
-              {page?.title ?? 'Shadow home'}
-            </h1>
+        <section
+          style={{
+            width: '100%',
+            maxWidth: 840,
+            textAlign: 'center',
+          }}
+        >
+          <h1
+            style={{
+              fontSize: 'clamp(40px, 6vw, 72px)',
+              lineHeight: 1.02,
+              margin: 0,
+              marginBottom: 18,
+              textWrap: 'balance',
+            }}
+          >
+            {data?.title ?? 'Coming soon'}
+          </h1>
 
-            <p
-              style={{
-                fontSize: 'clamp(16px, 2.1vw, 22px)',
-                lineHeight: 1.5,
-                opacity: 0.85,
-                margin: '0 auto',
-                maxWidth: 760,
-                textWrap: 'pretty',
-              }}
-            >
-              {page?.subtitle ??
-                'This is the shadow homepage: content evolves fast, identity stays boring, access stays canonical.'}
-            </p>
+          <p
+            style={{
+              fontSize: 'clamp(16px, 2.2vw, 22px)',
+              lineHeight: 1.5,
+              opacity: 0.85,
+              margin: '0 auto 34px',
+              maxWidth: 720,
+              textWrap: 'pretty',
+            }}
+          >
+            {data?.subtitle ?? 'A new home for audio and video—built for members, not platforms.'}
+          </p>
 
-            {/* CTAs */}
-            <div style={{display: 'grid', justifyItems: 'center', gap: 12}}>
-              <EarlyAccessForm />
+          <div style={{display: 'grid', justifyItems: 'center', gap: 14}}>
+            <EarlyAccessForm />
 
-              <div style={{display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center'}}>
-                {page?.primaryCtaText && page?.primaryCtaHref && (
-                  <a
-                    href={page.primaryCtaHref}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '11px 16px',
-                      borderRadius: 999,
-                      border: '1px solid color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.22))',
-                      background: 'color-mix(in srgb, var(--accent) 22%, transparent)',
-                      textDecoration: 'none',
-                      color: 'rgba(255,255,255,0.90)',
-                      fontSize: 14,
-                    }}
-                  >
-                    {page.primaryCtaText}
-                  </a>
-                )}
-
-                {page?.secondaryCtaText && page?.secondaryCtaHref && (
-                  <a
-                    href={page.secondaryCtaHref}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '11px 16px',
-                      borderRadius: 999,
-                      border: '1px solid rgba(255,255,255,0.22)',
-                      background: 'transparent',
-                      textDecoration: 'none',
-                      color: 'rgba(255,255,255,0.82)',
-                      fontSize: 14,
-                    }}
-                  >
-                    {page.secondaryCtaText}
-                  </a>
-                )}
-              </div>
-            </div>
-
-            {/* Member box */}
-            {member && canSeeMemberBox && (
-              <div style={{marginTop: 18, display: 'grid', justifyItems: 'center'}}>
-                <div
-                  style={{
-                    width: 'min(880px, 100%)',
-                    borderRadius: 18,
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    background: 'rgba(255,255,255,0.06)',
-                    padding: '14px 16px',
-                    textAlign: 'left',
-                  }}
-                >
-                  <div style={{display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap'}}>
-                    <div style={{display: 'grid', gap: 2}}>
-                      <div style={{fontSize: 13, opacity: 0.72}}>Member</div>
-                      <div style={{fontSize: 14, opacity: 0.92}}>{member.email}</div>
-                    </div>
-
-                    <div style={{display: 'grid', gap: 2, textAlign: 'right'}}>
-                      <div style={{fontSize: 13, opacity: 0.72}}>Tier (derived)</div>
-                      <div style={{fontSize: 14, opacity: 0.92}}>
-                        <span
-                          style={{
-                            padding: '4px 10px',
-                            borderRadius: 999,
-                            border: '1px solid rgba(255,255,255,0.14)',
-                            background: 'color-mix(in srgb, var(--accent) 14%, transparent)',
-                          }}
-                        >
-                          {tier}
-                        </span>
-                        <span style={{marginLeft: 10, fontSize: 12, opacity: 0.65}}>
-                          accent: {accentLabel}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{marginTop: 10, fontSize: 12, opacity: 0.70, lineHeight: 1.45}}>
-                    Display-only: derived from canonical entitlements. No engagement metrics. Just legible state.
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Sections */}
-            {page?.sections?.length ? (
-              <div
+            {data?.ctaText && data?.ctaHref && (
+              <a
+                href={data.ctaHref}
                 style={{
-                  marginTop: 36,
-                  display: 'grid',
-                  gap: 14,
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-                  textAlign: 'left',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '10px 14px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(255,255,255,0.22)',
+                  background: 'transparent',
+                  textDecoration: 'none',
+                  color: 'rgba(255,255,255,0.82)',
+                  fontSize: 14,
                 }}
               >
-                {page.sections.map((s, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      borderRadius: 18,
-                      border: '1px solid rgba(255,255,255,0.10)',
-                      background: 'rgba(255,255,255,0.04)',
-                      padding: 16,
-                    }}
-                  >
-                    {s?.heading && (
-                      <div style={{fontSize: 15, opacity: 0.92, marginBottom: 6}}>{s.heading}</div>
-                    )}
-                    {s?.body && (
-                      <div style={{fontSize: 13, opacity: 0.78, lineHeight: 1.55, whiteSpace: 'pre-wrap'}}>
-                        {s.body}
-                      </div>
-                    )}
-                    {s?.gatedHint && (
-                      <div style={{marginTop: 10, fontSize: 12, opacity: 0.60}}>Hint: {s.gatedHint}</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
-            {/* Footer */}
-            <div
-              style={{
-                marginTop: 34,
-                display: 'flex',
-                justifyContent: 'center',
-                gap: 10,
-                flexWrap: 'wrap',
-                opacity: 0.70,
-                fontSize: 13,
-              }}
-            >
-              <span>
-                Route: <code style={{opacity: 0.9}}>{flags?.shadowHomeRoute ?? '/home'}</code>
-              </span>
-              <span>·</span>
-              <span>
-                Soft identity test:{' '}
-                <code style={{opacity: 0.9}}>?email=you@example.com</code>
-              </span>
-            </div>
+                {data.ctaText}
+              </a>
+            )}
           </div>
+
+          <div
+            style={{
+              marginTop: 44,
+              display: 'flex',
+              justifyContent: 'center',
+              gap: 14,
+              flexWrap: 'wrap',
+              opacity: 0.75,
+              fontSize: 13,
+            }}
+          />
         </section>
       </div>
     </main>
