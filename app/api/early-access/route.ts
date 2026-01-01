@@ -7,19 +7,73 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null)
 
   const email = (body?.email ?? '').toString().trim().toLowerCase()
-  const honey = (body?.company ?? '').toString().trim() // honeypot for bots
+  const honey = (body?.company ?? '').toString().trim()
 
   if (honey) return NextResponse.json({ok: true})
   if (!emailOk(email)) return NextResponse.json({ok: false}, {status: 400})
 
+  const result = await sql`
+    insert into members (
+      email,
+      source,
+      consent_first_at,
+      consent_latest_at,
+      consent_latest_version
+    )
+    values (
+      ${email},
+      'landing_form',
+      now(),
+      now(),
+      'terms_v1'
+    )
+    on conflict (email) do update
+      set consent_latest_at = now(),
+          consent_latest_version = 'terms_v1'
+    returning id
+  `
+
+  const memberId = result.rows[0].id
+
   await sql`
-    insert into members (id, email, tier, source, email_consent_at, updated_at)
-    values (gen_random_uuid(), ${email}, 'free', 'landing_form', now(), now())
-    on conflict (email)
-    do update set updated_at = now()
+    insert into member_consents (
+      member_id,
+      consent_type,
+      consent_value,
+      consent_version,
+      source
+    )
+    values (
+      ${memberId},
+      'terms',
+      'accepted',
+      'terms_v1',
+      'landing_form'
+    )
+  `
+
+  await sql`
+    insert into entitlement_grants (
+      member_id,
+      entitlement_key,
+      granted_by,
+      grant_reason,
+      grant_source
+    )
+    select
+      ${memberId},
+      'free_member',
+      'system',
+      'initial signup',
+      'landing_form'
+    where not exists (
+      select 1
+      from entitlement_grants
+      where member_id = ${memberId}
+        and entitlement_key = 'free_member'
+        and revoked_at is null
+    )
   `
 
   return NextResponse.json({ok: true})
 }
-
-export {}
