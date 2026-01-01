@@ -18,18 +18,21 @@ export async function POST(req: Request) {
       source,
       consent_first_at,
       consent_latest_at,
-      consent_latest_version
+      consent_latest_version,
+      marketing_opt_in
     )
     values (
       ${email},
       'landing_form',
       now(),
       now(),
-      'terms_v1'
+      null,
+      true
     )
     on conflict (email) do update
       set consent_latest_at = now(),
-          consent_latest_version = 'terms_v1'
+          marketing_opt_in = true,
+          consent_latest_version = null
     returning id
   `
 
@@ -45,9 +48,9 @@ export async function POST(req: Request) {
     )
     values (
       ${memberId},
-      'terms',
-      'accepted',
-      'terms_v1',
+      'marketing',
+      'opt_in',
+      'landing_list_v1',
       'landing_form'
     )
   `
