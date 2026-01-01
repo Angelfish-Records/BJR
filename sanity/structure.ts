@@ -9,7 +9,19 @@ export const structure: StructureResolver = (S) =>
         .id('landingPageSingleton')
         .child(S.document().schemaType('landingPage').documentId('landingPage')),
 
-      ...S.documentTypeListItems().filter(
-        (listItem) => listItem.getId() !== 'landingPage'
-      ),
+      S.listItem()
+        .title('Site Flags')
+        .id('siteFlagsSingleton')
+        .child(S.document().schemaType('siteFlags').documentId('siteFlags')),
+
+      S.divider(),
+
+      S.listItem()
+        .title('Shadow Home Pages')
+        .child(S.documentTypeList('shadowHomePage').title('Shadow Home Pages')),
+
+      ...S.documentTypeListItems().filter((listItem) => {
+        const id = listItem.getId()
+        return id !== 'landingPage' && id !== 'siteFlags' && id !== 'shadowHomePage'
+      }),
     ])

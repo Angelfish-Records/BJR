@@ -139,3 +139,8 @@ export async function listCurrentEntitlements(memberId: string): Promise<Entitle
     expiresAt: (r.expires_at as string | null) ?? null,
   }))
 }
+
+export async function listCurrentEntitlementKeys(memberId: string): Promise<EntitlementKey[]> {
+  const matches = await listCurrentEntitlements(memberId)
+  return matches.map((m) => m.entitlementKey)
+}

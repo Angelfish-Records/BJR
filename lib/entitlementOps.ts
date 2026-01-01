@@ -1,12 +1,12 @@
 import 'server-only'
 import {sql} from '@vercel/postgres'
-import {EVENT_SOURCES, type EventSource} from './vocab'
+import {ENT, ENTITLEMENTS, EVENT_SOURCES, type EventSource} from './vocab'
 import {logEntitlementGranted, logEntitlementRevoked} from './events'
 
 const uuidOk = (v: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v)
 
-export async function grantEntitlement(params: {
+type GrantParams = {
   memberId: string
   entitlementKey: string
   scopeId?: string | null
@@ -18,7 +18,56 @@ export async function grantEntitlement(params: {
   expiresAt?: Date | null
   correlationId?: string | null
   eventSource?: EventSource | string
-}): Promise<void> {
+}
+
+// Side-effect grants: add-only policy.
+// Keep this extremely small and legible.
+async function applySideEffectGrants(params: {
+  memberId: string
+  entitlementKey: string
+  correlationId: string | null
+  eventSource: EventSource | string
+  grantedBy: string
+  grantSource: string
+  grantSourceRef: string | null
+}) {
+  const {memberId, entitlementKey, correlationId, eventSource, grantedBy, grantSource, grantSourceRef} =
+    params
+
+  // FREE_MEMBER implies basic ability to view /home (display-only sandbox today).
+  if (entitlementKey === ENTITLEMENTS.FREE_MEMBER) {
+    await grantEntitlement({
+      memberId,
+      entitlementKey: ENT.pageView('home'),
+      scopeId: null,
+      scopeMeta: {implied_by: ENTITLEMENTS.FREE_MEMBER},
+      grantedBy,
+      grantReason: 'implied: free member can view home',
+      grantSource,
+      grantSourceRef,
+      expiresAt: null,
+      correlationId,
+      eventSource,
+    })
+
+    // Optional: deterministic default theme. Comment out if you want “no theme unless earned”.
+    await grantEntitlement({
+      memberId,
+      entitlementKey: ENT.theme('default'),
+      scopeId: null,
+      scopeMeta: {implied_by: ENTITLEMENTS.FREE_MEMBER},
+      grantedBy,
+      grantReason: 'implied: assign default theme',
+      grantSource,
+      grantSourceRef,
+      expiresAt: null,
+      correlationId,
+      eventSource,
+    })
+  }
+}
+
+export async function grantEntitlement(params: GrantParams): Promise<void> {
   if (!uuidOk(params.memberId)) throw new Error('Invalid memberId')
 
   const {
@@ -82,6 +131,17 @@ export async function grantEntitlement(params: {
       grant_source_ref: grantSourceRef,
       expires_at: expiresAt ? expiresAt.toISOString() : null,
     },
+  })
+
+  // Apply implied “side-effect” grants (policy lives here, not in callers).
+  await applySideEffectGrants({
+    memberId,
+    entitlementKey,
+    correlationId,
+    eventSource,
+    grantedBy,
+    grantSource,
+    grantSourceRef,
   })
 }
 

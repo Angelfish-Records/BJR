@@ -8,6 +8,8 @@ type SanityWebhookPayload = {
   }
 }
 
+const CACHE_PROFILE = 'default' as const
+
 function getAuthSecret(req: Request): string {
   const auth = req.headers.get('authorization') || ''
   const m = auth.match(/^Bearer\s+(.+)$/i)
@@ -37,10 +39,22 @@ export async function POST(req: Request) {
 
   const docType = body?._type ?? body?.type ?? body?.document?._type ?? null
 
+  // Back-compat: missing docType => treat as landing change.
   if (!docType || docType === 'landingPage') {
-    revalidateTag('landingPage', 'default')
+    revalidateTag('landingPage', CACHE_PROFILE)
     revalidatePath('/')
+    return Response.json({ok: true, revalidated: ['landingPage'], path: '/'})
   }
 
-  return Response.json({ok: true})
+  const tags: string[] = []
+  if (docType === 'siteFlags') tags.push('siteFlags')
+  if (docType === 'shadowHomePage') tags.push('shadowHome')
+
+  if (tags.length === 0) {
+    return Response.json({ok: true, revalidated: [], ignoredType: docType})
+  }
+
+  for (const t of tags) revalidateTag(t, CACHE_PROFILE)
+
+  return Response.json({ok: true, revalidated: tags})
 }
