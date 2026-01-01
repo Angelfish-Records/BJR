@@ -1,3 +1,5 @@
+export const revalidate = 0
+
 import {client} from '../sanity/lib/client'
 
 // If you already have sanity/lib/image.ts (urlFor), you can use it.
@@ -7,6 +9,7 @@ import EarlyAccessForm from './EarlyAccessForm'
 
 const landingQuery = `
   *[_id == "landingPage"][0]{
+    _updatedAt,
     title,
     subtitle,
     ctaText,
@@ -14,6 +17,7 @@ const landingQuery = `
     backgroundImage
   }
 `
+
 
 const dupesQuery = `
   count(*[_type == "landingPage" && _id != "landingPage"])
@@ -157,6 +161,9 @@ if (dupesCount > 0) {
             <span>•</span>
             <span>Token-gated playback</span>
           </div>
+          <div style={{marginTop: 16, opacity: 0.45, fontSize: 12}}>
+  Rendered from Sanity: {data?._updatedAt ?? 'unknown'}
+</div>
         </section>
       </div>
     </main>
