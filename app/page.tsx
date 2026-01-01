@@ -5,7 +5,7 @@ import {client} from '../sanity/lib/client'
 import {urlFor} from '../sanity/lib/image'
 import EarlyAccessForm from './EarlyAccessForm'
 
-const query = `
+const landingQuery = `
   *[_id == "landingPage"][0]{
     title,
     subtitle,
@@ -15,8 +15,21 @@ const query = `
   }
 `
 
+const dupesQuery = `
+  count(*[_type == "landingPage" && _id != "landingPage"])
+`
+
 export default async function Home() {
-  const data = await client.fetch(query)
+  const [data, dupesCount] = await Promise.all([
+  client.fetch(landingQuery),
+  client.fetch(dupesQuery),
+])
+
+if (dupesCount > 0) {
+  console.error(
+    `Sanity warning: ${dupesCount} rogue landingPage documents exist. Homepage is using the singleton.`
+  )
+}
 
   const bgUrl =
     data?.backgroundImage
