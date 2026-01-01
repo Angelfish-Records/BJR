@@ -1,15 +1,9 @@
-export const revalidate = 0
-
 import {client} from '../sanity/lib/client'
-
-// If you already have sanity/lib/image.ts (urlFor), you can use it.
-// Otherwise this page will still work without a background image.
 import {urlFor} from '../sanity/lib/image'
 import EarlyAccessForm from './EarlyAccessForm'
 
 const landingQuery = `
   *[_id == "landingPage"][0]{
-    _updatedAt,
     title,
     subtitle,
     ctaText,
@@ -18,22 +12,21 @@ const landingQuery = `
   }
 `
 
-
 const dupesQuery = `
   count(*[_type == "landingPage" && _id != "landingPage"])
 `
 
 export default async function Home() {
   const [data, dupesCount] = await Promise.all([
-  client.fetch(landingQuery),
-  client.fetch(dupesQuery),
-])
+    client.fetch(landingQuery, {}, {next: {tags: ['landingPage']}}),
+    client.fetch(dupesQuery),
+  ])
 
-if (dupesCount > 0) {
-  console.error(
-    `Sanity warning: ${dupesCount} rogue landingPage documents exist. Homepage is using the singleton.`
-  )
-}
+  if (dupesCount > 0) {
+    console.error(
+      `Sanity warning: ${dupesCount} rogue landingPage documents exist. Homepage is using the singleton.`
+    )
+  }
 
   const bgUrl =
     data?.backgroundImage
@@ -120,29 +113,28 @@ if (dupesCount > 0) {
           </p>
 
           <div style={{display: 'grid', justifyItems: 'center', gap: 14}}>
-  <EarlyAccessForm />
+            <EarlyAccessForm />
 
-  {data?.ctaText && data?.ctaHref && (
-    <a
-      href={data.ctaHref}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '10px 14px',
-        borderRadius: 999,
-        border: '1px solid rgba(255,255,255,0.22)',
-        background: 'transparent',
-        textDecoration: 'none',
-        color: 'rgba(255,255,255,0.82)',
-        fontSize: 14,
-      }}
-    >
-      {data.ctaText}
-    </a>
-  )}
-</div>
-
+            {data?.ctaText && data?.ctaHref && (
+              <a
+                href={data.ctaHref}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '10px 14px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(255,255,255,0.22)',
+                  background: 'transparent',
+                  textDecoration: 'none',
+                  color: 'rgba(255,255,255,0.82)',
+                  fontSize: 14,
+                }}
+              >
+                {data.ctaText}
+              </a>
+            )}
+          </div>
 
           <div
             style={{
@@ -155,15 +147,8 @@ if (dupesCount > 0) {
               fontSize: 13,
             }}
           >
-            <span>Secure identity</span>
-            <span>•</span>
-            <span>Explicit entitlements</span>
-            <span>•</span>
-            <span>Token-gated playback</span>
+
           </div>
-          <div style={{marginTop: 16, opacity: 0.45, fontSize: 12}}>
-  Rendered from Sanity: {data?._updatedAt ?? 'unknown'}
-</div>
         </section>
       </div>
     </main>
