@@ -1,9 +1,11 @@
 import {revalidatePath, revalidateTag} from 'next/cache'
 
 type SanityWebhookPayload = {
+  _id?: string
   _type?: string
   type?: string
   document?: {
+    _id?: string
     _type?: string
   }
 }
@@ -25,6 +27,12 @@ function getAuthSecret(req: Request): string {
   return ''
 }
 
+function getDocMeta(body: SanityWebhookPayload | null): {docType: string | null; docId: string | null} {
+  const docType = body?._type ?? body?.type ?? body?.document?._type ?? null
+  const docId = body?._id ?? body?.document?._id ?? null
+  return {docType, docId}
+}
+
 export async function POST(req: Request) {
   const expected = process.env.SANITY_REVALIDATE_SECRET || ''
   if (!expected) return new Response('Missing SANITY_REVALIDATE_SECRET', {status: 500})
@@ -37,24 +45,47 @@ export async function POST(req: Request) {
     body = (await req.json()) as SanityWebhookPayload
   } catch {}
 
-  const docType = body?._type ?? body?.type ?? body?.document?._type ?? null
+  const {docType, docId} = getDocMeta(body)
+
+  const reTag = (t: string) => revalidateTag(t, CACHE_PROFILE)
 
   // Back-compat: missing docType => treat as landing change.
-  if (!docType || docType === 'landingPage') {
-    revalidateTag('landingPage', CACHE_PROFILE)
+  if (!docType) {
+    reTag('landingPage')
     revalidatePath('/')
-    return Response.json({ok: true, revalidated: ['landingPage'], path: '/'})
+    return Response.json({ok: true, docType: null, docId, revalidated: ['landingPage'], path: '/'})
   }
 
   const tags: string[] = []
-  if (docType === 'siteFlags') tags.push('siteFlags')
-  if (docType === 'shadowHomePage') tags.push('shadowHome')
 
-  if (tags.length === 0) {
-    return Response.json({ok: true, revalidated: [], ignoredType: docType})
+  // Landing singleton (support both type-based and id-based routing)
+  if (docType === 'landingPage' || docId === 'landingPage') {
+    tags.push('landingPage')
+    revalidatePath('/')
   }
 
-  for (const t of tags) revalidateTag(t, CACHE_PROFILE)
+  // Site flags singleton
+  if (docType === 'siteFlags' || docId === 'siteFlags') tags.push('siteFlags')
 
-  return Response.json({ok: true, revalidated: tags})
+  // Shadow home pages
+  if (docType === 'shadowHomePage') tags.push('shadowHome')
+
+  // Never silently ignore: if we don't recognize the doc type, do a cheap safe refresh.
+  if (tags.length === 0) {
+    tags.push('landingPage')
+    revalidatePath('/')
+    for (const t of tags) reTag(t)
+    return Response.json({
+      ok: true,
+      docType,
+      docId,
+      revalidated: tags,
+      note: 'Unknown docType; defaulted to landingPage revalidation',
+      path: '/',
+    })
+  }
+
+  for (const t of tags) reTag(t)
+
+  return Response.json({ok: true, docType, docId, revalidated: tags})
 }
