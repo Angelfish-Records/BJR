@@ -20,6 +20,10 @@ export async function POST(req: Request) {
   must(APP_URL, 'NEXT_PUBLIC_APP_URL')
   must(PRICE_ID, 'STRIPE_TEST_SUB_PRICE_ID')
 
+  if (!sameOriginOrAllowed(req, APP_URL)) {
+  return NextResponse.json({ok: false, error: 'Bad origin'}, {status: 403})
+}
+
   const stripe = new Stripe(STRIPE_SECRET_KEY)
 
   const {userId} = await auth()
@@ -43,11 +47,31 @@ export async function POST(req: Request) {
     })
   }
 
-  // Optional: lightweight origin check (same-origin only)
-const origin = req.headers.get('origin') ?? ''
-if (origin && !origin.startsWith(APP_URL)) {
-  return NextResponse.json({ok: false, error: 'Bad origin'}, {status: 403})
+function sameOriginOrAllowed(req: Request, appUrl: string): boolean {
+  const origin = req.headers.get('origin')
+  if (!origin) return true // non-browser / same-origin fetch edge cases
+
+  let appOrigin = ''
+  try {
+    appOrigin = new URL(appUrl).origin
+  } catch {
+    return false
+  }
+
+  // Always allow exact match to the configured app origin
+  if (origin === appOrigin) return true
+
+  // Allow Vercel preview / deployment domains (common during testing)
+  try {
+    const o = new URL(origin)
+    if (o.hostname.endsWith('.vercel.app')) return true
+  } catch {
+    return false
+  }
+
+  return false
 }
+
 
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
