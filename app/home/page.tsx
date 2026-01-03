@@ -1,6 +1,7 @@
 import React from 'react'
 import type {Metadata} from 'next'
 import {unstable_noStore as noStore} from 'next/cache'
+import {headers} from 'next/headers'
 
 import {client} from '../../sanity/lib/client'
 import {urlFor} from '../../sanity/lib/image'
@@ -78,9 +79,10 @@ function firstParam(v: string | string[] | undefined): string | undefined {
 }
 
 export default async function Home({searchParams}: {searchParams?: SearchParams}) {
+  // Make this route *unavoidably* request-dynamic on Vercel/Next edge.
+  headers()
   noStore()
 
-  // ---- Soft identity controls (prod-safe) ----
   const isProd = process.env.NODE_ENV === 'production'
   const allowSoftIdentityInProd = process.env.ALLOW_SOFT_IDENTITY_IN_PROD === 'true'
   const requiredToken = process.env.SOFT_IDENTITY_TOKEN || ''
@@ -102,6 +104,18 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
       ? normalizeEmail(emailRaw)
       : null
 
+  const debugState = debug
+    ? {
+        isProd,
+        allowSoftIdentityInProd,
+        requiredTokenPresent: Boolean(requiredToken),
+        tokenPresent: Boolean(tokenRaw),
+        tokenOk,
+        emailRawPresent: Boolean(emailRaw),
+        emailResolved: Boolean(email),
+      }
+    : null
+
   const [flags, page] = await Promise.all([
     client.fetch<SiteFlagsDoc>(siteFlagsQuery, {}, {next: {tags: ['siteFlags']}}),
     client.fetch<ShadowHomeDoc>(shadowHomeQuery, {slug: 'home'}, {next: {tags: ['shadowHome']}}),
@@ -109,14 +123,7 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
 
   const enabled = flags?.shadowHomeEnabled !== false
 
-  let member:
-    | null
-    | {
-        id: string
-        created: boolean
-        email: string
-      } = null
-
+  let member: null | {id: string; created: boolean; email: string} = null
   let entitlementKeys: string[] = []
   let tier = 'none'
   let accent = '#8b8bff'
@@ -139,27 +146,6 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
     accentLabel = picked.label
   }
 
-  const canSeeMemberBox =
-    member &&
-    (await hasAnyEntitlement(member.id, [
-      ENT.pageView('home'),
-      ENTITLEMENTS.FREE_MEMBER,
-      ENTITLEMENTS.PATRON_ACCESS,
-      ENTITLEMENTS.LIFETIME_ACCESS,
-    ]))
-
-  const debugState = debug
-    ? {
-        isProd,
-        allowSoftIdentityInProd,
-        requiredTokenPresent: Boolean(requiredToken),
-        tokenPresent: Boolean(tokenRaw),
-        tokenOk,
-        emailRaw,
-        emailResolved: email,
-      }
-    : null
-
   const debugEnts = debug
     ? {
         memberResolved: Boolean(member),
@@ -169,12 +155,20 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
         tier,
         accentLabel,
         accent,
-        canSeeMemberBox: Boolean(canSeeMemberBox),
         hasFree: entitlementKeys.includes(ENTITLEMENTS.FREE_MEMBER),
         hasLifetime: entitlementKeys.includes(ENTITLEMENTS.LIFETIME_ACCESS),
         hasGold: entitlementKeys.includes(ENT.theme('gold')),
       }
     : null
+
+  const canSeeMemberBox =
+    member &&
+    (await hasAnyEntitlement(member.id, [
+      ENT.pageView('home'),
+      ENTITLEMENTS.FREE_MEMBER,
+      ENTITLEMENTS.PATRON_ACCESS,
+      ENTITLEMENTS.LIFETIME_ACCESS,
+    ]))
 
   const bgUrl =
     page?.backgroundImage
@@ -273,27 +267,6 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
                 'This is the shadow homepage: content evolves fast, identity stays boring, access stays canonical.'}
             </p>
 
-            {/* DEBUG (must be visible immediately if debug=1) */}
-            {debug && (
-              <pre
-                style={{
-                  marginTop: 6,
-                  textAlign: 'left',
-                  width: 'min(980px, 100%)',
-                  borderRadius: 14,
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  background: 'rgba(0,0,0,0.35)',
-                  padding: 14,
-                  fontSize: 12,
-                  lineHeight: 1.4,
-                  overflowX: 'auto',
-                }}
-              >
-                {JSON.stringify({debugState, debugEnts}, null, 2)}
-              </pre>
-            )}
-
-            {/* CTAs */}
             <div style={{display: 'grid', justifyItems: 'center', gap: 12}}>
               <EarlyAccessForm />
 
@@ -341,7 +314,6 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
               </div>
             </div>
 
-            {/* Member box */}
             {member && canSeeMemberBox && (
               <div style={{marginTop: 18, display: 'grid', justifyItems: 'center'}}>
                 <div
@@ -394,7 +366,6 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
               </div>
             )}
 
-            {/* Sections */}
             {page?.sections?.length ? (
               <div
                 style={{
@@ -440,7 +411,25 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
               </div>
             ) : null}
 
-            {/* Footer */}
+            {debug && (
+              <pre
+                style={{
+                  marginTop: 18,
+                  textAlign: 'left',
+                  width: 'min(980px, 100%)',
+                  borderRadius: 14,
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  background: 'rgba(0,0,0,0.35)',
+                  padding: 14,
+                  fontSize: 12,
+                  lineHeight: 1.4,
+                  overflowX: 'auto',
+                }}
+              >
+                {JSON.stringify({debugState, debugEnts, canSeeMemberBox}, null, 2)}
+              </pre>
+            )}
+
             <div
               style={{
                 marginTop: 34,
