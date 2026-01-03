@@ -2,7 +2,6 @@
 import React from 'react'
 import type {Metadata} from 'next'
 import {headers} from 'next/headers'
-import {redirect} from 'next/navigation'
 
 import {client} from '../../sanity/lib/client'
 import {urlFor} from '../../sanity/lib/image'
@@ -10,6 +9,7 @@ import EarlyAccessForm from '../EarlyAccessForm'
 
 import {auth, currentUser} from '@clerk/nextjs/server'
 import {ensureMemberByClerk} from '../../lib/members'
+import {SignInButton, SignedIn, SignedOut, UserButton} from '@clerk/nextjs'
 
 import {hasAnyEntitlement, listCurrentEntitlementKeys} from '../../lib/entitlements'
 import {ENT, ENTITLEMENTS, deriveTier, pickAccent} from '../../lib/vocab'
@@ -81,10 +81,8 @@ export default async function Home() {
 
   // Server-side auth gate (middleware should also protect /home)
   const {userId} = await auth()
-if (!userId) redirect('/sign-in')
 
-
-  const user = await currentUser()
+  const user = userId ? await currentUser() : null
   const email =
     user?.primaryEmailAddress?.emailAddress ??
     user?.emailAddresses?.[0]?.emailAddress ??
@@ -110,7 +108,7 @@ if (!userId) redirect('/sign-in')
   let accent = '#8b8bff'
   let accentLabel = 'default'
 
-  if (email) {
+  if (userId && email) {
     const ensured = await ensureMemberByClerk({
       clerkUserId: userId,
       email,
@@ -300,6 +298,30 @@ if (!userId) redirect('/sign-in')
                   </a>
                 )}
               </div>
+            </div>
+
+            <div style={{display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap'}}>
+              <SignedOut>
+                <SignInButton mode="modal">
+                  <button
+                    style={{
+                      padding: '11px 16px',
+                      borderRadius: 999,
+                      border: '1px solid rgba(255,255,255,0.22)',
+                      background: 'rgba(255,255,255,0.06)',
+                      color: 'rgba(255,255,255,0.90)',
+                      cursor: 'pointer',
+                      fontSize: 14,
+                    }}
+                  >
+                    Sign in
+                  </button>
+                </SignInButton>
+              </SignedOut>
+
+              <SignedIn>
+                <UserButton />
+              </SignedIn>
             </div>
 
             {member && canSeeMemberBox && (
