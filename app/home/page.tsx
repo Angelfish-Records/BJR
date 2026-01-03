@@ -1,7 +1,6 @@
-// web/app/home/page.tsx
 import React from 'react'
 import type {Metadata} from 'next'
-import {headers} from 'next/headers'
+import {unstable_noStore as noStore} from 'next/cache'
 
 import {client} from '../../sanity/lib/client'
 import {urlFor} from '../../sanity/lib/image'
@@ -13,7 +12,6 @@ import {ENT, ENTITLEMENTS, deriveTier, pickAccent} from '../../lib/vocab'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
-export const fetchCache = 'force-no-store'
 
 type ShadowHomeDoc = {
   title?: string
@@ -32,6 +30,7 @@ type SiteFlagsDoc = {
 }
 
 type SearchParams = Record<string, string | string[] | undefined>
+
 type StyleWithAccent = React.CSSProperties & {'--accent'?: string}
 
 const siteFlagsQuery = `
@@ -77,31 +76,17 @@ function firstParam(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v
 }
 
-async function resolveSearchParams(
-  input: SearchParams | Promise<SearchParams> | undefined
-): Promise<SearchParams> {
-  // Next 16 may pass searchParams as a Promise; handle both.
-  return (await Promise.resolve(input ?? {})) as SearchParams
-}
-
-export default async function Home({
-  searchParams,
-}: {
-  searchParams?: SearchParams | Promise<SearchParams>
-}) {
-  // Make this request-bound (also helps avoid any static optimisation surprises)
-  headers()
-
-  const sp = await resolveSearchParams(searchParams)
+export default async function Home({searchParams}: {searchParams?: SearchParams}) {
+  noStore()
 
   // ---- Soft identity controls (prod-safe) ----
   const isProd = process.env.NODE_ENV === 'production'
   const allowSoftIdentityInProd = process.env.ALLOW_SOFT_IDENTITY_IN_PROD === 'true'
   const requiredToken = process.env.SOFT_IDENTITY_TOKEN || ''
 
-  const emailRaw = firstParam(sp.email)
-  const tokenRaw = firstParam(sp.token)
-  const debug = firstParam(sp.debug) === '1'
+  const emailRaw = firstParam(searchParams?.email)
+  const tokenRaw = firstParam(searchParams?.token)
+  const debug = firstParam(searchParams?.debug) === '1'
 
   const tokenOk =
     !isProd || !allowSoftIdentityInProd
@@ -203,6 +188,7 @@ export default async function Home({
 
   return (
     <main style={mainStyle}>
+      {/* Background */}
       <div
         style={{
           position: 'absolute',
@@ -219,6 +205,20 @@ export default async function Home({
         }}
       />
 
+      {/* Accent wash (makes gold/premium unmistakable even with a bg image) */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background:
+            'radial-gradient(900px 700px at 50% 35%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 62%)',
+          mixBlendMode: 'screen',
+          opacity: 0.55,
+          pointerEvents: 'none',
+        }}
+      />
+
+      {/* Dark overlay */}
       <div
         style={{
           position: 'absolute',
@@ -228,6 +228,7 @@ export default async function Home({
         }}
       />
 
+      {/* Flag ribbon */}
       {!enabled && (
         <div
           style={{
@@ -244,6 +245,7 @@ export default async function Home({
         </div>
       )}
 
+      {/* Content */}
       <div
         style={{
           position: 'relative',
@@ -266,6 +268,19 @@ export default async function Home({
               {page?.title ?? 'Shadow home'}
             </h1>
 
+            {/* Accent keyline under headline */}
+            <div
+              style={{
+                height: 2,
+                width: 'min(420px, 70vw)',
+                margin: '0 auto',
+                borderRadius: 999,
+                background:
+                  'linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 75%, white 10%), transparent)',
+                opacity: 0.75,
+              }}
+            />
+
             <p
               style={{
                 fontSize: 'clamp(16px, 2.1vw, 22px)',
@@ -280,6 +295,7 @@ export default async function Home({
                 'This is the shadow homepage: content evolves fast, identity stays boring, access stays canonical.'}
             </p>
 
+            {/* CTAs */}
             <div style={{display: 'grid', justifyItems: 'center', gap: 12}}>
               <EarlyAccessForm />
 
@@ -291,13 +307,15 @@ export default async function Home({
                       display: 'inline-flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      padding: '11px 16px',
+                      padding: '11px 18px',
                       borderRadius: 999,
                       border:
-                        '1px solid color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.22))',
-                      background: 'color-mix(in srgb, var(--accent) 22%, transparent)',
+                        '1px solid color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.18))',
+                      background:
+                        'linear-gradient(180deg, color-mix(in srgb, var(--accent) 38%, transparent), rgba(0,0,0,0.10))',
+                      boxShadow: '0 0 0 1px rgba(255,255,255,0.06), 0 10px 30px rgba(0,0,0,0.35)',
                       textDecoration: 'none',
-                      color: 'rgba(255,255,255,0.90)',
+                      color: 'rgba(255,255,255,0.93)',
                       fontSize: 14,
                     }}
                   >
@@ -327,6 +345,7 @@ export default async function Home({
               </div>
             </div>
 
+            {/* Member box */}
             {member && canSeeMemberBox && (
               <div style={{marginTop: 18, display: 'grid', justifyItems: 'center'}}>
                 <div
@@ -359,8 +378,9 @@ export default async function Home({
                           style={{
                             padding: '4px 10px',
                             borderRadius: 999,
-                            border: '1px solid rgba(255,255,255,0.14)',
-                            background: 'color-mix(in srgb, var(--accent) 14%, transparent)',
+                            border:
+                              '1px solid color-mix(in srgb, var(--accent) 70%, rgba(255,255,255,0.14))',
+                            background: 'color-mix(in srgb, var(--accent) 22%, rgba(0,0,0,0.25))',
                           }}
                         >
                           {tier}
@@ -379,6 +399,7 @@ export default async function Home({
               </div>
             )}
 
+            {/* Sections */}
             {page?.sections?.length ? (
               <div
                 style={{
@@ -400,7 +421,9 @@ export default async function Home({
                     }}
                   >
                     {s?.heading && (
-                      <div style={{fontSize: 15, opacity: 0.92, marginBottom: 6}}>{s.heading}</div>
+                      <div style={{fontSize: 15, opacity: 0.92, marginBottom: 6}}>
+                        {s.heading}
+                      </div>
                     )}
                     {s?.body && (
                       <div
@@ -424,6 +447,7 @@ export default async function Home({
               </div>
             ) : null}
 
+            {/* Debug */}
             {debug && (
               <pre
                 style={{
@@ -443,6 +467,7 @@ export default async function Home({
               </pre>
             )}
 
+            {/* Footer */}
             <div
               style={{
                 marginTop: 34,
@@ -459,7 +484,8 @@ export default async function Home({
               </span>
               <span>·</span>
               <span>
-                Soft identity: <code style={{opacity: 0.9}}>?email=you@example.com&token=…</code>
+                Soft identity:{' '}
+                <code style={{opacity: 0.9}}>?email=you@example.com&token=…</code>
               </span>
             </div>
           </div>
