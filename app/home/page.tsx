@@ -11,7 +11,6 @@ import {ensureMemberByEmail, normalizeEmail} from '../../lib/members'
 import {hasAnyEntitlement, listCurrentEntitlementKeys} from '../../lib/entitlements'
 import {ENT, ENTITLEMENTS, deriveTier, pickAccent} from '../../lib/vocab'
 
-// Make it unambiguously per-request (HTML not cached / not static)
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 export const fetchCache = 'force-no-store'
@@ -78,18 +77,31 @@ function firstParam(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v
 }
 
-export default async function Home({searchParams}: {searchParams?: SearchParams}) {
-  // Force Next to treat this as request-bound (prevents static HTML)
+async function resolveSearchParams(
+  input: SearchParams | Promise<SearchParams> | undefined
+): Promise<SearchParams> {
+  // Next 16 may pass searchParams as a Promise; handle both.
+  return (await Promise.resolve(input ?? {})) as SearchParams
+}
+
+export default async function Home({
+  searchParams,
+}: {
+  searchParams?: SearchParams | Promise<SearchParams>
+}) {
+  // Make this request-bound (also helps avoid any static optimisation surprises)
   headers()
+
+  const sp = await resolveSearchParams(searchParams)
 
   // ---- Soft identity controls (prod-safe) ----
   const isProd = process.env.NODE_ENV === 'production'
   const allowSoftIdentityInProd = process.env.ALLOW_SOFT_IDENTITY_IN_PROD === 'true'
   const requiredToken = process.env.SOFT_IDENTITY_TOKEN || ''
 
-  const emailRaw = firstParam(searchParams?.email)
-  const tokenRaw = firstParam(searchParams?.token)
-  const debug = firstParam(searchParams?.debug) === '1'
+  const emailRaw = firstParam(sp.email)
+  const tokenRaw = firstParam(sp.token)
+  const debug = firstParam(sp.debug) === '1'
 
   const tokenOk =
     !isProd || !allowSoftIdentityInProd
