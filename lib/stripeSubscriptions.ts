@@ -20,6 +20,16 @@ function keyOf(entitlementKey: string, scopeId: string | null): string {
   return `${entitlementKey}::${scopeId ?? ''}`
 }
 
+async function attachStripeCustomerId(memberId: string, customerId: string): Promise<void> {
+  if (!memberId || !customerId) return
+  await sql`
+    update members
+    set stripe_customer_id = ${customerId}
+    where id = ${memberId}::uuid
+      and (stripe_customer_id is null or stripe_customer_id = ${customerId})
+  `
+}
+
 /**
  * Reconcile entitlements for a Stripe subscription into entitlement_grants.
  *
@@ -66,14 +76,10 @@ export async function reconcileStripeSubscription(params: {
       marketingOptIn: true,
     })
     memberId = ensured.id
-
-    await sql`
-      update members
-      set stripe_customer_id = ${customerId}
-      where id = ${memberId}::uuid
-        and (stripe_customer_id is null or stripe_customer_id = ${customerId})
-    `
   }
+
+  // BULLETPROOFING: once we have a memberId, always attach the customer id (idempotent).
+  await attachStripeCustomerId(memberId, customerId)
 
   // 2) Derive price IDs + per-item period ends
   const items = sub.items?.data ?? []
@@ -121,7 +127,6 @@ export async function reconcileStripeSubscription(params: {
   // 5) Upsert desired entitlement grants per entitlement row
   for (const r of entRows) {
     const scopeMetaJson = JSON.stringify(r.scope_meta ?? {})
-
     const itemExpiry = expireNow ? new Date() : (endByPriceId.get(r.price_id) ?? null)
 
     await sql`
