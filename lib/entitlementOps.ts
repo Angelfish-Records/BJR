@@ -65,6 +65,39 @@ async function applySideEffectGrants(params: {
       eventSource,
     })
   }
+
+  // subscription_gold implies premium tier + gold theme.
+  // Stripe (or any billing source) should grant ONLY subscription_gold with an expiry.
+  // Everything else is derived here as policy.
+  if (entitlementKey === ENTITLEMENTS.SUBSCRIPTION_GOLD) {
+    await grantEntitlement({
+      memberId,
+      entitlementKey: ENT.tier('premium'),
+      scopeId: null,
+      scopeMeta: {implied_by: ENTITLEMENTS.SUBSCRIPTION_GOLD},
+      grantedBy,
+      grantReason: 'implied: gold subscription implies premium tier',
+      grantSource,
+      grantSourceRef,
+      expiresAt: null,
+      correlationId,
+      eventSource,
+    })
+
+    await grantEntitlement({
+      memberId,
+      entitlementKey: ENT.theme('gold'),
+      scopeId: null,
+      scopeMeta: {implied_by: ENTITLEMENTS.SUBSCRIPTION_GOLD},
+      grantedBy,
+      grantReason: 'implied: gold subscription grants gold theme',
+      grantSource,
+      grantSourceRef,
+      expiresAt: null,
+      correlationId,
+      eventSource,
+    })
+  }
 }
 
 export async function grantEntitlement(params: GrantParams): Promise<void> {

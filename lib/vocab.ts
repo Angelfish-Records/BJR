@@ -5,6 +5,7 @@ export const ENTITLEMENTS = {
   PATRON_ACCESS: 'patron_access',
   LIFETIME_ACCESS: 'lifetime_access',
   TRACK_SHARE_GRANT: 'track_share_grant',
+  SUBSCRIPTION_GOLD: 'subscription_gold',
 } as const
 
 export type EntitlementKey = (typeof ENTITLEMENTS)[keyof typeof ENTITLEMENTS]

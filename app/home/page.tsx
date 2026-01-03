@@ -14,6 +14,8 @@ import {SignInButton, SignedIn, SignedOut, UserButton} from '@clerk/nextjs'
 import {hasAnyEntitlement, listCurrentEntitlementKeys} from '../../lib/entitlements'
 import {ENT, ENTITLEMENTS, deriveTier, pickAccent} from '../../lib/vocab'
 
+import SubscribeButton from './SubscribeButton'
+
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 export const fetchCache = 'force-no-store'
@@ -75,11 +77,16 @@ export async function generateMetadata(): Promise<Metadata> {
   }
 }
 
-export default async function Home() {
+export default async function Home(props: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+}) {
   // Make this request-bound (also helps avoid any static optimisation surprises)
   headers()
 
-  // Server-side auth gate (middleware should also protect /home)
+  const sp = (await props.searchParams) ?? {}
+  const checkout = typeof sp.checkout === 'string' ? sp.checkout : null
+
+  // Server-side auth
   const {userId} = await auth()
 
   const user = userId ? await currentUser() : null
@@ -253,8 +260,48 @@ export default async function Home() {
                 'This is the shadow homepage: content evolves fast, identity stays boring, access stays canonical.'}
             </p>
 
+            {checkout === 'success' && (
+              <div
+                style={{
+                  margin: '0 auto',
+                  maxWidth: 720,
+                  borderRadius: 14,
+                  border: '1px solid rgba(255,255,255,0.14)',
+                  background: 'rgba(0,0,0,0.25)',
+                  padding: '12px 14px',
+                  fontSize: 13,
+                  opacity: 0.9,
+                }}
+              >
+                ✅ Checkout completed. If entitlements haven’t appeared yet, refresh once (webhooks can be a beat
+                behind).
+              </div>
+            )}
+
+            {checkout === 'cancel' && (
+              <div
+                style={{
+                  margin: '0 auto',
+                  maxWidth: 720,
+                  borderRadius: 14,
+                  border: '1px solid rgba(255,255,255,0.14)',
+                  background: 'rgba(0,0,0,0.20)',
+                  padding: '12px 14px',
+                  fontSize: 13,
+                  opacity: 0.85,
+                }}
+              >
+                Checkout cancelled.
+              </div>
+            )}
+
             <div style={{display: 'grid', justifyItems: 'center', gap: 12}}>
               <EarlyAccessForm />
+
+              {/* Purchase entrypoint */}
+              <div style={{marginTop: 6, display: 'grid', justifyItems: 'center', gap: 10}}>
+                <SubscribeButton loggedIn={!!userId} />
+              </div>
 
               <div style={{display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center'}}>
                 {page?.primaryCtaText && page?.primaryCtaHref && (
