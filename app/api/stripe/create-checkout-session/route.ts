@@ -20,6 +20,19 @@ export async function POST(req: Request) {
   must(APP_URL, 'NEXT_PUBLIC_APP_URL')
   must(PRICE_ID, 'STRIPE_TEST_SUB_PRICE_ID')
 
+  const dbg = {
+  origin: req.headers.get('origin'),
+  host: req.headers.get('host'),
+  referer: req.headers.get('referer'),
+  appUrl: APP_URL,
+  appOrigin: (() => {
+    try { return new URL(APP_URL).origin } catch { return 'INVALID_APP_URL' }
+  })(),
+  url: req.url,
+}
+return NextResponse.json({ok: false, error: 'DEBUG', dbg}, {status: 403})
+
+
   if (!sameOriginOrAllowed(req, APP_URL)) {
   return NextResponse.json({ok: false, error: 'Bad origin'}, {status: 403})
 }
