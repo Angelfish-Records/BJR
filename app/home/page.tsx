@@ -1,5 +1,6 @@
 import React from 'react'
 import type {Metadata} from 'next'
+import {unstable_noStore as noStore} from 'next/cache'
 
 import {client} from '../../sanity/lib/client'
 import {urlFor} from '../../sanity/lib/image'
@@ -8,6 +9,9 @@ import EarlyAccessForm from '../EarlyAccessForm'
 import {ensureMemberByEmail, normalizeEmail} from '../../lib/members'
 import {hasAnyEntitlement, listCurrentEntitlementKeys} from '../../lib/entitlements'
 import {ENT, ENTITLEMENTS, deriveTier, pickAccent} from '../../lib/vocab'
+
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 type ShadowHomeDoc = {
   title?: string
@@ -73,6 +77,7 @@ function firstParam(v: string | string[] | undefined): string | undefined {
 }
 
 export default async function Home({searchParams}: {searchParams?: SearchParams}) {
+  noStore()
   // ---- Soft identity controls (prod-safe) ----
   const isProd = process.env.NODE_ENV === 'production'
   const allowSoftIdentityInProd = process.env.ALLOW_SOFT_IDENTITY_IN_PROD === 'true'
