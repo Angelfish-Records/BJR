@@ -1,3 +1,4 @@
+// web/lib/members.ts
 import 'server-only'
 import {sql} from '@vercel/postgres'
 
@@ -8,78 +9,6 @@ export function normalizeEmail(input: string): string {
 export function assertLooksLikeEmail(email: string): void {
   const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
   if (!ok) throw new Error('Invalid email')
-}
-
-export async function ensureMemberByClerk(params: {
-  clerkUserId: string
-  email: string
-  source?: string
-  sourceDetail?: Record<string, unknown>
-}): Promise<{id: string; created: boolean}> {
-  const clerkUserId = (params.clerkUserId ?? '').toString().trim()
-  if (!clerkUserId) throw new Error('Missing clerkUserId')
-
-  const email = normalizeEmail(params.email)
-  assertLooksLikeEmail(email)
-
-  const source = params.source ?? 'clerk'
-  const sourceDetail = params.sourceDetail ?? {}
-
-  // Strategy:
-  // 1) If row exists by clerk_user_id -> update email + source_detail, return
-  // 2) Else if row exists by email (early access) and clerk_user_id is null -> claim it (set clerk_user_id), return
-  // 3) Else insert new row with clerk_user_id + email, return
-  const res = await sql`
-    with by_clerk as (
-      update members
-        set email = ${email},
-            source_detail = members.source_detail || ${JSON.stringify(sourceDetail)}::jsonb
-      where clerk_user_id = ${clerkUserId}
-      returning id, false as created
-    ),
-    claim_by_email as (
-      update members
-        set clerk_user_id = ${clerkUserId},
-            source_detail = members.source_detail || ${JSON.stringify(sourceDetail)}::jsonb
-      where email = ${email}
-        and clerk_user_id is null
-      returning id, false as created
-    ),
-    ins as (
-      insert into members (
-        email,
-        clerk_user_id,
-        source,
-        source_detail,
-        consent_first_at,
-        consent_latest_at,
-        consent_latest_version,
-        marketing_opt_in
-      )
-      select
-        ${email},
-        ${clerkUserId},
-        ${source},
-        ${JSON.stringify(sourceDetail)}::jsonb,
-        now(),
-        now(),
-        null,
-        true
-      where not exists (select 1 from by_clerk)
-        and not exists (select 1 from claim_by_email)
-      returning id, (xmax = 0) as created
-    )
-    select * from by_clerk
-    union all
-    select * from claim_by_email
-    union all
-    select * from ins
-    limit 1
-  `
-
-  const row = res.rows[0] as {id: string; created: boolean} | undefined
-  if (!row?.id) throw new Error('Failed to ensure member by Clerk')
-  return row
 }
 
 export async function getMemberIdByEmail(email: string): Promise<string | null> {
@@ -96,7 +25,109 @@ export async function getMemberIdByEmail(email: string): Promise<string | null> 
 }
 
 /**
- * Idempotent upsert. Returns {id, created}.
+ * Canonical Clerk bridge.
+ *
+ * Policy:
+ * 1) Prefer canonical lookup by clerk_user_id. If found, update email + consent_latest_at + source_detail.
+ * 2) Else claim existing row by email ONLY if unclaimed (clerk_user_id is null).
+ * 3) If email exists but is already claimed by another clerk_user_id, throw loud.
+ * 4) Else insert a new member row with clerk_user_id + email.
+ *
+ * Returns {id, created} where created=true only for fresh inserts.
+ */
+export async function ensureMemberByClerk(params: {
+  clerkUserId: string
+  email: string
+  source?: string
+  sourceDetail?: Record<string, unknown>
+  marketingOptIn?: boolean
+}): Promise<{id: string; created: boolean}> {
+  const clerkUserId = (params.clerkUserId ?? '').toString().trim()
+  if (!clerkUserId) throw new Error('Missing clerkUserId')
+
+  const email = normalizeEmail(params.email)
+  assertLooksLikeEmail(email)
+
+  const source = params.source ?? 'clerk'
+  const sourceDetail = params.sourceDetail ?? {}
+  const marketingOptIn = params.marketingOptIn ?? true
+
+  // 1) Prefer canonical lookup by clerk_user_id
+  const byClerk = await sql`
+    select id
+    from members
+    where clerk_user_id = ${clerkUserId}
+    limit 1
+  `
+  if (byClerk.rows[0]?.id) {
+    const id = byClerk.rows[0].id as string
+    await sql`
+      update members
+      set email = ${email},
+          consent_latest_at = now(),
+          marketing_opt_in = ${marketingOptIn},
+          source_detail = members.source_detail || ${JSON.stringify(sourceDetail)}::jsonb
+      where id = ${id}
+    `
+    return {id, created: false}
+  }
+
+  // 2) Claim by email if unclaimed
+  const claimed = await sql`
+    update members
+      set clerk_user_id = ${clerkUserId},
+          consent_latest_at = now(),
+          marketing_opt_in = ${marketingOptIn},
+          source_detail = members.source_detail || ${JSON.stringify(sourceDetail)}::jsonb
+    where email = ${email}
+      and clerk_user_id is null
+    returning id
+  `
+  if (claimed.rows[0]?.id) {
+    return {id: claimed.rows[0].id as string, created: false}
+  }
+
+  // 3) If email exists but is claimed by someone else, fail loud
+  const emailRow = await sql`
+    select id
+    from members
+    where email = ${email}
+    limit 1
+  `
+  if (emailRow.rows[0]?.id) {
+    throw new Error('Email already claimed by a different Clerk user')
+  }
+
+  // 4) Insert new canonical row
+  const inserted = await sql`
+    insert into members (
+      email,
+      clerk_user_id,
+      source,
+      source_detail,
+      consent_first_at,
+      consent_latest_at,
+      consent_latest_version,
+      marketing_opt_in
+    )
+    values (
+      ${email},
+      ${clerkUserId},
+      ${source},
+      ${JSON.stringify(sourceDetail)}::jsonb,
+      now(),
+      now(),
+      null,
+      ${marketingOptIn}
+    )
+    returning id, (xmax = 0) as created
+  `
+
+  return {id: inserted.rows[0].id as string, created: inserted.rows[0].created as boolean}
+}
+
+/**
+ * Idempotent upsert by email. Returns {id, created}.
  * Postgres trick: xmax = 0 is true for freshly inserted rows.
  */
 export async function ensureMemberByEmail(params: {
