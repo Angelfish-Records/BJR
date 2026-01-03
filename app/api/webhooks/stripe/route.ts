@@ -6,11 +6,6 @@ import Stripe from 'stripe'
 
 export const runtime = 'nodejs'
 
-const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY ?? ''
-const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? ''
-
-const stripeClient = new Stripe(STRIPE_SECRET_KEY)
-
 type PriceEntitlementRow = {
   entitlement_key: string
   scope_id: string | null
@@ -18,6 +13,11 @@ type PriceEntitlementRow = {
 }
 
 export async function POST(req: Request) {
+  const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY ?? ''
+  const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? ''
+
+  // IMPORTANT: do not instantiate Stripe unless we have keys,
+  // otherwise Next build can crash while evaluating this module.
   if (!STRIPE_SECRET_KEY || !STRIPE_WEBHOOK_SECRET) {
     return NextResponse.json(
       {ok: false, error: 'Missing Stripe env vars'},
@@ -34,6 +34,8 @@ export async function POST(req: Request) {
   }
 
   const body = await req.text()
+
+  const stripeClient = new Stripe(STRIPE_SECRET_KEY)
 
   let event: Stripe.Event
   try {
