@@ -2,12 +2,15 @@
 import React from 'react'
 import type {Metadata} from 'next'
 import {headers} from 'next/headers'
+import {redirect} from 'next/navigation'
 
 import {client} from '../../sanity/lib/client'
 import {urlFor} from '../../sanity/lib/image'
 import EarlyAccessForm from '../EarlyAccessForm'
 
-import {ensureMemberByEmail, normalizeEmail} from '../../lib/members'
+import {auth, currentUser} from '@clerk/nextjs/server'
+import {ensureMemberByClerk} from '../../lib/members'
+
 import {hasAnyEntitlement, listCurrentEntitlementKeys} from '../../lib/entitlements'
 import {ENT, ENTITLEMENTS, deriveTier, pickAccent} from '../../lib/vocab'
 
@@ -31,7 +34,6 @@ type SiteFlagsDoc = {
   shadowHomeRoute?: string
 }
 
-type SearchParams = Record<string, string | string[] | undefined>
 type StyleWithAccent = React.CSSProperties & {'--accent'?: string}
 
 const siteFlagsQuery = `
@@ -73,47 +75,20 @@ export async function generateMetadata(): Promise<Metadata> {
   }
 }
 
-function firstParam(v: string | string[] | undefined): string | undefined {
-  return Array.isArray(v) ? v[0] : v
-}
-
-async function resolveSearchParams(
-  input: SearchParams | Promise<SearchParams> | undefined
-): Promise<SearchParams> {
-  // Next 16 may pass searchParams as a Promise; handle both.
-  return (await Promise.resolve(input ?? {})) as SearchParams
-}
-
-export default async function Home({
-  searchParams,
-}: {
-  searchParams?: SearchParams | Promise<SearchParams>
-}) {
+export default async function Home() {
   // Make this request-bound (also helps avoid any static optimisation surprises)
   headers()
 
-  const sp = await resolveSearchParams(searchParams)
+  // Server-side auth gate (middleware should also protect /home)
+  const {userId} = await auth()
+if (!userId) redirect('/sign-in')
 
-  // ---- Soft identity controls (prod-safe) ----
-  const isProd = process.env.NODE_ENV === 'production'
-  const allowSoftIdentityInProd = process.env.ALLOW_SOFT_IDENTITY_IN_PROD === 'true'
-  const requiredToken = process.env.SOFT_IDENTITY_TOKEN || ''
 
-  const emailRaw = firstParam(sp.email)
-  const tokenRaw = firstParam(sp.token)
-
-  const tokenOk =
-    !isProd || !allowSoftIdentityInProd
-      ? true
-      : Boolean(requiredToken && tokenRaw === requiredToken)
-
+  const user = await currentUser()
   const email =
-    (!isProd || allowSoftIdentityInProd) &&
-    tokenOk &&
-    emailRaw &&
-    emailRaw.includes('@')
-      ? normalizeEmail(emailRaw)
-      : null
+    user?.primaryEmailAddress?.emailAddress ??
+    user?.emailAddresses?.[0]?.emailAddress ??
+    null
 
   const [flags, page] = await Promise.all([
     client.fetch<SiteFlagsDoc>(siteFlagsQuery, {}, {next: {tags: ['siteFlags']}}),
@@ -136,9 +111,10 @@ export default async function Home({
   let accentLabel = 'default'
 
   if (email) {
-    const ensured = await ensureMemberByEmail({
+    const ensured = await ensureMemberByClerk({
+      clerkUserId: userId,
       email,
-      source: 'shadow_home_soft_identity',
+      source: 'shadow_home_clerk',
       sourceDetail: {route: '/home'},
     })
 
@@ -193,18 +169,18 @@ export default async function Home({
         }}
       />
 
-     {/* Accent wash */}
-<div
-  style={{
-    position: 'absolute',
-    inset: 0,
-    background:
-      'radial-gradient(900px 700px at 50% 35%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 62%)',
-    mixBlendMode: 'screen',
-    opacity: 0.55,
-    pointerEvents: 'none',
-  }}
-/>
+      {/* Accent wash */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background:
+            'radial-gradient(900px 700px at 50% 35%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 62%)',
+          mixBlendMode: 'screen',
+          opacity: 0.55,
+          pointerEvents: 'none',
+        }}
+      />
 
       <div
         style={{
@@ -252,19 +228,18 @@ export default async function Home({
             >
               {page?.title ?? 'Shadow home'}
             </h1>
-            
-            <div
-  style={{
-    height: 2,
-    width: 'min(420px, 70vw)',
-    margin: '0 auto',
-    borderRadius: 999,
-    background:
-      'linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 75%, white 10%), transparent)',
-    opacity: 0.75,
-  }}
-/>
 
+            <div
+              style={{
+                height: 2,
+                width: 'min(420px, 70vw)',
+                margin: '0 auto',
+                borderRadius: 999,
+                background:
+                  'linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 75%, white 10%), transparent)',
+                opacity: 0.75,
+              }}
+            />
 
             <p
               style={{
@@ -440,7 +415,7 @@ export default async function Home({
               </span>
               <span>·</span>
               <span>
-                Soft identity: <code style={{opacity: 0.9}}>?email=you@example.com&token=…</code>
+                Auth: <code style={{opacity: 0.9}}>Clerk</code>
               </span>
             </div>
           </div>
