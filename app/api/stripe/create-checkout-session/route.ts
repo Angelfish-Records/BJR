@@ -20,19 +20,6 @@ export async function POST(req: Request) {
   must(APP_URL, 'NEXT_PUBLIC_APP_URL')
   must(PRICE_ID, 'STRIPE_TEST_SUB_PRICE_ID')
 
-  const dbg = {
-  origin: req.headers.get('origin'),
-  host: req.headers.get('host'),
-  referer: req.headers.get('referer'),
-  appUrl: APP_URL,
-  appOrigin: (() => {
-    try { return new URL(APP_URL).origin } catch { return 'INVALID_APP_URL' }
-  })(),
-  url: req.url,
-}
-return NextResponse.json({ok: false, error: 'DEBUG', dbg}, {status: 403})
-
-
   if (!sameOriginOrAllowed(req, APP_URL)) {
   return NextResponse.json({ok: false, error: 'Bad origin'}, {status: 403})
 }
@@ -62,25 +49,27 @@ return NextResponse.json({ok: false, error: 'DEBUG', dbg}, {status: 403})
 
 function sameOriginOrAllowed(req: Request, appUrl: string): boolean {
   const origin = req.headers.get('origin')
-  if (!origin) return true // non-browser / same-origin fetch edge cases
+  if (!origin) return true
 
-  let appOrigin = ''
+  let app: URL
+  let o: URL
   try {
-    appOrigin = new URL(appUrl).origin
+    app = new URL(appUrl)
+    o = new URL(origin)
   } catch {
     return false
   }
 
-  // Always allow exact match to the configured app origin
-  if (origin === appOrigin) return true
+  if (o.origin === app.origin) return true
 
-  // Allow Vercel preview / deployment domains (common during testing)
-  try {
-    const o = new URL(origin)
-    if (o.hostname.endsWith('.vercel.app')) return true
-  } catch {
-    return false
+  // Allow www ↔ bare swap (same protocol)
+  const stripWww = (h: string) => h.replace(/^www\./, '')
+  if (stripWww(o.hostname) === stripWww(app.hostname) && o.protocol === app.protocol) {
+    return true
   }
+
+  // Allow Vercel previews while building
+  if (o.hostname.endsWith('.vercel.app')) return true
 
   return false
 }
