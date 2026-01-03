@@ -86,6 +86,8 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
   const emailRaw = firstParam(searchParams?.email)
   const tokenRaw = firstParam(searchParams?.token)
 
+  const debug = firstParam(searchParams?.debug) === '1'
+
   const tokenOk =
     !isProd || !allowSoftIdentityInProd
       ? true
@@ -99,6 +101,19 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
       ? normalizeEmail(emailRaw)
       : null
 
+  // Cheap visibility into whether this request is actually using the query params.
+  const debugState = debug
+    ? {
+        isProd,
+        allowSoftIdentityInProd,
+        tokenPresent: Boolean(tokenRaw),
+        tokenOk,
+        emailRawPresent: Boolean(emailRaw),
+        emailResolved: Boolean(email),
+      }
+    : null
+
+      
   const [flags, page] = await Promise.all([
     client.fetch<SiteFlagsDoc>(siteFlagsQuery, {}, {next: {tags: ['siteFlags']}}),
     client.fetch<ShadowHomeDoc>(shadowHomeQuery, {slug: 'home'}, {next: {tags: ['shadowHome']}}),
@@ -135,6 +150,21 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
     accent = picked.accent
     accentLabel = picked.label
   }
+
+    const debugEnts = debug
+    ? {
+        memberResolved: Boolean(member),
+        entitlementCount: entitlementKeys.length,
+        entitlementKeys,
+        tier,
+        accentLabel,
+        accent,
+        hasFree: entitlementKeys.includes(ENTITLEMENTS.FREE_MEMBER),
+        hasLifetime: entitlementKeys.includes(ENTITLEMENTS.LIFETIME_ACCESS),
+        hasGold: entitlementKeys.includes(ENT.theme('gold')),
+      }
+    : null
+
 
   const canSeeMemberBox =
     member &&
@@ -390,6 +420,26 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
                 ))}
               </div>
             ) : null}
+
+            {debug && (
+              <pre
+                style={{
+                  marginTop: 18,
+                  textAlign: 'left',
+                  width: 'min(980px, 100%)',
+                  borderRadius: 14,
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  background: 'rgba(0,0,0,0.35)',
+                  padding: 14,
+                  fontSize: 12,
+                  lineHeight: 1.4,
+                  overflowX: 'auto',
+                }}
+              >
+                {JSON.stringify({debugState, debugEnts}, null, 2)}
+              </pre>
+            )}
+
 
             {/* Footer */}
             <div
