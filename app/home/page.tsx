@@ -101,7 +101,6 @@ export default async function Home({
 
   const emailRaw = firstParam(sp.email)
   const tokenRaw = firstParam(sp.token)
-  const debug = firstParam(sp.debug) === '1'
 
   const tokenOk =
     !isProd || !allowSoftIdentityInProd
@@ -115,17 +114,6 @@ export default async function Home({
     emailRaw.includes('@')
       ? normalizeEmail(emailRaw)
       : null
-
-  const debugState = debug
-    ? {
-        isProd,
-        allowSoftIdentityInProd,
-        tokenPresent: Boolean(tokenRaw),
-        tokenOk,
-        emailRawPresent: Boolean(emailRaw),
-        emailResolved: Boolean(email),
-      }
-    : null
 
   const [flags, page] = await Promise.all([
     client.fetch<SiteFlagsDoc>(siteFlagsQuery, {}, {next: {tags: ['siteFlags']}}),
@@ -163,20 +151,6 @@ export default async function Home({
     accent = picked.accent
     accentLabel = picked.label
   }
-
-  const debugEnts = debug
-    ? {
-        memberResolved: Boolean(member),
-        entitlementCount: entitlementKeys.length,
-        entitlementKeys,
-        tier,
-        accentLabel,
-        accent,
-        hasFree: entitlementKeys.includes(ENTITLEMENTS.FREE_MEMBER),
-        hasLifetime: entitlementKeys.includes(ENTITLEMENTS.LIFETIME_ACCESS),
-        hasGold: entitlementKeys.includes(ENT.theme('gold')),
-      }
-    : null
 
   const canSeeMemberBox =
     member &&
@@ -449,25 +423,6 @@ export default async function Home({
                 ))}
               </div>
             ) : null}
-
-            {debug && (
-              <pre
-                style={{
-                  marginTop: 18,
-                  textAlign: 'left',
-                  width: 'min(980px, 100%)',
-                  borderRadius: 14,
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  background: 'rgba(0,0,0,0.35)',
-                  padding: 14,
-                  fontSize: 12,
-                  lineHeight: 1.4,
-                  overflowX: 'auto',
-                }}
-              >
-                {JSON.stringify({debugState, debugEnts}, null, 2)}
-              </pre>
-            )}
 
             <div
               style={{
