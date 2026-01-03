@@ -1,6 +1,6 @@
+// web/app/home/page.tsx
 import React from 'react'
 import type {Metadata} from 'next'
-import {unstable_noStore as noStore} from 'next/cache'
 import {headers} from 'next/headers'
 
 import {client} from '../../sanity/lib/client'
@@ -11,6 +11,7 @@ import {ensureMemberByEmail, normalizeEmail} from '../../lib/members'
 import {hasAnyEntitlement, listCurrentEntitlementKeys} from '../../lib/entitlements'
 import {ENT, ENTITLEMENTS, deriveTier, pickAccent} from '../../lib/vocab'
 
+// Make it unambiguously per-request (HTML not cached / not static)
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 export const fetchCache = 'force-no-store'
@@ -32,7 +33,6 @@ type SiteFlagsDoc = {
 }
 
 type SearchParams = Record<string, string | string[] | undefined>
-
 type StyleWithAccent = React.CSSProperties & {'--accent'?: string}
 
 const siteFlagsQuery = `
@@ -79,10 +79,10 @@ function firstParam(v: string | string[] | undefined): string | undefined {
 }
 
 export default async function Home({searchParams}: {searchParams?: SearchParams}) {
-  // Make this route *unavoidably* request-dynamic on Vercel/Next edge.
+  // Force Next to treat this as request-bound (prevents static HTML)
   headers()
-  noStore()
 
+  // ---- Soft identity controls (prod-safe) ----
   const isProd = process.env.NODE_ENV === 'production'
   const allowSoftIdentityInProd = process.env.ALLOW_SOFT_IDENTITY_IN_PROD === 'true'
   const requiredToken = process.env.SOFT_IDENTITY_TOKEN || ''
@@ -108,7 +108,6 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
     ? {
         isProd,
         allowSoftIdentityInProd,
-        requiredTokenPresent: Boolean(requiredToken),
         tokenPresent: Boolean(tokenRaw),
         tokenOk,
         emailRawPresent: Boolean(emailRaw),
@@ -123,7 +122,14 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
 
   const enabled = flags?.shadowHomeEnabled !== false
 
-  let member: null | {id: string; created: boolean; email: string} = null
+  let member:
+    | null
+    | {
+        id: string
+        created: boolean
+        email: string
+      } = null
+
   let entitlementKeys: string[] = []
   let tier = 'none'
   let accent = '#8b8bff'
@@ -149,7 +155,6 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
   const debugEnts = debug
     ? {
         memberResolved: Boolean(member),
-        memberId: member?.id ?? null,
         entitlementCount: entitlementKeys.length,
         entitlementKeys,
         tier,
@@ -186,7 +191,6 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
 
   return (
     <main style={mainStyle}>
-      {/* Background */}
       <div
         style={{
           position: 'absolute',
@@ -203,7 +207,6 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
         }}
       />
 
-      {/* Dark overlay */}
       <div
         style={{
           position: 'absolute',
@@ -213,7 +216,6 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
         }}
       />
 
-      {/* Flag ribbon */}
       {!enabled && (
         <div
           style={{
@@ -230,7 +232,6 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
         </div>
       )}
 
-      {/* Content */}
       <div
         style={{
           position: 'relative',
@@ -426,7 +427,7 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
                   overflowX: 'auto',
                 }}
               >
-                {JSON.stringify({debugState, debugEnts, canSeeMemberBox}, null, 2)}
+                {JSON.stringify({debugState, debugEnts}, null, 2)}
               </pre>
             )}
 
@@ -446,8 +447,7 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
               </span>
               <span>·</span>
               <span>
-                Soft identity:{' '}
-                <code style={{opacity: 0.9}}>?email=you@example.com&amp;token=…</code>
+                Soft identity: <code style={{opacity: 0.9}}>?email=you@example.com&token=…</code>
               </span>
             </div>
           </div>
