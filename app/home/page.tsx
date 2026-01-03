@@ -12,6 +12,7 @@ import {ENT, ENTITLEMENTS, deriveTier, pickAccent} from '../../lib/vocab'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+export const fetchCache = 'force-no-store'
 
 type ShadowHomeDoc = {
   title?: string
@@ -78,6 +79,7 @@ function firstParam(v: string | string[] | undefined): string | undefined {
 
 export default async function Home({searchParams}: {searchParams?: SearchParams}) {
   noStore()
+
   // ---- Soft identity controls (prod-safe) ----
   const isProd = process.env.NODE_ENV === 'production'
   const allowSoftIdentityInProd = process.env.ALLOW_SOFT_IDENTITY_IN_PROD === 'true'
@@ -85,7 +87,6 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
 
   const emailRaw = firstParam(searchParams?.email)
   const tokenRaw = firstParam(searchParams?.token)
-
   const debug = firstParam(searchParams?.debug) === '1'
 
   const tokenOk =
@@ -101,19 +102,6 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
       ? normalizeEmail(emailRaw)
       : null
 
-  // Cheap visibility into whether this request is actually using the query params.
-  const debugState = debug
-    ? {
-        isProd,
-        allowSoftIdentityInProd,
-        tokenPresent: Boolean(tokenRaw),
-        tokenOk,
-        emailRawPresent: Boolean(emailRaw),
-        emailResolved: Boolean(email),
-      }
-    : null
-
-      
   const [flags, page] = await Promise.all([
     client.fetch<SiteFlagsDoc>(siteFlagsQuery, {}, {next: {tags: ['siteFlags']}}),
     client.fetch<ShadowHomeDoc>(shadowHomeQuery, {slug: 'home'}, {next: {tags: ['shadowHome']}}),
@@ -151,21 +139,6 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
     accentLabel = picked.label
   }
 
-    const debugEnts = debug
-    ? {
-        memberResolved: Boolean(member),
-        entitlementCount: entitlementKeys.length,
-        entitlementKeys,
-        tier,
-        accentLabel,
-        accent,
-        hasFree: entitlementKeys.includes(ENTITLEMENTS.FREE_MEMBER),
-        hasLifetime: entitlementKeys.includes(ENTITLEMENTS.LIFETIME_ACCESS),
-        hasGold: entitlementKeys.includes(ENT.theme('gold')),
-      }
-    : null
-
-
   const canSeeMemberBox =
     member &&
     (await hasAnyEntitlement(member.id, [
@@ -174,6 +147,34 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
       ENTITLEMENTS.PATRON_ACCESS,
       ENTITLEMENTS.LIFETIME_ACCESS,
     ]))
+
+  const debugState = debug
+    ? {
+        isProd,
+        allowSoftIdentityInProd,
+        requiredTokenPresent: Boolean(requiredToken),
+        tokenPresent: Boolean(tokenRaw),
+        tokenOk,
+        emailRaw,
+        emailResolved: email,
+      }
+    : null
+
+  const debugEnts = debug
+    ? {
+        memberResolved: Boolean(member),
+        memberId: member?.id ?? null,
+        entitlementCount: entitlementKeys.length,
+        entitlementKeys,
+        tier,
+        accentLabel,
+        accent,
+        canSeeMemberBox: Boolean(canSeeMemberBox),
+        hasFree: entitlementKeys.includes(ENTITLEMENTS.FREE_MEMBER),
+        hasLifetime: entitlementKeys.includes(ENTITLEMENTS.LIFETIME_ACCESS),
+        hasGold: entitlementKeys.includes(ENT.theme('gold')),
+      }
+    : null
 
   const bgUrl =
     page?.backgroundImage
@@ -271,6 +272,26 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
               {page?.subtitle ??
                 'This is the shadow homepage: content evolves fast, identity stays boring, access stays canonical.'}
             </p>
+
+            {/* DEBUG (must be visible immediately if debug=1) */}
+            {debug && (
+              <pre
+                style={{
+                  marginTop: 6,
+                  textAlign: 'left',
+                  width: 'min(980px, 100%)',
+                  borderRadius: 14,
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  background: 'rgba(0,0,0,0.35)',
+                  padding: 14,
+                  fontSize: 12,
+                  lineHeight: 1.4,
+                  overflowX: 'auto',
+                }}
+              >
+                {JSON.stringify({debugState, debugEnts}, null, 2)}
+              </pre>
+            )}
 
             {/* CTAs */}
             <div style={{display: 'grid', justifyItems: 'center', gap: 12}}>
@@ -395,9 +416,7 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
                     }}
                   >
                     {s?.heading && (
-                      <div style={{fontSize: 15, opacity: 0.92, marginBottom: 6}}>
-                        {s.heading}
-                      </div>
+                      <div style={{fontSize: 15, opacity: 0.92, marginBottom: 6}}>{s.heading}</div>
                     )}
                     {s?.body && (
                       <div
@@ -421,26 +440,6 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
               </div>
             ) : null}
 
-            {debug && (
-              <pre
-                style={{
-                  marginTop: 18,
-                  textAlign: 'left',
-                  width: 'min(980px, 100%)',
-                  borderRadius: 14,
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  background: 'rgba(0,0,0,0.35)',
-                  padding: 14,
-                  fontSize: 12,
-                  lineHeight: 1.4,
-                  overflowX: 'auto',
-                }}
-              >
-                {JSON.stringify({debugState, debugEnts}, null, 2)}
-              </pre>
-            )}
-
-
             {/* Footer */}
             <div
               style={{
@@ -459,7 +458,7 @@ export default async function Home({searchParams}: {searchParams?: SearchParams}
               <span>·</span>
               <span>
                 Soft identity:{' '}
-                <code style={{opacity: 0.9}}>?email=you@example.com&token=…</code>
+                <code style={{opacity: 0.9}}>?email=you@example.com&amp;token=…</code>
               </span>
             </div>
           </div>
