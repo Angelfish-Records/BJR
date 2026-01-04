@@ -5,11 +5,10 @@ import {headers} from 'next/headers'
 
 import {client} from '../../sanity/lib/client'
 import {urlFor} from '../../sanity/lib/image'
-import EarlyAccessForm from '../EarlyAccessForm'
+import ActivationGate from './ActivationGate'
 
 import {auth, currentUser} from '@clerk/nextjs/server'
 import {ensureMemberByClerk} from '../../lib/members'
-import {SignInButton, SignedIn, SignedOut, UserButton} from '@clerk/nextjs'
 
 import {hasAnyEntitlement, listCurrentEntitlementKeys} from '../../lib/entitlements'
 import {ENT, ENTITLEMENTS, deriveTier, pickAccent} from '../../lib/vocab'
@@ -301,15 +300,15 @@ const hasGold = entitlementKeys.includes(ENTITLEMENTS.SUBSCRIPTION_GOLD)
             )}
 
             <div style={{display: 'grid', justifyItems: 'center', gap: 12}}>
-              <EarlyAccessForm />
+                  <ActivationGate>
+  {member ? (
+    <div style={{marginTop: 6, display: 'grid', justifyItems: 'center', gap: 10}}>
+      {!hasGold ? <SubscribeButton loggedIn={!!userId} /> : null}
+      {hasGold ? <CancelSubscriptionButton /> : null}
+    </div>
+  ) : null}
+</ActivationGate>
 
-
-{member ? (
-  <div style={{marginTop: 6, display: 'grid', justifyItems: 'center', gap: 10}}>
-    {!hasGold ? <SubscribeButton loggedIn={!!userId} /> : null}
-    {hasGold ? <CancelSubscriptionButton /> : null}
-  </div>
-) : null}
 
 
 
@@ -355,30 +354,6 @@ const hasGold = entitlementKeys.includes(ENTITLEMENTS.SUBSCRIPTION_GOLD)
                   </a>
                 )}
               </div>
-            </div>
-
-            <div style={{display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap'}}>
-              <SignedOut>
-                <SignInButton mode="modal">
-                  <button
-                    style={{
-                      padding: '11px 16px',
-                      borderRadius: 999,
-                      border: '1px solid rgba(255,255,255,0.22)',
-                      background: 'rgba(255,255,255,0.06)',
-                      color: 'rgba(255,255,255,0.90)',
-                      cursor: 'pointer',
-                      fontSize: 14,
-                    }}
-                  >
-                    Sign in
-                  </button>
-                </SignInButton>
-              </SignedOut>
-
-              <SignedIn>
-                <UserButton />
-              </SignedIn>
             </div>
 
             {member && canSeeMemberBox && (
