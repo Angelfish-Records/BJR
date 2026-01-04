@@ -15,6 +15,8 @@ import {hasAnyEntitlement, listCurrentEntitlementKeys} from '../../lib/entitleme
 import {ENT, ENTITLEMENTS, deriveTier, pickAccent} from '../../lib/vocab'
 
 import SubscribeButton from './SubscribeButton'
+import CancelSubscriptionButton from './CancelSubscriptionButton'
+
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -132,6 +134,9 @@ export default async function Home(props: {
     accent = picked.accent
     accentLabel = picked.label
   }
+
+const hasGold = entitlementKeys.includes(ENTITLEMENTS.SUBSCRIPTION_GOLD)
+
 
   const canSeeMemberBox =
     member &&
@@ -298,10 +303,15 @@ export default async function Home(props: {
             <div style={{display: 'grid', justifyItems: 'center', gap: 12}}>
               <EarlyAccessForm />
 
-              {/* Purchase entrypoint */}
-              <div style={{marginTop: 6, display: 'grid', justifyItems: 'center', gap: 10}}>
+
+              {member ? (
+  <div style={{marginTop: 6, display: 'grid', justifyItems: 'center', gap: 10}}>
                 <SubscribeButton loggedIn={!!userId} />
-              </div>
+
+    {hasGold ? <CancelSubscriptionButton /> : null}
+  </div>
+) : null}
+
 
               <div style={{display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center'}}>
                 {page?.primaryCtaText && page?.primaryCtaHref && (
