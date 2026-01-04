@@ -1,8 +1,8 @@
 // web/app/home/ActivationGate.tsx
 'use client'
 
-import {useEffect, useMemo, useState} from 'react'
-import {useAuth, useSignIn} from '@clerk/nextjs'
+import {useEffect, useMemo, useRef, useState} from 'react'
+import {useAuth, useSignIn, useUser} from '@clerk/nextjs'
 import {useRouter} from 'next/navigation'
 
 type Phase = 'idle' | 'code'
@@ -89,11 +89,122 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
   )
 }
 
+function normalizeDigits(raw: string): string {
+  return raw.replace(/\D/g, '').slice(0, 6)
+}
+
+function OtpBoxes(props: {
+  value: string
+  onChange: (next: string) => void
+  disabled?: boolean
+  width: number
+  onComplete?: () => void
+}) {
+  const {value, onChange, disabled, width, onComplete} = props
+  const digits = (value + '______').slice(0, 6).split('')
+  const refs = useRef<Array<HTMLInputElement | null>>([])
+
+  useEffect(() => {
+    if (value.length === 6) onComplete?.()
+  }, [value, onComplete])
+
+  function setAt(index: number, ch: string) {
+    const next = value.split('')
+    while (next.length < 6) next.push('')
+    next[index] = ch
+    const joined = normalizeDigits(next.join(''))
+    onChange(joined)
+  }
+
+  function focus(i: number) {
+    refs.current[i]?.focus()
+  }
+
+  const gap = 10
+  const boxW = Math.floor((width - gap * 5) / 6)
+
+  return (
+    <div style={{display: 'grid', gap: 10, justifyItems: 'center'}}>
+      <div style={{display: 'flex', gap}}>
+        {digits.map((d, i) => (
+          <input
+            key={i}
+            ref={(el) => {
+              refs.current[i] = el
+            }}
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={d === '_' ? '' : d}
+            disabled={disabled}
+            onChange={(e) => {
+              const n = normalizeDigits(e.target.value)
+              const ch = n.slice(-1) // last digit typed
+              setAt(i, ch)
+              if (ch && i < 5) focus(i + 1)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Backspace') {
+                if (!digits[i] || digits[i] === '_') {
+                  if (i > 0) focus(i - 1)
+                } else {
+                  setAt(i, '')
+                }
+              }
+              if (e.key === 'ArrowLeft' && i > 0) focus(i - 1)
+              if (e.key === 'ArrowRight' && i < 5) focus(i + 1)
+            }}
+            onPaste={(e) => {
+              const text = e.clipboardData.getData('text') || ''
+              const pasted = normalizeDigits(text)
+              if (!pasted) return
+              e.preventDefault()
+              onChange(pasted)
+              // focus last filled
+              const idx = Math.min(5, pasted.length - 1)
+              setTimeout(() => focus(idx), 0)
+            }}
+            style={{
+              width: boxW,
+              height: 48,
+              borderRadius: 12,
+              border: '1px solid rgba(255,255,255,0.18)',
+              background: 'rgba(0,0,0,0.35)',
+              color: 'rgba(255,255,255,0.92)',
+              textAlign: 'center',
+              fontSize: 18,
+              outline: 'none',
+              boxShadow: '0 12px 26px rgba(0,0,0,0.24)',
+            }}
+          />
+        ))}
+      </div>
+
+      {/* hidden full-value input for accessibility / mobile autofill */}
+      <input
+        aria-label="One-time password"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        value={value}
+        onChange={(e) => onChange(normalizeDigits(e.target.value))}
+        style={{
+          position: 'absolute',
+          opacity: 0,
+          pointerEvents: 'none',
+          height: 0,
+          width: 0,
+        }}
+        tabIndex={-1}
+      />
+    </div>
+  )
+}
+
 export default function ActivationGate(props: {children: React.ReactNode}) {
   const {children} = props
   const router = useRouter()
 
   const {isSignedIn} = useAuth()
+  const {user} = useUser()
   const {signIn, isLoaded} = useSignIn()
 
   const [email, setEmail] = useState('')
@@ -102,12 +213,20 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
   const [isVerifying, setIsVerifying] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const isActive = !!isSignedIn
+
+  const displayEmail =
+    (user?.primaryEmailAddress?.emailAddress ??
+      user?.emailAddresses?.[0]?.emailAddress ??
+      '') || email
+
   const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), [email])
 
+  // Ensure server components re-render with session-aware data once signed in
   useEffect(() => {
-    if (!isSignedIn) return
+    if (!isActive) return
     router.refresh()
-  }, [isSignedIn, router])
+  }, [isActive, router])
 
   async function startEmailCode() {
     if (!isLoaded || !signIn) return
@@ -127,9 +246,9 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
     }
   }
 
-  async function verifyCode() {
+  async function verifyCode(submitCode: string) {
     if (!isLoaded || !signIn) return
-    if (code.length !== 6) return
+    if (submitCode.length !== 6) return
 
     setError(null)
     setIsVerifying(true)
@@ -137,7 +256,7 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
     try {
       const result = await signIn.attemptFirstFactor({
         strategy: 'email_code',
-        code,
+        code: submitCode,
       })
 
       if (result.status === 'complete') {
@@ -153,83 +272,98 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
     }
   }
 
-  useEffect(() => {
-    if (phase !== 'code') return
-    if (code.length !== 6) return
-    void verifyCode()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code, phase])
-
-  const isActive = !!isSignedIn // <-- FIX: coerce boolean|undefined -> boolean
+  // Layout constraints: email and toggle side-by-side
+  const EMAIL_W = 320
 
   const toggleClickable = !isActive && phase === 'idle' && emailValid && isLoaded
 
   return (
-    <div style={{display: 'grid', gap: 14, justifyItems: 'center'}}>
-      <Toggle checked={isActive} disabled={!toggleClickable} onClick={startEmailCode} />
+    <div style={{display: 'grid', gap: 12, justifyItems: 'center'}}>
+      {/* Row: identity slot + toggle */}
+      <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
+        {/* Identity slot: input when logged out, button when logged in */}
+        {!isActive ? (
+          <input
+            type="email"
+            placeholder="you@email.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value.trim())}
+            style={{
+              width: EMAIL_W,
+              padding: '11px 14px',
+              borderRadius: 999,
+              border: '1px solid rgba(255,255,255,0.18)',
+              background: 'rgba(0,0,0,0.35)',
+              color: 'rgba(255,255,255,0.92)',
+              outline: 'none',
+              textAlign: 'left',
+              boxShadow: '0 14px 30px rgba(0,0,0,0.22)',
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            style={{
+              width: EMAIL_W,
+              padding: '11px 14px',
+              borderRadius: 999,
+              border: '1px solid rgba(255,255,255,0.18)',
+              background: 'rgba(0,0,0,0.26)',
+              color: 'rgba(255,255,255,0.88)',
+              textAlign: 'left',
+              cursor: 'default',
+              boxShadow: '0 14px 30px rgba(0,0,0,0.22)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+            aria-label="Signed in identity"
+          >
+            {displayEmail}
+          </button>
+        )}
 
-      {!isActive && (
-        <>
-          {phase !== 'code' ? (
-            <input
-              type="email"
-              placeholder="you@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value.trim())}
-              style={{
-                width: 300,
-                padding: '11px 14px',
-                borderRadius: 999,
-                border: '1px solid rgba(255,255,255,0.18)',
-                background: 'rgba(0,0,0,0.35)',
-                color: 'rgba(255,255,255,0.92)',
-                outline: 'none',
-                textAlign: 'center',
-              }}
-            />
-          ) : (
-            <div style={{display: 'grid', gap: 10, justifyItems: 'center'}}>
-              <input
-                inputMode="numeric"
-                pattern="[0-9]*"
-                placeholder="••••••"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                style={{
-                  width: 200,
-                  padding: '11px 14px',
-                  borderRadius: 999,
-                  border: '1px solid rgba(255,255,255,0.18)',
-                  background: 'rgba(0,0,0,0.35)',
-                  color: 'rgba(255,255,255,0.92)',
-                  letterSpacing: 8,
-                  textAlign: 'center',
-                  outline: 'none',
-                }}
-                disabled={isVerifying}
-              />
+        <Toggle checked={isActive} disabled={!toggleClickable} onClick={startEmailCode} />
+      </div>
 
-              <button
-                disabled={code.length !== 6 || isVerifying}
-                onClick={verifyCode}
-                style={{
-                  padding: '9px 14px',
-                  borderRadius: 999,
-                  border: '1px solid rgba(255,255,255,0.18)',
-                  background: 'color-mix(in srgb, var(--accent) 30%, transparent)',
-                  color: 'rgba(255,255,255,0.90)',
-                  cursor: code.length === 6 && !isVerifying ? 'pointer' : 'not-allowed',
-                  opacity: isVerifying ? 0.82 : 1,
-                }}
-              >
-                {isVerifying ? 'Verifying…' : 'Confirm'}
-              </button>
+      {/* OTP: slides down from below the identity row */}
+      {!isActive && phase === 'code' && (
+        <div
+          style={{
+            width: EMAIL_W,
+            transform: 'translateY(0px)',
+            animation: 'otpSlideDown 180ms ease-out',
+          }}
+        >
+          <style>
+            {`
+              @keyframes otpSlideDown {
+                from { opacity: 0; transform: translateY(-10px); }
+                to   { opacity: 1; transform: translateY(0px); }
+              }
+            `}
+          </style>
+
+          <OtpBoxes
+            width={EMAIL_W}
+            value={code}
+            onChange={(next) => {
+              setCode(next)
+              if (next.length === 6) void verifyCode(next) // auto-submit only
+            }}
+            disabled={isVerifying}
+            onComplete={() => {
+              if (code.length === 6) void verifyCode(code)
+            }}
+          />
+
+          {isVerifying && (
+            <div style={{marginTop: 10, fontSize: 12, opacity: 0.70, textAlign: 'center'}}>
+              Verifying…
             </div>
           )}
-        </>
+        </div>
       )}
-
-      {isActive && <>{children}</>}
 
       {error && (
         <div
@@ -237,13 +371,16 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
             fontSize: 12,
             opacity: 0.78,
             color: '#ffb4b4',
-            maxWidth: 360,
+            maxWidth: EMAIL_W,
             textAlign: 'center',
           }}
         >
           {error}
         </div>
       )}
+
+      {/* Authenticated content appears once active */}
+      {isActive && <>{children}</>}
     </div>
   )
 }
