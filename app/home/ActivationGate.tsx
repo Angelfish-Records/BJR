@@ -28,7 +28,6 @@ function looksLikeNoAccountError(err: unknown): boolean {
   const msg = getClerkErrorMessage(err).toLowerCase()
   const code = (getClerkFirstErrorCode(err) ?? '').toLowerCase()
 
-  // Clerk error codes can vary by version/config; message check is the pragmatic fallback.
   if (code.includes('not_found') || code.includes('identifier')) return true
   if (msg.includes("couldn't find your account")) return true
   if (msg.includes('could not find your account')) return true
@@ -149,8 +148,7 @@ function OtpBoxes(props: {
               const arr = value.split('')
               while (arr.length < 6) arr.push('')
               arr[i] = ch
-              const joined = normalizeDigits(arr.join(''))
-              onChange(joined)
+              onChange(normalizeDigits(arr.join('')))
               if (ch && i < 5) focus(i + 1)
             }}
             onKeyDown={(e) => {
@@ -202,78 +200,87 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
 
   const {isSignedIn} = useAuth()
   const {user} = useUser()
-  const {signIn, isLoaded: signInLoaded} = useSignIn()
-  const {signUp, isLoaded: signUpLoaded} = useSignUp()
+
+  const {
+    signIn,
+    setActive: setActiveSignIn,
+    isLoaded: signInLoaded,
+  } = useSignIn()
+
+  const {
+    signUp,
+    setActive: setActiveSignUp,
+    isLoaded: signUpLoaded,
+  } = useSignUp()
 
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [phase, setPhase] = useState<Phase>('idle')
-  const [flow, setFlow] = useState<Flow>(null) // <--- which Clerk object we’re using for the OTP verification
+  const [flow, setFlow] = useState<Flow>(null)
+  const [isSending, setIsSending] = useState(false)
   const [isVerifying, setIsVerifying] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const isActive = !!isSignedIn
+  const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), [email])
+  const clerkLoaded = signInLoaded && signUpLoaded
 
   const displayEmail =
     (user?.primaryEmailAddress?.emailAddress ??
       user?.emailAddresses?.[0]?.emailAddress ??
       '') || email
 
-  const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), [email])
-
-  // refresh server state once signed in
   useEffect(() => {
     if (!isActive) return
     router.refresh()
   }, [isActive, router])
 
-  const clerkLoaded = signInLoaded && signUpLoaded
+  const EMAIL_W = 320
+  const toggleClickable = !isActive && phase === 'idle' && emailValid && clerkLoaded
 
   async function startEmailCode() {
-    if (!clerkLoaded) return
-    if (!emailValid) return
+    if (!clerkLoaded || !emailValid) return
     if (!signIn || !signUp) return
 
     setError(null)
     setCode('')
+    setFlow(null)
     setIsVerifying(false)
+    setIsSending(true)
 
-    // First, try SIGN-IN. If no account exists, fallback to SIGN-UP.
+    // Show OTP immediately (don’t wait on network)
+    setPhase('code')
+
+    // Try sign-in
     try {
-      await signIn.create({
-        identifier: email,
-        strategy: 'email_code',
-      })
+      await signIn.create({identifier: email, strategy: 'email_code'})
       setFlow('signin')
-      setPhase('code')
+      setIsSending(false)
       return
     } catch (err) {
-      // If it's "no account", initiate sign-up flow instead.
       if (!looksLikeNoAccountError(err)) {
         setError(getClerkErrorMessage(err))
+        setIsSending(false)
+        setPhase('idle')
         return
       }
     }
 
+    // Fallback sign-up
     try {
-      await signUp.create({
-        emailAddress: email,
-      })
-
-      await signUp.prepareEmailAddressVerification({
-        strategy: 'email_code',
-      })
-
+      await signUp.create({emailAddress: email})
+      await signUp.prepareEmailAddressVerification({strategy: 'email_code'})
       setFlow('signup')
-      setPhase('code')
+      setIsSending(false)
     } catch (err) {
       setError(getClerkErrorMessage(err))
+      setIsSending(false)
+      setPhase('idle')
     }
   }
 
   async function verifyCode(submitCode: string) {
-    if (!clerkLoaded) return
-    if (submitCode.length !== 6) return
+    if (!clerkLoaded || submitCode.length !== 6) return
     if (!flow) return
 
     setError(null)
@@ -281,28 +288,36 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
 
     try {
       if (flow === 'signin') {
-        if (!signIn) throw new Error('Sign-in not ready')
+        if (!signIn || !setActiveSignIn) throw new Error('Sign-in not ready')
+
         const result = await signIn.attemptFirstFactor({
           strategy: 'email_code',
           code: submitCode,
         })
+
         if (result.status === 'complete') {
+          const sid = (result as unknown as {createdSessionId?: string}).createdSessionId
+          if (sid) await setActiveSignIn({session: sid})
           router.refresh()
           return
         }
+
         setError('Verification incomplete')
         return
       }
 
       // flow === 'signup'
-      if (!signUp) throw new Error('Sign-up not ready')
-      const result = await signUp.attemptEmailAddressVerification({
-        code: submitCode,
-      })
+      if (!signUp || !setActiveSignUp) throw new Error('Sign-up not ready')
+
+      const result = await signUp.attemptEmailAddressVerification({code: submitCode})
+
       if (result.status === 'complete') {
+        const sid = (result as unknown as {createdSessionId?: string}).createdSessionId
+        if (sid) await setActiveSignUp({session: sid})
         router.refresh()
         return
       }
+
       setError('Verification incomplete')
     } catch (err) {
       setError(getClerkErrorMessage(err))
@@ -311,12 +326,6 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
     }
   }
 
-  // layout: email + toggle inline
-  const EMAIL_W = 320
-
-  const toggleClickable = !isActive && phase === 'idle' && emailValid && clerkLoaded
-
-  // auto-submit once 6 digits entered
   useEffect(() => {
     if (phase !== 'code') return
     if (code.length !== 6) return
@@ -376,17 +385,15 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
           style={{
             width: EMAIL_W,
             transform: 'translateY(0px)',
-            animation: 'otpSlideDown 180ms ease-out',
+            animation: 'otpSlideDown 160ms ease-out',
           }}
         >
-          <style>
-            {`
-              @keyframes otpSlideDown {
-                from { opacity: 0; transform: translateY(-10px); }
-                to   { opacity: 1; transform: translateY(0px); }
-              }
-            `}
-          </style>
+          <style>{`
+            @keyframes otpSlideDown {
+              from { opacity: 0; transform: translateY(-10px); }
+              to   { opacity: 1; transform: translateY(0px); }
+            }
+          `}</style>
 
           <OtpBoxes
             width={EMAIL_W}
@@ -394,6 +401,12 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
             onChange={(next) => setCode(normalizeDigits(next))}
             disabled={isVerifying}
           />
+
+          {(isSending || !flow) && (
+            <div style={{marginTop: 10, fontSize: 12, opacity: 0.70, textAlign: 'center'}}>
+              Sending code…
+            </div>
+          )}
 
           {isVerifying && (
             <div style={{marginTop: 10, fontSize: 12, opacity: 0.70, textAlign: 'center'}}>
