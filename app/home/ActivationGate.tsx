@@ -9,12 +9,84 @@ type Phase = 'idle' | 'code'
 
 function getClerkErrorMessage(err: unknown): string {
   if (!err || typeof err !== 'object') return 'Something went wrong'
-  // Clerk often throws { errors: [{ message: string }] }
   const e = err as {errors?: Array<{message?: unknown}>; message?: unknown}
   const first = e.errors?.[0]?.message
   if (typeof first === 'string' && first.trim()) return first
   if (typeof e.message === 'string' && e.message.trim()) return e.message
   return 'Something went wrong'
+}
+
+function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => void}) {
+  const {checked, disabled, onClick} = props
+
+  const w = 56
+  const h = 32
+  const pad = 3
+  const knob = h - pad * 2
+  const travel = w - pad * 2 - knob
+
+  return (
+    <button
+      type="button"
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      aria-checked={checked}
+      role="switch"
+      style={{
+        width: w,
+        height: h,
+        borderRadius: 999,
+        border: '1px solid rgba(255,255,255,0.18)',
+        background: checked
+          ? 'color-mix(in srgb, var(--accent) 78%, rgba(0,0,0,0.20))'
+          : 'rgba(255,255,255,0.10)',
+        position: 'relative',
+        padding: 0,
+        outline: 'none',
+        cursor: disabled ? 'default' : 'pointer',
+        transition:
+          'background 180ms ease, box-shadow 180ms ease, border-color 180ms ease, opacity 180ms ease',
+        boxShadow: checked
+          ? '0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent), 0 10px 26px rgba(0,0,0,0.35)'
+          : '0 10px 26px rgba(0,0,0,0.28)',
+        opacity: disabled ? 0.65 : 1,
+      }}
+    >
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: 1,
+          borderRadius: 999,
+          background:
+            'linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.02) 45%, rgba(0,0,0,0.10))',
+          pointerEvents: 'none',
+          mixBlendMode: 'screen',
+          opacity: checked ? 0.55 : 0.35,
+          transition: 'opacity 180ms ease',
+        }}
+      />
+
+      <div
+        aria-hidden
+        style={{
+          width: knob,
+          height: knob,
+          borderRadius: 999,
+          position: 'absolute',
+          top: pad,
+          left: pad,
+          transform: `translateX(${checked ? travel : 0}px)`,
+          transition:
+            'transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease',
+          background: 'rgba(255,255,255,0.98)',
+          boxShadow: checked
+            ? '0 10px 22px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.65) inset'
+            : '0 10px 22px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.45) inset',
+        }}
+      />
+    </button>
+  )
 }
 
 export default function ActivationGate(props: {children: React.ReactNode}) {
@@ -30,12 +102,8 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
   const [isVerifying, setIsVerifying] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const emailValid = useMemo(
-    () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),
-    [email]
-  )
+  const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), [email])
 
-  // If already signed in, skip the ritual entirely
   useEffect(() => {
     if (!isSignedIn) return
     router.refresh()
@@ -85,7 +153,6 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
     }
   }
 
-  // Nice UX: auto-verify as soon as we have 6 digits
   useEffect(() => {
     if (phase !== 'code') return
     if (code.length !== 6) return
@@ -93,94 +160,84 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, phase])
 
-  // Once signed in, render authenticated UI
-  if (isSignedIn) return <>{children}</>
+  const isActive = !!isSignedIn // <-- FIX: coerce boolean|undefined -> boolean
 
-  const toggleArmed = phase === 'idle' && emailValid && isLoaded
+  const toggleClickable = !isActive && phase === 'idle' && emailValid && isLoaded
 
   return (
-    <div style={{display: 'grid', gap: 12, justifyItems: 'center'}}>
-      {phase !== 'code' ? (
-        <>
-          <input
-            type="email"
-            placeholder="you@email.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value.trim())}
-            style={{
-              width: 260,
-              padding: '10px 12px',
-              borderRadius: 10,
-              border: '1px solid rgba(255,255,255,0.18)',
-              background: 'rgba(0,0,0,0.35)',
-              color: 'white',
-              outline: 'none',
-              opacity: 0.9,
-            }}
-          />
+    <div style={{display: 'grid', gap: 14, justifyItems: 'center'}}>
+      <Toggle checked={isActive} disabled={!toggleClickable} onClick={startEmailCode} />
 
-          <button
-            disabled={!toggleArmed}
-            onClick={startEmailCode}
-            style={{
-              width: 56,
-              height: 30,
-              borderRadius: 999,
-              border: '1px solid rgba(255,255,255,0.22)',
-              background: toggleArmed
-                ? 'color-mix(in srgb, var(--accent) 45%, transparent)'
-                : 'rgba(255,255,255,0.08)',
-              cursor: toggleArmed ? 'pointer' : 'not-allowed',
-              transition: 'all 160ms ease',
-            }}
-            aria-label="Activate access"
-          />
-        </>
-      ) : (
+      {!isActive && (
         <>
-          <input
-            inputMode="numeric"
-            pattern="[0-9]*"
-            placeholder="6-digit code"
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-            style={{
-              width: 180,
-              padding: '10px 12px',
-              letterSpacing: 6,
-              textAlign: 'center',
-              borderRadius: 10,
-              border: '1px solid rgba(255,255,255,0.18)',
-              background: 'rgba(0,0,0,0.35)',
-              color: 'white',
-            }}
-            disabled={isVerifying}
-          />
+          {phase !== 'code' ? (
+            <input
+              type="email"
+              placeholder="you@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value.trim())}
+              style={{
+                width: 300,
+                padding: '11px 14px',
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.18)',
+                background: 'rgba(0,0,0,0.35)',
+                color: 'rgba(255,255,255,0.92)',
+                outline: 'none',
+                textAlign: 'center',
+              }}
+            />
+          ) : (
+            <div style={{display: 'grid', gap: 10, justifyItems: 'center'}}>
+              <input
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="••••••"
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                style={{
+                  width: 200,
+                  padding: '11px 14px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(255,255,255,0.18)',
+                  background: 'rgba(0,0,0,0.35)',
+                  color: 'rgba(255,255,255,0.92)',
+                  letterSpacing: 8,
+                  textAlign: 'center',
+                  outline: 'none',
+                }}
+                disabled={isVerifying}
+              />
 
-          <button
-            disabled={code.length !== 6 || isVerifying}
-            onClick={verifyCode}
-            style={{
-              padding: '8px 14px',
-              borderRadius: 999,
-              border: '1px solid rgba(255,255,255,0.22)',
-              background: 'color-mix(in srgb, var(--accent) 35%, transparent)',
-              cursor: code.length === 6 && !isVerifying ? 'pointer' : 'not-allowed',
-              opacity: isVerifying ? 0.8 : 1,
-            }}
-          >
-            {isVerifying ? 'Verifying…' : 'Confirm'}
-          </button>
+              <button
+                disabled={code.length !== 6 || isVerifying}
+                onClick={verifyCode}
+                style={{
+                  padding: '9px 14px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(255,255,255,0.18)',
+                  background: 'color-mix(in srgb, var(--accent) 30%, transparent)',
+                  color: 'rgba(255,255,255,0.90)',
+                  cursor: code.length === 6 && !isVerifying ? 'pointer' : 'not-allowed',
+                  opacity: isVerifying ? 0.82 : 1,
+                }}
+              >
+                {isVerifying ? 'Verifying…' : 'Confirm'}
+              </button>
+            </div>
+          )}
         </>
       )}
+
+      {isActive && <>{children}</>}
 
       {error && (
         <div
           style={{
             fontSize: 12,
-            opacity: 0.75,
+            opacity: 0.78,
             color: '#ffb4b4',
-            maxWidth: 320,
+            maxWidth: 360,
             textAlign: 'center',
           }}
         >
