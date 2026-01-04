@@ -130,35 +130,35 @@ export async function reconcileStripeSubscription(params: {
     const itemExpiry = expireNow ? new Date() : (endByPriceId.get(r.price_id) ?? null)
 
     await sql`
-      insert into entitlement_grants (
-        member_id,
-        entitlement_key,
-        scope_id,
-        scope_meta,
-        granted_by,
-        grant_reason,
-        grant_source,
-        grant_source_ref,
-        expires_at
-      )
-      values (
-        ${memberId}::uuid,
-        ${r.entitlement_key},
-        ${r.scope_id},
-        ${scopeMetaJson}::jsonb,
-        'system',
-        'stripe_subscription_reconciled',
-        'stripe_subscription',
-        ${sub.id},
-        ${itemExpiry ? itemExpiry.toISOString() : null}::timestamptz
-      )
-      on conflict (member_id, entitlement_key, coalesce(scope_id,''), grant_source, grant_source_ref)
-      where grant_source = 'stripe_subscription'
-      do update set
-        scope_meta = excluded.scope_meta,
-        expires_at = excluded.expires_at,
-        grant_reason = excluded.grant_reason
-    `
+  insert into entitlement_grants (
+    member_id,
+    entitlement_key,
+    scope_id,
+    scope_meta,
+    granted_by,
+    grant_reason,
+    grant_source,
+    grant_source_ref,
+    expires_at
+  )
+  values (
+    ${memberId}::uuid,
+    ${r.entitlement_key},
+    ${r.scope_id},
+    ${scopeMetaJson}::jsonb,
+    'system',
+    'stripe_subscription_reconciled',
+    'stripe_subscription',
+    ${sub.id},
+    ${itemExpiry ? itemExpiry.toISOString() : null}::timestamptz
+  )
+  on conflict (member_id, entitlement_key, coalesce(scope_id,''), grant_source, grant_source_ref)
+  do update set
+    scope_meta = excluded.scope_meta,
+    expires_at = excluded.expires_at,
+    grant_reason = excluded.grant_reason
+`
+
   }
 
   // 6) Expire stale entitlements tied to this subscription that are no longer implied
