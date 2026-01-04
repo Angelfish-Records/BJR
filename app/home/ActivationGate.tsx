@@ -8,6 +8,11 @@ import {useRouter} from 'next/navigation'
 type Phase = 'idle' | 'code'
 type Flow = 'signin' | 'signup' | null
 
+type Props = {
+  children: React.ReactNode
+  attentionMessage?: string | null
+}
+
 function getClerkErrorMessage(err: unknown): string {
   if (!err || typeof err !== 'object') return 'Something went wrong'
   const e = err as {errors?: Array<{message?: unknown; code?: unknown}>; message?: unknown}
@@ -194,24 +199,15 @@ function OtpBoxes(props: {
   )
 }
 
-export default function ActivationGate(props: {children: React.ReactNode}) {
-  const {children} = props
+export default function ActivationGate(props: Props) {
+  const {children, attentionMessage = null} = props
   const router = useRouter()
 
   const {isSignedIn} = useAuth()
   const {user} = useUser()
 
-  const {
-    signIn,
-    setActive: setActiveSignIn,
-    isLoaded: signInLoaded,
-  } = useSignIn()
-
-  const {
-    signUp,
-    setActive: setActiveSignUp,
-    isLoaded: signUpLoaded,
-  } = useSignUp()
+  const {signIn, setActive: setActiveSignIn, isLoaded: signInLoaded} = useSignIn()
+  const {signUp, setActive: setActiveSignUp, isLoaded: signUpLoaded} = useSignUp()
 
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
@@ -222,8 +218,9 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
   const [error, setError] = useState<string | null>(null)
 
   const isActive = !!isSignedIn
-  const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), [email])
   const clerkLoaded = signInLoaded && signUpLoaded
+
+  const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), [email])
 
   const displayEmail =
     (user?.primaryEmailAddress?.emailAddress ??
@@ -236,6 +233,9 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
   }, [isActive, router])
 
   const EMAIL_W = 320
+  const showAttention = !isActive && !!attentionMessage
+  const shouldShowBox = !isActive && (showAttention || phase === 'code')
+
   const toggleClickable = !isActive && phase === 'idle' && emailValid && clerkLoaded
 
   async function startEmailCode() {
@@ -248,10 +248,9 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
     setIsVerifying(false)
     setIsSending(true)
 
-    // Show OTP immediately (don’t wait on network)
+    // Switch box content immediately so message can fade out to OTP
     setPhase('code')
 
-    // Try sign-in
     try {
       await signIn.create({identifier: email, strategy: 'email_code'})
       setFlow('signin')
@@ -266,7 +265,6 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
       }
     }
 
-    // Fallback sign-up
     try {
       await signUp.create({emailAddress: email})
       await signUp.prepareEmailAddressVerification({strategy: 'email_code'})
@@ -289,35 +287,28 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
     try {
       if (flow === 'signin') {
         if (!signIn || !setActiveSignIn) throw new Error('Sign-in not ready')
-
         const result = await signIn.attemptFirstFactor({
           strategy: 'email_code',
           code: submitCode,
         })
-
         if (result.status === 'complete') {
           const sid = (result as unknown as {createdSessionId?: string}).createdSessionId
           if (sid) await setActiveSignIn({session: sid})
           router.refresh()
           return
         }
-
         setError('Verification incomplete')
         return
       }
 
-      // flow === 'signup'
       if (!signUp || !setActiveSignUp) throw new Error('Sign-up not ready')
-
       const result = await signUp.attemptEmailAddressVerification({code: submitCode})
-
       if (result.status === 'complete') {
         const sid = (result as unknown as {createdSessionId?: string}).createdSessionId
         if (sid) await setActiveSignUp({session: sid})
         router.refresh()
         return
       }
-
       setError('Verification incomplete')
     } catch (err) {
       setError(getClerkErrorMessage(err))
@@ -333,8 +324,17 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, phase])
 
+  const boxShowMessage = showAttention && phase !== 'code'
+
   return (
     <div style={{display: 'grid', gap: 12, justifyItems: 'center'}}>
+      <style>{`
+        @keyframes boxDown {
+          from { opacity: 0; transform: translateY(-10px); }
+          to   { opacity: 1; transform: translateY(0px); }
+        }
+      `}</style>
+
       <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
         {!isActive ? (
           <input
@@ -351,7 +351,12 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
               color: 'rgba(255,255,255,0.92)',
               outline: 'none',
               textAlign: 'left',
-              boxShadow: '0 14px 30px rgba(0,0,0,0.22)',
+              boxShadow: showAttention
+                ? `0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent),
+                   0 0 26px color-mix(in srgb, var(--accent) 40%, transparent),
+                   0 14px 30px rgba(0,0,0,0.22)`
+                : '0 14px 30px rgba(0,0,0,0.22)',
+              transition: 'box-shadow 220ms ease',
             }}
           />
         ) : (
@@ -380,53 +385,75 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
         <Toggle checked={isActive} disabled={!toggleClickable} onClick={startEmailCode} />
       </div>
 
-      {!isActive && phase === 'code' && (
+      {!isActive && shouldShowBox && (
         <div
           style={{
             width: EMAIL_W,
-            transform: 'translateY(0px)',
-            animation: 'otpSlideDown 160ms ease-out',
+            borderRadius: 16,
+            border: '1px solid rgba(255,255,255,0.14)',
+            background: 'rgba(0,0,0,0.28)',
+            padding: 12,
+            animation: 'boxDown 160ms ease-out',
+            boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
+            position: 'relative',
+            overflow: 'hidden',
+            minHeight: 72, // keeps the box stable while fading
           }}
         >
-          <style>{`
-            @keyframes otpSlideDown {
-              from { opacity: 0; transform: translateY(-10px); }
-              to   { opacity: 1; transform: translateY(0px); }
-            }
-          `}</style>
+          {/* Message layer */}
+          <div
+            style={{
+              position: 'absolute',
+              inset: 12,
+              display: 'grid',
+              placeItems: 'center',
+              textAlign: 'center',
+              fontSize: 13,
+              opacity: boxShowMessage ? 0.92 : 0,
+              pointerEvents: boxShowMessage ? 'auto' : 'none',
+              transition: 'opacity 180ms ease',
+            }}
+          >
+            {attentionMessage}
+          </div>
 
-          <OtpBoxes
-            width={EMAIL_W}
-            value={code}
-            onChange={(next) => setCode(normalizeDigits(next))}
-            disabled={isVerifying}
-          />
+          {/* OTP layer */}
+          <div
+            style={{
+              opacity: phase === 'code' ? 1 : 0,
+              transform: phase === 'code' ? 'translateY(0px)' : 'translateY(-4px)',
+              transition: 'opacity 180ms ease, transform 180ms ease',
+              pointerEvents: phase === 'code' ? 'auto' : 'none',
+              display: 'grid',
+              gap: 10,
+              justifyItems: 'center',
+            }}
+          >
+            <OtpBoxes
+              width={EMAIL_W - 2}
+              value={code}
+              onChange={(next) => setCode(normalizeDigits(next))}
+              disabled={isVerifying}
+            />
 
-          {(isSending || !flow) && (
-            <div style={{marginTop: 10, fontSize: 12, opacity: 0.70, textAlign: 'center'}}>
-              Sending code…
-            </div>
-          )}
+            {(isSending || !flow) && (
+              <div style={{fontSize: 12, opacity: 0.70, textAlign: 'center'}}>
+                Sending code…
+              </div>
+            )}
 
-          {isVerifying && (
-            <div style={{marginTop: 10, fontSize: 12, opacity: 0.70, textAlign: 'center'}}>
-              Verifying…
-            </div>
-          )}
-        </div>
-      )}
+            {isVerifying && (
+              <div style={{fontSize: 12, opacity: 0.70, textAlign: 'center'}}>
+                Verifying…
+              </div>
+            )}
 
-      {error && (
-        <div
-          style={{
-            fontSize: 12,
-            opacity: 0.78,
-            color: '#ffb4b4',
-            maxWidth: EMAIL_W,
-            textAlign: 'center',
-          }}
-        >
-          {error}
+            {error && (
+              <div style={{fontSize: 12, opacity: 0.88, color: '#ffb4b4', textAlign: 'center'}}>
+                {error}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

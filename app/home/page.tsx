@@ -16,7 +16,6 @@ import {ENT, ENTITLEMENTS, deriveTier, pickAccent} from '../../lib/vocab'
 import SubscribeButton from './SubscribeButton'
 import CancelSubscriptionButton from './CancelSubscriptionButton'
 
-
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 export const fetchCache = 'force-no-store'
@@ -81,14 +80,15 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function Home(props: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
-  // Make this request-bound (also helps avoid any static optimisation surprises)
   headers()
 
   const sp = (await props.searchParams) ?? {}
   const checkout = typeof sp.checkout === 'string' ? sp.checkout : null
 
-  // Server-side auth
   const {userId} = await auth()
+
+  // ✅ define it here (inside Home), before JSX uses it
+  const showPaymentPrompt = checkout === 'success' && !userId
 
   const user = userId ? await currentUser() : null
   const email =
@@ -134,8 +134,7 @@ export default async function Home(props: {
     accentLabel = picked.label
   }
 
-const hasGold = entitlementKeys.includes(ENTITLEMENTS.SUBSCRIPTION_GOLD)
-
+  const hasGold = entitlementKeys.includes(ENTITLEMENTS.SUBSCRIPTION_GOLD)
 
   const canSeeMemberBox =
     member &&
@@ -178,7 +177,6 @@ const hasGold = entitlementKeys.includes(ENTITLEMENTS.SUBSCRIPTION_GOLD)
         }}
       />
 
-      {/* Accent wash */}
       <div
         style={{
           position: 'absolute',
@@ -277,7 +275,7 @@ const hasGold = entitlementKeys.includes(ENTITLEMENTS.SUBSCRIPTION_GOLD)
                   opacity: 0.9,
                 }}
               >
-                ✅ Checkout completed. If entitlements haven’t appeared yet, refresh once (webhooks can be a beat
+                ✅ Checkout completed. If entitlements haven&apos;t appeared yet, refresh once (webhooks can be a beat
                 behind).
               </div>
             )}
@@ -300,17 +298,16 @@ const hasGold = entitlementKeys.includes(ENTITLEMENTS.SUBSCRIPTION_GOLD)
             )}
 
             <div style={{display: 'grid', justifyItems: 'center', gap: 12}}>
-                  <ActivationGate>
-  {member ? (
-    <div style={{marginTop: 6, display: 'grid', justifyItems: 'center', gap: 10}}>
-      {!hasGold ? <SubscribeButton loggedIn={!!userId} /> : null}
-      {hasGold ? <CancelSubscriptionButton /> : null}
-    </div>
-  ) : null}
-</ActivationGate>
-
-
-
+              <ActivationGate
+                attentionMessage={showPaymentPrompt ? 'Payment confirmed - activate to unlock.' : null}
+              >
+                {member ? (
+                  <div style={{marginTop: 6, display: 'grid', justifyItems: 'center', gap: 10}}>
+                    {!hasGold ? <SubscribeButton loggedIn={!!userId} /> : null}
+                    {hasGold ? <CancelSubscriptionButton /> : null}
+                  </div>
+                ) : null}
+              </ActivationGate>
 
               <div style={{display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center'}}>
                 {page?.primaryCtaText && page?.primaryCtaHref && (
