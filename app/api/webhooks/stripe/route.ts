@@ -88,11 +88,55 @@ export async function POST(req: Request) {
 
     const session = event.data.object as Stripe.Checkout.Session
 
-    // Subscriptions are reconciled via customer.subscription.* events.
-// Do NOT grant mappings here or you'll create permanent "subscription_*" entitlements.
-if (session.mode === 'subscription') {
-  // still okay to attach stripe_customer_id if you want, but skip grants
-  return NextResponse.json({ok: true})
+    // ---- Checkout session completed ----
+if (event.type === 'checkout.session.completed') {
+  const session = event.data.object as Stripe.Checkout.Session
+
+  // HARD RULE:
+  // Subscriptions NEVER grant entitlements from checkout completion.
+  // They are reconciled exclusively via customer.subscription.* events.
+  if (session.mode === 'subscription') {
+    const customerId =
+      (typeof session.customer === 'string'
+        ? session.customer
+        : session.customer?.id) ?? ''
+
+    // Still attach customer → member linkage if possible (harmless, useful)
+    if (customerId) {
+      const clerkUserId = (session.client_reference_id ?? '').toString().trim()
+      let memberId: string | null = null
+
+      if (clerkUserId) {
+        memberId = await getMemberIdByClerkUserId(clerkUserId)
+      }
+
+      if (!memberId) {
+        const emailRaw =
+          (session.customer_details?.email ?? session.customer_email ?? '')
+            .toString()
+            .trim()
+        const email = normalizeEmail(emailRaw)
+        if (email) {
+          const ensured = await ensureMemberByEmail({
+            email,
+            source: 'stripe',
+            sourceDetail: {checkout_session_id: session.id},
+            marketingOptIn: true,
+          })
+          memberId = ensured.id
+        }
+      }
+
+      if (memberId) {
+        await attachStripeCustomerId(memberId, customerId)
+      }
+    }
+
+    // Exit without granting anything
+    return NextResponse.json({ok: true})
+  }
+
+  // ---- One-off purchases continue below ----
 }
 
     // Resolve member via Clerk if present; otherwise via email (logged-out purchases)
