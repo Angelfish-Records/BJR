@@ -2,18 +2,39 @@
 'use client'
 
 import {useEffect, useMemo, useRef, useState} from 'react'
-import {useAuth, useSignIn, useUser} from '@clerk/nextjs'
+import {useAuth, useSignIn, useSignUp, useUser} from '@clerk/nextjs'
 import {useRouter} from 'next/navigation'
 
 type Phase = 'idle' | 'code'
+type Flow = 'signin' | 'signup' | null
 
 function getClerkErrorMessage(err: unknown): string {
   if (!err || typeof err !== 'object') return 'Something went wrong'
-  const e = err as {errors?: Array<{message?: unknown}>; message?: unknown}
-  const first = e.errors?.[0]?.message
-  if (typeof first === 'string' && first.trim()) return first
+  const e = err as {errors?: Array<{message?: unknown; code?: unknown}>; message?: unknown}
+  const firstMsg = e.errors?.[0]?.message
+  if (typeof firstMsg === 'string' && firstMsg.trim()) return firstMsg
   if (typeof e.message === 'string' && e.message.trim()) return e.message
   return 'Something went wrong'
+}
+
+function getClerkFirstErrorCode(err: unknown): string | null {
+  if (!err || typeof err !== 'object') return null
+  const e = err as {errors?: Array<{code?: unknown}>}
+  const c = e.errors?.[0]?.code
+  return typeof c === 'string' ? c : null
+}
+
+function looksLikeNoAccountError(err: unknown): boolean {
+  const msg = getClerkErrorMessage(err).toLowerCase()
+  const code = (getClerkFirstErrorCode(err) ?? '').toLowerCase()
+
+  // Clerk error codes can vary by version/config; message check is the pragmatic fallback.
+  if (code.includes('not_found') || code.includes('identifier')) return true
+  if (msg.includes("couldn't find your account")) return true
+  if (msg.includes('could not find your account')) return true
+  if (msg.includes('account not found')) return true
+
+  return false
 }
 
 function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => void}) {
@@ -66,7 +87,6 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
           transition: 'opacity 180ms ease',
         }}
       />
-
       <div
         aria-hidden
         style={{
@@ -98,23 +118,10 @@ function OtpBoxes(props: {
   onChange: (next: string) => void
   disabled?: boolean
   width: number
-  onComplete?: () => void
 }) {
-  const {value, onChange, disabled, width, onComplete} = props
+  const {value, onChange, disabled, width} = props
   const digits = (value + '______').slice(0, 6).split('')
   const refs = useRef<Array<HTMLInputElement | null>>([])
-
-  useEffect(() => {
-    if (value.length === 6) onComplete?.()
-  }, [value, onComplete])
-
-  function setAt(index: number, ch: string) {
-    const next = value.split('')
-    while (next.length < 6) next.push('')
-    next[index] = ch
-    const joined = normalizeDigits(next.join(''))
-    onChange(joined)
-  }
 
   function focus(i: number) {
     refs.current[i]?.focus()
@@ -138,16 +145,24 @@ function OtpBoxes(props: {
             disabled={disabled}
             onChange={(e) => {
               const n = normalizeDigits(e.target.value)
-              const ch = n.slice(-1) // last digit typed
-              setAt(i, ch)
+              const ch = n.slice(-1)
+              const arr = value.split('')
+              while (arr.length < 6) arr.push('')
+              arr[i] = ch
+              const joined = normalizeDigits(arr.join(''))
+              onChange(joined)
               if (ch && i < 5) focus(i + 1)
             }}
             onKeyDown={(e) => {
               if (e.key === 'Backspace') {
-                if (!digits[i] || digits[i] === '_') {
+                const cur = digits[i]
+                if (!cur || cur === '_') {
                   if (i > 0) focus(i - 1)
                 } else {
-                  setAt(i, '')
+                  const arr = value.split('')
+                  while (arr.length < 6) arr.push('')
+                  arr[i] = ''
+                  onChange(normalizeDigits(arr.join('')))
                 }
               }
               if (e.key === 'ArrowLeft' && i > 0) focus(i - 1)
@@ -159,7 +174,6 @@ function OtpBoxes(props: {
               if (!pasted) return
               e.preventDefault()
               onChange(pasted)
-              // focus last filled
               const idx = Math.min(5, pasted.length - 1)
               setTimeout(() => focus(idx), 0)
             }}
@@ -178,23 +192,6 @@ function OtpBoxes(props: {
           />
         ))}
       </div>
-
-      {/* hidden full-value input for accessibility / mobile autofill */}
-      <input
-        aria-label="One-time password"
-        inputMode="numeric"
-        pattern="[0-9]*"
-        value={value}
-        onChange={(e) => onChange(normalizeDigits(e.target.value))}
-        style={{
-          position: 'absolute',
-          opacity: 0,
-          pointerEvents: 'none',
-          height: 0,
-          width: 0,
-        }}
-        tabIndex={-1}
-      />
     </div>
   )
 }
@@ -205,11 +202,13 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
 
   const {isSignedIn} = useAuth()
   const {user} = useUser()
-  const {signIn, isLoaded} = useSignIn()
+  const {signIn, isLoaded: signInLoaded} = useSignIn()
+  const {signUp, isLoaded: signUpLoaded} = useSignUp()
 
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [phase, setPhase] = useState<Phase>('idle')
+  const [flow, setFlow] = useState<Flow>(null) // <--- which Clerk object we’re using for the OTP verification
   const [isVerifying, setIsVerifying] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -222,24 +221,50 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
 
   const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), [email])
 
-  // Ensure server components re-render with session-aware data once signed in
+  // refresh server state once signed in
   useEffect(() => {
     if (!isActive) return
     router.refresh()
   }, [isActive, router])
 
+  const clerkLoaded = signInLoaded && signUpLoaded
+
   async function startEmailCode() {
-    if (!isLoaded || !signIn) return
+    if (!clerkLoaded) return
     if (!emailValid) return
+    if (!signIn || !signUp) return
 
     setError(null)
     setCode('')
+    setIsVerifying(false)
 
+    // First, try SIGN-IN. If no account exists, fallback to SIGN-UP.
     try {
       await signIn.create({
         identifier: email,
         strategy: 'email_code',
       })
+      setFlow('signin')
+      setPhase('code')
+      return
+    } catch (err) {
+      // If it's "no account", initiate sign-up flow instead.
+      if (!looksLikeNoAccountError(err)) {
+        setError(getClerkErrorMessage(err))
+        return
+      }
+    }
+
+    try {
+      await signUp.create({
+        emailAddress: email,
+      })
+
+      await signUp.prepareEmailAddressVerification({
+        strategy: 'email_code',
+      })
+
+      setFlow('signup')
       setPhase('code')
     } catch (err) {
       setError(getClerkErrorMessage(err))
@@ -247,23 +272,37 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
   }
 
   async function verifyCode(submitCode: string) {
-    if (!isLoaded || !signIn) return
+    if (!clerkLoaded) return
     if (submitCode.length !== 6) return
+    if (!flow) return
 
     setError(null)
     setIsVerifying(true)
 
     try {
-      const result = await signIn.attemptFirstFactor({
-        strategy: 'email_code',
+      if (flow === 'signin') {
+        if (!signIn) throw new Error('Sign-in not ready')
+        const result = await signIn.attemptFirstFactor({
+          strategy: 'email_code',
+          code: submitCode,
+        })
+        if (result.status === 'complete') {
+          router.refresh()
+          return
+        }
+        setError('Verification incomplete')
+        return
+      }
+
+      // flow === 'signup'
+      if (!signUp) throw new Error('Sign-up not ready')
+      const result = await signUp.attemptEmailAddressVerification({
         code: submitCode,
       })
-
       if (result.status === 'complete') {
         router.refresh()
         return
       }
-
       setError('Verification incomplete')
     } catch (err) {
       setError(getClerkErrorMessage(err))
@@ -272,16 +311,22 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
     }
   }
 
-  // Layout constraints: email and toggle side-by-side
+  // layout: email + toggle inline
   const EMAIL_W = 320
 
-  const toggleClickable = !isActive && phase === 'idle' && emailValid && isLoaded
+  const toggleClickable = !isActive && phase === 'idle' && emailValid && clerkLoaded
+
+  // auto-submit once 6 digits entered
+  useEffect(() => {
+    if (phase !== 'code') return
+    if (code.length !== 6) return
+    void verifyCode(code)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code, phase])
 
   return (
     <div style={{display: 'grid', gap: 12, justifyItems: 'center'}}>
-      {/* Row: identity slot + toggle */}
       <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
-        {/* Identity slot: input when logged out, button when logged in */}
         {!isActive ? (
           <input
             type="email"
@@ -326,7 +371,6 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
         <Toggle checked={isActive} disabled={!toggleClickable} onClick={startEmailCode} />
       </div>
 
-      {/* OTP: slides down from below the identity row */}
       {!isActive && phase === 'code' && (
         <div
           style={{
@@ -347,14 +391,8 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
           <OtpBoxes
             width={EMAIL_W}
             value={code}
-            onChange={(next) => {
-              setCode(next)
-              if (next.length === 6) void verifyCode(next) // auto-submit only
-            }}
+            onChange={(next) => setCode(normalizeDigits(next))}
             disabled={isVerifying}
-            onComplete={() => {
-              if (code.length === 6) void verifyCode(code)
-            }}
           />
 
           {isVerifying && (
@@ -379,7 +417,6 @@ export default function ActivationGate(props: {children: React.ReactNode}) {
         </div>
       )}
 
-      {/* Authenticated content appears once active */}
       {isActive && <>{children}</>}
     </div>
   )
