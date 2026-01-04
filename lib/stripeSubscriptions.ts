@@ -152,12 +152,13 @@ export async function reconcileStripeSubscription(params: {
     ${sub.id},
     ${itemExpiry ? itemExpiry.toISOString() : null}::timestamptz
   )
-  on conflict (member_id, entitlement_key, coalesce(scope_id,''), grant_source, grant_source_ref)
+  on conflict on constraint entitlement_grants_unique_stripe_subscription
   do update set
     scope_meta = excluded.scope_meta,
     expires_at = excluded.expires_at,
     grant_reason = excluded.grant_reason
-`
+`;
+
 
   }
 
