@@ -304,13 +304,13 @@ const hasGold = entitlementKeys.includes(ENTITLEMENTS.SUBSCRIPTION_GOLD)
               <EarlyAccessForm />
 
 
-              {member ? (
+{member ? (
   <div style={{marginTop: 6, display: 'grid', justifyItems: 'center', gap: 10}}>
-                <SubscribeButton loggedIn={!!userId} />
-
+    {!hasGold ? <SubscribeButton loggedIn={!!userId} /> : null}
     {hasGold ? <CancelSubscriptionButton /> : null}
   </div>
 ) : null}
+
 
 
               <div style={{display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center'}}>

@@ -88,6 +88,13 @@ export async function POST(req: Request) {
 
     const session = event.data.object as Stripe.Checkout.Session
 
+    // Subscriptions are reconciled via customer.subscription.* events.
+// Do NOT grant mappings here or you'll create permanent "subscription_*" entitlements.
+if (session.mode === 'subscription') {
+  // still okay to attach stripe_customer_id if you want, but skip grants
+  return NextResponse.json({ok: true})
+}
+
     // Resolve member via Clerk if present; otherwise via email (logged-out purchases)
     const clerkUserId = (session.client_reference_id ?? '').toString().trim()
     let memberId: string | null = null

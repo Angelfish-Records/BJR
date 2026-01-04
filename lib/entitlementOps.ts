@@ -6,6 +6,12 @@ import {logEntitlementGranted, logEntitlementRevoked} from './events'
 const uuidOk = (v: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v)
 
+// Keep subscription entitlements as plain text keys (stable, readable, not structured JSON).
+// Add-only. Avoid renames once in the wild.
+const SUBSCRIPTION = {
+  GOLD: 'subscription_gold',
+} as const
+
 type GrantParams = {
   memberId: string
   entitlementKey: string
@@ -25,14 +31,23 @@ type GrantParams = {
 async function applySideEffectGrants(params: {
   memberId: string
   entitlementKey: string
+  expiresAt: Date | null
   correlationId: string | null
   eventSource: EventSource | string
   grantedBy: string
   grantSource: string
   grantSourceRef: string | null
 }) {
-  const {memberId, entitlementKey, correlationId, eventSource, grantedBy, grantSource, grantSourceRef} =
-    params
+  const {
+    memberId,
+    entitlementKey,
+    expiresAt,
+    correlationId,
+    eventSource,
+    grantedBy,
+    grantSource,
+    grantSourceRef,
+  } = params
 
   // FREE_MEMBER implies basic ability to view /home (display-only sandbox today).
   if (entitlementKey === ENTITLEMENTS.FREE_MEMBER) {
@@ -68,18 +83,18 @@ async function applySideEffectGrants(params: {
 
   // subscription_gold implies premium tier + gold theme.
   // Stripe (or any billing source) should grant ONLY subscription_gold with an expiry.
-  // Everything else is derived here as policy.
-  if (entitlementKey === ENTITLEMENTS.SUBSCRIPTION_GOLD) {
+  // Everything else is derived here as policy — and MUST expire with the subscription.
+  if (entitlementKey === SUBSCRIPTION.GOLD) {
     await grantEntitlement({
       memberId,
       entitlementKey: ENT.tier('premium'),
       scopeId: null,
-      scopeMeta: {implied_by: ENTITLEMENTS.SUBSCRIPTION_GOLD},
+      scopeMeta: {implied_by: SUBSCRIPTION.GOLD},
       grantedBy,
       grantReason: 'implied: gold subscription implies premium tier',
       grantSource,
       grantSourceRef,
-      expiresAt: null,
+      expiresAt, // IMPORTANT: inherit expiry
       correlationId,
       eventSource,
     })
@@ -88,12 +103,12 @@ async function applySideEffectGrants(params: {
       memberId,
       entitlementKey: ENT.theme('gold'),
       scopeId: null,
-      scopeMeta: {implied_by: ENTITLEMENTS.SUBSCRIPTION_GOLD},
+      scopeMeta: {implied_by: SUBSCRIPTION.GOLD},
       grantedBy,
       grantReason: 'implied: gold subscription grants gold theme',
       grantSource,
       grantSourceRef,
-      expiresAt: null,
+      expiresAt, // IMPORTANT: inherit expiry
       correlationId,
       eventSource,
     })
@@ -166,10 +181,10 @@ export async function grantEntitlement(params: GrantParams): Promise<void> {
     },
   })
 
-  // Apply implied “side-effect” grants (policy lives here, not in callers).
   await applySideEffectGrants({
     memberId,
     entitlementKey,
+    expiresAt,
     correlationId,
     eventSource,
     grantedBy,
