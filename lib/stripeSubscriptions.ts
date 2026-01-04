@@ -3,6 +3,7 @@ import 'server-only'
 import {sql} from '@vercel/postgres'
 import Stripe from 'stripe'
 import {ensureMemberByEmail, normalizeEmail} from './members'
+import {ENT, ENTITLEMENTS} from './vocab'
 
 type PriceEntitlementRow = {
   price_id: string
@@ -18,6 +19,15 @@ function toDateFromUnixSeconds(s: number | null | undefined): Date | null {
 
 function keyOf(entitlementKey: string, scopeId: string | null): string {
   return `${entitlementKey}::${scopeId ?? ''}`
+}
+
+function maxDate(dates: Array<Date | null>): Date | null {
+  let best: Date | null = null
+  for (const d of dates) {
+    if (!d) continue
+    if (!best || d.getTime() > best.getTime()) best = d
+  }
+  return best
 }
 
 async function attachStripeCustomerId(memberId: string, customerId: string): Promise<void> {
@@ -39,8 +49,12 @@ async function attachStripeCustomerId(memberId: string, customerId: string): Pro
  *
  * Behaviour:
  * - For all entitlements implied by subscription items, upsert a grant row whose expires_at
- *   equals the item's current_period_end (or now() on cancel/delete).
+ *   equals the item's current_period_end (or now() on terminal status).
  * - For entitlements previously associated with this subscription but no longer implied, expire them now.
+ *
+ * Additionally:
+ * - If SUBSCRIPTION_GOLD is implied, also upsert its implied structured entitlements:
+ *   ENT.tier('premium') and ENT.theme('gold'), with the same source/ref/expiry.
  */
 export async function reconcileStripeSubscription(params: {
   stripe: Stripe
@@ -121,45 +135,77 @@ export async function reconcileStripeSubscription(params: {
   const expireNow =
     status === 'canceled' || status === 'incomplete_expired' || status === 'unpaid'
 
+  // Choose a single “subscription window” end for implied entitlements:
+  // latest current_period_end across all items (good default even if multiple items exist).
+  const subscriptionWindowEnd = expireNow
+    ? new Date()
+    : maxDate(Array.from(endByPriceId.values()))
+
+  // 4b) Add implied entitlements when SUBSCRIPTION_GOLD is present
+  const hasGold = entRows.some((r) => r.entitlement_key === ENTITLEMENTS.SUBSCRIPTION_GOLD)
+  const impliedRows: PriceEntitlementRow[] = hasGold
+    ? [
+        {
+          price_id: '__implied__',
+          entitlement_key: ENT.tier('premium'),
+          scope_id: null,
+          scope_meta: {},
+        },
+        {
+          price_id: '__implied__',
+          entitlement_key: ENT.theme('gold'),
+          scope_id: null,
+          scope_meta: {},
+        },
+      ]
+    : []
+
+  const allDesiredRows = [...entRows, ...impliedRows]
+
   // Build stable key set of desired entitlements (for stale-expiry step)
-  const desiredKeys = new Set(entRows.map((r) => keyOf(r.entitlement_key, r.scope_id)))
+  const desiredKeys = new Set(allDesiredRows.map((r) => keyOf(r.entitlement_key, r.scope_id)))
 
   // 5) Upsert desired entitlement grants per entitlement row
-  for (const r of entRows) {
+  for (const r of allDesiredRows) {
     const scopeMetaJson = JSON.stringify(r.scope_meta ?? {})
-    const itemExpiry = expireNow ? new Date() : (endByPriceId.get(r.price_id) ?? null)
+
+    // Normal mapped entitlements can be per-price; implied entitlements use the subscription window end.
+    const itemExpiry =
+      expireNow
+        ? new Date()
+        : r.price_id === '__implied__'
+          ? subscriptionWindowEnd
+          : (endByPriceId.get(r.price_id) ?? null)
 
     await sql`
-  insert into entitlement_grants (
-    member_id,
-    entitlement_key,
-    scope_id,
-    scope_meta,
-    granted_by,
-    grant_reason,
-    grant_source,
-    grant_source_ref,
-    expires_at
-  )
-  values (
-    ${memberId}::uuid,
-    ${r.entitlement_key},
-    ${r.scope_id},
-    ${scopeMetaJson}::jsonb,
-    'system',
-    'stripe_subscription_reconciled',
-    'stripe_subscription',
-    ${sub.id},
-    ${itemExpiry ? itemExpiry.toISOString() : null}::timestamptz
-  )
-  on conflict on constraint entitlement_grants_unique_stripe_subscription
-  do update set
-    scope_meta = excluded.scope_meta,
-    expires_at = excluded.expires_at,
-    grant_reason = excluded.grant_reason
-`;
-
-
+      insert into entitlement_grants (
+        member_id,
+        entitlement_key,
+        scope_id,
+        scope_meta,
+        granted_by,
+        grant_reason,
+        grant_source,
+        grant_source_ref,
+        expires_at
+      )
+      values (
+        ${memberId}::uuid,
+        ${r.entitlement_key},
+        ${r.scope_id},
+        ${scopeMetaJson}::jsonb,
+        'system',
+        'stripe_subscription_reconciled',
+        'stripe_subscription',
+        ${sub.id},
+        ${itemExpiry ? itemExpiry.toISOString() : null}::timestamptz
+      )
+      on conflict on constraint entitlement_grants_unique_stripe_subscription
+      do update set
+        scope_meta = excluded.scope_meta,
+        expires_at = excluded.expires_at,
+        grant_reason = excluded.grant_reason
+    `
   }
 
   // 6) Expire stale entitlements tied to this subscription that are no longer implied
