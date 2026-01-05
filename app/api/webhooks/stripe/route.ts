@@ -92,49 +92,52 @@ export async function POST(req: Request) {
 if (event.type === 'checkout.session.completed') {
   const session = event.data.object as Stripe.Checkout.Session
 
-  // HARD RULE:
-  // Subscriptions NEVER grant entitlements from checkout completion.
-  // They are reconciled exclusively via customer.subscription.* events.
-  if (session.mode === 'subscription') {
-    const customerId =
-      (typeof session.customer === 'string'
-        ? session.customer
-        : session.customer?.id) ?? ''
+if (session.mode === 'subscription') {
+  // Attach customer → member linkage (as you already do)
+  const customerId =
+    (typeof session.customer === 'string'
+      ? session.customer
+      : session.customer?.id) ?? ''
 
-    // Still attach customer → member linkage if possible (harmless, useful)
-    if (customerId) {
-      const clerkUserId = (session.client_reference_id ?? '').toString().trim()
-      let memberId: string | null = null
+  if (customerId) {
+    const clerkUserId = (session.client_reference_id ?? '').toString().trim()
+    let memberId: string | null = null
 
-      if (clerkUserId) {
-        memberId = await getMemberIdByClerkUserId(clerkUserId)
-      }
+    if (clerkUserId) {
+      memberId = await getMemberIdByClerkUserId(clerkUserId)
+    }
 
-      if (!memberId) {
-        const emailRaw =
-          (session.customer_details?.email ?? session.customer_email ?? '')
-            .toString()
-            .trim()
-        const email = normalizeEmail(emailRaw)
-        if (email) {
-          const ensured = await ensureMemberByEmail({
-            email,
-            source: 'stripe',
-            sourceDetail: {checkout_session_id: session.id},
-            marketingOptIn: true,
-          })
-          memberId = ensured.id
-        }
-      }
-
-      if (memberId) {
-        await attachStripeCustomerId(memberId, customerId)
+    if (!memberId) {
+      const emailRaw =
+        (session.customer_details?.email ?? session.customer_email ?? '')
+          .toString()
+          .trim()
+      const email = normalizeEmail(emailRaw)
+      if (email) {
+        const ensured = await ensureMemberByEmail({
+          email,
+          source: 'stripe',
+          sourceDetail: {checkout_session_id: session.id},
+          marketingOptIn: true,
+        })
+        memberId = ensured.id
       }
     }
 
-    // Exit without granting anything
-    return NextResponse.json({ok: true})
+    if (memberId) {
+      await attachStripeCustomerId(memberId, customerId)
+    }
   }
+
+  // 🔑 NEW: immediately reconcile the subscription
+  if (typeof session.subscription === 'string') {
+    const sub = await stripe.subscriptions.retrieve(session.subscription)
+    await reconcileStripeSubscription({stripe, subscription: sub})
+  }
+
+  return NextResponse.json({ok: true})
+}
+
 
   // ---- One-off purchases continue below ----
 }

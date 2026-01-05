@@ -130,6 +130,20 @@ export async function reconcileStripeSubscription(params: {
   `
   const entRows = mapped.rows as PriceEntitlementRow[]
 
+  console.log('[reconcileStripeSubscription]', {
+  subId: sub.id,
+  customerId,
+  status: sub.status,
+  priceIds,
+})
+
+console.log('[reconcileStripeSubscription mapped]', {
+  subId: sub.id,
+  mappedCount: (mapped.rows ?? []).length,
+  mapped: mapped.rows,
+})
+
+
   // 4) Compute "expire now" for terminal statuses
   const status = (sub.status ?? '').toString()
   const expireNow =
