@@ -1,41 +1,50 @@
+// web/app/home/PortalModules.tsx
 import React from 'react'
-import {ENTITLEMENTS} from '../../lib/vocab'
-import type {PortalModuleRichText} from '../../lib/portal'
-import {hasAnyEntitlement} from '../../lib/entitlements'
 import PortalRichText from './modules/PortalRichText'
+import type {PortalModule} from '../../lib/portal'
 
-type Props = {
-  modules: PortalModuleRichText[]
+export default function PortalModules(props: {
+  modules: PortalModule[]
   memberId: string | null
-}
+  entitlementKeys: string[]
+}) {
+  const {modules, memberId, entitlementKeys} = props
 
-export default async function PortalModules({modules, memberId}: Props) {
   return (
-    <div style={{display: 'grid', gap: 14}}>
-      {modules.map(async (m) => {
-        if (m._type !== 'moduleRichText') return null
+    <div style={{display: 'grid', gap: 14, minWidth: 0}}>
+      {modules.map((m, idx) => {
+        const isAuthed = !!memberId
+        const required = (m.requiresEntitlement ?? '').toString().trim()
+        const isEntitled = !required || entitlementKeys.includes(required)
+        const locked = !isAuthed || !isEntitled
 
-        // If module declares a required entitlement, enforce it server-side.
-        let allowed = false
-        const reqKey = (m.requiresEntitlement ?? '').trim()
-
-        if (!reqKey) {
-          // no gate → always allow full
-          allowed = true
-        } else if (memberId) {
-          // treat requiresEntitlement as literal entitlement key string
-          allowed = await hasAnyEntitlement(memberId, [reqKey, ENTITLEMENTS.LIFETIME_ACCESS])
-        } else {
-          allowed = false
+        if (m._type === 'moduleRichText') {
+          return (
+            <PortalRichText
+              key={m._key ?? `moduleRichText_${idx}`}
+              title={m.title}
+              locked={locked}
+              teaserBlocks={m.teaser ?? []}
+              blocks={m.full ?? []}
+            />
+          )
         }
 
         return (
-          <PortalRichText
-            key={m._key}
-            title={m.title}
-            blocks={allowed ? m.full ?? m.teaser ?? [] : m.teaser ?? []}
-            locked={!allowed}
-          />
+          <div
+            key={m._key ?? `${m._type}_${idx}`}
+            style={{
+              borderRadius: 18,
+              border: '1px solid rgba(255,255,255,0.10)',
+              background: 'rgba(255,255,255,0.04)',
+              padding: 16,
+              fontSize: 13,
+              opacity: 0.78,
+              lineHeight: 1.55,
+            }}
+          >
+            Unknown module type: <code style={{opacity: 0.9}}>{m._type}</code>
+          </div>
         )
       })}
     </div>

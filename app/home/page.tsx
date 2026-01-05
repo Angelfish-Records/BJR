@@ -190,7 +190,12 @@ export default async function Home(props: {
   }
 
   const portalPanel = portal?.modules?.length ? (
-    <PortalModules modules={portal.modules} memberId={member?.id ?? null} />
+    <PortalModules
+  modules={portal.modules}
+  memberId={member?.id ?? null}
+  entitlementKeys={entitlementKeys}
+/>
+
   ) : (
     <div
       style={{

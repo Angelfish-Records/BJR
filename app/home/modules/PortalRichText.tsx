@@ -1,3 +1,4 @@
+// web/app/home/modules/PortalRichText.tsx
 import React from 'react'
 import {PortableText} from '@portabletext/react'
 import type {PortableTextBlock} from '@portabletext/types'
@@ -5,9 +6,11 @@ import type {PortableTextBlock} from '@portabletext/types'
 export default function PortalRichText(props: {
   title?: string
   blocks: PortableTextBlock[]
+  teaserBlocks?: PortableTextBlock[]
   locked?: boolean
 }) {
-  const {title, blocks, locked} = props
+  const {title, blocks, teaserBlocks = [], locked} = props
+  const value: PortableTextBlock[] = locked ? teaserBlocks : blocks
 
   return (
     <div
@@ -26,7 +29,7 @@ export default function PortalRichText(props: {
       ) : null}
 
       <div style={{fontSize: 13, opacity: 0.82, lineHeight: 1.65}}>
-        <PortableText value={blocks} />
+        <PortableText value={value} />
       </div>
     </div>
   )

@@ -8,12 +8,15 @@ export type PortalModuleRichText = {
   title?: string
   teaser?: PortableTextBlock[]
   full?: PortableTextBlock[]
+  /** Single entitlement key required to see full content (schema v1) */
   requiresEntitlement?: string
 }
 
+export type PortalModule = PortalModuleRichText
+
 export type PortalPageDoc = {
   title?: string
-  modules?: PortalModuleRichText[]
+  modules?: PortalModule[]
 }
 
 const portalPageQuery = `
@@ -30,8 +33,8 @@ const portalPageQuery = `
   }
 `
 
-export async function fetchPortalPage(slug: string) {
-  return client.fetch<PortalPageDoc>(
+export async function fetchPortalPage(slug: string): Promise<PortalPageDoc | null> {
+  return client.fetch<PortalPageDoc | null>(
     portalPageQuery,
     {slug},
     {next: {tags: ['portalPage', `portalPage:${slug}`]}}
