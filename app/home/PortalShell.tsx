@@ -9,16 +9,19 @@ export type PortalPanelSpec = {
   content: React.ReactNode
 }
 
+type DockRenderer = React.ReactNode | ((activePanelId: string) => React.ReactNode)
+
 type Props = {
   panels: PortalPanelSpec[]
   defaultPanelId?: string
-  dock?: React.ReactNode
+  dock?: DockRenderer
   /** If true, mirrors selected panel into ?panel= */
   syncToQueryParam?: boolean
+  onPanelChange?: (panelId: string) => void
 }
 
 export default function PortalShell(props: Props) {
-  const {panels, defaultPanelId, dock, syncToQueryParam = true} = props
+  const {panels, defaultPanelId, dock, syncToQueryParam = true, onPanelChange} = props
 
   const router = useRouter()
   const sp = useSearchParams()
@@ -32,13 +35,18 @@ export default function PortalShell(props: Props) {
 
   const [active, setActive] = React.useState<string>(initial)
 
-  // If the URL changes (back/forward), follow it.
+  // Keep local state in sync with back/forward (?panel= changes).
   React.useEffect(() => {
     if (!syncToQueryParam) return
     const q = sp.get('panel')
     if (q && q !== active) setActive(q)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sp, syncToQueryParam])
+
+  // Notify parent whenever active changes (covers click, mount, and back/forward).
+  React.useEffect(() => {
+    onPanelChange?.(active)
+  }, [active, onPanelChange])
 
   const setPanel = (id: string) => {
     setActive(id)
@@ -48,15 +56,10 @@ export default function PortalShell(props: Props) {
     router.replace(`?${params.toString()}`, {scroll: false})
   }
 
+  const dockNode = typeof dock === 'function' ? dock(active) : dock
+
   return (
-    <div
-      style={{
-        display: 'grid',
-        gap: 14,
-        minWidth: 0,
-      }}
-    >
-      {/* Panel tabs */}
+    <div style={{display: 'grid', gap: 14, minWidth: 0}}>
       <div
         style={{
           display: 'flex',
@@ -94,7 +97,6 @@ export default function PortalShell(props: Props) {
         })}
       </div>
 
-      {/* Panels (all mounted; client just hides/shows) */}
       <div style={{display: 'grid', gap: 14, minWidth: 0}}>
         {panels.map((p) => (
           <div key={p.id} hidden={p.id !== active} style={{minWidth: 0}}>
@@ -103,8 +105,7 @@ export default function PortalShell(props: Props) {
         ))}
       </div>
 
-      {/* Persistent dock region (player will live here) */}
-      {dock ? (
+      {dockNode ? (
         <div
           style={{
             position: 'sticky',
@@ -117,7 +118,7 @@ export default function PortalShell(props: Props) {
             padding: 12,
           }}
         >
-          {dock}
+          {dockNode}
         </div>
       ) : null}
     </div>

@@ -19,8 +19,7 @@ import CancelSubscriptionButton from './CancelSubscriptionButton'
 import {fetchPortalPage} from '../../lib/portal'
 import PortalModules from './PortalModules'
 
-import PortalShell from './PortalShell'
-import DockPlaceholder from './DockPlaceholder'
+import PortalArea from './PortalArea'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -300,53 +299,9 @@ export default async function Home(props: {
           </div>
 
           <div className="shadowHomeGrid" style={{marginTop: 26}}>
-            {/* LEFT: portal (client shell + dock) */}
+            {/* LEFT: portal (client shell + player dock) */}
             <div className="shadowHomeMain">
-              <PortalShell
-                defaultPanelId="portal"
-                dock={<DockPlaceholder />}
-                panels={[
-                  {id: 'portal', label: 'Portal', content: portalPanel},
-                  {
-                    id: 'shop',
-                    label: 'Shop',
-                    content: (
-                      <div
-                        style={{
-                          borderRadius: 18,
-                          border: '1px solid rgba(255,255,255,0.10)',
-                          background: 'rgba(255,255,255,0.04)',
-                          padding: 16,
-                          fontSize: 13,
-                          opacity: 0.78,
-                          lineHeight: 1.55,
-                        }}
-                      >
-                        Shop panel placeholder.
-                      </div>
-                    ),
-                  },
-                  {
-                    id: 'about',
-                    label: 'About',
-                    content: (
-                      <div
-                        style={{
-                          borderRadius: 18,
-                          border: '1px solid rgba(255,255,255,0.10)',
-                          background: 'rgba(255,255,255,0.04)',
-                          padding: 16,
-                          fontSize: 13,
-                          opacity: 0.78,
-                          lineHeight: 1.55,
-                        }}
-                      >
-                        About panel placeholder.
-                      </div>
-                    ),
-                  },
-                ]}
-              />
+              <PortalArea portalPanel={portalPanel} />
             </div>
 
             {/* RIGHT: membership sidebar (moves above on mobile via CSS order) */}
