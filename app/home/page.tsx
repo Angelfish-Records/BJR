@@ -87,7 +87,7 @@ export default async function Home(props: {
 
   const {userId} = await auth()
 
-  // ✅ define it here (inside Home), before JSX uses it
+  // Only for signed-out success returns
   const showPaymentPrompt = checkout === 'success' && !userId
 
   const user = userId ? await currentUser() : null
@@ -220,11 +220,12 @@ export default async function Home(props: {
           minHeight: '100svh',
           display: 'grid',
           placeItems: 'center',
-          padding: '96px 24px',
+          padding: '86px 24px',
         }}
       >
-        <section style={{width: '100%', maxWidth: 980, textAlign: 'center'}}>
-          <div style={{display: 'grid', gap: 18}}>
+        <section style={{width: '100%', maxWidth: 1120}}>
+          {/* Header stays centered */}
+          <div style={{display: 'grid', gap: 18, justifyItems: 'center', textAlign: 'center'}}>
             <h1
               style={{
                 fontSize: 'clamp(38px, 5.6vw, 70px)',
@@ -247,117 +248,146 @@ export default async function Home(props: {
                 opacity: 0.75,
               }}
             />
+          </div>
 
-            <p
-              style={{
-                fontSize: 'clamp(16px, 2.1vw, 22px)',
-                lineHeight: 1.5,
-                opacity: 0.85,
-                margin: '0 auto',
-                maxWidth: 760,
-                textWrap: 'pretty',
-              }}
-            >
-              {page?.subtitle ??
-                'This is the shadow homepage: content evolves fast, identity stays boring, access stays canonical.'}
-            </p>
-
-            {checkout === 'success' && (
-              <div
+          {/* Two-column body */}
+          <div
+            style={{
+              marginTop: 26,
+              display: 'grid',
+              gridTemplateColumns: '1fr 360px',
+              gap: 26,
+              alignItems: 'start',
+            }}
+          >
+            {/* LEFT: content area */}
+            <div style={{display: 'grid', gap: 18, textAlign: 'left'}}>
+              <p
                 style={{
-                  margin: '0 auto',
-                  maxWidth: 720,
-                  borderRadius: 14,
-                  border: '1px solid rgba(255,255,255,0.14)',
-                  background: 'rgba(0,0,0,0.25)',
-                  padding: '12px 14px',
-                  fontSize: 13,
-                  opacity: 0.9,
-                }}
-              >
-                ✅ Checkout completed. If entitlements haven&apos;t appeared yet, refresh once (webhooks can be a beat
-                behind).
-              </div>
-            )}
-
-            {checkout === 'cancel' && (
-              <div
-                style={{
-                  margin: '0 auto',
-                  maxWidth: 720,
-                  borderRadius: 14,
-                  border: '1px solid rgba(255,255,255,0.14)',
-                  background: 'rgba(0,0,0,0.20)',
-                  padding: '12px 14px',
-                  fontSize: 13,
+                  fontSize: 'clamp(16px, 2.0vw, 22px)',
+                  lineHeight: 1.55,
                   opacity: 0.85,
+                  margin: 0,
+                  maxWidth: 760,
+                  textWrap: 'pretty',
                 }}
               >
-                Checkout cancelled.
-              </div>
-            )}
+                {page?.subtitle ??
+                  'This is the shadow homepage: content evolves fast, identity stays boring, access stays canonical.'}
+              </p>
 
-            <div style={{display: 'grid', justifyItems: 'center', gap: 12}}>
-              <ActivationGate
-                attentionMessage={showPaymentPrompt ? 'Payment confirmed - activate to unlock.' : null}
-              >
-                {member ? (
-                  <div style={{marginTop: 6, display: 'grid', justifyItems: 'center', gap: 10}}>
-                    {!hasGold ? <SubscribeButton loggedIn={!!userId} /> : null}
-                    {hasGold ? <CancelSubscriptionButton /> : null}
-                  </div>
-                ) : null}
-              </ActivationGate>
-
-              <div style={{display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center'}}>
-                {page?.primaryCtaText && page?.primaryCtaHref && (
-                  <a
-                    href={page.primaryCtaHref}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '11px 16px',
-                      borderRadius: 999,
-                      border:
-                        '1px solid color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.22))',
-                      background: 'color-mix(in srgb, var(--accent) 22%, transparent)',
-                      textDecoration: 'none',
-                      color: 'rgba(255,255,255,0.90)',
-                      fontSize: 14,
-                    }}
-                  >
-                    {page.primaryCtaText}
-                  </a>
-                )}
-
-                {page?.secondaryCtaText && page?.secondaryCtaHref && (
-                  <a
-                    href={page.secondaryCtaHref}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '11px 16px',
-                      borderRadius: 999,
-                      border: '1px solid rgba(255,255,255,0.22)',
-                      background: 'transparent',
-                      textDecoration: 'none',
-                      color: 'rgba(255,255,255,0.82)',
-                      fontSize: 14,
-                    }}
-                  >
-                    {page.secondaryCtaText}
-                  </a>
-                )}
-              </div>
-            </div>
-
-            {member && canSeeMemberBox && (
-              <div style={{marginTop: 18, display: 'grid', justifyItems: 'center'}}>
+              {checkout === 'success' && (
                 <div
                   style={{
-                    width: 'min(880px, 100%)',
+                    maxWidth: 720,
+                    borderRadius: 14,
+                    border: '1px solid rgba(255,255,255,0.14)',
+                    background: 'rgba(0,0,0,0.25)',
+                    padding: '12px 14px',
+                    fontSize: 13,
+                    opacity: 0.9,
+                  }}
+                >
+                  ✅ Checkout completed. If entitlements haven&apos;t appeared yet, refresh once (webhooks can be a
+                  beat behind).
+                </div>
+              )}
+
+              {checkout === 'cancel' && (
+                <div
+                  style={{
+                    maxWidth: 720,
+                    borderRadius: 14,
+                    border: '1px solid rgba(255,255,255,0.14)',
+                    background: 'rgba(0,0,0,0.20)',
+                    padding: '12px 14px',
+                    fontSize: 13,
+                    opacity: 0.85,
+                  }}
+                >
+                  Checkout cancelled.
+                </div>
+              )}
+
+              {page?.sections?.length ? (
+                <div
+                  style={{
+                    marginTop: 6,
+                    display: 'grid',
+                    gap: 14,
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                    textAlign: 'left',
+                  }}
+                >
+                  {page.sections.map((s, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        borderRadius: 18,
+                        border: '1px solid rgba(255,255,255,0.10)',
+                        background: 'rgba(255,255,255,0.04)',
+                        padding: 16,
+                      }}
+                    >
+                      {s?.heading && (
+                        <div style={{fontSize: 15, opacity: 0.92, marginBottom: 6}}>{s.heading}</div>
+                      )}
+                      {s?.body && (
+                        <div
+                          style={{
+                            fontSize: 13,
+                            opacity: 0.78,
+                            lineHeight: 1.55,
+                            whiteSpace: 'pre-wrap',
+                          }}
+                        >
+                          {s.body}
+                        </div>
+                      )}
+                      {s?.gatedHint && (
+                        <div style={{marginTop: 10, fontSize: 12, opacity: 0.60}}>
+                          Hint: {s.gatedHint}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            {/* RIGHT: membership sidebar */}
+            <aside
+              style={{
+                position: 'sticky',
+                top: 22,
+                alignSelf: 'start',
+                display: 'grid',
+                gap: 14,
+              }}
+            >
+              <div
+                style={{
+                  borderRadius: 18,
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  background: 'rgba(255,255,255,0.05)',
+                  padding: 14,
+                }}
+              >
+                <ActivationGate
+                  attentionMessage={showPaymentPrompt ? 'Payment confirmed - activate to unlock.' : null}
+                >
+                  {member ? (
+                    <div style={{display: 'grid', justifyItems: 'center', gap: 10}}>
+                      {!hasGold ? <SubscribeButton loggedIn={!!userId} /> : null}
+                      {hasGold ? <CancelSubscriptionButton /> : null}
+                    </div>
+                  ) : null}
+                </ActivationGate>
+              </div>
+
+              {member && canSeeMemberBox && (
+                <div
+                  style={{
                     borderRadius: 18,
                     border: '1px solid rgba(255,255,255,0.12)',
                     background: 'rgba(255,255,255,0.06)',
@@ -365,14 +395,7 @@ export default async function Home(props: {
                     textAlign: 'left',
                   }}
                 >
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      gap: 12,
-                      flexWrap: 'wrap',
-                    }}
-                  >
+                  <div style={{display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap'}}>
                     <div style={{display: 'grid', gap: 2}}>
                       <div style={{fontSize: 13, opacity: 0.72}}>Member</div>
                       <div style={{fontSize: 14, opacity: 0.92}}>{member.email}</div>
@@ -402,73 +425,28 @@ export default async function Home(props: {
                     Display-only: derived from canonical entitlements. No engagement metrics. Just legible state.
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {page?.sections?.length ? (
               <div
                 style={{
-                  marginTop: 36,
-                  display: 'grid',
-                  gap: 14,
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-                  textAlign: 'left',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  gap: 10,
+                  flexWrap: 'wrap',
+                  opacity: 0.70,
+                  fontSize: 13,
+                  paddingTop: 4,
                 }}
               >
-                {page.sections.map((s, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      borderRadius: 18,
-                      border: '1px solid rgba(255,255,255,0.10)',
-                      background: 'rgba(255,255,255,0.04)',
-                      padding: 16,
-                    }}
-                  >
-                    {s?.heading && (
-                      <div style={{fontSize: 15, opacity: 0.92, marginBottom: 6}}>{s.heading}</div>
-                    )}
-                    {s?.body && (
-                      <div
-                        style={{
-                          fontSize: 13,
-                          opacity: 0.78,
-                          lineHeight: 1.55,
-                          whiteSpace: 'pre-wrap',
-                        }}
-                      >
-                        {s.body}
-                      </div>
-                    )}
-                    {s?.gatedHint && (
-                      <div style={{marginTop: 10, fontSize: 12, opacity: 0.60}}>
-                        Hint: {s.gatedHint}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                <span>
+                  Route: <code style={{opacity: 0.9}}>{flags?.shadowHomeRoute ?? '/home'}</code>
+                </span>
+                <span>·</span>
+                <span>
+                  Auth: <code style={{opacity: 0.9}}>Clerk</code>
+                </span>
               </div>
-            ) : null}
-
-            <div
-              style={{
-                marginTop: 34,
-                display: 'flex',
-                justifyContent: 'center',
-                gap: 10,
-                flexWrap: 'wrap',
-                opacity: 0.70,
-                fontSize: 13,
-              }}
-            >
-              <span>
-                Route: <code style={{opacity: 0.9}}>{flags?.shadowHomeRoute ?? '/home'}</code>
-              </span>
-              <span>·</span>
-              <span>
-                Auth: <code style={{opacity: 0.9}}>Clerk</code>
-              </span>
-            </div>
+            </aside>
           </div>
         </section>
       </div>
