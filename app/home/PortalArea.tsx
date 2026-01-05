@@ -60,13 +60,17 @@ export default function PortalArea(props: {portalPanel: React.ReactNode}) {
       <PortalShell
         defaultPanelId="portal"
         onPanelChange={(id) => setActivePanelId(id)}
-        dock={() => (
-          <PlayerController
-            activePanelId={activePanelId}
-            playerPanelId="player"
-            openPlayerPanel={() => setActivePanelId('player')}
-          />
-        )}
+        // Crucial: hide the dock entirely on the player panel.
+        dock={() => {
+          if (activePanelId === 'player') return null
+          return (
+            <PlayerController
+              activePanelId={activePanelId}
+              playerPanelId="player"
+              openPlayerPanel={() => setActivePanelId('player')}
+            />
+          )
+        }}
         panels={panels}
         syncToQueryParam
       />
