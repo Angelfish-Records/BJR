@@ -24,3 +24,37 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* --- Shadow Home layout helpers (desktop-first, mobile stacks with sidebar first) --- */
+
+.shadowHomeGrid {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 26px;
+  align-items: start;
+}
+
+/* Allow grid children to shrink properly (prevents overflow on long content) */
+.shadowHomeMain,
+.shadowHomeSidebar {
+  min-width: 0;
+}
+
+/* Mobile: stack, sidebar first */
+@media (max-width: 900px) {
+  .shadowHomeGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .shadowHomeSidebar {
+    order: -1; /* sidebar above portal */
+    position: relative !important; /* disable sticky */
+    top: auto !important;
+  }
+
+  /* Optional: slightly reduce spacing on mobile */
+  .shadowHomeGrid {
+    gap: 16px;
+  }
+}
+
