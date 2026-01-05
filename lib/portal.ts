@@ -2,17 +2,49 @@
 import type {PortableTextBlock} from '@portabletext/types'
 import {client} from '../sanity/lib/client'
 
+export type PortalModuleHeading = {
+  _key: string
+  _type: 'moduleHeading'
+  title: string
+  blurb?: string
+}
+
 export type PortalModuleRichText = {
   _key: string
   _type: 'moduleRichText'
   title?: string
   teaser?: PortableTextBlock[]
   full?: PortableTextBlock[]
-  /** Single entitlement key required to see full content (schema v1) */
   requiresEntitlement?: string
 }
 
-export type PortalModule = PortalModuleRichText
+export type PortalModuleCard = {
+  _key: string
+  title: string
+  body?: string
+  requiresEntitlement?: string
+}
+
+export type PortalModuleCardGrid = {
+  _key: string
+  _type: 'moduleCardGrid'
+  title?: string
+  cards: PortalModuleCard[]
+}
+
+export type PortalModuleDownloads = {
+  _key: string
+  _type: 'moduleDownloads'
+  title?: string
+  albumSlug: string
+  teaserCopy?: string
+}
+
+export type PortalModule =
+  | PortalModuleHeading
+  | PortalModuleRichText
+  | PortalModuleCardGrid
+  | PortalModuleDownloads
 
 export type PortalPageDoc = {
   title?: string
@@ -25,10 +57,27 @@ const portalPageQuery = `
     modules[]{
       _key,
       _type,
+
+      // moduleHeading
       title,
+      blurb,
+
+      // moduleRichText
       teaser,
       full,
-      requiresEntitlement
+      requiresEntitlement,
+
+      // moduleCardGrid
+      cards[]{
+        _key,
+        title,
+        body,
+        requiresEntitlement
+      },
+
+      // moduleDownloads
+      albumSlug,
+      teaserCopy
     }
   }
 `

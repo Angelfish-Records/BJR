@@ -21,7 +21,12 @@ export const portalPage = defineType({
       name: 'modules',
       title: 'Modules',
       type: 'array',
-      of: [{type: 'moduleRichText'}],
+      of: [
+        {type: 'moduleHeading'},
+        {type: 'moduleRichText'},
+        {type: 'moduleCardGrid'},
+        {type: 'moduleDownloads'},
+      ],
       validation: (r) => r.required().min(1),
     }),
   ],
