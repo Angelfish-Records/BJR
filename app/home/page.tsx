@@ -299,9 +299,57 @@ export default async function Home(props: {
             />
           </div>
 
-          {/* layout now controlled by globals.css */}
           <div className="shadowHomeGrid" style={{marginTop: 26}}>
-            {/* RIGHT: membership sidebar (will stack above on mobile via CSS order) */}
+            {/* LEFT: portal (client shell + dock) */}
+            <div className="shadowHomeMain">
+              <PortalShell
+                defaultPanelId="portal"
+                dock={<DockPlaceholder />}
+                panels={[
+                  {id: 'portal', label: 'Portal', content: portalPanel},
+                  {
+                    id: 'shop',
+                    label: 'Shop',
+                    content: (
+                      <div
+                        style={{
+                          borderRadius: 18,
+                          border: '1px solid rgba(255,255,255,0.10)',
+                          background: 'rgba(255,255,255,0.04)',
+                          padding: 16,
+                          fontSize: 13,
+                          opacity: 0.78,
+                          lineHeight: 1.55,
+                        }}
+                      >
+                        Shop panel placeholder.
+                      </div>
+                    ),
+                  },
+                  {
+                    id: 'about',
+                    label: 'About',
+                    content: (
+                      <div
+                        style={{
+                          borderRadius: 18,
+                          border: '1px solid rgba(255,255,255,0.10)',
+                          background: 'rgba(255,255,255,0.04)',
+                          padding: 16,
+                          fontSize: 13,
+                          opacity: 0.78,
+                          lineHeight: 1.55,
+                        }}
+                      >
+                        About panel placeholder.
+                      </div>
+                    ),
+                  },
+                ]}
+              />
+            </div>
+
+            {/* RIGHT: membership sidebar (moves above on mobile via CSS order) */}
             <aside
               className="shadowHomeSidebar"
               style={{
@@ -396,55 +444,6 @@ export default async function Home(props: {
                 </span>
               </div>
             </aside>
-
-            {/* LEFT: portal (client shell + dock) */}
-            <div className="shadowHomeMain">
-              <PortalShell
-                defaultPanelId="portal"
-                dock={<DockPlaceholder />}
-                panels={[
-                  {id: 'portal', label: 'Portal', content: portalPanel},
-                  {
-                    id: 'shop',
-                    label: 'Shop',
-                    content: (
-                      <div
-                        style={{
-                          borderRadius: 18,
-                          border: '1px solid rgba(255,255,255,0.10)',
-                          background: 'rgba(255,255,255,0.04)',
-                          padding: 16,
-                          fontSize: 13,
-                          opacity: 0.78,
-                          lineHeight: 1.55,
-                        }}
-                      >
-                        Shop panel placeholder.
-                      </div>
-                    ),
-                  },
-                  {
-                    id: 'about',
-                    label: 'About',
-                    content: (
-                      <div
-                        style={{
-                          borderRadius: 18,
-                          border: '1px solid rgba(255,255,255,0.10)',
-                          background: 'rgba(255,255,255,0.04)',
-                          padding: 16,
-                          fontSize: 13,
-                          opacity: 0.78,
-                          lineHeight: 1.55,
-                        }}
-                      >
-                        About panel placeholder.
-                      </div>
-                    ),
-                  },
-                ]}
-              />
-            </div>
           </div>
         </section>
       </div>
