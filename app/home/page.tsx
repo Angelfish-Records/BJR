@@ -19,6 +19,9 @@ import CancelSubscriptionButton from './CancelSubscriptionButton'
 import {fetchPortalPage} from '../../lib/portal'
 import PortalModules from './PortalModules'
 
+import PortalShell from './PortalShell'
+import DockPlaceholder from './DockPlaceholder'
+
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 export const fetchCache = 'force-no-store'
@@ -31,7 +34,6 @@ type ShadowHomeDoc = {
   primaryCtaHref?: string
   secondaryCtaText?: string
   secondaryCtaHref?: string
-  sections?: Array<{heading?: string; body?: string; gatedHint?: string}>
 }
 
 type SiteFlagsDoc = {
@@ -56,12 +58,7 @@ const shadowHomeQuery = `
     primaryCtaText,
     primaryCtaHref,
     secondaryCtaText,
-    secondaryCtaHref,
-    sections[]{
-      heading,
-      body,
-      gatedHint
-    }
+    secondaryCtaHref
   }
 `
 
@@ -74,9 +71,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     title: page?.title ?? 'Shadow Home',
-    description:
-      page?.subtitle ??
-      'A single-page portal: identity stays boring, entitlements stay canonical, modules do the talking.',
+    description: page?.subtitle ?? 'Portal shell: panels swap; identity stays boring; access stays canonical.',
   }
 }
 
@@ -89,6 +84,7 @@ function CheckoutBanner(props: {checkout: string | null}) {
   return (
     <div
       style={{
+        marginTop: 12,
         borderRadius: 14,
         border: '1px solid rgba(255,255,255,0.14)',
         background: isSuccess ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.20)',
@@ -194,6 +190,25 @@ export default async function Home(props: {
     '--accent': accent,
   }
 
+  const portalPanel = portal?.modules?.length ? (
+    <PortalModules modules={portal.modules} memberId={member?.id ?? null} />
+  ) : (
+    <div
+      style={{
+        borderRadius: 18,
+        border: '1px solid rgba(255,255,255,0.10)',
+        background: 'rgba(255,255,255,0.04)',
+        padding: 16,
+        fontSize: 13,
+        opacity: 0.78,
+        lineHeight: 1.55,
+      }}
+    >
+      No portal modules yet. Create a <code style={{opacity: 0.9}}>portalPage</code> with slug{' '}
+      <code style={{opacity: 0.9}}>home</code> in Sanity Studio.
+    </div>
+  )
+
   return (
     <main style={mainStyle}>
       <div
@@ -259,7 +274,6 @@ export default async function Home(props: {
         }}
       >
         <section style={{width: '100%', maxWidth: 1120}}>
-          {/* Header stays centered */}
           <div style={{display: 'grid', gap: 18, justifyItems: 'center', textAlign: 'center'}}>
             <h1
               style={{
@@ -285,7 +299,6 @@ export default async function Home(props: {
             />
           </div>
 
-          {/* Two-column body */}
           <div
             style={{
               marginTop: 26,
@@ -295,26 +308,53 @@ export default async function Home(props: {
               alignItems: 'start',
             }}
           >
-            {/* LEFT: portal content area (top-aligned with sidebar) */}
-            <div style={{display: 'grid', gap: 18, textAlign: 'left'}}>
-              {portal?.modules?.length ? (
-                <PortalModules modules={portal.modules} memberId={member?.id ?? null} />
-              ) : (
-                <div
-                  style={{
-                    borderRadius: 18,
-                    border: '1px solid rgba(255,255,255,0.10)',
-                    background: 'rgba(255,255,255,0.04)',
-                    padding: 16,
-                    fontSize: 13,
-                    opacity: 0.78,
-                    lineHeight: 1.55,
-                  }}
-                >
-                  No portal modules yet. Create a <code style={{opacity: 0.9}}>portalPage</code> with slug{' '}
-                  <code style={{opacity: 0.9}}>home</code> in Sanity Studio.
-                </div>
-              )}
+            {/* LEFT: client shell (panels + persistent dock) */}
+            <div style={{minWidth: 0}}>
+              <PortalShell
+                defaultPanelId="portal"
+                dock={<DockPlaceholder />}
+                panels={[
+                  {id: 'portal', label: 'Portal', content: portalPanel},
+                  {
+                    id: 'shop',
+                    label: 'Shop',
+                    content: (
+                      <div
+                        style={{
+                          borderRadius: 18,
+                          border: '1px solid rgba(255,255,255,0.10)',
+                          background: 'rgba(255,255,255,0.04)',
+                          padding: 16,
+                          fontSize: 13,
+                          opacity: 0.78,
+                          lineHeight: 1.55,
+                        }}
+                      >
+                        Shop panel placeholder.
+                      </div>
+                    ),
+                  },
+                  {
+                    id: 'about',
+                    label: 'About',
+                    content: (
+                      <div
+                        style={{
+                          borderRadius: 18,
+                          border: '1px solid rgba(255,255,255,0.10)',
+                          background: 'rgba(255,255,255,0.04)',
+                          padding: 16,
+                          fontSize: 13,
+                          opacity: 0.78,
+                          lineHeight: 1.55,
+                        }}
+                      >
+                        About panel placeholder.
+                      </div>
+                    ),
+                  },
+                ]}
+              />
             </div>
 
             {/* RIGHT: membership sidebar */}
@@ -346,10 +386,7 @@ export default async function Home(props: {
                   ) : null}
                 </ActivationGate>
 
-                {/* Post-Stripe banners live with payments, not content */}
-                <div style={{marginTop: 12}}>
-                  <CheckoutBanner checkout={checkout} />
-                </div>
+                <CheckoutBanner checkout={checkout} />
               </div>
 
               {member && canSeeMemberBox && (
