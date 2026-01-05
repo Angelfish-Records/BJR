@@ -80,6 +80,37 @@ export async function generateMetadata(): Promise<Metadata> {
   }
 }
 
+function CheckoutBanner(props: {checkout: string | null}) {
+  const {checkout} = props
+  if (checkout !== 'success' && checkout !== 'cancel') return null
+
+  const isSuccess = checkout === 'success'
+
+  return (
+    <div
+      style={{
+        borderRadius: 14,
+        border: '1px solid rgba(255,255,255,0.14)',
+        background: isSuccess ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.20)',
+        padding: '12px 14px',
+        fontSize: 13,
+        opacity: isSuccess ? 0.9 : 0.85,
+        lineHeight: 1.45,
+        textAlign: 'left',
+      }}
+    >
+      {isSuccess ? (
+        <>
+          ✅ Checkout completed. If entitlements haven&apos;t appeared yet, refresh once (webhooks can be a beat
+          behind).
+        </>
+      ) : (
+        <>Checkout cancelled.</>
+      )}
+    </div>
+  )
+}
+
 export default async function Home(props: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
@@ -264,55 +295,8 @@ export default async function Home(props: {
               alignItems: 'start',
             }}
           >
-            {/* LEFT: content area */}
+            {/* LEFT: portal content area (top-aligned with sidebar) */}
             <div style={{display: 'grid', gap: 18, textAlign: 'left'}}>
-              <p
-                style={{
-                  fontSize: 'clamp(16px, 2.0vw, 22px)',
-                  lineHeight: 1.55,
-                  opacity: 0.85,
-                  margin: 0,
-                  maxWidth: 760,
-                  textWrap: 'pretty',
-                }}
-              >
-                {page?.subtitle ??
-                  'A single-page portal: modules change often; identity and entitlements don’t.'}
-              </p>
-
-              {checkout === 'success' && (
-                <div
-                  style={{
-                    maxWidth: 720,
-                    borderRadius: 14,
-                    border: '1px solid rgba(255,255,255,0.14)',
-                    background: 'rgba(0,0,0,0.25)',
-                    padding: '12px 14px',
-                    fontSize: 13,
-                    opacity: 0.9,
-                  }}
-                >
-                  ✅ Checkout completed. If entitlements haven&apos;t appeared yet, refresh once (webhooks can be a
-                  beat behind).
-                </div>
-              )}
-
-              {checkout === 'cancel' && (
-                <div
-                  style={{
-                    maxWidth: 720,
-                    borderRadius: 14,
-                    border: '1px solid rgba(255,255,255,0.14)',
-                    background: 'rgba(0,0,0,0.20)',
-                    padding: '12px 14px',
-                    fontSize: 13,
-                    opacity: 0.85,
-                  }}
-                >
-                  Checkout cancelled.
-                </div>
-              )}
-
               {portal?.modules?.length ? (
                 <PortalModules modules={portal.modules} memberId={member?.id ?? null} />
               ) : (
@@ -361,6 +345,11 @@ export default async function Home(props: {
                     </div>
                   ) : null}
                 </ActivationGate>
+
+                {/* Post-Stripe banners live with payments, not content */}
+                <div style={{marginTop: 12}}>
+                  <CheckoutBanner checkout={checkout} />
+                </div>
               </div>
 
               {member && canSeeMemberBox && (
