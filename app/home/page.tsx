@@ -16,6 +16,9 @@ import {ENT, ENTITLEMENTS, deriveTier, pickAccent} from '../../lib/vocab'
 import SubscribeButton from './SubscribeButton'
 import CancelSubscriptionButton from './CancelSubscriptionButton'
 
+import {fetchPortalPage} from '../../lib/portal'
+import PortalModules from './PortalModules'
+
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 export const fetchCache = 'force-no-store'
@@ -73,7 +76,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: page?.title ?? 'Shadow Home',
     description:
       page?.subtitle ??
-      'Shadow homepage: content evolves fast, identity stays boring, access stays canonical.',
+      'A single-page portal: identity stays boring, entitlements stay canonical, modules do the talking.',
   }
 }
 
@@ -96,9 +99,10 @@ export default async function Home(props: {
     user?.emailAddresses?.[0]?.emailAddress ??
     null
 
-  const [flags, page] = await Promise.all([
+  const [flags, page, portal] = await Promise.all([
     client.fetch<SiteFlagsDoc>(siteFlagsQuery, {}, {next: {tags: ['siteFlags']}}),
     client.fetch<ShadowHomeDoc>(shadowHomeQuery, {slug: 'home'}, {next: {tags: ['shadowHome']}}),
+    fetchPortalPage('home'),
   ])
 
   const enabled = flags?.shadowHomeEnabled !== false
@@ -273,7 +277,7 @@ export default async function Home(props: {
                 }}
               >
                 {page?.subtitle ??
-                  'This is the shadow homepage: content evolves fast, identity stays boring, access stays canonical.'}
+                  'A single-page portal: modules change often; identity and entitlements don’t.'}
               </p>
 
               {checkout === 'success' && (
@@ -309,50 +313,24 @@ export default async function Home(props: {
                 </div>
               )}
 
-              {page?.sections?.length ? (
+              {portal?.modules?.length ? (
+                <PortalModules modules={portal.modules} memberId={member?.id ?? null} />
+              ) : (
                 <div
                   style={{
-                    marginTop: 6,
-                    display: 'grid',
-                    gap: 14,
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-                    textAlign: 'left',
+                    borderRadius: 18,
+                    border: '1px solid rgba(255,255,255,0.10)',
+                    background: 'rgba(255,255,255,0.04)',
+                    padding: 16,
+                    fontSize: 13,
+                    opacity: 0.78,
+                    lineHeight: 1.55,
                   }}
                 >
-                  {page.sections.map((s, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        borderRadius: 18,
-                        border: '1px solid rgba(255,255,255,0.10)',
-                        background: 'rgba(255,255,255,0.04)',
-                        padding: 16,
-                      }}
-                    >
-                      {s?.heading && (
-                        <div style={{fontSize: 15, opacity: 0.92, marginBottom: 6}}>{s.heading}</div>
-                      )}
-                      {s?.body && (
-                        <div
-                          style={{
-                            fontSize: 13,
-                            opacity: 0.78,
-                            lineHeight: 1.55,
-                            whiteSpace: 'pre-wrap',
-                          }}
-                        >
-                          {s.body}
-                        </div>
-                      )}
-                      {s?.gatedHint && (
-                        <div style={{marginTop: 10, fontSize: 12, opacity: 0.60}}>
-                          Hint: {s.gatedHint}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                  No portal modules yet. Create a <code style={{opacity: 0.9}}>portalPage</code> with slug{' '}
+                  <code style={{opacity: 0.9}}>home</code> in Sanity Studio.
                 </div>
-              ) : null}
+              )}
             </div>
 
             {/* RIGHT: membership sidebar */}
