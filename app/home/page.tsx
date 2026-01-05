@@ -193,8 +193,8 @@ export default async function Home(props: {
     <PortalModules
   modules={portal.modules}
   memberId={member?.id ?? null}
-  entitlementKeys={entitlementKeys}
 />
+
 
   ) : (
     <div
