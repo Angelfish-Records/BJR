@@ -33,21 +33,23 @@ return (
       }}
     >
       <PortalShell
-        panels={panels}
-        defaultPanelId="player"
-        syncToQueryParam
-        onPanelChange={setActivePanelId}
-        dock={() => {
-          if (activePanelId === 'player') return null
-          return (
-            <PlayerController
-              activePanelId={activePanelId}
-              playerPanelId="player"
-              openPlayerPanel={() => setActivePanelId('player')}
-            />
-          )
-        }}
+  panels={panels}
+  defaultPanelId="player"
+  activePanelId={activePanelId}   // ✅ NEW: controlled
+  syncToQueryParam
+  onPanelChange={setActivePanelId}
+  dock={() => {
+    if (activePanelId === 'player') return null
+    return (
+      <PlayerController
+        activePanelId={activePanelId}
+        playerPanelId="player"
+        openPlayerPanel={() => setActivePanelId('player')} // now actually switches panels
       />
+    )
+  }}
+/>
+
     </div>
   </PlayerStateProvider>
 )

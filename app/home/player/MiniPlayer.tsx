@@ -259,35 +259,42 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
             </IconBtn>
 
             {volOpen ? (
-              <div
-                style={{
-                  position: 'absolute',
-                  right: 0,
-                  bottom: 44,
-                  width: 160,
-                  borderRadius: 14,
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  background: 'rgba(0,0,0,0.55)',
-                  backdropFilter: 'blur(10px)',
-                  padding: 10,
-                  boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
-                }}
-              >
-                <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
-                  <div style={{fontSize: 12, opacity: 0.7}}>Vol</div>
-                  <input
-                    aria-label="Volume slider"
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={vol}
-                    onChange={(e) => setVol(Number(e.target.value))}
-                    style={{width: '100%'}}
-                  />
-                </div>
-              </div>
-            ) : null}
+  <div
+    style={{
+      position: 'absolute',
+      right: 0,
+      bottom: 44,
+      width: 48,
+      height: 150,
+      borderRadius: 14,
+      border: '1px solid rgba(255,255,255,0.12)',
+      background: 'rgba(0,0,0,0.55)',
+      backdropFilter: 'blur(10px)',
+      padding: 10,
+      boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
+      display: 'grid',
+      justifyItems: 'center',
+      alignItems: 'center',
+    }}
+  >
+    <input
+      aria-label="Volume slider"
+      type="range"
+      min={0}
+      max={1}
+      step={0.01}
+      value={vol}
+      onChange={(e) => setVol(Number(e.target.value))}
+      style={{
+        width: 120, // becomes the vertical length after rotation
+        transform: 'rotate(-90deg)',
+        transformOrigin: 'center',
+        background: 'transparent',
+      }}
+    />
+  </div>
+) : null}
+
           </div>
 
           {onExpand ? (

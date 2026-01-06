@@ -19,10 +19,38 @@ type Props = {
   /** If true, mirrors selected panel into ?panel= */
   syncToQueryParam?: boolean
   onPanelChange?: (panelId: string) => void
+
+  /**
+   * Optional controlled mode:
+   * if provided, PortalShell will render this as the active panel
+   * and will not own its own active state.
+   */
+  activePanelId?: string
+}
+
+const PANEL_ICONS: Record<string, React.ReactNode> = {
+  portal: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="2" />
+      <circle cx="12" cy="12" r="2" fill="currentColor" />
+    </svg>
+  ),
+  player: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+      <polygon points="9,7 19,12 9,17" />
+    </svg>
+  ),
 }
 
 export default function PortalShell(props: Props) {
-  const {panels, defaultPanelId, dock, syncToQueryParam = true, onPanelChange} = props
+  const {
+    panels,
+    defaultPanelId,
+    dock,
+    syncToQueryParam = true,
+    onPanelChange,
+    activePanelId: controlledActive,
+  } = props
 
   const router = useRouter()
   const sp = useSearchParams()
@@ -34,41 +62,18 @@ export default function PortalShell(props: Props) {
     initialPanelRef.current = fromQuery ?? defaultPanelId ?? panels[0]?.id ?? 'portal'
   }
 
-  const [active, setActive] = React.useState<string>(initialPanelRef.current)
+  const [uncontrolledActive, setUncontrolledActive] = React.useState<string>(
+    initialPanelRef.current
+  )
 
-  const PANEL_ICONS: Record<string, React.ReactNode> = {
-    portal: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-        <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="2" />
-        <circle cx="12" cy="12" r="2" fill="currentColor" />
-      </svg>
-    ),
-    player: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-        <polygon points="9,7 19,12 9,17" />
-      </svg>
-    ),
-  }
-
-  // Keep local state in sync with back/forward (?panel= changes).
-  React.useEffect(() => {
-    if (!syncToQueryParam) return
-    const q = sp.get('panel')
-    if (!q) return
-    if (q === active) return
-    if (!panels.some((p) => p.id === q)) return
-    setActive(q)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sp, syncToQueryParam])
-
-  // Notify parent whenever active changes (covers click, mount, and back/forward).
-  React.useEffect(() => {
-    onPanelChange?.(active)
-  }, [active, onPanelChange])
+  const isControlled = typeof controlledActive === 'string' && controlledActive.length > 0
+  const active = isControlled ? (controlledActive as string) : uncontrolledActive
 
   const setPanel = (id: string) => {
     if (!panels.some((p) => p.id === id)) return
-    setActive(id)
+
+    if (!isControlled) setUncontrolledActive(id)
+    onPanelChange?.(id)
 
     if (!syncToQueryParam) return
     const params = new URLSearchParams(sp.toString())
@@ -76,12 +81,38 @@ export default function PortalShell(props: Props) {
     router.replace(`?${params.toString()}`, {scroll: false})
   }
 
-  const dockNode = typeof dock === 'function' ? dock(active) : dock
+  // Keep state in sync with back/forward (?panel= changes).
+  React.useEffect(() => {
+    if (!syncToQueryParam) return
+    const q = sp.get('panel')
+    if (!q) return
+    if (q === active) return
+    if (!panels.some((p) => p.id === q)) return
 
-  // Fixed edge-to-edge dock sizing
-  const DOCK_H = 84 // tweak if you want it taller/shorter
-  const DOCK_PAD_Y = 10
-  const DOCK_GAP = 14
+    if (!isControlled) setUncontrolledActive(q)
+    onPanelChange?.(q)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sp, syncToQueryParam, isControlled, panels, active])
+
+  // In controlled mode, if parent changes active panel, optionally mirror into URL.
+  React.useEffect(() => {
+    if (!syncToQueryParam) return
+    if (!isControlled) return
+    const current = sp.get('panel')
+    if (current === active) return
+
+    const params = new URLSearchParams(sp.toString())
+    params.set('panel', active)
+    router.replace(`?${params.toString()}`, {scroll: false})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, isControlled, syncToQueryParam])
+
+  // Notify parent whenever active changes (covers click, mount, back/forward, controlled updates).
+  React.useEffect(() => {
+    onPanelChange?.(active)
+  }, [active, onPanelChange])
+
+  const dockNode = typeof dock === 'function' ? dock(active) : dock
 
   return (
     <div
@@ -172,41 +203,24 @@ export default function PortalShell(props: Props) {
               {p.content}
             </div>
           ))}
-
-          {/* Spacer so the last bit of content isn't hidden behind the fixed dock */}
-          {dockNode ? <div aria-hidden style={{height: DOCK_H + DOCK_PAD_Y * 2 + DOCK_GAP}} /> : null}
         </div>
       </div>
 
-      {/* Fixed edge-to-edge dock */}
+      {/* Dock */}
       {dockNode ? (
         <div
           style={{
-            position: 'fixed',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 60,
-
-            borderTop: '1px solid rgba(255,255,255,0.12)',
-            background: 'rgba(0,0,0,0.55)',
-            backdropFilter: 'blur(14px)',
-            WebkitBackdropFilter: 'blur(14px)',
-
-            padding: `${DOCK_PAD_Y}px 14px`,
-            paddingBottom: `calc(${DOCK_PAD_Y}px + env(safe-area-inset-bottom))`,
+            position: 'sticky',
+            bottom: 12,
+            zIndex: 5,
+            borderRadius: 18,
+            border: '1px solid rgba(255,255,255,0.12)',
+            background: 'rgba(0,0,0,0.35)',
+            backdropFilter: 'blur(10px)',
+            padding: 12,
           }}
         >
-          <div
-            style={{
-              height: DOCK_H,
-              display: 'flex',
-              alignItems: 'center',
-              minWidth: 0,
-            }}
-          >
-            {dockNode}
-          </div>
+          {dockNode}
         </div>
       ) : null}
     </div>
