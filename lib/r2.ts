@@ -1,51 +1,78 @@
 // web/lib/r2.ts
 import 'server-only'
-import {S3Client, GetObjectCommand, HeadObjectCommand} from '@aws-sdk/client-s3'
+import {S3Client, HeadObjectCommand, GetObjectCommand} from '@aws-sdk/client-s3'
 import {getSignedUrl} from '@aws-sdk/s3-request-presigner'
 
-function must(v: string, name: string) {
-  if (!v) throw new Error(`Missing ${name}`)
-  return v
+type R2Env = {
+  accessKeyId: string
+  secretAccessKey: string
+  endpoint: string
+  bucket: string
+  region: string
 }
 
-const accountId = must(process.env.R2_ACCOUNT_ID ?? '', 'R2_ACCOUNT_ID')
-const accessKeyId = must(process.env.R2_ACCESS_KEY_ID ?? '', 'R2_ACCESS_KEY_ID')
-const secretAccessKey = must(process.env.R2_SECRET_ACCESS_KEY ?? '', 'R2_SECRET_ACCESS_KEY')
-const bucket = must(process.env.R2_BUCKET ?? '', 'R2_BUCKET')
+function must(v: string | undefined, name: string): string {
+  if (!v || !v.trim()) throw new Error(`Missing ${name}`)
+  return v.trim()
+}
 
-export const r2Bucket = bucket
+function readEnv(): R2Env {
+  // Keep region fixed; Cloudflare R2 expects "auto" for S3 compatibility.
+  const region = process.env.R2_REGION?.trim() || 'auto'
 
-export const r2 = new S3Client({
-  region: process.env.R2_REGION ?? 'auto',
-  endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-  credentials: {accessKeyId, secretAccessKey},
-})
+  return {
+    accessKeyId: must(process.env.R2_ACCESS_KEY_ID, 'R2_ACCESS_KEY_ID'),
+    secretAccessKey: must(process.env.R2_SECRET_ACCESS_KEY, 'R2_SECRET_ACCESS_KEY'),
+    endpoint: must(process.env.R2_ENDPOINT, 'R2_ENDPOINT'),
+    bucket: must(process.env.R2_BUCKET, 'R2_BUCKET'),
+    region,
+  }
+}
 
-export async function assertObjectExists(key: string) {
-  await r2.send(new HeadObjectCommand({Bucket: bucket, Key: key}))
+let _client: S3Client | null = null
+function getClient(): {client: S3Client; bucket: string} {
+  const env = readEnv()
+
+  if (!_client) {
+    _client = new S3Client({
+      region: env.region,
+      endpoint: env.endpoint,
+      credentials: {
+        accessKeyId: env.accessKeyId,
+        secretAccessKey: env.secretAccessKey,
+      },
+      forcePathStyle: true, // important for R2/S3 compat
+    })
+  }
+
+  return {client: _client, bucket: env.bucket}
+}
+
+export async function assertObjectExists(key: string): Promise<void> {
+  const {client, bucket} = getClient()
+  await client.send(new HeadObjectCommand({Bucket: bucket, Key: key}))
 }
 
 export async function signGetObjectUrl(params: {
   key: string
-  expiresInSeconds?: number
+  expiresInSeconds: number
   responseContentType?: string
   responseContentDispositionFilename?: string
-}) {
-  const {
-    key,
-    expiresInSeconds = 60, // short TTL by default
-    responseContentType,
-    responseContentDispositionFilename,
-  } = params
+}): Promise<string> {
+  const {client, bucket} = getClient()
+
+  const {key, expiresInSeconds, responseContentType, responseContentDispositionFilename} = params
+
+  const disposition = responseContentDispositionFilename
+    ? `attachment; filename="${responseContentDispositionFilename}"`
+    : undefined
 
   const cmd = new GetObjectCommand({
     Bucket: bucket,
     Key: key,
     ResponseContentType: responseContentType,
-    ResponseContentDisposition: responseContentDispositionFilename
-      ? `attachment; filename="${responseContentDispositionFilename}"`
-      : undefined,
+    ResponseContentDisposition: disposition,
   })
 
-  return getSignedUrl(r2, cmd, {expiresIn: expiresInSeconds})
+  return getSignedUrl(client, cmd, {expiresIn: expiresInSeconds})
 }
