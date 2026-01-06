@@ -1,3 +1,4 @@
+// web/app/home/PortalShell.tsx
 'use client'
 
 import React from 'react'
@@ -26,9 +27,9 @@ export default function PortalShell(props: Props) {
   const router = useRouter()
   const sp = useSearchParams()
 
-  const panelFromQuery = sp.get('panel')
+  const panelFromQuery = syncToQueryParam ? sp.get('panel') : null
   const initial =
-    (syncToQueryParam ? panelFromQuery : null) ??
+    panelFromQuery ??
     defaultPanelId ??
     panels[0]?.id ??
     'portal'
@@ -39,9 +40,12 @@ export default function PortalShell(props: Props) {
   React.useEffect(() => {
     if (!syncToQueryParam) return
     const q = sp.get('panel')
-    if (q && q !== active) setActive(q)
+    if (!q) return
+    if (q === active) return
+    if (!panels.some((p) => p.id === q)) return
+    setActive(q)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sp, syncToQueryParam])
+  }, [sp, syncToQueryParam, panels])
 
   // Notify parent whenever active changes (covers click, mount, and back/forward).
   React.useEffect(() => {
@@ -49,7 +53,9 @@ export default function PortalShell(props: Props) {
   }, [active, onPanelChange])
 
   const setPanel = (id: string) => {
+    if (!panels.some((p) => p.id === id)) return
     setActive(id)
+
     if (!syncToQueryParam) return
     const params = new URLSearchParams(sp.toString())
     params.set('panel', id)
@@ -60,51 +66,76 @@ export default function PortalShell(props: Props) {
 
   return (
     <div style={{display: 'grid', gap: 14, minWidth: 0}}>
+      {/* Rail + Content */}
       <div
         style={{
-          display: 'flex',
-          gap: 10,
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'flex-start',
-          padding: '2px 2px 10px',
+          display: 'grid',
+          gridTemplateColumns: '56px minmax(0, 1fr)',
+          gap: 14,
+          alignItems: 'start',
+          minWidth: 0,
         }}
       >
-        {panels.map((p) => {
-          const isActive = p.id === active
-          return (
-            <button
-              key={p.id}
-              onClick={() => setPanel(p.id)}
-              type="button"
-              style={{
-                appearance: 'none',
-                borderRadius: 999,
-                border: '1px solid rgba(255,255,255,0.14)',
-                background: isActive
-                  ? 'color-mix(in srgb, var(--accent) 18%, rgba(255,255,255,0.06))'
-                  : 'rgba(255,255,255,0.04)',
-                color: 'rgba(255,255,255,0.90)',
-                padding: '8px 12px',
-                fontSize: 13,
-                cursor: 'pointer',
-                opacity: isActive ? 0.98 : 0.78,
-              }}
-            >
-              {p.label}
-            </button>
-          )
-        })}
+        {/* Left rail */}
+        <nav
+          aria-label="Portal navigation"
+          style={{
+            position: 'sticky',
+            top: 12,
+            display: 'grid',
+            gap: 10,
+            justifyItems: 'center',
+            paddingTop: 2,
+          }}
+        >
+          {panels.map((p) => {
+            const isActive = p.id === active
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setPanel(p.id)}
+                title={p.label}
+                aria-current={isActive ? 'page' : undefined}
+                style={{
+                  width: 46,
+                  height: 46,
+                  borderRadius: 999,
+                  border: '1px solid rgba(255,255,255,0.14)',
+                  background: isActive
+                    ? 'color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))'
+                    : 'rgba(255,255,255,0.04)',
+                  boxShadow: isActive
+                    ? '0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)'
+                    : '0 12px 26px rgba(0,0,0,0.18)',
+                  color: 'rgba(255,255,255,0.90)',
+                  cursor: 'pointer',
+                  opacity: isActive ? 0.98 : 0.78,
+                  display: 'grid',
+                  placeItems: 'center',
+                  userSelect: 'none',
+                }}
+              >
+                {/* Minimal label — first letter. Swap later for icons if you want. */}
+                <span style={{fontSize: 13, fontWeight: 650, letterSpacing: 0.2}}>
+                  {p.label.slice(0, 1).toUpperCase()}
+                </span>
+              </button>
+            )
+          })}
+        </nav>
+
+        {/* Panel content */}
+        <div style={{display: 'grid', gap: 14, minWidth: 0}}>
+          {panels.map((p) => (
+            <div key={p.id} hidden={p.id !== active} style={{minWidth: 0}}>
+              {p.content}
+            </div>
+          ))}
+        </div>
       </div>
 
-      <div style={{display: 'grid', gap: 14, minWidth: 0}}>
-        {panels.map((p) => (
-          <div key={p.id} hidden={p.id !== active} style={{minWidth: 0}}>
-            {p.content}
-          </div>
-        ))}
-      </div>
-
+      {/* Dock (unchanged) */}
       {dockNode ? (
         <div
           style={{

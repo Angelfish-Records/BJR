@@ -191,20 +191,27 @@ export default async function Home(props: {
     <main style={mainStyle}>
       {/* Grid + responsive behavior kept here so it can’t “go missing” via CSS drift */}
       <style>{`
-        .shadowHomeGrid {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) 380px;
-          gap: 18px;
-          align-items: start;
-        }
-        .shadowHomeMain { min-width: 0; }
-        .shadowHomeSidebar { min-width: 0; }
-        @media (max-width: 900px) {
-          .shadowHomeGrid { grid-template-columns: 1fr; }
-          .shadowHomeSidebar { order: 0; position: static !important; top: auto !important; }
-          .shadowHomeMain { order: 1; }
-        }
-      `}</style>
+  .shadowHomeGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(300px, 34vw, 380px);
+    gap: 18px;
+    align-items: start;
+  }
+
+  .shadowHomeMain { min-width: 0; }
+  .shadowHomeSidebar { min-width: 0; }
+
+  /* Make sidebar cards actually fit the column */
+  .shadowHomeSidebar > * { width: 100%; }
+
+  /* Stack earlier so “tablet / narrow desktop” doesn’t feel broken */
+  @media (max-width: 1060px) {
+    .shadowHomeGrid { grid-template-columns: 1fr; }
+    .shadowHomeSidebar { order: 0; position: static !important; top: auto !important; }
+    .shadowHomeMain { order: 1; }
+  }
+`}</style>
+
 
       {/* background layers */}
       <div
