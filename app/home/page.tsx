@@ -240,24 +240,34 @@ export default async function Home(props: {
       />
 
       <div
-        style={{
-          position: 'relative',
-          minHeight: '100svh',
-          display: 'grid',
-          placeItems: 'center',
-          padding: '86px 24px',
-        }}
-      >
+  style={{
+    position: 'relative',
+    minHeight: '100svh',
+    display: 'grid',
+
+    // Key: do NOT vertically center the whole section
+    justifyItems: 'center',
+    alignItems: 'start',
+
+    padding: '86px 24px',
+  }}
+>
+
         <section
   style={{
     width: '100%',
     maxWidth: 1120,
     display: 'grid',
-    gridTemplateRows: 'auto auto 1fr',
+
     alignItems: 'start',
     gap: 26,
+
+    // Key: give the section a real height budget inside the viewport padding
+    minHeight: 0,
+    height: 'calc(100svh - 172px)', // 86px top + 86px bottom padding
   }}
 >
+
   {/* HEADER (never moves) */}
   <div style={{textAlign: 'center'}}>
     <h1
@@ -284,11 +294,8 @@ export default async function Home(props: {
     />
   </div>
 
-  {/* SPACER ROW (locks header position visually) */}
-  <div aria-hidden />
-
   {/* CONTENT (this is the only row that changes height) */}
-  <div className="shadowHomeGrid">
+  <div className="shadowHomeGrid" style={{minHeight: 0, overflow: 'auto'}}>
             {/* LEFT: portal */}
             <div className="shadowHomeMain">
               <PortalArea portalPanel={portalPanel} />

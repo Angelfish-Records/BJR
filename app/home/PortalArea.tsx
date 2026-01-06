@@ -20,8 +20,18 @@ export default function PortalArea(props: {portalPanel: React.ReactNode}) {
     [portalPanel]
   )
 
-  return (
-    <PlayerStateProvider>
+return (
+  <PlayerStateProvider>
+    <div
+      style={{
+        // Make PortalArea a stable-height frame.
+        // This is the missing precondition for "PortalShell scrolls internally".
+        height: '100%',
+        minHeight: 0,
+        minWidth: 0,
+        display: 'grid',
+      }}
+    >
       <PortalShell
         panels={panels}
         defaultPanelId="portal"
@@ -38,6 +48,8 @@ export default function PortalArea(props: {portalPanel: React.ReactNode}) {
           )
         }}
       />
-    </PlayerStateProvider>
-  )
+    </div>
+  </PlayerStateProvider>
+)
+
 }

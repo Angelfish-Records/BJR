@@ -58,3 +58,23 @@ body {
   }
 }
 
+/* PortalShell should behave like a stable-height frame so parent layouts don't re-center it */
+.portalShell {
+  min-height: 0;
+}
+
+/* Make it deterministic on desktop: give the portal region a reliable height budget.
+   This prevents tiny content panels from collapsing the frame and triggering upstream reflow. */
+@media (min-width: 901px) {
+  .portalShell {
+    min-height: 0;
+  }
+}
+
+/* Mobile: let it size naturally */
+@media (max-width: 900px) {
+  .portalShell {
+    height: auto;
+  }
+}
+
