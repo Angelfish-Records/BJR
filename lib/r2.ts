@@ -17,7 +17,7 @@ function must(v: string | undefined, name: string): string {
 }
 
 function readEnv(): R2Env {
-  // Keep region fixed; Cloudflare R2 expects "auto" for S3 compatibility.
+  // Cloudflare R2 expects region "auto" for S3 compatibility.
   const region = process.env.R2_REGION?.trim() || 'auto'
 
   return {
@@ -29,23 +29,25 @@ function readEnv(): R2Env {
   }
 }
 
-let _client: S3Client | null = null
+let _cached: {client: S3Client; bucket: string; endpoint: string} | null = null
+
 function getClient(): {client: S3Client; bucket: string} {
+  if (_cached) return {client: _cached.client, bucket: _cached.bucket}
+
   const env = readEnv()
 
-  if (!_client) {
-    _client = new S3Client({
-      region: env.region,
-      endpoint: env.endpoint,
-      credentials: {
-        accessKeyId: env.accessKeyId,
-        secretAccessKey: env.secretAccessKey,
-      },
-      forcePathStyle: true, // important for R2/S3 compat
-    })
-  }
+  const client = new S3Client({
+    region: env.region,
+    endpoint: env.endpoint,
+    credentials: {
+      accessKeyId: env.accessKeyId,
+      secretAccessKey: env.secretAccessKey,
+    },
+    forcePathStyle: true, // important for R2/S3 compat
+  })
 
-  return {client: _client, bucket: env.bucket}
+  _cached = {client, bucket: env.bucket, endpoint: env.endpoint}
+  return {client, bucket: env.bucket}
 }
 
 export async function assertObjectExists(key: string): Promise<void> {
@@ -60,7 +62,6 @@ export async function signGetObjectUrl(params: {
   responseContentDispositionFilename?: string
 }): Promise<string> {
   const {client, bucket} = getClient()
-
   const {key, expiresInSeconds, responseContentType, responseContentDispositionFilename} = params
 
   const disposition = responseContentDispositionFilename
