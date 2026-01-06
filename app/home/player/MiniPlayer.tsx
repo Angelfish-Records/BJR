@@ -1,4 +1,4 @@
-// web/app/home/MiniPlayer.tsx
+// web/app/home/player/MiniPlayer.tsx
 'use client'
 
 import React from 'react'
@@ -6,13 +6,6 @@ import {usePlayer} from './PlayerState'
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
-}
-
-function fmtTime(sec: number) {
-  if (!Number.isFinite(sec) || sec < 0) sec = 0
-  const m = Math.floor(sec / 60)
-  const s = Math.floor(sec % 60)
-  return `${m}:${String(s).padStart(2, '0')}`
 }
 
 // NOTE: defined OUTSIDE render to avoid “Cannot create components during render”
@@ -117,6 +110,16 @@ function VolumeIcon({muted}: {muted: boolean}) {
   )
 }
 
+function MenuIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M5 7h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M5 17h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export default function MiniPlayer(props: {onExpand?: () => void}) {
   const {onExpand} = props
   const p = usePlayer()
@@ -134,6 +137,12 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
   const title = p.current?.title ?? p.current?.id ?? 'Nothing queued'
   const artist = p.current?.artist ?? (p.status === 'blocked' ? 'blocked' : p.status)
 
+  // IMPORTANT:
+  // PortalShell dock has paddingTop: 10. To put the seek bar *on the dock border*,
+  // we pull this whole component up by 10px, then re-add 10px internal top padding
+  // for the content. (If you change dock padding, change these two numbers together.)
+  const DOCK_PAD_TOP = 10
+
   return (
     <div
       style={{
@@ -141,9 +150,12 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
         width: '100%',
         display: 'grid',
         gap: 10,
+
+        marginTop: -DOCK_PAD_TOP,
+        paddingTop: DOCK_PAD_TOP,
       }}
     >
-      {/* TOP EDGE progress bar (full width) */}
+      {/* TOP EDGE progress bar (flush to dock border) */}
       <div style={{position: 'absolute', left: 0, right: 0, top: 0}}>
         <input
           aria-label="Seek"
@@ -194,14 +206,14 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
         `}</style>
       </div>
 
-      {/* Main row: controls + meta + actions (responsive without overlap) */}
+      {/* Main row */}
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: 'auto minmax(0, 1fr) auto',
           alignItems: 'center',
           gap: 12,
-          paddingTop: 14, // leave room for the top-edge slider
+          paddingTop: 14, // leaves room for the top-edge slider
         }}
       >
         {/* Left controls */}
@@ -236,107 +248,90 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
           >
             {title}
           </div>
-          <div style={{fontSize: 12, opacity: 0.65, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
+          <div
+            style={{
+              fontSize: 12,
+              opacity: 0.65,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
             {artist}
           </div>
         </div>
 
         {/* Right actions */}
         <div style={{display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end'}}>
-          {/* Time (compact) */}
-          <div style={{fontSize: 12, opacity: 0.65, whiteSpace: 'nowrap'}}>
-            {fmtTime(safePos)} <span style={{opacity: 0.45}}>/</span> {fmtTime(durSec)}
-          </div>
-
           {/* Volume icon + pop slider */}
           <div style={{position: 'relative'}}>
-            <IconBtn
-              label="Volume"
-              onClick={() => setVolOpen((v) => !v)}
-              title="Volume"
-            >
+            <IconBtn label="Volume" onClick={() => setVolOpen((v) => !v)} title="Volume">
               <VolumeIcon muted={muted} />
             </IconBtn>
 
             {volOpen ? (
-  <div
-    style={{
-      position: 'absolute',
-      right: 0,
-      bottom: 44,
-      width: 48,
-      height: 150,
-      borderRadius: 14,
-      border: '1px solid rgba(255,255,255,0.12)',
-      background: 'rgba(0,0,0,0.55)',
-      backdropFilter: 'blur(10px)',
-      padding: 10,
-      boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
-      display: 'grid',
-      justifyItems: 'center',
-      alignItems: 'center',
-    }}
-  >
-    <input
-      aria-label="Volume slider"
-      type="range"
-      min={0}
-      max={1}
-      step={0.01}
-      value={vol}
-      onChange={(e) => setVol(Number(e.target.value))}
-      style={{
-        width: 120, // becomes the vertical length after rotation
-        transform: 'rotate(-90deg)',
-        transformOrigin: 'center',
-        background: 'transparent',
-      }}
-    />
-  </div>
-) : null}
-
+              <div
+                style={{
+                  position: 'absolute',
+                  right: 0,
+                  bottom: 44,
+                  width: 48,
+                  height: 150,
+                  borderRadius: 14,
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  background: 'rgba(0,0,0,0.55)',
+                  backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
+                  padding: 10,
+                  boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
+                  display: 'grid',
+                  justifyItems: 'center',
+                  alignItems: 'center',
+                }}
+              >
+                <input
+                  aria-label="Volume slider"
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={vol}
+                  onChange={(e) => setVol(Number(e.target.value))}
+                  style={{
+                    width: 120, // becomes the vertical length after rotation
+                    transform: 'rotate(-90deg)',
+                    transformOrigin: 'center',
+                    background: 'transparent',
+                  }}
+                />
+              </div>
+            ) : null}
           </div>
 
+          {/* Open (hamburger icon) */}
           {onExpand ? (
-            <button
-              type="button"
-              onClick={onExpand}
-              style={{
-                borderRadius: 999,
-                border: '1px solid rgba(255,255,255,0.14)',
-                background: 'rgba(255,255,255,0.05)',
-                color: 'rgba(255,255,255,0.9)',
-                padding: '8px 10px',
-                fontSize: 13,
-                cursor: 'pointer',
-                opacity: 0.9,
-              }}
-            >
-              Open
-            </button>
+            <IconBtn label="Open player" title="Open player" onClick={onExpand}>
+              <MenuIcon />
+            </IconBtn>
           ) : null}
         </div>
       </div>
 
-      {/* Mobile tightening (no overlap): stack meta under controls, keep top slider */}
+      {/* Mobile tightening */}
       <style>{`
         @media (max-width: 520px) {
-          /* Turn main row into two rows: controls + actions, then meta */
           div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] {
             grid-template-columns: 1fr auto;
             grid-auto-rows: auto;
             row-gap: 10px;
           }
-          /* Meta spans full width below */
           div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(2) {
             grid-column: 1 / -1;
             order: 3;
           }
-          /* Left controls stay first */
           div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(1) {
             order: 1;
           }
-          /* Right actions stay top-right */
           div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(3) {
             order: 2;
           }
