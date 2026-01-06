@@ -8,7 +8,7 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
 }
 
-// NOTE: defined OUTSIDE render to avoid “Cannot create components during render”
+// NOTE: defined OUTSIDE render
 function IconBtn(props: {
   label: string
   title?: string
@@ -77,35 +77,14 @@ function NextIcon() {
 function VolumeIcon({muted}: {muted: boolean}) {
   return muted ? (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M11 7 8.5 9H6v6h2.5L11 17V7Z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
+      <path d="M11 7 8.5 9H6v6h2.5L11 17V7Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
       <path d="M16 9l5 5M21 9l-5 5" stroke="currentColor" strokeWidth="2" />
     </svg>
   ) : (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M11 7 8.5 9H6v6h2.5L11 17V7Z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M14.5 9.5c.9.9.9 4.1 0 5"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M17 7c2 2 2 8 0 10"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        opacity="0.75"
-      />
+      <path d="M11 7 8.5 9H6v6h2.5L11 17V7Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <path d="M14.5 9.5c.9.9.9 4.1 0 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M17 7c2 2 2 8 0 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.75" />
     </svg>
   )
 }
@@ -166,77 +145,78 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
             appearance: 'none',
           }}
         />
-        <style>{`
-          /* Seek range styling */
-          input[type="range"]::-webkit-slider-runnable-track {
-            height: 4px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.18);
-          }
-          input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 10px;
-            height: 10px;
-            border-radius: 999px;
-            margin-top: -3px;
-            background: color-mix(in srgb, var(--accent) 75%, white 10%);
-            box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
-          }
-          input[type="range"]::-moz-range-track {
-            height: 4px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.18);
-          }
-          input[type="range"]::-moz-range-thumb {
-            width: 10px;
-            height: 10px;
-            border: 0;
-            border-radius: 999px;
-            background: color-mix(in srgb, var(--accent) 75%, white 10%);
-            box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
-          }
-
-          /* Volume range styling (scoped) */
-          .volSlider {
-            -webkit-appearance: slider-vertical;
-            appearance: auto;
-            writing-mode: bt-lr;
-            width: 18px;
-            height: 120px;
-            margin: 0;
-            background: transparent;
-          }
-          .volSlider::-webkit-slider-runnable-track {
-            width: 6px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.18);
-          }
-          .volSlider::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 16px;
-            height: 16px;
-            border-radius: 999px;
-            background: color-mix(in srgb, var(--accent) 75%, white 10%);
-            box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
-            margin-left: -5px; /* centers thumb over 6px track */
-          }
-          .volSlider::-moz-range-track {
-            width: 6px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.18);
-          }
-          .volSlider::-moz-range-thumb {
-            width: 16px;
-            height: 16px;
-            border: 0;
-            border-radius: 999px;
-            background: color-mix(in srgb, var(--accent) 75%, white 10%);
-            box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
-          }
-        `}</style>
       </div>
+
+      <style>{`
+        /* Seek range styling */
+        input[aria-label="Seek"]::-webkit-slider-runnable-track {
+          height: 4px;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.18);
+        }
+        input[aria-label="Seek"]::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 10px;
+          height: 10px;
+          border-radius: 999px;
+          margin-top: -3px;
+          background: color-mix(in srgb, var(--accent) 75%, white 10%);
+          box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
+        }
+        input[aria-label="Seek"]::-moz-range-track {
+          height: 4px;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.18);
+        }
+        input[aria-label="Seek"]::-moz-range-thumb {
+          width: 10px;
+          height: 10px;
+          border: 0;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--accent) 75%, white 10%);
+          box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
+        }
+
+        /* Volume slider (rotate reliably everywhere) */
+        .volSlider {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 130px; /* becomes vertical length after rotate */
+          height: 18px; /* becomes thickness */
+          background: transparent;
+          transform: rotate(-90deg);
+          transform-origin: center;
+        }
+        .volSlider::-webkit-slider-runnable-track {
+          height: 6px;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.18);
+        }
+        .volSlider::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 16px;
+          height: 16px;
+          border-radius: 999px;
+          margin-top: -5px; /* centers thumb on 6px track */
+          background: color-mix(in srgb, var(--accent) 75%, white 10%);
+          box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
+        }
+        .volSlider::-moz-range-track {
+          height: 6px;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.18);
+        }
+        .volSlider::-moz-range-thumb {
+          width: 16px;
+          height: 16px;
+          border: 0;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--accent) 75%, white 10%);
+          box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
+        }
+      `}</style>
 
       <div
         style={{
@@ -300,11 +280,12 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
               <div
                 style={{
                   position: 'absolute',
-                  right: 0,
-                  bottom: 44,
-                  width: 52,
-                  height: 160,
-                  borderRadius: 14,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  bottom: 44, // directly above the button
+                  width: 58,
+                  height: 170,
+                  borderRadius: 16,
                   border: '1px solid rgba(255,255,255,0.12)',
                   background: 'rgba(0,0,0,0.60)',
                   backdropFilter: 'blur(10px)',
@@ -312,7 +293,8 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
                   boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
                   display: 'grid',
                   placeItems: 'center',
-                  zIndex: 20,
+                  zIndex: 30,
+                  padding: 10,
                 }}
               >
                 <input
