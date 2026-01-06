@@ -10,12 +10,12 @@ import FullPlayer from './player/FullPlayer'
 export default function PortalArea(props: {portalPanel: React.ReactNode}) {
   const {portalPanel} = props
 
-  const [activePanelId, setActivePanelId] = React.useState<string>('portal')
+  const [activePanelId, setActivePanelId] = React.useState<string>('player')
 
   const panels = React.useMemo<PortalPanelSpec[]>(
     () => [
-      {id: 'portal', label: 'Portal', content: portalPanel},
       {id: 'player', label: 'Player', content: <FullPlayer />},
+      {id: 'portal', label: 'Portal', content: portalPanel},
     ],
     [portalPanel]
   )
@@ -34,7 +34,7 @@ return (
     >
       <PortalShell
         panels={panels}
-        defaultPanelId="portal"
+        defaultPanelId="player"
         syncToQueryParam
         onPanelChange={setActivePanelId}
         dock={() => {

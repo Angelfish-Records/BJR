@@ -197,19 +197,50 @@ export default async function Home(props: {
     align-items: start;
   }
 
-  .shadowHomeMain { min-width: 0; }
-  .shadowHomeSidebar { min-width: 0; }
+  /* Allow grid children to shrink properly */
+  .shadowHomeMain,
+  .shadowHomeSidebar,
+  .shadowHomeGrid > * {
+    min-width: 0;
+  }
 
   /* Make sidebar cards actually fit the column */
-  .shadowHomeSidebar > * { width: 100%; }
+  .shadowHomeSidebar > * {
+    width: 100%;
+  }
 
-  /* Stack earlier so “tablet / narrow desktop” doesn’t feel broken */
+  /* Two-up card grid (desktop) */
+  .portalCardGrid2up {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Stack cards on narrow screens */
+  @media (max-width: 700px) {
+    .portalCardGrid2up {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* Stack portal + sidebar earlier so tablet doesn't feel broken */
   @media (max-width: 1060px) {
-    .shadowHomeGrid { grid-template-columns: 1fr; }
-    .shadowHomeSidebar { order: 0; position: static !important; top: auto !important; }
-    .shadowHomeMain { order: 1; }
+    .shadowHomeGrid {
+      grid-template-columns: 1fr;
+    }
+
+    .shadowHomeSidebar {
+      order: 0;
+      position: static !important;
+      top: auto !important;
+    }
+
+    .shadowHomeMain {
+      order: 1;
+    }
   }
 `}</style>
+
 
 
       {/* background layers */}

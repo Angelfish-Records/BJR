@@ -242,21 +242,22 @@ export default async function PortalModules(props: Props) {
         }
 
         if (m._type === 'moduleCardGrid') {
-          return (
-            <div key={m._key} style={{borderRadius: 18, padding: 16}}>
-              <div style={{display: 'grid', gap: 12}}>
-                {m.cards.map((c) => (
-                  <PanelCard
-                    key={c._key}
-                    title={c.title}
-                    body={c.body}
-                    locked={!!c.requiresEntitlement && !hasKey(entitlementKeys, c.requiresEntitlement)}
-                  />
-                ))}
-              </div>
-            </div>
-          )
-        }
+  return (
+    <div key={m._key} style={{borderRadius: 18, padding: 16}}>
+      <div className="portalCardGrid2up">
+        {m.cards.map((c) => (
+          <PanelCard
+            key={c._key}
+            title={c.title}
+            body={c.body}
+            locked={!!c.requiresEntitlement && !hasKey(entitlementKeys, c.requiresEntitlement)}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 
         if (m._type === 'moduleDownloads') {
           const offer = getAlbumOffer(m.albumSlug)
