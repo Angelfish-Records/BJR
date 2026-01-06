@@ -86,7 +86,6 @@ export async function POST(req: Request) {
   err: err instanceof Error ? err.message : String(err),
 }
 
-
     return json(500, {
       ok: false,
       error: 'Download not available (missing object)',
