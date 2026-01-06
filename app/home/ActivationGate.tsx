@@ -407,60 +407,76 @@ export default function ActivationGate(props: Props) {
       ) : null}
 
       <div style={{position: 'relative', zIndex: 41, display: 'grid', gap: 12, justifyItems: 'center'}}>
-        <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
-          {!isActive ? (
-            <input
-              type="email"
-              placeholder="you@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value.trim())}
-              style={{
-                width: EMAIL_W,
-                padding: '11px 14px',
-                borderRadius: 999,
-                border: '1px solid rgba(255,255,255,0.18)',
-                background: 'rgba(0,0,0,0.35)',
-                color: 'rgba(255,255,255,0.92)',
-                outline: 'none',
-                textAlign: 'left',
-                boxShadow: needsAttention
-                  ? `0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent),
-                     0 0 26px color-mix(in srgb, var(--accent) 40%, transparent),
-                     0 14px 30px rgba(0,0,0,0.22)`
-                  : '0 14px 30px rgba(0,0,0,0.22)',
-                transition: 'box-shadow 220ms ease',
-              }}
-            />
-          ) : (
-            <button
-              type="button"
-              style={{
-                width: EMAIL_W,
-                padding: '11px 14px',
-                borderRadius: 999,
-                border: '1px solid rgba(255,255,255,0.18)',
-                background: 'rgba(0,0,0,0.26)',
-                color: 'rgba(255,255,255,0.88)',
-                textAlign: 'left',
-                cursor: 'default',
-                boxShadow: '0 14px 30px rgba(0,0,0,0.22)',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-              aria-label="Signed in identity"
-            >
-              {displayEmail}
-            </button>
-          )}
+        <div
+  style={{
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
+    minWidth: 0,            // allow children to shrink
+    justifyContent: 'center',
+  }}
+>
+  <div style={{flex: '1 1 auto', minWidth: 0, maxWidth: EMAIL_W}}>
+    {!isActive ? (
+      <input
+        type="email"
+        placeholder="you@email.com"
+        value={email}
+        onChange={(e) => setEmail(e.target.value.trim())}
+        style={{
+          width: '100%',      // fill wrapper
+          minWidth: 0,        // critical for flex shrink
+          padding: '11px 14px',
+          borderRadius: 999,
+          border: '1px solid rgba(255,255,255,0.18)',
+          background: 'rgba(0,0,0,0.35)',
+          color: 'rgba(255,255,255,0.92)',
+          outline: 'none',
+          textAlign: 'left',
+          boxShadow: needsAttention
+            ? `0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent),
+               0 0 26px color-mix(in srgb, var(--accent) 40%, transparent),
+               0 14px 30px rgba(0,0,0,0.22)`
+            : '0 14px 30px rgba(0,0,0,0.22)',
+          transition: 'box-shadow 220ms ease',
+        }}
+      />
+    ) : (
+      <button
+        type="button"
+        style={{
+          width: '100%',      // fill wrapper
+          minWidth: 0,        // critical for flex shrink
+          padding: '11px 14px',
+          borderRadius: 999,
+          border: '1px solid rgba(255,255,255,0.18)',
+          background: 'rgba(0,0,0,0.26)',
+          color: 'rgba(255,255,255,0.88)',
+          textAlign: 'left',
+          cursor: 'default',
+          boxShadow: '0 14px 30px rgba(0,0,0,0.22)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+        aria-label="Signed in identity"
+      >
+        {displayEmail}
+      </button>
+    )}
+  </div>
 
-          <Toggle checked={isActive} disabled={!toggleClickable} onClick={startEmailCode} />
-        </div>
+  <div style={{flex: '0 0 auto'}}>
+    <Toggle checked={isActive} disabled={!toggleClickable} onClick={startEmailCode} />
+  </div>
+</div>
+
 
         {!isActive && shouldShowBox && (
           <div
             style={{
-              width: EMAIL_W,
+              width: 'min(100%, 320px)',
               borderRadius: 16,
               border: '1px solid rgba(255,255,255,0.14)',
               background: 'rgba(0,0,0,0.28)',
@@ -502,7 +518,7 @@ export default function ActivationGate(props: Props) {
               }}
             >
               <OtpBoxes
-                width={EMAIL_W - 2}
+                width={Math.min(EMAIL_W - 2, 320 - 2)}
                 value={code}
                 onChange={(next) => setCode(normalizeDigits(next))}
                 disabled={isVerifying}
