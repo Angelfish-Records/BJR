@@ -172,11 +172,11 @@
           display: 'grid',
           gap: 14,
           minWidth: 0,
+          overflowY: 'auto',
           overflowX: 'hidden',
 
           // Key: this becomes the scroll container
           minHeight: 0,
-          overflow: 'auto',
           overscrollBehavior: 'contain',
         }}
       >

@@ -259,13 +259,9 @@ export default async function Home(props: {
     width: '100%',
     maxWidth: 1120,
     display: 'grid',
-
+    gridTemplateRows: 'auto auto 1fr', // (or just remove this line entirely)
     alignItems: 'start',
     gap: 26,
-
-    // Key: give the section a real height budget inside the viewport padding
-    minHeight: 0,
-    height: 'calc(100svh - 172px)', // 86px top + 86px bottom padding
   }}
 >
 
@@ -296,7 +292,7 @@ export default async function Home(props: {
   </div>
 
   {/* CONTENT (this is the only row that changes height) */}
-  <div className="shadowHomeGrid" style={{minHeight: 0, overflow: 'auto'}}>
+  <div className="shadowHomeGrid" style={{minHeight: 0}}>
             {/* LEFT: portal */}
             <div className="shadowHomeMain">
               <PortalArea portalPanel={portalPanel} />
