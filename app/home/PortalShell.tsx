@@ -84,17 +84,9 @@
     className="portalShell"
     style={{
       display: 'grid',
-      gap: 14,
-      minWidth: 0,
-
-      // Key: let this component behave like a "frame"
-      // so its own content scrolls instead of changing its outer height.
-      height: '100%',
-      minHeight: 0,
-
-      // Key: split into (main) + (dock)
-      gridTemplateRows: dockNode ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)',
-      alignContent: 'start',
+  gap: 14,
+  minWidth: 0,
+  alignContent: 'start',
     }}
   >
     {/* Rail + Content */}
@@ -105,9 +97,6 @@
         gap: 14,
         alignItems: 'start',
         minWidth: 0,
-
-        // Key: allow children to shrink and enable inner scrolling
-        minHeight: 0,
       }}
     >
       {/* Left rail */}
@@ -172,16 +161,10 @@
           display: 'grid',
           gap: 14,
           minWidth: 0,
-          overflowY: 'auto',
-          overflowX: 'hidden',
-
-          // Key: this becomes the scroll container
-          minHeight: 0,
-          overscrollBehavior: 'contain',
         }}
       >
         {panels.map((p) => (
-          <div key={p.id} hidden={p.id !== active} style={{minWidth: 0, overflowX: 'hidden'}}>
+          <div key={p.id} hidden={p.id !== active} style={{minWidth: 0}}>
             {p.content}
           </div>
         ))}

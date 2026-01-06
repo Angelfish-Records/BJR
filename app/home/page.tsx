@@ -163,7 +163,6 @@ export default async function Home(props: {
     minHeight: '100svh',
     position: 'relative',
     overflowX: 'hidden',
-    overflowY: 'auto',
     backgroundColor: '#050506',
     color: 'rgba(255,255,255,0.92)',
     '--accent': accent,
