@@ -1,9 +1,34 @@
-// web/app/home/PortalModules.tsx
 import React from 'react'
 import {listCurrentEntitlementKeys} from '../../lib/entitlements'
-import type {PortalModule} from '../../lib/portal'
 import PortalRichText from './modules/PortalRichText'
 import {getAlbumOffer} from '../../lib/albumOffers'
+import BuyAlbumButton from './modules/BuyAlbumButton'
+
+// Local discriminated union so we don't depend on lib/portal exporting PortalModule correctly yet.
+type ModuleHeading = {_key: string; _type: 'moduleHeading'; title?: string; blurb?: string}
+type ModuleRichText = {
+  _key: string
+  _type: 'moduleRichText'
+  title?: string
+  teaser?: import('@portabletext/types').PortableTextBlock[]
+  full?: import('@portabletext/types').PortableTextBlock[]
+  requiresEntitlement?: string
+}
+type ModuleCardGrid = {
+  _key: string
+  _type: 'moduleCardGrid'
+  title?: string
+  cards: Array<{_key: string; title: string; body?: string; requiresEntitlement?: string}>
+}
+type ModuleDownloads = {
+  _key: string
+  _type: 'moduleDownloads'
+  title?: string
+  albumSlug: string
+  teaserCopy?: string
+}
+
+type PortalModule = ModuleHeading | ModuleRichText | ModuleCardGrid | ModuleDownloads
 
 type Props = {
   modules: PortalModule[]
@@ -74,7 +99,7 @@ function DownloadsModule(props: {
           <div style={{opacity: 0.85}}>Owned: {offer.title}</div>
           <div style={{marginTop: 8, opacity: 0.75}}>
             Downloads will appear here next. Planned inclusions:{' '}
-            {offer.includes.map((x) => (
+            {offer.includes.map((x: string) => (
               <span
                 key={x}
                 style={{
@@ -98,23 +123,12 @@ function DownloadsModule(props: {
             {teaserCopy ?? 'Buy the digital album to unlock downloads (perpetual).'}
           </div>
 
-          <div style={{marginTop: 10, opacity: 0.75}}>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 10,
-                borderRadius: 999,
-                border: '1px solid rgba(255,255,255,0.14)',
-                background: 'rgba(255,255,255,0.04)',
-                padding: '8px 12px',
-                fontSize: 13,
-              }}
-            >
-              Buy digital album (coming next)
+          <div style={{marginTop: 10, opacity: 0.9}}>
+            <div style={{display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap'}}>
+              <BuyAlbumButton albumSlug={albumSlug} label="Buy digital album" />
               <span style={{opacity: 0.7}}>•</span>
               <span style={{opacity: 0.85}}>{offer.title}</span>
-            </span>
+            </div>
           </div>
         </div>
       )}
@@ -124,7 +138,6 @@ function DownloadsModule(props: {
 
 export default async function PortalModules(props: Props) {
   const {modules, memberId} = props
-
   const entitlementKeys = memberId ? await listCurrentEntitlementKeys(memberId) : []
 
   return (
@@ -149,14 +162,7 @@ export default async function PortalModules(props: Props) {
           const blocks = entitled ? (m.full ?? m.teaser ?? []) : (m.teaser ?? [])
           const locked = !!required && !entitled
 
-          return (
-            <PortalRichText
-              key={m._key}
-              title={m.title}
-              blocks={blocks}
-              locked={locked}
-            />
-          )
+          return <PortalRichText key={m._key} title={m.title} blocks={blocks} locked={locked} />
         }
 
         if (m._type === 'moduleCardGrid') {
@@ -170,7 +176,9 @@ export default async function PortalModules(props: Props) {
                 padding: 16,
               }}
             >
-              {m.title ? <div style={{fontSize: 15, opacity: 0.92, marginBottom: 10}}>{m.title}</div> : null}
+              {m.title ? (
+                <div style={{fontSize: 15, opacity: 0.92, marginBottom: 10}}>{m.title}</div>
+              ) : null}
 
               <div
                 style={{
@@ -204,7 +212,6 @@ export default async function PortalModules(props: Props) {
           )
         }
 
-        // Exhaustive fallback (should never hit)
         return null
       })}
     </div>

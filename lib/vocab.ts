@@ -85,6 +85,7 @@ export const ENT = {
   download: (assetId: string) => entKey({kind: 'download', assetId}),
   downloadAlbum: (slug: string) => `download_album_${slug}`,
 
+
   // Optional explicit tier signals (still derived in code; you can choose whether to grant these)
   tier: (name: 'free' | 'premium' | 'lifetime' | string) => entKey({kind: 'tier', name}),
 } as const
