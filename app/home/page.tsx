@@ -239,7 +239,16 @@ export default async function Home(props: {
       order: 1;
     }
   }
+
+  /* Tighten horizontal padding on small phones so sidebar doesn't feel oversized */
+  @media (max-width: 520px) {
+    .shadowHomeOuter {
+      padding-left: 14px !important;
+      padding-right: 14px !important;
+    }
+  }
 `}</style>
+
 
 
 
@@ -272,16 +281,17 @@ export default async function Home(props: {
       </div>
 
       <div
-  style={{
-    position: 'relative',
-    minHeight: '100svh',
-    display: 'grid',
+        className="shadowHomeOuter"
+        style={{
+          position: 'relative',
+          minHeight: '100svh',
+          display: 'grid',
 
-    // Key: do NOT vertically center the whole section
-    justifyItems: 'center',
-    alignItems: 'start',
+          // Key: do NOT vertically center the whole section
+          justifyItems: 'center',
+          alignItems: 'start',
 
-    padding: '86px 24px',
+          padding: '86px 24px',
   }}
 >
 
