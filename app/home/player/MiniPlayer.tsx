@@ -124,12 +124,10 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
   const {onExpand} = props
   const p = usePlayer()
 
-  // Progress UI is “visual only” for now (until real audio plumbing exists)
   const [posSec, setPosSec] = React.useState(0)
   const durSec = Math.max(1, Math.round((p.current?.durationMs ?? 0) / 1000))
   const safePos = clamp(posSec, 0, durSec)
 
-  // Volume: icon + pop slider (local-only for now)
   const [volOpen, setVolOpen] = React.useState(false)
   const [vol, setVol] = React.useState(0.85)
   const muted = vol <= 0.001
@@ -137,10 +135,6 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
   const title = p.current?.title ?? p.current?.id ?? 'Nothing queued'
   const artist = p.current?.artist ?? (p.status === 'blocked' ? 'blocked' : p.status)
 
-  // IMPORTANT:
-  // PortalShell dock has paddingTop: 10. To put the seek bar *on the dock border*,
-  // we pull this whole component up by 10px, then re-add 10px internal top padding
-  // for the content. (If you change dock padding, change these two numbers together.)
   const DOCK_PAD_TOP = 10
 
   return (
@@ -150,12 +144,11 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
         width: '100%',
         display: 'grid',
         gap: 10,
-
         marginTop: -DOCK_PAD_TOP,
         paddingTop: DOCK_PAD_TOP,
       }}
     >
-      {/* TOP EDGE progress bar (flush to dock border) */}
+      {/* TOP EDGE progress bar (full width) */}
       <div style={{position: 'absolute', left: 0, right: 0, top: 0}}>
         <input
           aria-label="Seek"
@@ -174,7 +167,7 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
           }}
         />
         <style>{`
-          /* Range styling (kept local to avoid global CSS drift) */
+          /* Seek range styling */
           input[type="range"]::-webkit-slider-runnable-track {
             height: 4px;
             border-radius: 999px;
@@ -203,22 +196,59 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
             background: color-mix(in srgb, var(--accent) 75%, white 10%);
             box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
           }
+
+          /* Volume range styling (scoped) */
+          .volSlider {
+            -webkit-appearance: slider-vertical;
+            appearance: auto;
+            writing-mode: bt-lr;
+            width: 18px;
+            height: 120px;
+            margin: 0;
+            background: transparent;
+          }
+          .volSlider::-webkit-slider-runnable-track {
+            width: 6px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.18);
+          }
+          .volSlider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 999px;
+            background: color-mix(in srgb, var(--accent) 75%, white 10%);
+            box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
+            margin-left: -5px; /* centers thumb over 6px track */
+          }
+          .volSlider::-moz-range-track {
+            width: 6px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.18);
+          }
+          .volSlider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border: 0;
+            border-radius: 999px;
+            background: color-mix(in srgb, var(--accent) 75%, white 10%);
+            box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
+          }
         `}</style>
       </div>
 
-      {/* Main row */}
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: 'auto minmax(0, 1fr) auto',
           alignItems: 'center',
           gap: 12,
-          paddingTop: 14, // leaves room for the top-edge slider
+          paddingTop: 14,
         }}
       >
-        {/* Left controls */}
         <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
-          <IconBtn label="Previous" onClick={() => { /* wire later */ }}>
+          <IconBtn label="Previous" onClick={() => {}}>
             <PrevIcon />
           </IconBtn>
 
@@ -229,12 +259,11 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
             <PlayPauseIcon playing={p.status === 'playing'} />
           </IconBtn>
 
-          <IconBtn label="Next" onClick={() => { /* wire later */ }}>
+          <IconBtn label="Next" onClick={() => {}}>
             <NextIcon />
           </IconBtn>
         </div>
 
-        {/* Middle meta */}
         <div style={{minWidth: 0}}>
           <div
             style={{
@@ -261,9 +290,7 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
           </div>
         </div>
 
-        {/* Right actions */}
         <div style={{display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end'}}>
-          {/* Volume icon + pop slider */}
           <div style={{position: 'relative'}}>
             <IconBtn label="Volume" onClick={() => setVolOpen((v) => !v)} title="Volume">
               <VolumeIcon muted={muted} />
@@ -275,21 +302,21 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
                   position: 'absolute',
                   right: 0,
                   bottom: 44,
-                  width: 48,
-                  height: 150,
+                  width: 52,
+                  height: 160,
                   borderRadius: 14,
                   border: '1px solid rgba(255,255,255,0.12)',
-                  background: 'rgba(0,0,0,0.55)',
+                  background: 'rgba(0,0,0,0.60)',
                   backdropFilter: 'blur(10px)',
                   WebkitBackdropFilter: 'blur(10px)',
-                  padding: 10,
                   boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
                   display: 'grid',
-                  justifyItems: 'center',
-                  alignItems: 'center',
+                  placeItems: 'center',
+                  zIndex: 20,
                 }}
               >
                 <input
+                  className="volSlider"
                   aria-label="Volume slider"
                   type="range"
                   min={0}
@@ -297,18 +324,11 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
                   step={0.01}
                   value={vol}
                   onChange={(e) => setVol(Number(e.target.value))}
-                  style={{
-                    width: 120, // becomes the vertical length after rotation
-                    transform: 'rotate(-90deg)',
-                    transformOrigin: 'center',
-                    background: 'transparent',
-                  }}
                 />
               </div>
             ) : null}
           </div>
 
-          {/* Open (hamburger icon) */}
           {onExpand ? (
             <IconBtn label="Open player" title="Open player" onClick={onExpand}>
               <MenuIcon />
@@ -317,7 +337,6 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
         </div>
       </div>
 
-      {/* Mobile tightening */}
       <style>{`
         @media (max-width: 520px) {
           div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] {
