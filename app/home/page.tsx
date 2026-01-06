@@ -162,7 +162,8 @@ export default async function Home(props: {
   const mainStyle: StyleWithAccent = {
     minHeight: '100svh',
     position: 'relative',
-    overflow: 'hidden',
+    overflowX: 'hidden',
+    overflowY: 'auto',
     backgroundColor: '#050506',
     color: 'rgba(255,255,255,0.92)',
     '--accent': accent,

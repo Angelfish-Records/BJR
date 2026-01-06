@@ -25,6 +25,11 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; overflow-x: hidden; }
+
+
 /* --- Shadow Home layout helpers (desktop-first, mobile stacks with sidebar first) --- */
 
 .shadowHomeGrid {

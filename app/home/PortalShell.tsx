@@ -172,6 +172,7 @@
           display: 'grid',
           gap: 14,
           minWidth: 0,
+          overflowX: 'hidden',
 
           // Key: this becomes the scroll container
           minHeight: 0,
@@ -180,7 +181,7 @@
         }}
       >
         {panels.map((p) => (
-          <div key={p.id} hidden={p.id !== active} style={{minWidth: 0}}>
+          <div key={p.id} hidden={p.id !== active} style={{minWidth: 0, overflowX: 'hidden'}}>
             {p.content}
           </div>
         ))}
