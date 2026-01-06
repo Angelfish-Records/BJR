@@ -77,8 +77,8 @@ function CheckoutBanner(props: {checkout: string | null}) {
     >
       {isSuccess ? (
         <>
-          ✅ Checkout completed. If entitlements haven&apos;t appeared yet, refresh once
-          (webhooks can be a beat behind).
+          ✅ Checkout completed. If entitlements haven&apos;t appeared yet, refresh once (webhooks can be a beat
+          behind).
         </>
       ) : (
         <>Checkout cancelled.</>
@@ -97,7 +97,8 @@ export default async function Home(props: {
 
   const {userId} = await auth()
 
-  // Post-checkout activation case (logged out)
+  // Only server-legit case for “attention”: you *just* returned from checkout while logged out.
+  // “Return later” guidance is handled client-side by ActivationGate’s localStorage flag.
   const showPaymentPrompt = checkout === 'success' && !userId
 
   const user = userId ? await currentUser() : null
@@ -107,10 +108,9 @@ export default async function Home(props: {
     null
 
   const [page, portal] = await Promise.all([
-  client.fetch<ShadowHomeDoc>(shadowHomeQuery, {slug: 'home'}, {next: {tags: ['shadowHome']}}),
-  fetchPortalPage('home'),
-])
-
+    client.fetch<ShadowHomeDoc>(shadowHomeQuery, {slug: 'home'}, {next: {tags: ['shadowHome']}}),
+    fetchPortalPage('home'),
+  ])
 
   let member:
     | null
@@ -154,20 +154,7 @@ export default async function Home(props: {
       ENTITLEMENTS.LIFETIME_ACCESS,
     ]))
 
-    const hasLockedDownloads =
-  !userId &&
-  !!portal?.modules?.some((m) => m._type === 'moduleDownloads')
-
-
-  const showActivationNudge =
-    !showPaymentPrompt && hasLockedDownloads
-
-  const attentionMessage =
-    showPaymentPrompt
-      ? 'Payment confirmed – activate to unlock.'
-      : showActivationNudge
-        ? 'Sign in to access your purchased content.'
-        : null
+  const attentionMessage = showPaymentPrompt ? 'Payment confirmed – activate to unlock.' : null
 
   const bgUrl =
     page?.backgroundImage
@@ -204,7 +191,6 @@ export default async function Home(props: {
 
   return (
     <main style={mainStyle}>
-      {/* background layers unchanged */}
       <div
         style={{
           position: 'absolute',
