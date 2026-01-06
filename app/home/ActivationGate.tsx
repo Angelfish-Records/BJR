@@ -233,9 +233,15 @@ export default function ActivationGate(props: Props) {
   }, [isActive, router])
 
   const EMAIL_W = 320
-  const showAttention = !isActive && !!attentionMessage
-  const shouldShowBox = !isActive && (showAttention || phase === 'code')
 
+  // Existing behaviour: attentionMessage triggers the post-checkout “message box”.
+  const showAttention = !isActive && !!attentionMessage
+
+  // NEW: spotlight mode (dim/blur the whole page) only when we have attentionMessage.
+  const spotlight = showAttention
+
+  // Existing behaviour: show message box OR OTP box.
+  const shouldShowBox = !isActive && (showAttention || phase === 'code')
   const toggleClickable = !isActive && phase === 'idle' && emailValid && clerkLoaded
 
   async function startEmailCode() {
@@ -327,137 +333,182 @@ export default function ActivationGate(props: Props) {
   const boxShowMessage = showAttention && phase !== 'code'
 
   return (
-    <div style={{display: 'grid', gap: 12, justifyItems: 'center'}}>
-      <style>{`
-        @keyframes boxDown {
-          from { opacity: 0; transform: translateY(-10px); }
-          to   { opacity: 1; transform: translateY(0px); }
-        }
-      `}</style>
+    <>
+      {/* Spotlight overlay: present only in post-checkout attention mode */}
+      {spotlight ? (
+        <div
+          aria-hidden
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.60)',
+            backdropFilter: 'blur(7px)',
+            zIndex: 40,
+          }}
+        />
+      ) : null}
 
-      <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
-        {!isActive ? (
-          <input
-            type="email"
-            placeholder="you@email.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value.trim())}
-            style={{
-              width: EMAIL_W,
-              padding: '11px 14px',
-              borderRadius: 999,
-              border: '1px solid rgba(255,255,255,0.18)',
-              background: 'rgba(0,0,0,0.35)',
-              color: 'rgba(255,255,255,0.92)',
-              outline: 'none',
-              textAlign: 'left',
-              boxShadow: showAttention
-                ? `0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent),
-                   0 0 26px color-mix(in srgb, var(--accent) 40%, transparent),
-                   0 14px 30px rgba(0,0,0,0.22)`
-                : '0 14px 30px rgba(0,0,0,0.22)',
-              transition: 'box-shadow 220ms ease',
-            }}
-          />
-        ) : (
-          <button
-            type="button"
-            style={{
-              width: EMAIL_W,
-              padding: '11px 14px',
-              borderRadius: 999,
-              border: '1px solid rgba(255,255,255,0.18)',
-              background: 'rgba(0,0,0,0.26)',
-              color: 'rgba(255,255,255,0.88)',
-              textAlign: 'left',
-              cursor: 'default',
-              boxShadow: '0 14px 30px rgba(0,0,0,0.22)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-            aria-label="Signed in identity"
-          >
-            {displayEmail}
-          </button>
-        )}
+      <div style={{display: 'grid', gap: 12, justifyItems: 'center', position: 'relative'}}>
+        <style>{`
+          @keyframes boxDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to   { opacity: 1; transform: translateY(0px); }
+          }
+        `}</style>
 
-        <Toggle checked={isActive} disabled={!toggleClickable} onClick={startEmailCode} />
-      </div>
-
-      {!isActive && shouldShowBox && (
+        {/* Email row becomes the “spotlight target” by raising z-index when spotlight is on */}
         <div
           style={{
-            width: EMAIL_W,
-            borderRadius: 16,
-            border: '1px solid rgba(255,255,255,0.14)',
-            background: 'rgba(0,0,0,0.28)',
-            padding: 12,
-            animation: 'boxDown 160ms ease-out',
-            boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
+            display: 'grid',
+            gap: 8,
+            justifyItems: 'center',
             position: 'relative',
-            overflow: 'hidden',
-            minHeight: 72, // keeps the box stable while fading
+            zIndex: spotlight ? 60 : 'auto',
           }}
         >
-          {/* Message layer */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: 12,
-              display: 'grid',
-              placeItems: 'center',
-              textAlign: 'center',
-              fontSize: 13,
-              opacity: boxShowMessage ? 0.92 : 0,
-              pointerEvents: boxShowMessage ? 'auto' : 'none',
-              transition: 'opacity 180ms ease',
-            }}
-          >
-            {attentionMessage}
+          <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
+            {!isActive ? (
+              <input
+                type="email"
+                placeholder="you@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value.trim())}
+                style={{
+                  width: EMAIL_W,
+                  padding: '11px 14px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(255,255,255,0.18)',
+                  background: 'rgba(0,0,0,0.35)',
+                  color: 'rgba(255,255,255,0.92)',
+                  outline: 'none',
+                  textAlign: 'left',
+                  boxShadow: spotlight
+                    ? `0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent),
+                       0 0 28px color-mix(in srgb, var(--accent) 40%, transparent),
+                       0 16px 34px rgba(0,0,0,0.28)`
+                    : showAttention
+                      ? `0 0 0 3px color-mix(in srgb, var(--accent) 26%, transparent),
+                         0 14px 30px rgba(0,0,0,0.22)`
+                      : '0 14px 30px rgba(0,0,0,0.22)',
+                  transition: 'box-shadow 220ms ease',
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                style={{
+                  width: EMAIL_W,
+                  padding: '11px 14px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(255,255,255,0.18)',
+                  background: 'rgba(0,0,0,0.26)',
+                  color: 'rgba(255,255,255,0.88)',
+                  textAlign: 'left',
+                  cursor: 'default',
+                  boxShadow: '0 14px 30px rgba(0,0,0,0.22)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+                aria-label="Signed in identity"
+              >
+                {displayEmail}
+              </button>
+            )}
+
+            <Toggle checked={isActive} disabled={!toggleClickable} onClick={startEmailCode} />
           </div>
 
-          {/* OTP layer */}
-          <div
-            style={{
-              opacity: phase === 'code' ? 1 : 0,
-              transform: phase === 'code' ? 'translateY(0px)' : 'translateY(-4px)',
-              transition: 'opacity 180ms ease, transform 180ms ease',
-              pointerEvents: phase === 'code' ? 'auto' : 'none',
-              display: 'grid',
-              gap: 10,
-              justifyItems: 'center',
-            }}
-          >
-            <OtpBoxes
-              width={EMAIL_W - 2}
-              value={code}
-              onChange={(next) => setCode(normalizeDigits(next))}
-              disabled={isVerifying}
-            />
-
-            {(isSending || !flow) && (
-              <div style={{fontSize: 12, opacity: 0.70, textAlign: 'center'}}>
-                Sending code…
-              </div>
-            )}
-
-            {isVerifying && (
-              <div style={{fontSize: 12, opacity: 0.70, textAlign: 'center'}}>
-                Verifying…
-              </div>
-            )}
-
-            {error && (
-              <div style={{fontSize: 12, opacity: 0.88, color: '#ffb4b4', textAlign: 'center'}}>
-                {error}
-              </div>
-            )}
-          </div>
+          {/* NEW: message under email field (post-checkout attention state) */}
+          {!isActive && spotlight ? (
+            <div
+              style={{
+                width: EMAIL_W,
+                fontSize: 13,
+                opacity: 0.86,
+                lineHeight: 1.45,
+                textAlign: 'center',
+              }}
+            >
+              {attentionMessage}
+            </div>
+          ) : null}
         </div>
-      )}
 
-      {isActive && <>{children}</>}
-    </div>
+        {/* Existing message/OTP box */}
+        {!isActive && shouldShowBox && (
+          <div
+            style={{
+              width: EMAIL_W,
+              borderRadius: 16,
+              border: '1px solid rgba(255,255,255,0.14)',
+              background: 'rgba(0,0,0,0.28)',
+              padding: 12,
+              animation: 'boxDown 160ms ease-out',
+              boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
+              position: 'relative',
+              overflow: 'hidden',
+              minHeight: 72,
+              zIndex: spotlight ? 60 : 'auto',
+            }}
+          >
+            {/* Message layer (kept for non-spotlight attention use, and fades out to OTP) */}
+            <div
+              style={{
+                position: 'absolute',
+                inset: 12,
+                display: 'grid',
+                placeItems: 'center',
+                textAlign: 'center',
+                fontSize: 13,
+                opacity: boxShowMessage ? 0.92 : 0,
+                pointerEvents: boxShowMessage ? 'auto' : 'none',
+                transition: 'opacity 180ms ease',
+              }}
+            >
+              {/* If spotlight is on, we already show the message under the email.
+                  Keep this layer empty to avoid duplicate copy. */}
+              {spotlight ? null : attentionMessage}
+            </div>
+
+            {/* OTP layer */}
+            <div
+              style={{
+                opacity: phase === 'code' ? 1 : 0,
+                transform: phase === 'code' ? 'translateY(0px)' : 'translateY(-4px)',
+                transition: 'opacity 180ms ease, transform 180ms ease',
+                pointerEvents: phase === 'code' ? 'auto' : 'none',
+                display: 'grid',
+                gap: 10,
+                justifyItems: 'center',
+              }}
+            >
+              <OtpBoxes
+                width={EMAIL_W - 2}
+                value={code}
+                onChange={(next) => setCode(normalizeDigits(next))}
+                disabled={isVerifying}
+              />
+
+              {(isSending || !flow) && (
+                <div style={{fontSize: 12, opacity: 0.70, textAlign: 'center'}}>Sending code…</div>
+              )}
+
+              {isVerifying && (
+                <div style={{fontSize: 12, opacity: 0.70, textAlign: 'center'}}>Verifying…</div>
+              )}
+
+              {error && (
+                <div style={{fontSize: 12, opacity: 0.88, color: '#ffb4b4', textAlign: 'center'}}>
+                  {error}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {isActive && <>{children}</>}
+      </div>
+    </>
   )
 }

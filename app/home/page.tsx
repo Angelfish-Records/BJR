@@ -18,7 +18,6 @@ import CancelSubscriptionButton from './CancelSubscriptionButton'
 
 import {fetchPortalPage} from '../../lib/portal'
 import PortalModules from './PortalModules'
-
 import PortalArea from './PortalArea'
 
 export const dynamic = 'force-dynamic'
@@ -29,35 +28,15 @@ type ShadowHomeDoc = {
   title?: string
   subtitle?: string
   backgroundImage?: unknown
-  primaryCtaText?: string
-  primaryCtaHref?: string
-  secondaryCtaText?: string
-  secondaryCtaHref?: string
-}
-
-type SiteFlagsDoc = {
-  shadowHomeEnabled?: boolean
-  shadowHomeRoute?: string
 }
 
 type StyleWithAccent = React.CSSProperties & {'--accent'?: string}
-
-const siteFlagsQuery = `
-  *[_id == "siteFlags"][0]{
-    shadowHomeEnabled,
-    shadowHomeRoute
-  }
-`
 
 const shadowHomeQuery = `
   *[_type == "shadowHomePage" && slug.current == $slug][0]{
     title,
     subtitle,
-    backgroundImage,
-    primaryCtaText,
-    primaryCtaHref,
-    secondaryCtaText,
-    secondaryCtaHref
+    backgroundImage
   }
 `
 
@@ -70,7 +49,9 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     title: page?.title ?? 'Shadow Home',
-    description: page?.subtitle ?? 'Portal shell: panels swap; identity stays boring; access stays canonical.',
+    description:
+      page?.subtitle ??
+      'Portal shell: panels swap; identity stays boring; access stays canonical.',
   }
 }
 
@@ -96,8 +77,8 @@ function CheckoutBanner(props: {checkout: string | null}) {
     >
       {isSuccess ? (
         <>
-          ✅ Checkout completed. If entitlements haven&apos;t appeared yet, refresh once (webhooks can be a beat
-          behind).
+          ✅ Checkout completed. If entitlements haven&apos;t appeared yet, refresh once
+          (webhooks can be a beat behind).
         </>
       ) : (
         <>Checkout cancelled.</>
@@ -116,7 +97,7 @@ export default async function Home(props: {
 
   const {userId} = await auth()
 
-  // Only for signed-out success returns
+  // Post-checkout activation case (logged out)
   const showPaymentPrompt = checkout === 'success' && !userId
 
   const user = userId ? await currentUser() : null
@@ -125,13 +106,11 @@ export default async function Home(props: {
     user?.emailAddresses?.[0]?.emailAddress ??
     null
 
-  const [flags, page, portal] = await Promise.all([
-    client.fetch<SiteFlagsDoc>(siteFlagsQuery, {}, {next: {tags: ['siteFlags']}}),
-    client.fetch<ShadowHomeDoc>(shadowHomeQuery, {slug: 'home'}, {next: {tags: ['shadowHome']}}),
-    fetchPortalPage('home'),
-  ])
+  const [page, portal] = await Promise.all([
+  client.fetch<ShadowHomeDoc>(shadowHomeQuery, {slug: 'home'}, {next: {tags: ['shadowHome']}}),
+  fetchPortalPage('home'),
+])
 
-  const enabled = flags?.shadowHomeEnabled !== false
 
   let member:
     | null
@@ -175,6 +154,21 @@ export default async function Home(props: {
       ENTITLEMENTS.LIFETIME_ACCESS,
     ]))
 
+    const hasLockedDownloads =
+  !userId &&
+  !!portal?.modules?.some((m) => m._type === 'moduleDownloads')
+
+
+  const showActivationNudge =
+    !showPaymentPrompt && hasLockedDownloads
+
+  const attentionMessage =
+    showPaymentPrompt
+      ? 'Payment confirmed – activate to unlock.'
+      : showActivationNudge
+        ? 'Sign in to access your purchased content.'
+        : null
+
   const bgUrl =
     page?.backgroundImage
       ? urlFor(page.backgroundImage).width(2400).height(1400).quality(80).url()
@@ -190,12 +184,7 @@ export default async function Home(props: {
   }
 
   const portalPanel = portal?.modules?.length ? (
-    <PortalModules
-  modules={portal.modules}
-  memberId={member?.id ?? null}
-/>
-
-
+    <PortalModules modules={portal.modules} memberId={member?.id ?? null} />
   ) : (
     <div
       style={{
@@ -215,6 +204,7 @@ export default async function Home(props: {
 
   return (
     <main style={mainStyle}>
+      {/* background layers unchanged */}
       <div
         style={{
           position: 'absolute',
@@ -236,37 +226,9 @@ export default async function Home(props: {
           position: 'absolute',
           inset: 0,
           background:
-            'radial-gradient(900px 700px at 50% 35%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 62%)',
-          mixBlendMode: 'screen',
-          opacity: 0.55,
-          pointerEvents: 'none',
-        }}
-      />
-
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background:
             'linear-gradient(180deg, rgba(0,0,0,0.70) 0%, rgba(0,0,0,0.55) 40%, rgba(0,0,0,0.78) 100%)',
         }}
       />
-
-      {!enabled && (
-        <div
-          style={{
-            position: 'relative',
-            zIndex: 2,
-            padding: '10px 14px',
-            background: 'rgba(255,255,255,0.06)',
-            borderBottom: '1px solid rgba(255,255,255,0.10)',
-            fontSize: 13,
-            color: 'rgba(255,255,255,0.80)',
-          }}
-        >
-          Shadow homepage is currently disabled via Site Flags.
-        </div>
-      )}
 
       <div
         style={{
@@ -278,38 +240,11 @@ export default async function Home(props: {
         }}
       >
         <section style={{width: '100%', maxWidth: 1120}}>
-          <div style={{display: 'grid', gap: 18, justifyItems: 'center', textAlign: 'center'}}>
-            <h1
-              style={{
-                fontSize: 'clamp(38px, 5.6vw, 70px)',
-                lineHeight: 1.02,
-                margin: 0,
-                textWrap: 'balance',
-              }}
-            >
-              {page?.title ?? 'Shadow home'}
-            </h1>
-
-            <div
-              style={{
-                height: 2,
-                width: 'min(420px, 70vw)',
-                margin: '0 auto',
-                borderRadius: 999,
-                background:
-                  'linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 75%, white 10%), transparent)',
-                opacity: 0.75,
-              }}
-            />
-          </div>
-
           <div className="shadowHomeGrid" style={{marginTop: 26}}>
-            {/* LEFT: portal (client shell + player dock) */}
             <div className="shadowHomeMain">
               <PortalArea portalPanel={portalPanel} />
             </div>
 
-            {/* RIGHT: membership sidebar (moves above on mobile via CSS order) */}
             <aside
               className="shadowHomeSidebar"
               style={{
@@ -328,9 +263,7 @@ export default async function Home(props: {
                   padding: 14,
                 }}
               >
-                <ActivationGate
-                  attentionMessage={showPaymentPrompt ? 'Payment confirmed - activate to unlock.' : null}
-                >
+                <ActivationGate attentionMessage={attentionMessage}>
                   {member ? (
                     <div style={{display: 'grid', justifyItems: 'center', gap: 10}}>
                       {!hasGold ? <SubscribeButton loggedIn={!!userId} /> : null}
@@ -352,57 +285,21 @@ export default async function Home(props: {
                     textAlign: 'left',
                   }}
                 >
-                  <div style={{display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap'}}>
-                    <div style={{display: 'grid', gap: 2}}>
+                  <div style={{display: 'flex', justifyContent: 'space-between', gap: 12}}>
+                    <div>
                       <div style={{fontSize: 13, opacity: 0.72}}>Member</div>
                       <div style={{fontSize: 14, opacity: 0.92}}>{member.email}</div>
                     </div>
 
-                    <div style={{display: 'grid', gap: 2, textAlign: 'right'}}>
-                      <div style={{fontSize: 13, opacity: 0.72}}>Tier (derived)</div>
+                    <div style={{textAlign: 'right'}}>
+                      <div style={{fontSize: 13, opacity: 0.72}}>Tier</div>
                       <div style={{fontSize: 14, opacity: 0.92}}>
-                        <span
-                          style={{
-                            padding: '4px 10px',
-                            borderRadius: 999,
-                            border: '1px solid rgba(255,255,255,0.14)',
-                            background: 'color-mix(in srgb, var(--accent) 14%, transparent)',
-                          }}
-                        >
-                          {tier}
-                        </span>
-                        <span style={{marginLeft: 10, fontSize: 12, opacity: 0.65}}>
-                          accent: {accentLabel}
-                        </span>
+                        {tier} <span style={{opacity: 0.65}}>({accentLabel})</span>
                       </div>
                     </div>
                   </div>
-
-                  <div style={{marginTop: 10, fontSize: 12, opacity: 0.70, lineHeight: 1.45}}>
-                    Display-only: derived from canonical entitlements. No engagement metrics. Just legible state.
-                  </div>
                 </div>
               )}
-
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  gap: 10,
-                  flexWrap: 'wrap',
-                  opacity: 0.70,
-                  fontSize: 13,
-                  paddingTop: 4,
-                }}
-              >
-                <span>
-                  Route: <code style={{opacity: 0.9}}>{flags?.shadowHomeRoute ?? '/home'}</code>
-                </span>
-                <span>·</span>
-                <span>
-                  Auth: <code style={{opacity: 0.9}}>Clerk</code>
-                </span>
-              </div>
             </aside>
           </div>
         </section>
