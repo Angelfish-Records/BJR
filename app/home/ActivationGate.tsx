@@ -1,17 +1,23 @@
 // web/app/home/ActivationGate.tsx
 'use client'
 
-import {useEffect, useMemo, useRef, useState} from 'react'
+import React, {useEffect, useMemo, useRef, useState} from 'react'
 import {useAuth, useSignIn, useSignUp, useUser} from '@clerk/nextjs'
-import {useRouter} from 'next/navigation'
+import {useRouter, useSearchParams} from 'next/navigation'
 
 type Phase = 'idle' | 'code'
 type Flow = 'signin' | 'signup' | null
 
 type Props = {
   children: React.ReactNode
+  /**
+   * Optional override copy when we *already* know we should spotlight activation.
+   * If null, we’ll use a default message.
+   */
   attentionMessage?: string | null
 }
+
+const PENDING_KEY = 'angelfish_pending_purchase_activation'
 
 function getClerkErrorMessage(err: unknown): string {
   if (!err || typeof err !== 'object') return 'Something went wrong'
@@ -101,8 +107,7 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
           top: pad,
           left: pad,
           transform: `translateX(${checked ? travel : 0}px)`,
-          transition:
-            'transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease',
+          transition: 'transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease',
           background: 'rgba(255,255,255,0.98)',
           boxShadow: checked
             ? '0 10px 22px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.65) inset'
@@ -199,9 +204,34 @@ function OtpBoxes(props: {
   )
 }
 
+function safeGetPendingFlag(): boolean {
+  try {
+    return window.localStorage.getItem(PENDING_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function safeSetPendingFlag(): void {
+  try {
+    window.localStorage.setItem(PENDING_KEY, '1')
+  } catch {
+    // ignore
+  }
+}
+
+function safeClearPendingFlag(): void {
+  try {
+    window.localStorage.removeItem(PENDING_KEY)
+  } catch {
+    // ignore
+  }
+}
+
 export default function ActivationGate(props: Props) {
   const {children, attentionMessage = null} = props
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const {isSignedIn} = useAuth()
   const {user} = useUser()
@@ -227,21 +257,40 @@ export default function ActivationGate(props: Props) {
       user?.emailAddresses?.[0]?.emailAddress ??
       '') || email
 
+  // Only treat as “needs activation spotlight” if:
+  // - we returned from Stripe checkout success while signed out, OR
+  // - we previously returned from checkout success while signed out (persisted flag)
+  const checkoutSuccess = searchParams?.get('checkout') === 'success'
+
+  const [pendingPurchase, setPendingPurchase] = useState(false)
+
   useEffect(() => {
-    if (!isActive) return
-    router.refresh()
-  }, [isActive, router])
+    // On first mount, load any persisted pending flag.
+    setPendingPurchase(safeGetPendingFlag())
+  }, [])
+
+  useEffect(() => {
+    // If we land on checkout success and are signed out, persist the pending flag.
+    if (!isActive && checkoutSuccess) {
+      safeSetPendingFlag()
+      setPendingPurchase(true)
+    }
+  }, [checkoutSuccess, isActive])
+
+  useEffect(() => {
+    // Once activated, clear the pending flag so the page doesn’t “nag” forever.
+    if (isActive) {
+      safeClearPendingFlag()
+      setPendingPurchase(false)
+      router.refresh()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive])
 
   const EMAIL_W = 320
+  const needsAttention = !isActive && (checkoutSuccess || pendingPurchase || !!attentionMessage)
+  const shouldShowBox = !isActive && (needsAttention || phase === 'code')
 
-  // Existing behaviour: attentionMessage triggers the post-checkout “message box”.
-  const showAttention = !isActive && !!attentionMessage
-
-  // NEW: spotlight mode (dim/blur the whole page) only when we have attentionMessage.
-  const spotlight = showAttention
-
-  // Existing behaviour: show message box OR OTP box.
-  const shouldShowBox = !isActive && (showAttention || phase === 'code')
   const toggleClickable = !isActive && phase === 'idle' && emailValid && clerkLoaded
 
   async function startEmailCode() {
@@ -254,7 +303,6 @@ export default function ActivationGate(props: Props) {
     setIsVerifying(false)
     setIsSending(true)
 
-    // Switch box content immediately so message can fade out to OTP
     setPhase('code')
 
     try {
@@ -330,112 +378,85 @@ export default function ActivationGate(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, phase])
 
-  const boxShowMessage = showAttention && phase !== 'code'
+  const message =
+    attentionMessage ??
+    (pendingPurchase || checkoutSuccess ? 'Sign in to access your purchased content.' : null)
 
   return (
-    <>
-      {/* Spotlight overlay: present only in post-checkout attention mode */}
-      {spotlight ? (
+    <div style={{position: 'relative', display: 'grid', gap: 12, justifyItems: 'center'}}>
+      <style>{`
+        @keyframes boxDown {
+          from { opacity: 0; transform: translateY(-10px); }
+          to   { opacity: 1; transform: translateY(0px); }
+        }
+      `}</style>
+
+      {/* Full-page soft dim + blur when we specifically need to spotlight activation */}
+      {!isActive && needsAttention ? (
         <div
           aria-hidden
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0,0,0,0.60)',
-            backdropFilter: 'blur(7px)',
+            background: 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
             zIndex: 40,
           }}
         />
       ) : null}
 
-      <div style={{display: 'grid', gap: 12, justifyItems: 'center', position: 'relative'}}>
-        <style>{`
-          @keyframes boxDown {
-            from { opacity: 0; transform: translateY(-10px); }
-            to   { opacity: 1; transform: translateY(0px); }
-          }
-        `}</style>
-
-        {/* Email row becomes the “spotlight target” by raising z-index when spotlight is on */}
-        <div
-          style={{
-            display: 'grid',
-            gap: 8,
-            justifyItems: 'center',
-            position: 'relative',
-            zIndex: spotlight ? 60 : 'auto',
-          }}
-        >
-          <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
-            {!isActive ? (
-              <input
-                type="email"
-                placeholder="you@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value.trim())}
-                style={{
-                  width: EMAIL_W,
-                  padding: '11px 14px',
-                  borderRadius: 999,
-                  border: '1px solid rgba(255,255,255,0.18)',
-                  background: 'rgba(0,0,0,0.35)',
-                  color: 'rgba(255,255,255,0.92)',
-                  outline: 'none',
-                  textAlign: 'left',
-                  boxShadow: spotlight
-                    ? `0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent),
-                       0 0 28px color-mix(in srgb, var(--accent) 40%, transparent),
-                       0 16px 34px rgba(0,0,0,0.28)`
-                    : showAttention
-                      ? `0 0 0 3px color-mix(in srgb, var(--accent) 26%, transparent),
-                         0 14px 30px rgba(0,0,0,0.22)`
-                      : '0 14px 30px rgba(0,0,0,0.22)',
-                  transition: 'box-shadow 220ms ease',
-                }}
-              />
-            ) : (
-              <button
-                type="button"
-                style={{
-                  width: EMAIL_W,
-                  padding: '11px 14px',
-                  borderRadius: 999,
-                  border: '1px solid rgba(255,255,255,0.18)',
-                  background: 'rgba(0,0,0,0.26)',
-                  color: 'rgba(255,255,255,0.88)',
-                  textAlign: 'left',
-                  cursor: 'default',
-                  boxShadow: '0 14px 30px rgba(0,0,0,0.22)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-                aria-label="Signed in identity"
-              >
-                {displayEmail}
-              </button>
-            )}
-
-            <Toggle checked={isActive} disabled={!toggleClickable} onClick={startEmailCode} />
-          </div>
-
-          {/* NEW: message under email field (post-checkout attention state) */}
-          {!isActive && spotlight ? (
-            <div
+      <div style={{position: 'relative', zIndex: 41, display: 'grid', gap: 12, justifyItems: 'center'}}>
+        <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
+          {!isActive ? (
+            <input
+              type="email"
+              placeholder="you@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value.trim())}
               style={{
                 width: EMAIL_W,
-                fontSize: 13,
-                opacity: 0.86,
-                lineHeight: 1.45,
-                textAlign: 'center',
+                padding: '11px 14px',
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.18)',
+                background: 'rgba(0,0,0,0.35)',
+                color: 'rgba(255,255,255,0.92)',
+                outline: 'none',
+                textAlign: 'left',
+                boxShadow: needsAttention
+                  ? `0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent),
+                     0 0 26px color-mix(in srgb, var(--accent) 40%, transparent),
+                     0 14px 30px rgba(0,0,0,0.22)`
+                  : '0 14px 30px rgba(0,0,0,0.22)',
+                transition: 'box-shadow 220ms ease',
               }}
+            />
+          ) : (
+            <button
+              type="button"
+              style={{
+                width: EMAIL_W,
+                padding: '11px 14px',
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.18)',
+                background: 'rgba(0,0,0,0.26)',
+                color: 'rgba(255,255,255,0.88)',
+                textAlign: 'left',
+                cursor: 'default',
+                boxShadow: '0 14px 30px rgba(0,0,0,0.22)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+              aria-label="Signed in identity"
             >
-              {attentionMessage}
-            </div>
-          ) : null}
+              {displayEmail}
+            </button>
+          )}
+
+          <Toggle checked={isActive} disabled={!toggleClickable} onClick={startEmailCode} />
         </div>
 
-        {/* Existing message/OTP box */}
         {!isActive && shouldShowBox && (
           <div
             style={{
@@ -449,10 +470,9 @@ export default function ActivationGate(props: Props) {
               position: 'relative',
               overflow: 'hidden',
               minHeight: 72,
-              zIndex: spotlight ? 60 : 'auto',
             }}
           >
-            {/* Message layer (kept for non-spotlight attention use, and fades out to OTP) */}
+            {/* Message layer */}
             <div
               style={{
                 position: 'absolute',
@@ -461,14 +481,12 @@ export default function ActivationGate(props: Props) {
                 placeItems: 'center',
                 textAlign: 'center',
                 fontSize: 13,
-                opacity: boxShowMessage ? 0.92 : 0,
-                pointerEvents: boxShowMessage ? 'auto' : 'none',
+                opacity: phase !== 'code' && message ? 0.92 : 0,
+                pointerEvents: phase !== 'code' && message ? 'auto' : 'none',
                 transition: 'opacity 180ms ease',
               }}
             >
-              {/* If spotlight is on, we already show the message under the email.
-                  Keep this layer empty to avoid duplicate copy. */}
-              {spotlight ? null : attentionMessage}
+              {message}
             </div>
 
             {/* OTP layer */}
@@ -490,13 +508,8 @@ export default function ActivationGate(props: Props) {
                 disabled={isVerifying}
               />
 
-              {(isSending || !flow) && (
-                <div style={{fontSize: 12, opacity: 0.70, textAlign: 'center'}}>Sending code…</div>
-              )}
-
-              {isVerifying && (
-                <div style={{fontSize: 12, opacity: 0.70, textAlign: 'center'}}>Verifying…</div>
-              )}
+              {(isSending || !flow) && <div style={{fontSize: 12, opacity: 0.7}}>Sending code…</div>}
+              {isVerifying && <div style={{fontSize: 12, opacity: 0.7}}>Verifying…</div>}
 
               {error && (
                 <div style={{fontSize: 12, opacity: 0.88, color: '#ffb4b4', textAlign: 'center'}}>
@@ -509,6 +522,6 @@ export default function ActivationGate(props: Props) {
 
         {isActive && <>{children}</>}
       </div>
-    </>
+    </div>
   )
 }
