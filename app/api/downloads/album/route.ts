@@ -79,16 +79,13 @@ export async function POST(req: Request) {
     await assertObjectExists(asset.r2Key)
   } catch (err: unknown) {
     // Surface the attempted key in non-prod to eliminate guesswork.
-    const detail =
-      process.env.NODE_ENV !== 'production'
-        ? {
-            attemptedKey: asset.r2Key,
-            bucket: process.env.R2_BUCKET ?? null,
-            endpoint: process.env.R2_ENDPOINT ?? null,
-            // best-effort error string
-            err: err instanceof Error ? err.message : String(err),
-          }
-        : undefined
+    const detail = {
+  attemptedKey: asset.r2Key,
+  bucket: process.env.R2_BUCKET ?? null,
+  endpoint: process.env.R2_ENDPOINT ?? null,
+  err: err instanceof Error ? err.message : String(err),
+}
+
 
     return json(500, {
       ok: false,
