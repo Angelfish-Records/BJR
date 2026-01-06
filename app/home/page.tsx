@@ -58,7 +58,6 @@ export async function generateMetadata(): Promise<Metadata> {
 function CheckoutBanner(props: {checkout: string | null}) {
   const {checkout} = props
   if (checkout !== 'success' && checkout !== 'cancel') return null
-
   const isSuccess = checkout === 'success'
 
   return (
@@ -77,8 +76,8 @@ function CheckoutBanner(props: {checkout: string | null}) {
     >
       {isSuccess ? (
         <>
-          ✅ Checkout completed. If entitlements haven&apos;t appeared yet, refresh once (webhooks can be a beat
-          behind).
+          ✅ Checkout completed. If entitlements haven&apos;t appeared yet, refresh once (webhooks can be a
+          beat behind).
         </>
       ) : (
         <>Checkout cancelled.</>
@@ -97,8 +96,7 @@ export default async function Home(props: {
 
   const {userId} = await auth()
 
-  // Only server-legit case for “attention”: you *just* returned from checkout while logged out.
-  // “Return later” guidance is handled client-side by ActivationGate’s localStorage flag.
+  // Post-checkout activation case (logged out)
   const showPaymentPrompt = checkout === 'success' && !userId
 
   const user = userId ? await currentUser() : null
@@ -191,6 +189,24 @@ export default async function Home(props: {
 
   return (
     <main style={mainStyle}>
+      {/* Grid + responsive behavior kept here so it can’t “go missing” via CSS drift */}
+      <style>{`
+        .shadowHomeGrid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 380px;
+          gap: 18px;
+          align-items: start;
+        }
+        .shadowHomeMain { min-width: 0; }
+        .shadowHomeSidebar { min-width: 0; }
+        @media (max-width: 900px) {
+          .shadowHomeGrid { grid-template-columns: 1fr; }
+          .shadowHomeSidebar { order: 0; position: static !important; top: auto !important; }
+          .shadowHomeMain { order: 1; }
+        }
+      `}</style>
+
+      {/* background layers */}
       <div
         style={{
           position: 'absolute',
@@ -226,11 +242,45 @@ export default async function Home(props: {
         }}
       >
         <section style={{width: '100%', maxWidth: 1120}}>
+          {/* ✅ RESTORED: H1 + fading divider */}
+          <div style={{display: 'grid', gap: 18, justifyItems: 'center', textAlign: 'center'}}>
+            <h1
+              style={{
+                fontSize: 'clamp(38px, 5.6vw, 70px)',
+                lineHeight: 1.02,
+                margin: 0,
+                textWrap: 'balance',
+              }}
+            >
+              {page?.title ?? 'Shadow home'}
+            </h1>
+
+            <div
+              style={{
+                height: 2,
+                width: 'min(420px, 70vw)',
+                margin: '0 auto',
+                borderRadius: 999,
+                background:
+                  'linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 75%, white 10%), transparent)',
+                opacity: 0.75,
+              }}
+            />
+
+            {page?.subtitle ? (
+              <div style={{maxWidth: 760, fontSize: 14, opacity: 0.78, lineHeight: 1.6}}>
+                {page.subtitle}
+              </div>
+            ) : null}
+          </div>
+
           <div className="shadowHomeGrid" style={{marginTop: 26}}>
+            {/* LEFT: portal */}
             <div className="shadowHomeMain">
               <PortalArea portalPanel={portalPanel} />
             </div>
 
+            {/* RIGHT: membership sidebar */}
             <aside
               className="shadowHomeSidebar"
               style={{
