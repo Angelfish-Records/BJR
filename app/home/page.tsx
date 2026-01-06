@@ -162,7 +162,6 @@ export default async function Home(props: {
   const mainStyle: StyleWithAccent = {
     minHeight: '100svh',
     position: 'relative',
-    overflowX: 'hidden',
     backgroundColor: '#050506',
     color: 'rgba(255,255,255,0.92)',
     '--accent': accent,
@@ -214,6 +213,7 @@ export default async function Home(props: {
 
 
       {/* background layers */}
+      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
       <div
         style={{
           position: 'absolute',
@@ -238,6 +238,7 @@ export default async function Home(props: {
             'linear-gradient(180deg, rgba(0,0,0,0.70) 0%, rgba(0,0,0,0.55) 40%, rgba(0,0,0,0.78) 100%)',
         }}
       />
+      </div>
 
       <div
   style={{
