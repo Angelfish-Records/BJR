@@ -1,43 +1,119 @@
+// web/app/home/MiniPlayer.tsx
 'use client'
 
 import React from 'react'
 import {usePlayer} from './PlayerState'
 
-function fmt(ms: number) {
-  const s = Math.floor(ms / 1000)
-  const m = Math.floor(s / 60)
-  const r = s % 60
-  return `${m}:${String(r).padStart(2, '0')}`
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n))
 }
 
+function fmtTime(sec: number) {
+  if (!Number.isFinite(sec) || sec < 0) sec = 0
+  const m = Math.floor(sec / 60)
+  const s = Math.floor(sec % 60)
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
+// NOTE: defined OUTSIDE render to avoid “Cannot create components during render”
 function IconBtn(props: {
   label: string
+  title?: string
   onClick?: () => void
   disabled?: boolean
   children: React.ReactNode
 }) {
+  const {label, title, onClick, disabled, children} = props
   return (
     <button
       type="button"
-      title={props.label}
-      aria-label={props.label}
-      onClick={props.disabled ? undefined : props.onClick}
-      disabled={props.disabled}
+      aria-label={label}
+      title={title ?? label}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
       style={{
         width: 36,
         height: 36,
         borderRadius: 999,
         border: '1px solid rgba(255,255,255,0.14)',
-        background: 'rgba(255,255,255,0.06)',
+        background: 'rgba(255,255,255,0.05)',
         color: 'rgba(255,255,255,0.92)',
         display: 'grid',
         placeItems: 'center',
-        cursor: props.disabled ? 'default' : 'pointer',
-        opacity: props.disabled ? 0.45 : 0.9,
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.45 : 0.9,
+        userSelect: 'none',
       }}
     >
-      {props.children}
+      {children}
     </button>
+  )
+}
+
+function PlayPauseIcon({playing}: {playing: boolean}) {
+  return playing ? (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="6" y="5" width="4" height="14" rx="1.2" />
+      <rect x="14" y="5" width="4" height="14" rx="1.2" />
+    </svg>
+  ) : (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+      <polygon points="9,7 19,12 9,17" />
+    </svg>
+  )
+}
+
+function PrevIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="6" y="6" width="2" height="12" />
+      <polygon points="18,7 10,12 18,17" />
+    </svg>
+  )
+}
+
+function NextIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="16" y="6" width="2" height="12" />
+      <polygon points="6,7 14,12 6,17" />
+    </svg>
+  )
+}
+
+function VolumeIcon({muted}: {muted: boolean}) {
+  return muted ? (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M11 7 8.5 9H6v6h2.5L11 17V7Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <path d="M16 9l5 5M21 9l-5 5" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  ) : (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M11 7 8.5 9H6v6h2.5L11 17V7Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M14.5 9.5c.9.9.9 4.1 0 5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M17 7c2 2 2 8 0 10"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        opacity="0.75"
+      />
+    </svg>
   )
 }
 
@@ -45,41 +121,108 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
   const {onExpand} = props
   const p = usePlayer()
 
+  // Progress UI is “visual only” for now (until real audio plumbing exists)
+  const [posSec, setPosSec] = React.useState(0)
+  const durSec = Math.max(1, Math.round((p.current?.durationMs ?? 0) / 1000))
+  const safePos = clamp(posSec, 0, durSec)
+
+  // Volume: icon + pop slider (local-only for now)
+  const [volOpen, setVolOpen] = React.useState(false)
+  const [vol, setVol] = React.useState(0.85)
+  const muted = vol <= 0.001
+
   const title = p.current?.title ?? p.current?.id ?? 'Nothing queued'
-  const artist = p.current?.artist ?? (p.status === 'idle' ? 'idle' : '')
-  const dur = p.current?.durationMs ?? 0
-  const pos = p.positionMs ?? 0
-
-  const canSeek = dur > 0 && p.status !== 'blocked'
-  const progress = dur > 0 ? Math.max(0, Math.min(1, pos / dur)) : 0
-
-  const repeatLabel =
-    p.repeat === 'off' ? 'Repeat off' : p.repeat === 'all' ? 'Repeat all' : 'Repeat 1'
+  const artist = p.current?.artist ?? (p.status === 'blocked' ? 'blocked' : p.status)
 
   return (
     <div
       style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) minmax(240px, 520px) minmax(0, 1fr)',
-        alignItems: 'center',
-        gap: 14,
+        position: 'relative',
         width: '100%',
+        display: 'grid',
+        gap: 10,
       }}
     >
-      {/* Left: now playing */}
-      <div style={{display: 'flex', alignItems: 'center', gap: 12, minWidth: 0}}>
-        <div
-          aria-hidden
+      {/* TOP EDGE progress bar (full width) */}
+      <div style={{position: 'absolute', left: 0, right: 0, top: 0}}>
+        <input
+          aria-label="Seek"
+          type="range"
+          min={0}
+          max={durSec}
+          value={safePos}
+          onChange={(e) => setPosSec(Number(e.target.value))}
           style={{
-            width: 44,
-            height: 44,
-            borderRadius: 10,
-            border: '1px solid rgba(255,255,255,0.14)',
-            background: 'rgba(255,255,255,0.06)',
-            boxShadow: '0 12px 26px rgba(0,0,0,0.25)',
-            flex: '0 0 auto',
+            width: '100%',
+            height: 18,
+            margin: 0,
+            background: 'transparent',
+            WebkitAppearance: 'none',
+            appearance: 'none',
           }}
         />
+        <style>{`
+          /* Range styling (kept local to avoid global CSS drift) */
+          input[type="range"]::-webkit-slider-runnable-track {
+            height: 4px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.18);
+          }
+          input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            margin-top: -3px;
+            background: color-mix(in srgb, var(--accent) 75%, white 10%);
+            box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
+          }
+          input[type="range"]::-moz-range-track {
+            height: 4px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.18);
+          }
+          input[type="range"]::-moz-range-thumb {
+            width: 10px;
+            height: 10px;
+            border: 0;
+            border-radius: 999px;
+            background: color-mix(in srgb, var(--accent) 75%, white 10%);
+            box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
+          }
+        `}</style>
+      </div>
+
+      {/* Main row: controls + meta + actions (responsive without overlap) */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'auto minmax(0, 1fr) auto',
+          alignItems: 'center',
+          gap: 12,
+          paddingTop: 14, // leave room for the top-edge slider
+        }}
+      >
+        {/* Left controls */}
+        <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+          <IconBtn label="Previous" onClick={() => { /* wire later */ }}>
+            <PrevIcon />
+          </IconBtn>
+
+          <IconBtn
+            label={p.status === 'playing' ? 'Pause' : 'Play'}
+            onClick={() => (p.status === 'playing' ? p.pause() : p.play())}
+          >
+            <PlayPauseIcon playing={p.status === 'playing'} />
+          </IconBtn>
+
+          <IconBtn label="Next" onClick={() => { /* wire later */ }}>
+            <NextIcon />
+          </IconBtn>
+        </div>
+
+        {/* Middle meta */}
         <div style={{minWidth: 0}}>
           <div
             style={{
@@ -88,178 +231,110 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
+              lineHeight: 1.25,
             }}
           >
             {title}
           </div>
-          <div
-            style={{
-              fontSize: 12,
-              opacity: 0.65,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
+          <div style={{fontSize: 12, opacity: 0.65, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
             {artist}
-            {p.lastError ? (
-              <span style={{marginLeft: 10, color: '#ffb4b4', opacity: 0.9}}>{p.lastError}</span>
-            ) : null}
           </div>
         </div>
-      </div>
 
-      {/* Center: transport + seek */}
-      <div style={{display: 'grid', gap: 8, justifyItems: 'center'}}>
-        <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
-          <IconBtn label="Previous" onClick={p.prev} disabled={p.status === 'blocked'}>
-            <span style={{fontSize: 14}}>⏮</span>
-          </IconBtn>
+        {/* Right actions */}
+        <div style={{display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end'}}>
+          {/* Time (compact) */}
+          <div style={{fontSize: 12, opacity: 0.65, whiteSpace: 'nowrap'}}>
+            {fmtTime(safePos)} <span style={{opacity: 0.45}}>/</span> {fmtTime(durSec)}
+          </div>
 
-          <button
-            type="button"
-            onClick={() => (p.status === 'playing' ? p.pause() : p.play())}
-            disabled={p.status === 'blocked'}
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 999,
-              border: '1px solid rgba(255,255,255,0.18)',
-              background: 'color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))',
-              color: 'rgba(255,255,255,0.92)',
-              cursor: p.status === 'blocked' ? 'default' : 'pointer',
-              opacity: p.status === 'blocked' ? 0.45 : 0.95,
-              boxShadow:
-                '0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent), 0 14px 30px rgba(0,0,0,0.22)',
-            }}
-            aria-label={p.status === 'playing' ? 'Pause' : 'Play'}
-            title={p.status === 'playing' ? 'Pause' : 'Play'}
-          >
-            {p.status === 'playing' ? '❚❚' : '▶'}
-          </button>
+          {/* Volume icon + pop slider */}
+          <div style={{position: 'relative'}}>
+            <IconBtn
+              label="Volume"
+              onClick={() => setVolOpen((v) => !v)}
+              title="Volume"
+            >
+              <VolumeIcon muted={muted} />
+            </IconBtn>
 
-          <IconBtn label="Next" onClick={p.next} disabled={p.status === 'blocked'}>
-            <span style={{fontSize: 14}}>⏭</span>
-          </IconBtn>
-        </div>
+            {volOpen ? (
+              <div
+                style={{
+                  position: 'absolute',
+                  right: 0,
+                  bottom: 44,
+                  width: 160,
+                  borderRadius: 14,
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  background: 'rgba(0,0,0,0.55)',
+                  backdropFilter: 'blur(10px)',
+                  padding: 10,
+                  boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
+                }}
+              >
+                <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
+                  <div style={{fontSize: 12, opacity: 0.7}}>Vol</div>
+                  <input
+                    aria-label="Volume slider"
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={vol}
+                    onChange={(e) => setVol(Number(e.target.value))}
+                    style={{width: '100%'}}
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '44px 1fr 44px',
-            alignItems: 'center',
-            gap: 10,
-            width: '100%',
-          }}
-        >
-          <div style={{fontSize: 12, opacity: 0.65, textAlign: 'right'}}>{fmt(pos)}</div>
-
-          <input
-            type="range"
-            min={0}
-            max={dur || 1}
-            value={canSeek ? pos : 0}
-            disabled={!canSeek}
-            onChange={(e) => p.seek(Number(e.target.value))}
-            style={{
-              width: '100%',
-              accentColor: 'var(--accent)',
-              opacity: canSeek ? 0.95 : 0.4,
-            }}
-            aria-label="Seek"
-          />
-
-          <div style={{fontSize: 12, opacity: 0.65}}>{dur ? fmt(dur) : '—:—'}</div>
-        </div>
-
-        <div
-          aria-hidden
-          style={{
-            height: 2,
-            width: '100%',
-            borderRadius: 999,
-            background: 'rgba(255,255,255,0.08)',
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              height: '100%',
-              width: `${progress * 100}%`,
-              background: 'color-mix(in srgb, var(--accent) 70%, white 10%)',
-              opacity: canSeek ? 0.7 : 0,
-              transition: 'width 120ms linear',
-            }}
-          />
+          {onExpand ? (
+            <button
+              type="button"
+              onClick={onExpand}
+              style={{
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.14)',
+                background: 'rgba(255,255,255,0.05)',
+                color: 'rgba(255,255,255,0.9)',
+                padding: '8px 10px',
+                fontSize: 13,
+                cursor: 'pointer',
+                opacity: 0.9,
+              }}
+            >
+              Open
+            </button>
+          ) : null}
         </div>
       </div>
 
-      {/* Right: volume + repeat + open */}
-      <div style={{display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10}}>
-        <IconBtn
-          label={p.muted ? 'Unmute' : 'Mute'}
-          onClick={p.toggleMute}
-          disabled={p.status === 'blocked'}
-        >
-          <span style={{fontSize: 14}}>{p.muted ? '🔇' : '🔊'}</span>
-        </IconBtn>
-
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={Math.round((p.muted ? 0 : p.volume) * 100)}
-          disabled={p.status === 'blocked'}
-          onChange={(e) => p.setVolume(Number(e.target.value) / 100)}
-          style={{
-            width: 120,
-            accentColor: 'var(--accent)',
-            opacity: p.status === 'blocked' ? 0.4 : 0.9,
-          }}
-          aria-label="Volume"
-        />
-
-        <button
-          type="button"
-          onClick={p.cycleRepeat}
-          disabled={p.status === 'blocked'}
-          title={repeatLabel}
-          aria-label={repeatLabel}
-          style={{
-            borderRadius: 999,
-            border: '1px solid rgba(255,255,255,0.14)',
-            background: 'rgba(255,255,255,0.06)',
-            color: 'rgba(255,255,255,0.92)',
-            padding: '8px 12px',
-            fontSize: 12,
-            cursor: p.status === 'blocked' ? 'default' : 'pointer',
-            opacity: p.status === 'blocked' ? 0.45 : 0.9,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {p.repeat === 'off' ? 'Repeat' : p.repeat === 'all' ? 'Repeat ∞' : 'Repeat 1'}
-        </button>
-
-        {onExpand ? (
-          <button
-            type="button"
-            onClick={onExpand}
-            style={{
-              borderRadius: 999,
-              border: '1px solid rgba(255,255,255,0.14)',
-              background: 'rgba(255,255,255,0.06)',
-              color: 'rgba(255,255,255,0.92)',
-              padding: '8px 12px',
-              fontSize: 12,
-              cursor: 'pointer',
-              opacity: 0.9,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Open
-          </button>
-        ) : null}
-      </div>
+      {/* Mobile tightening (no overlap): stack meta under controls, keep top slider */}
+      <style>{`
+        @media (max-width: 520px) {
+          /* Turn main row into two rows: controls + actions, then meta */
+          div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] {
+            grid-template-columns: 1fr auto;
+            grid-auto-rows: auto;
+            row-gap: 10px;
+          }
+          /* Meta spans full width below */
+          div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(2) {
+            grid-column: 1 / -1;
+            order: 3;
+          }
+          /* Left controls stay first */
+          div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(1) {
+            order: 1;
+          }
+          /* Right actions stay top-right */
+          div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(3) {
+            order: 2;
+          }
+        }
+      `}</style>
     </div>
   )
 }
