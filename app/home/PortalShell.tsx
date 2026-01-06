@@ -27,14 +27,16 @@ export default function PortalShell(props: Props) {
   const router = useRouter()
   const sp = useSearchParams()
 
-  const panelFromQuery = syncToQueryParam ? sp.get('panel') : null
-  const initial =
-    panelFromQuery ??
-    defaultPanelId ??
-    panels[0]?.id ??
-    'portal'
+  const initialPanelRef = React.useRef<string | null>(null)
 
-  const [active, setActive] = React.useState<string>(initial)
+if (initialPanelRef.current === null) {
+  const fromQuery = syncToQueryParam ? sp.get('panel') : null
+  initialPanelRef.current =
+    fromQuery ?? defaultPanelId ?? panels[0]?.id ?? 'portal'
+}
+
+const [active, setActive] = React.useState<string>(initialPanelRef.current)
+
 
   // Keep local state in sync with back/forward (?panel= changes).
   React.useEffect(() => {
