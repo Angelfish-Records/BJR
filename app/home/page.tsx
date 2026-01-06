@@ -248,40 +248,47 @@ export default async function Home(props: {
           padding: '86px 24px',
         }}
       >
-        <section style={{width: '100%', maxWidth: 1120}}>
-          {/* ✅ RESTORED: H1 + fading divider */}
-          <div style={{display: 'grid', gap: 18, justifyItems: 'center', textAlign: 'center'}}>
-            <h1
-              style={{
-                fontSize: 'clamp(38px, 5.6vw, 70px)',
-                lineHeight: 1.02,
-                margin: 0,
-                textWrap: 'balance',
-              }}
-            >
-              {page?.title ?? 'Shadow home'}
-            </h1>
+        <section
+  style={{
+    width: '100%',
+    maxWidth: 1120,
+    display: 'grid',
+    gridTemplateRows: 'auto auto 1fr',
+    alignItems: 'start',
+    gap: 26,
+  }}
+>
+  {/* HEADER (never moves) */}
+  <div style={{textAlign: 'center'}}>
+    <h1
+      style={{
+        fontSize: 'clamp(38px, 5.6vw, 70px)',
+        lineHeight: 1.02,
+        margin: 0,
+        textWrap: 'balance',
+      }}
+    >
+      {page?.title ?? 'Shadow home'}
+    </h1>
 
-            <div
-              style={{
-                height: 2,
-                width: 'min(420px, 70vw)',
-                margin: '0 auto',
-                borderRadius: 999,
-                background:
-                  'linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 75%, white 10%), transparent)',
-                opacity: 0.75,
-              }}
-            />
+    <div
+      style={{
+        height: 2,
+        width: 'min(420px, 70vw)',
+        margin: '18px auto 0',
+        borderRadius: 999,
+        background:
+          'linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 75%, white 10%), transparent)',
+        opacity: 0.75,
+      }}
+    />
+  </div>
 
-            {page?.subtitle ? (
-              <div style={{maxWidth: 760, fontSize: 14, opacity: 0.78, lineHeight: 1.6}}>
-                {page.subtitle}
-              </div>
-            ) : null}
-          </div>
+  {/* SPACER ROW (locks header position visually) */}
+  <div aria-hidden />
 
-          <div className="shadowHomeGrid" style={{marginTop: 26}}>
+  {/* CONTENT (this is the only row that changes height) */}
+  <div className="shadowHomeGrid">
             {/* LEFT: portal */}
             <div className="shadowHomeMain">
               <PortalArea portalPanel={portalPanel} />
