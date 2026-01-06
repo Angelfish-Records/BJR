@@ -75,11 +75,28 @@ export async function POST(req: Request) {
   if (!asset) return json(400, {ok: false, error: 'Unknown assetId'})
 
   // Fail loud if R2 is misconfigured or object missing.
-  try {
+    try {
     await assertObjectExists(asset.r2Key)
-  } catch {
-    return json(500, {ok: false, error: 'Download not available (missing object)'})
+  } catch (err: unknown) {
+    // Surface the attempted key in non-prod to eliminate guesswork.
+    const detail =
+      process.env.NODE_ENV !== 'production'
+        ? {
+            attemptedKey: asset.r2Key,
+            bucket: process.env.R2_BUCKET ?? null,
+            endpoint: process.env.R2_ENDPOINT ?? null,
+            // best-effort error string
+            err: err instanceof Error ? err.message : String(err),
+          }
+        : undefined
+
+    return json(500, {
+      ok: false,
+      error: 'Download not available (missing object)',
+      ...(detail ? {detail} : {}),
+    })
   }
+
 
   const url = await signGetObjectUrl({
     key: asset.r2Key,
