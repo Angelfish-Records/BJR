@@ -1,4 +1,3 @@
-// web/app/home/PortalArea.tsx
 'use client'
 
 import React from 'react'
@@ -13,10 +12,13 @@ export default function PortalArea(props: {portalPanel: React.ReactNode}) {
 
   const [activePanelId, setActivePanelId] = React.useState<string>('portal')
 
-  const panels: PortalPanelSpec[] = [
-    {id: 'portal', label: 'Portal', content: portalPanel},
-    {id: 'player', label: 'Player', content: <FullPlayer />},
-  ]
+  const panels = React.useMemo<PortalPanelSpec[]>(
+    () => [
+      {id: 'portal', label: 'Portal', content: portalPanel},
+      {id: 'player', label: 'Player', content: <FullPlayer />},
+    ],
+    [portalPanel]
+  )
 
   return (
     <PlayerStateProvider>
@@ -24,8 +26,7 @@ export default function PortalArea(props: {portalPanel: React.ReactNode}) {
         panels={panels}
         defaultPanelId="portal"
         syncToQueryParam
-        onPanelChange={(id) => setActivePanelId(id)}
-        // Hide the dock entirely on the player panel.
+        onPanelChange={setActivePanelId}
         dock={() => {
           if (activePanelId === 'player') return null
           return (
