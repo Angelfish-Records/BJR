@@ -92,6 +92,44 @@ export async function POST(req: Request) {
 if (event.type === 'checkout.session.completed') {
   const session = event.data.object as Stripe.Checkout.Session
 
+const customerId =
+  (typeof session.customer === 'string' ? session.customer : session.customer?.id) ?? ''
+
+let memberId: string | null = null
+
+// 1) Best: resolve by stripe_customer_id
+if (customerId) {
+  memberId = await getMemberIdByStripeCustomerId(customerId)
+}
+
+// 2) Next: resolve by Clerk user id
+if (!memberId) {
+  const clerkUserId = (session.client_reference_id ?? '').toString().trim()
+  if (clerkUserId) memberId = await getMemberIdByClerkUserId(clerkUserId)
+}
+
+// 3) Last: resolve by email
+if (!memberId) {
+  const emailRaw =
+    (session.customer_details?.email ?? session.customer_email ?? '').toString().trim()
+  const email = normalizeEmail(emailRaw)
+  if (email) {
+    const ensured = await ensureMemberByEmail({
+      email,
+      source: 'stripe',
+      sourceDetail: {checkout_session_id: session.id},
+      marketingOptIn: true,
+    })
+    memberId = ensured.id
+  }
+}
+
+if (!memberId) return NextResponse.json({ok: true})
+
+// Now that we have memberId, attach customer id (idempotent)
+if (customerId) await attachStripeCustomerId(memberId, customerId)
+
+
 if (session.mode === 'subscription') {
   // Attach customer → member linkage (as you already do)
   const customerId =
@@ -141,6 +179,18 @@ if (session.mode === 'subscription') {
 
   // ---- One-off purchases continue below ----
 }
+
+async function getMemberIdByStripeCustomerId(customerId: string): Promise<string | null> {
+  if (!customerId) return null
+  const res = await sql`
+    select id
+    from members
+    where stripe_customer_id = ${customerId}
+    limit 1
+  `
+  return (res.rows[0]?.id as string | undefined) ?? null
+}
+
 
     // Resolve member via Clerk if present; otherwise via email (logged-out purchases)
     const clerkUserId = (session.client_reference_id ?? '').toString().trim()
