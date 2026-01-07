@@ -271,45 +271,91 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
         </div>
 
         <div style={{display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end'}}>
-          <div style={{position: 'relative'}}>
-            <IconBtn label="Volume" onClick={() => setVolOpen((v) => !v)} title="Volume">
-              <VolumeIcon muted={muted} />
-            </IconBtn>
+          {/* Volume icon + pop slider */}
+<div style={{position: 'relative', display: 'grid', justifyItems: 'center'}}>
+  <IconBtn
+    label="Volume"
+    onClick={() => setVolOpen((v) => !v)}
+    title="Volume"
+  >
+    <VolumeIcon muted={muted} />
+  </IconBtn>
 
-            {volOpen ? (
-              <div
-                style={{
-                  position: 'absolute',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  bottom: 44, // directly above the button
-                  width: 58,
-                  height: 170,
-                  borderRadius: 16,
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  background: 'rgba(0,0,0,0.60)',
-                  backdropFilter: 'blur(10px)',
-                  WebkitBackdropFilter: 'blur(10px)',
-                  boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
-                  display: 'grid',
-                  placeItems: 'center',
-                  zIndex: 30,
-                  padding: 10,
-                }}
-              >
-                <input
-                  className="volSlider"
-                  aria-label="Volume slider"
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={vol}
-                  onChange={(e) => setVol(Number(e.target.value))}
-                />
-              </div>
-            ) : null}
-          </div>
+  {volOpen ? (
+    <div
+      style={{
+    position: 'absolute',
+    right: 0,
+    bottom: 44,
+    width: 56,
+    height: 170,
+    borderRadius: 14,
+    border: '1px solid rgba(255,255,255,0.12)',
+    background: 'rgba(0,0,0,0.55)',
+    backdropFilter: 'blur(10px)',
+    padding: 10,
+    boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
+    display: 'grid',
+    placeItems: 'center',
+    overflow: 'hidden',
+  }}
+    >
+      <input
+  aria-label="Volume slider"
+  type="range"
+  min={0}
+  max={1}
+  step={0.01}
+  value={vol}
+  onChange={(e) => setVol(Number(e.target.value))}
+  style={{
+    width: 140,              // becomes the vertical length after rotation
+    height: 18,              // thickness of the control
+    transform: 'rotate(-90deg)',
+    transformOrigin: 'center',
+    background: 'transparent',
+    margin: 0,
+    padding: 0,
+  }}
+/>
+
+
+      <style>{`
+        /* Keep styling local to this popup */
+        input.miniVol::-webkit-slider-runnable-track {
+          width: 6px;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.20);
+        }
+        input.miniVol::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 16px;
+          height: 16px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--accent) 75%, white 10%);
+          box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
+          border: 0;
+        }
+
+        input.miniVol::-moz-range-track {
+          width: 6px;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.20);
+        }
+        input.miniVol::-moz-range-thumb {
+          width: 16px;
+          height: 16px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--accent) 75%, white 10%);
+          box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
+          border: 0;
+        }
+      `}</style>
+    </div>
+  ) : null}
+</div>
+
 
           {onExpand ? (
             <IconBtn label="Open player" title="Open player" onClick={onExpand}>
