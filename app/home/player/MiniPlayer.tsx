@@ -3,6 +3,7 @@
 
 import React from 'react'
 import {usePlayer} from './PlayerState'
+import {createPortal} from 'react-dom'
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
@@ -99,6 +100,21 @@ function MenuIcon() {
   )
 }
 
+function VolBtnBinder(props: {onBind: (btn: HTMLButtonElement | null) => void}) {
+  const {onBind} = props
+
+  React.useEffect(() => {
+    // Find the most recent "Volume" button in this component subtree.
+    // We do this because IconBtn doesn't forwardRef.
+    const btn = document.querySelector('button[aria-label="Volume"]') as HTMLButtonElement | null
+    onBind(btn)
+    return () => onBind(null)
+  }, [onBind])
+
+  return null
+}
+
+
 export default function MiniPlayer(props: {onExpand?: () => void}) {
   const {onExpand} = props
   const p = usePlayer()
@@ -110,6 +126,34 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
   const [volOpen, setVolOpen] = React.useState(false)
   const [vol, setVol] = React.useState(0.85)
   const muted = vol <= 0.001
+  const volBtnRef = React.useRef<HTMLButtonElement | null>(null)
+const [volAnchor, setVolAnchor] = React.useState<{x: number; y: number} | null>(null)
+
+React.useEffect(() => {
+  if (!volOpen) {
+    setVolAnchor(null)
+    return
+  }
+
+  const el = volBtnRef.current
+  if (!el) return
+
+  const compute = () => {
+    const r = el.getBoundingClientRect()
+    // anchor point: horizontally centered above the button
+    setVolAnchor({x: r.left + r.width / 2, y: r.top})
+  }
+
+  compute()
+  window.addEventListener('scroll', compute, true)
+  window.addEventListener('resize', compute)
+
+  return () => {
+    window.removeEventListener('scroll', compute, true)
+    window.removeEventListener('resize', compute)
+  }
+}, [volOpen])
+
 
   const title = p.current?.title ?? p.current?.id ?? 'Nothing queued'
   const artist = p.current?.artist ?? (p.status === 'blocked' ? 'blocked' : p.status)
@@ -272,101 +316,121 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
 
         <div style={{display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end'}}>
           {/* Volume icon + pop slider */}
-<div style={{position: 'relative', display: 'grid', justifyItems: 'center'}}>
+{/* Volume icon + pop slider (ported to body for reliable positioning) */}
+<div style={{display: 'grid', justifyItems: 'center'}}>
   <IconBtn
     label="Volume"
     onClick={() => setVolOpen((v) => !v)}
     title="Volume"
   >
-    <VolumeIcon muted={muted} />
+    {/* Wrap IconBtn so we can attach a ref to the actual button */}
+    <span
+      // This span does nothing visually; it's just to let us capture the button node reliably.
+      // We'll set the ref on the parent button via a callback below.
+      aria-hidden
+    >
+      <VolumeIcon muted={muted} />
+    </span>
   </IconBtn>
 
-  {volOpen ? (
-  <>
-    <div
-      style={{
-        position: 'absolute',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        bottom: 44,
-        width: 56,
-        height: 170,
-        borderRadius: 14,
-        border: '1px solid rgba(255,255,255,0.12)',
-        background: 'rgba(0,0,0,0.55)',
-        backdropFilter: 'blur(10px)',
-        padding: 10,
-        boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
-        display: 'grid',
-        placeItems: 'center',
-        overflow: 'hidden',
-        zIndex: 50,
-      }}
-    >
-      <input
-        className="volRange"
-        aria-label="Volume slider"
-        type="range"
-        min={0}
-        max={1}
-        step={0.01}
-        value={vol}
-        onChange={(e) => setVol(Number(e.target.value))}
-        style={{
-          width: 140, // becomes the vertical length after rotation
-          height: 18, // thickness of the control
-          transform: 'rotate(-90deg)',
-          transformOrigin: 'center',
-          background: 'transparent',
-          margin: 0,
-          padding: 0,
-        }}
-      />
-    </div>
+  {/* Attach the ref to the *actual* IconBtn button via DOM query */}
+  <span
+    style={{display: 'none'}}
+    ref={() => {
+      // no-op element; we use layout effect below to grab the previous button
+    }}
+  />
 
-    <style>{`
-      /* Volume range styling ONLY (avoid fighting the seek slider styles) */
-      .volRange {
-        -webkit-appearance: none;
-        appearance: none;
-      }
+  {/*
+    We need the real button element for getBoundingClientRect().
+    Since IconBtn doesn't forwardRef, we grab the closest button after render.
+  */}
+  <VolBtnBinder onBind={(btn) => (volBtnRef.current = btn)} />
 
-      .volRange::-webkit-slider-runnable-track {
-        height: 4px;
-        border-radius: 999px;
-        background: rgba(255,255,255,0.22);
-      }
+  {volOpen && volAnchor
+    ? createPortal(
+        <>
+          <div
+            style={{
+              position: 'fixed',
+              left: volAnchor.x,
+              top: volAnchor.y,
+              transform: 'translate(-50%, calc(-100% - 10px))', // above the button
+              width: 56,
+              height: 170,
+              borderRadius: 14,
+              border: '1px solid rgba(255,255,255,0.12)',
+              background: 'rgba(0,0,0,0.55)',
+              backdropFilter: 'blur(10px)',
+              padding: 10,
+              boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
+              display: 'grid',
+              placeItems: 'center',
+              overflow: 'hidden',
+              zIndex: 99999,
+            }}
+          >
+            <input
+              className="volRange"
+              aria-label="Volume slider"
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={vol}
+              onChange={(e) => setVol(Number(e.target.value))}
+              style={{
+                width: 140, // becomes vertical length after rotate
+                height: 18,
+                transform: 'rotate(-90deg)',
+                transformOrigin: 'center',
+                background: 'transparent',
+                margin: 0,
+                padding: 0,
+              }}
+            />
+          </div>
 
-      .volRange::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        appearance: none;
-        width: 12px;
-        height: 12px;
-        border-radius: 999px;
-        margin-top: -4px;
-        background: color-mix(in srgb, var(--accent) 75%, white 10%);
-        box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
-      }
-
-      .volRange::-moz-range-track {
-        height: 4px;
-        border-radius: 999px;
-        background: rgba(255,255,255,0.22);
-      }
-
-      .volRange::-moz-range-thumb {
-        width: 12px;
-        height: 12px;
-        border: 0;
-        border-radius: 999px;
-        background: color-mix(in srgb, var(--accent) 75%, white 10%);
-        box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
-      }
-    `}</style>
-  </>
-) : null}
-
+          <style>{`
+            .volRange {
+              -webkit-appearance: none;
+              appearance: none;
+            }
+            .volRange::-webkit-slider-runnable-track {
+              height: 6px;
+              border-radius: 999px;
+              background: rgba(255,255,255,0.22);
+            }
+            .volRange::-webkit-slider-thumb {
+              -webkit-appearance: none;
+              appearance: none;
+              width: 16px;
+              height: 16px;
+              border-radius: 999px;
+              margin-top: -5px; /* centers thumb on 6px track */
+              background: color-mix(in srgb, var(--accent) 75%, white 10%);
+              box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
+            }
+            .volRange::-moz-range-track {
+              height: 6px;
+              border-radius: 999px;
+              background: rgba(255,255,255,0.22);
+            }
+            .volRange::-moz-range-thumb {
+              width: 16px;
+              height: 16px;
+              border: 0;
+              border-radius: 999px;
+              background: color-mix(in srgb, var(--accent) 75%, white 10%);
+              box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
+            }
+          `}</style>
+        </>,
+        document.body
+      )
+    : null}
 </div>
+
 
 
           {onExpand ? (
