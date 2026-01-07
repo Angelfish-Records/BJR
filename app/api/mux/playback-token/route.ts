@@ -60,28 +60,41 @@ async function countAnonDistinctPlaysToday(params: {anonId: string}): Promise<nu
 }
 
 function muxClient(): Mux {
-  const tokenId = process.env.MUX_SIGNING_KEY_ID
-  const tokenSecret = process.env.MUX_SIGNING_KEY_SECRET
+  const tokenId = process.env.MUX_TOKEN_ID
+  const tokenSecret = process.env.MUX_TOKEN_SECRET
 
   if (!tokenId || !tokenSecret) {
-    throw new Error('Missing Mux signing env vars: MUX_SIGNING_KEY_ID and MUX_SIGNING_KEY_SECRET.')
+    throw new Error('Missing Mux API env vars: MUX_TOKEN_ID and MUX_TOKEN_SECRET.')
   }
 
   return new Mux({tokenId, tokenSecret})
 }
 
+
 async function signPlaybackToken(playbackId: string): Promise<{token: string; expiresAt: string}> {
   const client = muxClient()
+
+  const keyId = process.env.MUX_SIGNING_KEY_ID
+  const keySecret =
+    process.env.MUX_SIGNING_KEY_SECRET || process.env.MUX_SIGNING_PRIVATE_KEY
+
+  if (!keyId || !keySecret) {
+    throw new Error('Missing Mux signing env vars: MUX_SIGNING_KEY_ID and MUX_SIGNING_KEY_SECRET.')
+  }
+
   const expirationSeconds = 60 * 10
   const expiresAt = new Date(Date.now() + expirationSeconds * 1000)
 
   const token = await client.jwt.signPlaybackId(playbackId, {
     type: 'video',
     expiration: `${expirationSeconds}s`,
+    keyId,          // <-- critical
+    keySecret,      // <-- critical
   })
 
   return {token, expiresAt: expiresAt.toISOString()}
 }
+
 
 export async function POST(req: Request) {
   const correlationId = newCorrelationId()
