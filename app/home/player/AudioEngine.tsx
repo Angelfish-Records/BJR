@@ -1,15 +1,24 @@
+// web/app/home/player/AudioEngine.tsx
 'use client'
 
 import React from 'react'
+import Hls from 'hls.js'
 import {usePlayer} from './PlayerState'
 
 type TokenResponse =
   | {ok: true; token: string; expiresAt: string}
   | {ok: false; blocked: true; action: string; reason: string}
 
+function canPlayNativeHls(a: HTMLMediaElement) {
+  // Safari/iOS will usually return "probably" or "maybe"
+  return a.canPlayType('application/vnd.apple.mpegurl') !== ''
+}
+
 export default function AudioEngine() {
   const p = usePlayer()
   const audioRef = React.useRef<HTMLAudioElement | null>(null)
+
+  const hlsRef = React.useRef<Hls | null>(null)
   const tokenAbortRef = React.useRef<AbortController | null>(null)
 
   /* ---------------- Volume / mute sync ---------------- */
@@ -17,12 +26,11 @@ export default function AudioEngine() {
   React.useEffect(() => {
     const a = audioRef.current
     if (!a) return
-
     a.volume = Math.max(0, Math.min(1, p.volume))
     a.muted = p.muted
   }, [p.volume, p.muted])
 
-  /* ---------------- Track change -> fetch token + set src ---------------- */
+  /* ---------------- Track change -> fetch token + attach media ---------------- */
 
   React.useEffect(() => {
     const a = audioRef.current
@@ -30,6 +38,14 @@ export default function AudioEngine() {
 
     const playbackId = p.current?.muxPlaybackId
     if (!playbackId) return
+
+    // Tear down any existing HLS instance
+    if (hlsRef.current) {
+      try {
+        hlsRef.current.destroy()
+      } catch {}
+      hlsRef.current = null
+    }
 
     // Cancel any in-flight token request
     tokenAbortRef.current?.abort()
@@ -53,13 +69,41 @@ export default function AudioEngine() {
           return
         }
 
-        const nextSrc = `https://stream.mux.com/${playbackId}.m3u8?token=${data.token}`
+        const src = `https://stream.mux.com/${playbackId}.m3u8?token=${data.token}`
 
-        if (a.src !== nextSrc) {
-          a.src = nextSrc
-          a.load()
+        // Reset element state
+        a.pause()
+        a.removeAttribute('src')
+        a.load()
+
+        if (canPlayNativeHls(a)) {
+          // Safari path
+          a.src = src
+        } else {
+          // Chrome/Firefox path via MSE
+          if (!Hls.isSupported()) {
+            p.setBlocked('This browser cannot play HLS (no MSE).')
+            return
+          }
+
+          const hls = new Hls({
+            // good defaults; keep it simple for now
+            enableWorker: true,
+            lowLatencyMode: false,
+          })
+          hlsRef.current = hls
+
+          hls.on(Hls.Events.ERROR, (_evt, err) => {
+            // Surface the real reason in UI
+            const msg = err?.details ? `HLS error: ${err.details}` : 'HLS error.'
+            p.setBlocked(msg)
+          })
+
+          hls.loadSource(src)
+          hls.attachMedia(a)
         }
 
+        // Only attempt play if state says play
         if (p.status === 'playing') {
           await a.play()
         }
@@ -105,22 +149,29 @@ export default function AudioEngine() {
       if (ms > 0) p.setDurationMs(ms)
     }
     const onEnded = () => p.next()
-    const onPlay = () => p.setStatusExternal('playing')
-    const onPause = () =>
-      p.setStatusExternal(p.status === 'idle' ? 'idle' : 'paused')
+
+    const onPlaying = () => p.setStatusExternal('playing')
+    const onPause = () => p.setStatusExternal(p.status === 'idle' ? 'idle' : 'paused')
+
+    const onError = () => {
+      // HTMLMediaElement errors are often opaque, but still better than silence
+      p.setBlocked('Media error while loading/decoding.')
+    }
 
     a.addEventListener('timeupdate', onTime)
     a.addEventListener('durationchange', onDur)
     a.addEventListener('ended', onEnded)
-    a.addEventListener('play', onPlay)
+    a.addEventListener('playing', onPlaying)
     a.addEventListener('pause', onPause)
+    a.addEventListener('error', onError)
 
     return () => {
       a.removeEventListener('timeupdate', onTime)
       a.removeEventListener('durationchange', onDur)
       a.removeEventListener('ended', onEnded)
-      a.removeEventListener('play', onPlay)
+      a.removeEventListener('playing', onPlaying)
       a.removeEventListener('pause', onPause)
+      a.removeEventListener('error', onError)
     }
   }, [p])
 
@@ -129,22 +180,25 @@ export default function AudioEngine() {
   React.useEffect(() => {
     const a = audioRef.current
     if (!a) return
-
     const desired = p.positionMs / 1000
-    if (
-      Number.isFinite(desired) &&
-      Math.abs(a.currentTime - desired) > 0.25
-    ) {
+    if (Number.isFinite(desired) && Math.abs(a.currentTime - desired) > 0.25) {
       a.currentTime = desired
     }
   }, [p.positionMs])
 
-  return (
-    <audio
-      ref={audioRef}
-      preload="metadata"
-      playsInline
-      style={{display: 'none'}}
-    />
-  )
+  /* ---------------- Cleanup ---------------- */
+
+  React.useEffect(() => {
+    return () => {
+      tokenAbortRef.current?.abort()
+      if (hlsRef.current) {
+        try {
+          hlsRef.current.destroy()
+        } catch {}
+        hlsRef.current = null
+      }
+    }
+  }, [])
+
+  return <audio ref={audioRef} preload="metadata" playsInline style={{display: 'none'}} />
 }
