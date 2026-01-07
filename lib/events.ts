@@ -27,17 +27,30 @@ export async function logMemberEvent(params: {
   } = params
 
   try {
-    await sql`
-      insert into member_events (member_id, event_type, occurred_at, source, payload, correlation_id)
-      values (
-        ${memberId ? (memberId as string) : null}::uuid,
-        ${eventType},
-        ${occurredAt ? occurredAt.toISOString() : null}::timestamptz,
-        ${source},
-        ${JSON.stringify(payload)}::jsonb,
-        ${correlationId}::uuid
-      )
-    `
+    if (occurredAt) {
+      await sql`
+        insert into member_events (member_id, event_type, occurred_at, source, payload, correlation_id)
+        values (
+          ${memberId ? (memberId as string) : null}::uuid,
+          ${eventType},
+          ${occurredAt.toISOString()}::timestamptz,
+          ${source},
+          ${JSON.stringify(payload)}::jsonb,
+          ${correlationId}::uuid
+        )
+      `
+    } else {
+      await sql`
+        insert into member_events (member_id, event_type, source, payload, correlation_id)
+        values (
+          ${memberId ? (memberId as string) : null}::uuid,
+          ${eventType},
+          ${source},
+          ${JSON.stringify(payload)}::jsonb,
+          ${correlationId}::uuid
+        )
+      `
+    }
   } catch (err) {
     console.error('member_events insert failed', {eventType, source, memberId, err})
   }
