@@ -9,17 +9,20 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
 }
 
-// NOTE: defined OUTSIDE render
-function IconBtn(props: {
-  label: string
-  title?: string
-  onClick?: () => void
-  disabled?: boolean
-  children: React.ReactNode
-}) {
+const IconBtn = React.forwardRef<
+  HTMLButtonElement,
+  {
+    label: string
+    title?: string
+    onClick?: () => void
+    disabled?: boolean
+    children: React.ReactNode
+  }
+>(function IconBtn(props, ref) {
   const {label, title, onClick, disabled, children} = props
   return (
     <button
+      ref={ref}
       type="button"
       aria-label={label}
       title={title ?? label}
@@ -42,7 +45,8 @@ function IconBtn(props: {
       {children}
     </button>
   )
-}
+})
+
 
 function PlayPauseIcon({playing}: {playing: boolean}) {
   return playing ? (
@@ -100,20 +104,6 @@ function MenuIcon() {
   )
 }
 
-function VolBtnBinder(props: {onBind: (btn: HTMLButtonElement | null) => void}) {
-  const {onBind} = props
-
-  React.useEffect(() => {
-    // Find the most recent "Volume" button in this component subtree.
-    // We do this because IconBtn doesn't forwardRef.
-    const btn = document.querySelector('button[aria-label="Volume"]') as HTMLButtonElement | null
-    onBind(btn)
-    return () => onBind(null)
-  }, [onBind])
-
-  return null
-}
-
 
 export default function MiniPlayer(props: {onExpand?: () => void}) {
   const {onExpand} = props
@@ -129,7 +119,7 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
   const volBtnRef = React.useRef<HTMLButtonElement | null>(null)
 const [volAnchor, setVolAnchor] = React.useState<{x: number; y: number} | null>(null)
 
-React.useEffect(() => {
+React.useLayoutEffect(() => {
   if (!volOpen) {
     setVolAnchor(null)
     return
@@ -140,7 +130,6 @@ React.useEffect(() => {
 
   const compute = () => {
     const r = el.getBoundingClientRect()
-    // anchor point: horizontally centered above the button
     setVolAnchor({x: r.left + r.width / 2, y: r.top})
   }
 
@@ -316,36 +305,16 @@ React.useEffect(() => {
 
         <div style={{display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end'}}>
           {/* Volume icon + pop slider */}
-{/* Volume icon + pop slider (ported to body for reliable positioning) */}
+
 <div style={{display: 'grid', justifyItems: 'center'}}>
   <IconBtn
+    ref={volBtnRef}
     label="Volume"
     onClick={() => setVolOpen((v) => !v)}
     title="Volume"
   >
-    {/* Wrap IconBtn so we can attach a ref to the actual button */}
-    <span
-      // This span does nothing visually; it's just to let us capture the button node reliably.
-      // We'll set the ref on the parent button via a callback below.
-      aria-hidden
-    >
-      <VolumeIcon muted={muted} />
-    </span>
+    <VolumeIcon muted={muted} />
   </IconBtn>
-
-  {/* Attach the ref to the *actual* IconBtn button via DOM query */}
-  <span
-    style={{display: 'none'}}
-    ref={() => {
-      // no-op element; we use layout effect below to grab the previous button
-    }}
-  />
-
-  {/*
-    We need the real button element for getBoundingClientRect().
-    Since IconBtn doesn't forwardRef, we grab the closest button after render.
-  */}
-  <VolBtnBinder onBind={(btn) => (volBtnRef.current = btn)} />
 
   {volOpen && volAnchor
     ? createPortal(
@@ -355,7 +324,7 @@ React.useEffect(() => {
               position: 'fixed',
               left: volAnchor.x,
               top: volAnchor.y,
-              transform: 'translate(-50%, calc(-100% - 10px))', // above the button
+              transform: 'translate(-50%, calc(-100% - 10px))',
               width: 56,
               height: 170,
               borderRadius: 14,
@@ -366,12 +335,12 @@ React.useEffect(() => {
               boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
               display: 'grid',
               placeItems: 'center',
-              overflow: 'hidden',
               zIndex: 99999,
+              overflow: 'visible', // IMPORTANT: don’t clip the control
             }}
           >
             <input
-              className="volRange"
+              className="volVRange"
               aria-label="Volume slider"
               type="range"
               min={0}
@@ -379,44 +348,48 @@ React.useEffect(() => {
               step={0.01}
               value={vol}
               onChange={(e) => setVol(Number(e.target.value))}
-              style={{
-                width: 140, // becomes vertical length after rotate
-                height: 18,
-                transform: 'rotate(-90deg)',
-                transformOrigin: 'center',
-                background: 'transparent',
-                margin: 0,
-                padding: 0,
-              }}
             />
           </div>
 
           <style>{`
-            .volRange {
-              -webkit-appearance: none;
-              appearance: none;
+            .volVRange{
+              /* make it vertical without rotation */
+              width: 18px;
+              height: 140px;
+              margin: 0;
+              padding: 0;
+              background: transparent;
+
+              /* Firefox */
+              writing-mode: bt-lr;
+
+              /* WebKit (Chrome/Safari) */
+              -webkit-appearance: slider-vertical;
+              appearance: slider-vertical;
             }
-            .volRange::-webkit-slider-runnable-track {
-              height: 6px;
+
+            /* Track / thumb */
+            .volVRange::-webkit-slider-runnable-track {
+              width: 6px;
               border-radius: 999px;
               background: rgba(255,255,255,0.22);
             }
-            .volRange::-webkit-slider-thumb {
+            .volVRange::-webkit-slider-thumb {
               -webkit-appearance: none;
               appearance: none;
               width: 16px;
               height: 16px;
               border-radius: 999px;
-              margin-top: -5px; /* centers thumb on 6px track */
               background: color-mix(in srgb, var(--accent) 75%, white 10%);
               box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
             }
-            .volRange::-moz-range-track {
-              height: 6px;
+
+            .volVRange::-moz-range-track {
+              width: 6px;
               border-radius: 999px;
               background: rgba(255,255,255,0.22);
             }
-            .volRange::-moz-range-thumb {
+            .volVRange::-moz-range-thumb {
               width: 16px;
               height: 16px;
               border: 0;
@@ -430,6 +403,7 @@ React.useEffect(() => {
       )
     : null}
 </div>
+
 
 
 
