@@ -2,7 +2,6 @@
 
 import React from 'react'
 import {usePlayer, PlayerTrack} from './PlayerState'
-import MuxUploader from './MuxUploader'
 
 function fmtTime(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000))
@@ -122,19 +121,61 @@ function MoreIcon() {
 export default function FullPlayer() {
   const p = usePlayer()
 
-  // ---- DEV seed so play/pause has something to operate on ----
-  React.useEffect(() => {
-    if (p.queue.length === 0) {
-      const seeded: PlayerTrack[] = [
-        {id: 't1', title: 'Consoler of the Lonely', artist: 'The Raconteurs', durationMs: 206_000},
-        {id: 't2', title: 'Salute Your Solution', artist: 'The Raconteurs', durationMs: 180_000},
-        {id: 't3', title: "You Don't Understand Me", artist: 'The Raconteurs', durationMs: 294_000},
-        {id: 't4', title: 'Old Enough', artist: 'The Raconteurs', durationMs: 238_000},
-      ]
-      p.setQueue(seeded)
+// ---- Load album + tracks from Sanity via server route ----
+const [albumInfo, setAlbumInfo] = React.useState<{
+  title: string
+  artist?: string
+  year?: number
+  description?: string
+} | null>(null)
+
+React.useEffect(() => {
+  let cancelled = false
+
+  async function load() {
+    try {
+      // IMPORTANT: set this to your test album slug in Sanity
+      const slug = 'test-album' // <- CHANGE ME
+
+      const res = await fetch(`/api/albums?slug=${encodeURIComponent(slug)}`, {cache: 'no-store'})
+      const data = (await res.json()) as {
+        album: {title: string; artist?: string; year?: number; description?: string} | null
+        tracks: Array<{
+          id: string
+          title?: string
+          artist?: string
+          durationMs?: number
+          muxPlaybackId?: string
+        }>
+      }
+
+      if (cancelled) return
+
+      setAlbumInfo(data.album)
+
+      const tracks: PlayerTrack[] = (data.tracks ?? []).map((t) => ({
+        id: t.id,
+        title: t.title,
+        artist: t.artist ?? data.album?.artist,
+        durationMs: t.durationMs,
+        // NOTE: PlayerTrack must include muxPlaybackId for AudioEngine
+        muxPlaybackId: t.muxPlaybackId,
+      })) as unknown as PlayerTrack[] // only needed if your PlayerTrack type doesn’t yet include muxPlaybackId
+
+      if (tracks.length > 0) p.setQueue(tracks)
+    } catch (err) {
+      if (cancelled) return
+      p.setBlocked(err instanceof Error ? err.message : 'Failed to load album.')
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }
+
+  void load()
+  return () => {
+    cancelled = true
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [])
+
 
   // ---- Fake progress until we wire a real audio element ----
   React.useEffect(() => {
@@ -143,14 +184,13 @@ export default function FullPlayer() {
     return () => window.clearInterval(t)
   }, [p.status, p])
 
-  const albumArtist = p.current?.artist ?? '—'
-  const albumTitle = 'Consolers of the Lonely' // TODO: from Sanity album doc
-  const albumMeta = 'Album · 2008' // TODO: from Sanity album doc
-  const albumSub = `${p.queue.length || 0} songs · ${Math.round(
-    p.queue.reduce((a, t) => a + (t.durationMs ?? 0), 0) / 60000
-  )} minutes`
-  const albumDesc =
-    'This is placeholder copy. Soon: pull album description from Sanity and clamp to 2–3 lines.'
+  const albumArtist = albumInfo?.artist ?? p.current?.artist ?? '—'
+const albumTitle = albumInfo?.title ?? '—'
+const albumMeta = albumInfo?.year ? `Album · ${albumInfo.year}` : 'Album'
+const albumDesc =
+  albumInfo?.description ??
+  'This is placeholder copy. Soon: pull album description from Sanity and clamp to 2–3 lines.'
+
 
   const cur = p.current
   const dur = cur?.durationMs ?? 0
@@ -194,17 +234,6 @@ export default function FullPlayer() {
 
         <div style={{fontSize: 22, fontWeight: 650, letterSpacing: 0.2, opacity: 0.96}}>{albumTitle}</div>
         <div style={{fontSize: 12, opacity: 0.7}}>{albumMeta}</div>
-        <div style={{fontSize: 12, opacity: 0.7}}>{albumSub}</div>
-
-          <MuxUploader
-  onReady={({playbackId}) => {
-    p.play({
-      id: `mux_${playbackId}`,
-      title: 'Uploaded track',
-      muxPlaybackId: playbackId,
-    })
-  }}
-/>
         
         <div style={{maxWidth: 540, fontSize: 12, opacity: 0.62, lineHeight: 1.45}}>
           {albumDesc}
