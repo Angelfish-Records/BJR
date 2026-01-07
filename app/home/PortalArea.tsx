@@ -4,33 +4,37 @@
 import React from 'react'
 import PortalShell, {PortalPanelSpec} from './PortalShell'
 
-import {PlayerStateProvider, usePlayer, type PlayerTrack} from './player/PlayerState'
-import AudioEngine from './player/AudioEngine'
+import {usePlayer, type PlayerTrack} from './player/PlayerState'
 import PlayerController from './player/PlayerController'
 import type {AlbumInfo} from '@/lib/types'
 
-function QueueBootstrapper(props: {
-  albumId: string | null
-  tracks: PlayerTrack[]
-}) {
+function QueueBootstrapper(props: {albumId: string | null; tracks: PlayerTrack[]}) {
   const p = usePlayer()
+  const appliedRef = React.useRef<string | null>(null)
 
   React.useEffect(() => {
-    if (props.tracks.length === 0) return
+  const tracks = props.tracks
+  if (!tracks.length) return
 
-    // Only (re)seed when empty OR current isn't in the provided list
-    const ids = new Set(props.tracks.map((t) => t.id))
-    const currentOk = p.current?.id ? ids.has(p.current.id) : false
-    const queueOk = p.queue.length > 0 && p.queue.every((t) => ids.has(t.id))
+  const key = `${props.albumId ?? 'none'}:${tracks.map(t => t.id).join('|')}`
+  if (appliedRef.current === key) return
+  appliedRef.current = key
 
-    if (p.queue.length === 0 || !currentOk || !queueOk) {
-      p.setQueue(props.tracks)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.albumId, props.tracks.length])
+  const ids = new Set(tracks.map(t => t.id))
+  const currentOk = p.current?.id ? ids.has(p.current.id) : false
+
+  p.setQueue(tracks)
+
+  // If you're not currently on a track in this album, jump to track 1.
+  if (!currentOk) {
+    p.play(tracks[0])
+  }
+}, [props.albumId, props.tracks, p])
+
 
   return null
 }
+
 
 
 export default function PortalArea(props: {
@@ -60,13 +64,10 @@ export default function PortalArea(props: {
     [portalPanel, album, activePanelId]
   )
 
-  return (
-    <PlayerStateProvider>
+    return (
+    <>
       {/* queue bootstrap (server-fed tracks) */}
       <QueueBootstrapper albumId={album?.id ?? null} tracks={tracks} />
-
-      {/* Media runtime — exactly once */}
-      <AudioEngine />
 
       <div style={{height: '100%', minHeight: 0, minWidth: 0, display: 'grid'}}>
         <PortalShell
@@ -88,6 +89,7 @@ export default function PortalArea(props: {
           }}
         />
       </div>
-    </PlayerStateProvider>
+    </>
   )
+
 }

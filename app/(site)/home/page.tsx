@@ -1,26 +1,20 @@
-// web/app/home/page.tsx
+// web/app/(site)/home/page.tsx
 import React from 'react'
 import type {Metadata} from 'next'
 import {headers} from 'next/headers'
-
-import {client} from '../../sanity/lib/client'
-import {urlFor} from '../../sanity/lib/image'
-import ActivationGate from './ActivationGate'
-
+import {client} from '@/sanity/lib/client'
+import {urlFor} from '@/sanity/lib/image'
+import ActivationGate from '@/app/home/ActivationGate'
 import {auth, currentUser} from '@clerk/nextjs/server'
-import {ensureMemberByClerk} from '../../lib/members'
-
-import {hasAnyEntitlement, listCurrentEntitlementKeys} from '../../lib/entitlements'
-import {ENT, ENTITLEMENTS, deriveTier, pickAccent} from '../../lib/vocab'
-
-import SubscribeButton from './SubscribeButton'
-import CancelSubscriptionButton from './CancelSubscriptionButton'
-
-import {fetchPortalPage} from '../../lib/portal'
-import PortalModules from './PortalModules'
-import PortalArea from './PortalArea'
-
-import {getAlbumBySlug} from '../../lib/albums'
+import {ensureMemberByClerk} from '@/lib/members'
+import {hasAnyEntitlement, listCurrentEntitlementKeys} from '@/lib/entitlements'
+import {ENT, ENTITLEMENTS, deriveTier, pickAccent} from '@/lib/vocab'
+import SubscribeButton from '@/app/home/SubscribeButton'
+import CancelSubscriptionButton from '@/app/home/CancelSubscriptionButton'
+import {fetchPortalPage} from '@/lib/portal'
+import PortalModules from '@/app/home/PortalModules'
+import PortalArea from '@/app/home/PortalArea'
+import {getAlbumBySlug} from '@/lib/albums'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0

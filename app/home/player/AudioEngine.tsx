@@ -41,6 +41,13 @@ export default function AudioEngine() {
     const playbackId = p.current?.muxPlaybackId
     if (!playbackId) return
 
+    // near top of the track-load effect, once playbackId exists:
+p.setStatusExternal('loading')
+
+// ... after attaching src / hls ...
+// DO NOT call a.play() here.
+
+
     const seq = ++loadSeq.current 
 
     // Tear down any existing HLS instance
@@ -117,9 +124,6 @@ export default function AudioEngine() {
       hls.attachMedia(a)
     }
 
-    if (p.status === 'playing') {
-      await a.play()
-    }
   } catch (err) {
     if (ac.signal.aborted) return
     if (seq !== loadSeq.current) return
@@ -162,7 +166,12 @@ export default function AudioEngine() {
       const ms = Number.isFinite(a.duration) ? Math.floor(a.duration * 1000) : 0
       if (ms > 0) p.setDurationMs(ms)
     }
-    const onEnded = () => p.next()
+    const onEnded = () => {
+  // continue playback along the queue
+  window.dispatchEvent(new Event('af:play-intent'))
+  p.next()
+}
+
 
     const onPlaying = () => {
   p.setStatusExternal('playing')
@@ -195,13 +204,15 @@ export default function AudioEngine() {
   /* ---------------- Seeking from UI ---------------- */
 
   React.useEffect(() => {
-    const a = audioRef.current
-    if (!a) return
-    const desired = p.positionMs / 1000
-    if (Number.isFinite(desired) && Math.abs(a.currentTime - desired) > 0.25) {
-      a.currentTime = desired
-    }
-  }, [p.positionMs])
+  const a = audioRef.current
+  if (!a) return
+  const desired = p.positionMs / 1000
+  if (!Number.isFinite(a.duration) || a.duration <= 0) return
+  if (Number.isFinite(desired)) a.currentTime = desired
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [p.seekNonce])
+
+
 
   /* ---------------- Cleanup ---------------- */
 

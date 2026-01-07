@@ -1,3 +1,4 @@
+// web/app/home/player/PlayerState.tsx
 'use client'
 
 import React from 'react'
@@ -13,6 +14,7 @@ export type PlayerTrack = {
 type PlayerStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'blocked'
 type RepeatMode = 'off' | 'one' | 'all'
 
+
 export type PlayerState = {
   status: PlayerStatus
   current?: PlayerTrack
@@ -21,6 +23,8 @@ export type PlayerState = {
 
   // UI-facing playback telemetry (real audio engine can own these later)
   positionMs: number
+  seekNonce: number
+
   volume: number // 0..1
   muted: boolean
   repeat: RepeatMode
@@ -40,6 +44,7 @@ type PlayerActions = {
   // Transport (stubs now; later: drive the real audio engine)
   next: () => void
   prev: () => void
+  
   seek: (ms: number) => void
 
   // Volume (stubs now; later: drive the real audio element)
@@ -55,6 +60,7 @@ type PlayerActions = {
   setBlocked: (reason?: string) => void
   clearError: () => void
 }
+
 
 const PlayerCtx = React.createContext<(PlayerState & PlayerActions) | null>(null)
 
@@ -76,6 +82,7 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
     lastError: undefined,
 
     positionMs: 0,
+    seekNonce: 0,
     volume: 0.9,
     muted: false,
     repeat: 'off',
@@ -97,7 +104,8 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
         setState((s) => ({ ...s, status: s.status === 'playing' ? 'paused' : s.status })),
 
             setPositionMs: (ms: number) =>
-        setState((s) => ({...s, positionMs: Math.max(0, ms)})),
+              setState((s) => ({ ...s, positionMs: Math.max(0, ms) })),
+
 
       setDurationMs: (ms: number) =>
         setState((s) => {
@@ -134,18 +142,18 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
           const at = idx >= 0 ? idx : 0
 
           // Repeat-one: stay on track
-          if (s.repeat === 'one') return { ...s, status: 'playing', positionMs: 0 }
+          if (s.repeat === 'one') return { ...s, status: 'loading', positionMs: 0 }
 
           const nextIdx = at + 1
           const hasNext = nextIdx < s.queue.length
 
           if (hasNext) {
-            return { ...s, current: s.queue[nextIdx], status: 'playing', positionMs: 0 }
+            return { ...s, current: s.queue[nextIdx], status: 'loading', positionMs: 0 }
           }
 
           // End of queue
           if (s.repeat === 'all' && s.queue.length > 0) {
-            return { ...s, current: s.queue[0], status: 'playing', positionMs: 0 }
+            return { ...s, current: s.queue[0], status: 'loading', positionMs: 0 }
           }
 
           return { ...s, status: 'paused', positionMs: 0 }
@@ -158,32 +166,33 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
           if (!cur || s.queue.length === 0) return s
 
           // “industry standard”: if you’re > ~3s in, restart track
-          if (s.positionMs > 3000) return { ...s, positionMs: 0, status: 'playing' }
+          if (s.positionMs > 3000) return { ...s, positionMs: 0, status: 'loading' }
 
           const idx = s.queue.findIndex((t) => t.id === cur.id)
           const at = idx >= 0 ? idx : 0
           const prevIdx = at - 1
 
           if (prevIdx >= 0) {
-            return { ...s, current: s.queue[prevIdx], status: 'playing', positionMs: 0 }
+            return { ...s, current: s.queue[prevIdx], status: 'loading', positionMs: 0 }
           }
 
           // At start
           if (s.repeat === 'all' && s.queue.length > 0) {
-            return { ...s, current: s.queue[s.queue.length - 1], status: 'playing', positionMs: 0 }
+            return { ...s, current: s.queue[s.queue.length - 1], status: 'loading', positionMs: 0 }
           }
 
-          return { ...s, positionMs: 0, status: 'playing' }
+          return { ...s, positionMs: 0, status: 'loading' }
         })
       },
 
       seek: (ms: number) => {
-        setState((s) => {
-          const dur = s.current?.durationMs ?? 0
-          const next = dur > 0 ? clamp(ms, 0, dur) : Math.max(0, ms)
-          return { ...s, positionMs: next }
-        })
-      },
+  setState((s) => {
+    const dur = s.current?.durationMs ?? 0
+    const next = dur > 0 ? clamp(ms, 0, dur) : Math.max(0, ms)
+    return { ...s, positionMs: next, seekNonce: s.seekNonce + 1 }
+  })
+},
+
 
       setVolume: (v: number) => setState((s) => ({ ...s, volume: clamp(v, 0, 1) })),
 
