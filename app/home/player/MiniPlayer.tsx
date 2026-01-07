@@ -339,66 +339,80 @@ React.useLayoutEffect(() => {
               overflow: 'visible', // IMPORTANT: don’t clip the control
             }}
           >
-            <input
-              className="volVRange"
-              aria-label="Volume slider"
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={vol}
-              onChange={(e) => setVol(Number(e.target.value))}
-            />
+            <div className="volWrap">
+  <input
+    className="volRot"
+    aria-label="Volume slider"
+    type="range"
+    min={0}
+    max={1}
+    step={0.01}
+    value={vol}
+    onChange={(e) => setVol(Number(e.target.value))}
+  />
+</div>
+
           </div>
 
           <style>{`
-            .volVRange{
-  width: 24px;        /* widened so track can be centered */
-  height: 140px;
+            .volWrap{
+  width: 24px;     /* visual thickness area */
+  height: 140px;   /* vertical travel */
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: visible;
+}
+
+/* Horizontal slider rotated and perfectly centered */
+.volRot{
+  -webkit-appearance: none;
+  appearance: none;
+
+  width: 140px;   /* becomes vertical length after rotate */
+  height: 24px;   /* becomes horizontal thickness after rotate */
   margin: 0;
   padding: 0;
   background: transparent;
 
-  /* Firefox */
-  writing-mode: bt-lr;
-
-  /* WebKit */
-  -webkit-appearance: slider-vertical;
-  appearance: slider-vertical;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  transform-origin: center;
 }
 
-/* ---------- WebKit ---------- */
-.volVRange::-webkit-slider-runnable-track{
-  width: 6px;
-  margin: 0 auto;     /* critical for centering */
+/* Track / thumb */
+.volRot::-webkit-slider-runnable-track{
+  height: 6px;
   border-radius: 999px;
   background: rgba(255,255,255,0.22);
 }
-
-.volVRange::-webkit-slider-thumb{
+.volRot::-webkit-slider-thumb{
   -webkit-appearance: none;
   appearance: none;
   width: 16px;
   height: 16px;
   border-radius: 999px;
+  margin-top: -5px; /* centers on 6px track */
   background: color-mix(in srgb, var(--accent) 75%, white 10%);
   box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
 }
 
-/* ---------- Firefox ---------- */
-.volVRange::-moz-range-track{
-  width: 6px;
+.volRot::-moz-range-track{
+  height: 6px;
   border-radius: 999px;
   background: rgba(255,255,255,0.22);
 }
-
-.volVRange::-moz-range-thumb{
+.volRot::-moz-range-thumb{
   width: 16px;
   height: 16px;
   border: 0;
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 75%, white 10%);
   box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
+}
+
 }
 
           `}</style>
