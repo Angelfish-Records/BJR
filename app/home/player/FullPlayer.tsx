@@ -123,6 +123,8 @@ function MoreIcon() {
 export default function FullPlayer(props: { album: AlbumInfo | null
 }) {
   const p = usePlayer()
+  console.log('[FullPlayer]', {status: p.status, queue: p.queue.length, current: p.current?.id})
+
 
   const albumArtist = props.album?.artist ?? p.current?.artist ?? '—'
 const albumTitle = props.album?.title ?? '—'

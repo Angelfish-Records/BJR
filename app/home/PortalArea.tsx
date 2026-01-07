@@ -16,15 +16,22 @@ function QueueBootstrapper(props: {
   const p = usePlayer()
 
   React.useEffect(() => {
-    if (props.tracks.length > 0) {
+    if (props.tracks.length === 0) return
+
+    // Only (re)seed when empty OR current isn't in the provided list
+    const ids = new Set(props.tracks.map((t) => t.id))
+    const currentOk = p.current?.id ? ids.has(p.current.id) : false
+    const queueOk = p.queue.length > 0 && p.queue.every((t) => ids.has(t.id))
+
+    if (p.queue.length === 0 || !currentOk || !queueOk) {
       p.setQueue(props.tracks)
     }
-    // only re-bootstrap when the album identity changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.albumId])
+  }, [props.albumId, props.tracks.length])
 
   return null
 }
+
 
 export default function PortalArea(props: {
   portalPanel: React.ReactNode
