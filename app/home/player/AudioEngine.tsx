@@ -69,7 +69,7 @@ export default function AudioEngine() {
           return
         }
 
-        const src = `https://stream.mux.com/${playbackId}.m3u8?token=${data.token}`
+        const src = `https://stream.mux.com/${playbackId}.m3u8?signature=${encodeURIComponent(data.token)}`
 
         // Reset element state
         a.pause()
