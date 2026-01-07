@@ -10,7 +10,7 @@ export type PlayerTrack = {
   muxPlaybackId?: string
 }
 
-type PlayerStatus = 'idle' | 'playing' | 'paused' | 'blocked'
+type PlayerStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'blocked'
 type RepeatMode = 'off' | 'one' | 'all'
 
 export type PlayerState = {
@@ -89,7 +89,7 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
         setState((s) => {
           const nextTrack = track ?? s.current ?? s.queue[0]
           if (!nextTrack) return { ...s, status: 'idle', current: undefined, positionMs: 0 }
-          return { ...s, current: nextTrack, status: 'playing', lastError: undefined, positionMs: 0 }
+          return { ...s, current: nextTrack, status: 'loading', lastError: undefined, positionMs: 0 }
         })
       },
 

@@ -20,6 +20,8 @@ import {fetchPortalPage} from '../../lib/portal'
 import PortalModules from './PortalModules'
 import PortalArea from './PortalArea'
 
+import {getAlbumBySlug} from '../../lib/albums'
+
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 export const fetchCache = 'force-no-store'
@@ -186,6 +188,11 @@ export default async function Home(props: {
     </div>
   )
 
+  const featuredAlbumSlug = 'consolers' // later: siteFlags.featuredAlbumSlug
+
+  const albumData = await getAlbumBySlug(featuredAlbumSlug)
+
+
   return (
     <main style={mainStyle}>
       {/* Grid + responsive behavior kept here so it can’t “go missing” via CSS drift */}
@@ -335,9 +342,11 @@ export default async function Home(props: {
   {/* CONTENT (this is the only row that changes height) */}
   <div className="shadowHomeGrid" style={{minHeight: 0}}>
             {/* LEFT: portal */}
-            <div className="shadowHomeMain">
-              <PortalArea portalPanel={portalPanel} />
-            </div>
+            <div className="shadowHomeMain" style={{display: 'grid', gap: 18}}>
+  <PortalArea portalPanel={portalPanel} album={albumData.album} tracks={albumData.tracks} />
+</div>
+
+
 
             {/* RIGHT: membership sidebar */}
             <aside

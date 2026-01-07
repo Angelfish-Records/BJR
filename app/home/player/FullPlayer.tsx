@@ -1,7 +1,9 @@
+// web/app/home/player/FullPlayer.tsx
 'use client'
 
 import React from 'react'
-import {usePlayer, PlayerTrack} from './PlayerState'
+import {usePlayer} from './PlayerState'
+import type {AlbumInfo} from '@/lib/types'
 
 function fmtTime(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000))
@@ -118,91 +120,33 @@ function MoreIcon() {
   )
 }
 
-export default function FullPlayer() {
+export default function FullPlayer(props: { album: AlbumInfo | null
+}) {
   const p = usePlayer()
 
-// ---- Load album + tracks from Sanity via server route ----
-const [albumInfo, setAlbumInfo] = React.useState<{
-  title: string
-  artist?: string
-  year?: number
-  description?: string
-} | null>(null)
-
-React.useEffect(() => {
-  let cancelled = false
-
-  async function load() {
-    try {
-      // IMPORTANT: set this to your test album slug in Sanity
-      const slug = 'consolers' // <- CHANGE ME
-
-      const res = await fetch(`/api/albums?slug=${encodeURIComponent(slug)}`, {cache: 'no-store'})
-      const data = (await res.json()) as {
-        album: {title: string; artist?: string; year?: number; description?: string} | null
-        tracks: Array<{
-          id: string
-          title?: string
-          artist?: string
-          durationMs?: number
-          muxPlaybackId?: string
-        }>
-      }
-
-      if (cancelled) return
-
-      setAlbumInfo(data.album)
-
-      const tracks: PlayerTrack[] = (data.tracks ?? []).map((t) => ({
-        id: t.id,
-        title: t.title,
-        artist: t.artist ?? data.album?.artist,
-        durationMs: t.durationMs,
-        // NOTE: PlayerTrack must include muxPlaybackId for AudioEngine
-        muxPlaybackId: t.muxPlaybackId,
-      })) as unknown as PlayerTrack[] // only needed if your PlayerTrack type doesn’t yet include muxPlaybackId
-
-      if (tracks.length > 0) p.setQueue(tracks)
-    } catch (err) {
-      if (cancelled) return
-      p.setBlocked(err instanceof Error ? err.message : 'Failed to load album.')
-    }
-  }
-
-  void load()
-  return () => {
-    cancelled = true
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [])
-
-
-  // ---- Fake progress until we wire a real audio element ----
-  React.useEffect(() => {
-    if (p.status !== 'playing') return
-    const t = window.setInterval(() => p.tick(250), 250)
-    return () => window.clearInterval(t)
-  }, [p.status, p])
-
-  const albumArtist = albumInfo?.artist ?? p.current?.artist ?? '—'
-const albumTitle = albumInfo?.title ?? '—'
-const albumMeta = albumInfo?.year ? `Album · ${albumInfo.year}` : 'Album'
+  const albumArtist = props.album?.artist ?? p.current?.artist ?? '—'
+const albumTitle = props.album?.title ?? '—'
+const albumMeta = props.album?.year ? `Album · ${props.album.year}` : 'Album'
 const albumDesc =
-  albumInfo?.description ??
-  'This is placeholder copy. Soon: pull album description from Sanity and clamp to 2–3 lines.'
+  props.album?.description ??
+  'This is placeholder copy. Soon: pull album description from Sanity.'
+
 
 
   const cur = p.current
-  const dur = cur?.durationMs ?? 0
-  const pos = dur > 0 ? clamp(p.positionMs, 0, dur) : 0
+  const durMs = cur?.durationMs ?? 0
+  const posMs = durMs > 0 ? clamp(p.positionMs, 0, durMs) : 0
+
 
   const playing = p.status === 'playing'
   const canPlay = Boolean(cur ?? p.queue[0])
 
-  const onTogglePlay = () => {
-    if (playing) p.pause()
-    else p.play()
-  }
+  const first = p.queue[0]
+const onTogglePlay = () => {
+  if (playing) p.pause()
+  else p.play(p.current ?? first)
+}
+
 
   return (
     <div
@@ -287,9 +231,9 @@ const albumDesc =
             aria-label="Seek"
             type="range"
             min={0}
-            max={Math.max(1, dur)}
-            value={Math.min(Math.max(0, pos), Math.max(1, dur))}
-            onChange={(e) => p.seek(Number(e.target.value))}
+            max={Math.max(1, durMs)}
+            value={Math.min(Math.max(0, posMs), Math.max(1, durMs))}
+            onChange={(e) => p.seek(Number(e.target.value))} // ms
             style={{
               width: '100%',
               height: 18,
@@ -300,8 +244,8 @@ const albumDesc =
             }}
           />
           <div style={{display: 'flex', justifyContent: 'space-between', fontSize: 12, opacity: 0.65, marginTop: 6}}>
-            <span>{fmtTime(pos)}</span>
-            <span>{fmtTime(dur)}</span>
+            <span>{fmtTime(posMs)}</span>
+            <span>{fmtTime(durMs)}</span>
           </div>
         </div>
 
@@ -351,7 +295,12 @@ const albumDesc =
               <button
                 key={t.id}
                 type="button"
-                onClick={() => p.play(t)}
+                onClick={() => {
+                  if (!isCur) p.play(t)
+                  else if (playing) p.pause()
+                  else p.play(t)
+                }}
+
                 style={{
                   width: '100%',
                   display: 'grid',
@@ -383,7 +332,7 @@ const albumDesc =
                   </div>
                   <div style={{fontSize: 12, opacity: 0.6}}>
                     {/* Placeholder “plays” to mimic reference; replace with real data or remove */}
-                    {isCur ? (playing ? 'Now playing' : 'Selected') : '—'}
+                    {isCur ? (playing ? 'Now playing' : 'Selected') : ''}
                   </div>
                 </div>
 

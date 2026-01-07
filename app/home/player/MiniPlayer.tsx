@@ -262,7 +262,7 @@ React.useLayoutEffect(() => {
         }}
       >
         <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
-          <IconBtn label="Previous" onClick={() => {}}>
+          <IconBtn label="Previous" onClick={() => p.prev()} disabled={!p.current}>
             <PrevIcon />
           </IconBtn>
 
@@ -273,7 +273,7 @@ React.useLayoutEffect(() => {
             <PlayPauseIcon playing={p.status === 'playing'} />
           </IconBtn>
 
-          <IconBtn label="Next" onClick={() => {}}>
+          <IconBtn label="Next" onClick={() => p.next()} disabled={!p.current}>
             <NextIcon />
           </IconBtn>
         </div>

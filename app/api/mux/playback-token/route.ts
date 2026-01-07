@@ -154,6 +154,7 @@ export async function POST(req: Request) {
     if (tier !== 'none') {
       const {token, expiresAt} = await signPlaybackToken(playbackId)
 
+      try {
       await logAccessDecision({
         memberId,
         allowed: true,
@@ -165,6 +166,9 @@ export async function POST(req: Request) {
         source: EVENT_SOURCES.SERVER,
         correlationId,
       })
+      } catch (e) {
+  console.error('logAccessDecision failed', e)
+}
 
       return NextResponse.json({ok: true, token, expiresAt} satisfies TokenOk)
     }
@@ -217,6 +221,7 @@ export async function POST(req: Request) {
 
   const {token, expiresAt} = await signPlaybackToken(playbackId)
 
+  try {
   await logMemberEvent({
     memberId: null,
     eventType: 'access_allowed',
@@ -230,6 +235,9 @@ export async function POST(req: Request) {
       reason: `anon_meter_ok:${used + 1}/${ANON_FREE_TRACKS_PER_DAY}`,
     },
   })
+  } catch (e) {
+  console.error('logMemberEvent failed', e)
+}
 
   const res = NextResponse.json({ok: true, token, expiresAt} satisfies TokenOk)
 
