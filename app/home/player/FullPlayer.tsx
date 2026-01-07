@@ -2,6 +2,7 @@
 
 import React from 'react'
 import {usePlayer, PlayerTrack} from './PlayerState'
+import MuxUploader from './MuxUploader'
 
 function fmtTime(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000))
@@ -195,6 +196,16 @@ export default function FullPlayer() {
         <div style={{fontSize: 12, opacity: 0.7}}>{albumMeta}</div>
         <div style={{fontSize: 12, opacity: 0.7}}>{albumSub}</div>
 
+          <MuxUploader
+  onReady={({playbackId}) => {
+    p.play({
+      id: `mux_${playbackId}`,
+      title: 'Uploaded track',
+      muxPlaybackId: playbackId,
+    })
+  }}
+/>
+        
         <div style={{maxWidth: 540, fontSize: 12, opacity: 0.62, lineHeight: 1.45}}>
           {albumDesc}
         </div>

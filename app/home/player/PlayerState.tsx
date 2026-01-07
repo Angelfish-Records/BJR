@@ -7,9 +7,7 @@ export type PlayerTrack = {
   title?: string
   artist?: string
   durationMs?: number
-
-  /** Audio source URL (temporary placeholder; later: Mux/HLS) */
-  src?: string
+  muxPlaybackId?: string
 }
 
 type PlayerStatus = 'idle' | 'playing' | 'paused' | 'blocked'

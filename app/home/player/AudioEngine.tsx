@@ -3,40 +3,82 @@
 import React from 'react'
 import {usePlayer} from './PlayerState'
 
+type TokenResponse =
+  | {ok: true; token: string; expiresAt: string}
+  | {ok: false; blocked: true; action: string; reason: string}
+
 export default function AudioEngine() {
   const p = usePlayer()
   const audioRef = React.useRef<HTMLAudioElement | null>(null)
+  const tokenAbortRef = React.useRef<AbortController | null>(null)
 
-  // Keep volume/mute in sync
+  /* ---------------- Volume / mute sync ---------------- */
+
   React.useEffect(() => {
     const a = audioRef.current
     if (!a) return
+
     a.volume = Math.max(0, Math.min(1, p.volume))
     a.muted = p.muted
   }, [p.volume, p.muted])
 
-  // When current track changes, set src (placeholder for now) and optionally autoplay.
+  /* ---------------- Track change -> fetch token + set src ---------------- */
+
   React.useEffect(() => {
     const a = audioRef.current
     if (!a) return
 
-   const nextSrc = p.current?.src
-if (!nextSrc) return
+    const playbackId = p.current?.muxPlaybackId
+    if (!playbackId) return
 
-    if (a.src !== nextSrc) {
-      a.src = nextSrc
-      a.load()
+    // Cancel any in-flight token request
+    tokenAbortRef.current?.abort()
+    const ac = new AbortController()
+    tokenAbortRef.current = ac
+
+    const load = async () => {
+      try {
+        const res = await fetch('/api/mux/playback-token', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({playbackId}),
+          signal: ac.signal,
+        })
+
+        const data = (await res.json()) as TokenResponse
+        if (ac.signal.aborted) return
+
+        if (!data.ok) {
+          p.setBlocked(data.reason)
+          return
+        }
+
+        const nextSrc = `https://stream.mux.com/${playbackId}.m3u8?token=${data.token}`
+
+        if (a.src !== nextSrc) {
+          a.src = nextSrc
+          a.load()
+        }
+
+        if (p.status === 'playing') {
+          await a.play()
+        }
+      } catch (err) {
+        if (ac.signal.aborted) return
+        p.setBlocked(err instanceof Error ? err.message : 'Playback blocked.')
+      }
     }
 
-    if (p.status === 'playing') {
-      void a.play().catch((err) => {
-        p.setBlocked(err instanceof Error ? err.message : 'Playback blocked.')
-      })
+    void load()
+
+    return () => {
+      ac.abort()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.current?.id])
 
-  // Drive play/pause from state
+  /* ---------------- Drive play / pause from state ---------------- */
+
   React.useEffect(() => {
     const a = audioRef.current
     if (!a) return
@@ -51,7 +93,8 @@ if (!nextSrc) return
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.status])
 
-  // Report time + duration back to state
+  /* ---------------- Report time / duration back to state ---------------- */
+
   React.useEffect(() => {
     const a = audioRef.current
     if (!a) return
@@ -63,7 +106,8 @@ if (!nextSrc) return
     }
     const onEnded = () => p.next()
     const onPlay = () => p.setStatusExternal('playing')
-    const onPause = () => p.setStatusExternal(p.status === 'idle' ? 'idle' : 'paused')
+    const onPause = () =>
+      p.setStatusExternal(p.status === 'idle' ? 'idle' : 'paused')
 
     a.addEventListener('timeupdate', onTime)
     a.addEventListener('durationchange', onDur)
@@ -80,13 +124,17 @@ if (!nextSrc) return
     }
   }, [p])
 
-  // Seeking from UI -> audio element
+  /* ---------------- Seeking from UI ---------------- */
+
   React.useEffect(() => {
     const a = audioRef.current
     if (!a) return
+
     const desired = p.positionMs / 1000
-    // Avoid fighting timeupdate: only set if meaningful delta.
-    if (Number.isFinite(desired) && Math.abs(a.currentTime - desired) > 0.25) {
+    if (
+      Number.isFinite(desired) &&
+      Math.abs(a.currentTime - desired) > 0.25
+    ) {
       a.currentTime = desired
     }
   }, [p.positionMs])
