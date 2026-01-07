@@ -343,7 +343,12 @@ export default async function Home(props: {
   <div className="shadowHomeGrid" style={{minHeight: 0}}>
             {/* LEFT: portal */}
             <div className="shadowHomeMain" style={{display: 'grid', gap: 18}}>
-  <PortalArea portalPanel={portalPanel} album={albumData.album} tracks={albumData.tracks} />
+  <PortalArea
+  portalPanel={portalPanel}
+  album={albumData.album}
+  tracks={albumData.tracks}
+/>
+
 </div>
 
 

@@ -267,11 +267,20 @@ React.useLayoutEffect(() => {
           </IconBtn>
 
           <IconBtn
-            label={p.status === 'playing' ? 'Pause' : 'Play'}
-            onClick={() => (p.status === 'playing' ? p.pause() : p.play())}
-          >
-            <PlayPauseIcon playing={p.status === 'playing'} />
-          </IconBtn>
+  label={p.status === 'playing' ? 'Pause' : 'Play'}
+  onClick={() => {
+    if (p.status === 'playing') {
+      window.dispatchEvent(new Event('af:pause-intent'))
+      p.pause()
+    } else {
+      window.dispatchEvent(new Event('af:play-intent'))
+      p.play(p.current ?? p.queue[0])
+    }
+  }}
+>
+  <PlayPauseIcon playing={p.status === 'playing'} />
+</IconBtn>
+
 
           <IconBtn label="Next" onClick={() => p.next()} disabled={!p.current}>
             <NextIcon />

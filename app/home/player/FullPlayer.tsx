@@ -143,11 +143,20 @@ const albumDesc =
   const playing = p.status === 'playing'
   const canPlay = Boolean(cur ?? p.queue[0])
 
-  const first = p.queue[0]
-const onTogglePlay = () => {
-  if (playing) p.pause()
-  else p.play(p.current ?? first)
-}
+    const first = p.queue[0]
+
+  const onTogglePlay = () => {
+    if (playing) {
+      window.dispatchEvent(new Event('af:pause-intent'))
+      p.pause()
+      return
+    }
+
+    // Ensure the browser sees a real user-gesture play attempt.
+    window.dispatchEvent(new Event('af:play-intent'))
+    p.play(p.current ?? first)
+  }
+
 
 
   return (

@@ -217,5 +217,41 @@ export default function AudioEngine() {
     }
   }, [])
 
+    /* ---------------- User-gesture play/pause intent ---------------- */
+
+  const pRef = React.useRef(p)
+React.useEffect(() => { pRef.current = p }, [p])
+  
+    React.useEffect(() => {
+    const a = audioRef.current
+    if (!a) return
+
+    const onPlayIntent = () => {
+      // This runs synchronously from the click handler call stack.
+      void a.play().catch((err) => {
+        // Don’t instantly hard-block on transient "not ready yet" cases.
+        const msg =
+          err instanceof Error ? err.message : 'Playback blocked.'
+        p.setBlocked(msg)
+      })
+    }
+
+    const onPauseIntent = () => {
+      a.pause()
+    }
+
+    window.addEventListener('af:play-intent', onPlayIntent)
+    window.addEventListener('af:pause-intent', onPauseIntent)
+
+    return () => {
+      window.removeEventListener('af:play-intent', onPlayIntent)
+      window.removeEventListener('af:pause-intent', onPauseIntent)
+    }
+  }, [p])
+
+
   return <audio ref={audioRef} preload="metadata" playsInline style={{display: 'none'}} />
+
 }
+
+
