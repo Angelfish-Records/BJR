@@ -194,7 +194,7 @@ const albumDesc =
 
   const cur = p.current
   const dur = cur?.durationMs ?? 0
-  const pos = clamp(p.positionMs, 0, dur > 0 ? dur : p.positionMs)
+  const pos = dur > 0 ? clamp(p.positionMs, 0, dur) : 0
 
   const playing = p.status === 'playing'
   const canPlay = Boolean(cur ?? p.queue[0])

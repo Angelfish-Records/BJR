@@ -61,10 +61,10 @@ async function countAnonDistinctPlaysToday(params: {anonId: string}): Promise<nu
 
 function muxClient(): Mux {
   const tokenId = process.env.MUX_SIGNING_KEY_ID
-  const tokenSecret = process.env.MUX_SIGNING_PRIVATE_KEY
+  const tokenSecret = process.env.MUX_SIGNING_KEY_SECRET
 
   if (!tokenId || !tokenSecret) {
-    throw new Error('Missing Mux signing env vars: MUX_SIGNING_KEY_ID and MUX_SIGNING_PRIVATE_KEY.')
+    throw new Error('Missing Mux signing env vars: MUX_SIGNING_KEY_ID and MUX_SIGNING_KEY_SECRET.')
   }
 
   return new Mux({tokenId, tokenSecret})
