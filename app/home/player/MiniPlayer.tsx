@@ -353,50 +353,54 @@ React.useLayoutEffect(() => {
 
           <style>{`
             .volVRange{
-              /* make it vertical without rotation */
-              width: 18px;
-              height: 140px;
-              margin: 0;
-              padding: 0;
-              background: transparent;
+  width: 24px;        /* widened so track can be centered */
+  height: 140px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
 
-              /* Firefox */
-              writing-mode: bt-lr;
+  /* Firefox */
+  writing-mode: bt-lr;
 
-              /* WebKit (Chrome/Safari) */
-              -webkit-appearance: slider-vertical;
-              appearance: slider-vertical;
-            }
+  /* WebKit */
+  -webkit-appearance: slider-vertical;
+  appearance: slider-vertical;
+}
 
-            /* Track / thumb */
-            .volVRange::-webkit-slider-runnable-track {
-              width: 6px;
-              border-radius: 999px;
-              background: rgba(255,255,255,0.22);
-            }
-            .volVRange::-webkit-slider-thumb {
-              -webkit-appearance: none;
-              appearance: none;
-              width: 16px;
-              height: 16px;
-              border-radius: 999px;
-              background: color-mix(in srgb, var(--accent) 75%, white 10%);
-              box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
-            }
+/* ---------- WebKit ---------- */
+.volVRange::-webkit-slider-runnable-track{
+  width: 6px;
+  margin: 0 auto;     /* critical for centering */
+  border-radius: 999px;
+  background: rgba(255,255,255,0.22);
+}
 
-            .volVRange::-moz-range-track {
-              width: 6px;
-              border-radius: 999px;
-              background: rgba(255,255,255,0.22);
-            }
-            .volVRange::-moz-range-thumb {
-              width: 16px;
-              height: 16px;
-              border: 0;
-              border-radius: 999px;
-              background: color-mix(in srgb, var(--accent) 75%, white 10%);
-              box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
-            }
+.volVRange::-webkit-slider-thumb{
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 75%, white 10%);
+  box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
+}
+
+/* ---------- Firefox ---------- */
+.volVRange::-moz-range-track{
+  width: 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.22);
+}
+
+.volVRange::-moz-range-thumb{
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 75%, white 10%);
+  box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
+}
+
           `}</style>
         </>,
         document.body
