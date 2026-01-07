@@ -135,7 +135,7 @@ React.useEffect(() => {
   async function load() {
     try {
       // IMPORTANT: set this to your test album slug in Sanity
-      const slug = 'test-album' // <- CHANGE ME
+      const slug = 'consolers' // <- CHANGE ME
 
       const res = await fetch(`/api/albums?slug=${encodeURIComponent(slug)}`, {cache: 'no-store'})
       const data = (await res.json()) as {
