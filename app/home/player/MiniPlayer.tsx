@@ -109,13 +109,14 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
   const {onExpand} = props
   const p = usePlayer()
 
-  const [posSec, setPosSec] = React.useState(0)
   const durSec = Math.max(1, Math.round((p.current?.durationMs ?? 0) / 1000))
+  const posSec = Math.round((p.positionMs ?? 0) / 1000)
   const safePos = clamp(posSec, 0, durSec)
 
+
   const [volOpen, setVolOpen] = React.useState(false)
-  const [vol, setVol] = React.useState(0.85)
-  const muted = vol <= 0.001
+  const vol = p.volume
+  const muted = p.muted || p.volume <= 0.001
   const volBtnRef = React.useRef<HTMLButtonElement | null>(null)
 const [volAnchor, setVolAnchor] = React.useState<{x: number; y: number} | null>(null)
 
@@ -168,7 +169,7 @@ React.useLayoutEffect(() => {
           min={0}
           max={durSec}
           value={safePos}
-          onChange={(e) => setPosSec(Number(e.target.value))}
+          onChange={(e) => p.seek(Number(e.target.value) * 1000)}
           style={{
             width: '100%',
             height: 18,
@@ -348,7 +349,7 @@ React.useLayoutEffect(() => {
     max={1}
     step={0.01}
     value={vol}
-    onChange={(e) => setVol(Number(e.target.value))}
+    onChange={(e) => p.setVolume(Number(e.target.value))}
   />
 </div>
 

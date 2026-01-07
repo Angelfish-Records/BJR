@@ -7,6 +7,9 @@ export type PlayerTrack = {
   title?: string
   artist?: string
   durationMs?: number
+
+  /** Audio source URL (temporary placeholder; later: Mux/HLS) */
+  src?: string
 }
 
 type PlayerStatus = 'idle' | 'playing' | 'paused' | 'blocked'
@@ -28,6 +31,10 @@ export type PlayerState = {
 type PlayerActions = {
   play: (track?: PlayerTrack) => void
   pause: () => void
+  setPositionMs: (ms: number) => void
+  setDurationMs: (ms: number) => void
+  setStatusExternal: (s: PlayerStatus) => void
+
 
   setQueue: (tracks: PlayerTrack[]) => void
   enqueue: (track: PlayerTrack) => void
@@ -91,6 +98,20 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
       pause: () =>
         setState((s) => ({ ...s, status: s.status === 'playing' ? 'paused' : s.status })),
 
+            setPositionMs: (ms: number) =>
+        setState((s) => ({...s, positionMs: Math.max(0, ms)})),
+
+      setDurationMs: (ms: number) =>
+        setState((s) => {
+          if (!s.current) return s
+          if (s.current.durationMs === ms) return s
+          return {...s, current: {...s.current, durationMs: ms}}
+        }),
+
+      setStatusExternal: (st: PlayerStatus) =>
+        setState((s) => (s.status === st ? s : {...s, status: st})),
+
+      
       setQueue: (tracks: PlayerTrack[]) =>
         setState((s) => ({
           ...s,
