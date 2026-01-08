@@ -244,7 +244,6 @@ const dock = (
       bottom: 0,
       zIndex: 9999,
 
-      // one clean geometry: dock height INCLUDES safe area (no padding-bottom gutter)
       height: `calc(${DOCK_H}px + ${SAFE_INSET})`,
 
       paddingTop: 0,
@@ -255,14 +254,21 @@ const dock = (
       backdropFilter: 'blur(10px)',
       WebkitBackdropFilter: 'blur(10px)',
 
-      // clip to the dock box (which now includes safe inset)
       overflow: 'hidden',
     }}
   >
     {/* One wrapper that fills the full dock height (including safe inset) */}
-    <div style={{position: 'relative', width: '100%', height: '100%'}}>
-      {/* Flush-left artwork, fully contained below the top border, FLUSH to viewport bottom */}
+    <div
+      data-af-band
+      style={{
+        position: 'relative',
+        width: '100%',
+        height: '100%',
+      }}
+    >
+      {/* Flush-left artwork */}
       <div
+        data-af-artwork
         aria-hidden="true"
         style={{
           position: 'absolute',
@@ -270,15 +276,26 @@ const dock = (
           top: TOP_BORDER,
           bottom: 0,
           width: ART_W,
-          background: artworkUrl ? `url(${artworkUrl}) center/cover no-repeat` : 'rgba(255,255,255,0.06)',
+          background: artworkUrl
+            ? `url(${artworkUrl}) center/cover no-repeat`
+            : 'rgba(255,255,255,0.06)',
           borderRadius: 0,
           borderRight: '1px solid rgba(255,255,255,0.10)',
           zIndex: 0,
         }}
       />
 
-      {/* TOP EDGE progress bar (hit area is 18px, track is 1px at the very top) */}
-      <div style={{position: 'absolute', left: 0, right: 0, top: 0, zIndex: 2}}>
+      {/* TOP EDGE progress bar */}
+      <div
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: 0,
+          zIndex: 2,
+        }}
+      >
+
         <input
           aria-label="Seek"
           type="range"
