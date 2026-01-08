@@ -234,6 +234,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
 
   const DOCK_H = 80
 const ART_W = DOCK_H
+const TOP_BORDER = 1
 
 const SAFE_INSET = 'env(safe-area-inset-bottom)'
 
@@ -269,7 +270,7 @@ const dock = (
     style={{
       position: 'absolute',
       left: 0,
-      top: 0,
+      top: TOP_BORDER,
       bottom: 0,
       width: ART_W,
       background: artworkUrl
@@ -277,11 +278,12 @@ const dock = (
         : 'rgba(255,255,255,0.06)',
       borderRadius: 0, // square corners
       borderRight: '1px solid rgba(255,255,255,0.10)',
+      zIndex: 0,
     }}
   />
 
         {/* TOP EDGE progress bar */}
-        <div style={{position: 'absolute', left: 0, right: 0, top: 0}}>
+        <div style={{position: 'absolute', left: 0, right: 0, top: 0, zIndex: 2}}>
           <input
             aria-label="Seek"
             type="range"
