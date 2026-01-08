@@ -99,12 +99,35 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
       ...state,
 
       play: (track?: PlayerTrack) => {
-        setState((s) => {
-          const nextTrack = track ?? s.current ?? s.queue[0]
-          if (!nextTrack) return { ...s, status: 'idle', current: undefined, positionMs: 0 }
-          return { ...s, current: nextTrack, status: 'loading', lastError: undefined, positionMs: 0 }
-        })
-      },
+  setState((s) => {
+    const nextTrack = track ?? s.current ?? s.queue[0]
+    if (!nextTrack) {
+      return { ...s, status: 'idle', current: undefined, positionMs: 0 }
+    }
+
+    const sameTrack = Boolean(s.current && s.current.id === nextTrack.id)
+
+    // ✅ Resume: same track + paused -> keep position
+    if (sameTrack && s.status === 'paused') {
+      return { ...s, status: 'playing', lastError: undefined }
+    }
+
+    // ✅ If we're already playing/loading the same track, don't clobber position
+    if (sameTrack && (s.status === 'playing' || s.status === 'loading')) {
+      return { ...s, lastError: undefined }
+    }
+
+    // ✅ New track (or "play this track fresh"): reset position
+    return {
+      ...s,
+      current: nextTrack,
+      status: 'loading',
+      lastError: undefined,
+      positionMs: sameTrack ? s.positionMs : 0,
+    }
+  })
+},
+
 
       pause: () =>
         setState((s) => ({ ...s, status: s.status === 'playing' ? 'paused' : s.status })),
