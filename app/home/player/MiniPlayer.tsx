@@ -197,7 +197,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
     }
   }, [volOpen])
 
-  /* ---------------- Debounce-y polish ---------------- */
+  /* ---------------- Small anti-doubletap locks ---------------- */
 
   const [transportLock, setTransportLock] = React.useState(false)
   const lockFor = (ms: number) => {
@@ -228,410 +228,463 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
 
   /* ---------------- Layout constants ---------------- */
 
-const DOCK_H = 80
-const ART_W = DOCK_H
-const TOP_BORDER = 1
-const SEEK_H = 18
-const SAFE_INSET = 'env(safe-area-inset-bottom, 0px)'
+  const DOCK_H = 80
+  const ART_W = DOCK_H
+  const TOP_BORDER = 1
+  const SEEK_H = 18
+  const SAFE_INSET = 'env(safe-area-inset-bottom, 0px)'
 
-const dock = (
-  <div
-    data-af-miniplayer
-    style={{
-      position: 'fixed',
-      left: 0,
-      right: 0,
-      bottom: 0,
-      zIndex: 9999,
+  // center the 18px seek hitbox on the 1px rail at y=0
+  const SEEK_TOP = -((SEEK_H - TOP_BORDER) / 2)
 
-      height: `calc(${DOCK_H}px + ${SAFE_INSET})`,
+  // visual progress is NOT the range track; it’s our own 1px fill bar
+  const progressPct = durKnown ? (sliderValue / durSec) * 100 : 0
 
-      paddingTop: 0,
-      paddingRight: 12,
-      paddingLeft: 0,
-
-      background: 'rgba(0,0,0,0.55)',
-      backdropFilter: 'blur(10px)',
-      WebkitBackdropFilter: 'blur(10px)',
-
-      overflow: 'hidden',
-    }}
-  >
-    {/* One wrapper that fills the full dock height (including safe inset) */}
+  const dock = (
     <div
-      data-af-band
+      data-af-miniplayer
       style={{
-        position: 'relative',
-        width: '100%',
-        height: '100%',
+        position: 'fixed',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 9999,
+
+        height: `calc(${DOCK_H}px + ${SAFE_INSET})`,
+
+        paddingTop: 0,
+        paddingRight: 12,
+        paddingLeft: 0,
+
+        background: 'rgba(0,0,0,0.55)',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+
+        // KEY: let the thumb poke above the dock
+        overflow: 'visible',
       }}
     >
-      {/* Flush-left artwork */}
       <div
-        data-af-artwork
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: TOP_BORDER,
-          bottom: 0,
-          width: ART_W,
-          background: artworkUrl
-            ? `url(${artworkUrl}) center/cover no-repeat`
-            : 'rgba(255,255,255,0.06)',
-          borderRadius: 0,
-          borderRight: '1px solid rgba(255,255,255,0.10)',
-          zIndex: 0,
-        }}
-      />
-
-      {/* TOP EDGE progress bar */}
-      <div
-        style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          top: 0,
-          zIndex: 2,
-        }}
-      >
-
-        <input
-          aria-label="Seek"
-          type="range"
-          min={0}
-          max={durSec}
-          disabled={!durKnown}
-          value={sliderValue}
-          onPointerDown={() => setScrubbing(true)}
-          onPointerUp={() => {
-            setScrubbing(false)
-            if (durKnown) p.seek(scrubSec * 1000)
-          }}
-          onPointerCancel={() => setScrubbing(false)}
-          onChange={(e) => setScrubSec(Number(e.target.value))}
-          style={{
-            width: '100%',
-            height: SEEK_H,
-            margin: 0,
-            background: 'transparent',
-            WebkitAppearance: 'none',
-            appearance: 'none',
-            cursor: durKnown ? 'pointer' : 'default',
-            opacity: durKnown ? 1 : 0.5,
-          }}
-        />
-      </div>
-
-      <style>{`
-        input[aria-label="Seek"]::-webkit-slider-runnable-track {
-          height: ${TOP_BORDER}px;
-          border-radius: 0px;
-          background: rgba(255,255,255,0.18);
-        }
-        input[aria-label="Seek"]::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 10px;
-          height: 10px;
-          border-radius: 999px;
-          margin-top: -3px;
-          background-color: rgba(245,245,245,0.95);
-          border: 0;
-          outline: none;
-          box-shadow:
-            0 0 0 1px rgba(0,0,0,0.35),
-            0 4px 10px rgba(0,0,0,0.25);
-        }
-        input[aria-label="Seek"]::-moz-range-track {
-          height: ${TOP_BORDER}px;
-          border-radius: 0px;
-          background: rgba(255,255,255,0.18);
-        }
-        input[aria-label="Seek"]::-moz-range-thumb {
-          width: 10px;
-          height: 10px;
-          border: 0;
-          border-radius: 999px;
-          background-color: rgba(245,245,245,0.95);
-          box-shadow:
-            0 0 0 1px rgba(0,0,0,0.35),
-            0 4px 10px rgba(0,0,0,0.25);
-        }
-      `}</style>
-
-      {/* Controls / text (lifted below seek hit area; safe-area lift happens HERE, not on dock) */}
-      <div
+        data-af-band
         style={{
           position: 'relative',
-          zIndex: 1,
-          display: 'grid',
-          gridTemplateColumns: 'auto minmax(0, 1fr) auto',
-          alignItems: 'center',
-          gap: 12,
-
-          // ensures the 18px seek hit-zone doesn't overlap controls
-          paddingTop: SEEK_H,
-          paddingBottom: `calc(12px + ${SAFE_INSET})`,
-
-          paddingLeft: ART_W + 12,
-          paddingRight: 0,
+          width: '100%',
+          height: '100%',
         }}
       >
-        <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
-          <IconBtn
-            label="Previous"
-            onClick={() => {
-              lockFor(350)
-              p.prev()
-            }}
-            disabled={!p.current || transportLock}
-          >
-            <PrevIcon />
-          </IconBtn>
+        {/* 1px rail at the top edge */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: 0,
+            height: TOP_BORDER,
+            background: 'rgba(255,255,255,0.18)',
+            zIndex: 3,
+          }}
+        />
+        {/* 1px progress fill */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            height: TOP_BORDER,
+            width: `${progressPct}%`,
+            background: 'rgba(255,255,255,0.55)',
+            zIndex: 4,
+            pointerEvents: 'none',
+          }}
+        />
 
-          <IconBtn
-            label={playingish ? 'Pause' : 'Play'}
-            onClick={() => {
-              lockPlayFor(120)
-
-              if (playingish) {
-                p.setIntent('pause')
-                window.dispatchEvent(new Event('af:pause-intent'))
-                p.pause()
-              } else {
-                const t = p.current ?? p.queue[0]
-                if (!t) return
-                p.setIntent('play')
-                p.play(t)
-                window.dispatchEvent(new Event('af:play-intent'))
-              }
+        {/* Invisible seek hitbox, centered on y=0, thumb is the only visible part */}
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: SEEK_TOP,
+            height: SEEK_H,
+            zIndex: 5,
+          }}
+        >
+          <input
+            aria-label="Seek"
+            type="range"
+            min={0}
+            max={durSec}
+            disabled={!durKnown}
+            value={sliderValue}
+            onPointerDown={() => setScrubbing(true)}
+            onPointerUp={() => {
+              setScrubbing(false)
+              if (durKnown) p.seek(scrubSec * 1000)
             }}
-            disabled={(!!(!p.current && p.queue.length === 0)) || playLock}
-          >
-            <PlayPauseIcon playing={playingish} />
-          </IconBtn>
-
-          <IconBtn
-            label="Next"
-            onClick={() => {
-              lockFor(350)
-              p.next()
+            onPointerCancel={() => setScrubbing(false)}
+            onChange={(e) => setScrubSec(Number(e.target.value))}
+            style={{
+              width: '100%',
+              height: SEEK_H,
+              margin: 0,
+              padding: 0,
+              background: 'transparent',
+              WebkitAppearance: 'none',
+              appearance: 'none',
+              cursor: durKnown ? 'pointer' : 'default',
+              opacity: durKnown ? 1 : 0.5,
             }}
-            disabled={!p.current || transportLock}
-          >
-            <NextIcon />
-          </IconBtn>
+          />
         </div>
 
-        <div style={{minWidth: 0}}>
+        {/* Clip band: everything below the 1px rail is clipped so artwork can never be intersected */}
+        <div
+          data-af-clipband
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: TOP_BORDER,
+            bottom: 0,
+            overflow: 'hidden',
+            zIndex: 1,
+          }}
+        >
+          {/* Artwork starts BELOW the rail (inside the clip band) */}
+          <div
+            data-af-artwork
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: ART_W,
+              background: artworkUrl
+                ? `url(${artworkUrl}) center/cover no-repeat`
+                : 'rgba(255,255,255,0.06)',
+              borderRadius: 0,
+              borderRight: '1px solid rgba(255,255,255,0.10)',
+              zIndex: 0,
+            }}
+          />
+
+          {/* Controls / text (no longer needs paddingTop: SEEK_H because seek is outside the clip band) */}
           <div
             style={{
-              fontSize: 13,
-              opacity: 0.92,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              lineHeight: 1.25,
-              transition: 'opacity 160ms ease',
+              position: 'relative',
+              zIndex: 1,
+              display: 'grid',
+              gridTemplateColumns: 'auto minmax(0, 1fr) auto',
+              alignItems: 'center',
+              gap: 12,
+
+              paddingTop: 12,
+              paddingBottom: `calc(12px + ${SAFE_INSET})`,
+
+              paddingLeft: ART_W + 12,
+              paddingRight: 0,
             }}
           >
-            {title}
-          </div>
-          <div
-            style={{
-              fontSize: 12,
-              opacity: 0.65,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            {statusLine}
-          </div>
-        </div>
+            <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
+              <IconBtn
+                label="Previous"
+                onClick={() => {
+                  lockFor(350)
+                  p.prev()
+                }}
+                disabled={!p.current || transportLock}
+              >
+                <PrevIcon />
+              </IconBtn>
 
-        <div style={{display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end'}}>
-          <div style={{display: 'grid', justifyItems: 'center', position: 'relative'}}>
-            <IconBtn ref={volBtnRef} label="Volume" onClick={() => setVolOpen((v) => !v)} title="Volume">
-              <VolumeIcon muted={muted} />
-            </IconBtn>
+              <IconBtn
+                label={playingish ? 'Pause' : 'Play'}
+                onClick={() => {
+                  lockPlayFor(120)
 
-            {volToast ? (
+                  if (playingish) {
+                    p.setIntent('pause')
+                    window.dispatchEvent(new Event('af:pause-intent'))
+                    p.pause()
+                  } else {
+                    const t = p.current ?? p.queue[0]
+                    if (!t) return
+                    p.setIntent('play')
+                    p.play(t)
+                    window.dispatchEvent(new Event('af:play-intent'))
+                  }
+                }}
+                disabled={(!!(!p.current && p.queue.length === 0)) || playLock}
+              >
+                <PlayPauseIcon playing={playingish} />
+              </IconBtn>
+
+              <IconBtn
+                label="Next"
+                onClick={() => {
+                  lockFor(350)
+                  p.next()
+                }}
+                disabled={!p.current || transportLock}
+              >
+                <NextIcon />
+              </IconBtn>
+            </div>
+
+            <div style={{minWidth: 0}}>
               <div
                 style={{
-                  position: 'absolute',
-                  top: -26,
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  fontSize: 11,
-                  padding: '4px 8px',
-                  borderRadius: 999,
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  background: 'rgba(0,0,0,0.45)',
-                  backdropFilter: 'blur(8px)',
-                  color: 'rgba(255,255,255,0.9)',
-                  boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
-                  pointerEvents: 'none',
+                  fontSize: 13,
+                  opacity: 0.92,
                   whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  lineHeight: 1.25,
+                  transition: 'opacity 160ms ease',
                 }}
               >
-                {volToast.pct}%
+                {title}
               </div>
-            ) : null}
+              <div
+                style={{
+                  fontSize: 12,
+                  opacity: 0.65,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {statusLine}
+              </div>
+            </div>
 
-            {volOpen && volAnchor
-              ? createPortal(
-                  <>
-                    <div
-                      style={{
-                        position: 'fixed',
-                        left: volAnchor.x,
-                        top: volAnchor.y,
-                        transform: 'translate(-50%, calc(-100% - 10px))',
-                        width: 56,
-                        height: 170,
-                        borderRadius: 14,
-                        border: '1px solid rgba(255,255,255,0.12)',
-                        background: 'rgba(0,0,0,0.55)',
-                        backdropFilter: 'blur(10px)',
-                        padding: 10,
-                        boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
-                        display: 'grid',
-                        placeItems: 'center',
-                        zIndex: 99999,
-                        overflow: 'visible',
-                      }}
-                    >
-                      <div className="volWrap">
-                        <input
-                          className="volRot"
-                          aria-label="Volume slider"
-                          type="range"
-                          min={0}
-                          max={1}
-                          step={0.01}
-                          value={vol}
-                          onChange={(e) => {
-                            const next = Number(e.target.value)
-                            p.setVolume(next)
-                            showVolToast(next)
+            <div style={{display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end'}}>
+              <div style={{display: 'grid', justifyItems: 'center', position: 'relative'}}>
+                <IconBtn ref={volBtnRef} label="Volume" onClick={() => setVolOpen((v) => !v)} title="Volume">
+                  <VolumeIcon muted={muted} />
+                </IconBtn>
+
+                {volToast ? (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: -26,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      fontSize: 11,
+                      padding: '4px 8px',
+                      borderRadius: 999,
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      background: 'rgba(0,0,0,0.45)',
+                      backdropFilter: 'blur(8px)',
+                      color: 'rgba(255,255,255,0.9)',
+                      boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
+                      pointerEvents: 'none',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {volToast.pct}%
+                  </div>
+                ) : null}
+
+                {volOpen && volAnchor
+                  ? createPortal(
+                      <>
+                        <div
+                          style={{
+                            position: 'fixed',
+                            left: volAnchor.x,
+                            top: volAnchor.y,
+                            transform: 'translate(-50%, calc(-100% - 10px))',
+                            width: 56,
+                            height: 170,
+                            borderRadius: 14,
+                            border: '1px solid rgba(255,255,255,0.12)',
+                            background: 'rgba(0,0,0,0.55)',
+                            backdropFilter: 'blur(10px)',
+                            padding: 10,
+                            boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
+                            display: 'grid',
+                            placeItems: 'center',
+                            zIndex: 99999,
+                            overflow: 'visible',
                           }}
-                        />
-                      </div>
-                    </div>
+                        >
+                          <div className="volWrap">
+                            <input
+                              className="volRot"
+                              aria-label="Volume slider"
+                              type="range"
+                              min={0}
+                              max={1}
+                              step={0.01}
+                              value={vol}
+                              onChange={(e) => {
+                                const next = Number(e.target.value)
+                                p.setVolume(next)
+                                showVolToast(next)
+                              }}
+                            />
+                          </div>
+                        </div>
 
-                    <style>{`
-                      .volWrap{
-                        width: 24px;
-                        height: 140px;
-                        position: relative;
-                        display: grid;
-                        place-items: center;
-                        overflow: visible;
-                      }
-                      .volRot{
-                        -webkit-appearance: none;
-                        appearance: none;
-                        width: 140px;
-                        height: 24px;
-                        margin: 0;
-                        padding: 0;
-                        background: transparent;
-                        position: absolute;
-                        left: 50%;
-                        top: 50%;
-                        transform: translate(-50%, -50%) rotate(-90deg);
-                        transform-origin: center;
-                        outline: none;
-                      }
-                      .volRot::-webkit-slider-runnable-track{
-                        height: 6px;
-                        border-radius: 999px;
-                        background: rgba(255,255,255,0.22);
-                      }
-                      .volRot::-webkit-slider-thumb{
-                        -webkit-appearance: none;
-                        appearance: none;
-                        width: 16px;
-                        height: 16px;
-                        border-radius: 999px;
-                        margin-top: -5px;
-                        background-color: rgba(245,245,245,0.95);
-                        border: 0;
-                        outline: none;
-                        box-shadow:
-                          0 0 0 1px rgba(0,0,0,0.35),
-                          0 4px 10px rgba(0,0,0,0.35);
-                      }
-                      .volRot::-moz-range-track{
-                        height: 6px;
-                        border-radius: 999px;
-                        background: rgba(255,255,255,0.22);
-                      }
-                      .volRot::-moz-range-thumb{
-                        width: 16px;
-                        height: 16px;
-                        border: 0;
-                        border-radius: 999px;
-                        background-color: rgba(245,245,245,0.95);
-                        box-shadow:
-                          0 0 0 1px rgba(0,0,0,0.35),
-                          0 4px 10px rgba(0,0,0,0.35);
-                      }
-                    `}</style>
-                  </>,
-                  document.body
-                )
-              : null}
+                        <style>{`
+                          .volWrap{
+                            width: 24px;
+                            height: 140px;
+                            position: relative;
+                            display: grid;
+                            place-items: center;
+                            overflow: visible;
+                          }
+                          .volRot{
+                            -webkit-appearance: none;
+                            appearance: none;
+                            width: 140px;
+                            height: 24px;
+                            margin: 0;
+                            padding: 0;
+                            background: transparent;
+                            position: absolute;
+                            left: 50%;
+                            top: 50%;
+                            transform: translate(-50%, -50%) rotate(-90deg);
+                            transform-origin: center;
+                            outline: none;
+                          }
+                          .volRot::-webkit-slider-runnable-track{
+                            height: 6px;
+                            border-radius: 999px;
+                            background: rgba(255,255,255,0.22);
+                          }
+                          .volRot::-webkit-slider-thumb{
+                            -webkit-appearance: none;
+                            appearance: none;
+                            width: 16px;
+                            height: 16px;
+                            border-radius: 999px;
+                            margin-top: -5px;
+                            background-color: rgba(245,245,245,0.95);
+                            border: 0;
+                            outline: none;
+                            box-shadow:
+                              0 0 0 1px rgba(0,0,0,0.35),
+                              0 4px 10px rgba(0,0,0,0.35);
+                          }
+                          .volRot::-moz-range-track{
+                            height: 6px;
+                            border-radius: 999px;
+                            background: rgba(255,255,255,0.22);
+                          }
+                          .volRot::-moz-range-thumb{
+                            width: 16px;
+                            height: 16px;
+                            border: 0;
+                            border-radius: 999px;
+                            background-color: rgba(245,245,245,0.95);
+                            box-shadow:
+                              0 0 0 1px rgba(0,0,0,0.35),
+                              0 4px 10px rgba(0,0,0,0.35);
+                          }
+                        `}</style>
+                      </>,
+                      document.body
+                    )
+                  : null}
+              </div>
+
+              {p.status === 'blocked' || p.lastError ? (
+                <IconBtn
+                  label="Retry"
+                  title="Retry"
+                  onClick={() => {
+                    p.setIntent('play')
+                    window.dispatchEvent(new Event('af:play-intent'))
+                    p.bumpReload()
+                  }}
+                >
+                  <RetryIcon />
+                </IconBtn>
+              ) : null}
+
+              {onExpand ? (
+                <IconBtn label="Open player" title="Open player" onClick={onExpand}>
+                  <MenuIcon />
+                </IconBtn>
+              ) : null}
+            </div>
           </div>
 
-          {p.status === 'blocked' || p.lastError ? (
-            <IconBtn
-              label="Retry"
-              title="Retry"
-              onClick={() => {
-                p.setIntent('play')
-                window.dispatchEvent(new Event('af:play-intent'))
-                p.bumpReload()
-              }}
-            >
-              <RetryIcon />
-            </IconBtn>
-          ) : null}
-
-          {onExpand ? (
-            <IconBtn label="Open player" title="Open player" onClick={onExpand}>
-              <MenuIcon />
-            </IconBtn>
-          ) : null}
+          <style>{`
+            @media (max-width: 520px) {
+              div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] {
+                grid-template-columns: 1fr auto;
+                grid-auto-rows: auto;
+                row-gap: 10px;
+              }
+              div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(2) {
+                grid-column: 1 / -1;
+                order: 3;
+              }
+              div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(1) {
+                order: 1;
+              }
+              div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(3) {
+                order: 2;
+              }
+            }
+          `}</style>
         </div>
+
+        {/* Seek styles: track fully transparent; thumb only visible */}
+        <style>{`
+          input[aria-label="Seek"]::-webkit-slider-runnable-track {
+            height: ${TOP_BORDER}px;
+            background: transparent;
+            border-radius: 0px;
+          }
+          input[aria-label="Seek"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            margin-top: -4.5px;
+            background-color: rgba(245,245,245,0.95);
+            border: 0;
+            outline: none;
+            box-shadow:
+              0 0 0 1px rgba(0,0,0,0.35),
+              0 4px 10px rgba(0,0,0,0.25);
+          }
+
+          input[aria-label="Seek"]::-moz-range-track {
+            height: ${TOP_BORDER}px;
+            background: transparent;
+            border-radius: 0px;
+          }
+          input[aria-label="Seek"]::-moz-range-progress {
+            height: ${TOP_BORDER}px;
+            background: transparent;
+          }
+          input[aria-label="Seek"]::-moz-range-thumb {
+            width: 10px;
+            height: 10px;
+            border: 0;
+            border-radius: 999px;
+            background-color: rgba(245,245,245,0.95);
+            box-shadow:
+              0 0 0 1px rgba(0,0,0,0.35),
+              0 4px 10px rgba(0,0,0,0.25);
+          }
+        `}</style>
       </div>
-
-      <style>{`
-        @media (max-width: 520px) {
-          div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] {
-            grid-template-columns: 1fr auto;
-            grid-auto-rows: auto;
-            row-gap: 10px;
-          }
-          div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(2) {
-            grid-column: 1 / -1;
-            order: 3;
-          }
-          div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(1) {
-            order: 1;
-          }
-          div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(3) {
-            order: 2;
-          }
-        }
-      `}</style>
     </div>
-  </div>
-)
+  )
 
-if (!mounted) return null
-return createPortal(dock, document.body)
-
+  if (!mounted) return null
+  return createPortal(dock, document.body)
 }
