@@ -258,7 +258,7 @@ const dock = (
     }}
   >
 
-      <div style={{position: 'relative', width: '100%', display: 'grid', gap: 10, minHeight: DOCK_H}}>
+      <div style={{position: 'relative', width: '100%', display: 'grid', gap: 10, height: DOCK_H}}>
   {/* Flush left artwork */}
   <div
     aria-hidden="true"
@@ -266,7 +266,7 @@ const dock = (
       position: 'absolute',
       left: 0,
       top: 0,
-      bottom: 0,
+      height: DOCK_H,
       width: ART_W,
       background: artworkUrl
         ? `url(${artworkUrl}) center/cover no-repeat`
@@ -359,19 +359,6 @@ const dock = (
 >
 
           <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
-  {artworkUrl ? (
-    <div
-      style={{
-        width: 36,
-        height: 36,
-        flex: '0 0 auto',
-        background: `url(${artworkUrl}) center / cover no-repeat`,
-        borderRadius: 4,          // hard-ish corners, not pill
-        boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
-      }}
-    />
-  ) : null}
-
   <IconBtn
     label="Previous"
     onClick={() => {
