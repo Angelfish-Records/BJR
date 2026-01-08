@@ -107,12 +107,7 @@ function MenuIcon() {
 function RetryIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M20 12a8 8 0 1 1-2.35-5.65"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
+      <path d="M20 12a8 8 0 1 1-2.35-5.65" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       <path d="M20 4v6h-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
@@ -143,7 +138,6 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
   const [scrubbing, setScrubbing] = React.useState(false)
   const [scrubSec, setScrubSec] = React.useState(0)
 
-  // Reset scrub state when track changes
   React.useEffect(() => {
     setScrubbing(false)
     setScrubSec(0)
@@ -232,51 +226,55 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
     return p.current?.artist ?? p.status
   })()
 
-const DOCK_H = 80
-const ART_W = DOCK_H
-const TOP_BORDER = 1
-const SAFE_INSET = 'env(safe-area-inset-bottom)'
+  /* ---------------- Layout constants ---------------- */
 
-const dock = (
-  <div
-    style={{
-      position: 'fixed',
-      left: 0,
-      right: 0,
-      bottom: 0,
-      zIndex: 9999,
+  const DOCK_H = 80
+  const ART_W = DOCK_H
+  const TOP_BORDER = 1
+  const SEEK_H = 18
+  const SAFE_INSET = 'env(safe-area-inset-bottom, 0px)'
 
-      // was: padding: '0 12px ...'
-      paddingTop: 0,
-      paddingRight: 12,
-      paddingBottom: 0,
-      paddingLeft: 0,
+  const dock = (
+    <div
+      style={{
+        position: 'fixed',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 9999,
 
-      // total height becomes DOCK_H + SAFE_PAD via spacer below
-       minHeight: `calc(${DOCK_H}px + ${SAFE_INSET})`,
+        // one clean geometry: fixed content height + safe-area padding
+        height: DOCK_H,
+        paddingBottom: SAFE_INSET,
 
-      background: 'rgba(0,0,0,0.55)',
-      backdropFilter: 'blur(10px)',
-      overflow: 'hidden',
-    }}
-  >
-    <div style={{position: 'relative', width: '100%', height: '100%'}}>
+        paddingTop: 0,
+        paddingRight: 12,
+        paddingLeft: 0,
+
+        background: 'rgba(0,0,0,0.55)',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+
+        // critical: allow safe-area padding without clipping the artwork inside the 80px band
+        overflow: 'visible',
+      }}
+    >
+      {/* Inner band: this is the 80px “real dock” that artwork must fill flush-bottom */}
       <div
         style={{
           position: 'relative',
-          width: '100%',
-          height: '100%', // important: fill dock INCLUDING safe inset
-          overflow: 'hidden',
+          height: DOCK_H,
+          overflow: 'hidden', // clip within the 80px band only
         }}
       >
-  {/* Flush left artwork */}
-  <div
-    aria-hidden="true"
-    style={{
+        {/* Flush-left artwork, fully contained below the top border */}
+        <div
+          aria-hidden="true"
+          style={{
             position: 'absolute',
             left: 0,
             top: TOP_BORDER,
-            bottom: `calc(0px - ${SAFE_INSET})`, // key line
+            bottom: 0,
             width: ART_W,
             background: artworkUrl
               ? `url(${artworkUrl}) center/cover no-repeat`
@@ -284,10 +282,10 @@ const dock = (
             borderRadius: 0,
             borderRight: '1px solid rgba(255,255,255,0.10)',
             zIndex: 0,
-    }}
-  />
+          }}
+        />
 
-        {/* TOP EDGE progress bar */}
+        {/* TOP EDGE progress bar (hit area is 18px, track is 1px at the very top) */}
         <div style={{position: 'absolute', left: 0, right: 0, top: 0, zIndex: 2}}>
           <input
             aria-label="Seek"
@@ -305,7 +303,7 @@ const dock = (
             onChange={(e) => setScrubSec(Number(e.target.value))}
             style={{
               width: '100%',
-              height: 18,
+              height: SEEK_H,
               margin: 0,
               background: 'transparent',
               WebkitAppearance: 'none',
@@ -318,10 +316,10 @@ const dock = (
 
         <style>{`
           input[aria-label="Seek"]::-webkit-slider-runnable-track {
-  height: 1px;
-  border-radius: 0px;
-  background: rgba(255,255,255,0.18);
-}
+            height: ${TOP_BORDER}px;
+            border-radius: 0px;
+            background: rgba(255,255,255,0.18);
+          }
           input[aria-label="Seek"]::-webkit-slider-thumb {
             -webkit-appearance: none;
             appearance: none;
@@ -337,10 +335,10 @@ const dock = (
               0 4px 10px rgba(0,0,0,0.25);
           }
           input[aria-label="Seek"]::-moz-range-track {
-  height: 1px;
-  border-radius: 0px;
-  background: rgba(255,255,255,0.18);
-}
+            height: ${TOP_BORDER}px;
+            border-radius: 0px;
+            background: rgba(255,255,255,0.18);
+          }
           input[aria-label="Seek"]::-moz-range-thumb {
             width: 10px;
             height: 10px;
@@ -353,37 +351,35 @@ const dock = (
           }
         `}</style>
 
+        {/* Controls / text (lifted below seek hit area) */}
         <div
-  style={{
-    display: 'grid',
-    gridTemplateColumns: 'auto minmax(0, 1fr) auto',
-    alignItems: 'center',
-    gap: 12,
+          style={{
+            position: 'relative',
+            zIndex: 1,
+            display: 'grid',
+            gridTemplateColumns: 'auto minmax(0, 1fr) auto',
+            alignItems: 'center',
+            gap: 12,
 
-    // more breathing room so thumb doesn’t “kiss” the controls
-    paddingTop: 18,
-    paddingBottom: `calc(12px + ${SAFE_INSET})`, // key line
+            // ensures the 18px seek hit-zone doesn't overlap controls
+            paddingTop: SEEK_H,
+            paddingBottom: 12,
 
-    // push everything right to make room for the flush artwork
-    paddingLeft: ART_W + 12,
-    paddingRight: 0,
-    position: 'relative',
-    zIndex: 1, // ensure controls sit above artwork
-  }}
->
-
+            paddingLeft: ART_W + 12,
+            paddingRight: 0,
+          }}
+        >
           <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
-  <IconBtn
-    label="Previous"
-    onClick={() => {
-      lockFor(350)
-      p.prev()
-    }}
-    disabled={!p.current || transportLock}
-  >
-    <PrevIcon />
-  </IconBtn>
-
+            <IconBtn
+              label="Previous"
+              onClick={() => {
+                lockFor(350)
+                p.prev()
+              }}
+              disabled={!p.current || transportLock}
+            >
+              <PrevIcon />
+            </IconBtn>
 
             <IconBtn
               label={playingish ? 'Pause' : 'Play'}
@@ -586,7 +582,6 @@ const dock = (
                 label="Retry"
                 title="Retry"
                 onClick={() => {
-                  // gesture + reload
                   p.setIntent('play')
                   window.dispatchEvent(new Event('af:play-intent'))
                   p.bumpReload()
@@ -625,7 +620,6 @@ const dock = (
         `}</style>
       </div>
     </div>
-  </div>
   )
 
   if (!mounted) return null

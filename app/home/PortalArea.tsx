@@ -105,21 +105,6 @@ export default function PortalArea(props: {
           activePanelId={activePanelId}
           syncToQueryParam
           onPanelChange={setActivePanelId}
-          dock={() => {
-            if (activePanelId === 'player') return null
-            return (
-              <PlayerController
-                album={album}
-                tracks={tracks}
-                albums={albums}
-                onSelectAlbum={onSelectAlbum}
-                isBrowsingAlbum={isBrowsingAlbum}
-                activePanelId={activePanelId}
-                playerPanelId="player"
-                openPlayerPanel={() => setActivePanelId('player')}
-              />
-            )
-          }}
         />
       </div>
     </>

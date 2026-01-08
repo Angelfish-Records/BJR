@@ -46,7 +46,6 @@ export default function PortalShell(props: Props) {
   const {
     panels,
     defaultPanelId,
-    dock,
     syncToQueryParam = true,
     onPanelChange,
     activePanelId: controlledActive,
@@ -112,11 +111,8 @@ export default function PortalShell(props: Props) {
     onPanelChange?.(active)
   }, [active, onPanelChange])
 
-  const dockNode = typeof dock === 'function' ? dock(active) : dock
-  const showDock = !!dockNode
-
-  // Gives content enough breathing room so it never hides under the fixed dock.
-  // Keep this comfortably larger than your MiniPlayer height.
+    // PortalShell no longer renders a fixed dock.
+  // MiniPlayer portals to <body> and owns the viewport-bottom UI.
   const DOCK_H = 84
 
   return (
@@ -127,9 +123,8 @@ export default function PortalShell(props: Props) {
         gap: 14,
         minWidth: 0,
         alignContent: 'start',
-        paddingBottom: showDock
-          ? `calc(${DOCK_H}px + env(safe-area-inset-bottom, 0px))`
-          : 0,
+        // always reserve space so page content doesn't sit under the MiniPlayer
+        paddingBottom: `calc(${DOCK_H}px + env(safe-area-inset-bottom, 0px))`,
       }}
     >
       {/* Rail + Content */}
@@ -213,31 +208,7 @@ export default function PortalShell(props: Props) {
           ))}
         </div>
       </div>
-
-      {/* Dock: TRUE viewport-bottom, edge-to-edge */}
-      {dockNode ? (
-        <div
-          style={{
-            position: 'fixed',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 9999,
-
-            borderTop: '1px solid rgba(255,255,255,0.12)',
-            background: 'rgba(0,0,0,0.72)',
-            backdropFilter: 'blur(14px)',
-            WebkitBackdropFilter: 'blur(14px)',
-
-            paddingLeft: 14,
-            paddingRight: 14,
-            paddingTop: 10,
-            paddingBottom: `calc(10px + env(safe-area-inset-bottom, 0px))`,
-          }}
-        >
-          {dockNode}
-        </div>
-      ) : null}
     </div>
   )
+
 }
