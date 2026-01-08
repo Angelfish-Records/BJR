@@ -64,13 +64,7 @@ function DownloadIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
       <path d="M12 3v10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path
-        d="M8 11l4 4 4-4"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <path d="M8 11l4 4 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M5 20h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   )
@@ -124,38 +118,31 @@ export default function FullPlayer(props: {
   const albumArtist = album?.artist ?? '—'
   const albumTitle = album?.title ?? '—'
   const albumMeta = album?.year ? `Album · ${album.year}` : 'Album'
-  const albumDesc =
-    album?.description ?? 'This is placeholder copy. Soon: pull album description from Sanity.'
+  const albumDesc = album?.description ?? 'This is placeholder copy. Soon: pull album description from Sanity.'
   const browseAlbums = albums.filter((a) => a.id !== album?.id)
 
-  const playing = p.status === 'playing'
-  // This album is “the playback context” if it set the current queue.
-const isThisAlbumActive = Boolean(album?.id && p.queueContextId === album.id)
+  const playingish = p.status === 'playing' || p.status === 'loading'
 
-// If you want an extra fallback (useful while you’re still wiring IDs), you can also treat it as active
-// if the current track id exists in the browsed album's track list:
-const currentIsInBrowsedAlbum = Boolean(p.current && tracks.some(t => t.id === p.current!.id))
+  const isThisAlbumActive = Boolean(album?.id && p.queueContextId === album.id)
+  const currentIsInBrowsedAlbum = Boolean(p.current && tracks.some((t) => t.id === p.current!.id))
 
-const playingThisAlbum = playing && (isThisAlbumActive || currentIsInBrowsedAlbum)
+  const playingThisAlbum = playingish && (isThisAlbumActive || currentIsInBrowsedAlbum)
   const canPlay = tracks.length > 0
 
   const onTogglePlay = () => {
-  // If THIS album is the active one and it’s playing, pause.
-  if (playingThisAlbum) {
-    window.dispatchEvent(new Event('af:pause-intent'))
-    p.pause()
-    return
+    if (playingThisAlbum) {
+      window.dispatchEvent(new Event('af:pause-intent'))
+      p.pause()
+      return
+    }
+
+    const firstTrack = tracks[0]
+    if (!firstTrack) return
+
+    p.setQueue(tracks, {contextId: album?.id})
+    p.play(firstTrack)
+    window.dispatchEvent(new Event('af:play-intent'))
   }
-
-  // Otherwise: explicit context switch to THIS album, then play.
-  const firstTrack = tracks[0] ?? p.queue[0] ?? p.current
-  if (!firstTrack) return
-
-  p.setQueue(tracks, {contextId: album?.id})   // NEW: claim playback context for this album
-  p.play(firstTrack)
-  window.dispatchEvent(new Event('af:play-intent'))
-}
-
 
   return (
     <div
@@ -171,28 +158,23 @@ const playingThisAlbum = playing && (isThisAlbumActive || currentIsInBrowsedAlbu
         <div style={{fontSize: 12, opacity: 0.75}}>{albumArtist}</div>
 
         <div
-  style={{
-    width: 210,
-    height: 210,
-    borderRadius: 18,
-    border: '1px solid rgba(255,255,255,0.14)',
-    background: album?.artworkUrl
-      ? `url(${album.artworkUrl}) center/cover no-repeat`
-      : 'radial-gradient(120px 120px at 30% 20%, rgba(255,255,255,0.14), rgba(255,255,255,0.02))',
-    boxShadow: '0 22px 60px rgba(0,0,0,0.35)',
-    overflow: 'hidden',
-  }}
-/>
+          style={{
+            width: 210,
+            height: 210,
+            borderRadius: 18,
+            border: '1px solid rgba(255,255,255,0.14)',
+            background: album?.artworkUrl
+              ? `url(${album.artworkUrl}) center/cover no-repeat`
+              : 'radial-gradient(120px 120px at 30% 20%, rgba(255,255,255,0.14), rgba(255,255,255,0.02))',
+            boxShadow: '0 22px 60px rgba(0,0,0,0.35)',
+            overflow: 'hidden',
+          }}
+        />
 
-
-        <div style={{fontSize: 22, fontWeight: 650, letterSpacing: 0.2, opacity: 0.96}}>
-          {albumTitle}
-        </div>
+        <div style={{fontSize: 22, fontWeight: 650, letterSpacing: 0.2, opacity: 0.96}}>{albumTitle}</div>
         <div style={{fontSize: 12, opacity: 0.7}}>{albumMeta}</div>
 
-        <div style={{maxWidth: 540, fontSize: 12, opacity: 0.62, lineHeight: 1.45}}>
-          {albumDesc}
-        </div>
+        <div style={{maxWidth: 540, fontSize: 12, opacity: 0.62, lineHeight: 1.45}}>{albumDesc}</div>
 
         <div style={{display: 'flex', alignItems: 'center', gap: 10, marginTop: 8}}>
           <IconCircleBtn label="Download" onClick={() => {}}>
@@ -246,11 +228,9 @@ const playingThisAlbum = playing && (isThisAlbumActive || currentIsInBrowsedAlbu
                 key={t.id}
                 type="button"
                 onClick={() => {
-                  // Explicit playback change: this is allowed.
                   p.setQueue(tracks, {contextId: album?.id})
                   p.play(t)
                   window.dispatchEvent(new Event('af:play-intent'))
-
                 }}
                 style={{
                   width: '100%',
@@ -269,19 +249,11 @@ const playingThisAlbum = playing && (isThisAlbumActive || currentIsInBrowsedAlbu
               >
                 <div style={{fontSize: 12, opacity: 0.7}}>{i + 1}</div>
                 <div style={{minWidth: 0}}>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      opacity: 0.92,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
+                  <div style={{fontSize: 13, opacity: 0.92, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
                     {t.title ?? t.id}
                   </div>
                   <div style={{fontSize: 12, opacity: 0.6}}>
-                    {isCur ? (p.status === 'playing' ? 'Now playing' : 'Selected') : ''}
+                    {isCur ? (p.status === 'playing' ? 'Now playing' : p.status === 'loading' ? 'Loading…' : 'Selected') : ''}
                   </div>
                 </div>
                 <div style={{fontSize: 12, opacity: 0.7}}>{fmtTime(t.durationMs ?? 0)}</div>
@@ -337,9 +309,7 @@ const playingThisAlbum = playing && (isThisAlbumActive || currentIsInBrowsedAlbu
                       }}
                     />
                     <div style={{minWidth: 0}}>
-                      <div style={{fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
-                        {a.title}
-                      </div>
+                      <div style={{fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{a.title}</div>
                       <div style={{fontSize: 12, opacity: 0.65, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
                         {a.artist ?? ''}
                       </div>

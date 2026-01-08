@@ -273,16 +273,12 @@ a.addEventListener('canplay', tryPlay, {once: true})
     if (!a) return
 
     const onPlayIntent = () => {
-      playIntentRef.current = true
-      void a.play().then(
-        () => {
-          playIntentRef.current = false
-        },
-        () => {
-          // ignore; we’ll retry after attach/canplay
-        }
-      )
-    }
+  playIntentRef.current = true
+  void a.play().catch(() => {
+    // ignore; we’ll retry after attach/loadedmetadata/canplay
+  })
+}
+
 
     const onPauseIntent = () => {
       playIntentRef.current = false

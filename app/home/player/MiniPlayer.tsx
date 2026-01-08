@@ -81,35 +81,14 @@ function NextIcon() {
 function VolumeIcon({muted}: {muted: boolean}) {
   return muted ? (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M11 7 8.5 9H6v6h2.5L11 17V7Z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
+      <path d="M11 7 8.5 9H6v6h2.5L11 17V7Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
       <path d="M16 9l5 5M21 9l-5 5" stroke="currentColor" strokeWidth="2" />
     </svg>
   ) : (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M11 7 8.5 9H6v6h2.5L11 17V7Z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M14.5 9.5c.9.9.9 4.1 0 5"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M17 7c2 2 2 8 0 10"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        opacity="0.75"
-      />
+      <path d="M11 7 8.5 9H6v6h2.5L11 17V7Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <path d="M14.5 9.5c.9.9.9 4.1 0 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M17 7c2 2 2 8 0 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.75" />
     </svg>
   )
 }
@@ -128,9 +107,10 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
   const {onExpand} = props
   const p = usePlayer()
 
-  // Portal safety for SSR
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
+
+  const playingish = p.status === 'playing' || p.status === 'loading'
 
   /* ---------------- Seek (scrub without fighting timeupdate) ---------------- */
 
@@ -138,10 +118,18 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
   const durKnown = durMs > 0
   const durSec = Math.max(1, Math.round(durMs / 1000))
   const posSec = Math.round((p.positionMs ?? 0) / 1000)
-  const safePos = clamp(posSec, 0, durSec)
+
+  // Key change: if duration unknown, don’t “clamp against 1 second” and jump to the end.
+  const safePos = durKnown ? clamp(posSec, 0, durSec) : 0
 
   const [scrubbing, setScrubbing] = React.useState(false)
   const [scrubSec, setScrubSec] = React.useState(0)
+
+  // Reset scrub state when track changes (fixes first-play weirdness).
+  React.useEffect(() => {
+    setScrubbing(false)
+    setScrubSec(0)
+  }, [p.current?.id])
 
   React.useEffect(() => {
     if (!scrubbing) setScrubSec(safePos)
@@ -211,6 +199,9 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
               setScrubbing(false)
               if (durKnown) p.seek(scrubSec * 1000)
             }}
+            onPointerCancel={() => {
+              setScrubbing(false)
+            }}
             onChange={(e) => setScrubSec(Number(e.target.value))}
             style={{
               width: '100%',
@@ -226,42 +217,41 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
         </div>
 
         <style>{`
-          /* Seek range styling */
           input[aria-label="Seek"]::-webkit-slider-runnable-track {
             height: 4px;
             border-radius: 999px;
             background: rgba(255,255,255,0.18);
           }
           input[aria-label="Seek"]::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 10px;
-          height: 10px;
-          border-radius: 999px;
-          margin-top: -3px;
+            -webkit-appearance: none;
+            appearance: none;
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            margin-top: -3px;
+            background-color: rgba(245,245,245,0.95);
+            border: 0;
+            outline: none;
+            box-shadow:
+              0 0 0 1px rgba(0,0,0,0.35),
+              0 4px 10px rgba(0,0,0,0.25);
+          }
 
-          background-color: rgba(245,245,245,0.95);
-          border: 0;
-          outline: none;
-
-          box-shadow:
-            0 0 0 1px rgba(0,0,0,0.35),
-            0 4px 10px rgba(0,0,0,0.25);
-        }
-
-        input[aria-label="Seek"]::-moz-range-thumb {
-          width: 10px;
-          height: 10px;
-          border: 0;
-          border-radius: 999px;
-
-          background-color: rgba(245,245,245,0.95);
-
-          box-shadow:
-            0 0 0 1px rgba(0,0,0,0.35),
-            0 4px 10px rgba(0,0,0,0.25);
-        }
-
+          input[aria-label="Seek"]::-moz-range-track {
+            height: 4px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.18);
+          }
+          input[aria-label="Seek"]::-moz-range-thumb {
+            width: 10px;
+            height: 10px;
+            border: 0;
+            border-radius: 999px;
+            background-color: rgba(245,245,245,0.95);
+            box-shadow:
+              0 0 0 1px rgba(0,0,0,0.35),
+              0 4px 10px rgba(0,0,0,0.25);
+          }
         `}</style>
 
         <div
@@ -279,21 +269,21 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
             </IconBtn>
 
             <IconBtn
-              label={p.status === 'playing' ? 'Pause' : 'Play'}
+              label={playingish ? 'Pause' : 'Play'}
               onClick={() => {
-                if (p.status === 'playing') {
+                if (playingish) {
                   window.dispatchEvent(new Event('af:pause-intent'))
                   p.pause()
                 } else {
                   const t = p.current ?? p.queue[0]
                   if (!t) return
-                  window.dispatchEvent(new Event('af:play-intent'))
                   p.play(t)
+                  window.dispatchEvent(new Event('af:play-intent'))
                 }
               }}
               disabled={!p.current && p.queue.length === 0}
             >
-              <PlayPauseIcon playing={p.status === 'playing'} />
+              <PlayPauseIcon playing={playingish} />
             </IconBtn>
 
             <IconBtn label="Next" onClick={() => p.next()} disabled={!p.current}>
@@ -328,14 +318,8 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
           </div>
 
           <div style={{display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end'}}>
-            {/* Volume icon + pop slider */}
             <div style={{display: 'grid', justifyItems: 'center'}}>
-              <IconBtn
-                ref={volBtnRef}
-                label="Volume"
-                onClick={() => setVolOpen((v) => !v)}
-                title="Volume"
-              >
+              <IconBtn ref={volBtnRef} label="Volume" onClick={() => setVolOpen((v) => !v)} title="Volume">
                 <VolumeIcon muted={muted} />
               </IconBtn>
 
@@ -413,7 +397,6 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
                           border-radius: 999px;
                           margin-top: -5px;
                           background-color: rgba(245,245,245,0.95);
-                          background-clip: padding-box;
                           border: 0;
                           outline: none;
                           box-shadow:
