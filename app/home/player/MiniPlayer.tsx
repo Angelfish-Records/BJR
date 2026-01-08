@@ -2,8 +2,8 @@
 'use client'
 
 import React from 'react'
-import {usePlayer} from './PlayerState'
 import {createPortal} from 'react-dom'
+import {usePlayer} from './PlayerState'
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
@@ -47,7 +47,6 @@ const IconBtn = React.forwardRef<
   )
 })
 
-
 function PlayPauseIcon({playing}: {playing: boolean}) {
   return playing ? (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -82,14 +81,35 @@ function NextIcon() {
 function VolumeIcon({muted}: {muted: boolean}) {
   return muted ? (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M11 7 8.5 9H6v6h2.5L11 17V7Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <path
+        d="M11 7 8.5 9H6v6h2.5L11 17V7Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
       <path d="M16 9l5 5M21 9l-5 5" stroke="currentColor" strokeWidth="2" />
     </svg>
   ) : (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M11 7 8.5 9H6v6h2.5L11 17V7Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-      <path d="M14.5 9.5c.9.9.9 4.1 0 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M17 7c2 2 2 8 0 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.75" />
+      <path
+        d="M11 7 8.5 9H6v6h2.5L11 17V7Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M14.5 9.5c.9.9.9 4.1 0 5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M17 7c2 2 2 8 0 10"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        opacity="0.75"
+      />
     </svg>
   )
 }
@@ -104,383 +124,348 @@ function MenuIcon() {
   )
 }
 
-
 export default function MiniPlayer(props: {onExpand?: () => void}) {
   const {onExpand} = props
   const p = usePlayer()
 
-  const durSec = Math.max(1, Math.round((p.current?.durationMs ?? 0) / 1000))
+  // Portal safety for SSR
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => setMounted(true), [])
+
+  /* ---------------- Seek (scrub without fighting timeupdate) ---------------- */
+
+  const durMs = p.current?.durationMs ?? 0
+  const durKnown = durMs > 0
+  const durSec = Math.max(1, Math.round(durMs / 1000))
   const posSec = Math.round((p.positionMs ?? 0) / 1000)
   const safePos = clamp(posSec, 0, durSec)
 
+  const [scrubbing, setScrubbing] = React.useState(false)
+  const [scrubSec, setScrubSec] = React.useState(0)
+
+  React.useEffect(() => {
+    if (!scrubbing) setScrubSec(safePos)
+  }, [safePos, scrubbing])
+
+  /* ---------------- Volume popup anchoring ---------------- */
 
   const [volOpen, setVolOpen] = React.useState(false)
   const vol = p.volume
   const muted = p.muted || p.volume <= 0.001
   const volBtnRef = React.useRef<HTMLButtonElement | null>(null)
-const [volAnchor, setVolAnchor] = React.useState<{x: number; y: number} | null>(null)
+  const [volAnchor, setVolAnchor] = React.useState<{x: number; y: number} | null>(null)
 
-React.useLayoutEffect(() => {
-  if (!volOpen) {
-    setVolAnchor(null)
-    return
-  }
+  React.useLayoutEffect(() => {
+    if (!volOpen) {
+      setVolAnchor(null)
+      return
+    }
 
-  const el = volBtnRef.current
-  if (!el) return
+    const el = volBtnRef.current
+    if (!el) return
 
-  const compute = () => {
-    const r = el.getBoundingClientRect()
-    setVolAnchor({x: r.left + r.width / 2, y: r.top})
-  }
+    const compute = () => {
+      const r = el.getBoundingClientRect()
+      setVolAnchor({x: r.left + r.width / 2, y: r.top})
+    }
 
-  compute()
-  window.addEventListener('scroll', compute, true)
-  window.addEventListener('resize', compute)
+    compute()
+    window.addEventListener('scroll', compute, true)
+    window.addEventListener('resize', compute)
 
-  return () => {
-    window.removeEventListener('scroll', compute, true)
-    window.removeEventListener('resize', compute)
-  }
-}, [volOpen])
-
+    return () => {
+      window.removeEventListener('scroll', compute, true)
+      window.removeEventListener('resize', compute)
+    }
+  }, [volOpen])
 
   const title = p.current?.title ?? p.current?.id ?? 'Nothing queued'
   const artist = p.current?.artist ?? (p.status === 'blocked' ? 'blocked' : p.status)
 
-  const DOCK_PAD_TOP = 10
-
-  return (
+  const dock = (
     <div
       style={{
-        position: 'relative',
-        width: '100%',
-        display: 'grid',
-        gap: 10,
-        marginTop: -DOCK_PAD_TOP,
-        paddingTop: DOCK_PAD_TOP,
+        position: 'fixed',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 9999,
+        padding: '10px 12px calc(10px + env(safe-area-inset-bottom))',
+        background: 'rgba(0,0,0,0.55)',
+        backdropFilter: 'blur(10px)',
+        borderTop: '1px solid rgba(255,255,255,0.10)',
       }}
     >
-      {/* TOP EDGE progress bar (full width) */}
-      <div style={{position: 'absolute', left: 0, right: 0, top: 0}}>
-        <input
-          aria-label="Seek"
-          type="range"
-          min={0}
-          max={durSec}
-          value={safePos}
-          onChange={(e) => p.seek(Number(e.target.value) * 1000)}
+      <div style={{position: 'relative', width: '100%', display: 'grid', gap: 10}}>
+        {/* TOP EDGE progress bar (full width) */}
+        <div style={{position: 'absolute', left: 0, right: 0, top: 0}}>
+          <input
+            aria-label="Seek"
+            type="range"
+            min={0}
+            max={durSec}
+            disabled={!durKnown}
+            value={scrubbing ? scrubSec : safePos}
+            onPointerDown={() => setScrubbing(true)}
+            onPointerUp={() => {
+              setScrubbing(false)
+              if (durKnown) p.seek(scrubSec * 1000)
+            }}
+            onChange={(e) => setScrubSec(Number(e.target.value))}
+            style={{
+              width: '100%',
+              height: 18,
+              margin: 0,
+              background: 'transparent',
+              WebkitAppearance: 'none',
+              appearance: 'none',
+              cursor: durKnown ? 'pointer' : 'default',
+              opacity: durKnown ? 1 : 0.5,
+            }}
+          />
+        </div>
+
+        <style>{`
+          /* Seek range styling */
+          input[aria-label="Seek"]::-webkit-slider-runnable-track {
+            height: 4px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.18);
+          }
+          input[aria-label="Seek"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            margin-top: -3px;
+            background: color-mix(in srgb, var(--accent) 75%, white 10%);
+            box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
+          }
+          input[aria-label="Seek"]::-moz-range-track {
+            height: 4px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.18);
+          }
+          input[aria-label="Seek"]::-moz-range-thumb {
+            width: 10px;
+            height: 10px;
+            border: 0;
+            border-radius: 999px;
+            background: color-mix(in srgb, var(--accent) 75%, white 10%);
+            box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
+          }
+        `}</style>
+
+        <div
           style={{
-            width: '100%',
-            height: 18,
-            margin: 0,
-            background: 'transparent',
-            WebkitAppearance: 'none',
-            appearance: 'none',
+            display: 'grid',
+            gridTemplateColumns: 'auto minmax(0, 1fr) auto',
+            alignItems: 'center',
+            gap: 12,
+            paddingTop: 14,
           }}
-        />
-      </div>
-
-      <style>{`
-        /* Seek range styling */
-        input[aria-label="Seek"]::-webkit-slider-runnable-track {
-          height: 4px;
-          border-radius: 999px;
-          background: rgba(255,255,255,0.18);
-        }
-        input[aria-label="Seek"]::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 10px;
-          height: 10px;
-          border-radius: 999px;
-          margin-top: -3px;
-          background: color-mix(in srgb, var(--accent) 75%, white 10%);
-          box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
-        }
-        input[aria-label="Seek"]::-moz-range-track {
-          height: 4px;
-          border-radius: 999px;
-          background: rgba(255,255,255,0.18);
-        }
-        input[aria-label="Seek"]::-moz-range-thumb {
-          width: 10px;
-          height: 10px;
-          border: 0;
-          border-radius: 999px;
-          background: color-mix(in srgb, var(--accent) 75%, white 10%);
-          box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
-        }
-
-        /* Volume slider (rotate reliably everywhere) */
-        .volSlider {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 130px; /* becomes vertical length after rotate */
-          height: 18px; /* becomes thickness */
-          background: transparent;
-          transform: rotate(-90deg);
-          transform-origin: center;
-        }
-        .volSlider::-webkit-slider-runnable-track {
-          height: 6px;
-          border-radius: 999px;
-          background: rgba(255,255,255,0.18);
-        }
-        .volSlider::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 16px;
-          height: 16px;
-          border-radius: 999px;
-          margin-top: -5px; /* centers thumb on 6px track */
-          background: color-mix(in srgb, var(--accent) 75%, white 10%);
-          box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
-        }
-        .volSlider::-moz-range-track {
-          height: 6px;
-          border-radius: 999px;
-          background: rgba(255,255,255,0.18);
-        }
-        .volSlider::-moz-range-thumb {
-          width: 16px;
-          height: 16px;
-          border: 0;
-          border-radius: 999px;
-          background: color-mix(in srgb, var(--accent) 75%, white 10%);
-          box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
-        }
-      `}</style>
-
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'auto minmax(0, 1fr) auto',
-          alignItems: 'center',
-          gap: 12,
-          paddingTop: 14,
-        }}
-      >
-        <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
-          <IconBtn label="Previous" onClick={() => p.prev()} disabled={!p.current}>
-            <PrevIcon />
-          </IconBtn>
-
-          <IconBtn
-  label={p.status === 'playing' ? 'Pause' : 'Play'}
-  onClick={() => {
-    if (p.status === 'playing') {
-      window.dispatchEvent(new Event('af:pause-intent'))
-      p.pause()
-    } else {
-      window.dispatchEvent(new Event('af:play-intent'))
-      p.play(p.current ?? p.queue[0])
-    }
-  }}
->
-  <PlayPauseIcon playing={p.status === 'playing'} />
-</IconBtn>
-
-
-          <IconBtn label="Next" onClick={() => p.next()} disabled={!p.current}>
-            <NextIcon />
-          </IconBtn>
-        </div>
-
-        <div style={{minWidth: 0}}>
-          <div
-            style={{
-              fontSize: 13,
-              opacity: 0.92,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              lineHeight: 1.25,
-            }}
-          >
-            {title}
-          </div>
-          <div
-            style={{
-              fontSize: 12,
-              opacity: 0.65,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            {artist}
-          </div>
-        </div>
-
-        <div style={{display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end'}}>
-          {/* Volume icon + pop slider */}
-
-<div style={{display: 'grid', justifyItems: 'center'}}>
-  <IconBtn
-    ref={volBtnRef}
-    label="Volume"
-    onClick={() => setVolOpen((v) => !v)}
-    title="Volume"
-  >
-    <VolumeIcon muted={muted} />
-  </IconBtn>
-
-  {volOpen && volAnchor
-    ? createPortal(
-        <>
-          <div
-            style={{
-              position: 'fixed',
-              left: volAnchor.x,
-              top: volAnchor.y,
-              transform: 'translate(-50%, calc(-100% - 10px))',
-              width: 56,
-              height: 170,
-              borderRadius: 14,
-              border: '1px solid rgba(255,255,255,0.12)',
-              background: 'rgba(0,0,0,0.55)',
-              backdropFilter: 'blur(10px)',
-              padding: 10,
-              boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
-              display: 'grid',
-              placeItems: 'center',
-              zIndex: 99999,
-              overflow: 'visible', // IMPORTANT: don’t clip the control
-            }}
-          >
-            <div className="volWrap">
-  <input
-    className="volRot"
-    aria-label="Volume slider"
-    type="range"
-    min={0}
-    max={1}
-    step={0.01}
-    value={vol}
-    onChange={(e) => p.setVolume(Number(e.target.value))}
-  />
-</div>
-
-          </div>
-
-          <style>{`
-  .volWrap{
-    width: 24px;     /* visual thickness area */
-    height: 140px;   /* vertical travel */
-    position: relative;
-    display: grid;
-    place-items: center;
-    overflow: visible;
-  }
-
-  /* Horizontal slider rotated and perfectly centered */
-  .volRot{
-    -webkit-appearance: none;
-    appearance: none;
-
-    width: 140px;   /* becomes vertical length after rotate */
-    height: 24px;   /* becomes horizontal thickness after rotate */
-    margin: 0;
-    padding: 0;
-    background: transparent;
-
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%) rotate(-90deg);
-    transform-origin: center;
-
-    outline: none;
-  }
-
-  /* WebKit track */
-  .volRot::-webkit-slider-runnable-track{
-    height: 6px;
-    border-radius: 999px;
-    background: rgba(255,255,255,0.22);
-  }
-
-  /* WebKit thumb (force solid off-white; kill hollow ring) */
-  .volRot::-webkit-slider-thumb{
-    -webkit-appearance: none;
-    appearance: none;
-
-    width: 16px;
-    height: 16px;
-    border-radius: 999px;
-
-    margin-top: -5px; /* centers on 6px track */
-
-    background-color: rgba(245,245,245,0.95);
-    background-clip: padding-box;
-
-    border: 0;
-    outline: none;
-
-    box-shadow:
-      0 0 0 1px rgba(0,0,0,0.35),
-      0 4px 10px rgba(0,0,0,0.35);
-  }
-
-  /* Firefox track */
-  .volRot::-moz-range-track{
-    height: 6px;
-    border-radius: 999px;
-    background: rgba(255,255,255,0.22);
-  }
-
-  /* Firefox thumb */
-  .volRot::-moz-range-thumb{
-    width: 16px;
-    height: 16px;
-    border: 0;
-    border-radius: 999px;
-
-    background-color: rgba(245,245,245,0.95);
-
-    box-shadow:
-      0 0 0 1px rgba(0,0,0,0.35),
-      0 4px 10px rgba(0,0,0,0.35);
-  }
-`}</style>
-
-        </>,
-        document.body
-      )
-    : null}
-</div>
-
-
-
-
-          {onExpand ? (
-            <IconBtn label="Open player" title="Open player" onClick={onExpand}>
-              <MenuIcon />
+        >
+          <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+            <IconBtn label="Previous" onClick={() => p.prev()} disabled={!p.current}>
+              <PrevIcon />
             </IconBtn>
-          ) : null}
-        </div>
-      </div>
 
-      <style>{`
-        @media (max-width: 520px) {
-          div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] {
-            grid-template-columns: 1fr auto;
-            grid-auto-rows: auto;
-            row-gap: 10px;
+            <IconBtn
+              label={p.status === 'playing' ? 'Pause' : 'Play'}
+              onClick={() => {
+                if (p.status === 'playing') {
+                  window.dispatchEvent(new Event('af:pause-intent'))
+                  p.pause()
+                } else {
+                  const t = p.current ?? p.queue[0]
+                  if (!t) return
+                  window.dispatchEvent(new Event('af:play-intent'))
+                  p.play(t)
+                }
+              }}
+              disabled={!p.current && p.queue.length === 0}
+            >
+              <PlayPauseIcon playing={p.status === 'playing'} />
+            </IconBtn>
+
+            <IconBtn label="Next" onClick={() => p.next()} disabled={!p.current}>
+              <NextIcon />
+            </IconBtn>
+          </div>
+
+          <div style={{minWidth: 0}}>
+            <div
+              style={{
+                fontSize: 13,
+                opacity: 0.92,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                lineHeight: 1.25,
+              }}
+            >
+              {title}
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                opacity: 0.65,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {artist}
+            </div>
+          </div>
+
+          <div style={{display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end'}}>
+            {/* Volume icon + pop slider */}
+            <div style={{display: 'grid', justifyItems: 'center'}}>
+              <IconBtn
+                ref={volBtnRef}
+                label="Volume"
+                onClick={() => setVolOpen((v) => !v)}
+                title="Volume"
+              >
+                <VolumeIcon muted={muted} />
+              </IconBtn>
+
+              {volOpen && volAnchor
+                ? createPortal(
+                    <>
+                      <div
+                        style={{
+                          position: 'fixed',
+                          left: volAnchor.x,
+                          top: volAnchor.y,
+                          transform: 'translate(-50%, calc(-100% - 10px))',
+                          width: 56,
+                          height: 170,
+                          borderRadius: 14,
+                          border: '1px solid rgba(255,255,255,0.12)',
+                          background: 'rgba(0,0,0,0.55)',
+                          backdropFilter: 'blur(10px)',
+                          padding: 10,
+                          boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
+                          display: 'grid',
+                          placeItems: 'center',
+                          zIndex: 99999,
+                          overflow: 'visible',
+                        }}
+                      >
+                        <div className="volWrap">
+                          <input
+                            className="volRot"
+                            aria-label="Volume slider"
+                            type="range"
+                            min={0}
+                            max={1}
+                            step={0.01}
+                            value={vol}
+                            onChange={(e) => p.setVolume(Number(e.target.value))}
+                          />
+                        </div>
+                      </div>
+
+                      <style>{`
+                        .volWrap{
+                          width: 24px;
+                          height: 140px;
+                          position: relative;
+                          display: grid;
+                          place-items: center;
+                          overflow: visible;
+                        }
+                        .volRot{
+                          -webkit-appearance: none;
+                          appearance: none;
+                          width: 140px;
+                          height: 24px;
+                          margin: 0;
+                          padding: 0;
+                          background: transparent;
+                          position: absolute;
+                          left: 50%;
+                          top: 50%;
+                          transform: translate(-50%, -50%) rotate(-90deg);
+                          transform-origin: center;
+                          outline: none;
+                        }
+                        .volRot::-webkit-slider-runnable-track{
+                          height: 6px;
+                          border-radius: 999px;
+                          background: rgba(255,255,255,0.22);
+                        }
+                        .volRot::-webkit-slider-thumb{
+                          -webkit-appearance: none;
+                          appearance: none;
+                          width: 16px;
+                          height: 16px;
+                          border-radius: 999px;
+                          margin-top: -5px;
+                          background-color: rgba(245,245,245,0.95);
+                          background-clip: padding-box;
+                          border: 0;
+                          outline: none;
+                          box-shadow:
+                            0 0 0 1px rgba(0,0,0,0.35),
+                            0 4px 10px rgba(0,0,0,0.35);
+                        }
+                        .volRot::-moz-range-track{
+                          height: 6px;
+                          border-radius: 999px;
+                          background: rgba(255,255,255,0.22);
+                        }
+                        .volRot::-moz-range-thumb{
+                          width: 16px;
+                          height: 16px;
+                          border: 0;
+                          border-radius: 999px;
+                          background-color: rgba(245,245,245,0.95);
+                          box-shadow:
+                            0 0 0 1px rgba(0,0,0,0.35),
+                            0 4px 10px rgba(0,0,0,0.35);
+                        }
+                      `}</style>
+                    </>,
+                    document.body
+                  )
+                : null}
+            </div>
+
+            {onExpand ? (
+              <IconBtn label="Open player" title="Open player" onClick={onExpand}>
+                <MenuIcon />
+              </IconBtn>
+            ) : null}
+          </div>
+        </div>
+
+        <style>{`
+          @media (max-width: 520px) {
+            div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] {
+              grid-template-columns: 1fr auto;
+              grid-auto-rows: auto;
+              row-gap: 10px;
+            }
+            div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(2) {
+              grid-column: 1 / -1;
+              order: 3;
+            }
+            div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(1) {
+              order: 1;
+            }
+            div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(3) {
+              order: 2;
+            }
           }
-          div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(2) {
-            grid-column: 1 / -1;
-            order: 3;
-          }
-          div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(1) {
-            order: 1;
-          }
-          div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(3) {
-            order: 2;
-          }
-        }
-      `}</style>
+        `}</style>
+      </div>
     </div>
   )
+
+  if (!mounted) return null
+  return createPortal(dock, document.body)
 }

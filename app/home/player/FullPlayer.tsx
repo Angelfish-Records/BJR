@@ -13,10 +13,6 @@ function fmtTime(ms: number) {
   return `${m}:${String(r).padStart(2, '0')}`
 }
 
-function clamp(n: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, n))
-}
-
 function IconCircleBtn(props: {
   label: string
   onClick?: () => void
@@ -131,9 +127,6 @@ export default function FullPlayer(props: {
   const albumDesc =
     album?.description ?? 'This is placeholder copy. Soon: pull album description from Sanity.'
   const browseAlbums = albums.filter((a) => a.id !== album?.id)
-  const cur = p.current
-  const durMs = cur?.durationMs ?? 0
-  const posMs = durMs > 0 ? clamp(p.positionMs, 0, durMs) : 0
 
   const playing = p.status === 'playing'
   // This album is “the playback context” if it set the current queue.
@@ -241,44 +234,6 @@ const playingThisAlbum = playing && (isThisAlbumActive || currentIsInBrowsedAlbu
             <MoreIcon />
           </IconCircleBtn>
         </div>
-
-        <div style={{width: '100%', maxWidth: 560, marginTop: 10}}>
-          <input
-            aria-label="Seek"
-            type="range"
-            min={0}
-            max={Math.max(1, durMs)}
-            value={Math.min(Math.max(0, posMs), Math.max(1, durMs))}
-            onChange={(e) => p.seek(Number(e.target.value))}
-            style={{
-              width: '100%',
-              height: 18,
-              margin: 0,
-              background: 'transparent',
-              WebkitAppearance: 'none',
-              appearance: 'none',
-            }}
-          />
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              fontSize: 12,
-              opacity: 0.65,
-              marginTop: 6,
-            }}
-          >
-            <span>{fmtTime(posMs)}</span>
-            <span>{fmtTime(durMs)}</span>
-          </div>
-        </div>
-
-        <style>{`
-          input[aria-label="Seek"]::-webkit-slider-runnable-track { height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); }
-          input[aria-label="Seek"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 10px; height: 10px; border-radius: 999px; margin-top: -3px; background: color-mix(in srgb, var(--accent) 75%, white 10%); box-shadow: 0 0 0 3px rgba(0,0,0,0.35); }
-          input[aria-label="Seek"]::-moz-range-track { height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); }
-          input[aria-label="Seek"]::-moz-range-thumb { width: 10px; height: 10px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--accent) 75%, white 10%); box-shadow: 0 0 0 3px rgba(0,0,0,0.35); }
-        `}</style>
       </div>
 
       {/* Tracklist (BROWSED album) */}
