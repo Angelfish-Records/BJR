@@ -46,136 +46,140 @@ export default function AudioEngine() {
   /* ---------------- Track change -> token + attach media ---------------- */
 
   React.useEffect(() => {
-    const a = audioRef.current
-    if (!a) return
+  const a = audioRef.current
+  if (!a) return
 
-    const playbackId = p.current?.muxPlaybackId
-    if (!playbackId) return
+  const playbackId = p.current?.muxPlaybackId
+  if (!playbackId) return
 
-    // Mark as loading whenever we switch tracks.
-    p.setStatusExternal('loading')
+  // ✅ Only load/attach when playback is explicitly armed by user intent.
+  // (Prevents “Loading…” / pause icon on cold page load.)
+  const armed = p.status === 'loading' || p.status === 'playing' || playIntentRef.current
+  if (!armed) return
 
-    const seq = ++loadSeq.current
+  const seq = ++loadSeq.current
 
-    // Tear down any existing HLS instance
-    if (hlsRef.current) {
-      try {
-        hlsRef.current.destroy()
-      } catch {}
-      hlsRef.current = null
+  // Tear down any existing HLS instance
+  if (hlsRef.current) {
+    try {
+      hlsRef.current.destroy()
+    } catch {}
+    hlsRef.current = null
+  }
+
+  // Cancel any in-flight token request
+  tokenAbortRef.current?.abort()
+  const ac = new AbortController()
+  tokenAbortRef.current = ac
+
+  const attachSrc = (src: string) => {
+    // Reset element state
+    a.pause()
+    a.removeAttribute('src')
+    a.load()
+
+    if (seq !== loadSeq.current) return
+
+    if (canPlayNativeHls(a)) {
+      a.src = src
+      a.load()
+    } else {
+      if (!Hls.isSupported()) {
+        p.setBlocked('This browser cannot play HLS (no MSE).')
+        return
+      }
+
+      const hls = new Hls({enableWorker: true, lowLatencyMode: false})
+      hlsRef.current = hls
+
+      hls.on(Hls.Events.ERROR, (_evt, err) => {
+        if (err?.fatal) {
+          const msg = err?.details ? `HLS fatal: ${err.details}` : 'HLS fatal error.'
+          p.setBlocked(msg)
+          try {
+            hls.destroy()
+          } catch {}
+          if (hlsRef.current === hls) hlsRef.current = null
+        }
+      })
+
+      hls.loadSource(src)
+      hls.attachMedia(a)
     }
 
-    // Cancel any in-flight token request
-    tokenAbortRef.current?.abort()
-    const ac = new AbortController()
-    tokenAbortRef.current = ac
+    // Retry play after attach if user has expressed intent.
+    const tryPlay = () => {
+      if (!playIntentRef.current) return
+      void a
+        .play()
+        .then(() => {
+          playIntentRef.current = false
+        })
+        .catch(() => {
+          // ignore; keep intent latched for next event
+        })
+    }
 
-    const attachSrc = (src: string) => {
-      // Reset element state
-      a.pause()
-      a.removeAttribute('src')
-      a.load()
+    tryPlay()
+    a.addEventListener('loadedmetadata', tryPlay, {once: true})
+    a.addEventListener('canplay', tryPlay, {once: true})
+  }
 
+  const load = async () => {
+    try {
+      // 1) Use cached token if still valid
+      const cached = tokenCacheRef.current.get(playbackId)
+      if (cached && Date.now() < cached.expiresAtMs - 5000) {
+        const src = muxSignedHlsUrl(playbackId, cached.token)
+        if (ac.signal.aborted) return
+        if (seq !== loadSeq.current) return
+        attachSrc(src)
+        return
+      }
+
+      // 2) Otherwise fetch a fresh token
+      const res = await fetch('/api/mux/playback-token', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({playbackId}),
+        signal: ac.signal,
+      })
+
+      if (ac.signal.aborted) return
       if (seq !== loadSeq.current) return
 
-      if (canPlayNativeHls(a)) {
-        a.src = src
-        a.load()
-      } else {
-        if (!Hls.isSupported()) {
-          p.setBlocked('This browser cannot play HLS (no MSE).')
-          return
-        }
+      const data = (await res.json()) as TokenResponse
 
-        const hls = new Hls({enableWorker: true, lowLatencyMode: false})
-        hlsRef.current = hls
+      if (ac.signal.aborted) return
+      if (seq !== loadSeq.current) return
 
-        hls.on(Hls.Events.ERROR, (_evt, err) => {
-          if (err?.fatal) {
-            const msg = err?.details ? `HLS fatal: ${err.details}` : 'HLS fatal error.'
-            p.setBlocked(msg)
-            try {
-              hls.destroy()
-            } catch {}
-            if (hlsRef.current === hls) hlsRef.current = null
-          }
-        })
-
-        hls.loadSource(src)
-        hls.attachMedia(a)
+      if (!res.ok || !data.ok) {
+        p.setBlocked(!data.ok ? data.reason : `Token route failed (${res.status}).`)
+        return
       }
 
-      // Retry play after attach if user has expressed intent.
-      const tryPlay = () => {
-  if (!playIntentRef.current) return
-  void a.play()
-    .then(() => {
-      playIntentRef.current = false
-    })
-    .catch(() => {
-      // ignore; keep intent latched for next event
-    })
-}
-
-      tryPlay()
-a.addEventListener('loadedmetadata', tryPlay, {once: true})
-a.addEventListener('canplay', tryPlay, {once: true})
-    }
-
-    const load = async () => {
-      try {
-        // 1) Use cached token if still valid
-        const cached = tokenCacheRef.current.get(playbackId)
-        if (cached && Date.now() < cached.expiresAtMs - 5000) {
-          const src = muxSignedHlsUrl(playbackId, cached.token)
-          if (ac.signal.aborted) return
-          if (seq !== loadSeq.current) return
-          attachSrc(src)
-          return
-        }
-
-        // 2) Otherwise fetch a fresh token
-        const res = await fetch('/api/mux/playback-token', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({playbackId}),
-          signal: ac.signal,
-        })
-
-        if (ac.signal.aborted) return
-        if (seq !== loadSeq.current) return
-
-        const data = (await res.json()) as TokenResponse
-
-        if (ac.signal.aborted) return
-        if (seq !== loadSeq.current) return
-
-        if (!res.ok || !data.ok) {
-          p.setBlocked(!data.ok ? data.reason : `Token route failed (${res.status}).`)
-          return
-        }
-
-        const expiresAtMs = Date.parse(data.expiresAt)
-        if (Number.isFinite(expiresAtMs)) {
-          tokenCacheRef.current.set(playbackId, {token: data.token, expiresAtMs})
-        }
-
-        const src = muxSignedHlsUrl(playbackId, data.token)
-        attachSrc(src)
-      } catch (err) {
-        if (ac.signal.aborted) return
-        if (seq !== loadSeq.current) return
-        p.setBlocked(err instanceof Error ? err.message : 'Playback blocked.')
+      const expiresAtMs = Date.parse(data.expiresAt)
+      if (Number.isFinite(expiresAtMs)) {
+        tokenCacheRef.current.set(playbackId, {token: data.token, expiresAtMs})
       }
-    }
 
-    void load()
-
-    return () => {
-      ac.abort()
+      const src = muxSignedHlsUrl(playbackId, data.token)
+      attachSrc(src)
+    } catch (err) {
+      if (ac.signal.aborted) return
+      if (seq !== loadSeq.current) return
+      p.setBlocked(err instanceof Error ? err.message : 'Playback blocked.')
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [p.current?.id])
+  }
+
+  void load()
+
+  return () => {
+    ac.abort()
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [p.current?.id, p.status])
+
 
   /* ---------------- Drive play / pause from state ---------------- */
 
