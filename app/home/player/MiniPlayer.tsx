@@ -235,6 +235,8 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
   const DOCK_H = 80
 const ART_W = DOCK_H
 
+const SAFE_PAD = 'calc(12px + env(safe-area-inset-bottom))'
+
 const dock = (
   <div
     style={{
@@ -247,17 +249,18 @@ const dock = (
       // was: padding: '0 12px ...'
       paddingTop: 0,
       paddingRight: 12,
-      paddingBottom: `calc(12px + env(safe-area-inset-bottom))`,
+      paddingBottom: 0,
       paddingLeft: 0,
 
-      minHeight: DOCK_H,
+      // total height becomes DOCK_H + SAFE_PAD via spacer below
+       minHeight: `calc(${DOCK_H}px + ${SAFE_PAD})`,
 
       background: 'rgba(0,0,0,0.55)',
       backdropFilter: 'blur(10px)',
       borderTop: 'none',
     }}
   >
-
+    <div style={{position: 'relative', width: '100%', display: 'grid', gap: 0}}>
       <div style={{position: 'relative', width: '100%', display: 'grid', gap: 10, height: DOCK_H, overflow: 'hidden'}}>
   {/* Flush left artwork */}
   <div
@@ -265,8 +268,8 @@ const dock = (
     style={{
       position: 'absolute',
       left: 0,
-      top: 1,
-      height: DOCK_H-1,
+      top: 0,
+      height: DOCK_H,
       width: ART_W,
       background: artworkUrl
         ? `url(${artworkUrl}) center/cover no-repeat`
@@ -610,6 +613,9 @@ const dock = (
           }
         `}</style>
       </div>
+    </div>
+    {/* Safe-area / bottom breathing room lives here (artwork stays flush) */}
+      <div aria-hidden="true" style={{height: SAFE_PAD}} />
     </div>
   )
 
