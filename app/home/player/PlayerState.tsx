@@ -13,7 +13,8 @@ export type PlayerTrack = {
 
 type PlayerStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'blocked'
 type RepeatMode = 'off' | 'one' | 'all'
-
+type Intent = 'play' | 'pause' | null
+type LoadingReason = 'token' | 'attach' | 'buffering' | undefined
 
 export type PlayerState = {
   status: PlayerStatus
@@ -21,10 +22,26 @@ export type PlayerState = {
   queue: PlayerTrack[]
   lastError?: string
 
-    // NEW: identifies what the queue represents (album id for now)
+  // identifies what the queue represents (album id for now)
   queueContextId?: string
 
-  // UI-facing playback telemetry (real audio engine can own these later)
+  // Optimistic UI
+  intent: Intent
+  intentAtMs?: number
+  selectedTrackId?: string
+  pendingTrackId?: string
+
+  // Seek optimism
+  pendingSeekMs?: number
+  seeking: boolean
+
+  // Loading micro-feedback
+  loadingReason?: LoadingReason
+
+  // Retry hook for AudioEngine
+  reloadNonce: number
+
+  // UI-facing playback telemetry
   positionMs: number
   seekNonce: number
 
@@ -34,37 +51,52 @@ export type PlayerState = {
 }
 
 type PlayerActions = {
+  // transport-ish
   play: (track?: PlayerTrack) => void
   pause: () => void
-  setPositionMs: (ms: number) => void
-  setDurationMs: (ms: number) => void
-  setStatusExternal: (s: PlayerStatus) => void
+  next: () => void
+  prev: () => void
 
-
-   // CHANGED: add optional contextId
+  // queue mgmt
   setQueue: (tracks: PlayerTrack[], opts?: {contextId?: string}) => void
   enqueue: (track: PlayerTrack) => void
 
-  // Transport (stubs now; later: drive the real audio engine)
-  next: () => void
-  prev: () => void
-  
-  seek: (ms: number) => void
+  // telemetry
+  setPositionMs: (ms: number) => void
+  setDurationMs: (ms: number) => void
 
-  // Volume (stubs now; later: drive the real audio element)
+  // external status updates from engine
+  setStatusExternal: (s: PlayerStatus) => void
+  setLoadingReasonExternal: (r?: LoadingReason) => void
+
+  // intents + optimistic selection
+  setIntent: (i: Intent) => void
+  clearIntent: () => void
+  selectTrack: (id?: string) => void
+  setPendingTrackId: (id?: string) => void
+  resolvePendingTrack: (id: string) => void
+
+  // seeking
+  seek: (ms: number) => void
+  clearPendingSeek: () => void
+
+  // volume
   setVolume: (v: number) => void
   toggleMute: () => void
 
-  // Repeat (UI state)
+  // repeat
   cycleRepeat: () => void
 
-  // Optional: tick time forward (useful if you want “fake” progress for now)
+  // optional: fake tick
   tick: (deltaMs: number) => void
 
+  // errors
   setBlocked: (reason?: string) => void
   clearError: () => void
-}
 
+  // retry
+  bumpReload: () => void
+}
 
 const PlayerCtx = React.createContext<(PlayerState & PlayerActions) | null>(null)
 
@@ -78,17 +110,29 @@ function nextRepeat(r: RepeatMode): RepeatMode {
   return 'off'
 }
 
-export function PlayerStateProvider(props: { children: React.ReactNode }) {
+export function PlayerStateProvider(props: {children: React.ReactNode}) {
   const [state, setState] = React.useState<PlayerState>({
     status: 'idle',
     current: undefined,
     queue: [],
     lastError: undefined,
 
-    queueContextId: undefined, // NEW
+    queueContextId: undefined,
+
+    intent: null,
+    intentAtMs: undefined,
+    selectedTrackId: undefined,
+    pendingTrackId: undefined,
+
+    pendingSeekMs: undefined,
+    seeking: false,
+
+    loadingReason: undefined,
+    reloadNonce: 0,
 
     positionMs: 0,
     seekNonce: 0,
+
     volume: 0.9,
     muted: false,
     repeat: 'off',
@@ -98,43 +142,265 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
     return {
       ...state,
 
+      /* ---------------- Intent ---------------- */
+
+      setIntent: (i: Intent) =>
+        setState((s) => ({
+          ...s,
+          intent: i,
+          intentAtMs: i ? Date.now() : undefined,
+        })),
+
+      clearIntent: () =>
+        setState((s) => (s.intent ? {...s, intent: null, intentAtMs: undefined} : s)),
+
+      /* ---------------- Selection / pending track ---------------- */
+
+      selectTrack: (id?: string) =>
+        setState((s) => ({
+          ...s,
+          selectedTrackId: id,
+        })),
+
+      setPendingTrackId: (id?: string) =>
+        setState((s) => ({
+          ...s,
+          pendingTrackId: id,
+        })),
+
+      resolvePendingTrack: (id: string) =>
+        setState((s) => {
+          if (s.pendingTrackId !== id) return s
+          return {...s, pendingTrackId: undefined}
+        }),
+
+      /* ---------------- Transport ---------------- */
+
       play: (track?: PlayerTrack) => {
-  setState((s) => {
-    const nextTrack = track ?? s.current ?? s.queue[0]
-    if (!nextTrack) {
-      return { ...s, status: 'idle', current: undefined, positionMs: 0 }
-    }
+        setState((s) => {
+          const nextTrack = track ?? s.current ?? s.queue[0]
+          if (!nextTrack) {
+            return {
+              ...s,
+              status: 'idle',
+              current: undefined,
+              positionMs: 0,
+              intent: 'play',
+              intentAtMs: Date.now(),
+              lastError: undefined,
+              loadingReason: undefined,
+              pendingTrackId: undefined,
+            }
+          }
 
-    const sameTrack = Boolean(s.current && s.current.id === nextTrack.id)
+          const sameTrack = Boolean(s.current && s.current.id === nextTrack.id)
 
-    // ✅ Resume: same track + paused -> keep position
-    if (sameTrack && s.status === 'paused') {
-      return { ...s, status: 'playing', lastError: undefined }
-    }
+          // optimistic: user pressed play now
+          const base = {
+            ...s,
+            intent: 'play' as const,
+            intentAtMs: Date.now(),
+            lastError: undefined,
+            selectedTrackId: nextTrack.id,
+            pendingTrackId: nextTrack.id,
+          }
 
-    // ✅ If we're already playing/loading the same track, don't clobber position
-    if (sameTrack && (s.status === 'playing' || s.status === 'loading')) {
-      return { ...s, lastError: undefined }
-    }
+          // ✅ Resume: same track + paused -> keep position, don't force loading
+          if (sameTrack && s.status === 'paused') {
+            return {...base, status: 'playing', loadingReason: undefined}
+          }
 
-    // ✅ New track (or "play this track fresh"): reset position
-    return {
-      ...s,
-      current: nextTrack,
-      status: 'loading',
-      lastError: undefined,
-      positionMs: sameTrack ? s.positionMs : 0,
-    }
-  })
-},
+          // ✅ If already playing/loading same track, don’t clobber position/status
+          if (sameTrack && (s.status === 'playing' || s.status === 'loading')) {
+            return {...base, loadingReason: s.loadingReason}
+          }
 
+          // ✅ New track: reset position and go loading
+          return {
+            ...base,
+            current: nextTrack,
+            status: 'loading',
+            loadingReason: 'token',
+            positionMs: 0,
+          }
+        })
+      },
 
       pause: () =>
-        setState((s) => ({ ...s, status: s.status === 'playing' ? 'paused' : s.status })),
+        setState((s) => ({
+          ...s,
+          intent: 'pause',
+          intentAtMs: Date.now(),
+          status: s.status === 'playing' ? 'paused' : s.status,
+        })),
 
-            setPositionMs: (ms: number) =>
-              setState((s) => ({ ...s, positionMs: Math.max(0, ms) })),
+      next: () => {
+        setState((s) => {
+          const cur = s.current
+          if (!cur || s.queue.length === 0) return s
 
+          const idx = s.queue.findIndex((t) => t.id === cur.id)
+          const at = idx >= 0 ? idx : 0
+
+          // repeat-one: stay on track
+          if (s.repeat === 'one') {
+            return {
+              ...s,
+              status: 'loading',
+              loadingReason: 'attach',
+              positionMs: 0,
+              intent: 'play',
+              intentAtMs: Date.now(),
+              pendingTrackId: cur.id,
+              selectedTrackId: cur.id,
+            }
+          }
+
+          const nextIdx = at + 1
+          const hasNext = nextIdx < s.queue.length
+
+          if (hasNext) {
+            const t = s.queue[nextIdx]
+            return {
+              ...s,
+              current: t,
+              status: 'loading',
+              loadingReason: 'token',
+              positionMs: 0,
+              intent: 'play',
+              intentAtMs: Date.now(),
+              pendingTrackId: t.id,
+              selectedTrackId: t.id,
+            }
+          }
+
+          // end of queue
+          if (s.repeat === 'all' && s.queue.length > 0) {
+            const t = s.queue[0]
+            return {
+              ...s,
+              current: t,
+              status: 'loading',
+              loadingReason: 'token',
+              positionMs: 0,
+              intent: 'play',
+              intentAtMs: Date.now(),
+              pendingTrackId: t.id,
+              selectedTrackId: t.id,
+            }
+          }
+
+          return {
+            ...s,
+            status: 'paused',
+            loadingReason: undefined,
+            positionMs: 0,
+            intent: 'pause',
+            intentAtMs: Date.now(),
+            pendingTrackId: undefined,
+          }
+        })
+      },
+
+      prev: () => {
+        setState((s) => {
+          const cur = s.current
+          if (!cur || s.queue.length === 0) return s
+
+          // industry standard: if >3s in, restart
+          if (s.positionMs > 3000) {
+            return {
+              ...s,
+              positionMs: 0,
+              status: 'loading',
+              loadingReason: 'attach',
+              intent: 'play',
+              intentAtMs: Date.now(),
+              pendingTrackId: cur.id,
+              selectedTrackId: cur.id,
+            }
+          }
+
+          const idx = s.queue.findIndex((t) => t.id === cur.id)
+          const at = idx >= 0 ? idx : 0
+          const prevIdx = at - 1
+
+          if (prevIdx >= 0) {
+            const t = s.queue[prevIdx]
+            return {
+              ...s,
+              current: t,
+              status: 'loading',
+              loadingReason: 'token',
+              positionMs: 0,
+              intent: 'play',
+              intentAtMs: Date.now(),
+              pendingTrackId: t.id,
+              selectedTrackId: t.id,
+            }
+          }
+
+          // at start
+          if (s.repeat === 'all' && s.queue.length > 0) {
+            const t = s.queue[s.queue.length - 1]
+            return {
+              ...s,
+              current: t,
+              status: 'loading',
+              loadingReason: 'token',
+              positionMs: 0,
+              intent: 'play',
+              intentAtMs: Date.now(),
+              pendingTrackId: t.id,
+              selectedTrackId: t.id,
+            }
+          }
+
+          return {
+            ...s,
+            positionMs: 0,
+            status: 'loading',
+            loadingReason: 'attach',
+            intent: 'play',
+            intentAtMs: Date.now(),
+            pendingTrackId: cur.id,
+            selectedTrackId: cur.id,
+          }
+        })
+      },
+
+      /* ---------------- Queue ---------------- */
+
+      setQueue: (tracks: PlayerTrack[], opts?: {contextId?: string}) =>
+        setState((s) => {
+          const nextContextId = opts?.contextId ?? s.queueContextId
+          const nextCurrent = s.current ?? tracks[0]
+          return {
+            ...s,
+            queue: tracks,
+            queueContextId: nextContextId,
+            current: nextCurrent,
+            positionMs: s.current ? s.positionMs : 0,
+            // optimistic: if we set a new queue and current is in it, selection stays coherent
+            selectedTrackId: s.selectedTrackId ?? nextCurrent?.id,
+          }
+        }),
+
+      enqueue: (track: PlayerTrack) =>
+        setState((s) => ({
+          ...s,
+          queue: [...s.queue, track],
+          current: s.current ?? track,
+          selectedTrackId: s.selectedTrackId ?? track.id,
+        })),
+
+      /* ---------------- Telemetry ---------------- */
+
+      setPositionMs: (ms: number) =>
+        setState((s) => ({
+          ...s,
+          positionMs: Math.max(0, ms),
+        })),
 
       setDurationMs: (ms: number) =>
         setState((s) => {
@@ -146,90 +412,41 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
       setStatusExternal: (st: PlayerStatus) =>
         setState((s) => (s.status === st ? s : {...s, status: st})),
 
-      
-      setQueue: (tracks: PlayerTrack[], opts?: {contextId?: string}) =>
-          setState((s) => ({
-            ...s,
-            queue: tracks,
-            queueContextId: opts?.contextId ?? s.queueContextId,
-            current: s.current ?? tracks[0],
-            positionMs: s.current ? s.positionMs : 0,
-          })),
+      setLoadingReasonExternal: (r?: LoadingReason) =>
+        setState((s) => (s.loadingReason === r ? s : {...s, loadingReason: r})),
 
-
-      enqueue: (track: PlayerTrack) =>
-        setState((s) => ({
-          ...s,
-          queue: [...s.queue, track],
-          current: s.current ?? track,
-        })),
-
-      next: () => {
-        setState((s) => {
-          const cur = s.current
-          if (!cur || s.queue.length === 0) return s
-
-          const idx = s.queue.findIndex((t) => t.id === cur.id)
-          const at = idx >= 0 ? idx : 0
-
-          // Repeat-one: stay on track
-          if (s.repeat === 'one') return { ...s, status: 'loading', positionMs: 0 }
-
-          const nextIdx = at + 1
-          const hasNext = nextIdx < s.queue.length
-
-          if (hasNext) {
-            return { ...s, current: s.queue[nextIdx], status: 'loading', positionMs: 0 }
-          }
-
-          // End of queue
-          if (s.repeat === 'all' && s.queue.length > 0) {
-            return { ...s, current: s.queue[0], status: 'loading', positionMs: 0 }
-          }
-
-          return { ...s, status: 'paused', positionMs: 0 }
-        })
-      },
-
-      prev: () => {
-        setState((s) => {
-          const cur = s.current
-          if (!cur || s.queue.length === 0) return s
-
-          // “industry standard”: if you’re > ~3s in, restart track
-          if (s.positionMs > 3000) return { ...s, positionMs: 0, status: 'loading' }
-
-          const idx = s.queue.findIndex((t) => t.id === cur.id)
-          const at = idx >= 0 ? idx : 0
-          const prevIdx = at - 1
-
-          if (prevIdx >= 0) {
-            return { ...s, current: s.queue[prevIdx], status: 'loading', positionMs: 0 }
-          }
-
-          // At start
-          if (s.repeat === 'all' && s.queue.length > 0) {
-            return { ...s, current: s.queue[s.queue.length - 1], status: 'loading', positionMs: 0 }
-          }
-
-          return { ...s, positionMs: 0, status: 'loading' }
-        })
-      },
+      /* ---------------- Seeking ---------------- */
 
       seek: (ms: number) => {
-  setState((s) => {
-    const dur = s.current?.durationMs ?? 0
-    const next = dur > 0 ? clamp(ms, 0, dur) : Math.max(0, ms)
-    return { ...s, positionMs: next, seekNonce: s.seekNonce + 1 }
-  })
-},
+        setState((s) => {
+          const dur = s.current?.durationMs ?? 0
+          const next = dur > 0 ? clamp(ms, 0, dur) : Math.max(0, ms)
+          return {
+            ...s,
+            positionMs: next, // optimistic: thumb + time jump now
+            pendingSeekMs: next,
+            seeking: true,
+            seekNonce: s.seekNonce + 1,
+          }
+        })
+      },
 
+      clearPendingSeek: () =>
+        setState((s) => {
+          if (!s.seeking && s.pendingSeekMs == null) return s
+          return {...s, seeking: false, pendingSeekMs: undefined}
+        }),
 
-      setVolume: (v: number) => setState((s) => ({ ...s, volume: clamp(v, 0, 1) })),
+      /* ---------------- Volume ---------------- */
 
-      toggleMute: () => setState((s) => ({ ...s, muted: !s.muted })),
+      setVolume: (v: number) => setState((s) => ({...s, volume: clamp(v, 0, 1)})),
+      toggleMute: () => setState((s) => ({...s, muted: !s.muted})),
 
-      cycleRepeat: () => setState((s) => ({ ...s, repeat: nextRepeat(s.repeat) })),
+      /* ---------------- Repeat ---------------- */
+
+      cycleRepeat: () => setState((s) => ({...s, repeat: nextRepeat(s.repeat)})),
+
+      /* ---------------- Optional fake tick ---------------- */
 
       tick: (deltaMs: number) => {
         setState((s) => {
@@ -237,36 +454,60 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
           const dur = s.current?.durationMs ?? 0
           const nextPos = Math.max(0, s.positionMs + Math.max(0, deltaMs))
 
-          if (dur <= 0) return { ...s, positionMs: nextPos }
+          if (dur <= 0) return {...s, positionMs: nextPos}
+          if (nextPos < dur) return {...s, positionMs: nextPos}
 
-          if (nextPos < dur) return { ...s, positionMs: nextPos }
+          // reached end
+          if (s.repeat === 'one') return {...s, positionMs: 0}
 
-          // Reached end
-          if (s.repeat === 'one') return { ...s, positionMs: 0 }
-          // advance
           const cur = s.current
           const idx = cur ? s.queue.findIndex((t) => t.id === cur.id) : -1
           const at = idx >= 0 ? idx : 0
           const nextIdx = at + 1
 
           if (nextIdx < s.queue.length) {
-            return { ...s, current: s.queue[nextIdx], positionMs: 0 }
+            const t = s.queue[nextIdx]
+            return {...s, current: t, positionMs: 0, selectedTrackId: t.id, pendingTrackId: t.id}
           }
           if (s.repeat === 'all' && s.queue.length > 0) {
-            return { ...s, current: s.queue[0], positionMs: 0 }
+            const t = s.queue[0]
+            return {...s, current: t, positionMs: 0, selectedTrackId: t.id, pendingTrackId: t.id}
           }
-          return { ...s, status: 'paused', positionMs: dur }
+          return {...s, status: 'paused', positionMs: dur}
         })
       },
+
+      /* ---------------- Errors / blocked ---------------- */
 
       setBlocked: (reason?: string) =>
         setState((s) => ({
           ...s,
           status: 'blocked',
           lastError: reason ?? 'Playback blocked.',
+          loadingReason: undefined,
+          intent: null,
+          intentAtMs: undefined,
         })),
 
-      clearError: () => setState((s) => ({ ...s, lastError: undefined })),
+      clearError: () => setState((s) => ({...s, lastError: undefined})),
+
+      /* ---------------- Retry ---------------- */
+
+      bumpReload: () =>
+        setState((s) => {
+          if (!s.current?.muxPlaybackId) return {...s, reloadNonce: s.reloadNonce + 1}
+          return {
+            ...s,
+            reloadNonce: s.reloadNonce + 1,
+            status: 'loading',
+            loadingReason: 'token',
+            lastError: undefined,
+            intent: 'play',
+            intentAtMs: Date.now(),
+            pendingTrackId: s.current.id,
+            selectedTrackId: s.current.id,
+          }
+        }),
     }
   }, [state])
 

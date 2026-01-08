@@ -40,6 +40,7 @@ const IconBtn = React.forwardRef<
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.45 : 0.9,
         userSelect: 'none',
+        transform: 'translateZ(0)',
       }}
     >
       {children}
@@ -103,6 +104,20 @@ function MenuIcon() {
   )
 }
 
+function RetryIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M20 12a8 8 0 1 1-2.35-5.65"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path d="M20 4v6h-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 export default function MiniPlayer(props: {onExpand?: () => void}) {
   const {onExpand} = props
   const p = usePlayer()
@@ -110,36 +125,57 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
 
-  const playingish = p.status === 'playing' || p.status === 'loading'
+  const playingish = p.status === 'playing' || p.status === 'loading' || p.intent === 'play'
+  const pausedish = p.status === 'paused' || p.intent === 'pause'
 
-  /* ---------------- Seek (scrub without fighting timeupdate) ---------------- */
+  /* ---------------- Seek (optimistic + scrub without fighting timeupdate) ---------------- */
 
   const durMs = p.current?.durationMs ?? 0
   const durKnown = durMs > 0
   const durSec = Math.max(1, Math.round(durMs / 1000))
-  const posSec = Math.round((p.positionMs ?? 0) / 1000)
 
-  // Key change: if duration unknown, don’t “clamp against 1 second” and jump to the end.
-  const safePos = durKnown ? clamp(posSec, 0, durSec) : 0
+  const posSecReal = Math.round((p.positionMs ?? 0) / 1000)
+  const safePosReal = durKnown ? clamp(posSecReal, 0, durSec) : 0
+
+  const pendingSec = p.pendingSeekMs != null ? Math.round(p.pendingSeekMs / 1000) : null
+  const safePending = pendingSec != null && durKnown ? clamp(pendingSec, 0, durSec) : pendingSec ?? undefined
 
   const [scrubbing, setScrubbing] = React.useState(false)
   const [scrubSec, setScrubSec] = React.useState(0)
 
-  // Reset scrub state when track changes (fixes first-play weirdness).
+  // Reset scrub state when track changes
   React.useEffect(() => {
     setScrubbing(false)
     setScrubSec(0)
   }, [p.current?.id])
 
   React.useEffect(() => {
-    if (!scrubbing) setScrubSec(safePos)
-  }, [safePos, scrubbing])
+    if (!scrubbing) setScrubSec(safePosReal)
+  }, [safePosReal, scrubbing])
 
-  /* ---------------- Volume popup anchoring ---------------- */
+  const sliderValue = scrubbing ? scrubSec : safePending ?? safePosReal
+
+  /* ---------------- Volume popup anchoring + “expensive” tooltip ---------------- */
 
   const [volOpen, setVolOpen] = React.useState(false)
   const vol = p.volume
   const muted = p.muted || p.volume <= 0.001
+
+  const [volToast, setVolToast] = React.useState<{pct: number} | null>(null)
+  const toastTimer = React.useRef<number | null>(null)
+  React.useEffect(() => {
+    return () => {
+      if (toastTimer.current) window.clearTimeout(toastTimer.current)
+    }
+  }, [])
+
+  const showVolToast = (nextVol: number) => {
+    const pct = Math.round(clamp(nextVol, 0, 1) * 100)
+    setVolToast({pct})
+    if (toastTimer.current) window.clearTimeout(toastTimer.current)
+    toastTimer.current = window.setTimeout(() => setVolToast(null), 600)
+  }
+
   const volBtnRef = React.useRef<HTMLButtonElement | null>(null)
   const [volAnchor, setVolAnchor] = React.useState<{x: number; y: number} | null>(null)
 
@@ -167,8 +203,34 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
     }
   }, [volOpen])
 
+  /* ---------------- Debounce-y polish ---------------- */
+
+  const [transportLock, setTransportLock] = React.useState(false)
+  const lockFor = (ms: number) => {
+    setTransportLock(true)
+    window.setTimeout(() => setTransportLock(false), ms)
+  }
+
+  const [playLock, setPlayLock] = React.useState(false)
+  const lockPlayFor = (ms: number) => {
+    setPlayLock(true)
+    window.setTimeout(() => setPlayLock(false), ms)
+  }
+
+  /* ---------------- Copy ---------------- */
+
   const title = p.current?.title ?? p.current?.id ?? 'Nothing queued'
-  const artist = p.current?.artist ?? (p.status === 'blocked' ? 'blocked' : p.status)
+
+  const statusLine = (() => {
+    if (p.status === 'blocked') return 'Playback error'
+    if (p.status === 'loading') {
+      if (p.loadingReason === 'buffering') return 'Buffering…'
+      return 'Loading…'
+    }
+    if (playingish) return p.current?.artist ?? 'Playing'
+    if (pausedish) return p.current?.artist ?? 'Paused'
+    return p.current?.artist ?? p.status
+  })()
 
   const dock = (
     <div
@@ -185,7 +247,7 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
       }}
     >
       <div style={{position: 'relative', width: '100%', display: 'grid', gap: 10}}>
-        {/* TOP EDGE progress bar (full width) */}
+        {/* TOP EDGE progress bar */}
         <div style={{position: 'absolute', left: 0, right: 0, top: 0}}>
           <input
             aria-label="Seek"
@@ -193,15 +255,13 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
             min={0}
             max={durSec}
             disabled={!durKnown}
-            value={scrubbing ? scrubSec : safePos}
+            value={sliderValue}
             onPointerDown={() => setScrubbing(true)}
             onPointerUp={() => {
               setScrubbing(false)
               if (durKnown) p.seek(scrubSec * 1000)
             }}
-            onPointerCancel={() => {
-              setScrubbing(false)
-            }}
+            onPointerCancel={() => setScrubbing(false)}
             onChange={(e) => setScrubSec(Number(e.target.value))}
             style={{
               width: '100%',
@@ -236,7 +296,6 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
               0 0 0 1px rgba(0,0,0,0.35),
               0 4px 10px rgba(0,0,0,0.25);
           }
-
           input[aria-label="Seek"]::-moz-range-track {
             height: 4px;
             border-radius: 999px;
@@ -264,29 +323,47 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
           }}
         >
           <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
-            <IconBtn label="Previous" onClick={() => p.prev()} disabled={!p.current}>
+            <IconBtn
+              label="Previous"
+              onClick={() => {
+                lockFor(350)
+                p.prev()
+              }}
+              disabled={!p.current || transportLock}
+            >
               <PrevIcon />
             </IconBtn>
 
             <IconBtn
               label={playingish ? 'Pause' : 'Play'}
               onClick={() => {
+                lockPlayFor(120)
+
                 if (playingish) {
+                  p.setIntent('pause')
                   window.dispatchEvent(new Event('af:pause-intent'))
                   p.pause()
                 } else {
                   const t = p.current ?? p.queue[0]
                   if (!t) return
+                  p.setIntent('play')
                   p.play(t)
                   window.dispatchEvent(new Event('af:play-intent'))
                 }
               }}
-              disabled={!p.current && p.queue.length === 0}
+              disabled={(!!(!p.current && p.queue.length === 0)) || playLock}
             >
               <PlayPauseIcon playing={playingish} />
             </IconBtn>
 
-            <IconBtn label="Next" onClick={() => p.next()} disabled={!p.current}>
+            <IconBtn
+              label="Next"
+              onClick={() => {
+                lockFor(350)
+                p.next()
+              }}
+              disabled={!p.current || transportLock}
+            >
               <NextIcon />
             </IconBtn>
           </div>
@@ -300,6 +377,7 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 lineHeight: 1.25,
+                transition: 'opacity 160ms ease',
               }}
             >
               {title}
@@ -313,15 +391,38 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
                 textOverflow: 'ellipsis',
               }}
             >
-              {artist}
+              {statusLine}
             </div>
           </div>
 
           <div style={{display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end'}}>
-            <div style={{display: 'grid', justifyItems: 'center'}}>
+            <div style={{display: 'grid', justifyItems: 'center', position: 'relative'}}>
               <IconBtn ref={volBtnRef} label="Volume" onClick={() => setVolOpen((v) => !v)} title="Volume">
                 <VolumeIcon muted={muted} />
               </IconBtn>
+
+              {volToast ? (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: -26,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    fontSize: 11,
+                    padding: '4px 8px',
+                    borderRadius: 999,
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    background: 'rgba(0,0,0,0.45)',
+                    backdropFilter: 'blur(8px)',
+                    color: 'rgba(255,255,255,0.9)',
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
+                    pointerEvents: 'none',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {volToast.pct}%
+                </div>
+              ) : null}
 
               {volOpen && volAnchor
                 ? createPortal(
@@ -355,7 +456,11 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
                             max={1}
                             step={0.01}
                             value={vol}
-                            onChange={(e) => p.setVolume(Number(e.target.value))}
+                            onChange={(e) => {
+                              const next = Number(e.target.value)
+                              p.setVolume(next)
+                              showVolToast(next)
+                            }}
                           />
                         </div>
                       </div>
@@ -424,6 +529,21 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
                   )
                 : null}
             </div>
+
+            {p.status === 'blocked' || p.lastError ? (
+              <IconBtn
+                label="Retry"
+                title="Retry"
+                onClick={() => {
+                  // gesture + reload
+                  p.setIntent('play')
+                  window.dispatchEvent(new Event('af:play-intent'))
+                  p.bumpReload()
+                }}
+              >
+                <RetryIcon />
+              </IconBtn>
+            ) : null}
 
             {onExpand ? (
               <IconBtn label="Open player" title="Open player" onClick={onExpand}>

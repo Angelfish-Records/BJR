@@ -40,6 +40,7 @@ function IconCircleBtn(props: {
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.45 : 0.9,
         userSelect: 'none',
+        transform: 'translateZ(0)',
       }}
     >
       {children}
@@ -121,16 +122,40 @@ export default function FullPlayer(props: {
   const albumDesc = album?.description ?? 'This is placeholder copy. Soon: pull album description from Sanity.'
   const browseAlbums = albums.filter((a) => a.id !== album?.id)
 
-  const playingish = p.status === 'playing' || p.status === 'loading'
+  const playingish = p.status === 'playing' || p.status === 'loading' || p.intent === 'play'
+  const pausedish = p.status === 'paused' || p.intent === 'pause'
 
   const isThisAlbumActive = Boolean(album?.id && p.queueContextId === album.id)
   const currentIsInBrowsedAlbum = Boolean(p.current && tracks.some((t) => t.id === p.current!.id))
-
   const playingThisAlbum = playingish && (isThisAlbumActive || currentIsInBrowsedAlbum)
+
   const canPlay = tracks.length > 0
 
+  const [playLock, setPlayLock] = React.useState(false)
+  const lockPlayFor = (ms: number) => {
+    setPlayLock(true)
+    window.setTimeout(() => setPlayLock(false), ms)
+  }
+
+  const prefetchTrack = (t?: PlayerTrack) => {
+    const playbackId = t?.muxPlaybackId
+    if (!playbackId) return
+    window.dispatchEvent(new CustomEvent('af:prefetch-token', {detail: {playbackId}}))
+  }
+
+  const prefetchAlbumArt = (url?: string | null) => {
+  if (!url) return
+  try {
+    const img = new Image()
+    img.src = url
+  } catch {}
+}
+
   const onTogglePlay = () => {
+    lockPlayFor(120)
+
     if (playingThisAlbum) {
+      p.setIntent('pause')
       window.dispatchEvent(new Event('af:pause-intent'))
       p.pause()
       return
@@ -139,7 +164,9 @@ export default function FullPlayer(props: {
     const firstTrack = tracks[0]
     if (!firstTrack) return
 
+    // optimistic context + selection
     p.setQueue(tracks, {contextId: album?.id})
+    p.setIntent('play')
     p.play(firstTrack)
     window.dispatchEvent(new Event('af:play-intent'))
   }
@@ -187,8 +214,10 @@ export default function FullPlayer(props: {
 
           <button
             type="button"
-            onClick={canPlay ? onTogglePlay : undefined}
-            disabled={!canPlay}
+            onClick={canPlay && !playLock ? onTogglePlay : undefined}
+            onMouseEnter={() => prefetchTrack(tracks[0])}
+            onFocus={() => prefetchTrack(tracks[0])}
+            disabled={!canPlay || playLock}
             aria-label={playingThisAlbum ? 'Pause' : 'Play'}
             title={playingThisAlbum ? 'Pause' : 'Play'}
             style={{
@@ -202,7 +231,8 @@ export default function FullPlayer(props: {
               placeItems: 'center',
               cursor: canPlay ? 'pointer' : 'default',
               opacity: canPlay ? 0.98 : 0.55,
-              boxShadow: '0 18px 50px rgba(0,0,0,0.35)',
+              boxShadow: playingThisAlbum ? '0 18px 50px rgba(0,0,0,0.35)' : '0 18px 50px rgba(0,0,0,0.30)',
+              transform: 'translateZ(0)',
             }}
           >
             <PlayPauseBig playing={playingThisAlbum} />
@@ -216,6 +246,15 @@ export default function FullPlayer(props: {
             <MoreIcon />
           </IconCircleBtn>
         </div>
+
+        {p.status === 'loading' && playingThisAlbum ? (
+          <div style={{fontSize: 12, opacity: 0.6, marginTop: 4}}>
+            {p.loadingReason === 'buffering' ? 'Buffering…' : 'Loading…'}
+          </div>
+        ) : null}
+        {p.status === 'blocked' && p.lastError ? (
+          <div style={{fontSize: 12, opacity: 0.75, marginTop: 4}}>Playback error</div>
+        ) : null}
       </div>
 
       {/* Tracklist (BROWSED album) */}
@@ -223,12 +262,27 @@ export default function FullPlayer(props: {
         <div style={{borderTop: '1px solid rgba(255,255,255,0.10)', paddingTop: 14}}>
           {tracks.map((t, i) => {
             const isCur = p.current?.id === t.id
+            const isPending = p.pendingTrackId === t.id
+            const isSelected = p.selectedTrackId === t.id
+
+            const sublabel = (() => {
+              if (isCur && playingish) return 'Now playing'
+              if (isPending) return 'Loading…'
+              if (isCur) return pausedish ? 'Selected' : 'Selected'
+              if (isSelected) return 'Selected'
+              return ''
+            })()
+
             return (
               <button
                 key={t.id}
                 type="button"
+                onMouseEnter={() => prefetchTrack(t)}
+                onFocus={() => prefetchTrack(t)}
                 onClick={() => {
+                  // optimistic selection + queue context flip
                   p.setQueue(tracks, {contextId: album?.id})
+                  p.setIntent('play')
                   p.play(t)
                   window.dispatchEvent(new Event('af:play-intent'))
                 }}
@@ -245,16 +299,24 @@ export default function FullPlayer(props: {
                   background: isCur ? 'rgba(255,255,255,0.06)' : 'transparent',
                   color: 'rgba(255,255,255,0.92)',
                   cursor: 'pointer',
+                  transform: 'translateZ(0)',
                 }}
               >
                 <div style={{fontSize: 12, opacity: 0.7}}>{i + 1}</div>
                 <div style={{minWidth: 0}}>
-                  <div style={{fontSize: 13, opacity: 0.92, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      opacity: 0.92,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      transition: 'opacity 160ms ease',
+                    }}
+                  >
                     {t.title ?? t.id}
                   </div>
-                  <div style={{fontSize: 12, opacity: 0.6}}>
-                    {isCur ? (p.status === 'playing' ? 'Now playing' : p.status === 'loading' ? 'Loading…' : 'Selected') : ''}
-                  </div>
+                  <div style={{fontSize: 12, opacity: 0.6, minHeight: 16}}>{sublabel}</div>
                 </div>
                 <div style={{fontSize: 12, opacity: 0.7}}>{fmtTime(t.durationMs ?? 0)}</div>
               </button>
@@ -280,6 +342,8 @@ export default function FullPlayer(props: {
                     key={a.id}
                     type="button"
                     disabled={disabled}
+                    onMouseEnter={() => prefetchAlbumArt(a.coverUrl)}
+                    onFocus={() => prefetchAlbumArt(a.coverUrl)}
                     onClick={() => onSelectAlbum?.(a.slug)}
                     style={{
                       display: 'grid',
@@ -309,7 +373,9 @@ export default function FullPlayer(props: {
                       }}
                     />
                     <div style={{minWidth: 0}}>
-                      <div style={{fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{a.title}</div>
+                      <div style={{fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
+                        {a.title}
+                      </div>
                       <div style={{fontSize: 12, opacity: 0.65, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
                         {a.artist ?? ''}
                       </div>

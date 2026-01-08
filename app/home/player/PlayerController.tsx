@@ -31,38 +31,45 @@ export default function PlayerController(props: {
 
   const p = usePlayer()
 
-const [miniActive, setMiniActive] = React.useState(() => {
-  if (typeof window === 'undefined') return false
-  return window.sessionStorage.getItem('af:miniActive') === '1'
-})
+  // Once the dock becomes active, it should never go away (this session or next).
+  const [miniActive, setMiniActive] = React.useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.sessionStorage.getItem('af:miniActive') === '1'
+  })
 
-React.useEffect(() => {
-  // “Open once” when playback begins (loading is fine — it means user hit play).
-  if (!miniActive && (p.status === 'loading' || p.status === 'playing' || p.status === 'paused')) {
+  React.useEffect(() => {
+  const shouldActivate =
+    p.intent === 'play' ||
+    p.status === 'loading' ||
+    p.status === 'playing' ||
+    p.status === 'paused' ||
+    Boolean(p.current) ||
+    p.queue.length > 0
+
+  if (!miniActive && shouldActivate) {
     setMiniActive(true)
-    try { window.sessionStorage.setItem('af:miniActive', '1') } catch {}
+    try {
+      window.sessionStorage.setItem('af:miniActive', '1')
+    } catch {}
   }
-}, [miniActive, p.status])
+}, [miniActive, p])
 
-  
+
   const showFull = activePanelId === playerPanelId
 
   return (
-  <>
-    {showFull ? (
-      <FullPlayer
-        album={album}
-        tracks={tracks}
-        albums={albums}
-        onSelectAlbum={onSelectAlbum}
-        isBrowsingAlbum={isBrowsingAlbum}
-      />
-    ) : null}
+    <>
+      {showFull ? (
+        <FullPlayer
+          album={album}
+          tracks={tracks}
+          albums={albums}
+          onSelectAlbum={onSelectAlbum}
+          isBrowsingAlbum={isBrowsingAlbum}
+        />
+      ) : null}
 
-    {miniActive ? <MiniPlayer onExpand={openPlayerPanel} /> : null}
-  </>
-)
-
+      {miniActive ? <MiniPlayer onExpand={openPlayerPanel} /> : null}
+    </>
+  )
 }
-
-
