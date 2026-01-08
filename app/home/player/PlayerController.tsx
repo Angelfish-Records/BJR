@@ -1,12 +1,10 @@
-// web/app/home/player/PlayerController.tsx
 'use client'
 
 import React from 'react'
 import FullPlayer from './FullPlayer'
 import MiniPlayer from './MiniPlayer'
-import type {AlbumInfo} from '@/lib/types'
+import type {AlbumInfo, AlbumNavItem} from '@/lib/types'
 import type {PlayerTrack} from './PlayerState'
-import type {AlbumNavItem} from '@/lib/types' // add this type
 
 export default function PlayerController(props: {
   activePanelId: string
@@ -15,16 +13,35 @@ export default function PlayerController(props: {
   album: AlbumInfo | null
   tracks: PlayerTrack[]
   albums: AlbumNavItem[]
+  onSelectAlbum: (slug: string) => void
+  isBrowsingAlbum: boolean
 }) {
-  const {activePanelId, openPlayerPanel, playerPanelId = 'player', album, tracks, albums} = props
+  const {
+    activePanelId,
+    openPlayerPanel,
+    playerPanelId = 'player',
+    album,
+    tracks,
+    albums,
+    onSelectAlbum,
+    isBrowsingAlbum,
+  } = props
 
   const showFull = activePanelId === playerPanelId
-  const showDock = !showFull
 
   return (
     <>
-      {showFull ? <FullPlayer album={album} tracks={tracks} albums={albums} /> : null}
-      {showDock ? <MiniPlayer onExpand={openPlayerPanel} /> : null}
+      {showFull ? (
+        <FullPlayer
+          album={album}
+          tracks={tracks}
+          albums={albums}
+          onSelectAlbum={onSelectAlbum}
+          isBrowsingAlbum={isBrowsingAlbum}
+        />
+      ) : (
+        <MiniPlayer onExpand={openPlayerPanel} />
+      )}
     </>
   )
 }

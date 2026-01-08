@@ -1,16 +1,17 @@
 // web/lib/albums.ts
-import 'server-only'
-import {sanity} from './sanityClient'
+import {client} from '@/sanity/lib/client'
+import {urlFor} from '@/sanity/lib/image'
+import type {AlbumInfo} from '@/lib/types'
+import type {PlayerTrack} from '@/app/home/player/PlayerState'
 
-export type AlbumPayload = {
-  album: {
-    id: string
-    title: string
-    artist?: string
-    year?: number
-    description?: string
-  } | null
-  tracks: Array<{
+type AlbumDoc = {
+  _id?: string
+  title?: string
+  artist?: string
+  year?: number
+  description?: string
+  artwork?: unknown
+  tracks?: Array<{
     id: string
     title?: string
     artist?: string
@@ -28,9 +29,10 @@ export type AlbumBrowseItem = {
   artwork?: unknown
 }
 
-export async function getAlbumBySlug(slug: string): Promise<AlbumPayload> {
-  const data = await sanity.fetch(
-    `
+export async function getAlbumBySlug(
+  slug: string
+): Promise<{album: AlbumInfo | null; tracks: PlayerTrack[]}> {
+  const q = `
     *[_type == "album" && slug.current == $slug][0]{
       _id,
       title,
@@ -46,27 +48,30 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPayload> {
         muxPlaybackId
       }
     }
-    `,
-    {slug}
-  )
+  `
 
-  if (!data?._id) return {album: null, tracks: []}
+  const doc = await client.fetch<AlbumDoc | null>(q, {slug})
 
-  return {
-    album: {
-      id: data._id,
-      title: data.title ?? 'Untitled',
-      artist: data.artist ?? undefined,
-      year: data.year ?? undefined,
-      description: data.description ?? undefined,
-    },
-    tracks: Array.isArray(data.tracks) ? data.tracks : [],
+  if (!doc?._id) return {album: null, tracks: []}
+
+  const album: AlbumInfo = {
+    id: doc._id,
+    title: doc.title ?? 'Untitled',
+    artist: doc.artist ?? undefined,
+    year: doc.year ?? undefined,
+    description: doc.description ?? undefined,
+    artworkUrl: doc.artwork
+      ? urlFor(doc.artwork).width(900).height(900).quality(85).url()
+      : null,
   }
+
+  const tracks: PlayerTrack[] = Array.isArray(doc.tracks) ? (doc.tracks as PlayerTrack[]) : []
+
+  return {album, tracks}
 }
 
 export async function listAlbumsForBrowse(): Promise<AlbumBrowseItem[]> {
-  const data = await sanity.fetch(
-    `
+  const q = `
     *[_type=="album"]|order(year desc, _createdAt desc){
       "id": _id,
       "slug": slug.current,
@@ -75,7 +80,9 @@ export async function listAlbumsForBrowse(): Promise<AlbumBrowseItem[]> {
       year,
       artwork
     }
-    `
-  )
+  `
+
+  const data = await client.fetch<AlbumBrowseItem[]>(q)
+
   return Array.isArray(data) ? data : []
 }

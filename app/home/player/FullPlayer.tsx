@@ -1,8 +1,6 @@
-// web/app/home/player/FullPlayer.tsx
 'use client'
 
 import React from 'react'
-import Link from 'next/link'
 import {usePlayer} from './PlayerState'
 import type {AlbumInfo, AlbumNavItem} from '@/lib/types'
 import type {PlayerTrack} from './PlayerState'
@@ -116,16 +114,22 @@ function MoreIcon() {
   )
 }
 
-export default function FullPlayer(props: {album: AlbumInfo | null; tracks: PlayerTrack[]; albums: AlbumNavItem[]}) {
+export default function FullPlayer(props: {
+  album: AlbumInfo | null
+  tracks: PlayerTrack[]
+  albums: AlbumNavItem[]
+  onSelectAlbum?: (slug: string) => void
+  isBrowsingAlbum?: boolean
+}) {
   const p = usePlayer()
-  const {album, tracks, albums} = props
+  const {album, tracks, albums, onSelectAlbum, isBrowsingAlbum = false} = props
 
   const albumArtist = album?.artist ?? '—'
   const albumTitle = album?.title ?? '—'
   const albumMeta = album?.year ? `Album · ${album.year}` : 'Album'
   const albumDesc =
     album?.description ?? 'This is placeholder copy. Soon: pull album description from Sanity.'
-
+  const browseAlbums = albums.filter((a) => a.id !== album?.id)
   const cur = p.current
   const durMs = cur?.durationMs ?? 0
   const posMs = durMs > 0 ? clamp(p.positionMs, 0, durMs) : 0
@@ -159,22 +163,28 @@ export default function FullPlayer(props: {album: AlbumInfo | null; tracks: Play
         <div style={{fontSize: 12, opacity: 0.75}}>{albumArtist}</div>
 
         <div
-          style={{
-            width: 210,
-            height: 210,
-            borderRadius: 18,
-            border: '1px solid rgba(255,255,255,0.14)',
-            background:
-              'radial-gradient(120px 120px at 30% 20%, rgba(255,255,255,0.14), rgba(255,255,255,0.02))',
-            boxShadow: '0 22px 60px rgba(0,0,0,0.35)',
-            overflow: 'hidden',
-          }}
-        />
+  style={{
+    width: 210,
+    height: 210,
+    borderRadius: 18,
+    border: '1px solid rgba(255,255,255,0.14)',
+    background: album?.artworkUrl
+      ? `url(${album.artworkUrl}) center/cover no-repeat`
+      : 'radial-gradient(120px 120px at 30% 20%, rgba(255,255,255,0.14), rgba(255,255,255,0.02))',
+    boxShadow: '0 22px 60px rgba(0,0,0,0.35)',
+    overflow: 'hidden',
+  }}
+/>
 
-        <div style={{fontSize: 22, fontWeight: 650, letterSpacing: 0.2, opacity: 0.96}}>{albumTitle}</div>
+
+        <div style={{fontSize: 22, fontWeight: 650, letterSpacing: 0.2, opacity: 0.96}}>
+          {albumTitle}
+        </div>
         <div style={{fontSize: 12, opacity: 0.7}}>{albumMeta}</div>
 
-        <div style={{maxWidth: 540, fontSize: 12, opacity: 0.62, lineHeight: 1.45}}>{albumDesc}</div>
+        <div style={{maxWidth: 540, fontSize: 12, opacity: 0.62, lineHeight: 1.45}}>
+          {albumDesc}
+        </div>
 
         <div style={{display: 'flex', alignItems: 'center', gap: 10, marginTop: 8}}>
           <IconCircleBtn label="Download" onClick={() => {}}>
@@ -234,7 +244,15 @@ export default function FullPlayer(props: {album: AlbumInfo | null; tracks: Play
               appearance: 'none',
             }}
           />
-          <div style={{display: 'flex', justifyContent: 'space-between', fontSize: 12, opacity: 0.65, marginTop: 6}}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontSize: 12,
+              opacity: 0.65,
+              marginTop: 6,
+            }}
+          >
             <span>{fmtTime(posMs)}</span>
             <span>{fmtTime(durMs)}</span>
           </div>
@@ -248,6 +266,7 @@ export default function FullPlayer(props: {album: AlbumInfo | null; tracks: Play
         `}</style>
       </div>
 
+      {/* Tracklist (BROWSED album) */}
       <div style={{marginTop: 18}}>
         <div style={{borderTop: '1px solid rgba(255,255,255,0.10)', paddingTop: 14}}>
           {tracks.map((t, i) => {
@@ -257,6 +276,7 @@ export default function FullPlayer(props: {album: AlbumInfo | null; tracks: Play
                 key={t.id}
                 type="button"
                 onClick={() => {
+                  // Explicit playback change: this is allowed.
                   p.setQueue(tracks)
                   p.play(t)
                   window.dispatchEvent(new Event('af:play-intent'))
@@ -278,10 +298,20 @@ export default function FullPlayer(props: {album: AlbumInfo | null; tracks: Play
               >
                 <div style={{fontSize: 12, opacity: 0.7}}>{i + 1}</div>
                 <div style={{minWidth: 0}}>
-                  <div style={{fontSize: 13, opacity: 0.92, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      opacity: 0.92,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
                     {t.title ?? t.id}
                   </div>
-                  <div style={{fontSize: 12, opacity: 0.6}}>{isCur ? (p.status === 'playing' ? 'Now playing' : 'Selected') : ''}</div>
+                  <div style={{fontSize: 12, opacity: 0.6}}>
+                    {isCur ? (p.status === 'playing' ? 'Now playing' : 'Selected') : ''}
+                  </div>
                 </div>
                 <div style={{fontSize: 12, opacity: 0.7}}>{fmtTime(t.durationMs ?? 0)}</div>
               </button>
@@ -289,17 +319,25 @@ export default function FullPlayer(props: {album: AlbumInfo | null; tracks: Play
           })}
         </div>
 
+        {/* Album selector (INLINE browse; no navigation) */}
         {albums.length ? (
           <div style={{marginTop: 18}}>
-            <div style={{fontSize: 12, opacity: 0.7, marginBottom: 10}}>Browse albums</div>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12}}>
+              <div style={{fontSize: 12, opacity: 0.7, marginBottom: 10}}>Browse albums</div>
+              {isBrowsingAlbum ? <div style={{fontSize: 12, opacity: 0.55}}>Loading…</div> : null}
+            </div>
 
             <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12}}>
-              {albums.map((a) => {
+              {browseAlbums.map((a) => {
                 const isActive = album?.id === a.id
+                const disabled = !onSelectAlbum || isBrowsingAlbum || isActive
+
                 return (
-                  <Link
+                  <button
                     key={a.id}
-                    href={`/albums/${a.slug}?panel=player`}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => onSelectAlbum?.(a.slug)}
                     style={{
                       display: 'grid',
                       gridTemplateColumns: '56px minmax(0, 1fr)',
@@ -311,6 +349,9 @@ export default function FullPlayer(props: {album: AlbumInfo | null; tracks: Play
                       background: isActive ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)',
                       textDecoration: 'none',
                       color: 'rgba(255,255,255,0.92)',
+                      cursor: disabled ? 'default' : 'pointer',
+                      opacity: disabled ? 0.75 : 1,
+                      textAlign: 'left',
                     }}
                   >
                     <div
@@ -325,10 +366,14 @@ export default function FullPlayer(props: {album: AlbumInfo | null; tracks: Play
                       }}
                     />
                     <div style={{minWidth: 0}}>
-                      <div style={{fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{a.title}</div>
-                      <div style={{fontSize: 12, opacity: 0.65, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{a.artist ?? ''}</div>
+                      <div style={{fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
+                        {a.title}
+                      </div>
+                      <div style={{fontSize: 12, opacity: 0.65, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
+                        {a.artist ?? ''}
+                      </div>
                     </div>
-                  </Link>
+                  </button>
                 )
               })}
             </div>

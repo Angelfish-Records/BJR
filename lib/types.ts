@@ -5,7 +5,7 @@ export type AlbumInfo = {
   artist?: string
   year?: number
   description?: string
-  artwork?: unknown
+  artworkUrl?: string | null
 }
 
 export type AlbumNavItem = {
