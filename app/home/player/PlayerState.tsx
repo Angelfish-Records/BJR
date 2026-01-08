@@ -50,7 +50,7 @@ export type PlayerState = {
   muted: boolean
   repeat: RepeatMode
 
-  // ✅ session cache: durations learned from playback metadata
+  // session cache: durations learned (or primed) during this session
   durationById: Record<string, number>
 }
 
@@ -116,7 +116,7 @@ function nextRepeat(r: RepeatMode): RepeatMode {
 
 function hydrateTrack(t: PlayerTrack, durationById: Record<string, number>): PlayerTrack {
   const cached = durationById[t.id]
-  if (!cached) return t
+  if (!cached || cached <= 0) return t
   if (t.durationMs === cached) return t
   return {...t, durationMs: cached}
 }
@@ -129,6 +129,24 @@ function hydrateTracks(ts: PlayerTrack[], durationById: Record<string, number>) 
     return ht
   })
   return changed ? next : ts
+}
+
+function primeDurationById(
+  prev: Record<string, number>,
+  tracks: PlayerTrack[]
+): Record<string, number> {
+  // Only set from Sanity values when present and positive.
+  // Never overwrite an existing cached value (keeps “Sanity is canonical” stable).
+  let next = prev
+  for (const t of tracks) {
+    if (!t?.id) continue
+    const ms = t.durationMs
+    if (typeof ms !== 'number' || !Number.isFinite(ms) || ms <= 0) continue
+    if (typeof next[t.id] === 'number' && next[t.id] > 0) continue
+    if (next === prev) next = {...prev}
+    next[t.id] = ms
+  }
+  return next
 }
 
 export function PlayerStateProvider(props: {children: React.ReactNode}) {
@@ -175,8 +193,7 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           intentAtMs: i ? Date.now() : undefined,
         })),
 
-      clearIntent: () =>
-        setState((s) => (s.intent ? {...s, intent: null, intentAtMs: undefined} : s)),
+      clearIntent: () => setState((s) => (s.intent ? {...s, intent: null, intentAtMs: undefined} : s)),
 
       /* ---------------- Selection / pending track ---------------- */
 
@@ -229,7 +246,7 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
             pendingTrackId: nextTrack.id,
           }
 
-          // resume (same track + paused)
+          // Resume: same track + paused -> keep position, don't force loading/token.
           if (sameTrack && s.status === 'paused') {
             return {
               ...base,
@@ -239,12 +256,12 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
             }
           }
 
-          // already playing/loading same track: don’t clobber
+          // Already playing/loading same track -> don't clobber position/status.
           if (sameTrack && (s.status === 'playing' || s.status === 'loading')) {
             return {...base, loadingReason: s.loadingReason}
           }
 
-          // new track
+          // New track -> reset position + go loading.
           return {
             ...base,
             current: nextTrack,
@@ -271,6 +288,7 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           const idx = s.queue.findIndex((t) => t.id === cur.id)
           const at = idx >= 0 ? idx : 0
 
+          // repeat-one: stay on track, restart
           if (s.repeat === 'one') {
             return {
               ...s,
@@ -285,9 +303,7 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           }
 
           const nextIdx = at + 1
-          const hasNext = nextIdx < s.queue.length
-
-          if (hasNext) {
+          if (nextIdx < s.queue.length) {
             const t = hydrateTrack(s.queue[nextIdx], s.durationById)
             return {
               ...s,
@@ -302,6 +318,7 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
             }
           }
 
+          // end of queue
           if (s.repeat === 'all' && s.queue.length > 0) {
             const t = hydrateTrack(s.queue[0], s.durationById)
             return {
@@ -321,7 +338,6 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
             ...s,
             status: 'paused',
             loadingReason: undefined,
-            positionMs: 0,
             intent: 'pause',
             intentAtMs: Date.now(),
             pendingTrackId: undefined,
@@ -334,7 +350,8 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           const cur = s.current
           if (!cur || s.queue.length === 0) return s
 
-          if (s.positionMs > 3000) {
+          // ✅ restart-on-prev ONLY while actually playing (not paused)
+          if (s.status === 'playing' && s.positionMs > 3000) {
             return {
               ...s,
               positionMs: 0,
@@ -366,6 +383,7 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
             }
           }
 
+          // at start
           if (s.repeat === 'all' && s.queue.length > 0) {
             const t = hydrateTrack(s.queue[s.queue.length - 1], s.durationById)
             return {
@@ -381,6 +399,7 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
             }
           }
 
+          // default: restart current
           return {
             ...s,
             positionMs: 0,
@@ -398,28 +417,22 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
 
       setQueue: (tracks: PlayerTrack[], opts?: {contextId?: string; artworkUrl?: string | null}) =>
         setState((s) => {
-          const nextContextId = opts?.contextId ?? s.queueContextId
-          const nextArtworkUrl =
-            opts && 'artworkUrl' in opts ? (opts.artworkUrl ?? null) : s.queueContextArtworkUrl ?? null
+          // ✅ prime cache from incoming Sanity durations (canonical)
+          const nextDurationById = primeDurationById(s.durationById, tracks)
 
-          const hydratedQueue = hydrateTracks(tracks, s.durationById)
+          // hydrate using the UPDATED cache
+          const hydratedQueue = hydrateTracks(tracks, nextDurationById)
 
           const nextCurrentRaw = s.current ?? hydratedQueue[0]
-          const nextCurrent = nextCurrentRaw ? hydrateTrack(nextCurrentRaw, s.durationById) : undefined
-
-          // 🔹 prime duration cache from Sanity data
-          const nextDurationById = {...(s.durationById ?? {})}
-          for (const t of tracks) {
-            if (t?.id && typeof t.durationMs === 'number' && t.durationMs > 0) {
-              nextDurationById[t.id] = t.durationMs
-            }
-          }
+          const nextCurrent = nextCurrentRaw ? hydrateTrack(nextCurrentRaw, nextDurationById) : undefined
 
           return {
             ...s,
+            durationById: nextDurationById,
             queue: hydratedQueue,
-            queueContextId: nextContextId,
-            queueContextArtworkUrl: nextArtworkUrl,
+            queueContextId: opts?.contextId ?? s.queueContextId,
+            queueContextArtworkUrl:
+              typeof opts?.artworkUrl !== 'undefined' ? (opts.artworkUrl ?? null) : s.queueContextArtworkUrl ?? null,
             current: nextCurrent,
             positionMs: s.current ? s.positionMs : 0,
             selectedTrackId: s.selectedTrackId ?? nextCurrent?.id,
@@ -428,9 +441,11 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
 
       enqueue: (track: PlayerTrack) =>
         setState((s) => {
-          const t = hydrateTrack(track, s.durationById)
+          const nextDurationById = primeDurationById(s.durationById, [track])
+          const t = hydrateTrack(track, nextDurationById)
           return {
             ...s,
+            durationById: nextDurationById,
             queue: [...s.queue, t],
             current: s.current ?? t,
             selectedTrackId: s.selectedTrackId ?? t.id,
@@ -445,39 +460,41 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           positionMs: Math.max(0, ms),
         })),
 
-      // ✅ store duration in cache + reflect it in current + queue entries
+      // ✅ “Sanity is canonical”:
+      // Only fill duration when we don't already have one cached (or on the current track).
       setDurationMs: (ms: number) =>
         setState((s) => {
           const cur = s.current
           if (!cur) return s
           if (!Number.isFinite(ms) || ms <= 0) return s
 
-          const prev = s.durationById[cur.id]
-          const same = prev === ms || cur.durationMs === ms
-          if (same) return s
+          const alreadyCached = typeof s.durationById[cur.id] === 'number' && s.durationById[cur.id] > 0
+          const alreadyOnTrack = typeof cur.durationMs === 'number' && cur.durationMs > 0
+
+          // If Sanity (or earlier cache) already provided a duration, NEVER overwrite with engine duration.
+          if (alreadyCached || alreadyOnTrack) return s
 
           const nextDurationById = {...s.durationById, [cur.id]: ms}
-          const nextCurrent = {...cur, durationMs: ms}
 
-          // update any matching track in queue too
+          // reflect into current + any matching queue entry
+          const nextCurrent = {...cur, durationMs: ms}
           let changed = false
           const nextQueue = s.queue.map((t) => {
             if (t.id !== cur.id) return t
-            if (t.durationMs === ms) return t
+            if (typeof t.durationMs === 'number' && t.durationMs > 0) return t
             changed = true
             return {...t, durationMs: ms}
           })
 
           return {
             ...s,
+            durationById: nextDurationById,
             current: nextCurrent,
             queue: changed ? nextQueue : s.queue,
-            durationById: nextDurationById,
           }
         }),
 
-      setStatusExternal: (st: PlayerStatus) =>
-        setState((s) => (s.status === st ? s : {...s, status: st})),
+      setStatusExternal: (st: PlayerStatus) => setState((s) => (s.status === st ? s : {...s, status: st})),
 
       setLoadingReasonExternal: (r?: LoadingReason) =>
         setState((s) => (s.loadingReason === r ? s : {...s, loadingReason: r})),
@@ -486,7 +503,8 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
 
       seek: (ms: number) => {
         setState((s) => {
-          const dur = s.current?.durationMs ?? s.durationById[s.current?.id ?? ''] ?? 0
+          const curId = s.current?.id ?? ''
+          const dur = (curId ? s.durationById[curId] : 0) || s.current?.durationMs || 0
           const next = dur > 0 ? clamp(ms, 0, dur) : Math.max(0, ms)
           return {
             ...s,
@@ -518,13 +536,15 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
       tick: (deltaMs: number) => {
         setState((s) => {
           if (s.status !== 'playing') return s
-          const curId = s.current?.id
+
+          const curId = s.current?.id ?? ''
           const dur = (curId ? s.durationById[curId] : 0) || s.current?.durationMs || 0
           const nextPos = Math.max(0, s.positionMs + Math.max(0, deltaMs))
 
           if (dur <= 0) return {...s, positionMs: nextPos}
           if (nextPos < dur) return {...s, positionMs: nextPos}
 
+          // reached end
           if (s.repeat === 'one') return {...s, positionMs: 0}
 
           const cur = s.current
@@ -540,6 +560,7 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
             const t = hydrateTrack(s.queue[0], s.durationById)
             return {...s, current: t, positionMs: 0, selectedTrackId: t.id, pendingTrackId: t.id}
           }
+
           return {...s, status: 'paused', positionMs: dur}
         })
       },
