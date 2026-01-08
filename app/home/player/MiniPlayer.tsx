@@ -232,10 +232,9 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
     return p.current?.artist ?? p.status
   })()
 
-  const DOCK_H = 80
+const DOCK_H = 80
 const ART_W = DOCK_H
 const TOP_BORDER = 1
-
 const SAFE_INSET = 'env(safe-area-inset-bottom)'
 
 const dock = (
@@ -258,27 +257,33 @@ const dock = (
 
       background: 'rgba(0,0,0,0.55)',
       backdropFilter: 'blur(10px)',
-      borderTop: 'none',
       overflow: 'hidden',
     }}
   >
-    <div style={{position: 'relative', width: '100%', display: 'grid', gap: 0}}>
-      <div style={{position: 'relative', width: '100%', display: 'grid', gap: 10, height: DOCK_H, overflow: 'hidden'}}>
+    <div style={{position: 'relative', width: '100%', height: '100%'}}>
+      <div
+        style={{
+          position: 'relative',
+          width: '100%',
+          height: '100%', // important: fill dock INCLUDING safe inset
+          overflow: 'hidden',
+        }}
+      >
   {/* Flush left artwork */}
   <div
     aria-hidden="true"
     style={{
-      position: 'absolute',
-      left: 0,
-      top: TOP_BORDER,
-      bottom: 0,
-      width: ART_W,
-      background: artworkUrl
-        ? `url(${artworkUrl}) center/cover no-repeat`
-        : 'rgba(255,255,255,0.06)',
-      borderRadius: 0, // square corners
-      borderRight: '1px solid rgba(255,255,255,0.10)',
-      zIndex: 0,
+            position: 'absolute',
+            left: 0,
+            top: TOP_BORDER,
+            bottom: `calc(0px - ${SAFE_INSET})`, // key line
+            width: ART_W,
+            background: artworkUrl
+              ? `url(${artworkUrl}) center/cover no-repeat`
+              : 'rgba(255,255,255,0.06)',
+            borderRadius: 0,
+            borderRight: '1px solid rgba(255,255,255,0.10)',
+            zIndex: 0,
     }}
   />
 
@@ -357,11 +362,13 @@ const dock = (
 
     // more breathing room so thumb doesn’t “kiss” the controls
     paddingTop: 18,
-    paddingBottom: 12,
+    paddingBottom: `calc(12px + ${SAFE_INSET})`, // key line
 
     // push everything right to make room for the flush artwork
     paddingLeft: ART_W + 12,
     paddingRight: 0,
+    position: 'relative',
+    zIndex: 1, // ensure controls sit above artwork
   }}
 >
 
@@ -618,9 +625,7 @@ const dock = (
         `}</style>
       </div>
     </div>
-    {/* Safe-area / bottom breathing room lives here (artwork stays flush) */}
-      <div aria-hidden="true" style={{height: SAFE_INSET}} />
-    </div>
+  </div>
   )
 
   if (!mounted) return null
