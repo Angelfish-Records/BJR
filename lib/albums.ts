@@ -37,7 +37,7 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPayload> {
       artist,
       year,
       description,
-      artwork
+      artwork,
       "tracks": tracks[]{
         id,
         title,
