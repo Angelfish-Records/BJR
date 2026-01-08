@@ -152,8 +152,8 @@ const playingThisAlbum = playing && (isThisAlbumActive || currentIsInBrowsedAlbu
   if (!firstTrack) return
 
   p.setQueue(tracks, {contextId: album?.id})   // NEW: claim playback context for this album
-  window.dispatchEvent(new Event('af:play-intent'))
   p.play(firstTrack)
+  window.dispatchEvent(new Event('af:play-intent'))
 }
 
 
@@ -248,8 +248,8 @@ const playingThisAlbum = playing && (isThisAlbumActive || currentIsInBrowsedAlbu
                 onClick={() => {
                   // Explicit playback change: this is allowed.
                   p.setQueue(tracks, {contextId: album?.id})
-                  window.dispatchEvent(new Event('af:play-intent'))
                   p.play(t)
+                  window.dispatchEvent(new Event('af:play-intent'))
 
                 }}
                 style={{

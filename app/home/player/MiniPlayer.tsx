@@ -233,28 +233,35 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
             background: rgba(255,255,255,0.18);
           }
           input[aria-label="Seek"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 10px;
-            height: 10px;
-            border-radius: 999px;
-            margin-top: -3px;
-            background: color-mix(in srgb, var(--accent) 75%, white 10%);
-            box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
-          }
-          input[aria-label="Seek"]::-moz-range-track {
-            height: 4px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.18);
-          }
-          input[aria-label="Seek"]::-moz-range-thumb {
-            width: 10px;
-            height: 10px;
-            border: 0;
-            border-radius: 999px;
-            background: color-mix(in srgb, var(--accent) 75%, white 10%);
-            box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
-          }
+          -webkit-appearance: none;
+          appearance: none;
+          width: 10px;
+          height: 10px;
+          border-radius: 999px;
+          margin-top: -3px;
+
+          background-color: rgba(245,245,245,0.95);
+          border: 0;
+          outline: none;
+
+          box-shadow:
+            0 0 0 1px rgba(0,0,0,0.35),
+            0 4px 10px rgba(0,0,0,0.25);
+        }
+
+        input[aria-label="Seek"]::-moz-range-thumb {
+          width: 10px;
+          height: 10px;
+          border: 0;
+          border-radius: 999px;
+
+          background-color: rgba(245,245,245,0.95);
+
+          box-shadow:
+            0 0 0 1px rgba(0,0,0,0.35),
+            0 4px 10px rgba(0,0,0,0.25);
+        }
+
         `}</style>
 
         <div

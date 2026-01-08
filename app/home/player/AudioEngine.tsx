@@ -11,7 +11,6 @@ type TokenResponse =
   | {ok: false; blocked: true; action: string; reason: string}
 
 function canPlayNativeHls(a: HTMLMediaElement) {
-  // Safari/iOS will usually return "probably" or "maybe"
   return a.canPlayType('application/vnd.apple.mpegurl') !== ''
 }
 
@@ -23,6 +22,18 @@ export default function AudioEngine() {
   const tokenAbortRef = React.useRef<AbortController | null>(null)
   const loadSeq = React.useRef(0)
 
+  // When user clicks play, we latch intent so we can retry once media is attached.
+  const playIntentRef = React.useRef(false)
+
+  // Cache signed tokens by playbackId to reduce perceived latency when switching around.
+  const tokenCacheRef = React.useRef(new Map<string, {token: string; expiresAtMs: number}>())
+
+  // Keep a stable ref to player API for event handlers.
+  const pRef = React.useRef(p)
+  React.useEffect(() => {
+    pRef.current = p
+  }, [p])
+
   /* ---------------- Volume / mute sync ---------------- */
 
   React.useEffect(() => {
@@ -32,7 +43,7 @@ export default function AudioEngine() {
     a.muted = p.muted
   }, [p.volume, p.muted])
 
-  /* ---------------- Track change -> fetch token + attach media ---------------- */
+  /* ---------------- Track change -> token + attach media ---------------- */
 
   React.useEffect(() => {
     const a = audioRef.current
@@ -41,14 +52,10 @@ export default function AudioEngine() {
     const playbackId = p.current?.muxPlaybackId
     if (!playbackId) return
 
-    // near top of the track-load effect, once playbackId exists:
-p.setStatusExternal('loading')
+    // Mark as loading whenever we switch tracks.
+    p.setStatusExternal('loading')
 
-// ... after attaching src / hls ...
-// DO NOT call a.play() here.
-
-
-    const seq = ++loadSeq.current 
+    const seq = ++loadSeq.current
 
     // Tear down any existing HLS instance
     if (hlsRef.current) {
@@ -57,79 +64,110 @@ p.setStatusExternal('loading')
       } catch {}
       hlsRef.current = null
     }
-    
+
     // Cancel any in-flight token request
     tokenAbortRef.current?.abort()
     const ac = new AbortController()
     tokenAbortRef.current = ac
-    
-    const load = async () => {
-  try {
-    const res = await fetch('/api/mux/playback-token', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({playbackId}),
-      signal: ac.signal,
-    })
 
-    if (ac.signal.aborted) return
-    if (seq !== loadSeq.current) return
-
-    // Read body safely (even on non-200)
-    const data = (await res.json()) as TokenResponse
-
-    if (ac.signal.aborted) return
-    if (seq !== loadSeq.current) return
-
-    if (!res.ok || !data.ok) {
-      p.setBlocked(!data.ok ? data.reason : `Token route failed (${res.status}).`)
-      return
-    }
-
-    const src = muxSignedHlsUrl(playbackId, data.token)
-
-    // Reset element state
-    a.pause()
-    a.removeAttribute('src')
-    a.load()
-
-    // 🔐 SECOND GUARD — right before attaching
-    if (seq !== loadSeq.current) return
-
-    if (canPlayNativeHls(a)) {
-      a.src = src
+    const attachSrc = (src: string) => {
+      // Reset element state
+      a.pause()
+      a.removeAttribute('src')
       a.load()
-    } else {
-      if (!Hls.isSupported()) {
-        p.setBlocked('This browser cannot play HLS (no MSE).')
-        return
+
+      if (seq !== loadSeq.current) return
+
+      if (canPlayNativeHls(a)) {
+        a.src = src
+        a.load()
+      } else {
+        if (!Hls.isSupported()) {
+          p.setBlocked('This browser cannot play HLS (no MSE).')
+          return
+        }
+
+        const hls = new Hls({enableWorker: true, lowLatencyMode: false})
+        hlsRef.current = hls
+
+        hls.on(Hls.Events.ERROR, (_evt, err) => {
+          if (err?.fatal) {
+            const msg = err?.details ? `HLS fatal: ${err.details}` : 'HLS fatal error.'
+            p.setBlocked(msg)
+            try {
+              hls.destroy()
+            } catch {}
+            if (hlsRef.current === hls) hlsRef.current = null
+          }
+        })
+
+        hls.loadSource(src)
+        hls.attachMedia(a)
       }
 
-      const hls = new Hls({enableWorker: true, lowLatencyMode: false})
-      hlsRef.current = hls
+      // Retry play after attach if user has expressed intent.
+      const tryPlay = () => {
+        if (!playIntentRef.current) return
+        void a
+          .play()
+          .then(() => {
+            playIntentRef.current = false
+          })
+          .catch(() => {
+            // not ready yet; allow canplay retry
+          })
+      }
 
-      hls.on(Hls.Events.ERROR, (_evt, err) => {
-        // Only hard-block on fatal errors; many are recoverable noise
-        if (err?.fatal) {
-          const msg = err?.details ? `HLS fatal: ${err.details}` : 'HLS fatal error.'
-          p.setBlocked(msg)
-          try {
-            hls.destroy()
-          } catch {}
-          if (hlsRef.current === hls) hlsRef.current = null
-        }
-      })
-
-      hls.loadSource(src)
-      hls.attachMedia(a)
+      tryPlay()
+      a.addEventListener('canplay', tryPlay, {once: true})
     }
 
-  } catch (err) {
-    if (ac.signal.aborted) return
-    if (seq !== loadSeq.current) return
-    p.setBlocked(err instanceof Error ? err.message : 'Playback blocked.')
-  }
-}
+    const load = async () => {
+      try {
+        // 1) Use cached token if still valid
+        const cached = tokenCacheRef.current.get(playbackId)
+        if (cached && Date.now() < cached.expiresAtMs - 5000) {
+          const src = muxSignedHlsUrl(playbackId, cached.token)
+          if (ac.signal.aborted) return
+          if (seq !== loadSeq.current) return
+          attachSrc(src)
+          return
+        }
+
+        // 2) Otherwise fetch a fresh token
+        const res = await fetch('/api/mux/playback-token', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({playbackId}),
+          signal: ac.signal,
+        })
+
+        if (ac.signal.aborted) return
+        if (seq !== loadSeq.current) return
+
+        const data = (await res.json()) as TokenResponse
+
+        if (ac.signal.aborted) return
+        if (seq !== loadSeq.current) return
+
+        if (!res.ok || !data.ok) {
+          p.setBlocked(!data.ok ? data.reason : `Token route failed (${res.status}).`)
+          return
+        }
+
+        const expiresAtMs = Date.parse(data.expiresAt)
+        if (Number.isFinite(expiresAtMs)) {
+          tokenCacheRef.current.set(playbackId, {token: data.token, expiresAtMs})
+        }
+
+        const src = muxSignedHlsUrl(playbackId, data.token)
+        attachSrc(src)
+      } catch (err) {
+        if (ac.signal.aborted) return
+        if (seq !== loadSeq.current) return
+        p.setBlocked(err instanceof Error ? err.message : 'Playback blocked.')
+      }
+    }
 
     void load()
 
@@ -161,31 +199,29 @@ p.setStatusExternal('loading')
     const a = audioRef.current
     if (!a) return
 
-    const onTime = () => p.setPositionMs(Math.floor(a.currentTime * 1000))
+    const onTime = () => pRef.current.setPositionMs(Math.floor(a.currentTime * 1000))
     const onDur = () => {
       const ms = Number.isFinite(a.duration) ? Math.floor(a.duration * 1000) : 0
-      if (ms > 0) p.setDurationMs(ms)
+      if (ms > 0) pRef.current.setDurationMs(ms)
     }
     const onEnded = () => {
-  // continue playback along the queue
-  window.dispatchEvent(new Event('af:play-intent'))
-  p.next()
-}
-
+      // Keep queue advancing. We also express intent so autoplay is allowed if next needs it.
+      window.dispatchEvent(new Event('af:play-intent'))
+      pRef.current.next()
+    }
 
     const onPlaying = () => {
-  p.setStatusExternal('playing')
-}
-   const onPause = () => {
-  // Don’t override blocked/loading transitions with “paused”
-  pRef.current.setStatusExternal(pRef.current.status === 'blocked' ? 'blocked' : 'paused')
-}
+      pRef.current.setStatusExternal('playing')
+    }
 
-
+    const onPause = () => {
+      // Don’t override blocked/loading transitions with “paused”
+      const s = pRef.current.status
+      pRef.current.setStatusExternal(s === 'blocked' ? 'blocked' : 'paused')
+    }
 
     const onError = () => {
-      // HTMLMediaElement errors are often opaque, but still better than silence
-      p.setBlocked('Media error while loading/decoding.')
+      pRef.current.setBlocked('Media error while loading/decoding.')
     }
 
     a.addEventListener('timeupdate', onTime)
@@ -203,20 +239,18 @@ p.setStatusExternal('loading')
       a.removeEventListener('pause', onPause)
       a.removeEventListener('error', onError)
     }
-  }, [p])
+  }, [])
 
   /* ---------------- Seeking from UI ---------------- */
 
   React.useEffect(() => {
-  const a = audioRef.current
-  if (!a) return
-  const desired = p.positionMs / 1000
-  if (!Number.isFinite(a.duration) || a.duration <= 0) return
-  if (Number.isFinite(desired)) a.currentTime = desired
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [p.seekNonce])
-
-
+    const a = audioRef.current
+    if (!a) return
+    const desired = p.positionMs / 1000
+    if (!Number.isFinite(a.duration) || a.duration <= 0) return
+    if (Number.isFinite(desired)) a.currentTime = desired
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.seekNonce])
 
   /* ---------------- Cleanup ---------------- */
 
@@ -232,26 +266,26 @@ p.setStatusExternal('loading')
     }
   }, [])
 
-    /* ---------------- User-gesture play/pause intent ---------------- */
+  /* ---------------- User-gesture play/pause intent ---------------- */
 
-  const pRef = React.useRef(p)
-React.useEffect(() => { pRef.current = p }, [p])
-  
-    React.useEffect(() => {
+  React.useEffect(() => {
     const a = audioRef.current
     if (!a) return
 
     const onPlayIntent = () => {
-      // This runs synchronously from the click handler call stack.
-      void a.play().catch((err) => {
-        // Don’t instantly hard-block on transient "not ready yet" cases.
-        const msg =
-          err instanceof Error ? err.message : 'Playback blocked.'
-        p.setBlocked(msg)
-      })
+      playIntentRef.current = true
+      void a.play().then(
+        () => {
+          playIntentRef.current = false
+        },
+        () => {
+          // ignore; we’ll retry after attach/canplay
+        }
+      )
     }
 
     const onPauseIntent = () => {
+      playIntentRef.current = false
       a.pause()
     }
 
@@ -262,11 +296,7 @@ React.useEffect(() => { pRef.current = p }, [p])
       window.removeEventListener('af:play-intent', onPlayIntent)
       window.removeEventListener('af:pause-intent', onPauseIntent)
     }
-  }, [p])
-
+  }, [])
 
   return <audio ref={audioRef} preload="metadata" playsInline style={{display: 'none'}} />
-
 }
-
-
