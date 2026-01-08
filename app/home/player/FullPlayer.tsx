@@ -143,7 +143,6 @@ export default function FullPlayer(props: {
   const browseAlbums = albums.filter((a) => a.id !== album?.id)
 
   const playingish = p.status === 'playing' || p.status === 'loading' || p.intent === 'play'
-  const pausedish = p.status === 'paused' || p.intent === 'pause'
 
   const isThisAlbumActive = Boolean(album?.id && p.queueContextId === album.id)
   const currentIsInBrowsedAlbum = Boolean(p.current && tracks.some((t) => t.id === p.current!.id))
@@ -276,11 +275,6 @@ export default function FullPlayer(props: {
           </IconCircleBtn>
         </div>
 
-        {p.status === 'loading' && playingThisAlbum ? (
-          <div style={{fontSize: 12, opacity: 0.6, marginTop: 4}}>
-            {p.loadingReason === 'buffering' ? 'Buffering…' : 'Loading…'}
-          </div>
-        ) : null}
         {p.status === 'blocked' && p.lastError ? (
           <div style={{fontSize: 12, opacity: 0.75, marginTop: 4}}>Playback error</div>
         ) : null}
@@ -292,18 +286,9 @@ export default function FullPlayer(props: {
           {tracks.map((t, i) => {
             const isCur = p.current?.id === t.id
             const isPending = p.pendingTrackId === t.id
-            const isSelected = p.selectedTrackId === t.id
 
             // shimmer: pending track OR current track while engine is still loading
             const shimmerTitle = isPending || (isCur && p.status === 'loading')
-
-            // ✅ remove "Now playing" copy; keep only useful secondary states
-            const sublabel = (() => {
-              if (isPending) return 'Loading…'
-              if (isCur) return pausedish ? 'Selected' : ''
-              if (isSelected) return 'Selected'
-              return ''
-            })()
 
             return (
               <button
@@ -353,7 +338,6 @@ export default function FullPlayer(props: {
                   >
                     {t.title ?? t.id}
                   </div>
-                  <div style={{fontSize: 12, opacity: 0.6, minHeight: 16}}>{sublabel}</div>
                 </div>
 
                 <div style={{fontSize: 12, opacity: 0.7}}>{renderDur(t)}</div>
