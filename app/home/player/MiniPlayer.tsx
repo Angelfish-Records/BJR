@@ -118,8 +118,9 @@ function RetryIcon() {
   )
 }
 
-export default function MiniPlayer(props: {onExpand?: () => void}) {
-  const {onExpand} = props
+export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: string | null})
+ {
+  const {onExpand, artworkUrl = null} = props
   const p = usePlayer()
 
   const [mounted, setMounted] = React.useState(false)
@@ -240,10 +241,10 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
         right: 0,
         bottom: 0,
         zIndex: 9999,
-        padding: '10px 12px calc(10px + env(safe-area-inset-bottom))',
+        padding: '0 12px calc(10px + env(safe-area-inset-bottom))',
         background: 'rgba(0,0,0,0.55)',
         backdropFilter: 'blur(10px)',
-        borderTop: '1px solid rgba(255,255,255,0.10)',
+        borderTop: 'none',
       }}
     >
       <div style={{position: 'relative', width: '100%', display: 'grid', gap: 10}}>
@@ -278,10 +279,10 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
 
         <style>{`
           input[aria-label="Seek"]::-webkit-slider-runnable-track {
-            height: 4px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.18);
-          }
+  height: 1px;
+  border-radius: 0px;
+  background: rgba(255,255,255,0.18);
+}
           input[aria-label="Seek"]::-webkit-slider-thumb {
             -webkit-appearance: none;
             appearance: none;
@@ -297,10 +298,10 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
               0 4px 10px rgba(0,0,0,0.25);
           }
           input[aria-label="Seek"]::-moz-range-track {
-            height: 4px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.18);
-          }
+  height: 1px;
+  border-radius: 0px;
+  background: rgba(255,255,255,0.18);
+}
           input[aria-label="Seek"]::-moz-range-thumb {
             width: 10px;
             height: 10px;
@@ -322,17 +323,31 @@ export default function MiniPlayer(props: {onExpand?: () => void}) {
             paddingTop: 14,
           }}
         >
-          <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
-            <IconBtn
-              label="Previous"
-              onClick={() => {
-                lockFor(350)
-                p.prev()
-              }}
-              disabled={!p.current || transportLock}
-            >
-              <PrevIcon />
-            </IconBtn>
+          <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
+  {artworkUrl ? (
+    <div
+      style={{
+        width: 36,
+        height: 36,
+        flex: '0 0 auto',
+        background: `url(${artworkUrl}) center / cover no-repeat`,
+        borderRadius: 4,          // hard-ish corners, not pill
+        boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
+      }}
+    />
+  ) : null}
+
+  <IconBtn
+    label="Previous"
+    onClick={() => {
+      lockFor(350)
+      p.prev()
+    }}
+    disabled={!p.current || transportLock}
+  >
+    <PrevIcon />
+  </IconBtn>
+
 
             <IconBtn
               label={playingish ? 'Pause' : 'Play'}

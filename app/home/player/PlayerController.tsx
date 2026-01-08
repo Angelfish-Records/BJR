@@ -69,7 +69,8 @@ export default function PlayerController(props: {
         />
       ) : null}
 
-      {miniActive ? <MiniPlayer onExpand={openPlayerPanel} /> : null}
+      {miniActive ? <MiniPlayer onExpand={openPlayerPanel} artworkUrl={p.queueContextArtworkUrl ?? null} /> : null}
+
     </>
   )
 }

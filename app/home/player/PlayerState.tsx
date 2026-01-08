@@ -24,6 +24,7 @@ export type PlayerState = {
 
   // identifies what the queue represents (album id for now)
   queueContextId?: string
+  queueContextArtworkUrl?: string | null
 
   // Optimistic UI
   intent: Intent
@@ -58,7 +59,7 @@ type PlayerActions = {
   prev: () => void
 
   // queue mgmt
-  setQueue: (tracks: PlayerTrack[], opts?: {contextId?: string}) => void
+  setQueue: (tracks: PlayerTrack[], opts?: {contextId?: string; artworkUrl?: string | null}) => void
   enqueue: (track: PlayerTrack) => void
 
   // telemetry
@@ -118,6 +119,7 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
     lastError: undefined,
 
     queueContextId: undefined,
+    queueContextArtworkUrl: null,
 
     intent: null,
     intentAtMs: undefined,
@@ -371,14 +373,18 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
 
       /* ---------------- Queue ---------------- */
 
-      setQueue: (tracks: PlayerTrack[], opts?: {contextId?: string}) =>
+      setQueue: (tracks: PlayerTrack[], opts?: {contextId?: string; artworkUrl?: string | null}) =>
         setState((s) => {
           const nextContextId = opts?.contextId ?? s.queueContextId
+          const nextArtworkUrl =
+      opts && 'artworkUrl' in opts ? (opts.artworkUrl ?? null) : s.queueContextArtworkUrl ?? null
+
           const nextCurrent = s.current ?? tracks[0]
           return {
             ...s,
             queue: tracks,
             queueContextId: nextContextId,
+            queueContextArtworkUrl: nextArtworkUrl,
             current: nextCurrent,
             positionMs: s.current ? s.positionMs : 0,
             // optimistic: if we set a new queue and current is in it, selection stays coherent

@@ -165,7 +165,7 @@ export default function FullPlayer(props: {
     if (!firstTrack) return
 
     // optimistic context + selection
-    p.setQueue(tracks, {contextId: album?.id})
+    p.setQueue(tracks, {contextId: album?.id, artworkUrl: album?.artworkUrl ?? null})
     p.setIntent('play')
     p.play(firstTrack)
     window.dispatchEvent(new Event('af:play-intent'))
@@ -281,7 +281,7 @@ export default function FullPlayer(props: {
                 onFocus={() => prefetchTrack(t)}
                 onClick={() => {
                   // optimistic selection + queue context flip
-                  p.setQueue(tracks, {contextId: album?.id})
+                  p.setQueue(tracks, {contextId: album?.id, artworkUrl: album?.artworkUrl ?? null})
                   p.setIntent('play')
                   p.play(t)
                   window.dispatchEvent(new Event('af:play-intent'))
