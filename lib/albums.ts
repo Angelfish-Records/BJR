@@ -25,7 +25,7 @@ export type AlbumBrowseItem = {
   title: string
   artist?: string
   year?: number
-  coverImage?: unknown
+  artwork?: unknown
 }
 
 export async function getAlbumBySlug(slug: string): Promise<AlbumPayload> {
@@ -37,6 +37,7 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPayload> {
       artist,
       year,
       description,
+      artwork
       "tracks": tracks[]{
         id,
         title,
@@ -72,8 +73,7 @@ export async function listAlbumsForBrowse(): Promise<AlbumBrowseItem[]> {
       title,
       artist,
       year,
-      // CHANGE this to your actual image field name
-      "coverImage": coalesce(coverImage, artwork, image)
+      artwork
     }
     `
   )

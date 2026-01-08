@@ -26,7 +26,7 @@ const browseAlbums: AlbumNavItem[] = browseAlbumsRaw
     title: a.title,
     artist: a.artist ?? undefined,
     year: a.year ?? undefined,
-    coverUrl: a.coverImage ? urlFor(a.coverImage).width(400).height(400).quality(80).url() : null,
+    coverUrl: a.artwork ? urlFor(a.artwork).width(400).height(400).quality(80).url() : null,
   }))
 
 
