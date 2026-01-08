@@ -107,19 +107,19 @@ export default function AudioEngine() {
 
       // Retry play after attach if user has expressed intent.
       const tryPlay = () => {
-        if (!playIntentRef.current) return
-        void a
-          .play()
-          .then(() => {
-            playIntentRef.current = false
-          })
-          .catch(() => {
-            // not ready yet; allow canplay retry
-          })
-      }
+  if (!playIntentRef.current) return
+  void a.play()
+    .then(() => {
+      playIntentRef.current = false
+    })
+    .catch(() => {
+      // ignore; keep intent latched for next event
+    })
+}
 
       tryPlay()
-      a.addEventListener('canplay', tryPlay, {once: true})
+a.addEventListener('loadedmetadata', tryPlay, {once: true})
+a.addEventListener('canplay', tryPlay, {once: true})
     }
 
     const load = async () => {
