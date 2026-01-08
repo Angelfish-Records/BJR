@@ -65,7 +65,23 @@ export async function getAlbumBySlug(
       : null,
   }
 
-  const tracks: PlayerTrack[] = Array.isArray(doc.tracks) ? (doc.tracks as PlayerTrack[]) : []
+  const tracks: PlayerTrack[] = Array.isArray(doc.tracks)
+  ? doc.tracks
+      .filter((t) => t?.id)
+      .map((t) => {
+        const raw = t.durationMs
+        const n = typeof raw === 'number' ? raw : undefined
+
+        return {
+          id: t.id,
+          title: t.title ?? undefined,
+          artist: t.artist ?? undefined,
+          muxPlaybackId: t.muxPlaybackId ?? undefined,
+          durationMs: typeof n === 'number' && n > 0 ? n : undefined,
+        }
+      })
+  : []
+
 
   return {album, tracks}
 }

@@ -407,6 +407,14 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           const nextCurrentRaw = s.current ?? hydratedQueue[0]
           const nextCurrent = nextCurrentRaw ? hydrateTrack(nextCurrentRaw, s.durationById) : undefined
 
+          // 🔹 prime duration cache from Sanity data
+          const nextDurationById = {...(s.durationById ?? {})}
+          for (const t of tracks) {
+            if (t?.id && typeof t.durationMs === 'number' && t.durationMs > 0) {
+              nextDurationById[t.id] = t.durationMs
+            }
+          }
+
           return {
             ...s,
             queue: hydratedQueue,

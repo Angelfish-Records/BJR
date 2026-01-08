@@ -129,12 +129,34 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
 
   const playingish = p.status === 'playing' || p.status === 'loading' || p.intent === 'play'
 
+    /* ---------------- Small anti-doubletap locks ---------------- */
+
+  const [transportLock, setTransportLock] = React.useState(false)
+  const lockFor = (ms: number) => {
+    setTransportLock(true)
+    window.setTimeout(() => setTransportLock(false), ms)
+  }
+
+  const [playLock, setPlayLock] = React.useState(false)
+  const lockPlayFor = (ms: number) => {
+    setPlayLock(true)
+    window.setTimeout(() => setPlayLock(false), ms)
+  }
+
   /* ---------------- Seek (optimistic + scrub without fighting timeupdate) ---------------- */
 
   const curId = p.current?.id ?? ''
   const durMs = Number((p.durationById?.[curId] ?? p.current?.durationMs ?? 0) || 0)
   const durKnown = durMs > 0
   const durSec = Math.max(1, Math.round(durMs / 1000))
+
+  const idx = curId ? p.queue.findIndex((t) => t.id === curId) : -1
+  const atStart = idx <= 0
+  const atEnd = idx >= 0 && idx === p.queue.length - 1
+
+  const prevDisabled = !p.current || transportLock || atStart
+  const nextDisabled = !p.current || transportLock || atEnd
+
 
   const posSecReal = Math.round((p.positionMs ?? 0) / 1000)
   const safePosReal = durKnown ? clamp(posSecReal, 0, durSec) : 0
@@ -233,20 +255,6 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
       window.removeEventListener('resize', compute)
     }
   }, [volOpen])
-
-  /* ---------------- Small anti-doubletap locks ---------------- */
-
-  const [transportLock, setTransportLock] = React.useState(false)
-  const lockFor = (ms: number) => {
-    setTransportLock(true)
-    window.setTimeout(() => setTransportLock(false), ms)
-  }
-
-  const [playLock, setPlayLock] = React.useState(false)
-  const lockPlayFor = (ms: number) => {
-    setPlayLock(true)
-    window.setTimeout(() => setPlayLock(false), ms)
-  }
 
   /* ---------------- Copy ---------------- */
 
@@ -473,9 +481,10 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
                 label="Previous"
                 onClick={() => {
                   lockFor(350)
+                  window.dispatchEvent(new Event('af:play-intent'))
                   p.prev()
                 }}
-                disabled={!p.current || transportLock}
+                disabled={prevDisabled}
               >
                 <PrevIcon />
               </IconBtn>
@@ -506,9 +515,10 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
                 label="Next"
                 onClick={() => {
                   lockFor(350)
+                  window.dispatchEvent(new Event('af:play-intent'))
                   p.next()
                 }}
-                disabled={!p.current || transportLock}
+                disabled={nextDisabled}
               >
                 <NextIcon />
               </IconBtn>
