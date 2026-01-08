@@ -118,8 +118,7 @@ function RetryIcon() {
   )
 }
 
-export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: string | null})
- {
+export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: string | null}) {
   const {onExpand, artworkUrl = null} = props
   const p = usePlayer()
 
@@ -233,21 +232,50 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
     return p.current?.artist ?? p.status
   })()
 
-  const dock = (
-    <div
-      style={{
-        position: 'fixed',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 9999,
-        padding: '0 12px calc(10px + env(safe-area-inset-bottom))',
-        background: 'rgba(0,0,0,0.55)',
-        backdropFilter: 'blur(10px)',
-        borderTop: 'none',
-      }}
-    >
-      <div style={{position: 'relative', width: '100%', display: 'grid', gap: 10}}>
+  const DOCK_H = 72
+const ART_W = DOCK_H
+
+const dock = (
+  <div
+    style={{
+      position: 'fixed',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 9999,
+
+      // was: padding: '0 12px ...'
+      paddingTop: 0,
+      paddingRight: 12,
+      paddingBottom: `calc(12px + env(safe-area-inset-bottom))`,
+      paddingLeft: 0,
+
+      minHeight: DOCK_H,
+
+      background: 'rgba(0,0,0,0.55)',
+      backdropFilter: 'blur(10px)',
+      borderTop: 'none',
+    }}
+  >
+
+      <div style={{position: 'relative', width: '100%', display: 'grid', gap: 10, minHeight: DOCK_H}}>
+  {/* Flush left artwork */}
+  <div
+    aria-hidden="true"
+    style={{
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: ART_W,
+      background: artworkUrl
+        ? `url(${artworkUrl}) center/cover no-repeat`
+        : 'rgba(255,255,255,0.06)',
+      borderRadius: 0, // square corners
+      borderRight: '1px solid rgba(255,255,255,0.10)',
+    }}
+  />
+
         {/* TOP EDGE progress bar */}
         <div style={{position: 'absolute', left: 0, right: 0, top: 0}}>
           <input
@@ -315,14 +343,21 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
         `}</style>
 
         <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'auto minmax(0, 1fr) auto',
-            alignItems: 'center',
-            gap: 12,
-            paddingTop: 14,
-          }}
-        >
+  style={{
+    display: 'grid',
+    gridTemplateColumns: 'auto minmax(0, 1fr) auto',
+    alignItems: 'center',
+    gap: 12,
+
+    // more breathing room so thumb doesn’t “kiss” the controls
+    paddingTop: 18,
+
+    // push everything right to make room for the flush artwork
+    paddingLeft: ART_W + 12,
+    paddingRight: 0,
+  }}
+>
+
           <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
   {artworkUrl ? (
     <div
