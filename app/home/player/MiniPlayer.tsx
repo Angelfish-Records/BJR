@@ -9,6 +9,13 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
 }
 
+function fmtTimeSec(sec: number) {
+  const s = Math.max(0, Math.floor(sec))
+  const m = Math.floor(s / 60)
+  const r = s % 60
+  return `${m}:${String(r).padStart(2, '0')}`
+}
+
 const IconBtn = React.forwardRef<
   HTMLButtonElement,
   {
@@ -125,7 +132,13 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
 
   /* ---------------- Seek (optimistic + scrub without fighting timeupdate) ---------------- */
 
-  const durMs = p.current?.durationMs ?? 0
+  const durMsRaw =
+  (p.current?.id ? p.durationById?.[p.current.id] : undefined) ??
+  p.current?.durationMs ??
+  0
+
+  const durMs = typeof durMsRaw === 'number' ? durMsRaw : Number(durMsRaw) || 0
+
   const durKnown = durMs > 0
   const durSec = Math.max(1, Math.round(durMs / 1000))
 
@@ -148,6 +161,46 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
   }, [safePosReal, scrubbing])
 
   const sliderValue = scrubbing ? scrubSec : safePending ?? safePosReal
+
+  /* ---------------- Seek hover tooltip ---------------- */
+
+  const seekWrapRef = React.useRef<HTMLDivElement | null>(null)
+  const [hoveringSeek, setHoveringSeek] = React.useState(false)
+  const [hoverClientX, setHoverClientX] = React.useState<number | null>(null)
+  const [hoverSec, setHoverSec] = React.useState<number | null>(null)
+  const [seekRect, setSeekRect] = React.useState<{left: number; top: number; width: number} | null>(null)
+
+  const tooltipVisible = durKnown && (scrubbing || hoveringSeek) && hoverClientX != null && hoverSec != null && seekRect
+
+  const updateSeekRect = React.useCallback(() => {
+    const el = seekWrapRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    setSeekRect({left: r.left, top: r.top, width: r.width})
+  }, [])
+
+  React.useLayoutEffect(() => {
+    if (!mounted) return
+    updateSeekRect()
+    window.addEventListener('resize', updateSeekRect)
+    window.addEventListener('scroll', updateSeekRect, true)
+    return () => {
+      window.removeEventListener('resize', updateSeekRect)
+      window.removeEventListener('scroll', updateSeekRect, true)
+    }
+  }, [mounted, updateSeekRect])
+
+  const computeHoverFromClientX = (clientX: number) => {
+    const el = seekWrapRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const x = clamp(clientX - r.left, 0, r.width)
+    const pct = r.width > 0 ? x / r.width : 0
+    const sec = clamp(Math.round(pct * durSec), 0, durSec)
+    setHoverClientX(clientX)
+    setHoverSec(sec)
+    setSeekRect({left: r.left, top: r.top, width: r.width})
+  }
 
   /* ---------------- Volume popup anchoring + “expensive” tooltip ---------------- */
 
@@ -240,6 +293,9 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
   // visual progress is NOT the range track; it’s our own 1px fill bar
   const progressPct = durKnown ? (sliderValue / durSec) * 100 : 0
 
+  // title shimmers on load or buffer
+  const isShimmering = p.status === 'loading' && !!p.current
+
   const dock = (
     <div
       data-af-miniplayer
@@ -260,7 +316,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
         backdropFilter: 'blur(10px)',
         WebkitBackdropFilter: 'blur(10px)',
 
-        // KEY: let the thumb poke above the dock
+        // KEY: let the thumb + tooltip poke above the dock
         overflow: 'visible',
       }}
     >
@@ -300,8 +356,55 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
           }}
         />
 
+        {/* Tooltip (fixed positioning so it never gets clipped / doesn’t depend on transforms) */}
+        {tooltipVisible ? (
+          <div
+            aria-hidden="true"
+            style={{
+              position: 'fixed',
+              left: clamp(hoverClientX!, (seekRect!.left ?? 0) + 12, (seekRect!.left ?? 0) + (seekRect!.width ?? 0) - 12),
+              top: (seekRect!.top ?? 0) - 28,
+              transform: 'translateX(-50%)',
+              fontSize: 11,
+              padding: '4px 8px',
+              borderRadius: 999,
+              border: '1px solid rgba(255,255,255,0.12)',
+              background: 'rgba(0,0,0,0.55)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              color: 'rgba(255,255,255,0.92)',
+              boxShadow: '0 10px 26px rgba(0,0,0,0.35)',
+              pointerEvents: 'none',
+              whiteSpace: 'nowrap',
+              zIndex: 999999,
+            }}
+          >
+            {fmtTimeSec(hoverSec!)}
+          </div>
+        ) : null}
+
         {/* Invisible seek hitbox, centered on y=0, thumb is the only visible part */}
         <div
+          ref={seekWrapRef}
+          onPointerEnter={(e) => {
+            // hover-ish for mouse/pen; touch will be handled by scrubbing
+            if (e.pointerType === 'touch') return
+            setHoveringSeek(true)
+            computeHoverFromClientX(e.clientX)
+          }}
+          onPointerMove={(e) => {
+            if (!durKnown) return
+            if (e.pointerType === 'touch' && !scrubbing) return
+            // show tooltip while scrubbing too
+            if (e.pointerType !== 'touch') setHoveringSeek(true)
+            computeHoverFromClientX(e.clientX)
+          }}
+          onPointerLeave={(e) => {
+            if (e.pointerType === 'touch') return
+            setHoveringSeek(false)
+            setHoverClientX(null)
+            setHoverSec(null)
+          }}
           style={{
             position: 'absolute',
             left: 0,
@@ -318,13 +421,36 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
             max={durSec}
             disabled={!durKnown}
             value={sliderValue}
-            onPointerDown={() => setScrubbing(true)}
+            onPointerDown={(e: React.PointerEvent<HTMLInputElement>) => {
+              setScrubbing(true)
+              computeHoverFromClientX(e.clientX)
+            }}
             onPointerUp={() => {
               setScrubbing(false)
+              // hide tooltip after touch interactions (mouse hover will keep it)
+              setTimeout(() => {
+                setHoveringSeek(false)
+                setHoverClientX(null)
+                setHoverSec(null)
+              }, 0)
               if (durKnown) p.seek(scrubSec * 1000)
             }}
-            onPointerCancel={() => setScrubbing(false)}
-            onChange={(e) => setScrubSec(Number(e.target.value))}
+            onPointerCancel={() => {
+              setScrubbing(false)
+              setHoveringSeek(false)
+              setHoverClientX(null)
+              setHoverSec(null)
+            }}
+            onChange={(e) => {
+              const next = Number(e.target.value)
+              setScrubSec(next)
+              // keep tooltip consistent even if pointer didn’t move (keyboard)
+              if (seekRect) {
+                const clientX = seekRect.left + (seekRect.width * (durSec > 0 ? next / durSec : 0))
+                setHoverClientX(clientX)
+                setHoverSec(next)
+              }
+            }}
             style={{
               width: '100%',
               height: SEEK_H,
@@ -362,16 +488,14 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
               top: 0,
               bottom: 0,
               width: ART_W,
-              background: artworkUrl
-                ? `url(${artworkUrl}) center/cover no-repeat`
-                : 'rgba(255,255,255,0.06)',
+              background: artworkUrl ? `url(${artworkUrl}) center/cover no-repeat` : 'rgba(255,255,255,0.06)',
               borderRadius: 0,
               borderRight: '1px solid rgba(255,255,255,0.10)',
               zIndex: 0,
             }}
           />
 
-          {/* Controls / text (no longer needs paddingTop: SEEK_H because seek is outside the clip band) */}
+          {/* Controls / text */}
           <div
             style={{
               position: 'relative',
@@ -436,6 +560,8 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
 
             <div style={{minWidth: 0}}>
               <div
+              className={isShimmering ? 'afShimmerText' : undefined}
+              data-reason={p.loadingReason ?? ''}
                 style={{
                   fontSize: 13,
                   opacity: 0.92,
@@ -639,7 +765,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
           `}</style>
         </div>
 
-        {/* Seek styles: track fully transparent; thumb only visible */}
+        {/* Seek track fully transparent; thumb only visible, loading and buffering shimmer */}
         <style>{`
           input[aria-label="Seek"]::-webkit-slider-runnable-track {
             height: ${TOP_BORDER}px;
@@ -680,7 +806,39 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
               0 0 0 1px rgba(0,0,0,0.35),
               0 4px 10px rgba(0,0,0,0.25);
           }
-        `}</style>
+
+
+          @keyframes afShimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  .afShimmerText {
+    background: linear-gradient(
+      90deg,
+      rgba(255,255,255,0.55) 0%,
+      rgba(255,255,255,0.95) 45%,
+      rgba(255,255,255,0.55) 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: afShimmer 1.1s linear infinite;
+  }
+
+  /* slightly calmer when just "loading", a bit punchier when buffering */
+  .afShimmerText[data-reason="token"],
+  .afShimmerText[data-reason="attach"] { opacity: 0.85; }
+
+  .afShimmerText[data-reason="buffering"] { opacity: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .afShimmerText { animation: none; color: rgba(255,255,255,0.92); background: none; }
+  }
+        `
+        
+        }</style>
       </div>
     </div>
   )

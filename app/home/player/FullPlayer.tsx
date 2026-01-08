@@ -106,6 +106,26 @@ function MoreIcon() {
   )
 }
 
+// tiny "now playing" indicator
+function NowPlayingPip() {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: 'inline-grid',
+        placeItems: 'center',
+        width: 16,
+        height: 16,
+      }}
+    >
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <circle cx="7" cy="7" r="2.3" fill="rgba(245,245,245,0.92)" />
+        <circle cx="7" cy="7" r="5.6" stroke="rgba(245,245,245,0.30)" strokeWidth="1.2" />
+      </svg>
+    </span>
+  )
+}
+
 export default function FullPlayer(props: {
   album: AlbumInfo | null
   tracks: PlayerTrack[]
@@ -144,12 +164,12 @@ export default function FullPlayer(props: {
   }
 
   const prefetchAlbumArt = (url?: string | null) => {
-  if (!url) return
-  try {
-    const img = new Image()
-    img.src = url
-  } catch {}
-}
+    if (!url) return
+    try {
+      const img = new Image()
+      img.src = url
+    } catch {}
+  }
 
   const onTogglePlay = () => {
     lockPlayFor(120)
@@ -164,11 +184,19 @@ export default function FullPlayer(props: {
     const firstTrack = tracks[0]
     if (!firstTrack) return
 
-    // optimistic context + selection
     p.setQueue(tracks, {contextId: album?.id, artworkUrl: album?.artworkUrl ?? null})
     p.setIntent('play')
     p.play(firstTrack)
     window.dispatchEvent(new Event('af:play-intent'))
+  }
+
+  const getDurMs = (t: PlayerTrack) => {
+    return p.durationById?.[t.id] ?? t.durationMs
+  }
+
+  const renderDur = (t: PlayerTrack) => {
+    const ms = getDurMs(t) ?? 0
+    return ms > 0 ? fmtTime(ms) : '—'
   }
 
   return (
@@ -233,6 +261,7 @@ export default function FullPlayer(props: {
               opacity: canPlay ? 0.98 : 0.55,
               boxShadow: playingThisAlbum ? '0 18px 50px rgba(0,0,0,0.35)' : '0 18px 50px rgba(0,0,0,0.30)',
               transform: 'translateZ(0)',
+              position: 'relative',
             }}
           >
             <PlayPauseBig playing={playingThisAlbum} />
@@ -265,10 +294,13 @@ export default function FullPlayer(props: {
             const isPending = p.pendingTrackId === t.id
             const isSelected = p.selectedTrackId === t.id
 
+            // shimmer: pending track OR current track while engine is still loading
+            const shimmerTitle = isPending || (isCur && p.status === 'loading')
+
+            // ✅ remove "Now playing" copy; keep only useful secondary states
             const sublabel = (() => {
-              if (isCur && playingish) return 'Now playing'
               if (isPending) return 'Loading…'
-              if (isCur) return pausedish ? 'Selected' : 'Selected'
+              if (isCur) return pausedish ? 'Selected' : ''
               if (isSelected) return 'Selected'
               return ''
             })()
@@ -280,7 +312,6 @@ export default function FullPlayer(props: {
                 onMouseEnter={() => prefetchTrack(t)}
                 onFocus={() => prefetchTrack(t)}
                 onClick={() => {
-                  // optimistic selection + queue context flip
                   p.setQueue(tracks, {contextId: album?.id, artworkUrl: album?.artworkUrl ?? null})
                   p.setIntent('play')
                   p.play(t)
@@ -302,9 +333,15 @@ export default function FullPlayer(props: {
                   transform: 'translateZ(0)',
                 }}
               >
-                <div style={{fontSize: 12, opacity: 0.7}}>{i + 1}</div>
+                <div style={{fontSize: 12, opacity: 0.7, display: 'flex', alignItems: 'center', gap: 6}}>
+                  {isCur && playingish ? <NowPlayingPip /> : <span style={{width: 16, display: 'inline-block'}} />}
+                  <span>{i + 1}</span>
+                </div>
+
                 <div style={{minWidth: 0}}>
                   <div
+                    className={shimmerTitle ? 'afShimmerText' : undefined}
+                    data-reason={isCur && p.status === 'loading' ? p.loadingReason ?? '' : ''}
                     style={{
                       fontSize: 13,
                       opacity: 0.92,
@@ -318,7 +355,8 @@ export default function FullPlayer(props: {
                   </div>
                   <div style={{fontSize: 12, opacity: 0.6, minHeight: 16}}>{sublabel}</div>
                 </div>
-                <div style={{fontSize: 12, opacity: 0.7}}>{fmtTime(t.durationMs ?? 0)}</div>
+
+                <div style={{fontSize: 12, opacity: 0.7}}>{renderDur(t)}</div>
               </button>
             )
           })}
@@ -376,7 +414,15 @@ export default function FullPlayer(props: {
                       <div style={{fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
                         {a.title}
                       </div>
-                      <div style={{fontSize: 12, opacity: 0.65, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          opacity: 0.65,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
                         {a.artist ?? ''}
                       </div>
                     </div>
@@ -404,6 +450,34 @@ export default function FullPlayer(props: {
           </div>
         ) : null}
       </div>
+
+      {/* shimmer styles (scoped by class name) */}
+      <style>{`
+        @keyframes afShimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+        .afShimmerText {
+          background: linear-gradient(
+            90deg,
+            rgba(255,255,255,0.55) 0%,
+            rgba(255,255,255,0.95) 45%,
+            rgba(255,255,255,0.55) 100%
+          );
+          background-size: 200% 100%;
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+          animation: afShimmer 1.1s linear infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .afShimmerText {
+            animation: none;
+            color: rgba(255,255,255,0.92);
+            background: none;
+          }
+        }
+      `}</style>
     </div>
   )
 }
