@@ -232,7 +232,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
     return p.current?.artist ?? p.status
   })()
 
-  const DOCK_H = 72
+  const DOCK_H = 80
 const ART_W = DOCK_H
 
 const dock = (
@@ -258,15 +258,15 @@ const dock = (
     }}
   >
 
-      <div style={{position: 'relative', width: '100%', display: 'grid', gap: 10, height: DOCK_H}}>
+      <div style={{position: 'relative', width: '100%', display: 'grid', gap: 10, height: DOCK_H, overflow: 'hidden'}}>
   {/* Flush left artwork */}
   <div
     aria-hidden="true"
     style={{
       position: 'absolute',
       left: 0,
-      top: 0,
-      height: DOCK_H,
+      top: 1,
+      height: DOCK_H-1,
       width: ART_W,
       background: artworkUrl
         ? `url(${artworkUrl}) center/cover no-repeat`
