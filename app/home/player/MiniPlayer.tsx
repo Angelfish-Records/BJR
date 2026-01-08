@@ -258,6 +258,7 @@ const dock = (
       background: 'rgba(0,0,0,0.55)',
       backdropFilter: 'blur(10px)',
       borderTop: 'none',
+      overflow: 'hidden',
     }}
   >
     <div style={{position: 'relative', width: '100%', display: 'grid', gap: 0}}>
@@ -269,7 +270,7 @@ const dock = (
       position: 'absolute',
       left: 0,
       top: 0,
-      height: DOCK_H,
+      bottom: 0,
       width: ART_W,
       background: artworkUrl
         ? `url(${artworkUrl}) center/cover no-repeat`
