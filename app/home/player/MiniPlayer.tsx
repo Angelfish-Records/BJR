@@ -235,7 +235,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
   const DOCK_H = 80
 const ART_W = DOCK_H
 
-const SAFE_PAD = 'calc(12px + env(safe-area-inset-bottom))'
+const SAFE_INSET = 'env(safe-area-inset-bottom)'
 
 const dock = (
   <div
@@ -253,7 +253,7 @@ const dock = (
       paddingLeft: 0,
 
       // total height becomes DOCK_H + SAFE_PAD via spacer below
-       minHeight: `calc(${DOCK_H}px + ${SAFE_PAD})`,
+       minHeight: `calc(${DOCK_H}px + ${SAFE_INSET})`,
 
       background: 'rgba(0,0,0,0.55)',
       backdropFilter: 'blur(10px)',
@@ -354,6 +354,7 @@ const dock = (
 
     // more breathing room so thumb doesn’t “kiss” the controls
     paddingTop: 18,
+    paddingBottom: 12,
 
     // push everything right to make room for the flush artwork
     paddingLeft: ART_W + 12,
@@ -615,7 +616,7 @@ const dock = (
       </div>
     </div>
     {/* Safe-area / bottom breathing room lives here (artwork stays flush) */}
-      <div aria-hidden="true" style={{height: SAFE_PAD}} />
+      <div aria-hidden="true" style={{height: SAFE_INSET}} />
     </div>
   )
 
