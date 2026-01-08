@@ -7,42 +7,28 @@ import PortalShell, {PortalPanelSpec} from './PortalShell'
 import {usePlayer, type PlayerTrack} from './player/PlayerState'
 import PlayerController from './player/PlayerController'
 import type {AlbumInfo} from '@/lib/types'
+import type {AlbumNavItem} from '@/lib/types'
 
 function QueueBootstrapper(props: {albumId: string | null; tracks: PlayerTrack[]}) {
   const p = usePlayer()
-  const appliedRef = React.useRef<string | null>(null)
 
   React.useEffect(() => {
-  const tracks = props.tracks
-  if (!tracks.length) return
-
-  const key = `${props.albumId ?? 'none'}:${tracks.map(t => t.id).join('|')}`
-  if (appliedRef.current === key) return
-  appliedRef.current = key
-
-  const ids = new Set(tracks.map(t => t.id))
-  const currentOk = p.current?.id ? ids.has(p.current.id) : false
-
-  p.setQueue(tracks)
-
-  // If you're not currently on a track in this album, jump to track 1.
-  if (!currentOk) {
-    p.play(tracks[0])
-  }
-}, [props.albumId, props.tracks, p])
-
+    // Browser-mode: never clobber an existing queue/playback on navigation.
+    if (p.queue.length > 0) return
+    if (!props.tracks.length) return
+    p.setQueue(props.tracks)
+  }, [p, props.tracks])
 
   return null
 }
-
-
 
 export default function PortalArea(props: {
   portalPanel: React.ReactNode
   album: AlbumInfo | null
   tracks: PlayerTrack[]
+  albums: AlbumNavItem[]
 }) {
-  const {portalPanel, album, tracks} = props
+  const {portalPanel, album, tracks, albums} = props
   const [activePanelId, setActivePanelId] = React.useState<string>('player')
 
   const panels = React.useMemo<PortalPanelSpec[]>(
@@ -53,6 +39,8 @@ export default function PortalArea(props: {
         content: (
           <PlayerController
             album={album}
+            tracks={tracks}
+            albums={albums}
             activePanelId={activePanelId}
             playerPanelId="player"
             openPlayerPanel={() => setActivePanelId('player')}
@@ -61,7 +49,7 @@ export default function PortalArea(props: {
       },
       {id: 'portal', label: 'Portal', content: portalPanel},
     ],
-    [portalPanel, album, activePanelId]
+    [portalPanel, album, tracks, albums, activePanelId]
   )
 
     return (
@@ -77,16 +65,18 @@ export default function PortalArea(props: {
           syncToQueryParam
           onPanelChange={setActivePanelId}
           dock={() => {
-            if (activePanelId === 'player') return null
-            return (
-              <PlayerController
-                album={album}
-                activePanelId={activePanelId}
-                playerPanelId="player"
-                openPlayerPanel={() => setActivePanelId('player')}
-              />
-            )
-          }}
+          if (activePanelId === 'player') return null
+          return (
+            <PlayerController
+              album={album}
+              tracks={tracks}
+              albums={albums}
+              activePanelId={activePanelId}
+              playerPanelId="player"
+              openPlayerPanel={() => setActivePanelId('player')}
+      />
+    )
+  }}
         />
       </div>
     </>

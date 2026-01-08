@@ -6,3 +6,11 @@ export type AlbumInfo = {
   year?: number
   description?: string
 }
+
+export type AlbumNavItem = {
+  id: string
+  slug: string
+  title: string
+  artist?: string
+  coverUrl?: string | null
+}

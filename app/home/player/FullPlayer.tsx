@@ -2,8 +2,10 @@
 'use client'
 
 import React from 'react'
+import Link from 'next/link'
 import {usePlayer} from './PlayerState'
-import type {AlbumInfo} from '@/lib/types'
+import type {AlbumInfo, AlbumNavItem} from '@/lib/types'
+import type {PlayerTrack} from './PlayerState'
 
 function fmtTime(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000))
@@ -67,7 +69,13 @@ function DownloadIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
       <path d="M12 3v10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M8 11l4 4 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M8 11l4 4 4-4"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
       <path d="M5 20h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   )
@@ -89,21 +97,9 @@ function BookmarkIcon() {
 function ShareIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M16 8a3 3 0 1 0-2.9-3.7A3 3 0 0 0 16 8Z"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-      <path
-        d="M6 14a3 3 0 1 0-2.9-3.7A3 3 0 0 0 6 14Z"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-      <path
-        d="M16 22a3 3 0 1 0-2.9-3.7A3 3 0 0 0 16 22Z"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
+      <path d="M16 8a3 3 0 1 0-2.9-3.7A3 3 0 0 0 16 8Z" stroke="currentColor" strokeWidth="2" />
+      <path d="M6 14a3 3 0 1 0-2.9-3.7A3 3 0 0 0 6 14Z" stroke="currentColor" strokeWidth="2" />
+      <path d="M16 22a3 3 0 1 0-2.9-3.7A3 3 0 0 0 16 22Z" stroke="currentColor" strokeWidth="2" />
       <path d="M8.7 11.2l5-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       <path d="M8.7 12.8l5 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
@@ -120,28 +116,23 @@ function MoreIcon() {
   )
 }
 
-export default function FullPlayer(props: { album: AlbumInfo | null
-}) {
+export default function FullPlayer(props: {album: AlbumInfo | null; tracks: PlayerTrack[]; albums: AlbumNavItem[]}) {
   const p = usePlayer()
+  const {album, tracks, albums} = props
 
-  const albumArtist = props.album?.artist ?? p.current?.artist ?? '—'
-const albumTitle = props.album?.title ?? '—'
-const albumMeta = props.album?.year ? `Album · ${props.album.year}` : 'Album'
-const albumDesc =
-  props.album?.description ??
-  'This is placeholder copy. Soon: pull album description from Sanity.'
-
-
+  const albumArtist = album?.artist ?? '—'
+  const albumTitle = album?.title ?? '—'
+  const albumMeta = album?.year ? `Album · ${album.year}` : 'Album'
+  const albumDesc =
+    album?.description ?? 'This is placeholder copy. Soon: pull album description from Sanity.'
 
   const cur = p.current
   const durMs = cur?.durationMs ?? 0
   const posMs = durMs > 0 ? clamp(p.positionMs, 0, durMs) : 0
 
-
   const playing = p.status === 'playing'
-  const canPlay = Boolean(cur ?? p.queue[0])
-
-    const first = p.queue[0]
+  const canPlay = Boolean(cur ?? p.queue[0] ?? tracks[0])
+  const first = p.queue[0] ?? tracks[0]
 
   const onTogglePlay = () => {
     if (playing) {
@@ -149,13 +140,10 @@ const albumDesc =
       p.pause()
       return
     }
-
-    // Ensure the browser sees a real user-gesture play attempt.
+    if (!first) return
     window.dispatchEvent(new Event('af:play-intent'))
     p.play(p.current ?? first)
   }
-
-
 
   return (
     <div
@@ -167,11 +155,9 @@ const albumDesc =
         padding: 18,
       }}
     >
-      {/* Header / hero */}
       <div style={{display: 'grid', justifyItems: 'center', textAlign: 'center', gap: 10}}>
         <div style={{fontSize: 12, opacity: 0.75}}>{albumArtist}</div>
 
-        {/* Artwork (placeholder) */}
         <div
           style={{
             width: 210,
@@ -187,12 +173,9 @@ const albumDesc =
 
         <div style={{fontSize: 22, fontWeight: 650, letterSpacing: 0.2, opacity: 0.96}}>{albumTitle}</div>
         <div style={{fontSize: 12, opacity: 0.7}}>{albumMeta}</div>
-        
-        <div style={{maxWidth: 540, fontSize: 12, opacity: 0.62, lineHeight: 1.45}}>
-          {albumDesc}
-        </div>
 
-        {/* Controls row (like reference) */}
+        <div style={{maxWidth: 540, fontSize: 12, opacity: 0.62, lineHeight: 1.45}}>{albumDesc}</div>
+
         <div style={{display: 'flex', alignItems: 'center', gap: 10, marginTop: 8}}>
           <IconCircleBtn label="Download" onClick={() => {}}>
             <DownloadIcon />
@@ -234,7 +217,6 @@ const albumDesc =
           </IconCircleBtn>
         </div>
 
-        {/* Seek (optional; reference screenshot doesn’t show it, but you’ll want it) */}
         <div style={{width: '100%', maxWidth: 560, marginTop: 10}}>
           <input
             aria-label="Seek"
@@ -242,7 +224,7 @@ const albumDesc =
             min={0}
             max={Math.max(1, durMs)}
             value={Math.min(Math.max(0, posMs), Math.max(1, durMs))}
-            onChange={(e) => p.seek(Number(e.target.value))} // ms
+            onChange={(e) => p.seek(Number(e.target.value))}
             style={{
               width: '100%',
               height: 18,
@@ -259,57 +241,26 @@ const albumDesc =
         </div>
 
         <style>{`
-          input[aria-label="Seek"]::-webkit-slider-runnable-track {
-            height: 4px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.18);
-          }
-          input[aria-label="Seek"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 10px;
-            height: 10px;
-            border-radius: 999px;
-            margin-top: -3px;
-            background: color-mix(in srgb, var(--accent) 75%, white 10%);
-            box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
-          }
-          input[aria-label="Seek"]::-moz-range-track {
-            height: 4px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.18);
-          }
-          input[aria-label="Seek"]::-moz-range-thumb {
-            width: 10px;
-            height: 10px;
-            border: 0;
-            border-radius: 999px;
-            background: color-mix(in srgb, var(--accent) 75%, white 10%);
-            box-shadow: 0 0 0 3px rgba(0,0,0,0.35);
-          }
+          input[aria-label="Seek"]::-webkit-slider-runnable-track { height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); }
+          input[aria-label="Seek"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 10px; height: 10px; border-radius: 999px; margin-top: -3px; background: color-mix(in srgb, var(--accent) 75%, white 10%); box-shadow: 0 0 0 3px rgba(0,0,0,0.35); }
+          input[aria-label="Seek"]::-moz-range-track { height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); }
+          input[aria-label="Seek"]::-moz-range-thumb { width: 10px; height: 10px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--accent) 75%, white 10%); box-shadow: 0 0 0 3px rgba(0,0,0,0.35); }
         `}</style>
       </div>
 
-      {/* Tracklist */}
       <div style={{marginTop: 18}}>
-        <div
-          style={{
-            borderTop: '1px solid rgba(255,255,255,0.10)',
-            paddingTop: 14,
-          }}
-        >
-          {p.queue.map((t, i) => {
+        <div style={{borderTop: '1px solid rgba(255,255,255,0.10)', paddingTop: 14}}>
+          {tracks.map((t, i) => {
             const isCur = p.current?.id === t.id
             return (
               <button
                 key={t.id}
                 type="button"
                 onClick={() => {
-                  if (!isCur) p.play(t)
-                  else if (playing) p.pause()
-                  else p.play(t)
+                  p.setQueue(tracks)
+                  p.play(t)
+                  window.dispatchEvent(new Event('af:play-intent'))
                 }}
-
                 style={{
                   width: '100%',
                   display: 'grid',
@@ -326,30 +277,63 @@ const albumDesc =
                 }}
               >
                 <div style={{fontSize: 12, opacity: 0.7}}>{i + 1}</div>
-
                 <div style={{minWidth: 0}}>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      opacity: 0.92,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
+                  <div style={{fontSize: 13, opacity: 0.92, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
                     {t.title ?? t.id}
                   </div>
-                  <div style={{fontSize: 12, opacity: 0.6}}>
-                    {/* Placeholder “plays” to mimic reference; replace with real data or remove */}
-                    {isCur ? (playing ? 'Now playing' : 'Selected') : ''}
-                  </div>
+                  <div style={{fontSize: 12, opacity: 0.6}}>{isCur ? (p.status === 'playing' ? 'Now playing' : 'Selected') : ''}</div>
                 </div>
-
                 <div style={{fontSize: 12, opacity: 0.7}}>{fmtTime(t.durationMs ?? 0)}</div>
               </button>
             )
           })}
         </div>
+
+        {albums.length ? (
+          <div style={{marginTop: 18}}>
+            <div style={{fontSize: 12, opacity: 0.7, marginBottom: 10}}>Browse albums</div>
+
+            <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12}}>
+              {albums.map((a) => {
+                const isActive = album?.id === a.id
+                return (
+                  <Link
+                    key={a.id}
+                    href={`/albums/${a.slug}?panel=player`}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '56px minmax(0, 1fr)',
+                      gap: 12,
+                      alignItems: 'center',
+                      padding: 12,
+                      borderRadius: 14,
+                      border: isActive ? '1px solid rgba(255,255,255,0.18)' : '1px solid rgba(255,255,255,0.10)',
+                      background: isActive ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)',
+                      textDecoration: 'none',
+                      color: 'rgba(255,255,255,0.92)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: 12,
+                        border: '1px solid rgba(255,255,255,0.14)',
+                        background: a.coverUrl
+                          ? `url(${a.coverUrl}) center/cover no-repeat`
+                          : 'radial-gradient(40px 40px at 30% 20%, rgba(255,255,255,0.14), rgba(255,255,255,0.02))',
+                      }}
+                    />
+                    <div style={{minWidth: 0}}>
+                      <div style={{fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{a.title}</div>
+                      <div style={{fontSize: 12, opacity: 0.65, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{a.artist ?? ''}</div>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        ) : null}
 
         {p.lastError ? (
           <div

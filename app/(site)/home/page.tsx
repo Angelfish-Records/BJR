@@ -14,7 +14,9 @@ import CancelSubscriptionButton from '@/app/home/CancelSubscriptionButton'
 import {fetchPortalPage} from '@/lib/portal'
 import PortalModules from '@/app/home/PortalModules'
 import PortalArea from '@/app/home/PortalArea'
-import {getAlbumBySlug} from '@/lib/albums'
+import {listAlbumsForBrowse, getAlbumBySlug} from '@/lib/albums'
+import type {AlbumNavItem} from '@/lib/types'
+
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -186,6 +188,18 @@ export default async function Home(props: {
 
   const albumData = await getAlbumBySlug(featuredAlbumSlug)
 
+  const browseAlbumsRaw = await listAlbumsForBrowse()
+
+const browseAlbums: AlbumNavItem[] = browseAlbumsRaw
+  .filter((a) => a.slug && a.title)
+  .map((a) => ({
+    id: a.id,
+    slug: a.slug,
+    title: a.title,
+    artist: a.artist ?? undefined,
+    year: a.year ?? undefined,
+    coverUrl: a.coverImage ? urlFor(a.coverImage).width(400).height(400).quality(80).url() : null,
+  }))
 
   return (
     <main style={mainStyle}>
@@ -341,6 +355,7 @@ export default async function Home(props: {
   portalPanel={portalPanel}
   album={albumData.album}
   tracks={albumData.tracks}
+  albums={browseAlbums}
 />
 
 </div>
