@@ -176,7 +176,11 @@ p.setStatusExternal('loading')
     const onPlaying = () => {
   p.setStatusExternal('playing')
 }
-   const onPause = () => p.setStatusExternal('paused')
+   const onPause = () => {
+  // Don’t override blocked/loading transitions with “paused”
+  pRef.current.setStatusExternal(pRef.current.status === 'blocked' ? 'blocked' : 'paused')
+}
+
 
 
     const onError = () => {

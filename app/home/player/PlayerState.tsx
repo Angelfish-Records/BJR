@@ -21,6 +21,9 @@ export type PlayerState = {
   queue: PlayerTrack[]
   lastError?: string
 
+    // NEW: identifies what the queue represents (album id for now)
+  queueContextId?: string
+
   // UI-facing playback telemetry (real audio engine can own these later)
   positionMs: number
   seekNonce: number
@@ -38,7 +41,8 @@ type PlayerActions = {
   setStatusExternal: (s: PlayerStatus) => void
 
 
-  setQueue: (tracks: PlayerTrack[]) => void
+   // CHANGED: add optional contextId
+  setQueue: (tracks: PlayerTrack[], opts?: {contextId?: string}) => void
   enqueue: (track: PlayerTrack) => void
 
   // Transport (stubs now; later: drive the real audio engine)
@@ -81,6 +85,8 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
     queue: [],
     lastError: undefined,
 
+    queueContextId: undefined, // NEW
+
     positionMs: 0,
     seekNonce: 0,
     volume: 0.9,
@@ -118,13 +124,15 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
         setState((s) => (s.status === st ? s : {...s, status: st})),
 
       
-      setQueue: (tracks: PlayerTrack[]) =>
-        setState((s) => ({
-          ...s,
-          queue: tracks,
-          current: s.current ?? tracks[0],
-          positionMs: s.current ? s.positionMs : 0,
-        })),
+      setQueue: (tracks: PlayerTrack[], opts?: {contextId?: string}) =>
+          setState((s) => ({
+            ...s,
+            queue: tracks,
+            queueContextId: opts?.contextId ?? s.queueContextId,
+            current: s.current ?? tracks[0],
+            positionMs: s.current ? s.positionMs : 0,
+          })),
+
 
       enqueue: (track: PlayerTrack) =>
         setState((s) => ({

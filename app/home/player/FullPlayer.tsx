@@ -1,3 +1,4 @@
+// web/app/home/player/FullPlayer.tsx
 'use client'
 
 import React from 'react'
@@ -135,19 +136,33 @@ export default function FullPlayer(props: {
   const posMs = durMs > 0 ? clamp(p.positionMs, 0, durMs) : 0
 
   const playing = p.status === 'playing'
-  const canPlay = Boolean(cur ?? p.queue[0] ?? tracks[0])
-  const first = p.queue[0] ?? tracks[0]
+  // This album is “the playback context” if it set the current queue.
+const isThisAlbumActive = Boolean(album?.id && p.queueContextId === album.id)
+
+// If you want an extra fallback (useful while you’re still wiring IDs), you can also treat it as active
+// if the current track id exists in the browsed album's track list:
+const currentIsInBrowsedAlbum = Boolean(p.current && tracks.some(t => t.id === p.current!.id))
+
+const playingThisAlbum = playing && (isThisAlbumActive || currentIsInBrowsedAlbum)
+  const canPlay = tracks.length > 0
 
   const onTogglePlay = () => {
-    if (playing) {
-      window.dispatchEvent(new Event('af:pause-intent'))
-      p.pause()
-      return
-    }
-    if (!first) return
-    window.dispatchEvent(new Event('af:play-intent'))
-    p.play(p.current ?? first)
+  // If THIS album is the active one and it’s playing, pause.
+  if (playingThisAlbum) {
+    window.dispatchEvent(new Event('af:pause-intent'))
+    p.pause()
+    return
   }
+
+  // Otherwise: explicit context switch to THIS album, then play.
+  const firstTrack = tracks[0] ?? p.queue[0] ?? p.current
+  if (!firstTrack) return
+
+  p.setQueue(tracks, {contextId: album?.id})   // NEW: claim playback context for this album
+  window.dispatchEvent(new Event('af:play-intent'))
+  p.play(firstTrack)
+}
+
 
   return (
     <div
@@ -199,8 +214,8 @@ export default function FullPlayer(props: {
             type="button"
             onClick={canPlay ? onTogglePlay : undefined}
             disabled={!canPlay}
-            aria-label={playing ? 'Pause' : 'Play'}
-            title={playing ? 'Pause' : 'Play'}
+            aria-label={playingThisAlbum ? 'Pause' : 'Play'}
+            title={playingThisAlbum ? 'Pause' : 'Play'}
             style={{
               width: 64,
               height: 64,
@@ -215,7 +230,7 @@ export default function FullPlayer(props: {
               boxShadow: '0 18px 50px rgba(0,0,0,0.35)',
             }}
           >
-            <PlayPauseBig playing={playing} />
+            <PlayPauseBig playing={playingThisAlbum} />
           </button>
 
           <IconCircleBtn label="Share" onClick={() => {}}>
@@ -277,9 +292,10 @@ export default function FullPlayer(props: {
                 type="button"
                 onClick={() => {
                   // Explicit playback change: this is allowed.
-                  p.setQueue(tracks)
-                  p.play(t)
+                  p.setQueue(tracks, {contextId: album?.id})
                   window.dispatchEvent(new Event('af:play-intent'))
+                  p.play(t)
+
                 }}
                 style={{
                   width: '100%',
