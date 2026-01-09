@@ -177,6 +177,7 @@ export default function AudioEngine() {
   if (!playbackId) return
 
   mediaSurface.setTrack(s.current?.id ?? null)
+  mediaSurface.setStatus('loading')
 
   const armed =
     s.status === 'loading' ||
@@ -284,87 +285,89 @@ export default function AudioEngine() {
 }, [p.current?.id, p.current?.muxPlaybackId, p.status, p.intent, p.reloadNonce])
 
 
-/* ---------------- Media element -> status ---------------- */
+/* ---------------- Media element -> time + duration + state (single source) ---------------- */
 
 React.useEffect(() => {
   const a = audioRef.current
   if (!a) return
 
-  const onPlaying = () => pRef.current.setStatusExternal('playing')
-  const onPause = () => pRef.current.setStatusExternal('paused')
-  const onWaiting = () => pRef.current.setLoadingReasonExternal('buffering')
-  const onCanPlay = () => pRef.current.setLoadingReasonExternal(undefined)
-
-  a.addEventListener('playing', onPlaying)
-  a.addEventListener('pause', onPause)
-  a.addEventListener('waiting', onWaiting)
-  a.addEventListener('canplay', onCanPlay)
-
-  return () => {
-    a.removeEventListener('playing', onPlaying)
-    a.removeEventListener('pause', onPause)
-    a.removeEventListener('waiting', onWaiting)
-    a.removeEventListener('canplay', onCanPlay)
+  const onTime = () => {
+    const ms = Math.floor(a.currentTime * 1000)
+    mediaSurface.setTime(ms)
+    pRef.current.setPositionMs(ms)
   }
-}, [])
 
-
-/* ---------------- Media element -> authoritative state ---------------- */
-
-React.useEffect(() => {
-  const a = audioRef.current
-  if (!a) return
+  const onLoadedMeta = () => {
+    // duration can be Infinity/NaN briefly for streams; guard it
+    const d = a.duration
+    if (Number.isFinite(d) && d > 0) {
+      pRef.current.setDurationMs(Math.floor(d * 1000))
+    }
+  }
 
   const markPlaying = () => {
+    mediaSurface.setStatus('playing')
     pRef.current.setStatusExternal('playing')
     pRef.current.setLoadingReasonExternal(undefined)
     pRef.current.clearIntent()
-
     const curId = pRef.current.current?.id
     if (curId) pRef.current.resolvePendingTrack(curId)
   }
 
   const markPaused = () => {
-    // If user explicitly paused, stay paused.
+    mediaSurface.setStatus('paused')
     pRef.current.setStatusExternal('paused')
     pRef.current.setLoadingReasonExternal(undefined)
     pRef.current.clearIntent()
   }
 
   const markBuffering = () => {
-    // Only show buffering shimmer if we *expected* to be playing.
+    // only if we expected play
     const s = pRef.current
     const shouldBePlaying = s.intent === 'play' || s.status === 'playing' || s.status === 'loading'
     if (!shouldBePlaying) return
+    mediaSurface.setStatus('loading')
     s.setStatusExternal('loading')
     s.setLoadingReasonExternal('buffering')
   }
 
   const clearBuffering = () => {
-    // Can play again; don’t force playing, just stop shimmer reason.
     pRef.current.setLoadingReasonExternal(undefined)
+    // don't force status; playing/pause events will do that
   }
+
+  const onEnded = () => {
+    window.dispatchEvent(new Event('af:play-intent'))
+    pRef.current.next()
+  }
+
+  a.addEventListener('timeupdate', onTime)
+  a.addEventListener('loadedmetadata', onLoadedMeta)
 
   a.addEventListener('playing', markPlaying)
   a.addEventListener('pause', markPaused)
-
   a.addEventListener('waiting', markBuffering)
   a.addEventListener('stalled', markBuffering)
-
   a.addEventListener('canplay', clearBuffering)
   a.addEventListener('canplaythrough', clearBuffering)
 
+  a.addEventListener('ended', onEnded)
+
   return () => {
+    a.removeEventListener('timeupdate', onTime)
+    a.removeEventListener('loadedmetadata', onLoadedMeta)
+
     a.removeEventListener('playing', markPlaying)
     a.removeEventListener('pause', markPaused)
-
     a.removeEventListener('waiting', markBuffering)
     a.removeEventListener('stalled', markBuffering)
-
     a.removeEventListener('canplay', clearBuffering)
     a.removeEventListener('canplaythrough', clearBuffering)
+
+    a.removeEventListener('ended', onEnded)
   }
 }, [])
+
 
   /* ---------------- Intent -> media element ---------------- */
 
