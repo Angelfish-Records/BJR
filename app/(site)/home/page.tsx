@@ -421,7 +421,11 @@ const browseAlbums: AlbumNavItem[] = browseAlbumsRaw
               )}
 
               {/* Stage: inline by default, fullscreen via button */}
-              <StageInline height={300} />
+              <StageInline
+  height={300}
+  cuesByTrackId={albumData.lyrics.cuesByTrackId}
+  offsetByTrackId={albumData.lyrics.offsetByTrackId}
+/>
               
             </aside>
           </div>

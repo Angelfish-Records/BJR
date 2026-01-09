@@ -5,7 +5,7 @@ import React from 'react'
 import {createPortal} from 'react-dom'
 import {usePlayer} from './PlayerState'
 import StageCore from './StageCore'
-
+import type {LyricCue} from './stage/LyricsOverlay'
 
 function lockBodyScroll(lock: boolean) {
   if (typeof document === 'undefined') return
@@ -22,12 +22,15 @@ function lockBodyScroll(lock: boolean) {
   }
 }
 
-import type {LyricCue} from './stage/LyricsOverlay'
-
 type CuesByTrackId = Record<string, LyricCue[]>
+type OffsetByTrackId = Record<string, number>
 
-export default function StageInline(props: {height?: number; cuesByTrackId?: CuesByTrackId}) {
-  const {height = 300, cuesByTrackId} = props
+export default function StageInline(props: {
+  height?: number
+  cuesByTrackId?: CuesByTrackId
+  offsetByTrackId?: OffsetByTrackId
+}) {
+  const {height = 300, cuesByTrackId, offsetByTrackId} = props
   const p = usePlayer()
 
   const [mounted, setMounted] = React.useState(false)
@@ -40,13 +43,10 @@ export default function StageInline(props: {height?: number; cuesByTrackId?: Cue
     return () => lockBodyScroll(false)
   }, [open])
 
-    // Optional: try Fullscreen API when opening (best-effort only)
   const tryRequestFullscreen = React.useCallback(async () => {
     if (typeof document === 'undefined') return
     const el = document.getElementById('af-stage-overlay')
     if (!el) return
-
-    // requestFullscreen lives on Element in modern DOM lib, but we keep it defensive.
     if (!('requestFullscreen' in el)) return
 
     const requestFullscreen = (el as Element).requestFullscreen
@@ -59,7 +59,6 @@ export default function StageInline(props: {height?: number; cuesByTrackId?: Cue
     }
   }, [])
 
-
   const overlay =
     mounted && open
       ? createPortal(
@@ -69,7 +68,6 @@ export default function StageInline(props: {height?: number; cuesByTrackId?: Cue
             aria-modal="true"
             aria-label="Stage"
             onMouseDown={(e) => {
-              // click outside content closes
               if (e.target === e.currentTarget) setOpen(false)
             }}
             style={{
@@ -90,7 +88,16 @@ export default function StageInline(props: {height?: number; cuesByTrackId?: Cue
             <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12}}>
               <div style={{minWidth: 0}}>
                 <div style={{fontSize: 12, opacity: 0.7}}>Stage</div>
-                <div style={{fontSize: 14, fontWeight: 650, opacity: 0.92, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
+                <div
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 650,
+                    opacity: 0.92,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
                   {p.current?.title ?? p.current?.id ?? 'Nothing playing'}
                 </div>
               </div>
@@ -134,7 +141,11 @@ export default function StageInline(props: {height?: number; cuesByTrackId?: Cue
             </div>
 
             <div style={{position: 'relative', minHeight: 0}}>
-              <StageCore variant="fullscreen" cuesByTrackId={cuesByTrackId} />
+              <StageCore
+                variant="fullscreen"
+                cuesByTrackId={cuesByTrackId}
+                offsetByTrackId={offsetByTrackId}
+              />
             </div>
           </div>,
           document.body
@@ -143,7 +154,6 @@ export default function StageInline(props: {height?: number; cuesByTrackId?: Cue
 
   return (
     <>
-      {/* Inline card (always visible) */}
       <div
         style={{
           borderRadius: 18,
@@ -179,7 +189,7 @@ export default function StageInline(props: {height?: number; cuesByTrackId?: Cue
         </div>
 
         <div style={{height, position: 'relative'}}>
-          <StageCore variant="inline" cuesByTrackId={cuesByTrackId} />
+          <StageCore variant="inline" cuesByTrackId={cuesByTrackId} offsetByTrackId={offsetByTrackId} />
         </div>
       </div>
 
