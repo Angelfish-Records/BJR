@@ -35,14 +35,13 @@ export default function LyricsOverlay(props: {
 }) {
   const {cues, offsetMs = 0, onSeek, windowLines = 8} = props
 
-  const wrapRef = React.useRef<HTMLDivElement | null>(null)
+  // viewport = the visible "glass" box
+  const viewportRef = React.useRef<HTMLDivElement | null>(null)
   const listRef = React.useRef<HTMLDivElement | null>(null)
   const rafRef = React.useRef<number | null>(null)
 
-  // State is safe to read during render.
   const [activeIdx, setActiveIdx] = React.useState(-1)
 
-  // Keep last idx in a ref to avoid extra state sets.
   const activeIdxRef = React.useRef(-1)
   React.useEffect(() => {
     activeIdxRef.current = activeIdx
@@ -60,14 +59,19 @@ export default function LyricsOverlay(props: {
 
     const applyVisuals = (idx: number) => {
       const list = listRef.current
-      const wrap = wrapRef.current
-      if (!list || !wrap) return
+      const viewport = viewportRef.current
+      if (!list || !viewport) return
 
-      const lineH = 34
-      const centerOffset = wrap.clientHeight / 2 - lineH * 1.2
-      const y = -(idx * lineH) + centerOffset
-      list.style.transform = `translate3d(0, ${Math.round(y)}px, 0)`
+      // Center the *actual rendered* active row (works even when rendering a slice).
+      const activeEl = list.querySelector<HTMLElement>(`[data-lyric-idx="${idx}"]`)
+      if (activeEl) {
+        const y = activeEl.offsetTop + activeEl.offsetHeight / 2
+        const center = viewport.clientHeight / 0.42
+        const translateY = center - y
+        list.style.transform = `translate3d(0, ${Math.round(translateY)}px, 0)`
+      }
 
+      // Opacity/scale styling
       const kids = list.querySelectorAll<HTMLElement>('[data-lyric-idx]')
       for (const k of kids) {
         const n = Number(k.dataset.lyricIdx)
@@ -83,7 +87,7 @@ export default function LyricsOverlay(props: {
 
       if (idx !== activeIdxRef.current) {
         activeIdxRef.current = idx
-        setActiveIdx(idx) // safe; only fires when index changes
+        setActiveIdx(idx)
         applyVisuals(idx)
       }
 
@@ -128,7 +132,6 @@ export default function LyricsOverlay(props: {
 
   return (
     <div
-      ref={wrapRef}
       style={{
         position: 'absolute',
         inset: 0,
@@ -140,6 +143,7 @@ export default function LyricsOverlay(props: {
       }}
     >
       <div
+        ref={viewportRef}
         style={{
           position: 'relative',
           height: 'min(520px, 70vh)',
@@ -172,7 +176,7 @@ export default function LyricsOverlay(props: {
             top: 0,
             willChange: 'transform',
             transform: 'translate3d(0,0,0)',
-            padding: '120px 20px',
+            padding: '140px 20px', // extra breathing room so center never feels cramped
             display: 'grid',
             gap: 10,
           }}
