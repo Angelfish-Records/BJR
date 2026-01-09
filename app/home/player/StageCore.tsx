@@ -22,6 +22,7 @@ export default function StageCore(props: {
   const {variant, cuesByTrackId, offsetByTrackId, offsetMs: globalOffsetMs = 0, autoResumeOnSeek = false} = props
   const p = usePlayer()
 
+  // Keep mediaSurface track around, but DO NOT let it override a known current track.
   const [surfaceTrackId, setSurfaceTrackId] = React.useState<string | null>(() => mediaSurface.getTrackId())
 
   React.useEffect(() => {
@@ -30,19 +31,21 @@ export default function StageCore(props: {
     })
   }, [])
 
-  const trackKey = surfaceTrackId ?? p.current?.id ?? p.current?.muxPlaybackId ?? null
+  // Prefer the PlayerState current track id (most reliable for inline UI),
+  // fall back to mediaSurface only if current is missing.
+  const trackId = p.current?.id ?? surfaceTrackId ?? null
 
   const cues: LyricCue[] | null = React.useMemo(() => {
-    if (!trackKey) return null
-    const xs = cuesByTrackId?.[trackKey]
+    if (!trackId) return null
+    const xs = cuesByTrackId?.[trackId]
     return Array.isArray(xs) && xs.length ? xs : null
-  }, [cuesByTrackId, trackKey])
+  }, [cuesByTrackId, trackId])
 
   const trackOffsetMs = React.useMemo(() => {
-    if (!trackKey) return 0
-    const v = offsetByTrackId?.[trackKey]
+    if (!trackId) return 0
+    const v = offsetByTrackId?.[trackId]
     return typeof v === 'number' && Number.isFinite(v) ? v : 0
-  }, [offsetByTrackId, trackKey])
+  }, [offsetByTrackId, trackId])
 
   const effectiveOffsetMs = trackOffsetMs + globalOffsetMs
 
@@ -62,8 +65,8 @@ export default function StageCore(props: {
     [autoResumeOnSeek, p]
   )
 
-  // LyricsOverlay supports: 'inline' | 'stage'
-  const lyricsVariant: 'inline' | 'stage' = variant === 'fullscreen' ? 'stage' : 'inline'
+  // Map StageCore variant to LyricsOverlay variant
+  const lyricVariant: 'inline' | 'stage' = variant === 'inline' ? 'inline' : 'stage'
 
   return (
     <div
@@ -77,7 +80,7 @@ export default function StageCore(props: {
     >
       <VisualizerCanvas />
 
-      <LyricsOverlay cues={cues} offsetMs={effectiveOffsetMs} onSeek={onSeek} variant={lyricsVariant} />
+      <LyricsOverlay cues={cues} offsetMs={effectiveOffsetMs} onSeek={onSeek} variant={lyricVariant} />
 
       <div
         aria-hidden="true"
