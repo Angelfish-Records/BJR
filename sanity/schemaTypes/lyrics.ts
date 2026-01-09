@@ -29,6 +29,15 @@ export default defineType({
       description: 'Paste .lrc text or JSON { offsetMs?, cues:[{tMs,text,endMs?}] } then click Apply below.',
     }),
 
+
+defineField({
+  name: 'version',
+  title: 'Version',
+  type: 'string',
+  initialValue: 'v1',
+}),
+
+
     defineField({
       name: 'cues',
       title: 'Cues',

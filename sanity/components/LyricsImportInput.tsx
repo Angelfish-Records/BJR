@@ -25,6 +25,7 @@ function parseTimestampToMs(ts: string): number | null {
     if (!Number.isFinite(hours)) return null
   }
 
+  // seconds can have decimals
   const secs = Number(secPart)
   if (!Number.isFinite(secs)) return null
 
@@ -67,11 +68,10 @@ function parseLrc(text: string): {cues: LyricCue[]; offsetMs?: number} {
     if (times.length === 0) continue
 
     const textOnly = line.replace(timeTag, '').trim()
-    // allow blank lines (just timestamps) to be ignored
-    if (!textOnly) continue
+    if (!textOnly) continue // ignore blank lyric lines like "[00:35.583]"
 
-    for (const tMsRaw of times) {
-      const tMs = tMsRaw + (globalOffsetMs ?? 0)
+    for (const baseMs of times) {
+      const tMs = baseMs + (globalOffsetMs ?? 0)
       if (tMs >= 0) cues.push({tMs, text: textOnly})
     }
   }
@@ -116,13 +116,17 @@ function tryParseJson(text: string): ImportPayload | null {
   }
 }
 
+function makeKey() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 export default function LyricsImportInput(props: ArrayOfObjectsInputProps) {
   const {value, onChange} = props
 
-  // read sibling field value: importText
+  // Pick ONE import field. This matches your schema's `importText`.
   const importText = (useFormValue(['importText']) as string | undefined) ?? ''
 
-  const [status, setStatus] = React.useState<string>('')
+  const [status, setStatus] = React.useState('')
 
   const apply = React.useCallback(() => {
     const src = importText.trim()
@@ -152,13 +156,17 @@ export default function LyricsImportInput(props: ArrayOfObjectsInputProps) {
     const siblingOffset =
       asJson?.offsetMs != null ? asJson.offsetMs : offsetFromLrc != null ? offsetFromLrc : undefined
 
-    // IMPORTANT: build FormPatch[] only
+    const cuesWithKeys = cues.map((c) => ({
+      _key: makeKey(),
+      _type: 'cue',
+      tMs: c.tMs,
+      text: c.text,
+      ...(typeof c.endMs === 'number' ? {endMs: c.endMs} : {}),
+    }))
+
     const patches: FormPatch[] = []
+    patches.push(set(cuesWithKeys))
 
-    // set current field (cues array)
-    patches.push(set(cues))
-
-    // set sibling offsetMs if present
     if (siblingOffset != null) {
       patches.push(set(siblingOffset, ['..', 'offsetMs']))
     }
@@ -200,6 +208,7 @@ export default function LyricsImportInput(props: ArrayOfObjectsInputProps) {
         </Stack>
       </Card>
 
+      {/* Keep default editor so you can manually tweak after import */}
       {props.renderDefault(props)}
     </Stack>
   )
