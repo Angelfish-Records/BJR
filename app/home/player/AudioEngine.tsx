@@ -309,31 +309,62 @@ React.useEffect(() => {
 }, [])
 
 
-  /* ---------------- Time + state reporting ---------------- */
+/* ---------------- Media element -> authoritative state ---------------- */
 
-  React.useEffect(() => {
-    const a = audioRef.current
-    if (!a) return
+React.useEffect(() => {
+  const a = audioRef.current
+  if (!a) return
 
-    const onTime = () => {
-      const ms = Math.floor(a.currentTime * 1000)
-      mediaSurface.setTime(ms)
-      pRef.current.setPositionMs(ms)
-    }
+  const markPlaying = () => {
+    pRef.current.setStatusExternal('playing')
+    pRef.current.setLoadingReasonExternal(undefined)
+    pRef.current.clearIntent()
 
-    const onEnded = () => {
-      window.dispatchEvent(new Event('af:play-intent'))
-      pRef.current.next()
-    }
+    const curId = pRef.current.current?.id
+    if (curId) pRef.current.resolvePendingTrack(curId)
+  }
 
-    a.addEventListener('timeupdate', onTime)
-    a.addEventListener('ended', onEnded)
+  const markPaused = () => {
+    // If user explicitly paused, stay paused.
+    pRef.current.setStatusExternal('paused')
+    pRef.current.setLoadingReasonExternal(undefined)
+    pRef.current.clearIntent()
+  }
 
-    return () => {
-      a.removeEventListener('timeupdate', onTime)
-      a.removeEventListener('ended', onEnded)
-    }
-  }, [])
+  const markBuffering = () => {
+    // Only show buffering shimmer if we *expected* to be playing.
+    const s = pRef.current
+    const shouldBePlaying = s.intent === 'play' || s.status === 'playing' || s.status === 'loading'
+    if (!shouldBePlaying) return
+    s.setStatusExternal('loading')
+    s.setLoadingReasonExternal('buffering')
+  }
+
+  const clearBuffering = () => {
+    // Can play again; don’t force playing, just stop shimmer reason.
+    pRef.current.setLoadingReasonExternal(undefined)
+  }
+
+  a.addEventListener('playing', markPlaying)
+  a.addEventListener('pause', markPaused)
+
+  a.addEventListener('waiting', markBuffering)
+  a.addEventListener('stalled', markBuffering)
+
+  a.addEventListener('canplay', clearBuffering)
+  a.addEventListener('canplaythrough', clearBuffering)
+
+  return () => {
+    a.removeEventListener('playing', markPlaying)
+    a.removeEventListener('pause', markPaused)
+
+    a.removeEventListener('waiting', markBuffering)
+    a.removeEventListener('stalled', markBuffering)
+
+    a.removeEventListener('canplay', clearBuffering)
+    a.removeEventListener('canplaythrough', clearBuffering)
+  }
+}, [])
 
   /* ---------------- Intent -> media element ---------------- */
 
