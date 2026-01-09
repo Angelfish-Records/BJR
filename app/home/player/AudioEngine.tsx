@@ -27,8 +27,8 @@ export default function AudioEngine() {
   // ---- Audio analysis ----
   const audioCtxRef = React.useRef<AudioContext | null>(null)
   const analyserRef = React.useRef<AnalyserNode | null>(null)
-  const freqDataRef = React.useRef<Uint8Array<ArrayBufferLike> | null>(null)
-  const timeDataRef = React.useRef<Uint8Array<ArrayBufferLike> | null>(null)
+  const freqDataRef = React.useRef<Uint8Array<ArrayBuffer> | null>(null)
+  const timeDataRef = React.useRef<Uint8Array<ArrayBuffer> | null>(null)
 
   // ---- Playback intent ----
   const playIntentRef = React.useRef(false)
@@ -44,47 +44,45 @@ export default function AudioEngine() {
   /* ---------------- AudioContext + analyser (ONCE) ---------------- */
 
   React.useEffect(() => {
-  const a = audioRef.current
-  if (!a) return
+    const a = audioRef.current
+    if (!a) return
 
-  let ctx: AudioContext | null = null
-  let src: MediaElementAudioSourceNode | null = null
-  let analyser: AnalyserNode | null = null
+    let ctx: AudioContext | null = null
+    let src: MediaElementAudioSourceNode | null = null
+    let analyser: AnalyserNode | null = null
 
-  const ensureAudioGraph = async () => {
-    if (audioCtxRef.current) return
+    const ensureAudioGraph = async () => {
+      if (audioCtxRef.current) return
 
-    ctx = new AudioContext()
-    audioCtxRef.current = ctx
+      ctx = new AudioContext()
+      audioCtxRef.current = ctx
 
-    src = ctx.createMediaElementSource(a)
-    analyser = ctx.createAnalyser()
+      src = ctx.createMediaElementSource(a)
+      analyser = ctx.createAnalyser()
 
-    analyser.fftSize = 2048
-    analyser.smoothingTimeConstant = 0.8
+      analyser.fftSize = 2048
+      analyser.smoothingTimeConstant = 0.8
 
-    src.connect(analyser)
-    analyser.connect(ctx.destination)
+      src.connect(analyser)
+      analyser.connect(ctx.destination)
 
-    analyserRef.current = analyser
-    freqDataRef.current = new Uint8Array(analyser.frequencyBinCount)
-    timeDataRef.current = new Uint8Array(analyser.fftSize)
-  }
-
-  const onUserGesture = async () => {
-    await ensureAudioGraph()
-    if (audioCtxRef.current?.state === 'suspended') {
-      await audioCtxRef.current.resume()
+      analyserRef.current = analyser
+      freqDataRef.current = new Uint8Array(analyser.frequencyBinCount)
+      timeDataRef.current = new Uint8Array(analyser.fftSize)
     }
-  }
 
-  window.addEventListener('af:play-intent', onUserGesture)
+    const onUserGesture = async () => {
+      await ensureAudioGraph()
+      if (audioCtxRef.current?.state === 'suspended') {
+        await audioCtxRef.current.resume()
+      }
+    }
 
-  return () => {
-    window.removeEventListener('af:play-intent', onUserGesture)
-  }
-}, [])
-
+    window.addEventListener('af:play-intent', onUserGesture)
+    return () => {
+      window.removeEventListener('af:play-intent', onUserGesture)
+    }
+  }, [])
 
   /* ---------------- Audio feature pump ---------------- */
 
@@ -95,14 +93,14 @@ export default function AudioEngine() {
       const analyser = analyserRef.current
       const freq = freqDataRef.current
       const time = timeDataRef.current
+
       if (!analyser || !freq || !time) {
         raf = requestAnimationFrame(step)
         return
       }
 
-      analyser.getByteFrequencyData(freq as unknown as Uint8Array<ArrayBuffer>)
-      analyser.getByteTimeDomainData(time as unknown as Uint8Array<ArrayBuffer>)
-
+      analyser.getByteFrequencyData(freq)
+      analyser.getByteTimeDomainData(time)
 
       let sum = 0
       for (let i = 0; i < time.length; i++) {
@@ -115,7 +113,9 @@ export default function AudioEngine() {
       const bassEnd = Math.floor(n * 0.08)
       const midEnd = Math.floor(n * 0.35)
 
-      let bass = 0, mid = 0, treble = 0
+      let bass = 0
+      let mid = 0
+      let treble = 0
       for (let i = 0; i < n; i++) {
         const v = freq[i]! / 255
         if (i < bassEnd) bass += v
@@ -124,8 +124,8 @@ export default function AudioEngine() {
       }
 
       bass /= bassEnd || 1
-      mid /= (midEnd - bassEnd) || 1
-      treble /= (n - midEnd) || 1
+      mid /= midEnd - bassEnd || 1
+      treble /= n - midEnd || 1
 
       let weighted = 0
       let total = 0
@@ -134,7 +134,6 @@ export default function AudioEngine() {
         weighted += i * v
         total += v
       }
-
       const centroid = total > 0 ? weighted / total / n : 0
 
       audioSurface.set({
@@ -165,241 +164,272 @@ export default function AudioEngine() {
   }, [p.volume, p.muted])
 
   /* ---------------- Track attach (HLS / native) ---------------- */
+
   React.useEffect(() => {
-  const a = audioRef.current
-  if (!a) return
+    const a = audioRef.current
+    if (!a) return
 
-  a.crossOrigin = 'anonymous'
+    a.crossOrigin = 'anonymous'
 
-  const s = pRef.current
-
-  const playbackId = s.current?.muxPlaybackId
-  if (!playbackId) return
-
-  mediaSurface.setTrack(s.current?.id ?? null)
-  mediaSurface.setStatus('loading')
-
-  const armed =
-    s.status === 'loading' ||
-    s.status === 'playing' ||
-    playIntentRef.current ||
-    s.intent === 'play' ||
-    s.reloadNonce > 0
-
-  if (!armed) return
-
-  const alreadyAttached =
-    attachedPlaybackIdRef.current === playbackId &&
-    (Boolean(a.currentSrc) || Boolean(hlsRef.current))
-
-  if (alreadyAttached) return
-
-  const seq = ++loadSeq.current
-
-  if (hlsRef.current) {
-    try {
-      hlsRef.current.destroy()
-    } catch {}
-    hlsRef.current = null
-    attachedPlaybackIdRef.current = null
-  }
-
-  tokenAbortRef.current?.abort()
-  const ac = new AbortController()
-  tokenAbortRef.current = ac
-
-  const attachSrc = (src: string) => {
-    a.crossOrigin = 'anonymous' // must be set before src/attach
-    a.pause()
-    a.removeAttribute('src')
-    a.load()
-
-    if (seq !== loadSeq.current) return
-
-    if (canPlayNativeHls(a)) {
-      a.src = src
-      a.load()
-      attachedPlaybackIdRef.current = playbackId
-    } else {
-      if (!Hls.isSupported()) {
-        pRef.current.setBlocked('This browser cannot play HLS.')
-        return
-      }
-
-      const hls = new Hls({enableWorker: true})
-      hlsRef.current = hls
-
-      hls.on(Hls.Events.ERROR, (_e, err) => {
-        if (err?.fatal) {
-          pRef.current.setBlocked(`HLS fatal: ${err.details ?? 'error'}`)
-          try {
-            hls.destroy()
-          } catch {}
-        }
-      })
-
-      hls.loadSource(src)
-      hls.attachMedia(a)
-      attachedPlaybackIdRef.current = playbackId
-    }
-
-    if (playIntentRef.current) {
-      void a.play().finally(() => {
-        playIntentRef.current = false
-      })
-    }
-  }
-
-  const load = async () => {
-    try {
-      const cached = tokenCacheRef.current.get(playbackId)
-      if (cached && Date.now() < cached.expiresAtMs - 5000) {
-        attachSrc(muxSignedHlsUrl(playbackId, cached.token))
-        return
-      }
-
-      const res = await fetch('/api/mux/playback-token', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({playbackId}),
-        signal: ac.signal,
-      })
-
-      const data = (await res.json()) as TokenResponse
-      if (!res.ok || !data.ok) {
-        pRef.current.setBlocked(!data.ok ? data.reason : 'Token error')
-        return
-      }
-
-      const expiresAtMs = Date.parse(data.expiresAt)
-      if (Number.isFinite(expiresAtMs)) {
-        tokenCacheRef.current.set(playbackId, {token: data.token, expiresAtMs})
-      }
-
-      attachSrc(muxSignedHlsUrl(playbackId, data.token))
-    } catch {}
-  }
-
-  void load()
-  return () => ac.abort()
-}, [p.current?.id, p.current?.muxPlaybackId, p.status, p.intent, p.reloadNonce])
-
-
-/* ---------------- Media element -> time + duration + state (single source) ---------------- */
-
-React.useEffect(() => {
-  const a = audioRef.current
-  if (!a) return
-
-  const onTime = () => {
-    const ms = Math.floor(a.currentTime * 1000)
-    mediaSurface.setTime(ms)
-    pRef.current.setPositionMs(ms)
-  }
-
-  const onLoadedMeta = () => {
-    // duration can be Infinity/NaN briefly for streams; guard it
-    const d = a.duration
-    if (Number.isFinite(d) && d > 0) {
-      pRef.current.setDurationMs(Math.floor(d * 1000))
-    }
-  }
-
-  const markPlaying = () => {
-    mediaSurface.setStatus('playing')
-    pRef.current.setStatusExternal('playing')
-    pRef.current.setLoadingReasonExternal(undefined)
-    pRef.current.clearIntent()
-    const curId = pRef.current.current?.id
-    if (curId) pRef.current.resolvePendingTrack(curId)
-  }
-
-  const markPaused = () => {
-    mediaSurface.setStatus('paused')
-    pRef.current.setStatusExternal('paused')
-    pRef.current.setLoadingReasonExternal(undefined)
-    pRef.current.clearIntent()
-  }
-
-  const markBuffering = () => {
-    // only if we expected play
     const s = pRef.current
-    const shouldBePlaying = s.intent === 'play' || s.status === 'playing' || s.status === 'loading'
-    if (!shouldBePlaying) return
-    mediaSurface.setStatus('loading')
-    s.setStatusExternal('loading')
-    s.setLoadingReasonExternal('buffering')
-  }
+    const playbackId = s.current?.muxPlaybackId
+    if (!playbackId) return
 
-  const clearBuffering = () => {
-    pRef.current.setLoadingReasonExternal(undefined)
-    // don't force status; playing/pause events will do that
-  }
+    // Surface is for stage/lyrics consumers (time, track, status).
+    mediaSurface.setTrack(s.current?.id ?? null)
 
-  const onEnded = () => {
-    window.dispatchEvent(new Event('af:play-intent'))
-    pRef.current.next()
-  }
+    const armed =
+      s.status === 'loading' ||
+      s.status === 'playing' ||
+      playIntentRef.current ||
+      s.intent === 'play' ||
+      s.reloadNonce > 0
 
-  a.addEventListener('timeupdate', onTime)
-  a.addEventListener('loadedmetadata', onLoadedMeta)
+    if (!armed) return
 
-  a.addEventListener('playing', markPlaying)
-  a.addEventListener('pause', markPaused)
-  a.addEventListener('waiting', markBuffering)
-  a.addEventListener('stalled', markBuffering)
-  a.addEventListener('canplay', clearBuffering)
-  a.addEventListener('canplaythrough', clearBuffering)
+    const alreadyAttached =
+      attachedPlaybackIdRef.current === playbackId &&
+      (Boolean(a.currentSrc) || Boolean(hlsRef.current))
 
-  a.addEventListener('ended', onEnded)
+    if (alreadyAttached) return
 
-  return () => {
-    a.removeEventListener('timeupdate', onTime)
-    a.removeEventListener('loadedmetadata', onLoadedMeta)
+    const seq = ++loadSeq.current
 
-    a.removeEventListener('playing', markPlaying)
-    a.removeEventListener('pause', markPaused)
-    a.removeEventListener('waiting', markBuffering)
-    a.removeEventListener('stalled', markBuffering)
-    a.removeEventListener('canplay', clearBuffering)
-    a.removeEventListener('canplaythrough', clearBuffering)
+    if (hlsRef.current) {
+      try {
+        hlsRef.current.destroy()
+      } catch {}
+      hlsRef.current = null
+      attachedPlaybackIdRef.current = null
+    }
 
-    a.removeEventListener('ended', onEnded)
-  }
-}, [])
+    tokenAbortRef.current?.abort()
+    const ac = new AbortController()
+    tokenAbortRef.current = ac
 
+    const attachSrc = (src: string) => {
+      a.crossOrigin = 'anonymous'
+      a.pause()
+      a.removeAttribute('src')
+      a.load()
+
+      if (seq !== loadSeq.current) return
+
+      if (canPlayNativeHls(a)) {
+        a.src = src
+        a.load()
+        attachedPlaybackIdRef.current = playbackId
+      } else {
+        if (!Hls.isSupported()) {
+          pRef.current.setBlocked('This browser cannot play HLS.')
+          return
+        }
+
+        const hls = new Hls({enableWorker: true})
+        hlsRef.current = hls
+
+        hls.on(Hls.Events.ERROR, (_e, err) => {
+          if (err?.fatal) {
+            pRef.current.setBlocked(`HLS fatal: ${err.details ?? 'error'}`)
+            try {
+              hls.destroy()
+            } catch {}
+          }
+        })
+
+        hls.loadSource(src)
+        hls.attachMedia(a)
+        attachedPlaybackIdRef.current = playbackId
+      }
+
+      if (playIntentRef.current) {
+        void a.play().finally(() => {
+          playIntentRef.current = false
+        })
+      }
+    }
+
+    const load = async () => {
+      try {
+        // If we’re switching tracks, reflect “loading” quickly for stage consumers.
+        mediaSurface.setStatus('loading')
+
+        const cached = tokenCacheRef.current.get(playbackId)
+        if (cached && Date.now() < cached.expiresAtMs - 5000) {
+          attachSrc(muxSignedHlsUrl(playbackId, cached.token))
+          return
+        }
+
+        const res = await fetch('/api/mux/playback-token', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({playbackId}),
+          signal: ac.signal,
+        })
+
+        const data = (await res.json()) as TokenResponse
+        if (!res.ok || !data.ok) {
+          pRef.current.setBlocked(!data.ok ? data.reason : 'Token error')
+          mediaSurface.setStatus('blocked')
+          return
+        }
+
+        const expiresAtMs = Date.parse(data.expiresAt)
+        if (Number.isFinite(expiresAtMs)) {
+          tokenCacheRef.current.set(playbackId, {token: data.token, expiresAtMs})
+        }
+
+        attachSrc(muxSignedHlsUrl(playbackId, data.token))
+      } catch {
+        // ignore
+      }
+    }
+
+    void load()
+    return () => ac.abort()
+  }, [p.current?.id, p.current?.muxPlaybackId, p.status, p.intent, p.reloadNonce])
+
+  /* ---------------- Media element -> time + duration + state (single source) ---------------- */
+
+  React.useEffect(() => {
+    const a = audioRef.current
+    if (!a) return
+
+    const onTime = () => {
+      const ms = Math.floor(a.currentTime * 1000)
+      mediaSurface.setTime(ms)
+      pRef.current.setPositionMs(ms)
+    }
+
+    const onLoadedMeta = () => {
+      const d = a.duration
+      if (Number.isFinite(d) && d > 0) {
+        pRef.current.setDurationMs(Math.floor(d * 1000))
+      }
+    }
+
+    const applyPendingSeek = () => {
+      const ms = pRef.current.pendingSeekMs
+      if (ms == null) return
+      try {
+        a.currentTime = Math.max(0, ms / 1000)
+      } catch {}
+      pRef.current.clearPendingSeek()
+    }
+
+    const markPlaying = () => {
+      mediaSurface.setStatus('playing')
+      pRef.current.setStatusExternal('playing')
+      pRef.current.setLoadingReasonExternal(undefined)
+      pRef.current.clearIntent()
+      applyPendingSeek()
+
+      const curId = pRef.current.current?.id
+      if (curId) pRef.current.resolvePendingTrack(curId)
+    }
+
+    const markPaused = () => {
+      mediaSurface.setStatus('paused')
+      pRef.current.setStatusExternal('paused')
+      pRef.current.setLoadingReasonExternal(undefined)
+      pRef.current.clearIntent()
+    }
+
+    const markBuffering = () => {
+      const s = pRef.current
+      const shouldBePlaying = s.intent === 'play' || s.status === 'playing' || s.status === 'loading'
+      if (!shouldBePlaying) return
+      mediaSurface.setStatus('loading')
+      s.setStatusExternal('loading')
+      s.setLoadingReasonExternal('buffering')
+    }
+
+    const clearBuffering = () => {
+      pRef.current.setLoadingReasonExternal(undefined)
+      // If a seek happened before we were ready, apply once we can play.
+      applyPendingSeek()
+    }
+
+    const onEnded = () => {
+      window.dispatchEvent(new Event('af:play-intent'))
+      pRef.current.next()
+    }
+
+    a.addEventListener('timeupdate', onTime)
+    a.addEventListener('loadedmetadata', onLoadedMeta)
+
+    a.addEventListener('playing', markPlaying)
+    a.addEventListener('pause', markPaused)
+
+    a.addEventListener('waiting', markBuffering)
+    a.addEventListener('stalled', markBuffering)
+
+    a.addEventListener('canplay', clearBuffering)
+    a.addEventListener('canplaythrough', clearBuffering)
+
+    a.addEventListener('ended', onEnded)
+
+    return () => {
+      a.removeEventListener('timeupdate', onTime)
+      a.removeEventListener('loadedmetadata', onLoadedMeta)
+
+      a.removeEventListener('playing', markPlaying)
+      a.removeEventListener('pause', markPaused)
+
+      a.removeEventListener('waiting', markBuffering)
+      a.removeEventListener('stalled', markBuffering)
+
+      a.removeEventListener('canplay', clearBuffering)
+      a.removeEventListener('canplaythrough', clearBuffering)
+
+      a.removeEventListener('ended', onEnded)
+    }
+  }, [])
+
+  /* ---------------- Seek: PlayerState -> media element ---------------- */
+
+  React.useEffect(() => {
+    const a = audioRef.current
+    if (!a) return
+
+    const ms = p.pendingSeekMs
+    if (ms == null) return
+
+    try {
+      a.currentTime = Math.max(0, ms / 1000)
+    } catch {
+      // If we can't seek yet (not enough metadata), we'll retry on canplay/canplaythrough.
+      return
+    }
+
+    pRef.current.clearPendingSeek()
+  }, [p.seekNonce, p.pendingSeekMs])
 
   /* ---------------- Intent -> media element ---------------- */
 
-React.useEffect(() => {
-  const a = audioRef.current
-  if (!a) return
+  React.useEffect(() => {
+    const a = audioRef.current
+    if (!a) return
 
-  // PAUSE should always be honored immediately.
-  if (p.intent === 'pause') {
-    a.pause()
-    // optional: clear intent once action taken
-    pRef.current.clearIntent()
-    return
-  }
-
-  if (p.intent === 'play') {
-    // Ensure audio context can run on Safari/iOS; this is no-op elsewhere.
-    if (audioCtxRef.current?.state === 'suspended') {
-      audioCtxRef.current.resume().catch(() => {})
+    if (p.intent === 'pause') {
+      a.pause()
+      pRef.current.clearIntent()
+      return
     }
 
-    // Try to play. If it fails due to gesture, we rely on your af:play-intent bridge.
-    void a.play().then(
-      () => pRef.current.clearIntent(),
-      () => {
-        // latch so attachSrc can auto-play once media is attached/ready
-        playIntentRef.current = true
+    if (p.intent === 'play') {
+      if (audioCtxRef.current?.state === 'suspended') {
+        audioCtxRef.current.resume().catch(() => {})
       }
-    )
-  }
-}, [p.intent])
 
+      void a.play().then(
+        () => pRef.current.clearIntent(),
+        () => {
+          playIntentRef.current = true
+        }
+      )
+    }
+  }, [p.intent])
 
   /* ---------------- User gesture bridge ---------------- */
 
@@ -420,5 +450,4 @@ React.useEffect(() => {
   }, [])
 
   return <audio ref={audioRef} crossOrigin="anonymous" preload="metadata" playsInline style={{display: 'none'}} />
-
 }
