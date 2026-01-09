@@ -1,14 +1,9 @@
-// web/app/home/player/stage/LyricsOverlay.tsx
 'use client'
 
 import React from 'react'
 import {mediaSurface} from '../mediaSurface'
 
 export type LyricCue = {tMs: number; text: string; endMs?: number}
-
-function clamp(n: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, n))
-}
 
 function findActiveIndex(cues: LyricCue[], tMs: number) {
   let lo = 0
@@ -31,69 +26,45 @@ export default function LyricsOverlay(props: {
   cues: LyricCue[] | null
   offsetMs?: number
   onSeek?: (tMs: number) => void
-  windowLines?: number
+  windowLines?: number // kept for API compatibility; no longer slices the list
 }) {
-  const {cues, offsetMs = 0, onSeek, windowLines = 8} = props
+  const {cues, offsetMs = 0, onSeek} = props
 
   const viewportRef = React.useRef<HTMLDivElement | null>(null)
-  const listRef = React.useRef<HTMLDivElement | null>(null)
   const rafRef = React.useRef<number | null>(null)
 
   const [activeIdx, setActiveIdx] = React.useState(-1)
   const activeIdxRef = React.useRef(-1)
 
-  // Derived slice bounds MUST exist before hooks depend on them.
-  const safeLen = cues?.length ?? 0
-  const safeActive = activeIdx >= 0 ? activeIdx : 0
-  const start = safeLen > 0 ? clamp(safeActive - windowLines, 0, safeLen - 1) : 0
-  const end = safeLen > 0 ? clamp(safeActive + windowLines, 0, safeLen - 1) : 0
+  // user-scroll suppression of auto-follow
+  const userScrollingRef = React.useRef(false)
+  const userScrollTimerRef = React.useRef<number | null>(null)
 
   React.useEffect(() => {
     activeIdxRef.current = activeIdx
   }, [activeIdx])
 
-  // reset when cues change
   React.useEffect(() => {
+    // reset when cues change
     setActiveIdx(-1)
     activeIdxRef.current = -1
-    const el = listRef.current
-    if (el) el.style.transform = 'translate3d(0,0,0)'
+    userScrollingRef.current = false
+    if (userScrollTimerRef.current) window.clearTimeout(userScrollTimerRef.current)
+    userScrollTimerRef.current = null
+    const vp = viewportRef.current
+    if (vp) vp.scrollTop = 0
   }, [cues])
 
-  // Layout: reposition + style based on active index
-  // IMPORTANT: this hook is unconditional (rules-of-hooks safe).
-  React.useLayoutEffect(() => {
-    if (!cues || cues.length === 0) return
-    if (activeIdx < 0) return
+  const markUserScrolling = React.useCallback(() => {
+    userScrollingRef.current = true
+    if (userScrollTimerRef.current) window.clearTimeout(userScrollTimerRef.current)
+    userScrollTimerRef.current = window.setTimeout(() => {
+      userScrollingRef.current = false
+      userScrollTimerRef.current = null
+    }, 1200)
+  }, [])
 
-    const list = listRef.current
-    const viewport = viewportRef.current
-    if (!list || !viewport) return
-
-    // Only works if the active element exists in the current slice
-    const activeEl = list.querySelector<HTMLElement>(`[data-lyric-idx="${activeIdx}"]`)
-    if (!activeEl) return
-
-    const vh = viewport.clientHeight
-    if (!vh || vh < 10) return
-
-    // Place active line at ~42% of the viewport height (slightly above center)
-    const y = activeEl.offsetTop + activeEl.offsetHeight / 2
-    const center = vh * 0.42
-    const translateY = center - y
-    list.style.transform = `translate3d(0, ${Math.round(translateY)}px, 0)`
-
-    // Fade/scale neighbors
-    const kids = list.querySelectorAll<HTMLElement>('[data-lyric-idx]')
-    for (const k of kids) {
-      const n = Number(k.dataset.lyricIdx)
-      const dist = Math.abs(n - activeIdx)
-      k.style.opacity = dist === 0 ? '1' : dist <= 2 ? '0.65' : '0.33'
-      k.style.transform = dist === 0 ? 'translateZ(0) scale(1.02)' : 'translateZ(0) scale(1)'
-    }
-  }, [cues, activeIdx, start, end])
-
-  // RAF: compute active index and update state only when it changes
+  // RAF: compute active index from mediaSurface time
   React.useEffect(() => {
     if (!cues || cues.length === 0) return
 
@@ -115,6 +86,32 @@ export default function LyricsOverlay(props: {
       rafRef.current = null
     }
   }, [cues, offsetMs])
+
+  // Auto-follow the active line (unless the user is scrolling)
+  React.useLayoutEffect(() => {
+    if (!cues || cues.length === 0) return
+    if (activeIdx < 0) return
+    if (userScrollingRef.current) return
+
+    const vp = viewportRef.current
+    if (!vp) return
+
+    const activeEl = vp.querySelector<HTMLElement>(`[data-lyric-idx="${activeIdx}"]`)
+    if (!activeEl) return
+
+    const vpH = vp.clientHeight
+    if (!vpH || vpH < 10) return
+
+    // place active line at ~42% height
+    const targetCenterY = vpH * 0.42
+    const elCenterY = activeEl.offsetTop + activeEl.offsetHeight / 2
+    const nextScrollTop = Math.max(0, elCenterY - targetCenterY)
+
+    // avoid micro-jitter
+    if (Math.abs(vp.scrollTop - nextScrollTop) < 2) return
+
+    vp.scrollTo({top: Math.round(nextScrollTop), behavior: 'smooth'})
+  }, [cues, activeIdx])
 
   if (!cues || cues.length === 0) {
     return (
@@ -140,8 +137,6 @@ export default function LyricsOverlay(props: {
     )
   }
 
-  const slice = cues.slice(start, end + 1)
-
   return (
     <div
       style={{
@@ -156,10 +151,16 @@ export default function LyricsOverlay(props: {
     >
       <div
         ref={viewportRef}
+        onScroll={markUserScrolling}
+        onPointerDown={markUserScrolling}
         style={{
           position: 'relative',
           height: 'min(520px, 70vh)',
-          overflow: 'hidden',
+          overflowX: 'hidden',
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
+          WebkitOverflowScrolling: 'touch',
+
           borderRadius: 18,
           border: '1px solid rgba(255,255,255,0.10)',
           background: 'rgba(0,0,0,0.18)',
@@ -180,39 +181,49 @@ export default function LyricsOverlay(props: {
         />
 
         <div
-          ref={listRef}
           style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: 0,
-            willChange: 'transform',
-            transform: 'translate3d(0,0,0)',
-            padding: '140px 20px',
+            position: 'relative',
+            padding: '180px 20px 180px 20px', // ✅ more top padding (fix #1)
             display: 'grid',
             gap: 10,
           }}
         >
-          {slice.map((cue, j) => {
-            const idx = start + j
+          {cues.map((cue, idx) => {
+            const isActive = idx === activeIdx
+            const dist = activeIdx >= 0 ? Math.abs(idx - activeIdx) : 999
+            const opacity = isActive ? 1 : dist <= 2 ? 0.65 : 0.33
+
             return (
               <button
                 key={`${cue.tMs}-${idx}`}
                 type="button"
                 data-lyric-idx={idx}
-                onClick={() => onSeek?.(cue.tMs)}
+                onClick={() => {
+                  if (!onSeek) return
+                  // clicking should feel immediate, and re-enable follow
+                  userScrollingRef.current = false
+                  onSeek(cue.tMs)
+                }}
                 style={{
                   textAlign: 'center',
                   background: 'transparent',
                   border: 0,
                   padding: '4px 0',
                   cursor: onSeek ? 'pointer' : 'default',
+
                   color: 'rgba(255,255,255,0.92)',
-                  fontSize: 18,
+                  fontSize: 'clamp(14px, 2.2vw, 20px)', // ✅ responsive (fix #3)
                   fontWeight: 650,
                   letterSpacing: 0.2,
-                  lineHeight: '34px',
-                  opacity: 0.33,
+                  lineHeight: 1.35,
+
+                  // ✅ keep more lines visible; avoid wrapping in tight inline layouts (fix #3)
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+
+                  opacity,
+                  transform: isActive ? 'translateZ(0) scale(1.02)' : 'translateZ(0) scale(1)',
                   transition: 'opacity 120ms ease, transform 120ms ease',
                   userSelect: 'none',
                 }}
