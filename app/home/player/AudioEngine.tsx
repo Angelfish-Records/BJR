@@ -310,6 +310,38 @@ export default function AudioEngine() {
     }
   }, [])
 
+  /* ---------------- Intent -> media element ---------------- */
+
+React.useEffect(() => {
+  const a = audioRef.current
+  if (!a) return
+
+  // PAUSE should always be honored immediately.
+  if (p.intent === 'pause') {
+    a.pause()
+    // optional: clear intent once action taken
+    pRef.current.clearIntent()
+    return
+  }
+
+  if (p.intent === 'play') {
+    // Ensure audio context can run on Safari/iOS; this is no-op elsewhere.
+    if (audioCtxRef.current?.state === 'suspended') {
+      audioCtxRef.current.resume().catch(() => {})
+    }
+
+    // Try to play. If it fails due to gesture, we rely on your af:play-intent bridge.
+    void a.play().then(
+      () => pRef.current.clearIntent(),
+      () => {
+        // latch so attachSrc can auto-play once media is attached/ready
+        playIntentRef.current = true
+      }
+    )
+  }
+}, [p.intent])
+
+
   /* ---------------- User gesture bridge ---------------- */
 
   React.useEffect(() => {
