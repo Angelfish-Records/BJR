@@ -50,8 +50,6 @@ export default function StageCore(props: {
   const onSeek = React.useCallback(
     (tMs: number) => {
       const ms = Math.max(0, Math.floor(tMs))
-
-      // seek should not *force* play unless you asked for it
       p.seek(ms)
 
       if (autoResumeOnSeek) {
@@ -65,6 +63,8 @@ export default function StageCore(props: {
     [autoResumeOnSeek, p]
   )
 
+  const lyricVariant = variant === 'inline' ? 'inline' : 'stage'
+
   return (
     <div
       style={{
@@ -75,19 +75,28 @@ export default function StageCore(props: {
         background: 'rgba(0,0,0,0.35)',
       }}
     >
-      <VisualizerCanvas />
-      <LyricsOverlay cues={cues} offsetMs={effectiveOffsetMs} onSeek={onSeek} variant="inline" />
+      {/* Canvas layer (bottom) */}
+      <div style={{position: 'absolute', inset: 0, zIndex: 0}}>
+        <VisualizerCanvas />
+      </div>
 
+      {/* Tint layer (ABOVE canvas, BELOW lyrics) */}
       <div
         aria-hidden="true"
         style={{
           position: 'absolute',
           inset: 0,
+          zIndex: 1,
           background:
             'radial-gradient(70% 55% at 50% 40%, rgba(0,0,0,0.0), rgba(0,0,0,0.35) 70%), linear-gradient(180deg, rgba(0,0,0,0.30), rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.40))',
           pointerEvents: 'none',
         }}
       />
+
+      {/* Lyrics layer (top) */}
+      <div style={{position: 'absolute', inset: 0, zIndex: 2}}>
+        <LyricsOverlay cues={cues} offsetMs={effectiveOffsetMs} onSeek={onSeek} variant={lyricVariant} />
+      </div>
     </div>
   )
 }
