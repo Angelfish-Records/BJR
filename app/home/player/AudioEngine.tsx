@@ -284,6 +284,31 @@ export default function AudioEngine() {
 }, [p.current?.id, p.current?.muxPlaybackId, p.status, p.intent, p.reloadNonce])
 
 
+/* ---------------- Media element -> status ---------------- */
+
+React.useEffect(() => {
+  const a = audioRef.current
+  if (!a) return
+
+  const onPlaying = () => pRef.current.setStatusExternal('playing')
+  const onPause = () => pRef.current.setStatusExternal('paused')
+  const onWaiting = () => pRef.current.setLoadingReasonExternal('buffering')
+  const onCanPlay = () => pRef.current.setLoadingReasonExternal(undefined)
+
+  a.addEventListener('playing', onPlaying)
+  a.addEventListener('pause', onPause)
+  a.addEventListener('waiting', onWaiting)
+  a.addEventListener('canplay', onCanPlay)
+
+  return () => {
+    a.removeEventListener('playing', onPlaying)
+    a.removeEventListener('pause', onPause)
+    a.removeEventListener('waiting', onWaiting)
+    a.removeEventListener('canplay', onCanPlay)
+  }
+}, [])
+
+
   /* ---------------- Time + state reporting ---------------- */
 
   React.useEffect(() => {
