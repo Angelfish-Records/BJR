@@ -169,6 +169,8 @@ export default function AudioEngine() {
   const a = audioRef.current
   if (!a) return
 
+  a.crossOrigin = 'anonymous'
+
   const s = pRef.current
 
   const playbackId = s.current?.muxPlaybackId
@@ -206,6 +208,7 @@ export default function AudioEngine() {
   tokenAbortRef.current = ac
 
   const attachSrc = (src: string) => {
+    a.crossOrigin = 'anonymous' // must be set before src/attach
     a.pause()
     a.removeAttribute('src')
     a.load()
@@ -325,5 +328,6 @@ export default function AudioEngine() {
     return () => window.removeEventListener('af:play-intent', resume)
   }, [])
 
-  return <audio ref={audioRef} preload="metadata" playsInline style={{display: 'none'}} />
+  return <audio ref={audioRef} crossOrigin="anonymous" preload="metadata" playsInline style={{display: 'none'}} />
+
 }
