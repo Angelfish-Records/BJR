@@ -73,7 +73,8 @@ type PlayerActions = {
   prev: () => void
 
   // queue mgmt
-  setQueue: (tracks: PlayerTrack[], opts?: QueueContext) => void
+  setQueue: (tracks: PlayerTrack[], opts?: {contextId?: string; artworkUrl?: string | null; slug?: string; artist?: string}) => void
+
   enqueue: (track: PlayerTrack) => void
 
   // telemetry
@@ -438,9 +439,7 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           const nextCurrent = nextCurrentRaw ? hydrateTrack(nextCurrentRaw, nextDurationById) : undefined
 
           const hasId = typeof opts?.contextId === 'string'
-          const hasSlug = typeof opts?.contextSlug === 'string'
           const hasTitle = typeof opts?.contextTitle === 'string'
-          const hasArtist = typeof opts?.contextArtist === 'string'
           const hasArtwork = typeof opts?.artworkUrl !== 'undefined'
 
           return {
@@ -449,9 +448,17 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
             queue: hydratedQueue,
 
             queueContextId: hasId ? opts!.contextId : s.queueContextId,
-            queueContextSlug: hasSlug ? opts!.contextSlug : s.queueContextSlug,
+            queueContextSlug:
+              typeof opts?.contextSlug === 'string' && opts.contextSlug.length > 0
+                ? opts.contextSlug
+                : s.queueContextSlug,
+
+            queueContextArtist:
+              typeof opts?.contextArtist === 'string' && opts.contextArtist.trim().length > 0
+                ? opts.contextArtist.trim()
+                : s.queueContextArtist,
+
             queueContextTitle: hasTitle ? opts!.contextTitle : s.queueContextTitle,
-            queueContextArtist: hasArtist ? opts!.contextArtist : s.queueContextArtist,
             queueContextArtworkUrl: hasArtwork
               ? (opts!.artworkUrl ?? null)
               : s.queueContextArtworkUrl ?? null,

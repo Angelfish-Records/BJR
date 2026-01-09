@@ -4,7 +4,9 @@
 import React from 'react'
 import {createPortal} from 'react-dom'
 import {usePlayer} from './PlayerState'
-import {useShareUX, bestEffortAlbumSlug, buildAlbumShareFromContext, buildTrackShareFromContext} from './share'
+import {buildShareTarget} from '@/lib/share'
+import {performShare} from '@/lib/share'
+
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
@@ -133,6 +135,134 @@ function RetryIcon() {
   )
 }
 
+function useShareUX() {
+  const [fallback, setFallback] = React.useState<{url: string; title?: string} | null>(null)
+  const close = React.useCallback(() => setFallback(null), [])
+
+  const shareTarget = React.useCallback(async (target: import('@/lib/share').ShareTarget) => {
+    const res = await performShare(target)
+    if (!res.ok) setFallback({url: res.url, title: target.title})
+    return res
+  }, [])
+
+  const fallbackModal =
+    fallback && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Share link"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) close()
+            }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.55)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              display: 'grid',
+              placeItems: 'center',
+              zIndex: 100000,
+              padding: 16,
+            }}
+          >
+            <div
+              style={{
+                width: 'min(520px, 100%)',
+                borderRadius: 16,
+                border: '1px solid rgba(255,255,255,0.14)',
+                background: 'rgba(10,10,10,0.85)',
+                boxShadow: '0 18px 60px rgba(0,0,0,0.45)',
+                padding: 14,
+                color: 'rgba(255,255,255,0.92)',
+              }}
+            >
+              <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10}}>
+                <div style={{minWidth: 0}}>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 650,
+                      opacity: 0.95,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {fallback.title ?? 'Share link'}
+                  </div>
+                  <div style={{fontSize: 12, opacity: 0.7}}>Copy this URL</div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={close}
+                  aria-label="Close"
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: 999,
+                    border: '1px solid rgba(255,255,255,0.14)',
+                    background: 'rgba(255,255,255,0.06)',
+                    color: 'rgba(255,255,255,0.9)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div style={{marginTop: 12, display: 'grid', gap: 10}}>
+                <input
+                  readOnly
+                  value={fallback.url}
+                  onFocus={(e) => e.currentTarget.select()}
+                  style={{
+                    width: '100%',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255,255,255,0.14)',
+                    background: 'rgba(255,255,255,0.06)',
+                    padding: '10px 12px',
+                    color: 'rgba(255,255,255,0.92)',
+                    fontSize: 12,
+                    outline: 'none',
+                  }}
+                />
+
+                <div style={{display: 'flex', justifyContent: 'flex-end', gap: 10}}>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        if (navigator?.clipboard?.writeText) await navigator.clipboard.writeText(fallback.url)
+                      } catch {}
+                    }}
+                    style={{
+                      borderRadius: 12,
+                      border: '1px solid rgba(255,255,255,0.14)',
+                      background: 'rgba(245,245,245,0.92)',
+                      color: 'rgba(0,0,0,0.9)',
+                      padding: '10px 12px',
+                      fontSize: 12,
+                      fontWeight: 650,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )
+      : null
+
+  return {shareTarget, fallbackModal}
+}
+
+
 export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: string | null}) {
   const {onExpand, artworkUrl = null} = props
   const p = usePlayer()
@@ -189,7 +319,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
     if (!scrubbing) setScrubSec(safePosReal)
   }, [safePosReal, scrubbing])
 
-  const sliderValue = scrubbing ? scrubSec : safePending ?? safePosReal
+  const sliderValue = scrubbing ? scrubSec : (safePending ?? safePosReal)
 
   /* ---------------- Seek tooltip (hover + scrub) ---------------- */
 
@@ -278,49 +408,51 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
     return p.current?.artist ?? ''
   })()
 
-  // web/app/home/player/MiniPlayer.tsx
-const onShare = async () => {
-  const loc = bestEffortAlbumSlug()
-  const origin = loc?.origin ?? window.location.origin
+  /* ---------------- Share ---------------- */
 
-  // Prefer queue context (canonical), fall back to URL-derived slug
-  const albumSlug = p.queueContextSlug ?? loc?.slug
+  const onShare = async () => {
+  const albumSlug = p.queueContextSlug
   if (!albumSlug) return
 
-  const albumTitle = p.queueContextTitle ?? albumSlug
+  const origin = window.location.origin
+  const albumTitle = (p.queueContextTitle ?? albumSlug).toString().trim() || albumSlug
   const artistName =
-  p.queueContextArtist ??
-  (((p.current?.artist ?? '').toString().trim()) || undefined)
-
+    p.queueContextArtist ??
+    (((p.current?.artist ?? '').toString().trim()) || undefined)
 
   const cur = p.current
-  const trackId = cur?.id ?? null
-  const trackTitle = (cur?.title ?? '').toString().trim()
-
-  if (trackId) {
-    await shareTarget(
-      buildTrackShareFromContext({
-        origin,
-        albumSlug,
-        albumTitle,
+  if (cur?.id) {
+    const target = buildShareTarget({
+      type: 'track',
+      methodHint: 'sheet',
+      origin,
+      album: {
+        slug: albumSlug,
+        id: p.queueContextId,
+        title: albumTitle,
         artistName,
-        albumId: p.queueContextId,
-        trackId,
-        trackTitle: trackTitle || trackId,
-      })
-    )
+      },
+      track: {
+        id: cur.id,
+        title: (cur.title ?? cur.id).toString().trim() || cur.id,
+      },
+    })
+    await shareTarget(target)
     return
   }
 
-  await shareTarget(
-    buildAlbumShareFromContext({
-      origin,
-      albumSlug,
-      albumTitle,
+  const target = buildShareTarget({
+    type: 'album',
+    methodHint: 'sheet',
+    origin,
+    album: {
+      slug: albumSlug,
+      id: p.queueContextId,
+      title: albumTitle,
       artistName,
-      albumId: p.queueContextId,
-    })
-  )
+    },
+  })
+  await shareTarget(target)
 }
 
 
@@ -745,12 +877,7 @@ const onShare = async () => {
                   : null}
               </div>
 
-              <IconBtn
-                label="Share"
-                title="Share"
-                onClick={onShare}
-                disabled={!bestEffortAlbumSlug()?.slug}
-              >
+              <IconBtn label="Share" title="Share" onClick={onShare} disabled={!p.queueContextSlug}>
                 <ShareIcon />
               </IconBtn>
 

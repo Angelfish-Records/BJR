@@ -5,7 +5,7 @@ import React from 'react'
 import {usePlayer} from './PlayerState'
 import type {AlbumInfo, AlbumNavItem} from '@/lib/types'
 import type {PlayerTrack} from './PlayerState'
-import {useShareUX, bestEffortAlbumSlug, buildAlbumShareFromContext, buildTrackShareFromContext} from './share'
+import {deriveShareContext, shareAlbum, shareTrack} from './share'
 
 function fmtTime(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000))
@@ -107,13 +107,9 @@ function MoreIcon() {
   )
 }
 
-// tiny "now playing" indicator
 function NowPlayingPip() {
   return (
-    <span
-      aria-hidden="true"
-      style={{display: 'inline-grid', placeItems: 'center', width: 16, height: 16, opacity: 0.9}}
-    >
+    <span aria-hidden="true" style={{display: 'inline-grid', placeItems: 'center', width: 16, height: 16, opacity: 0.9}}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
         <path d="M11 7 8.5 9H6v6h2.5L11 17V7Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
         <path d="M14.5 9.5c.9.9.9 4.1 0 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -124,6 +120,7 @@ function NowPlayingPip() {
 }
 
 export default function FullPlayer(props: {
+  albumSlug: string
   album: AlbumInfo | null
   tracks: PlayerTrack[]
   albums: AlbumNavItem[]
@@ -131,9 +128,7 @@ export default function FullPlayer(props: {
   isBrowsingAlbum?: boolean
 }) {
   const p = usePlayer()
-  const {shareTarget, fallbackModal} = useShareUX()
-
-  const {album, tracks, albums, onSelectAlbum, isBrowsingAlbum = false} = props
+  const {albumSlug, album, tracks, albums, onSelectAlbum, isBrowsingAlbum = false} = props
 
   const albumArtist = album?.artist ?? '—'
   const albumTitle = album?.title ?? '—'
@@ -169,6 +164,13 @@ export default function FullPlayer(props: {
     } catch {}
   }
 
+  const queueOpts = {
+    contextId: album?.id,
+    artworkUrl: album?.artworkUrl ?? null,
+    slug: albumSlug,
+    artist: (album?.artist ?? '').toString().trim() || undefined,
+  }
+
   const onTogglePlay = () => {
     lockPlayFor(120)
 
@@ -182,12 +184,7 @@ export default function FullPlayer(props: {
     const firstTrack = tracks[0]
     if (!firstTrack) return
 
-    p.setQueue(tracks, {
-      contextId: album?.id,
-      contextTitle: album?.title,
-      contextArtist: album?.artist,
-      artworkUrl: album?.artworkUrl ?? null,
-    })
+    p.setQueue(tracks, queueOpts)
     p.setIntent('play')
     p.play(firstTrack)
     window.dispatchEvent(new Event('af:play-intent'))
@@ -202,313 +199,272 @@ export default function FullPlayer(props: {
     return ms > 0 ? fmtTime(ms) : '—'
   }
 
-  const onShare = async () => {
-    const loc = bestEffortAlbumSlug()
-    if (!loc?.slug) return
-
-    const cur = p.current
-    const trackId = cur?.id ?? null
-    const trackTitle = (cur?.title ?? '').toString().trim()
-
-    if (trackId) {
-      await shareTarget(
-        buildTrackShareFromContext({
-          origin: loc.origin,
-          albumSlug: loc.slug,
-          albumTitle: albumTitle,
-          artistName: (album?.artist ?? '').toString().trim() || undefined,
-          albumId: album?.id,
-          trackId,
-          trackTitle: trackTitle || trackId,
-        })
-      )
-      return
-    }
-
-    await shareTarget(
-      buildAlbumShareFromContext({
-        origin: loc.origin,
-        albumSlug: loc.slug,
-        albumTitle: albumTitle,
-        artistName: (album?.artist ?? '').toString().trim() || undefined,
-        albumId: album?.id,
-      })
-    )
-  }
+  const shareCtx = deriveShareContext({
+    albumSlug,
+    album,
+    queueArtist: p.queueContextArtist,
+  })
 
   return (
-    <>
-      {fallbackModal}
+    <div
+      style={{
+        minWidth: 0,
+        borderRadius: 18,
+        border: '1px solid rgba(255,255,255,0.10)',
+        background: 'rgba(255,255,255,0.04)',
+        padding: 18,
+      }}
+    >
+      <div style={{display: 'grid', justifyItems: 'center', textAlign: 'center', gap: 10}}>
+        <div style={{fontSize: 12, opacity: 0.75}}>{albumArtist}</div>
 
-      <div
-        style={{
-          minWidth: 0,
-          borderRadius: 18,
-          border: '1px solid rgba(255,255,255,0.10)',
-          background: 'rgba(255,255,255,0.04)',
-          padding: 18,
-        }}
-      >
-        <div style={{display: 'grid', justifyItems: 'center', textAlign: 'center', gap: 10}}>
-          <div style={{fontSize: 12, opacity: 0.75}}>{albumArtist}</div>
+        <div
+          style={{
+            width: 210,
+            height: 210,
+            borderRadius: 18,
+            border: '1px solid rgba(255,255,255,0.14)',
+            background: album?.artworkUrl
+              ? `url(${album.artworkUrl}) center/cover no-repeat`
+              : 'radial-gradient(120px 120px at 30% 20%, rgba(255,255,255,0.14), rgba(255,255,255,0.02))',
+            boxShadow: '0 22px 60px rgba(0,0,0,0.35)',
+            overflow: 'hidden',
+          }}
+        />
 
+        <div style={{fontSize: 22, fontWeight: 650, letterSpacing: 0.2, opacity: 0.96}}>{albumTitle}</div>
+        <div style={{fontSize: 12, opacity: 0.7}}>{albumMeta}</div>
+
+        <div style={{maxWidth: 540, fontSize: 12, opacity: 0.62, lineHeight: 1.45}}>{albumDesc}</div>
+
+        <div style={{display: 'flex', alignItems: 'center', gap: 10, marginTop: 8}}>
+          <IconCircleBtn label="Download" onClick={() => {}}>
+            <DownloadIcon />
+          </IconCircleBtn>
+
+          <IconCircleBtn label="Save" onClick={() => {}}>
+            <BookmarkIcon />
+          </IconCircleBtn>
+
+          <button
+            type="button"
+            onClick={canPlay && !playLock ? onTogglePlay : undefined}
+            onMouseEnter={() => prefetchTrack(tracks[0])}
+            onFocus={() => prefetchTrack(tracks[0])}
+            disabled={!canPlay || playLock}
+            aria-label={playingThisAlbum ? 'Pause' : 'Play'}
+            title={playingThisAlbum ? 'Pause' : 'Play'}
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 999,
+              border: '1px solid rgba(255,255,255,0.12)',
+              background: 'rgba(245,245,245,0.95)',
+              color: 'rgba(0,0,0,0.92)',
+              display: 'grid',
+              placeItems: 'center',
+              cursor: canPlay ? 'pointer' : 'default',
+              opacity: canPlay ? 0.98 : 0.55,
+              boxShadow: playingThisAlbum ? '0 18px 50px rgba(0,0,0,0.35)' : '0 18px 50px rgba(0,0,0,0.30)',
+              transform: 'translateZ(0)',
+              position: 'relative',
+            }}
+          >
+            <PlayPauseBig playing={playingThisAlbum} />
+          </button>
+
+          <IconCircleBtn
+            label="Share"
+            onClick={() => {
+              void shareAlbum(shareCtx)
+            }}
+          >
+            <ShareIcon />
+          </IconCircleBtn>
+
+          <IconCircleBtn label="More" onClick={() => {}}>
+            <MoreIcon />
+          </IconCircleBtn>
+        </div>
+
+        {p.status === 'blocked' && p.lastError ? (
+          <div style={{fontSize: 12, opacity: 0.75, marginTop: 4}}>Playback error</div>
+        ) : null}
+      </div>
+
+      <div style={{marginTop: 18}}>
+        <div style={{borderTop: '1px solid rgba(255,255,255,0.10)', paddingTop: 14}}>
+          {tracks.map((t, i) => {
+            const isCur = p.current?.id === t.id
+            const isPending = p.pendingTrackId === t.id
+            const shimmerTitle = isPending || (isCur && p.status === 'loading')
+
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onMouseEnter={() => prefetchTrack(t)}
+                onFocus={() => prefetchTrack(t)}
+                onClick={() => {
+                  p.setQueue(tracks, queueOpts)
+                  p.setIntent('play')
+                  p.play(t)
+                  window.dispatchEvent(new Event('af:play-intent'))
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  void shareTrack(shareCtx, t)
+                }}
+                style={{
+                  width: '100%',
+                  display: 'grid',
+                  gridTemplateColumns: '34px minmax(0, 1fr) auto',
+                  alignItems: 'center',
+                  gap: 12,
+                  textAlign: 'left',
+                  padding: '12px 10px',
+                  borderRadius: 14,
+                  border: isCur ? '1px solid rgba(255,255,255,0.16)' : '1px solid rgba(255,255,255,0.00)',
+                  background: isCur ? 'rgba(255,255,255,0.06)' : 'transparent',
+                  color: 'rgba(255,255,255,0.92)',
+                  cursor: 'pointer',
+                  transform: 'translateZ(0)',
+                }}
+              >
+                <div style={{fontSize: 12, opacity: 0.7, display: 'flex', alignItems: 'center', gap: 6}}>
+                  {isCur ? <NowPlayingPip /> : <span style={{width: 16, display: 'inline-block'}} />}
+                  <span>{i + 1}</span>
+                </div>
+
+                <div style={{minWidth: 0}}>
+                  <div
+                    className={shimmerTitle ? 'afShimmerText' : undefined}
+                    data-reason={isCur && p.status === 'loading' ? p.loadingReason ?? '' : ''}
+                    style={{
+                      fontSize: 13,
+                      opacity: 0.92,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      transition: 'opacity 160ms ease',
+                    }}
+                  >
+                    {t.title ?? t.id}
+                  </div>
+                </div>
+
+                <div style={{fontSize: 12, opacity: 0.7}}>{renderDur(t)}</div>
+              </button>
+            )
+          })}
+        </div>
+
+        {albums.length ? (
+          <div style={{marginTop: 18}}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12}}>
+              <div style={{fontSize: 12, opacity: 0.7, marginBottom: 10}}>Browse albums</div>
+              {isBrowsingAlbum ? <div style={{fontSize: 12, opacity: 0.55}}>Loading…</div> : null}
+            </div>
+
+            <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12}}>
+              {browseAlbums.map((a) => {
+                const isActive = album?.id === a.id
+                const disabled = !onSelectAlbum || isBrowsingAlbum || isActive
+
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    disabled={disabled}
+                    onMouseEnter={() => prefetchAlbumArt(a.coverUrl)}
+                    onFocus={() => prefetchAlbumArt(a.coverUrl)}
+                    onClick={() => onSelectAlbum?.(a.slug)}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '56px minmax(0, 1fr)',
+                      gap: 12,
+                      alignItems: 'center',
+                      padding: 12,
+                      borderRadius: 14,
+                      border: isActive ? '1px solid rgba(255,255,255,0.18)' : '1px solid rgba(255,255,255,0.10)',
+                      background: isActive ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)',
+                      textDecoration: 'none',
+                      color: 'rgba(255,255,255,0.92)',
+                      cursor: disabled ? 'default' : 'pointer',
+                      opacity: disabled ? 0.75 : 1,
+                      textAlign: 'left',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: 12,
+                        border: '1px solid rgba(255,255,255,0.14)',
+                        background: a.coverUrl
+                          ? `url(${a.coverUrl}) center/cover no-repeat`
+                          : 'radial-gradient(40px 40px at 30% 20%, rgba(255,255,255,0.14), rgba(255,255,255,0.02))',
+                      }}
+                    />
+                    <div style={{minWidth: 0}}>
+                      <div style={{fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
+                        {a.title}
+                      </div>
+                      <div style={{fontSize: 12, opacity: 0.65, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
+                        {a.artist ?? ''}
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        {p.lastError ? (
           <div
             style={{
-              width: 210,
-              height: 210,
-              borderRadius: 18,
+              marginTop: 12,
+              borderRadius: 14,
               border: '1px solid rgba(255,255,255,0.14)',
-              background: album?.artworkUrl
-                ? `url(${album.artworkUrl}) center/cover no-repeat`
-                : 'radial-gradient(120px 120px at 30% 20%, rgba(255,255,255,0.14), rgba(255,255,255,0.02))',
-              boxShadow: '0 22px 60px rgba(0,0,0,0.35)',
-              overflow: 'hidden',
+              background: 'rgba(0,0,0,0.22)',
+              padding: '10px 12px',
+              fontSize: 12,
+              opacity: 0.85,
+              lineHeight: 1.45,
             }}
-          />
-
-          <div style={{fontSize: 22, fontWeight: 650, letterSpacing: 0.2, opacity: 0.96}}>{albumTitle}</div>
-          <div style={{fontSize: 12, opacity: 0.7}}>{albumMeta}</div>
-
-          <div style={{maxWidth: 540, fontSize: 12, opacity: 0.62, lineHeight: 1.45}}>{albumDesc}</div>
-
-          <div style={{display: 'flex', alignItems: 'center', gap: 10, marginTop: 8}}>
-            <IconCircleBtn label="Download" onClick={() => {}}>
-              <DownloadIcon />
-            </IconCircleBtn>
-
-            <IconCircleBtn label="Save" onClick={() => {}}>
-              <BookmarkIcon />
-            </IconCircleBtn>
-
-            <button
-              type="button"
-              onClick={canPlay && !playLock ? onTogglePlay : undefined}
-              onMouseEnter={() => prefetchTrack(tracks[0])}
-              onFocus={() => prefetchTrack(tracks[0])}
-              disabled={!canPlay || playLock}
-              aria-label={playingThisAlbum ? 'Pause' : 'Play'}
-              title={playingThisAlbum ? 'Pause' : 'Play'}
-              style={{
-                width: 64,
-                height: 64,
-                borderRadius: 999,
-                border: '1px solid rgba(255,255,255,0.12)',
-                background: 'rgba(245,245,245,0.95)',
-                color: 'rgba(0,0,0,0.92)',
-                display: 'grid',
-                placeItems: 'center',
-                cursor: canPlay ? 'pointer' : 'default',
-                opacity: canPlay ? 0.98 : 0.55,
-                boxShadow: playingThisAlbum ? '0 18px 50px rgba(0,0,0,0.35)' : '0 18px 50px rgba(0,0,0,0.30)',
-                transform: 'translateZ(0)',
-                position: 'relative',
-              }}
-            >
-              <PlayPauseBig playing={playingThisAlbum} />
-            </button>
-
-            <IconCircleBtn label="Share" onClick={onShare} disabled={!bestEffortAlbumSlug()?.slug}>
-              <ShareIcon />
-            </IconCircleBtn>
-
-            <IconCircleBtn label="More" onClick={() => {}}>
-              <MoreIcon />
-            </IconCircleBtn>
+          >
+            {p.lastError}
           </div>
-
-          {p.status === 'blocked' && p.lastError ? (
-            <div style={{fontSize: 12, opacity: 0.75, marginTop: 4}}>Playback error</div>
-          ) : null}
-        </div>
-
-        {/* Tracklist (BROWSED album) */}
-        <div style={{marginTop: 18}}>
-          <div style={{borderTop: '1px solid rgba(255,255,255,0.10)', paddingTop: 14}}>
-            {tracks.map((t, i) => {
-              const isCur = p.current?.id === t.id
-              const isPending = p.pendingTrackId === t.id
-
-              // shimmer: pending track OR current track while engine is still loading
-              const shimmerTitle = isPending || (isCur && p.status === 'loading')
-
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onMouseEnter={() => prefetchTrack(t)}
-                  onFocus={() => prefetchTrack(t)}
-                  onClick={() => {
-                    p.setQueue(tracks, {
-                      contextId: album?.id,
-                      contextTitle: album?.title,
-                      contextArtist: album?.artist,
-                      artworkUrl: album?.artworkUrl ?? null,
-                    })
-                    p.setIntent('play')
-                    p.play(t)
-                    window.dispatchEvent(new Event('af:play-intent'))
-                  }}
-                  style={{
-                    width: '100%',
-                    display: 'grid',
-                    gridTemplateColumns: '34px minmax(0, 1fr) auto',
-                    alignItems: 'center',
-                    gap: 12,
-                    textAlign: 'left',
-                    padding: '12px 10px',
-                    borderRadius: 14,
-                    border: isCur ? '1px solid rgba(255,255,255,0.16)' : '1px solid rgba(255,255,255,0.00)',
-                    background: isCur ? 'rgba(255,255,255,0.06)' : 'transparent',
-                    color: 'rgba(255,255,255,0.92)',
-                    cursor: 'pointer',
-                    transform: 'translateZ(0)',
-                  }}
-                >
-                  <div style={{fontSize: 12, opacity: 0.7, display: 'flex', alignItems: 'center', gap: 6}}>
-                    {isCur ? <NowPlayingPip /> : <span style={{width: 16, display: 'inline-block'}} />}
-                    <span>{i + 1}</span>
-                  </div>
-
-                  <div style={{minWidth: 0}}>
-                    <div
-                      className={shimmerTitle ? 'afShimmerText' : undefined}
-                      data-reason={isCur && p.status === 'loading' ? p.loadingReason ?? '' : ''}
-                      style={{
-                        fontSize: 13,
-                        opacity: 0.92,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        transition: 'opacity 160ms ease',
-                      }}
-                    >
-                      {t.title ?? t.id}
-                    </div>
-                  </div>
-
-                  <div style={{fontSize: 12, opacity: 0.7}}>{renderDur(t)}</div>
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Album selector (INLINE browse; no navigation) */}
-          {albums.length ? (
-            <div style={{marginTop: 18}}>
-              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12}}>
-                <div style={{fontSize: 12, opacity: 0.7, marginBottom: 10}}>Browse albums</div>
-                {isBrowsingAlbum ? <div style={{fontSize: 12, opacity: 0.55}}>Loading…</div> : null}
-              </div>
-
-              <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12}}>
-                {browseAlbums.map((a) => {
-                  const isActive = album?.id === a.id
-                  const disabled = !onSelectAlbum || isBrowsingAlbum || isActive
-
-                  return (
-                    <button
-                      key={a.id}
-                      type="button"
-                      disabled={disabled}
-                      onMouseEnter={() => prefetchAlbumArt(a.coverUrl)}
-                      onFocus={() => prefetchAlbumArt(a.coverUrl)}
-                      onClick={() => onSelectAlbum?.(a.slug)}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '56px minmax(0, 1fr)',
-                        gap: 12,
-                        alignItems: 'center',
-                        padding: 12,
-                        borderRadius: 14,
-                        border: isActive ? '1px solid rgba(255,255,255,0.18)' : '1px solid rgba(255,255,255,0.10)',
-                        background: isActive ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)',
-                        textDecoration: 'none',
-                        color: 'rgba(255,255,255,0.92)',
-                        cursor: disabled ? 'default' : 'pointer',
-                        opacity: disabled ? 0.75 : 1,
-                        textAlign: 'left',
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 56,
-                          height: 56,
-                          borderRadius: 12,
-                          border: '1px solid rgba(255,255,255,0.14)',
-                          background: a.coverUrl
-                            ? `url(${a.coverUrl}) center/cover no-repeat`
-                            : 'radial-gradient(40px 40px at 30% 20%, rgba(255,255,255,0.14), rgba(255,255,255,0.02))',
-                        }}
-                      />
-                      <div style={{minWidth: 0}}>
-                        <div style={{fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
-                          {a.title}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 12,
-                            opacity: 0.65,
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}
-                        >
-                          {a.artist ?? ''}
-                        </div>
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          ) : null}
-
-          {p.lastError ? (
-            <div
-              style={{
-                marginTop: 12,
-                borderRadius: 14,
-                border: '1px solid rgba(255,255,255,0.14)',
-                background: 'rgba(0,0,0,0.22)',
-                padding: '10px 12px',
-                fontSize: 12,
-                opacity: 0.85,
-                lineHeight: 1.45,
-              }}
-            >
-              {p.lastError}
-            </div>
-          ) : null}
-        </div>
-
-        {/* shimmer styles (scoped by class name) */}
-        <style>{`
-          @keyframes afShimmer {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
-          }
-          .afShimmerText {
-            background: linear-gradient(
-              90deg,
-              rgba(255,255,255,0.55) 0%,
-              rgba(255,255,255,0.95) 45%,
-              rgba(255,255,255,0.55) 100%
-            );
-            background-size: 200% 100%;
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            animation: afShimmer 1.1s linear infinite;
-          }
-          @media (prefers-reduced-motion: reduce) {
-            .afShimmerText {
-              animation: none;
-              color: rgba(255,255,255,0.92);
-              background: none;
-            }
-          }
-        `}</style>
+        ) : null}
       </div>
-    </>
+
+      <style>{`
+        @keyframes afShimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+        .afShimmerText {
+          background: linear-gradient(
+            90deg,
+            rgba(255,255,255,0.55) 0%,
+            rgba(255,255,255,0.95) 45%,
+            rgba(255,255,255,0.55) 100%
+          );
+          background-size: 200% 100%;
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+          animation: afShimmer 1.1s linear infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .afShimmerText {
+            animation: none;
+            color: rgba(255,255,255,0.92);
+            background: none;
+          }
+        }
+      `}</style>
+    </div>
   )
 }
