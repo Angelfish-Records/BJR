@@ -1,6 +1,5 @@
-// sanity/schemaTypes/lyrics.ts
 import {defineField, defineType} from 'sanity'
-import CuesImportInput from '../components/CuesImportInput'
+import LyricsImportInput from '../components/LyricsImportInput'
 
 export default defineType({
   name: 'lyrics',
@@ -24,20 +23,10 @@ export default defineType({
     }),
 
     defineField({
-      name: 'version',
-      title: 'Version',
-      type: 'string',
-      initialValue: 'v1',
-    }),
-
-    // NEW: paste JSON/LRC here, click Apply, it populates cues[]
-    defineField({
-      name: 'cuesImport',
-      title: 'Import (JSON or LRC)',
+      name: 'importText',
+      title: 'Import (paste LRC or JSON)',
       type: 'text',
-      description:
-        'Paste JSON array of cues, or an object {offsetMs, cues}, or LRC. Click Apply to populate cues.',
-      components: {input: CuesImportInput},
+      description: 'Paste .lrc text or JSON { offsetMs?, cues:[{tMs,text,endMs?}] } then click Apply below.',
     }),
 
     defineField({
@@ -49,51 +38,21 @@ export default defineType({
           type: 'object',
           name: 'cue',
           fields: [
-            defineField({
-              name: 'tMs',
-              title: 'Time (ms)',
-              type: 'number',
-              validation: (r) => r.required().integer().min(0),
-            }),
-            defineField({
-              name: 'endMs',
-              title: 'End (ms, optional)',
-              type: 'number',
-              validation: (r) => r.integer().min(0),
-            }),
-            defineField({
-              name: 'text',
-              title: 'Text',
-              type: 'string',
-              validation: (r) => r.required(),
-            }),
-            defineField({
-              name: 'words',
-              title: 'Words (optional)',
-              type: 'array',
-              of: [
-                {
-                  type: 'object',
-                  name: 'wordCue',
-                  fields: [
-                    defineField({name: 'tMs', type: 'number', validation: (r) => r.required().integer().min(0)}),
-                    defineField({name: 'text', type: 'string', validation: (r) => r.required()}),
-                  ],
-                },
-              ],
-            }),
+            defineField({name: 'tMs', type: 'number', validation: (r) => r.required().integer().min(0)}),
+            defineField({name: 'endMs', type: 'number', validation: (r) => r.integer().min(0)}),
+            defineField({name: 'text', type: 'string', validation: (r) => r.required()}),
           ],
         },
       ],
+      components: {input: LyricsImportInput}, // replaces default array editor UI
       validation: (r) =>
         r.custom((value: unknown) => {
           if (!Array.isArray(value) || value.length === 0) return true
           let prev = -1
           for (const item of value) {
             if (!item || typeof item !== 'object') return 'Each cue must be an object.'
-            const rec = item as Record<string, unknown>
-            const tMs = rec.tMs
-            const text = rec.text
+            const tMs = (item as Record<string, unknown>).tMs
+            const text = (item as Record<string, unknown>).text
             if (typeof tMs !== 'number' || !Number.isFinite(tMs)) return 'Each cue needs a numeric tMs.'
             if (tMs < 0) return 'Cue tMs must be >= 0.'
             if (typeof text !== 'string' || text.trim().length === 0) return 'Each cue needs non-empty text.'
