@@ -73,8 +73,7 @@ type PlayerActions = {
   prev: () => void
 
   // queue mgmt
-  setQueue: (tracks: PlayerTrack[], opts?: {contextId?: string; artworkUrl?: string | null; slug?: string; artist?: string}) => void
-
+  setQueue: (tracks: PlayerTrack[], opts?: QueueContext) => void
   enqueue: (track: PlayerTrack) => void
 
   // telemetry
@@ -205,7 +204,8 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           intentAtMs: i ? Date.now() : undefined,
         })),
 
-      clearIntent: () => setState((s) => (s.intent ? {...s, intent: null, intentAtMs: undefined} : s)),
+      clearIntent: () =>
+        setState((s) => (s.intent ? {...s, intent: null, intentAtMs: undefined} : s)),
 
       /* ---------------- Selection / pending track ---------------- */
 
@@ -429,18 +429,21 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
 
       setQueue: (tracks: PlayerTrack[], opts?: QueueContext) =>
         setState((s) => {
-          // ✅ prime cache from incoming Sanity durations (canonical)
           const nextDurationById = primeDurationById(s.durationById, tracks)
-
-          // hydrate using the UPDATED cache
           const hydratedQueue = hydrateTracks(tracks, nextDurationById)
 
           const nextCurrentRaw = s.current ?? hydratedQueue[0]
           const nextCurrent = nextCurrentRaw ? hydrateTrack(nextCurrentRaw, nextDurationById) : undefined
 
-          const hasId = typeof opts?.contextId === 'string'
-          const hasTitle = typeof opts?.contextTitle === 'string'
+          const slug = typeof opts?.contextSlug === 'string' ? opts.contextSlug.trim() : ''
+          const title = typeof opts?.contextTitle === 'string' ? opts.contextTitle.trim() : ''
+          const artist = typeof opts?.contextArtist === 'string' ? opts.contextArtist.trim() : ''
+
+          const hasSlug = slug.length > 0
+          const hasTitle = title.length > 0
+          const hasArtist = artist.length > 0
           const hasArtwork = typeof opts?.artworkUrl !== 'undefined'
+          const hasId = typeof opts?.contextId === 'string' && opts.contextId.length > 0
 
           return {
             ...s,
@@ -448,20 +451,10 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
             queue: hydratedQueue,
 
             queueContextId: hasId ? opts!.contextId : s.queueContextId,
-            queueContextSlug:
-              typeof opts?.contextSlug === 'string' && opts.contextSlug.length > 0
-                ? opts.contextSlug
-                : s.queueContextSlug,
-
-            queueContextArtist:
-              typeof opts?.contextArtist === 'string' && opts.contextArtist.trim().length > 0
-                ? opts.contextArtist.trim()
-                : s.queueContextArtist,
-
-            queueContextTitle: hasTitle ? opts!.contextTitle : s.queueContextTitle,
-            queueContextArtworkUrl: hasArtwork
-              ? (opts!.artworkUrl ?? null)
-              : s.queueContextArtworkUrl ?? null,
+            queueContextSlug: hasSlug ? slug : s.queueContextSlug,
+            queueContextTitle: hasTitle ? title : s.queueContextTitle,
+            queueContextArtist: hasArtist ? artist : s.queueContextArtist,
+            queueContextArtworkUrl: hasArtwork ? (opts!.artworkUrl ?? null) : s.queueContextArtworkUrl ?? null,
 
             current: nextCurrent,
             positionMs: s.current ? s.positionMs : 0,
@@ -490,8 +483,7 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           positionMs: Math.max(0, ms),
         })),
 
-      // ✅ “Sanity is canonical”:
-      // Only fill duration when we don't already have one cached (or on the current track).
+      // ✅ “Sanity is canonical”
       setDurationMs: (ms: number) =>
         setState((s) => {
           const cur = s.current
@@ -500,13 +492,10 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
 
           const alreadyCached = typeof s.durationById[cur.id] === 'number' && s.durationById[cur.id] > 0
           const alreadyOnTrack = typeof cur.durationMs === 'number' && cur.durationMs > 0
-
-          // If Sanity (or earlier cache) already provided a duration, NEVER overwrite with engine duration.
           if (alreadyCached || alreadyOnTrack) return s
 
           const nextDurationById = {...s.durationById, [cur.id]: ms}
 
-          // reflect into current + any matching queue entry
           const nextCurrent = {...cur, durationMs: ms}
           let changed = false
           const nextQueue = s.queue.map((t) => {
@@ -574,7 +563,6 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           if (dur <= 0) return {...s, positionMs: nextPos}
           if (nextPos < dur) return {...s, positionMs: nextPos}
 
-          // reached end
           if (s.repeat === 'one') return {...s, positionMs: 0}
 
           const cur = s.current

@@ -163,14 +163,7 @@ export default function FullPlayer(props: {
       img.src = url
     } catch {}
   }
-
-  const queueOpts = {
-    contextId: album?.id,
-    artworkUrl: album?.artworkUrl ?? null,
-    slug: albumSlug,
-    artist: (album?.artist ?? '').toString().trim() || undefined,
-  }
-
+  
   const onTogglePlay = () => {
     lockPlayFor(120)
 
@@ -184,7 +177,13 @@ export default function FullPlayer(props: {
     const firstTrack = tracks[0]
     if (!firstTrack) return
 
-    p.setQueue(tracks, queueOpts)
+    p.setQueue(tracks, {
+  contextId: album?.id,
+  artworkUrl: album?.artworkUrl ?? null,
+  contextSlug: props.albumSlug,
+  contextTitle: album?.title ?? undefined,
+  contextArtist: album?.artist ?? undefined,
+})
     p.setIntent('play')
     p.play(firstTrack)
     window.dispatchEvent(new Event('af:play-intent'))
@@ -306,7 +305,13 @@ export default function FullPlayer(props: {
                 onMouseEnter={() => prefetchTrack(t)}
                 onFocus={() => prefetchTrack(t)}
                 onClick={() => {
-                  p.setQueue(tracks, queueOpts)
+                  p.setQueue(tracks, {
+                    contextId: album?.id,
+                    artworkUrl: album?.artworkUrl ?? null,
+                    contextSlug: props.albumSlug,
+                    contextTitle: album?.title ?? undefined,
+                    contextArtist: album?.artist ?? undefined,
+                  })
                   p.setIntent('play')
                   p.play(t)
                   window.dispatchEvent(new Event('af:play-intent'))

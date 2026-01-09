@@ -4,9 +4,7 @@
 import React from 'react'
 import {createPortal} from 'react-dom'
 import {usePlayer} from './PlayerState'
-import {buildShareTarget} from '@/lib/share'
-import {performShare} from '@/lib/share'
-
+import {buildShareTarget, performShare, type ShareTarget} from '@/lib/share'
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
@@ -135,11 +133,15 @@ function RetryIcon() {
   )
 }
 
+/**
+ * Local share UX: tries native share, falls back to copy, and if clipboard isn't available
+ * shows a tiny modal with the URL.
+ */
 function useShareUX() {
   const [fallback, setFallback] = React.useState<{url: string; title?: string} | null>(null)
   const close = React.useCallback(() => setFallback(null), [])
 
-  const shareTarget = React.useCallback(async (target: import('@/lib/share').ShareTarget) => {
+  const shareTarget = React.useCallback(async (target: ShareTarget) => {
     const res = await performShare(target)
     if (!res.ok) setFallback({url: res.url, title: target.title})
     return res
@@ -235,7 +237,9 @@ function useShareUX() {
                     type="button"
                     onClick={async () => {
                       try {
-                        if (navigator?.clipboard?.writeText) await navigator.clipboard.writeText(fallback.url)
+                        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                          await navigator.clipboard.writeText(fallback.url)
+                        }
                       } catch {}
                     }}
                     style={{
@@ -261,7 +265,6 @@ function useShareUX() {
 
   return {shareTarget, fallbackModal}
 }
-
 
 export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: string | null}) {
   const {onExpand, artworkUrl = null} = props
@@ -319,7 +322,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
     if (!scrubbing) setScrubSec(safePosReal)
   }, [safePosReal, scrubbing])
 
-  const sliderValue = scrubbing ? scrubSec : (safePending ?? safePosReal)
+  const sliderValue = scrubbing ? scrubSec : safePending ?? safePosReal
 
   /* ---------------- Seek tooltip (hover + scrub) ---------------- */
 
@@ -411,19 +414,37 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
   /* ---------------- Share ---------------- */
 
   const onShare = async () => {
-  const albumSlug = p.queueContextSlug
-  if (!albumSlug) return
+    const albumSlug = p.queueContextSlug
+    if (!albumSlug) return
+    if (typeof window === 'undefined') return
 
-  const origin = window.location.origin
-  const albumTitle = (p.queueContextTitle ?? albumSlug).toString().trim() || albumSlug
-  const artistName =
-    p.queueContextArtist ??
-    (((p.current?.artist ?? '').toString().trim()) || undefined)
+    const origin = window.location.origin
+    const albumTitle = (p.queueContextTitle ?? albumSlug).toString().trim() || albumSlug
+    const artistName = p.queueContextArtist ?? ((p.current?.artist ?? '').toString().trim() || undefined)
 
-  const cur = p.current
-  if (cur?.id) {
+    const cur = p.current
+    if (cur?.id) {
+      const target = buildShareTarget({
+        type: 'track',
+        methodHint: 'sheet',
+        origin,
+        album: {
+          slug: albumSlug,
+          id: p.queueContextId,
+          title: albumTitle,
+          artistName,
+        },
+        track: {
+          id: cur.id,
+          title: (cur.title ?? cur.id).toString().trim() || cur.id,
+        },
+      })
+      await shareTarget(target)
+      return
+    }
+
     const target = buildShareTarget({
-      type: 'track',
+      type: 'album',
       methodHint: 'sheet',
       origin,
       album: {
@@ -432,29 +453,9 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
         title: albumTitle,
         artistName,
       },
-      track: {
-        id: cur.id,
-        title: (cur.title ?? cur.id).toString().trim() || cur.id,
-      },
     })
     await shareTarget(target)
-    return
   }
-
-  const target = buildShareTarget({
-    type: 'album',
-    methodHint: 'sheet',
-    origin,
-    album: {
-      slug: albumSlug,
-      id: p.queueContextId,
-      title: albumTitle,
-      artistName,
-    },
-  })
-  await shareTarget(target)
-}
-
 
   /* ---------------- Layout constants ---------------- */
 
