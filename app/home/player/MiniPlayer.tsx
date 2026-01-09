@@ -4,6 +4,7 @@
 import React from 'react'
 import {createPortal} from 'react-dom'
 import {usePlayer} from './PlayerState'
+import {useShareUX, bestEffortAlbumSlug, buildAlbumShareFromContext, buildTrackShareFromContext} from './share'
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
@@ -101,6 +102,18 @@ function VolumeIcon({muted}: {muted: boolean}) {
   )
 }
 
+function ShareIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M16 8a3 3 0 1 0-2.9-3.7A3 3 0 0 0 16 8Z" stroke="currentColor" strokeWidth="2" />
+      <path d="M6 14a3 3 0 1 0-2.9-3.7A3 3 0 0 0 6 14Z" stroke="currentColor" strokeWidth="2" />
+      <path d="M16 22a3 3 0 1 0-2.9-3.7A3 3 0 0 0 16 22Z" stroke="currentColor" strokeWidth="2" />
+      <path d="M8.7 11.2l5-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M8.7 12.8l5 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 function MenuIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -123,13 +136,14 @@ function RetryIcon() {
 export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: string | null}) {
   const {onExpand, artworkUrl = null} = props
   const p = usePlayer()
+  const {shareTarget, fallbackModal} = useShareUX()
 
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
 
   const playingish = p.status === 'playing' || p.status === 'loading' || p.intent === 'play'
 
-    /* ---------------- Small anti-doubletap locks ---------------- */
+  /* ---------------- Small anti-doubletap locks ---------------- */
 
   const [transportLock, setTransportLock] = React.useState(false)
   const lockFor = (ms: number) => {
@@ -156,7 +170,6 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
 
   const prevDisabled = !p.current || transportLock || atStart
   const nextDisabled = !p.current || transportLock || atEnd
-
 
   const posSecReal = Math.round((p.positionMs ?? 0) / 1000)
   const safePosReal = durKnown ? clamp(posSecReal, 0, durSec) : 0
@@ -197,7 +210,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
       const pct = clamp((clientX - r.left) / Math.max(1, r.width), 0, 1)
       const sec = clamp(Math.round(pct * durSec), 0, durSec)
       const x = r.left + pct * r.width
-      const y = r.top // we’ll offset in render
+      const y = r.top
       setSeekTip({open: forceOpen, sec, x, y})
       if (scrubbing) setScrubSec(sec)
     },
@@ -261,9 +274,54 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
   const title = p.current?.title ?? p.current?.id ?? 'Nothing queued'
 
   const statusLine = (() => {
-  if (p.status === 'blocked') return 'Playback error'
-  return p.current?.artist ?? ''
-})()
+    if (p.status === 'blocked') return 'Playback error'
+    return p.current?.artist ?? ''
+  })()
+
+  // web/app/home/player/MiniPlayer.tsx
+const onShare = async () => {
+  const loc = bestEffortAlbumSlug()
+  const origin = loc?.origin ?? window.location.origin
+
+  // Prefer queue context (canonical), fall back to URL-derived slug
+  const albumSlug = p.queueContextSlug ?? loc?.slug
+  if (!albumSlug) return
+
+  const albumTitle = p.queueContextTitle ?? albumSlug
+  const artistName =
+  p.queueContextArtist ??
+  (((p.current?.artist ?? '').toString().trim()) || undefined)
+
+
+  const cur = p.current
+  const trackId = cur?.id ?? null
+  const trackTitle = (cur?.title ?? '').toString().trim()
+
+  if (trackId) {
+    await shareTarget(
+      buildTrackShareFromContext({
+        origin,
+        albumSlug,
+        albumTitle,
+        artistName,
+        albumId: p.queueContextId,
+        trackId,
+        trackTitle: trackTitle || trackId,
+      })
+    )
+    return
+  }
+
+  await shareTarget(
+    buildAlbumShareFromContext({
+      origin,
+      albumSlug,
+      albumTitle,
+      artistName,
+      albumId: p.queueContextId,
+    })
+  )
+}
 
 
   /* ---------------- Layout constants ---------------- */
@@ -369,8 +427,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
             }}
             onPointerMove={(e) => {
               if (!durKnown) return
-              if (scrubbing) computeSeekTipFromClientX(e.clientX, true)
-              else computeSeekTipFromClientX(e.clientX, true)
+              computeSeekTipFromClientX(e.clientX, true)
             }}
             onPointerUp={() => {
               setScrubbing(false)
@@ -429,7 +486,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
             )
           : null}
 
-        {/* Clip band: everything below the 1px rail is clipped so artwork can never be intersected */}
+        {/* Clip band */}
         <div
           data-af-clipband
           style={{
@@ -442,7 +499,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
             zIndex: 1,
           }}
         >
-          {/* Artwork starts BELOW the rail (inside the clip band) */}
+          {/* Artwork */}
           <div
             data-af-artwork
             aria-hidden="true"
@@ -526,8 +583,8 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
 
             <div style={{minWidth: 0}}>
               <div
-              className={isShimmering ? 'afShimmerText' : undefined}
-              data-reason={p.loadingReason ?? ''}
+                className={isShimmering ? 'afShimmerText' : undefined}
+                data-reason={p.loadingReason ?? ''}
                 style={{
                   fontSize: 13,
                   opacity: 0.92,
@@ -688,6 +745,15 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
                   : null}
               </div>
 
+              <IconBtn
+                label="Share"
+                title="Share"
+                onClick={onShare}
+                disabled={!bestEffortAlbumSlug()?.slug}
+              >
+                <ShareIcon />
+              </IconBtn>
+
               {p.status === 'blocked' || p.lastError ? (
                 <IconBtn
                   label="Retry"
@@ -731,7 +797,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
           `}</style>
         </div>
 
-        {/* Seek and shimmer styles: track fully transparent; thumb only visible, shimmer on load and buffer */}
+        {/* Seek + shimmer */}
         <style>{`
           input[aria-label="Seek"]::-webkit-slider-runnable-track {
             height: ${TOP_BORDER}px;
@@ -772,39 +838,44 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
               0 0 0 1px rgba(0,0,0,0.35),
               0 4px 10px rgba(0,0,0,0.25);
           }
-              @keyframes afShimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
 
-  .afShimmerText {
-    background: linear-gradient(
-      90deg,
-      rgba(255,255,255,0.55) 0%,
-      rgba(255,255,255,0.95) 45%,
-      rgba(255,255,255,0.55) 100%
-    );
-    background-size: 200% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    animation: afShimmer 1.1s linear infinite;
-  }
+          @keyframes afShimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+          }
 
-  /* slightly calmer when just "loading", a bit punchier when buffering */
-  .afShimmerText[data-reason="token"],
-  .afShimmerText[data-reason="attach"] { opacity: 0.85; }
+          .afShimmerText {
+            background: linear-gradient(
+              90deg,
+              rgba(255,255,255,0.55) 0%,
+              rgba(255,255,255,0.95) 45%,
+              rgba(255,255,255,0.55) 100%
+            );
+            background-size: 200% 100%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            animation: afShimmer 1.1s linear infinite;
+          }
 
-  .afShimmerText[data-reason="buffering"] { opacity: 1; }
+          .afShimmerText[data-reason="token"],
+          .afShimmerText[data-reason="attach"] { opacity: 0.85; }
 
-  @media (prefers-reduced-motion: reduce) {
-    .afShimmerText { animation: none; color: rgba(255,255,255,0.92); background: none; }
-  }
+          .afShimmerText[data-reason="buffering"] { opacity: 1; }
+
+          @media (prefers-reduced-motion: reduce) {
+            .afShimmerText { animation: none; color: rgba(255,255,255,0.92); background: none; }
+          }
         `}</style>
       </div>
     </div>
   )
 
   if (!mounted) return null
-  return createPortal(dock, document.body)
+  return (
+    <>
+      {createPortal(dock, document.body)}
+      {fallbackModal}
+    </>
+  )
 }

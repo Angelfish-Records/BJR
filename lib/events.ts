@@ -1,3 +1,4 @@
+// web/lib/events.ts
 import 'server-only'
 import crypto from 'crypto'
 import {sql} from '@vercel/postgres'

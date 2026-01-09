@@ -16,14 +16,25 @@ type RepeatMode = 'off' | 'one' | 'all'
 type Intent = 'play' | 'pause' | null
 type LoadingReason = 'token' | 'attach' | 'buffering' | undefined
 
+export type QueueContext = {
+  contextId?: string
+  contextSlug?: string
+  contextTitle?: string
+  contextArtist?: string
+  artworkUrl?: string | null
+}
+
 export type PlayerState = {
   status: PlayerStatus
   current?: PlayerTrack
   queue: PlayerTrack[]
   lastError?: string
 
-  // identifies what the queue represents (album id for now)
+  // identifies what the queue represents (album-ish context)
   queueContextId?: string
+  queueContextSlug?: string
+  queueContextTitle?: string
+  queueContextArtist?: string
   queueContextArtworkUrl?: string | null
 
   // Optimistic UI
@@ -62,7 +73,7 @@ type PlayerActions = {
   prev: () => void
 
   // queue mgmt
-  setQueue: (tracks: PlayerTrack[], opts?: {contextId?: string; artworkUrl?: string | null}) => void
+  setQueue: (tracks: PlayerTrack[], opts?: QueueContext) => void
   enqueue: (track: PlayerTrack) => void
 
   // telemetry
@@ -131,10 +142,7 @@ function hydrateTracks(ts: PlayerTrack[], durationById: Record<string, number>) 
   return changed ? next : ts
 }
 
-function primeDurationById(
-  prev: Record<string, number>,
-  tracks: PlayerTrack[]
-): Record<string, number> {
+function primeDurationById(prev: Record<string, number>, tracks: PlayerTrack[]): Record<string, number> {
   // Only set from Sanity values when present and positive.
   // Never overwrite an existing cached value (keeps “Sanity is canonical” stable).
   let next = prev
@@ -157,6 +165,9 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
     lastError: undefined,
 
     queueContextId: undefined,
+    queueContextSlug: undefined,
+    queueContextTitle: undefined,
+    queueContextArtist: undefined,
     queueContextArtworkUrl: null,
 
     intent: null,
@@ -415,7 +426,7 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
 
       /* ---------------- Queue ---------------- */
 
-      setQueue: (tracks: PlayerTrack[], opts?: {contextId?: string; artworkUrl?: string | null}) =>
+      setQueue: (tracks: PlayerTrack[], opts?: QueueContext) =>
         setState((s) => {
           // ✅ prime cache from incoming Sanity durations (canonical)
           const nextDurationById = primeDurationById(s.durationById, tracks)
@@ -426,13 +437,25 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           const nextCurrentRaw = s.current ?? hydratedQueue[0]
           const nextCurrent = nextCurrentRaw ? hydrateTrack(nextCurrentRaw, nextDurationById) : undefined
 
+          const hasId = typeof opts?.contextId === 'string'
+          const hasSlug = typeof opts?.contextSlug === 'string'
+          const hasTitle = typeof opts?.contextTitle === 'string'
+          const hasArtist = typeof opts?.contextArtist === 'string'
+          const hasArtwork = typeof opts?.artworkUrl !== 'undefined'
+
           return {
             ...s,
             durationById: nextDurationById,
             queue: hydratedQueue,
-            queueContextId: opts?.contextId ?? s.queueContextId,
-            queueContextArtworkUrl:
-              typeof opts?.artworkUrl !== 'undefined' ? (opts.artworkUrl ?? null) : s.queueContextArtworkUrl ?? null,
+
+            queueContextId: hasId ? opts!.contextId : s.queueContextId,
+            queueContextSlug: hasSlug ? opts!.contextSlug : s.queueContextSlug,
+            queueContextTitle: hasTitle ? opts!.contextTitle : s.queueContextTitle,
+            queueContextArtist: hasArtist ? opts!.contextArtist : s.queueContextArtist,
+            queueContextArtworkUrl: hasArtwork
+              ? (opts!.artworkUrl ?? null)
+              : s.queueContextArtworkUrl ?? null,
+
             current: nextCurrent,
             positionMs: s.current ? s.positionMs : 0,
             selectedTrackId: s.selectedTrackId ?? nextCurrent?.id,
