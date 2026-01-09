@@ -29,7 +29,6 @@ export default function AudioEngine() {
   const analyserRef = React.useRef<AnalyserNode | null>(null)
   const freqDataRef = React.useRef<Uint8Array<ArrayBufferLike> | null>(null)
   const timeDataRef = React.useRef<Uint8Array<ArrayBufferLike> | null>(null)
-  const sourceNodeRef = React.useRef<MediaElementAudioSourceNode | null>(null)
 
   // ---- Playback intent ----
   const playIntentRef = React.useRef(false)
@@ -45,18 +44,22 @@ export default function AudioEngine() {
   /* ---------------- AudioContext + analyser (ONCE) ---------------- */
 
   React.useEffect(() => {
-    const a = audioRef.current
-    if (!a) return
+  const a = audioRef.current
+  if (!a) return
 
+  let ctx: AudioContext | null = null
+  let src: MediaElementAudioSourceNode | null = null
+  let analyser: AnalyserNode | null = null
+
+  const ensureAudioGraph = async () => {
     if (audioCtxRef.current) return
 
-    const ctx = new AudioContext()
+    ctx = new AudioContext()
     audioCtxRef.current = ctx
 
-    const src = ctx.createMediaElementSource(a)
-    sourceNodeRef.current = src
+    src = ctx.createMediaElementSource(a)
+    analyser = ctx.createAnalyser()
 
-    const analyser = ctx.createAnalyser()
     analyser.fftSize = 2048
     analyser.smoothingTimeConstant = 0.8
 
@@ -66,15 +69,22 @@ export default function AudioEngine() {
     analyserRef.current = analyser
     freqDataRef.current = new Uint8Array(analyser.frequencyBinCount)
     timeDataRef.current = new Uint8Array(analyser.fftSize)
+  }
 
-    return () => {
-      try {
-        analyser.disconnect()
-        src.disconnect()
-        ctx.close()
-      } catch {}
+  const onUserGesture = async () => {
+    await ensureAudioGraph()
+    if (audioCtxRef.current?.state === 'suspended') {
+      await audioCtxRef.current.resume()
     }
-  }, [])
+  }
+
+  window.addEventListener('af:play-intent', onUserGesture)
+
+  return () => {
+    window.removeEventListener('af:play-intent', onUserGesture)
+  }
+}, [])
+
 
   /* ---------------- Audio feature pump ---------------- */
 
