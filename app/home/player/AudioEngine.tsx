@@ -5,6 +5,7 @@ import React from 'react'
 import Hls from 'hls.js'
 import {usePlayer} from './PlayerState'
 import {muxSignedHlsUrl} from '@/lib/mux'
+import {mediaSurface} from './mediaSurface'
 
 type TokenResponse =
   | {ok: true; token: string; expiresAt: string}
@@ -78,6 +79,8 @@ export default function AudioEngine() {
 
     const playbackId = p.current?.muxPlaybackId
     if (!playbackId) return
+
+    mediaSurface.setTrack(p.current?.id ?? null)
 
     // Only load/attach when playback is armed by user intent or state says we should be playing/loading.
     const armed =
@@ -255,7 +258,7 @@ export default function AudioEngine() {
 
     const onTime = () => {
       const ms = Math.floor(a.currentTime * 1000)
-
+      mediaSurface.setTime(ms)
       // Don’t fight the scrub: while seeking, ignore timeupdates until we converge.
       const s = pRef.current
       if (s.seeking && s.pendingSeekMs != null) {
@@ -284,6 +287,8 @@ export default function AudioEngine() {
       const s = pRef.current
       s.setStatusExternal('playing')
       s.setLoadingReasonExternal(undefined)
+      mediaSurface.setStatus('playing')
+      mediaSurface.setTrack(pRef.current.current?.id ?? null)
       s.clearError()
       s.clearIntent()
       if (s.current?.id) s.resolvePendingTrack(s.current.id)
@@ -294,6 +299,7 @@ export default function AudioEngine() {
       // Don’t override blocked/loading transitions with “paused”
       s.setStatusExternal(s.status === 'blocked' ? 'blocked' : 'paused')
       s.setLoadingReasonExternal(undefined)
+      mediaSurface.setStatus('paused')
       s.clearIntent()
     }
 
@@ -303,6 +309,7 @@ export default function AudioEngine() {
       if (s.status === 'playing' || s.status === 'loading') {
         s.setStatusExternal('loading')
         s.setLoadingReasonExternal('buffering')
+        mediaSurface.setStatus('loading')
       }
     }
 
@@ -324,6 +331,7 @@ export default function AudioEngine() {
     const onError = () => {
       pRef.current.setBlocked('Media error while loading/decoding.')
     }
+    mediaSurface.setStatus('blocked')
 
     a.addEventListener('timeupdate', onTime)
     a.addEventListener('durationchange', onDur)

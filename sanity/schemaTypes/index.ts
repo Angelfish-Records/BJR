@@ -8,8 +8,9 @@ import {moduleCardGrid} from './moduleCardGrid'
 import {moduleDownloads} from './moduleDownloads'
 import {moduleRichText} from './modules/moduleRichText'
 import album from './album'
+import lyrics from './lyrics'
 
 
 export const schema: {types: SchemaTypeDefinition[]} = {
-  types: [landingPage, shadowHomePage, siteFlags, portalPage, moduleHeading, moduleCardGrid, moduleDownloads, moduleRichText, album],
+  types: [landingPage, shadowHomePage, siteFlags, portalPage, moduleHeading, moduleCardGrid, moduleDownloads, moduleRichText, album, lyrics],
 }

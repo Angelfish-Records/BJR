@@ -16,6 +16,7 @@ import PortalModules from '@/app/home/PortalModules'
 import PortalArea from '@/app/home/PortalArea'
 import {listAlbumsForBrowse, getAlbumBySlug} from '@/lib/albums'
 import type {AlbumNavItem} from '@/lib/types'
+import StageInline from '@/app/home/player/StageInline'
 
 
 export const dynamic = 'force-dynamic'
@@ -418,6 +419,10 @@ const browseAlbums: AlbumNavItem[] = browseAlbumsRaw
                   </div>
                 </div>
               )}
+
+              {/* Stage: inline by default, fullscreen via button */}
+              <StageInline height={300} />
+              
             </aside>
           </div>
         </section>
