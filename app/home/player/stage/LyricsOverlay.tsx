@@ -35,18 +35,24 @@ export default function LyricsOverlay(props: {
 }) {
   const {cues, offsetMs = 0, onSeek, windowLines = 8} = props
 
-  // viewport = the visible "glass" box
   const viewportRef = React.useRef<HTMLDivElement | null>(null)
   const listRef = React.useRef<HTMLDivElement | null>(null)
   const rafRef = React.useRef<number | null>(null)
 
   const [activeIdx, setActiveIdx] = React.useState(-1)
-
   const activeIdxRef = React.useRef(-1)
+
+  // Derived slice bounds MUST exist before hooks depend on them.
+  const safeLen = cues?.length ?? 0
+  const safeActive = activeIdx >= 0 ? activeIdx : 0
+  const start = safeLen > 0 ? clamp(safeActive - windowLines, 0, safeLen - 1) : 0
+  const end = safeLen > 0 ? clamp(safeActive + windowLines, 0, safeLen - 1) : 0
+
   React.useEffect(() => {
     activeIdxRef.current = activeIdx
   }, [activeIdx])
 
+  // reset when cues change
   React.useEffect(() => {
     setActiveIdx(-1)
     activeIdxRef.current = -1
@@ -54,32 +60,42 @@ export default function LyricsOverlay(props: {
     if (el) el.style.transform = 'translate3d(0,0,0)'
   }, [cues])
 
+  // Layout: reposition + style based on active index
+  // IMPORTANT: this hook is unconditional (rules-of-hooks safe).
+  React.useLayoutEffect(() => {
+    if (!cues || cues.length === 0) return
+    if (activeIdx < 0) return
+
+    const list = listRef.current
+    const viewport = viewportRef.current
+    if (!list || !viewport) return
+
+    // Only works if the active element exists in the current slice
+    const activeEl = list.querySelector<HTMLElement>(`[data-lyric-idx="${activeIdx}"]`)
+    if (!activeEl) return
+
+    const vh = viewport.clientHeight
+    if (!vh || vh < 10) return
+
+    // Place active line at ~42% of the viewport height (slightly above center)
+    const y = activeEl.offsetTop + activeEl.offsetHeight / 2
+    const center = vh * 0.42
+    const translateY = center - y
+    list.style.transform = `translate3d(0, ${Math.round(translateY)}px, 0)`
+
+    // Fade/scale neighbors
+    const kids = list.querySelectorAll<HTMLElement>('[data-lyric-idx]')
+    for (const k of kids) {
+      const n = Number(k.dataset.lyricIdx)
+      const dist = Math.abs(n - activeIdx)
+      k.style.opacity = dist === 0 ? '1' : dist <= 2 ? '0.65' : '0.33'
+      k.style.transform = dist === 0 ? 'translateZ(0) scale(1.02)' : 'translateZ(0) scale(1)'
+    }
+  }, [cues, activeIdx, start, end])
+
+  // RAF: compute active index and update state only when it changes
   React.useEffect(() => {
     if (!cues || cues.length === 0) return
-
-    const applyVisuals = (idx: number) => {
-      const list = listRef.current
-      const viewport = viewportRef.current
-      if (!list || !viewport) return
-
-      // Center the *actual rendered* active row (works even when rendering a slice).
-      const activeEl = list.querySelector<HTMLElement>(`[data-lyric-idx="${idx}"]`)
-      if (activeEl) {
-        const y = activeEl.offsetTop + activeEl.offsetHeight / 2
-        const center = viewport.clientHeight / 0.42
-        const translateY = center - y
-        list.style.transform = `translate3d(0, ${Math.round(translateY)}px, 0)`
-      }
-
-      // Opacity/scale styling
-      const kids = list.querySelectorAll<HTMLElement>('[data-lyric-idx]')
-      for (const k of kids) {
-        const n = Number(k.dataset.lyricIdx)
-        const dist = Math.abs(n - idx)
-        k.style.opacity = dist === 0 ? '1' : dist <= 2 ? '0.65' : '0.33'
-        k.style.transform = dist === 0 ? 'translateZ(0) scale(1.02)' : 'translateZ(0) scale(1)'
-      }
-    }
 
     const step = () => {
       const tMs = mediaSurface.getTimeMs() + offsetMs
@@ -88,7 +104,6 @@ export default function LyricsOverlay(props: {
       if (idx !== activeIdxRef.current) {
         activeIdxRef.current = idx
         setActiveIdx(idx)
-        applyVisuals(idx)
       }
 
       rafRef.current = window.requestAnimationFrame(step)
@@ -125,9 +140,6 @@ export default function LyricsOverlay(props: {
     )
   }
 
-  const safeActive = activeIdx >= 0 ? activeIdx : 0
-  const start = clamp(safeActive - windowLines, 0, cues.length - 1)
-  const end = clamp(safeActive + windowLines, 0, cues.length - 1)
   const slice = cues.slice(start, end + 1)
 
   return (
@@ -176,7 +188,7 @@ export default function LyricsOverlay(props: {
             top: 0,
             willChange: 'transform',
             transform: 'translate3d(0,0,0)',
-            padding: '140px 20px', // extra breathing room so center never feels cramped
+            padding: '140px 20px',
             display: 'grid',
             gap: 10,
           }}
