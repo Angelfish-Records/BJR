@@ -25,11 +25,12 @@ type AlbumPayload = {album: AlbumInfo | null; tracks: PlayerTrack[]}
 
 export default function PortalArea(props: {
   portalPanel: React.ReactNode
+  albumSlug: string
   album: AlbumInfo | null
   tracks: PlayerTrack[]
   albums: AlbumNavItem[]
 }) {
-  const {portalPanel, album: initialAlbum, tracks: initialTracks, albums} = props
+  const {portalPanel, albumSlug, album: initialAlbum, tracks: initialTracks, albums} = props
   const [activePanelId, setActivePanelId] = React.useState<string>('player')
 
   // “Browsed album” lives here (inline browsing, no navigation)
@@ -77,6 +78,7 @@ export default function PortalArea(props: {
         label: 'Player',
         content: (
           <PlayerController
+            albumSlug={albumSlug}  
             album={album}
             tracks={tracks}
             albums={albums}
@@ -90,7 +92,7 @@ export default function PortalArea(props: {
       },
       {id: 'portal', label: 'Portal', content: portalPanel},
     ],
-    [portalPanel, album, tracks, albums, activePanelId, isBrowsingAlbum, onSelectAlbum]
+    [portalPanel, albumSlug, album, tracks, albums, activePanelId, isBrowsingAlbum, onSelectAlbum]
   )
 
   return (

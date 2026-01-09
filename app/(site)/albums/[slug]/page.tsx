@@ -124,6 +124,7 @@ export default async function AlbumPage(props: {
       />
 
       <PortalArea
+        albumSlug={slug}
         album={album}
         tracks={tracks}
         albums={browseAlbums}

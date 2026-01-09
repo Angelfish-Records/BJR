@@ -9,6 +9,7 @@ import type {AlbumInfo, AlbumNavItem} from '@/lib/types'
 import type {PlayerTrack} from './PlayerState'
 
 export default function PlayerController(props: {
+  albumSlug: string
   activePanelId: string
   openPlayerPanel: () => void
   playerPanelId?: string
@@ -19,6 +20,7 @@ export default function PlayerController(props: {
   isBrowsingAlbum: boolean
 }) {
   const {
+    albumSlug,
     activePanelId,
     openPlayerPanel,
     playerPanelId = 'player',
@@ -61,6 +63,7 @@ export default function PlayerController(props: {
     <>
       {showFull ? (
         <FullPlayer
+          albumSlug={albumSlug}  
           album={album}
           tracks={tracks}
           albums={albums}
