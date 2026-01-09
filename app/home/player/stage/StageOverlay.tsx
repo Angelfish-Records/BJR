@@ -86,7 +86,6 @@ export default function StageOverlay(props: {
         style={{
           position: 'absolute',
           inset: 0,
-          pointerEvents: 'none',
           background:
             'radial-gradient(800px 500px at 40% 30%, rgba(255,255,255,0.10), rgba(0,0,0,0.00) 65%), radial-gradient(700px 450px at 70% 70%, rgba(255,255,255,0.06), rgba(0,0,0,0.00) 60%), rgba(0,0,0,0.90)',
           filter: 'saturate(1.05)',
@@ -107,29 +106,14 @@ export default function StageOverlay(props: {
           gap: 12,
           pointerEvents: 'auto',
           background: 'linear-gradient(rgba(0,0,0,0.70), rgba(0,0,0,0.00))',
+          zIndex: 5,
         }}
       >
         <div style={{minWidth: 0}}>
-          <div
-            style={{
-              fontSize: 13,
-              fontWeight: 700,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
+          <div style={{fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
             {title}
           </div>
-          <div
-            style={{
-              fontSize: 12,
-              opacity: 0.7,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
+          <div style={{fontSize: 12, opacity: 0.7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
             {artist}
           </div>
         </div>
@@ -191,13 +175,10 @@ export default function StageOverlay(props: {
       <LyricsOverlay
         cues={cues}
         offsetMs={offsetMs}
+        variant="stage"
         onSeek={(tMs) => {
-          const ms = Math.max(0, Math.floor(tMs))
-          p.seek(ms)
-
-          // If you want lyric-click to resume reliably, do it here:
-          p.setIntent('play')
           window.dispatchEvent(new Event('af:play-intent'))
+          p.seek(tMs)
         }}
       />
     </div>

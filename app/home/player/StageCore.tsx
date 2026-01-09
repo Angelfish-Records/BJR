@@ -76,7 +76,7 @@ export default function StageCore(props: {
       }}
     >
       <VisualizerCanvas />
-      <LyricsOverlay cues={cues} offsetMs={effectiveOffsetMs} onSeek={onSeek} />
+      <LyricsOverlay cues={cues} offsetMs={effectiveOffsetMs} onSeek={onSeek} variant="inline" />
 
       <div
         aria-hidden="true"
