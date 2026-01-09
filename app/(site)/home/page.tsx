@@ -185,9 +185,8 @@ export default async function Home(props: {
   )
 
   const featuredAlbumSlug = 'consolers' // later: siteFlags.featuredAlbumSlug
-
   const albumData = await getAlbumBySlug(featuredAlbumSlug)
-
+  const albumSlug = featuredAlbumSlug
   const browseAlbumsRaw = await listAlbumsForBrowse()
 
 const browseAlbums: AlbumNavItem[] = browseAlbumsRaw
@@ -353,6 +352,7 @@ const browseAlbums: AlbumNavItem[] = browseAlbumsRaw
             <div className="shadowHomeMain" style={{display: 'grid', gap: 18}}>
   <PortalArea
   portalPanel={portalPanel}
+  albumSlug={albumSlug}
   album={albumData.album}
   tracks={albumData.tracks}
   albums={browseAlbums}
