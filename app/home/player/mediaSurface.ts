@@ -21,9 +21,12 @@ class MediaSurface {
     fn({type: 'time', ms: this.lastTimeMs})
     fn({type: 'status', status: this.lastStatus})
     fn({type: 'track', id: this.lastTrackId})
+
+    // IMPORTANT: cleanup must return void (not boolean)
     return () => {
       this.listeners.delete(fn)
-    }}
+    }
+  }
 
   setTime(ms: number) {
     this.lastTimeMs = ms

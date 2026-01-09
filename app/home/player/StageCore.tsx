@@ -25,31 +25,33 @@ export default function StageCore(props: {
   const [surfaceTrackId, setSurfaceTrackId] = React.useState<string | null>(() => mediaSurface.getTrackId())
 
   React.useEffect(() => {
-    return mediaSurface.subscribe((e) => {
+    const unsub = mediaSurface.subscribe((e) => {
       if (e.type === 'track') setSurfaceTrackId(e.id)
     })
+    return unsub
   }, [])
 
   const trackId = surfaceTrackId ?? p.current?.id ?? null
 
-  const cues: LyricCue[] | null = (() => {
+  const cues: LyricCue[] | null = React.useMemo(() => {
     if (!trackId) return null
     const xs = cuesByTrackId?.[trackId]
     return Array.isArray(xs) && xs.length ? xs : null
-  })()
+  }, [cuesByTrackId, trackId])
 
-  const trackOffsetMs = (() => {
+  const trackOffsetMs = React.useMemo(() => {
     if (!trackId) return 0
     const v = offsetByTrackId?.[trackId]
     return typeof v === 'number' && Number.isFinite(v) ? v : 0
-  })()
+  }, [offsetByTrackId, trackId])
 
   const effectiveOffsetMs = trackOffsetMs + globalOffsetMs
 
   const onSeek = React.useCallback(
     (tMs: number) => {
       const ms = Math.max(0, Math.floor(tMs))
-      window.dispatchEvent(new Event('af:play-intent'))
+
+      // seek should not *force* play unless you asked for it
       p.seek(ms)
 
       if (autoResumeOnSeek) {
@@ -74,7 +76,6 @@ export default function StageCore(props: {
       }}
     >
       <VisualizerCanvas />
-
       <LyricsOverlay cues={cues} offsetMs={effectiveOffsetMs} onSeek={onSeek} />
 
       <div

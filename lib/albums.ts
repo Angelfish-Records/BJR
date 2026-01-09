@@ -3,6 +3,7 @@ import {client} from '@/sanity/lib/client'
 import {urlFor} from '@/sanity/lib/image'
 import type {AlbumInfo} from '@/lib/types'
 import type {PlayerTrack} from '@/app/home/player/PlayerState'
+import type {LyricCue} from '@/app/home/player/stage/LyricsOverlay'
 
 type AlbumDoc = {
   _id?: string
@@ -20,12 +21,10 @@ type AlbumDoc = {
   }>
 }
 
-export type LyricCue = {tMs: number; text: string; endMs?: number}
-
 type TrackLyricsDoc = {
-  trackId: string
+  trackId?: string
   offsetMs?: number
-  cues?: LyricCue[]
+  cues?: Array<{tMs?: number; text?: string; endMs?: number}>
 }
 
 export type AlbumBrowseItem = {
@@ -40,6 +39,23 @@ export type AlbumBrowseItem = {
 export type AlbumLyricsBundle = {
   cuesByTrackId: Record<string, LyricCue[]>
   offsetByTrackId: Record<string, number>
+}
+
+function normalizeCues(input: TrackLyricsDoc['cues']): LyricCue[] {
+  if (!Array.isArray(input)) return []
+  const out: LyricCue[] = []
+  for (const c of input) {
+    const tMs = c?.tMs
+    const text = c?.text
+    const endMs = c?.endMs
+    if (typeof tMs !== 'number' || !Number.isFinite(tMs) || tMs < 0) continue
+    if (typeof text !== 'string' || text.trim().length === 0) continue
+    const cue: LyricCue = {tMs: Math.floor(tMs), text: text.trim()}
+    if (typeof endMs === 'number' && Number.isFinite(endMs) && endMs >= 0) cue.endMs = Math.floor(endMs)
+    out.push(cue)
+  }
+  out.sort((a, b) => a.tMs - b.tMs)
+  return out
 }
 
 export async function getAlbumBySlug(
@@ -84,7 +100,6 @@ export async function getAlbumBySlug(
         .map((t) => {
           const raw = t.durationMs
           const n = typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined
-
           return {
             id: t.id,
             title: t.title ?? undefined,
@@ -95,7 +110,7 @@ export async function getAlbumBySlug(
         })
     : []
 
-  const trackIds = tracks.map((t) => t.id).filter(Boolean)
+  const trackIds = tracks.map((t) => t.id).filter((x): x is string => typeof x === 'string' && x.length > 0)
 
   const lyricsQ = `
     *[_type == "lyrics" && trackId in $trackIds]{
@@ -105,8 +120,7 @@ export async function getAlbumBySlug(
     }
   `
 
-  const lyricDocs =
-    trackIds.length > 0 ? await client.fetch<TrackLyricsDoc[]>(lyricsQ, {trackIds}) : []
+  const lyricDocs = trackIds.length ? await client.fetch<TrackLyricsDoc[]>(lyricsQ, {trackIds}) : []
 
   const cuesByTrackId: Record<string, LyricCue[]> = {}
   const offsetByTrackId: Record<string, number> = {}
@@ -114,10 +128,9 @@ export async function getAlbumBySlug(
   for (const d of Array.isArray(lyricDocs) ? lyricDocs : []) {
     const id = d?.trackId
     if (!id) continue
-
-    cuesByTrackId[id] = Array.isArray(d.cues) ? d.cues : []
+    cuesByTrackId[id] = normalizeCues(d.cues)
     offsetByTrackId[id] =
-      typeof d.offsetMs === 'number' && Number.isFinite(d.offsetMs) ? d.offsetMs : 0
+      typeof d.offsetMs === 'number' && Number.isFinite(d.offsetMs) ? Math.floor(d.offsetMs) : 0
   }
 
   return {album, tracks, lyrics: {cuesByTrackId, offsetByTrackId}}
