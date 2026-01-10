@@ -77,7 +77,7 @@ export async function getAlbumBySlug(
         title,
         artist,
         durationMs,
-        muxPlaybackId
+        muxPlaybackId,
         visualTheme
       }
     }
