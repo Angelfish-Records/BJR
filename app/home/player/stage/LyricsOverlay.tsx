@@ -305,6 +305,12 @@ export default function LyricsOverlay(props: {
     -webkit-text-fill-color: rgba(255,255,255,0.94) !important;
     -webkit-text-stroke: 0px transparent !important;
   }
+
+    .af-lyrics-scroll {
+    -webkit-mask-image: none !important;
+    mask-image: none !important;
+  }
+
 `}</style>
 
       </div>
