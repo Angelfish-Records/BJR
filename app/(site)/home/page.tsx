@@ -204,13 +204,13 @@ export default async function Home(props: {
           }
 
           .shadowHomeSidebar {
-            order: 0;
+            order: 1;
             position: static !important;
             top: auto !important;
           }
 
           .shadowHomeMain {
-            order: 1;
+            order: 0;
           }
         }
 

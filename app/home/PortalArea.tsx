@@ -172,126 +172,171 @@ export default function PortalArea(props: {
           onPanelChange={setActivePanelId}
           headerPortalId="af-portal-topbar-slot"
           header={({activePanelId, setPanel}) => (
-            <div
-              style={{
-                width: '100%',
-                display: 'grid',
-                gridTemplateColumns: 'auto 1fr auto',
-                alignItems: 'center',
-                gap: 12,
-                padding: 12,
-                borderRadius: 18,
-                border: '1px solid rgba(255,255,255,0.12)',
-                background: 'rgba(255,255,255,0.04)',
-                backdropFilter: 'blur(10px)',
-                WebkitBackdropFilter: 'blur(10px)',
-                minWidth: 0,
-              }}
-            >
-              {/* Left: circular panel buttons */}
-              <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
-                <button
-                  type="button"
-                  aria-label="Player"
-                  title="Player"
-                  onClick={() => setPanel('player')}
-                  style={{
-                    width: 46,
-                    height: 46,
-                    borderRadius: 999,
-                    border: '1px solid rgba(255,255,255,0.14)',
-                    background:
-                      activePanelId === 'player'
-                        ? 'color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))'
-                        : 'rgba(255,255,255,0.04)',
-                    boxShadow:
-                      activePanelId === 'player'
-                        ? '0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)'
-                        : '0 12px 26px rgba(0,0,0,0.18)',
-                    color: 'rgba(255,255,255,0.90)',
-                    cursor: 'pointer',
-                    opacity: activePanelId === 'player' ? 0.98 : 0.78,
-                    display: 'grid',
-                    placeItems: 'center',
-                    userSelect: 'none',
-                  }}
-                >
-                  <IconPlayer />
-                </button>
+  <div
+    style={{
+      width: '100%',
+      borderRadius: 18,
+      border: '1px solid rgba(255,255,255,0.12)',
+      background: 'rgba(255,255,255,0.04)',
+      backdropFilter: 'blur(10px)',
+      WebkitBackdropFilter: 'blur(10px)',
+      padding: 12,
+      minWidth: 0,
+    }}
+  >
+    <style>{`
+      /* Desktop/tablet: true centered logo */
+      .afTopBar {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
 
-                <button
-                  type="button"
-                  aria-label="Portal"
-                  title="Portal"
-                  onClick={() => setPanel('portal')}
-                  style={{
-                    width: 46,
-                    height: 46,
-                    borderRadius: 999,
-                    border: '1px solid rgba(255,255,255,0.14)',
-                    background:
-                      activePanelId === 'portal'
-                        ? 'color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))'
-                        : 'rgba(255,255,255,0.04)',
-                    boxShadow:
-                      activePanelId === 'portal'
-                        ? '0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)'
-                        : '0 12px 26px rgba(0,0,0,0.18)',
-                    color: 'rgba(255,255,255,0.90)',
-                    cursor: 'pointer',
-                    opacity: activePanelId === 'portal' ? 0.98 : 0.78,
-                    display: 'grid',
-                    placeItems: 'center',
-                    userSelect: 'none',
-                  }}
-                >
-                  <IconPortal />
-                </button>
-              </div>
+      .afTopBarLeft,
+      .afTopBarRight {
+        min-width: 0;
+        display: flex;
+        align-items: center;
+      }
 
-              {/* Center: logo */}
-              <div style={{display: 'grid', placeItems: 'center', minWidth: 0}}>
-                <div
-                  aria-label="AF"
-                  title="AF"
-                  style={{
-                    width: 38,
-                    height: 38,
-                    borderRadius: 999,
-                    border: '1px solid rgba(255,255,255,0.14)',
-                    background: 'rgba(0,0,0,0.22)',
-                    display: 'grid',
-                    placeItems: 'center',
-                    fontSize: 13,
-                    fontWeight: 700,
-                    letterSpacing: 0.5,
-                    opacity: 0.92,
-                    userSelect: 'none',
-                  }}
-                >
-                  AF
-                </div>
-              </div>
+      .afTopBarLeft { justify-content: flex-start; gap: 10px; }
+      .afTopBarRight { justify-content: flex-end; }
 
-              {/* Right: ActivationGate */}
-              <div style={{justifySelf: 'end', minWidth: 0}}>
-                <div style={{maxWidth: 520}}>
-                  <ActivationGate attentionMessage={attentionMessage}>
-                    <div style={{display: 'grid', justifyItems: 'center', gap: 10}}>
-                      {canManageBilling ? (
-                        <>
-                          {!hasGold ? <SubscribeButton loggedIn={loggedIn} /> : null}
-                          {hasGold ? <CancelSubscriptionButton /> : null}
-                        </>
-                      ) : null}
-                    </div>
-                  </ActivationGate>
+      /* Mobile: logo gets its own row, controls sit below */
+      @media (max-width: 720px) {
+        .afTopBar {
+          grid-template-columns: 1fr;
+          grid-template-rows: auto auto;
+          gap: 10px;
+        }
 
-                  <CheckoutBanner checkout={checkout} />
-                </div>
-              </div>
+        .afTopBarLogo {
+          grid-row: 1;
+          justify-self: center;
+        }
+
+        .afTopBarLeft {
+          grid-row: 2;
+          justify-self: start;
+        }
+
+        .afTopBarRight {
+          grid-row: 2;
+          justify-self: end;
+        }
+      }
+    `}</style>
+
+    <div className="afTopBar">
+      {/* Left: circular panel buttons */}
+      <div className="afTopBarLeft">
+        <button
+          type="button"
+          aria-label="Player"
+          title="Player"
+          onClick={() => setPanel('player')}
+          style={{
+            width: 46,
+            height: 46,
+            borderRadius: 999,
+            border: '1px solid rgba(255,255,255,0.14)',
+            background:
+              activePanelId === 'player'
+                ? 'color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))'
+                : 'rgba(255,255,255,0.04)',
+            boxShadow:
+              activePanelId === 'player'
+                ? '0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)'
+                : '0 12px 26px rgba(0,0,0,0.18)',
+            color: 'rgba(255,255,255,0.90)',
+            cursor: 'pointer',
+            opacity: activePanelId === 'player' ? 0.98 : 0.78,
+            display: 'grid',
+            placeItems: 'center',
+            userSelect: 'none',
+          }}
+        >
+          {/* keep your SVG IconPlayer() here */}
+          <IconPlayer />
+        </button>
+
+        <button
+          type="button"
+          aria-label="Portal"
+          title="Portal"
+          onClick={() => setPanel('portal')}
+          style={{
+            width: 46,
+            height: 46,
+            borderRadius: 999,
+            border: '1px solid rgba(255,255,255,0.14)',
+            background:
+              activePanelId === 'portal'
+                ? 'color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))'
+                : 'rgba(255,255,255,0.04)',
+            boxShadow:
+              activePanelId === 'portal'
+                ? '0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)'
+                : '0 12px 26px rgba(0,0,0,0.18)',
+            color: 'rgba(255,255,255,0.90)',
+            cursor: 'pointer',
+            opacity: activePanelId === 'portal' ? 0.98 : 0.78,
+            display: 'grid',
+            placeItems: 'center',
+            userSelect: 'none',
+          }}
+        >
+          <IconPortal />
+        </button>
+      </div>
+
+      {/* Center: logo (now truly centered) */}
+      <div className="afTopBarLogo" style={{display: 'grid', placeItems: 'center', minWidth: 0}}>
+        <div
+          aria-label="AF"
+          title="AF"
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: 999,
+            border: '1px solid rgba(255,255,255,0.14)',
+            background: 'rgba(0,0,0,0.22)',
+            display: 'grid',
+            placeItems: 'center',
+            fontSize: 13,
+            fontWeight: 700,
+            letterSpacing: 0.5,
+            opacity: 0.92,
+            userSelect: 'none',
+          }}
+        >
+          AF
+        </div>
+      </div>
+
+      {/* Right: ActivationGate */}
+      <div className="afTopBarRight">
+        <div style={{maxWidth: 520, minWidth: 0}}>
+          <ActivationGate attentionMessage={attentionMessage}>
+            <div style={{display: 'grid', justifyItems: 'center', gap: 10}}>
+              {canManageBilling ? (
+                <>
+                  {!hasGold ? <SubscribeButton loggedIn={loggedIn} /> : null}
+                  {hasGold ? <CancelSubscriptionButton /> : null}
+                </>
+              ) : null}
             </div>
-          )}
+          </ActivationGate>
+
+          <CheckoutBanner checkout={checkout} />
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
         />
       </div>
     </>
