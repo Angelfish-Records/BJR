@@ -14,26 +14,22 @@ export default function StageCore(props: {
   variant: 'inline' | 'fullscreen'
   cuesByTrackId?: CuesByTrackId
   offsetByTrackId?: OffsetByTrackId
-  /** Optional global offset applied in addition to per-track offset */
   offsetMs?: number
-  /** If true, clicking a lyric also resumes playback */
   autoResumeOnSeek?: boolean
 }) {
   const {variant, cuesByTrackId, offsetByTrackId, offsetMs: globalOffsetMs = 0, autoResumeOnSeek = false} = props
   const p = usePlayer()
 
-  // Keep mediaSurface track around, but DO NOT let it override a known current track.
   const [surfaceTrackId, setSurfaceTrackId] = React.useState<string | null>(() => mediaSurface.getTrackId())
 
   React.useEffect(() => {
-    return mediaSurface.subscribe((e) => {
+    const unsub = mediaSurface.subscribe((e) => {
       if (e.type === 'track') setSurfaceTrackId(e.id)
     })
+    return unsub
   }, [])
 
-  // Prefer the PlayerState current track id (most reliable for inline UI),
-  // fall back to mediaSurface only if current is missing.
-  const trackId = p.current?.id ?? surfaceTrackId ?? null
+  const trackId = surfaceTrackId ?? p.current?.id ?? null
 
   const cues: LyricCue[] | null = React.useMemo(() => {
     if (!trackId) return null
@@ -64,34 +60,42 @@ export default function StageCore(props: {
     },
     [autoResumeOnSeek, p]
   )
-  
-  // Map StageCore variant to LyricsOverlay variant
-  const lyricVariant: 'inline' | 'stage' = variant === 'inline' ? 'inline' : 'stage'
+
+  const lyricsVariant = variant === 'inline' ? 'inline' : 'stage'
 
   return (
     <div
       style={{
         position: 'absolute',
         inset: 0,
-        borderRadius: variant === 'inline' ? 0 : 18,
+        borderRadius: variant === 'inline' ? 18 : 18,
         overflow: 'hidden',
         background: 'rgba(0,0,0,0.35)',
+        isolation: 'isolate', // ✅ force a stacking context so zIndex is deterministic
       }}
     >
-      <VisualizerCanvas />
+      {/* Layer 0: canvas */}
+      <div style={{position: 'absolute', inset: 0, zIndex: 0}}>
+        <VisualizerCanvas />
+      </div>
 
-      <LyricsOverlay cues={cues} offsetMs={effectiveOffsetMs} onSeek={onSeek} variant={lyricVariant} />
-
+      {/* Layer 1: tint/vignette BEHIND lyrics */}
       <div
         aria-hidden="true"
         style={{
           position: 'absolute',
           inset: 0,
+          zIndex: 1,
           background:
             'radial-gradient(70% 55% at 50% 40%, rgba(0,0,0,0.0), rgba(0,0,0,0.35) 70%), linear-gradient(180deg, rgba(0,0,0,0.30), rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.40))',
           pointerEvents: 'none',
         }}
       />
+
+      {/* Layer 2: lyrics always on top */}
+      <div style={{position: 'absolute', inset: 0, zIndex: 2}}>
+        <LyricsOverlay cues={cues} offsetMs={effectiveOffsetMs} onSeek={onSeek} variant={lyricsVariant} />
+      </div>
     </div>
   )
 }

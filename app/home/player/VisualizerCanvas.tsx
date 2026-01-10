@@ -19,10 +19,7 @@ export default function VisualizerCanvas() {
       window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false
 
     const getAudio = (): AudioFeatures => {
-      if (prefersReduced) {
-        // calm, static baseline
-        return {energy: 0.12}
-      }
+      if (prefersReduced) return {energy: 0.12}
       return audioSurface.get()
     }
 
@@ -51,7 +48,8 @@ export default function VisualizerCanvas() {
         width: '100%',
         height: '100%',
         display: 'block',
-        pointerEvents: 'none', // ✅ critical: don't steal clicks
+        pointerEvents: 'none',
+        zIndex: 0, // ✅ always behind overlays
       }}
     />
   )
