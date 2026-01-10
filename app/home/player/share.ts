@@ -2,7 +2,7 @@
 'use client'
 
 import type {AlbumInfo} from '@/lib/types'
-import type {PlayerTrack} from './PlayerState'
+import type {PlayerTrack} from '@/lib/types'
 import {buildShareTarget, performShare, type ShareMethod} from '@/lib/share'
 
 export type PlayerShareContext = {

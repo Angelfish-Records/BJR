@@ -5,7 +5,7 @@ import FullPlayer from './FullPlayer'
 import MiniPlayer from './MiniPlayer'
 import {usePlayer} from './PlayerState'
 import type {AlbumInfo, AlbumNavItem} from '@/lib/types'
-import type {PlayerTrack} from './PlayerState'
+import type {PlayerTrack} from '@/lib/types'
 import StageOverlay from './stage/StageOverlay'
 import type {LyricCue} from './stage/LyricsOverlay'
 

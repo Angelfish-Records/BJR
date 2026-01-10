@@ -4,7 +4,7 @@
 import React from 'react'
 import {usePlayer} from './PlayerState'
 import type {AlbumInfo, AlbumNavItem} from '@/lib/types'
-import type {PlayerTrack} from './PlayerState'
+import type {PlayerTrack} from '@/lib/types'
 import {deriveShareContext, shareAlbum, shareTrack} from './share'
 
 function fmtTime(ms: number) {
