@@ -236,15 +236,20 @@ export default function LyricsOverlay(props: {
                 }}
                 style={{
                   textAlign: 'center',
-                  background: 'transparent',
-                  border: 0,
-                  padding: 0,
-                  cursor: onSeek ? 'pointer' : 'default',
-                  color: 'rgba(255,255,255,0.94)',
-                  fontSize: lineFontSize,
-                  fontWeight: isActive ? 780 : 650,
-                  letterSpacing: 0.2,
-                  lineHeight,
+  background: 'transparent',
+  border: 0,
+
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: '100%',
+  minHeight: lineHeight,
+  padding: isInline ? '2px 0' : '4px 0',
+
+  cursor: onSeek ? 'pointer' : 'default',
+  color: 'rgba(255,255,255,0.94)',
+  fontSize: lineFontSize,
+  lineHeight,
                   opacity,
                   transition: 'opacity 140ms ease, transform 140ms ease',
                   userSelect: 'none',
@@ -298,19 +303,6 @@ export default function LyricsOverlay(props: {
   /* Hide scrollbar (WebKit) reliably */
   .af-lyrics-scroll::-webkit-scrollbar { width: 0px; height: 0px; }
   .af-lyrics-scroll::-webkit-scrollbar-thumb { background: transparent; }
-
-  /* CRITICAL: force text paint even if some global button rule uses !important */
-  .af-lyrics-scroll button {
-    color: rgba(255,255,255,0.94) !important;
-    -webkit-text-fill-color: rgba(255,255,255,0.94) !important;
-    -webkit-text-stroke: 0px transparent !important;
-  }
-
-    .af-lyrics-scroll {
-    -webkit-mask-image: none !important;
-    mask-image: none !important;
-  }
-
 `}</style>
 
       </div>
