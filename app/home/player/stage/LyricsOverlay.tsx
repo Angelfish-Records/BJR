@@ -140,13 +140,6 @@ export default function LyricsOverlay(props: {
   const botFadeH = isInline ? 54 : 160
 
 
-    // TEMP DEBUG (remove once fixed)
-  const dbgT = Math.floor(mediaSurface.getTimeMs() + offsetMs)
-  const dbgFirst = cues[0]?.text ?? ''
-  const dbgFirstT = cues[0]?.tMs ?? -1
-  const dbgLen = cues.length
-
-
   return (
     <div
       style={{
@@ -160,34 +153,6 @@ export default function LyricsOverlay(props: {
         zIndex: 9999, // make absolutely sure it’s on top in the inline card
       }}
     >
-            {/* TEMP DEBUG (remove once fixed) */}
-      {isInline ? (
-        <div
-          style={{
-            position: 'absolute',
-            top: 8,
-            left: 8,
-            zIndex: 10000,
-            padding: '6px 8px',
-            borderRadius: 10,
-            border: '1px solid rgba(255,255,255,0.18)',
-            background: 'rgba(0,0,0,0.65)',
-            color: 'rgba(255,255,255,0.95)',
-            fontSize: 11,
-            lineHeight: 1.25,
-            maxWidth: 260,
-            pointerEvents: 'none',
-            textAlign: 'left',
-            whiteSpace: 'normal',
-          }}
-        >
-          <div>cues: {dbgLen}</div>
-          <div>tMs: {dbgT}</div>
-          <div>activeIdx: {activeIdx}</div>
-          <div>first: {dbgFirstT} — {dbgFirst.slice(0, 48)}</div>
-        </div>
-      ) : null}
-
       <div
         ref={viewportRef}
         style={{
@@ -201,8 +166,8 @@ export default function LyricsOverlay(props: {
           // Inline: give the text a darker “plate” so low-opacity lines still read.
           background: isInline ? 'rgba(0,0,0,0.28)' : 'rgba(0,0,0,0.16)',
 
-          backdropFilter: 'blur(10px)',
-          WebkitBackdropFilter: 'blur(10px)',
+          //backdropFilter: 'blur(10px)',
+          //WebkitBackdropFilter: 'blur(10px)',
           boxShadow: '0 18px 60px rgba(0,0,0,0.35)',
         }}
       >
@@ -226,6 +191,9 @@ export default function LyricsOverlay(props: {
           }}
           style={{
             position: 'absolute',
+            outline: '2px solid rgba(0, 200, 255, 0.9)',
+background: 'rgba(0,0,0,0.35)',
+
             inset: 0,
             overflowY: 'auto',
             overflowX: 'hidden',
@@ -272,16 +240,18 @@ export default function LyricsOverlay(props: {
                 }}
                 style={{
                   textAlign: 'center',
-                  background: 'transparent',
+                  background: 'rgba(255, 0, 0, 0.22)',
+outline: '1px solid rgba(0, 255, 0, 0.8)',
+color: 'rgba(255,255,0,1)',
+
                   border: 0,
                   padding: 0,
                   cursor: onSeek ? 'pointer' : 'default',
-                  color: 'rgba(255,255,255,0.94)',
                   fontSize: lineFontSize,
                   fontWeight: isActive ? 780 : 650,
                   letterSpacing: 0.2,
                   lineHeight,
-                  opacity: 1,
+                  opacity,
                   transition: 'opacity 140ms ease, transform 140ms ease',
                   userSelect: 'none',
                   transform: isActive ? 'translateZ(0) scale(1.02)' : 'translateZ(0) scale(1)',
