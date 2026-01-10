@@ -31,7 +31,6 @@ export default function LyricsOverlay(props: {
   cues: LyricCue[] | null
   offsetMs?: number
   onSeek?: (tMs: number) => void
-  windowLines?: number
   variant?: 'inline' | 'stage'
 }) {
   const {cues, offsetMs = 0, onSeek, variant = 'stage'} = props
@@ -67,10 +66,12 @@ export default function LyricsOverlay(props: {
     const step = () => {
       const tMs = mediaSurface.getTimeMs() + offsetMs
       const idx = findActiveIndex(cues, tMs)
+
       if (idx !== activeIdxRef.current) {
         activeIdxRef.current = idx
         setActiveIdx(idx)
       }
+
       rafRef.current = window.requestAnimationFrame(step)
     }
 
@@ -99,10 +100,8 @@ export default function LyricsOverlay(props: {
     const vh = viewport.clientHeight
     if (!vh || vh < 10) return
 
-    // Place active line ~40% from top.
     const targetY = activeEl.offsetTop + activeEl.offsetHeight / 2 - vh * 0.40
     const nextTop = clamp(Math.round(targetY), 0, Math.max(0, sc.scrollHeight - sc.clientHeight))
-
     sc.scrollTo({top: nextTop, behavior: 'smooth'})
   }, [cues, activeIdx])
 
@@ -130,17 +129,15 @@ export default function LyricsOverlay(props: {
     )
   }
 
-  // Typography
+  // Typography (inline genuinely smaller)
   const lineFontSize = isInline ? 'clamp(12px, 1.15vw, 14px)' : 'clamp(18px, 2.2vw, 26px)'
   const lineHeight = isInline ? '22px' : '34px'
 
-  // Padding (inline must be small; stage can breathe)
-  const padTop = isInline ? 56 : 140
-  const padBottom = isInline ? 86 : 180
-
-  // Fades (inline must be shallow or it hides everything)
-  const topFadeH = isInline ? 54 : 130
-  const botFadeH = isInline ? 64 : 160
+  // Inline needs tighter padding/fades or it eats the whole panel.
+  const padTop = isInline ? 44 : 140
+  const padBottom = isInline ? 66 : 180
+  const topFadeH = isInline ? 44 : 130
+  const botFadeH = isInline ? 54 : 160
 
   return (
     <div
@@ -150,8 +147,9 @@ export default function LyricsOverlay(props: {
         display: 'grid',
         alignItems: 'stretch',
         justifyItems: 'stretch',
-        padding: isInline ? 12 : 18,
+        padding: isInline ? 10 : 18,
         pointerEvents: 'auto',
+        zIndex: 9999, // make absolutely sure it’s on top in the inline card
       }}
     >
       <div
@@ -159,11 +157,14 @@ export default function LyricsOverlay(props: {
         style={{
           position: 'relative',
           width: '100%',
-          height: '100%', // ✅ critical: inline must fit its 300px box
+          height: '100%',
           overflow: 'hidden',
           borderRadius: 18,
           border: '1px solid rgba(255,255,255,0.10)',
-          background: 'rgba(0,0,0,0.16)',
+
+          // Inline: give the text a darker “plate” so low-opacity lines still read.
+          background: isInline ? 'rgba(0,0,0,0.28)' : 'rgba(0,0,0,0.16)',
+
           backdropFilter: 'blur(10px)',
           WebkitBackdropFilter: 'blur(10px)',
           boxShadow: '0 18px 60px rgba(0,0,0,0.35)',
@@ -183,6 +184,7 @@ export default function LyricsOverlay(props: {
 
         <div
           ref={scrollerRef}
+          className="af-lyrics-scroll"
           onScroll={() => {
             userScrollUntilRef.current = Date.now() + 1400
           }}
@@ -192,21 +194,35 @@ export default function LyricsOverlay(props: {
             overflowY: 'auto',
             overflowX: 'hidden',
             WebkitOverflowScrolling: 'touch',
-            padding: `${padTop}px 16px ${padBottom}px 16px`,
+            padding: `${padTop}px 14px ${padBottom}px 14px`,
             display: 'grid',
             gap: isInline ? 8 : 12,
             zIndex: 1,
 
-            // hide scrollbar (Firefox)
+            // Firefox
             scrollbarWidth: 'none',
-            // hide scrollbar (old Edge/IE)
+            // IE/old Edge
             msOverflowStyle: 'none',
           }}
         >
           {cues.map((cue, idx) => {
             const isActive = idx === activeIdx
-            const dist = activeIdx >= 0 ? Math.abs(idx - activeIdx) : 999
-            const opacity = isActive ? 1 : dist <= 1 ? 0.65 : dist <= 3 ? 0.40 : 0.22
+
+            // Key change: when activeIdx is unknown, don’t fade everything to near-invisible.
+            const dist =
+              activeIdx >= 0 ? Math.abs(idx - activeIdx) : Math.abs(idx - 0) // bias to top until we know
+            const opacity =
+              activeIdx < 0
+                ? isInline
+                  ? 0.62
+                  : 0.52
+                : isActive
+                  ? 1
+                  : dist <= 1
+                    ? 0.72
+                    : dist <= 3
+                      ? 0.44
+                      : 0.26
 
             return (
               <button
@@ -224,9 +240,9 @@ export default function LyricsOverlay(props: {
                   border: 0,
                   padding: 0,
                   cursor: onSeek ? 'pointer' : 'default',
-                  color: 'rgba(255,255,255,0.92)',
+                  color: 'rgba(255,255,255,0.94)',
                   fontSize: lineFontSize,
-                  fontWeight: isActive ? 750 : 650,
+                  fontWeight: isActive ? 780 : 650,
                   letterSpacing: 0.2,
                   lineHeight,
                   opacity,
@@ -234,10 +250,13 @@ export default function LyricsOverlay(props: {
                   userSelect: 'none',
                   transform: isActive ? 'translateZ(0) scale(1.02)' : 'translateZ(0) scale(1)',
 
-                  // Inline: prevent wrapping; stage can wrap.
+                  // Inline: no wrapping, show ellipsis.
                   whiteSpace: isInline ? 'nowrap' : 'normal',
                   overflow: isInline ? 'hidden' : 'visible',
                   textOverflow: isInline ? 'ellipsis' : 'clip',
+
+                  // Small readability bump in the inline card
+                  textShadow: isInline ? '0 1px 10px rgba(0,0,0,0.55)' : undefined,
                 }}
                 title={isInline ? cue.text : undefined}
               >
@@ -276,9 +295,9 @@ export default function LyricsOverlay(props: {
         />
 
         <style>{`
-          /* Hide scrollbar (WebKit) */
-          div[style*="scrollbar-width: none"]::-webkit-scrollbar { width: 0px; height: 0px; }
-          div[style*="scrollbar-width: none"]::-webkit-scrollbar-thumb { background: transparent; }
+          /* Hide scrollbar (WebKit) reliably */
+          .af-lyrics-scroll::-webkit-scrollbar { width: 0px; height: 0px; }
+          .af-lyrics-scroll::-webkit-scrollbar-thumb { background: transparent; }
         `}</style>
       </div>
     </div>
