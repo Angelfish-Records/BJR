@@ -237,12 +237,6 @@ export default function LyricsOverlay(props: {
                 style={{
                   textAlign: 'center',
                   background: 'transparent',
-                  display: 'block',
-width: '100%',
-
-WebkitTextFillColor: 'rgba(255,255,255,0.94)',
-WebkitTextStroke: '0px transparent',
-textRendering: 'geometricPrecision',
                   border: 0,
                   padding: 0,
                   cursor: onSeek ? 'pointer' : 'default',
@@ -301,10 +295,18 @@ textRendering: 'geometricPrecision',
         />
 
         <style>{`
-          /* Hide scrollbar (WebKit) reliably */
-          .af-lyrics-scroll::-webkit-scrollbar { width: 0px; height: 0px; }
-          .af-lyrics-scroll::-webkit-scrollbar-thumb { background: transparent; }
-        `}</style>
+  /* Hide scrollbar (WebKit) reliably */
+  .af-lyrics-scroll::-webkit-scrollbar { width: 0px; height: 0px; }
+  .af-lyrics-scroll::-webkit-scrollbar-thumb { background: transparent; }
+
+  /* CRITICAL: force text paint even if some global button rule uses !important */
+  .af-lyrics-scroll button {
+    color: rgba(255,255,255,0.94) !important;
+    -webkit-text-fill-color: rgba(255,255,255,0.94) !important;
+    -webkit-text-stroke: 0px transparent !important;
+  }
+`}</style>
+
       </div>
     </div>
   )
