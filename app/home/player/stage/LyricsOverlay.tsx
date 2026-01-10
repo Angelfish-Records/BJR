@@ -100,7 +100,7 @@ export default function LyricsOverlay(props: {
     const vh = viewport.clientHeight
     if (!vh || vh < 10) return
 
-    const targetY = activeEl.offsetTop + activeEl.offsetHeight / 2 - vh * 0.40
+    const targetY = activeEl.offsetTop + activeEl.offsetHeight / 2 - vh * 0.4
     const nextTop = clamp(Math.round(targetY), 0, Math.max(0, sc.scrollHeight - sc.clientHeight))
     sc.scrollTo({top: nextTop, behavior: 'smooth'})
   }, [cues, activeIdx])
@@ -131,7 +131,7 @@ export default function LyricsOverlay(props: {
 
   // Typography (inline genuinely smaller)
   const lineFontSize = isInline ? 'clamp(12px, 1.15vw, 14px)' : 'clamp(18px, 2.2vw, 26px)'
-  const lineHeight = isInline ? '22px' : '34px'
+  const lineHeight = isInline ? 22 : 34
 
   // Inline needs tighter padding/fades or it eats the whole panel.
   const padTop = isInline ? 44 : 140
@@ -149,7 +149,6 @@ export default function LyricsOverlay(props: {
         justifyItems: 'stretch',
         padding: isInline ? 10 : 18,
         pointerEvents: 'auto',
-        zIndex: 9999, // make absolutely sure it’s on top in the inline card
       }}
     >
       <div
@@ -161,10 +160,7 @@ export default function LyricsOverlay(props: {
           overflow: 'hidden',
           borderRadius: 18,
           border: '1px solid rgba(255,255,255,0.10)',
-
-          // Inline: give the text a darker “plate” so low-opacity lines still read.
           background: isInline ? 'rgba(0,0,0,0.28)' : 'rgba(0,0,0,0.16)',
-
           backdropFilter: 'blur(10px)',
           WebkitBackdropFilter: 'blur(10px)',
           boxShadow: '0 18px 60px rgba(0,0,0,0.35)',
@@ -175,8 +171,7 @@ export default function LyricsOverlay(props: {
           style={{
             position: 'absolute',
             inset: 0,
-            background:
-              'radial-gradient(60% 40% at 50% 40%, rgba(255,255,255,0.08), rgba(0,0,0,0.00) 60%)',
+            background: 'radial-gradient(60% 40% at 50% 40%, rgba(255,255,255,0.08), rgba(0,0,0,0.00) 60%)',
             pointerEvents: 'none',
             zIndex: 0,
           }}
@@ -208,9 +203,8 @@ export default function LyricsOverlay(props: {
           {cues.map((cue, idx) => {
             const isActive = idx === activeIdx
 
-            // Key change: when activeIdx is unknown, don’t fade everything to near-invisible.
-            const dist =
-              activeIdx >= 0 ? Math.abs(idx - activeIdx) : Math.abs(idx - 0) // bias to top until we know
+            // When activeIdx is unknown, bias visibility to top so it doesn't look "dead".
+            const dist = activeIdx >= 0 ? Math.abs(idx - activeIdx) : idx
             const opacity =
               activeIdx < 0
                 ? isInline
@@ -234,38 +228,57 @@ export default function LyricsOverlay(props: {
                   userScrollUntilRef.current = Date.now() + 900
                   onSeek(cue.tMs)
                 }}
+                title={isInline ? cue.text : undefined}
                 style={{
+                  // Reset
+                  border: 0,
+                  background: 'transparent',
+                  padding: 0,
+
+                  // Robust row height (prevents 0-height collapse observed in inline)
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '100%',
+                  minWidth: 0, // allow ellipsis within centered flex
+                  minHeight: lineHeight,
+                  paddingTop: isInline ? 2 : 4,
+                  paddingBottom: isInline ? 2 : 4,
+
+                  // Typography
+                  color: 'rgba(255,255,255,0.94)',
+                  fontSize: lineFontSize,
+                  lineHeight: `${lineHeight}px`,
+                  fontWeight: isActive ? 780 : 650,
+                  letterSpacing: 0.2,
                   textAlign: 'center',
-  background: 'transparent',
-  border: 0,
 
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  width: '100%',
-  minHeight: lineHeight,
-  padding: isInline ? '2px 0' : '4px 0',
-
-  cursor: onSeek ? 'pointer' : 'default',
-  color: 'rgba(255,255,255,0.94)',
-  fontSize: lineFontSize,
-  lineHeight,
+                  // Motion/visibility
                   opacity,
                   transition: 'opacity 140ms ease, transform 140ms ease',
-                  userSelect: 'none',
                   transform: isActive ? 'translateZ(0) scale(1.02)' : 'translateZ(0) scale(1)',
 
-                  // Inline: no wrapping, show ellipsis.
-                  whiteSpace: isInline ? 'nowrap' : 'normal',
-                  overflow: isInline ? 'hidden' : 'visible',
-                  textOverflow: isInline ? 'ellipsis' : 'clip',
+                  // Interaction
+                  cursor: onSeek ? 'pointer' : 'default',
+                  userSelect: 'none',
 
-                  // Small readability bump in the inline card
+                  // Readability
                   textShadow: isInline ? '0 1px 10px rgba(0,0,0,0.55)' : undefined,
                 }}
-                title={isInline ? cue.text : undefined}
               >
-                {cue.text}
+                {/* IMPORTANT: ellipsis must be on a constrained child, not the flex container */}
+                <span
+                  style={{
+                    display: 'block',
+                    maxWidth: '100%',
+                    minWidth: 0,
+                    whiteSpace: isInline ? 'nowrap' : 'normal',
+                    overflow: isInline ? 'hidden' : 'visible',
+                    textOverflow: isInline ? 'ellipsis' : 'clip',
+                  }}
+                >
+                  {cue.text}
+                </span>
               </button>
             )
           })}
@@ -300,11 +313,10 @@ export default function LyricsOverlay(props: {
         />
 
         <style>{`
-  /* Hide scrollbar (WebKit) reliably */
-  .af-lyrics-scroll::-webkit-scrollbar { width: 0px; height: 0px; }
-  .af-lyrics-scroll::-webkit-scrollbar-thumb { background: transparent; }
-`}</style>
-
+          /* Hide scrollbar (WebKit) reliably */
+          .af-lyrics-scroll::-webkit-scrollbar { width: 0px; height: 0px; }
+          .af-lyrics-scroll::-webkit-scrollbar-thumb { background: transparent; }
+        `}</style>
       </div>
     </div>
   )
