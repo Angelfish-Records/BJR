@@ -8,11 +8,14 @@ import {usePlayer} from '@/app/home/player/PlayerState'
 import type {PlayerTrack, AlbumInfo, AlbumNavItem} from '@/lib/types'
 import PlayerController from './player/PlayerController'
 
+import ActivationGate from '@/app/home/ActivationGate'
+import SubscribeButton from '@/app/home/SubscribeButton'
+import CancelSubscriptionButton from '@/app/home/CancelSubscriptionButton'
+
 function QueueBootstrapper(props: {albumId: string | null; tracks: PlayerTrack[]}) {
   const p = usePlayer()
 
   React.useEffect(() => {
-    // Browser-mode: never clobber an existing queue/playback on navigation.
     if (p.queue.length > 0) return
     if (!props.tracks.length) return
     p.setQueue(props.tracks)
@@ -40,22 +43,69 @@ function IconPortal() {
   )
 }
 
+function CheckoutBanner(props: {checkout: string | null}) {
+  const {checkout} = props
+  if (checkout !== 'success' && checkout !== 'cancel') return null
+  const isSuccess = checkout === 'success'
+
+  return (
+    <div
+      style={{
+        marginTop: 10,
+        borderRadius: 14,
+        border: '1px solid rgba(255,255,255,0.14)',
+        background: isSuccess ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.20)',
+        padding: '10px 12px',
+        fontSize: 12,
+        opacity: isSuccess ? 0.9 : 0.85,
+        lineHeight: 1.45,
+        textAlign: 'left',
+        maxWidth: 520,
+      }}
+    >
+      {isSuccess ? (
+        <>
+          ✅ Checkout completed. If entitlements haven&apos;t appeared yet, refresh once (webhooks can be a
+          beat behind).
+        </>
+      ) : (
+        <>Checkout cancelled.</>
+      )}
+    </div>
+  )
+}
+
 export default function PortalArea(props: {
   portalPanel: React.ReactNode
   albumSlug: string
   album: AlbumInfo | null
   tracks: PlayerTrack[]
   albums: AlbumNavItem[]
+  checkout?: string | null
+  attentionMessage?: string | null
+  loggedIn?: boolean
+  hasGold?: boolean
+  canManageBilling?: boolean
 }) {
-  const {portalPanel, albumSlug, album: initialAlbum, tracks: initialTracks, albums} = props
+  const {
+    portalPanel,
+    albumSlug,
+    album: initialAlbum,
+    tracks: initialTracks,
+    albums,
+    checkout = null,
+    attentionMessage = null,
+    loggedIn = false,
+    hasGold = false,
+    canManageBilling = false,
+  } = props
+
   const [activePanelId, setActivePanelId] = React.useState<string>('player')
 
-  // “Browsed album” lives here (inline browsing, no navigation)
   const [album, setAlbum] = React.useState<AlbumInfo | null>(initialAlbum)
   const [tracks, setTracks] = React.useState<PlayerTrack[]>(initialTracks)
   const [isBrowsingAlbum, setIsBrowsingAlbum] = React.useState(false)
 
-  // If server props change (rare), sync them.
   React.useEffect(() => {
     setAlbum(initialAlbum)
     setTracks(initialTracks)
@@ -73,11 +123,8 @@ export default function PortalArea(props: {
         if (!res.ok) throw new Error(`Album fetch failed (${res.status})`)
         const json = (await res.json()) as AlbumPayload
 
-        // Inline browse swap: does NOT alter playback.
         setAlbum(json.album ?? null)
         setTracks(Array.isArray(json.tracks) ? json.tracks : [])
-
-        // Ensure we’re viewing the player panel when browsing
         setActivePanelId('player')
       } catch (e) {
         console.error(e)
@@ -141,7 +188,7 @@ export default function PortalArea(props: {
                 minWidth: 0,
               }}
             >
-              {/* Left: circular panel buttons (state toggles, NOT links) */}
+              {/* Left: circular panel buttons */}
               <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
                 <button
                   type="button"
@@ -226,8 +273,23 @@ export default function PortalArea(props: {
                 </div>
               </div>
 
-              {/* Right: empty placeholder (ActivationGate moves here later) */}
-              <div style={{justifySelf: 'end', minWidth: 0}} />
+              {/* Right: ActivationGate */}
+              <div style={{justifySelf: 'end', minWidth: 0}}>
+                <div style={{maxWidth: 520}}>
+                  <ActivationGate attentionMessage={attentionMessage}>
+                    <div style={{display: 'grid', justifyItems: 'center', gap: 10}}>
+                      {canManageBilling ? (
+                        <>
+                          {!hasGold ? <SubscribeButton loggedIn={loggedIn} /> : null}
+                          {hasGold ? <CancelSubscriptionButton /> : null}
+                        </>
+                      ) : null}
+                    </div>
+                  </ActivationGate>
+
+                  <CheckoutBanner checkout={checkout} />
+                </div>
+              </div>
             </div>
           )}
         />

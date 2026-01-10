@@ -4,13 +4,10 @@ import type {Metadata} from 'next'
 import {headers} from 'next/headers'
 import {client} from '@/sanity/lib/client'
 import {urlFor} from '@/sanity/lib/image'
-import ActivationGate from '@/app/home/ActivationGate'
 import {auth, currentUser} from '@clerk/nextjs/server'
 import {ensureMemberByClerk} from '@/lib/members'
 import {hasAnyEntitlement, listCurrentEntitlementKeys} from '@/lib/entitlements'
 import {ENT, ENTITLEMENTS, deriveTier, pickAccent} from '@/lib/vocab'
-import SubscribeButton from '@/app/home/SubscribeButton'
-import CancelSubscriptionButton from '@/app/home/CancelSubscriptionButton'
 import {fetchPortalPage} from '@/lib/portal'
 import PortalModules from '@/app/home/PortalModules'
 import PortalArea from '@/app/home/PortalArea'
@@ -53,37 +50,6 @@ export async function generateMetadata(): Promise<Metadata> {
   }
 }
 
-function CheckoutBanner(props: {checkout: string | null}) {
-  const {checkout} = props
-  if (checkout !== 'success' && checkout !== 'cancel') return null
-  const isSuccess = checkout === 'success'
-
-  return (
-    <div
-      style={{
-        marginTop: 12,
-        borderRadius: 14,
-        border: '1px solid rgba(255,255,255,0.14)',
-        background: isSuccess ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.20)',
-        padding: '12px 14px',
-        fontSize: 13,
-        opacity: isSuccess ? 0.9 : 0.85,
-        lineHeight: 1.45,
-        textAlign: 'left',
-      }}
-    >
-      {isSuccess ? (
-        <>
-          ✅ Checkout completed. If entitlements haven&apos;t appeared yet, refresh once (webhooks can be a
-          beat behind).
-        </>
-      ) : (
-        <>Checkout cancelled.</>
-      )}
-    </div>
-  )
-}
-
 export default async function Home(props: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
@@ -93,9 +59,11 @@ export default async function Home(props: {
   const checkout = typeof sp.checkout === 'string' ? sp.checkout : null
 
   const {userId} = await auth()
+  const loggedIn = !!userId
 
   // Post-checkout activation case (logged out)
   const showPaymentPrompt = checkout === 'success' && !userId
+  const attentionMessage = showPaymentPrompt ? 'Payment confirmed – activate to unlock.' : null
 
   const user = userId ? await currentUser() : null
   const email =
@@ -149,8 +117,6 @@ export default async function Home(props: {
       ENTITLEMENTS.PATRON_ACCESS,
       ENTITLEMENTS.LIFETIME_ACCESS,
     ]))
-
-  const attentionMessage = showPaymentPrompt ? 'Payment confirmed – activate to unlock.' : null
 
   const bgUrl =
     page?.backgroundImage
@@ -330,7 +296,7 @@ export default async function Home(props: {
           </div>
 
           <div className="shadowHomeGrid" style={{minHeight: 0}}>
-            {/* GRID-WIDE TOP BAR SLOT (PortalShell will portal into this) */}
+            {/* GRID-WIDE TOP BAR SLOT (PortalShell portals into this) */}
             <div style={{gridColumn: '1 / -1', minWidth: 0}}>
               <div id="af-portal-topbar-slot" />
             </div>
@@ -343,6 +309,11 @@ export default async function Home(props: {
                 album={albumData.album}
                 tracks={albumData.tracks}
                 albums={browseAlbums}
+                checkout={checkout}
+                attentionMessage={attentionMessage}
+                loggedIn={loggedIn}
+                hasGold={hasGold}
+                canManageBilling={!!member}
               />
             </div>
 
@@ -357,26 +328,6 @@ export default async function Home(props: {
                 gap: 14,
               }}
             >
-              <div
-                style={{
-                  borderRadius: 18,
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  background: 'rgba(255,255,255,0.05)',
-                  padding: 14,
-                }}
-              >
-                <ActivationGate attentionMessage={attentionMessage}>
-                  {member ? (
-                    <div style={{display: 'grid', justifyItems: 'center', gap: 10}}>
-                      {!hasGold ? <SubscribeButton loggedIn={!!userId} /> : null}
-                      {hasGold ? <CancelSubscriptionButton /> : null}
-                    </div>
-                  ) : null}
-                </ActivationGate>
-
-                <CheckoutBanner checkout={checkout} />
-              </div>
-
               {member && canSeeMemberBox && (
                 <div
                   style={{
