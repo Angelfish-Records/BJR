@@ -10,6 +10,19 @@ import {mediaSurface} from './mediaSurface'
 type CuesByTrackId = Record<string, LyricCue[]>
 type OffsetByTrackId = Record<string, number>
 
+function pickKeyWithCues(
+  cuesByTrackId: CuesByTrackId | undefined,
+  keys: Array<string | null | undefined>
+) {
+  if (!cuesByTrackId) return (keys.find(Boolean) as string | null) ?? null
+  for (const k of keys) {
+    if (!k) continue
+    const xs = cuesByTrackId[k]
+    if (Array.isArray(xs) && xs.length) return k
+  }
+  return (keys.find(Boolean) as string | null) ?? null
+}
+
 export default function StageCore(props: {
   variant: 'inline' | 'fullscreen'
   cuesByTrackId?: CuesByTrackId
@@ -29,7 +42,14 @@ export default function StageCore(props: {
     return unsub
   }, [])
 
-  const trackId = surfaceTrackId ?? p.current?.id ?? null
+  // Prefer player id, but fall back to surface id, and finally muxPlaybackId.
+  // Critically: choose the first key that actually exists in cuesByTrackId (if provided).
+    const playerTrackId = p.current?.id ?? null
+    const playerMuxId = p.current?.muxPlaybackId ?? null
+
+    const trackId = React.useMemo(() => {
+      return pickKeyWithCues(cuesByTrackId, [playerTrackId, surfaceTrackId, playerMuxId])
+    }, [cuesByTrackId, playerTrackId, playerMuxId, surfaceTrackId])
 
   const cues: LyricCue[] | null = React.useMemo(() => {
     if (!trackId) return null
@@ -68,18 +88,16 @@ export default function StageCore(props: {
       style={{
         position: 'absolute',
         inset: 0,
-        borderRadius: variant === 'inline' ? 18 : 18,
+        borderRadius: 18,
         overflow: 'hidden',
         background: 'rgba(0,0,0,0.35)',
-        isolation: 'isolate', // ✅ force a stacking context so zIndex is deterministic
+        isolation: 'isolate',
       }}
     >
-      {/* Layer 0: canvas */}
       <div style={{position: 'absolute', inset: 0, zIndex: 0}}>
         <VisualizerCanvas />
       </div>
 
-      {/* Layer 1: tint/vignette BEHIND lyrics */}
       <div
         aria-hidden="true"
         style={{
@@ -92,7 +110,6 @@ export default function StageCore(props: {
         }}
       />
 
-      {/* Layer 2: lyrics always on top */}
       <div style={{position: 'absolute', inset: 0, zIndex: 2}}>
         <LyricsOverlay cues={cues} offsetMs={effectiveOffsetMs} onSeek={onSeek} variant={lyricsVariant} />
       </div>
