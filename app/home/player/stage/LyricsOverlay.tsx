@@ -139,7 +139,6 @@ export default function LyricsOverlay(props: {
   const topFadeH = isInline ? 44 : 130
   const botFadeH = isInline ? 54 : 160
 
-
   return (
     <div
       style={{
@@ -166,8 +165,8 @@ export default function LyricsOverlay(props: {
           // Inline: give the text a darker “plate” so low-opacity lines still read.
           background: isInline ? 'rgba(0,0,0,0.28)' : 'rgba(0,0,0,0.16)',
 
-          //backdropFilter: 'blur(10px)',
-          //WebkitBackdropFilter: 'blur(10px)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
           boxShadow: '0 18px 60px rgba(0,0,0,0.35)',
         }}
       >
@@ -191,9 +190,6 @@ export default function LyricsOverlay(props: {
           }}
           style={{
             position: 'absolute',
-            outline: '2px solid rgba(0, 200, 255, 0.9)',
-background: 'rgba(0,0,0,0.35)',
-
             inset: 0,
             overflowY: 'auto',
             overflowX: 'hidden',
@@ -240,13 +236,16 @@ background: 'rgba(0,0,0,0.35)',
                 }}
                 style={{
                   textAlign: 'center',
-                  background: 'rgba(255, 0, 0, 0.22)',
-outline: '1px solid rgba(0, 255, 0, 0.8)',
-color: 'rgba(255,255,0,1)',
-
+                  //background: 'transparent',
                   border: 0,
                   padding: 0,
                   cursor: onSeek ? 'pointer' : 'default',
+                  background: 'rgba(255, 0, 0, 0.22)',
+outline: '1px solid rgba(0, 255, 0, 0.8)',
+color: 'rgba(255,255,0,1)',
+WebkitTextFillColor: 'rgba(255,255,255,0.94)',
+WebkitTextStroke: '0px transparent',
+textRendering: 'geometricPrecision',
                   fontSize: lineFontSize,
                   fontWeight: isActive ? 780 : 650,
                   letterSpacing: 0.2,
