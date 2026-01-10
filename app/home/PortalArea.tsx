@@ -4,7 +4,8 @@
 import React from 'react'
 import PortalShell, {PortalPanelSpec} from './PortalShell'
 
-import {usePlayer, type PlayerTrack} from './player/PlayerState'
+import {usePlayer} from '@/app/home/player/PlayerState'
+import type {PlayerTrack} from '@/lib/types'
 import PlayerController from './player/PlayerController'
 import type {AlbumInfo, AlbumNavItem} from '@/lib/types'
 
