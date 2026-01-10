@@ -34,7 +34,8 @@ export default function LyricsOverlay(props: {
   windowLines?: number
   variant?: 'inline' | 'stage'
 }) {
-  const {cues, offsetMs = 0, onSeek, windowLines = 8, variant = 'stage'} = props
+  const {cues, offsetMs = 0, onSeek, variant = 'stage'} = props
+  const isInline = variant === 'inline'
 
   const viewportRef = React.useRef<HTMLDivElement | null>(null)
   const scrollerRef = React.useRef<HTMLDivElement | null>(null)
@@ -43,21 +44,14 @@ export default function LyricsOverlay(props: {
   const [activeIdx, setActiveIdx] = React.useState(-1)
   const activeIdxRef = React.useRef(-1)
 
-  // pause auto-follow briefly after user scroll/click
+  // When user scrolls manually, pause auto-follow briefly.
   const userScrollUntilRef = React.useRef<number>(0)
-
-  // (kept for future windowing if you want; currently render-all)
-  const safeLen = cues?.length ?? 0
-  const safeActive = activeIdx >= 0 ? activeIdx : 0
-  const start = safeLen > 0 ? clamp(safeActive - windowLines, 0, safeLen - 1) : 0
-  const end = safeLen > 0 ? clamp(safeActive + windowLines, 0, safeLen - 1) : 0
-  void start
-  void end
 
   React.useEffect(() => {
     activeIdxRef.current = activeIdx
   }, [activeIdx])
 
+  // Reset on cue change.
   React.useEffect(() => {
     setActiveIdx(-1)
     activeIdxRef.current = -1
@@ -66,7 +60,7 @@ export default function LyricsOverlay(props: {
     if (sc) sc.scrollTop = 0
   }, [cues])
 
-  // time -> active index
+  // RAF: compute active index from mediaSurface time
   React.useEffect(() => {
     if (!cues || cues.length === 0) return
 
@@ -87,7 +81,7 @@ export default function LyricsOverlay(props: {
     }
   }, [cues, offsetMs])
 
-  // auto-follow active line unless user scrolled recently
+  // Auto-follow: scroll active line into a nice reading position, unless user recently scrolled.
   React.useLayoutEffect(() => {
     if (!cues || cues.length === 0) return
     if (activeIdx < 0) return
@@ -105,8 +99,10 @@ export default function LyricsOverlay(props: {
     const vh = viewport.clientHeight
     if (!vh || vh < 10) return
 
+    // Place active line ~40% from top.
     const targetY = activeEl.offsetTop + activeEl.offsetHeight / 2 - vh * 0.40
     const nextTop = clamp(Math.round(targetY), 0, Math.max(0, sc.scrollHeight - sc.clientHeight))
+
     sc.scrollTo({top: nextTop, behavior: 'smooth'})
   }, [cues, activeIdx])
 
@@ -134,20 +130,17 @@ export default function LyricsOverlay(props: {
     )
   }
 
-  const isInline = variant === 'inline'
-
-  // Smaller inline typography (actually smaller, not just truncated)
-  const lineFontSize = isInline ? 'clamp(12px, 1.6vw, 14px)' : 'clamp(18px, 2.2vw, 26px)'
+  // Typography
+  const lineFontSize = isInline ? 'clamp(12px, 1.15vw, 14px)' : 'clamp(18px, 2.2vw, 26px)'
   const lineHeight = isInline ? '22px' : '34px'
 
-  // Inline must fit parent; stage can be a “panel”
-  const viewportHeight = isInline ? '100%' : 'min(560px, 70vh)'
+  // Padding (inline must be small; stage can breathe)
+  const padTop = isInline ? 56 : 140
+  const padBottom = isInline ? 86 : 180
 
-  // Padding: top breathing room + scroll “runway” so fades never feel like hard edges
-  const padTop = isInline ? 72 : 140
-  const padBottom = isInline ? 96 : 180
-
-  const gap = isInline ? 8 : 12
+  // Fades (inline must be shallow or it hides everything)
+  const topFadeH = isInline ? 54 : 130
+  const botFadeH = isInline ? 64 : 160
 
   return (
     <div
@@ -155,7 +148,7 @@ export default function LyricsOverlay(props: {
         position: 'absolute',
         inset: 0,
         display: 'grid',
-        alignItems: 'center',
+        alignItems: 'stretch',
         justifyItems: 'stretch',
         padding: isInline ? 12 : 18,
         pointerEvents: 'auto',
@@ -165,8 +158,8 @@ export default function LyricsOverlay(props: {
         ref={viewportRef}
         style={{
           position: 'relative',
-          height: viewportHeight,
-          minHeight: 0,
+          width: '100%',
+          height: '100%', // ✅ critical: inline must fit its 300px box
           overflow: 'hidden',
           borderRadius: 18,
           border: '1px solid rgba(255,255,255,0.10)',
@@ -181,7 +174,8 @@ export default function LyricsOverlay(props: {
           style={{
             position: 'absolute',
             inset: 0,
-            background: 'radial-gradient(60% 40% at 50% 40%, rgba(255,255,255,0.08), rgba(0,0,0,0.00) 60%)',
+            background:
+              'radial-gradient(60% 40% at 50% 40%, rgba(255,255,255,0.08), rgba(0,0,0,0.00) 60%)',
             pointerEvents: 'none',
             zIndex: 0,
           }}
@@ -189,7 +183,6 @@ export default function LyricsOverlay(props: {
 
         <div
           ref={scrollerRef}
-          className="af-lyrics-scroll"
           onScroll={() => {
             userScrollUntilRef.current = Date.now() + 1400
           }}
@@ -199,13 +192,15 @@ export default function LyricsOverlay(props: {
             overflowY: 'auto',
             overflowX: 'hidden',
             WebkitOverflowScrolling: 'touch',
-            padding: `${padTop}px 18px ${padBottom}px 18px`,
+            padding: `${padTop}px 16px ${padBottom}px 16px`,
             display: 'grid',
-            gap,
+            gap: isInline ? 8 : 12,
             zIndex: 1,
 
-            // Firefox scrollbar hide
+            // hide scrollbar (Firefox)
             scrollbarWidth: 'none',
+            // hide scrollbar (old Edge/IE)
+            msOverflowStyle: 'none',
           }}
         >
           {cues.map((cue, idx) => {
@@ -239,6 +234,7 @@ export default function LyricsOverlay(props: {
                   userSelect: 'none',
                   transform: isActive ? 'translateZ(0) scale(1.02)' : 'translateZ(0) scale(1)',
 
+                  // Inline: prevent wrapping; stage can wrap.
                   whiteSpace: isInline ? 'nowrap' : 'normal',
                   overflow: isInline ? 'hidden' : 'visible',
                   textOverflow: isInline ? 'ellipsis' : 'clip',
@@ -258,7 +254,7 @@ export default function LyricsOverlay(props: {
             left: 0,
             right: 0,
             top: 0,
-            height: isInline ? 72 : 130,
+            height: topFadeH,
             background: 'linear-gradient(rgba(0,0,0,0.78), rgba(0,0,0,0.00))',
             pointerEvents: 'none',
             zIndex: 2,
@@ -272,7 +268,7 @@ export default function LyricsOverlay(props: {
             left: 0,
             right: 0,
             bottom: 0,
-            height: isInline ? 86 : 160,
+            height: botFadeH,
             background: 'linear-gradient(rgba(0,0,0,0.00), rgba(0,0,0,0.82))',
             pointerEvents: 'none',
             zIndex: 2,
@@ -281,8 +277,8 @@ export default function LyricsOverlay(props: {
 
         <style>{`
           /* Hide scrollbar (WebKit) */
-          .af-lyrics-scroll::-webkit-scrollbar { width: 0px; height: 0px; }
-          .af-lyrics-scroll::-webkit-scrollbar-thumb { background: transparent; }
+          div[style*="scrollbar-width: none"]::-webkit-scrollbar { width: 0px; height: 0px; }
+          div[style*="scrollbar-width: none"]::-webkit-scrollbar-thumb { background: transparent; }
         `}</style>
       </div>
     </div>
