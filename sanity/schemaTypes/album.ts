@@ -2,9 +2,9 @@ import {defineType, defineField} from 'sanity'
 
 const THEME_OPTIONS = [
   {title: 'Nebula', value: 'nebula'},
-  {title: 'Fractal World', value: 'fractal-world'},
-  {title: 'Reaction Diffusion', value: 'reaction-diffusion'},
-  {title: 'Calligraphy', value: 'calligraphy'},
+  {title: 'Gravitational Lattice', value: 'gravitational-lattice'},
+  {title: 'Orbital Script', value: 'orbital-script'},
+  {title: 'Phase Glass', value: 'phase-glass'},
 ]
 
 export default defineType({
