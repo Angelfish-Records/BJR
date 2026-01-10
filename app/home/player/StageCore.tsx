@@ -64,18 +64,7 @@ export default function StageCore(props: {
     },
     [autoResumeOnSeek, p]
   )
-
-console.log('[StageCore]', {
-  variant,
-  surfaceTrackId,
-  currentId: p.current?.id,
-  muxPlaybackId: p.current?.muxPlaybackId,
-  cuesKeys: cuesByTrackId ? Object.keys(cuesByTrackId).slice(0, 5) : null,
-  resolvedTrackId: trackId,
-  cuesLen: cues?.length ?? 0,
-})
-
-
+  
   // Map StageCore variant to LyricsOverlay variant
   const lyricVariant: 'inline' | 'stage' = variant === 'inline' ? 'inline' : 'stage'
 
