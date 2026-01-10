@@ -2,6 +2,7 @@
 'use client'
 
 import React from 'react'
+import {createPortal} from 'react-dom'
 import {useRouter, useSearchParams} from 'next/navigation'
 
 export type PortalPanelSpec = {
@@ -10,12 +11,17 @@ export type PortalPanelSpec = {
   content: React.ReactNode
 }
 
-type DockRenderer = React.ReactNode | ((activePanelId: string) => React.ReactNode)
+type HeaderCtx = {
+  activePanelId: string
+  setPanel: (id: string) => void
+  panels: PortalPanelSpec[]
+}
+
+type HeaderRenderer = React.ReactNode | ((ctx: HeaderCtx) => React.ReactNode)
 
 type Props = {
   panels: PortalPanelSpec[]
   defaultPanelId?: string
-  dock?: DockRenderer
   /** If true, mirrors selected panel into ?panel= */
   syncToQueryParam?: boolean
   onPanelChange?: (panelId: string) => void
@@ -26,20 +32,15 @@ type Props = {
    * and will not own its own active state.
    */
   activePanelId?: string
-}
 
-const PANEL_ICONS: Record<string, React.ReactNode> = {
-  portal: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="2" />
-      <circle cx="12" cy="12" r="2" fill="currentColor" />
-    </svg>
-  ),
-  player: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-      <polygon points="9,7 19,12 9,17" />
-    </svg>
-  ),
+  /** Optional header row UI. */
+  header?: HeaderRenderer
+
+  /**
+   * Optional DOM id to portal header into (lets header span main+sidebar layout).
+   * If not found, header renders inline at top of PortalShell.
+   */
+  headerPortalId?: string
 }
 
 export default function PortalShell(props: Props) {
@@ -49,71 +50,97 @@ export default function PortalShell(props: Props) {
     syncToQueryParam = true,
     onPanelChange,
     activePanelId: controlledActive,
+    header,
+    headerPortalId = 'af-portal-topbar-slot',
   } = props
 
   const router = useRouter()
   const sp = useSearchParams()
 
-  const initialPanelRef = React.useRef<string | null>(null)
-
-  if (initialPanelRef.current === null) {
-    const fromQuery = syncToQueryParam ? sp.get('panel') : null
-    initialPanelRef.current = fromQuery ?? defaultPanelId ?? panels[0]?.id ?? 'portal'
-  }
-
-  const [uncontrolledActive, setUncontrolledActive] = React.useState<string>(
-    initialPanelRef.current
-  )
+  const panelIds = React.useMemo(() => new Set(panels.map((p) => p.id)), [panels])
 
   const isControlled = typeof controlledActive === 'string' && controlledActive.length > 0
+
+  const [uncontrolledActive, setUncontrolledActive] = React.useState<string>(() => {
+    const fromQuery = syncToQueryParam ? sp.get('panel') : null
+    const initial = fromQuery ?? defaultPanelId ?? panels[0]?.id ?? 'portal'
+    return panelIds.has(initial) ? initial : (panels[0]?.id ?? 'portal')
+  })
+
   const active = isControlled ? (controlledActive as string) : uncontrolledActive
 
-  const setPanel = (id: string) => {
-    if (!panels.some((p) => p.id === id)) return
+  // Ensure we never sit on an invalid panel if panels change.
+  React.useEffect(() => {
+    if (panelIds.has(active)) return
+    const fallback = defaultPanelId && panelIds.has(defaultPanelId) ? defaultPanelId : panels[0]?.id
+    if (!fallback) return
+    if (!isControlled) setUncontrolledActive(fallback)
+    onPanelChange?.(fallback)
+    // In controlled mode, parent must respond.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelIds, panels, defaultPanelId])
 
-    if (!isControlled) setUncontrolledActive(id)
-    onPanelChange?.(id)
+  const setPanel = React.useCallback(
+    (id: string) => {
+      if (!panelIds.has(id)) return
 
-    if (!syncToQueryParam) return
-    const params = new URLSearchParams(sp.toString())
-    params.set('panel', id)
-    router.replace(`?${params.toString()}`, {scroll: false})
-  }
+      if (isControlled) {
+        // Controlled: parent owns state; URL mirroring handled by effect below.
+        onPanelChange?.(id)
+        return
+      }
 
-  // Keep state in sync with back/forward (?panel= changes).
+      setUncontrolledActive(id)
+      onPanelChange?.(id)
+
+      if (!syncToQueryParam) return
+      const params = new URLSearchParams(sp.toString())
+      params.set('panel', id)
+      router.replace(`?${params.toString()}`, {scroll: false})
+    },
+    [isControlled, onPanelChange, panelIds, router, sp, syncToQueryParam]
+  )
+
+  // Uncontrolled: respond to back/forward (?panel= changes) without creating loops.
   React.useEffect(() => {
     if (!syncToQueryParam) return
+    if (isControlled) return
+
     const q = sp.get('panel')
     if (!q) return
+    if (!panelIds.has(q)) return
     if (q === active) return
-    if (!panels.some((p) => p.id === q)) return
 
-    if (!isControlled) setUncontrolledActive(q)
+    setUncontrolledActive(q)
     onPanelChange?.(q)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sp, syncToQueryParam, isControlled, panels, active])
+  }, [active, isControlled, onPanelChange, panelIds, sp, syncToQueryParam])
 
-  // In controlled mode, mirror active into URL.
+  // Controlled: mirror active into URL (single direction).
   React.useEffect(() => {
     if (!syncToQueryParam) return
     if (!isControlled) return
+
     const current = sp.get('panel')
     if (current === active) return
 
     const params = new URLSearchParams(sp.toString())
     params.set('panel', active)
     router.replace(`?${params.toString()}`, {scroll: false})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, isControlled, syncToQueryParam])
+  }, [active, isControlled, router, sp, syncToQueryParam])
 
-  // Notify parent whenever active changes.
-  React.useEffect(() => {
-    onPanelChange?.(active)
-  }, [active, onPanelChange])
+  // Header node (rendered inline or portaled)
+  const headerNode =
+    typeof header === 'function'
+      ? header({activePanelId: active, setPanel, panels})
+      : header ?? null
 
-    // PortalShell no longer renders a fixed dock.
-  // MiniPlayer portals to <body> and owns the viewport-bottom UI.
-  const DOCK_H = 84
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => setMounted(true), [])
+
+  const headerPortalEl =
+    mounted && headerPortalId ? document.getElementById(headerPortalId) : null
+
+  const DOCK_H = 84 // mini player padding space
 
   return (
     <div
@@ -123,92 +150,23 @@ export default function PortalShell(props: Props) {
         gap: 14,
         minWidth: 0,
         alignContent: 'start',
-        // always reserve space so page content doesn't sit under the MiniPlayer
         paddingBottom: `calc(${DOCK_H}px + env(safe-area-inset-bottom, 0px))`,
       }}
     >
-      {/* Rail + Content */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '56px minmax(0, 1fr)',
-          gap: 14,
-          alignItems: 'start',
-          minWidth: 0,
-        }}
-      >
-        {/* Left rail */}
-        <nav
-          aria-label="Portal navigation"
-          style={{
-            position: 'sticky',
-            top: 12,
-            display: 'grid',
-            gap: 10,
-            justifyItems: 'center',
-            paddingTop: 2,
-            alignSelf: 'start',
-          }}
-        >
-          {panels.map((p) => {
-            const isActive = p.id === active
-            return (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setPanel(p.id)}
-                title={p.label}
-                aria-current={isActive ? 'page' : undefined}
-                style={{
-                  width: 46,
-                  height: 46,
-                  borderRadius: 999,
-                  border: '1px solid rgba(255,255,255,0.14)',
-                  background: isActive
-                    ? 'color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))'
-                    : 'rgba(255,255,255,0.04)',
-                  boxShadow: isActive
-                    ? '0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)'
-                    : '0 12px 26px rgba(0,0,0,0.18)',
-                  color: 'rgba(255,255,255,0.90)',
-                  cursor: 'pointer',
-                  opacity: isActive ? 0.98 : 0.78,
-                  display: 'grid',
-                  placeItems: 'center',
-                  userSelect: 'none',
-                }}
-              >
-                <span
-                  aria-hidden
-                  style={{
-                    display: 'grid',
-                    placeItems: 'center',
-                    color: 'rgba(255,255,255,0.92)',
-                  }}
-                >
-                  {PANEL_ICONS[p.id] ?? p.label.slice(0, 1)}
-                </span>
-              </button>
-            )
-          })}
-        </nav>
+      {/* If we can portal into the grid-wide slot, do that. Otherwise render inline. */}
+      {headerNode
+        ? headerPortalEl
+          ? createPortal(headerNode, headerPortalEl)
+          : headerNode
+        : null}
 
-        {/* Panel content */}
-        <div
-          style={{
-            display: 'grid',
-            gap: 14,
-            minWidth: 0,
-          }}
-        >
-          {panels.map((p) => (
-            <div key={p.id} hidden={p.id !== active} style={{minWidth: 0}}>
-              {p.content}
-            </div>
-          ))}
-        </div>
+      <div style={{display: 'grid', minWidth: 0}}>
+        {panels.map((p) => (
+          <div key={p.id} hidden={p.id !== active} style={{minWidth: 0}}>
+            {p.content}
+          </div>
+        ))}
       </div>
     </div>
   )
-
 }

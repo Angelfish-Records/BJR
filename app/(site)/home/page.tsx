@@ -18,7 +18,6 @@ import {listAlbumsForBrowse, getAlbumBySlug} from '@/lib/albums'
 import type {AlbumNavItem} from '@/lib/types'
 import StageInline from '@/app/home/player/StageInline'
 
-
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 export const fetchCache = 'force-no-store'
@@ -185,114 +184,103 @@ export default async function Home(props: {
     </div>
   )
 
-  const featuredAlbumSlug = 'consolers' // later: siteFlags.featuredAlbumSlug
+  const featuredAlbumSlug = 'consolers'
   const albumData = await getAlbumBySlug(featuredAlbumSlug)
   const albumSlug = featuredAlbumSlug
   const browseAlbumsRaw = await listAlbumsForBrowse()
 
-const browseAlbums: AlbumNavItem[] = browseAlbumsRaw
-  .filter((a) => a.slug && a.title)
-  .map((a) => ({
-    id: a.id,
-    slug: a.slug,
-    title: a.title,
-    artist: a.artist ?? undefined,
-    year: a.year ?? undefined,
-    coverUrl: a.artwork ? urlFor(a.artwork).width(400).height(400).quality(80).url() : null,
-  }))
+  const browseAlbums: AlbumNavItem[] = browseAlbumsRaw
+    .filter((a) => a.slug && a.title)
+    .map((a) => ({
+      id: a.id,
+      slug: a.slug,
+      title: a.title,
+      artist: a.artist ?? undefined,
+      year: a.year ?? undefined,
+      coverUrl: a.artwork ? urlFor(a.artwork).width(400).height(400).quality(80).url() : null,
+    }))
 
   return (
     <main style={mainStyle}>
-      {/* Grid + responsive behavior kept here so it can’t “go missing” via CSS drift */}
       <style>{`
-  .shadowHomeGrid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) clamp(300px, 34vw, 380px);
-    gap: 18px;
-    align-items: start;
-  }
+        .shadowHomeGrid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) clamp(300px, 34vw, 380px);
+          gap: 18px;
+          align-items: start;
+        }
 
-  /* Allow grid children to shrink properly */
-  .shadowHomeMain,
-  .shadowHomeSidebar,
-  .shadowHomeGrid > * {
-    min-width: 0;
-  }
+        .shadowHomeMain,
+        .shadowHomeSidebar,
+        .shadowHomeGrid > * {
+          min-width: 0;
+        }
 
-  /* Make sidebar cards actually fit the column */
-  .shadowHomeSidebar > * {
-    width: 100%;
-  }
+        .shadowHomeSidebar > * {
+          width: 100%;
+        }
 
-  /* Two-up card grid (desktop) */
-  .portalCardGrid2up {
-    display: grid;
-    gap: 12px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+        .portalCardGrid2up {
+          display: grid;
+          gap: 12px;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
 
-  /* Stack cards on narrow screens */
-  @media (max-width: 700px) {
-    .portalCardGrid2up {
-      grid-template-columns: 1fr;
-    }
-  }
+        @media (max-width: 700px) {
+          .portalCardGrid2up {
+            grid-template-columns: 1fr;
+          }
+        }
 
-  /* Stack portal + sidebar earlier so tablet doesn't feel broken */
-  @media (max-width: 1060px) {
-    .shadowHomeGrid {
-      grid-template-columns: 1fr;
-    }
+        @media (max-width: 1060px) {
+          .shadowHomeGrid {
+            grid-template-columns: 1fr;
+          }
 
-    .shadowHomeSidebar {
-      order: 0;
-      position: static !important;
-      top: auto !important;
-    }
+          .shadowHomeSidebar {
+            order: 0;
+            position: static !important;
+            top: auto !important;
+          }
 
-    .shadowHomeMain {
-      order: 1;
-    }
-  }
+          .shadowHomeMain {
+            order: 1;
+          }
+        }
 
-  /* Tighten horizontal padding on small phones so sidebar doesn't feel oversized */
-  @media (max-width: 520px) {
-    .shadowHomeOuter {
-      padding-left: 14px !important;
-      padding-right: 14px !important;
-    }
-  }
-`}</style>
-
-
-
+        @media (max-width: 520px) {
+          .shadowHomeOuter {
+            padding-left: 14px !important;
+            padding-right: 14px !important;
+          }
+        }
+      `}</style>
 
       {/* background layers */}
-      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          backgroundImage: bgUrl
-            ? `url(${bgUrl})`
-            : `radial-gradient(1200px 800px at 20% 20%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 60%),
-               radial-gradient(900px 700px at 80% 40%, rgba(255,255,255,0.06), transparent 55%),
-               linear-gradient(180deg, #050506 0%, #0b0b10 70%, #050506 100%)`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          filter: bgUrl ? 'saturate(0.9) contrast(1.05)' : undefined,
-          transform: 'scale(1.03)',
-        }}
-      />
-
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background:
-            'linear-gradient(180deg, rgba(0,0,0,0.70) 0%, rgba(0,0,0,0.55) 40%, rgba(0,0,0,0.78) 100%)',
-        }}
-      />
+      <div style={{position: 'absolute', inset: 0, overflow: 'hidden'}}>
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: bgUrl
+              ? `url(${bgUrl})`
+              : `radial-gradient(1200px 800px at 20% 20%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 60%),
+                 radial-gradient(900px 700px at 80% 40%, rgba(255,255,255,0.06), transparent 55%),
+                 linear-gradient(180deg, #050506 0%, #0b0b10 70%, #050506 100%)`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            filter: bgUrl ? 'saturate(0.9) contrast(1.05)' : undefined,
+            transform: 'scale(1.03)',
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background:
+              'linear-gradient(180deg, rgba(0,0,0,0.70) 0%, rgba(0,0,0,0.55) 40%, rgba(0,0,0,0.78) 100%)',
+          }}
+        />
       </div>
 
       <div
@@ -301,67 +289,62 @@ const browseAlbums: AlbumNavItem[] = browseAlbumsRaw
           position: 'relative',
           minHeight: '100svh',
           display: 'grid',
-
-          // Key: do NOT vertically center the whole section
           justifyItems: 'center',
           alignItems: 'start',
-
           padding: '86px 24px',
-  }}
->
-
+        }}
+      >
         <section
-  style={{
-    width: '100%',
-    maxWidth: 1120,
-    display: 'grid',
-    gridTemplateRows: 'auto auto 1fr', // (or just remove this line entirely)
-    alignItems: 'start',
-    gap: 26,
-  }}
->
+          style={{
+            width: '100%',
+            maxWidth: 1120,
+            display: 'grid',
+            gridTemplateRows: 'auto auto 1fr',
+            alignItems: 'start',
+            gap: 26,
+          }}
+        >
+          <div style={{textAlign: 'center'}}>
+            <h1
+              style={{
+                fontSize: 'clamp(38px, 5.6vw, 70px)',
+                lineHeight: 1.02,
+                margin: 0,
+                textWrap: 'balance',
+              }}
+            >
+              {page?.title ?? 'Shadow home'}
+            </h1>
 
-  {/* HEADER (never moves) */}
-  <div style={{textAlign: 'center'}}>
-    <h1
-      style={{
-        fontSize: 'clamp(38px, 5.6vw, 70px)',
-        lineHeight: 1.02,
-        margin: 0,
-        textWrap: 'balance',
-      }}
-    >
-      {page?.title ?? 'Shadow home'}
-    </h1>
+            <div
+              style={{
+                height: 2,
+                width: 'min(420px, 70vw)',
+                margin: '18px auto 0',
+                borderRadius: 999,
+                background:
+                  'linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 75%, white 10%), transparent)',
+                opacity: 0.75,
+              }}
+            />
+          </div>
 
-    <div
-      style={{
-        height: 2,
-        width: 'min(420px, 70vw)',
-        margin: '18px auto 0',
-        borderRadius: 999,
-        background:
-          'linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 75%, white 10%), transparent)',
-        opacity: 0.75,
-      }}
-    />
-  </div>
+          <div className="shadowHomeGrid" style={{minHeight: 0}}>
+            {/* GRID-WIDE TOP BAR SLOT (PortalShell will portal into this) */}
+            <div style={{gridColumn: '1 / -1', minWidth: 0}}>
+              <div id="af-portal-topbar-slot" />
+            </div>
 
-  {/* CONTENT (this is the only row that changes height) */}
-  <div className="shadowHomeGrid" style={{minHeight: 0}}>
             {/* LEFT: portal */}
             <div className="shadowHomeMain" style={{display: 'grid', gap: 18}}>
-  <PortalArea
-  portalPanel={portalPanel}
-  albumSlug={albumSlug}
-  album={albumData.album}
-  tracks={albumData.tracks}
-  albums={browseAlbums}
-/>
-
-</div>
-
-
+              <PortalArea
+                portalPanel={portalPanel}
+                albumSlug={albumSlug}
+                album={albumData.album}
+                tracks={albumData.tracks}
+                albums={browseAlbums}
+              />
+            </div>
 
             {/* RIGHT: membership sidebar */}
             <aside
@@ -420,13 +403,11 @@ const browseAlbums: AlbumNavItem[] = browseAlbumsRaw
                 </div>
               )}
 
-              {/* Stage: inline by default, fullscreen via button */}
               <StageInline
-  height={300}
-  cuesByTrackId={albumData.lyrics.cuesByTrackId}
-  offsetByTrackId={albumData.lyrics.offsetByTrackId}
-/>
-              
+                height={300}
+                cuesByTrackId={albumData.lyrics.cuesByTrackId}
+                offsetByTrackId={albumData.lyrics.offsetByTrackId}
+              />
             </aside>
           </div>
         </section>
