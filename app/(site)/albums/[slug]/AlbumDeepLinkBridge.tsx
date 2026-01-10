@@ -2,7 +2,8 @@
 'use client'
 
 import React from 'react'
-import {usePlayer, type PlayerTrack} from '@/app/home/player/PlayerState'
+import {usePlayer} from '@/app/home/player/PlayerState'
+import type {PlayerTrack} from '@/lib/types'
 
 export default function AlbumDeepLinkBridge(props: {
   albumContextId?: string

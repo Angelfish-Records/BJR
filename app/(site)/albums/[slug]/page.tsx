@@ -6,7 +6,7 @@ import PortalArea from '@/app/home/PortalArea'
 import AlbumDeepLinkBridge from './AlbumDeepLinkBridge'
 import {getAlbumBySlug, listAlbumsForBrowse} from '@/lib/albums'
 import type {AlbumInfo, AlbumNavItem} from '@/lib/types'
-import type {PlayerTrack} from '@/app/home/player/PlayerState'
+import type {PlayerTrack} from '@/lib/types'
 import {urlFor} from '@/sanity/lib/image'
 
 export const dynamic = 'force-dynamic'
