@@ -5,6 +5,7 @@ import React from 'react'
 import {createPortal} from 'react-dom'
 import {usePlayer} from './PlayerState'
 import {buildShareTarget, performShare, type ShareTarget} from '@/lib/share'
+import {PatternPillUnderlay} from './VisualizerPattern'
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
@@ -461,12 +462,14 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
 
   const DOCK_H = 80
   const ART_W = DOCK_H
-  const TOP_BORDER = 1
+  const TOP_BORDER = 1 // legacy (keep for reference)
+  const VIS_H = 3 // visual rail height (pattern needs >1px to read)
   const SEEK_H = 18
   const SAFE_INSET = 'env(safe-area-inset-bottom, 0px)'
 
-  // center the 18px seek hitbox on the 1px rail at y=0
-  const SEEK_TOP = -((SEEK_H - TOP_BORDER) / 2)
+  // center the 18px seek hitbox on the VIS_H rail at y=0
+  const SEEK_TOP = -((SEEK_H - VIS_H) / 2)
+
 
   // visual progress is NOT the range track; it’s our own 1px fill bar
   const progressPct = durKnown ? (sliderValue / durSec) * 100 : 0
@@ -504,7 +507,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
           height: '100%',
         }}
       >
-        {/* 1px rail at the top edge */}
+                {/* Textured rail at the top edge (visual only) */}
         <div
           aria-hidden="true"
           style={{
@@ -512,25 +515,82 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
             left: 0,
             right: 0,
             top: 0,
-            height: TOP_BORDER,
-            background: 'rgba(255,255,255,0.18)',
+            height: VIS_H,
             zIndex: 3,
+            pointerEvents: 'none',
+            overflow: 'hidden',
           }}
-        />
-        {/* 1px progress fill */}
+        >
+          {/* subtle base so there's always a readable line */}
+          <div
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(255,255,255,0.10)',
+            }}
+          />
+
+          {/* pattern layer */}
+          <PatternPillUnderlay active opacity={0.28} seed={1337} />
+
+          {/* specular sheen */}
+          <div
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background:
+                'linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.04))',
+              mixBlendMode: 'screen',
+              opacity: 0.55,
+            }}
+          />
+        </div>
+
+        {/* Textured progress fill (visual only) */}
         <div
           aria-hidden="true"
           style={{
             position: 'absolute',
             left: 0,
             top: 0,
-            height: TOP_BORDER,
+            height: VIS_H,
             width: `${progressPct}%`,
-            background: 'rgba(255,255,255,0.55)',
             zIndex: 4,
             pointerEvents: 'none',
+            overflow: 'hidden',
           }}
-        />
+        >
+          {/* stronger base */}
+          <div
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'color-mix(in srgb, var(--accent) 45%, rgba(255,255,255,0.30))',
+              opacity: 0.9,
+            }}
+          />
+
+          {/* pattern layer, stronger */}
+          <PatternPillUnderlay active opacity={0.55} seed={1337} />
+
+          {/* crisp top edge */}
+          <div
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              top: 0,
+              height: 1,
+              background: 'rgba(255,255,255,0.30)',
+              opacity: 0.9,
+            }}
+          />
+        </div>
+
 
         {/* Invisible seek hitbox, centered on y=0, thumb is the only visible part */}
         <div
@@ -928,7 +988,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
         {/* Seek + shimmer */}
         <style>{`
           input[aria-label="Seek"]::-webkit-slider-runnable-track {
-            height: ${TOP_BORDER}px;
+            height: ${VIS_H}px;
             background: transparent;
             border-radius: 0px;
           }
@@ -948,12 +1008,12 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
           }
 
           input[aria-label="Seek"]::-moz-range-track {
-            height: ${TOP_BORDER}px;
+            height: ${VIS_H}px;
             background: transparent;
             border-radius: 0px;
           }
           input[aria-label="Seek"]::-moz-range-progress {
-            height: ${TOP_BORDER}px;
+            height: ${VIS_H}px;
             background: transparent;
           }
           input[aria-label="Seek"]::-moz-range-thumb {
