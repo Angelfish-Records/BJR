@@ -213,9 +213,13 @@ export default function PortalArea(props: {
         }
 
         .afTopBarLogo {
-          grid-row: 1;
-          justify-self: center;
-        }
+  grid-row: 1;
+  justify-self: center;
+  width: 100%;
+  display: grid;
+  place-items: center;
+}
+
 
         .afTopBarLeft {
           grid-row: 2;

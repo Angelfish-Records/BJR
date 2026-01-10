@@ -270,30 +270,6 @@ export default async function Home(props: {
             gap: 26,
           }}
         >
-          <div style={{textAlign: 'center'}}>
-            <h1
-              style={{
-                fontSize: 'clamp(38px, 5.6vw, 70px)',
-                lineHeight: 1.02,
-                margin: 0,
-                textWrap: 'balance',
-              }}
-            >
-              {page?.title ?? 'Shadow home'}
-            </h1>
-
-            <div
-              style={{
-                height: 2,
-                width: 'min(420px, 70vw)',
-                margin: '18px auto 0',
-                borderRadius: 999,
-                background:
-                  'linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 75%, white 10%), transparent)',
-                opacity: 0.75,
-              }}
-            />
-          </div>
 
           <div className="shadowHomeGrid" style={{minHeight: 0}}>
             {/* GRID-WIDE TOP BAR SLOT (PortalShell portals into this) */}
