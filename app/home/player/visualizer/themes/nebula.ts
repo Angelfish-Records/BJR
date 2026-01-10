@@ -1,5 +1,5 @@
 // web/app/home/player/visualizer/themes/nebula.ts
-import type {Theme, AudioFeatures} from '../types'
+import type {Theme} from '../types'
 import {createProgram, makeFullscreenTriangle} from '../gl'
 
 const VS = `#version 300 es

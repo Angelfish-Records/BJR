@@ -1,4 +1,3 @@
-// web/app/home/player/visualizer/VisualizerEngine.ts
 'use client'
 
 import type {Theme, AudioFeatures} from './types'
@@ -17,6 +16,7 @@ export class VisualizerEngine {
 
   private ro: ResizeObserver | null = null
   private raf: number | null = null
+  private parent: HTMLElement | null = null
 
   private w = 1
   private h = 1
@@ -49,14 +49,26 @@ export class VisualizerEngine {
     this.theme.init(this.gl)
   }
 
+  /** Swap theme without recreating canvas/GL/RAF. */
+  setTheme(next: Theme) {
+    if (next === this.theme) return
+    try {
+      this.theme.dispose(this.gl)
+    } catch {}
+    this.theme = next
+    this.theme.init(this.gl)
+  }
+
   start() {
-    if (this.raf) return
+    if (this.raf != null) return
 
     const parent = this.canvas.parentElement
     if (!parent) return
+    this.parent = parent
 
     const resize = () => {
-      const r = parent.getBoundingClientRect()
+      if (!this.parent) return
+      const r = this.parent.getBoundingClientRect()
       const rawDpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
       this.baseDpr = Math.max(1, Math.min(2, rawDpr))
       this.w = Math.max(1, Math.floor(r.width))
@@ -75,7 +87,6 @@ export class VisualizerEngine {
       const dtSec = Math.min(0.05, (tNowMs - this.lastT) / 1000)
       this.lastT = tNowMs
 
-      // fixed timestep accumulator (reserved for future sim steps)
       this.acc += dtSec
       while (this.acc >= this.fixedDt) this.acc -= this.fixedDt
 
@@ -113,10 +124,11 @@ export class VisualizerEngine {
   }
 
   stop() {
-    if (this.raf) window.cancelAnimationFrame(this.raf)
+    if (this.raf != null) window.cancelAnimationFrame(this.raf)
     this.raf = null
     this.ro?.disconnect()
     this.ro = null
+    this.parent = null
   }
 
   dispose() {
@@ -132,6 +144,7 @@ export class VisualizerEngine {
     if (this.canvas.width !== W) this.canvas.width = W
     if (this.canvas.height !== H) this.canvas.height = H
 
+    // Keep CSS sizing deterministic; parent measures drive it.
     this.canvas.style.width = `${this.w}px`
     this.canvas.style.height = `${this.h}px`
   }

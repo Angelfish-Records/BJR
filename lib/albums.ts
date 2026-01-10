@@ -2,7 +2,7 @@
 import {client} from '@/sanity/lib/client'
 import {urlFor} from '@/sanity/lib/image'
 import type {AlbumInfo} from '@/lib/types'
-import type {PlayerTrack} from '@/app/home/player/PlayerState'
+import type {PlayerTrack} from '@/lib/types'
 import type {LyricCue} from '@/app/home/player/stage/LyricsOverlay'
 
 type AlbumDoc = {
@@ -12,12 +12,14 @@ type AlbumDoc = {
   year?: number
   description?: string
   artwork?: unknown
+  visualTheme?: string
   tracks?: Array<{
     id: string
     title?: string
     artist?: string
     durationMs?: number
     muxPlaybackId?: string
+    visualTheme?: string
   }>
 }
 
@@ -69,12 +71,14 @@ export async function getAlbumBySlug(
       year,
       description,
       artwork,
+      visualTheme,
       "tracks": tracks[]{
         id,
         title,
         artist,
         durationMs,
         muxPlaybackId
+        visualTheme
       }
     }
   `
@@ -94,18 +98,25 @@ export async function getAlbumBySlug(
     artworkUrl: doc.artwork ? urlFor(doc.artwork).width(900).height(900).quality(85).url() : null,
   }
 
+  const albumTheme =
+  typeof doc.visualTheme === 'string' && doc.visualTheme.trim().length > 0 ? doc.visualTheme.trim() : undefined
+
   const tracks: PlayerTrack[] = Array.isArray(doc.tracks)
     ? doc.tracks
         .filter((t) => t?.id)
         .map((t) => {
           const raw = t.durationMs
           const n = typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined
+
+          const trackTheme =
+          typeof t.visualTheme === 'string' && t.visualTheme.trim().length > 0 ? t.visualTheme.trim() : undefined
           return {
             id: t.id,
             title: t.title ?? undefined,
             artist: t.artist ?? undefined,
             muxPlaybackId: t.muxPlaybackId ?? undefined,
             durationMs: typeof n === 'number' && n > 0 ? n : undefined,
+            visualTheme: trackTheme ?? albumTheme ?? undefined,
           }
         })
     : []

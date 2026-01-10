@@ -1,12 +1,13 @@
-// web/app/home/player/mediaSurface.ts
 'use client'
 
 export type MediaStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'blocked'
+export type StageVariant = 'inline' | 'fullscreen'
 
 export type MediaEvent =
   | {type: 'time'; ms: number}
   | {type: 'status'; status: MediaStatus}
   | {type: 'track'; id: string | null}
+  | {type: 'stage'; variant: StageVariant | null}
 
 type Listener = (e: MediaEvent) => void
 
@@ -16,17 +17,24 @@ class MediaSurface {
   private lastStatus: MediaStatus = 'idle'
   private lastTrackId: string | null = null
 
+  // Stage “authority”
+  private inlineCount = 0
+  private fullscreenCount = 0
+  private activeStage: StageVariant | null = null
+
   subscribe(fn: Listener) {
     this.listeners.add(fn)
     fn({type: 'time', ms: this.lastTimeMs})
     fn({type: 'status', status: this.lastStatus})
     fn({type: 'track', id: this.lastTrackId})
+    fn({type: 'stage', variant: this.activeStage})
 
-    // IMPORTANT: cleanup must return void (not boolean)
     return () => {
       this.listeners.delete(fn)
     }
   }
+
+  /* ---------------- media state ---------------- */
 
   setTime(ms: number) {
     this.lastTimeMs = ms
@@ -53,6 +61,31 @@ class MediaSurface {
 
   getTrackId() {
     return this.lastTrackId
+  }
+
+  /* ---------------- stage authority ---------------- */
+
+  private recomputeStage() {
+    const next: StageVariant | null = this.fullscreenCount > 0 ? 'fullscreen' : this.inlineCount > 0 ? 'inline' : null
+    if (next === this.activeStage) return
+    this.activeStage = next
+    for (const fn of this.listeners) fn({type: 'stage', variant: next})
+  }
+
+  registerStage(variant: StageVariant) {
+    if (variant === 'fullscreen') this.fullscreenCount++
+    else this.inlineCount++
+    this.recomputeStage()
+
+    return () => {
+      if (variant === 'fullscreen') this.fullscreenCount = Math.max(0, this.fullscreenCount - 1)
+      else this.inlineCount = Math.max(0, this.inlineCount - 1)
+      this.recomputeStage()
+    }
+  }
+
+  getStageVariant(): StageVariant | null {
+    return this.activeStage
   }
 }
 

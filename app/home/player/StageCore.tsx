@@ -1,4 +1,3 @@
-// web/app/home/player/StageCore.tsx
 'use client'
 
 import React from 'react'
@@ -33,6 +32,11 @@ export default function StageCore(props: {
   const {variant, cuesByTrackId, offsetByTrackId, offsetMs: globalOffsetMs = 0, autoResumeOnSeek = false} = props
   const p = usePlayer()
 
+  // Register stage presence; fullscreen wins if it exists.
+  React.useEffect(() => {
+    return mediaSurface.registerStage(variant)
+  }, [variant])
+
   const [surfaceTrackId, setSurfaceTrackId] = React.useState<string | null>(() => mediaSurface.getTrackId())
 
   React.useEffect(() => {
@@ -42,14 +46,12 @@ export default function StageCore(props: {
     return unsub
   }, [])
 
-  // Prefer player id, but fall back to surface id, and finally muxPlaybackId.
-  // Critically: choose the first key that actually exists in cuesByTrackId (if provided).
-    const playerTrackId = p.current?.id ?? null
-    const playerMuxId = p.current?.muxPlaybackId ?? null
+  const playerTrackId = p.current?.id ?? null
+  const playerMuxId = p.current?.muxPlaybackId ?? null
 
-    const trackId = React.useMemo(() => {
-      return pickKeyWithCues(cuesByTrackId, [playerTrackId, surfaceTrackId, playerMuxId])
-    }, [cuesByTrackId, playerTrackId, playerMuxId, surfaceTrackId])
+  const trackId = React.useMemo(() => {
+    return pickKeyWithCues(cuesByTrackId, [playerTrackId, surfaceTrackId, playerMuxId])
+  }, [cuesByTrackId, playerTrackId, playerMuxId, surfaceTrackId])
 
   const cues: LyricCue[] | null = React.useMemo(() => {
     if (!trackId) return null
@@ -95,7 +97,7 @@ export default function StageCore(props: {
       }}
     >
       <div style={{position: 'absolute', inset: 0, zIndex: 0}}>
-        <VisualizerCanvas />
+        <VisualizerCanvas variant={variant} />
       </div>
 
       <div

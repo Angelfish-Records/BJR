@@ -3,13 +3,7 @@
 
 import React from 'react'
 
-export type PlayerTrack = {
-  id: string
-  title?: string
-  artist?: string
-  durationMs?: number
-  muxPlaybackId?: string
-}
+import type {PlayerTrack} from '@/lib/types'
 
 type PlayerStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'blocked'
 type RepeatMode = 'off' | 'one' | 'all'

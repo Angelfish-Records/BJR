@@ -15,3 +15,12 @@ export type AlbumNavItem = {
   artist?: string
   coverUrl?: string | null
 }
+
+export type PlayerTrack = {
+  id: string
+  title?: string
+  artist?: string
+  durationMs?: number
+  muxPlaybackId?: string
+  visualTheme?: string
+}

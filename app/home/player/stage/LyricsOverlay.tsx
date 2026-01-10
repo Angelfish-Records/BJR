@@ -272,9 +272,8 @@ export default function LyricsOverlay(props: {
                     display: 'block',
                     maxWidth: '100%',
                     minWidth: 0,
-                    whiteSpace: isInline ? 'nowrap' : 'normal',
+                    whiteSpace: 'normal',
                     overflow: isInline ? 'hidden' : 'visible',
-                    textOverflow: isInline ? 'ellipsis' : 'clip',
                   }}
                 >
                   {cue.text}

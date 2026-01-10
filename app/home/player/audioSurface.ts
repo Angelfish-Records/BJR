@@ -1,29 +1,32 @@
+// web/app/home/player/audioSurface.ts
 'use client'
 
-export type AudioFeatures = {
-  rms: number
-  bass: number
-  mid: number
-  treble: number
-  centroid: number
-  energy: number
-}
+import type {AudioFeatures} from './visualizer/types'
+
+type AudioKey = keyof Required<AudioFeatures>
+
+const AUDIO_KEYS: AudioKey[] = ['energy', 'rms', 'bass', 'mid', 'treble', 'centroid']
 
 class AudioSurface {
-  private features: AudioFeatures = {
+  private features: Required<AudioFeatures> = {
+    energy: 0,
     rms: 0,
     bass: 0,
     mid: 0,
     treble: 0,
     centroid: 0,
-    energy: 0,
   }
 
   set(next: Partial<AudioFeatures>) {
-    Object.assign(this.features, next)
+    for (const k of AUDIO_KEYS) {
+      const v = next[k]
+      if (typeof v === 'number' && Number.isFinite(v)) {
+        this.features[k] = v
+      }
+    }
   }
 
-  get(): AudioFeatures {
+  get(): Required<AudioFeatures> {
     return this.features
   }
 }

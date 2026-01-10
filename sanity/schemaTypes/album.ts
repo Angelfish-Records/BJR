@@ -1,5 +1,12 @@
 import {defineType, defineField} from 'sanity'
 
+const THEME_OPTIONS = [
+  {title: 'Nebula', value: 'nebula'},
+  {title: 'Fractal World', value: 'fractal-world'},
+  {title: 'Reaction Diffusion', value: 'reaction-diffusion'},
+  {title: 'Calligraphy', value: 'calligraphy'},
+]
+
 export default defineType({
   name: 'album',
   title: 'Album',
@@ -28,6 +35,19 @@ export default defineType({
 
     defineField({name: 'description', type: 'text'}),
 
+    // ✅ Album default theme (track can override)
+    defineField({
+      name: 'visualTheme',
+      title: 'Visualizer Theme (Default)',
+      type: 'string',
+      description: 'Default visualizer theme for tracks on this album (tracks can override).',
+      options: {
+        list: THEME_OPTIONS,
+        layout: 'radio',
+      },
+      initialValue: 'nebula',
+    }),
+
     defineField({
       name: 'tracks',
       title: 'Tracks',
@@ -51,15 +71,31 @@ export default defineType({
             }),
             defineField({name: 'artist', type: 'string'}),
             defineField({name: 'durationMs', type: 'number'}),
+
             defineField({
               name: 'muxPlaybackId',
               type: 'string',
               description: 'Mux playback ID for HLS streaming.',
               validation: (r) => r.required(),
             }),
+
+            // ✅ Track override theme
+            defineField({
+              name: 'visualTheme',
+              title: 'Visualizer Theme (Override)',
+              type: 'string',
+              description: 'Optional override for this track. If empty, album default is used.',
+              options: {
+                list: [{title: 'Use album default', value: ''}, ...THEME_OPTIONS],
+              },
+            }),
           ],
           preview: {
-            select: {title: 'title', subtitle: 'muxPlaybackId'},
+            select: {title: 'title', subtitle: 'muxPlaybackId', theme: 'visualTheme'},
+            prepare({title, subtitle, theme}: {title?: string; subtitle?: string; theme?: string}) {
+              const t = typeof theme === 'string' && theme.trim().length ? theme.trim() : 'album default'
+              return {title, subtitle: `${subtitle ?? ''}${subtitle ? ' · ' : ''}${t}`}
+            },
           },
         },
       ],
