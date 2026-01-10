@@ -4,9 +4,9 @@ import React from 'react'
 import {usePlayer} from './PlayerState'
 import {VisualizerEngine} from './visualizer/VisualizerEngine'
 import {createNebulaTheme} from './visualizer/themes/nebula'
-import {createFractalWorldTheme} from './visualizer/themes/fractalWorld'
-import {createReactionDiffusionTheme} from './visualizer/themes/reactionDiffusion'
-import {createCalligraphyTheme} from './visualizer/themes/calligraphy'
+import {createGravitationalLatticeTheme} from './visualizer/themes/gravitationalLattice'
+import {createOrbitalScriptTheme} from './visualizer/themes/orbitalScript'
+import {createPhaseGlassTheme} from './visualizer/themes/phaseGlass'
 import {audioSurface} from './audioSurface'
 import {mediaSurface, type StageVariant} from './mediaSurface'
 import type {AudioFeatures, Theme} from './visualizer/types'
@@ -14,14 +14,15 @@ import type {AudioFeatures, Theme} from './visualizer/types'
 function themeFromKey(key: string | undefined | null): Theme {
   // Expand later: 'prism', 'rings', etc.
   switch ((key ?? '').toLowerCase()) {
-    case 'fractal-world':
-    case 'fractal':
-      return createFractalWorldTheme()
-    case 'reaction-diffusion':
-    case 'reaction':
-      return createReactionDiffusionTheme()
-    case 'calligraphy':
-      return createCalligraphyTheme()
+    case 'gravitational-lattice':
+    case 'lattice':
+      return createGravitationalLatticeTheme()
+    case 'orbital-script':
+    case 'orbital':
+      return createOrbitalScriptTheme()
+    case 'phase-glass':
+    case 'glass':
+      return createPhaseGlassTheme()
     case 'nebula':
     default:
       return createNebulaTheme()
