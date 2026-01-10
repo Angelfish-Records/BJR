@@ -139,6 +139,14 @@ export default function LyricsOverlay(props: {
   const topFadeH = isInline ? 44 : 130
   const botFadeH = isInline ? 54 : 160
 
+
+    // TEMP DEBUG (remove once fixed)
+  const dbgT = Math.floor(mediaSurface.getTimeMs() + offsetMs)
+  const dbgFirst = cues[0]?.text ?? ''
+  const dbgFirstT = cues[0]?.tMs ?? -1
+  const dbgLen = cues.length
+
+
   return (
     <div
       style={{
@@ -152,6 +160,34 @@ export default function LyricsOverlay(props: {
         zIndex: 9999, // make absolutely sure it’s on top in the inline card
       }}
     >
+            {/* TEMP DEBUG (remove once fixed) */}
+      {isInline ? (
+        <div
+          style={{
+            position: 'absolute',
+            top: 8,
+            left: 8,
+            zIndex: 10000,
+            padding: '6px 8px',
+            borderRadius: 10,
+            border: '1px solid rgba(255,255,255,0.18)',
+            background: 'rgba(0,0,0,0.65)',
+            color: 'rgba(255,255,255,0.95)',
+            fontSize: 11,
+            lineHeight: 1.25,
+            maxWidth: 260,
+            pointerEvents: 'none',
+            textAlign: 'left',
+            whiteSpace: 'normal',
+          }}
+        >
+          <div>cues: {dbgLen}</div>
+          <div>tMs: {dbgT}</div>
+          <div>activeIdx: {activeIdx}</div>
+          <div>first: {dbgFirstT} — {dbgFirst.slice(0, 48)}</div>
+        </div>
+      ) : null}
+
       <div
         ref={viewportRef}
         style={{
@@ -245,7 +281,7 @@ export default function LyricsOverlay(props: {
                   fontWeight: isActive ? 780 : 650,
                   letterSpacing: 0.2,
                   lineHeight,
-                  opacity,
+                  opacity: 1,
                   transition: 'opacity 140ms ease, transform 140ms ease',
                   userSelect: 'none',
                   transform: isActive ? 'translateZ(0) scale(1.02)' : 'translateZ(0) scale(1)',
