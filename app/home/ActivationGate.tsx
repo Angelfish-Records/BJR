@@ -4,6 +4,8 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react'
 import {useAuth, useSignIn, useSignUp, useUser} from '@clerk/nextjs'
 import {useRouter, useSearchParams} from 'next/navigation'
+import {PatternPillUnderlay} from '@/app/home/player/VisualizerPattern'
+
 
 type Phase = 'idle' | 'code'
 type Flow = 'signin' | 'signup' | null
@@ -68,9 +70,7 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
         height: h,
         borderRadius: 999,
         border: '1px solid rgba(255,255,255,0.18)',
-        background: checked
-          ? 'color-mix(in srgb, var(--accent) 78%, rgba(0,0,0,0.20))'
-          : 'rgba(255,255,255,0.10)',
+        background: checked ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.10)',
         position: 'relative',
         padding: 0,
         outline: 'none',
@@ -81,8 +81,13 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
           ? '0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent), 0 10px 26px rgba(0,0,0,0.35)'
           : '0 10px 26px rgba(0,0,0,0.28)',
         opacity: disabled ? 0.65 : 1,
+        overflow: 'hidden',
       }}
     >
+      {/* pattern underlay only when checked */}
+      <PatternPillUnderlay active={checked} opacity={0.32} seed={777} />
+
+      {/* specular layer */}
       <div
         aria-hidden
         style={{
@@ -97,6 +102,8 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
           transition: 'opacity 180ms ease',
         }}
       />
+
+      {/* knob */}
       <div
         aria-hidden
         style={{
@@ -117,6 +124,7 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
     </button>
   )
 }
+
 
 function normalizeDigits(raw: string): string {
   return raw.replace(/\D/g, '').slice(0, 6)

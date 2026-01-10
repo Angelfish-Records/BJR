@@ -6,6 +6,7 @@ import {usePlayer} from './PlayerState'
 import type {AlbumInfo, AlbumNavItem} from '@/lib/types'
 import type {PlayerTrack} from '@/lib/types'
 import {deriveShareContext, shareAlbum, shareTrack} from './share'
+import {PatternRing} from './VisualizerPattern'
 
 function fmtTime(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000))
@@ -163,7 +164,7 @@ export default function FullPlayer(props: {
       img.src = url
     } catch {}
   }
-  
+
   const onTogglePlay = () => {
     lockPlayFor(120)
 
@@ -178,12 +179,12 @@ export default function FullPlayer(props: {
     if (!firstTrack) return
 
     p.setQueue(tracks, {
-  contextId: album?.id,
-  artworkUrl: album?.artworkUrl ?? null,
-  contextSlug: props.albumSlug,
-  contextTitle: album?.title ?? undefined,
-  contextArtist: album?.artist ?? undefined,
-})
+      contextId: album?.id,
+      artworkUrl: album?.artworkUrl ?? null,
+      contextSlug: props.albumSlug,
+      contextTitle: album?.title ?? undefined,
+      contextArtist: album?.artist ?? undefined,
+    })
     p.setIntent('play')
     p.play(firstTrack)
     window.dispatchEvent(new Event('af:play-intent'))
@@ -245,32 +246,41 @@ export default function FullPlayer(props: {
             <BookmarkIcon />
           </IconCircleBtn>
 
-          <button
-            type="button"
-            onClick={canPlay && !playLock ? onTogglePlay : undefined}
-            onMouseEnter={() => prefetchTrack(tracks[0])}
-            onFocus={() => prefetchTrack(tracks[0])}
-            disabled={!canPlay || playLock}
-            aria-label={playingThisAlbum ? 'Pause' : 'Play'}
-            title={playingThisAlbum ? 'Pause' : 'Play'}
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 999,
-              border: '1px solid rgba(255,255,255,0.12)',
-              background: 'rgba(245,245,245,0.95)',
-              color: 'rgba(0,0,0,0.92)',
-              display: 'grid',
-              placeItems: 'center',
-              cursor: canPlay ? 'pointer' : 'default',
-              opacity: canPlay ? 0.98 : 0.55,
-              boxShadow: playingThisAlbum ? '0 18px 50px rgba(0,0,0,0.35)' : '0 18px 50px rgba(0,0,0,0.30)',
-              transform: 'translateZ(0)',
-              position: 'relative',
-            }}
-          >
-            <PlayPauseBig playing={playingThisAlbum} />
-          </button>
+          {/* Big play button + patterned border ring */}
+          <div style={{position: 'relative', width: 64, height: 64}}>
+            <button
+              type="button"
+              onClick={canPlay && !playLock ? onTogglePlay : undefined}
+              onMouseEnter={() => prefetchTrack(tracks[0])}
+              onFocus={() => prefetchTrack(tracks[0])}
+              disabled={!canPlay || playLock}
+              aria-label={playingThisAlbum ? 'Pause' : 'Play'}
+              title={playingThisAlbum ? 'Pause' : 'Play'}
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.12)',
+                background: 'rgba(245,245,245,0.95)',
+                color: 'rgba(0,0,0,0.92)',
+                display: 'grid',
+                placeItems: 'center',
+                cursor: canPlay ? 'pointer' : 'default',
+                opacity: canPlay ? 0.98 : 0.55,
+                boxShadow: playingThisAlbum ? '0 18px 50px rgba(0,0,0,0.35)' : '0 18px 50px rgba(0,0,0,0.30)',
+                transform: 'translateZ(0)',
+                position: 'relative',
+                zIndex: 2,
+              }}
+            >
+              <PlayPauseBig playing={playingThisAlbum} />
+            </button>
+
+            {/* subtle visualizer ring */}
+            <div style={{position: 'absolute', inset: -5, borderRadius: 999, zIndex: 1}}>
+              <PatternRing size={74} thickness={7} opacity={0.45} seed={913} />
+            </div>
+          </div>
 
           <IconCircleBtn
             label="Share"
@@ -364,7 +374,7 @@ export default function FullPlayer(props: {
           })}
         </div>
 
-        {albums.length ? (
+        {browseAlbums.length ? (
           <div style={{marginTop: 18}}>
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12}}>
               <div style={{fontSize: 12, opacity: 0.7, marginBottom: 10}}>Browse albums</div>
@@ -372,50 +382,88 @@ export default function FullPlayer(props: {
             </div>
 
             <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12}}>
-              {browseAlbums.map((a) => {
+              {browseAlbums.map((a, idx) => {
                 const isActive = album?.id === a.id
                 const disabled = !onSelectAlbum || isBrowsingAlbum || isActive
 
                 return (
                   <button
-                    key={a.id}
-                    type="button"
-                    disabled={disabled}
-                    onMouseEnter={() => prefetchAlbumArt(a.coverUrl)}
-                    onFocus={() => prefetchAlbumArt(a.coverUrl)}
-                    onClick={() => onSelectAlbum?.(a.slug)}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '56px minmax(0, 1fr)',
-                      gap: 12,
-                      alignItems: 'center',
-                      padding: 12,
-                      borderRadius: 14,
-                      border: isActive ? '1px solid rgba(255,255,255,0.18)' : '1px solid rgba(255,255,255,0.10)',
-                      background: isActive ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)',
-                      textDecoration: 'none',
-                      color: 'rgba(255,255,255,0.92)',
-                      cursor: disabled ? 'default' : 'pointer',
-                      opacity: disabled ? 0.75 : 1,
-                      textAlign: 'left',
-                    }}
-                  >
+  key={a.id}
+  type="button"
+  disabled={disabled}
+  onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
+    prefetchAlbumArt(a.coverUrl)
+    if (disabled) return
+    e.currentTarget.style.transform = 'translateZ(0) translateY(-1px)'
+    e.currentTarget.style.boxShadow = '0 16px 38px rgba(0,0,0,0.22)'
+  }}
+  onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.transform = 'translateZ(0)'
+    e.currentTarget.style.boxShadow = disabled ? 'none' : '0 14px 34px rgba(0,0,0,0.18)'
+  }}
+  onFocus={() => prefetchAlbumArt(a.coverUrl)}
+  onClick={() => onSelectAlbum?.(a.slug)}
+  style={{
+    display: 'grid',
+    gridTemplateColumns: '62px minmax(0, 1fr)',
+    gap: 12,
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 16,
+    border: isActive ? '1px solid rgba(255,255,255,0.18)' : '1px solid rgba(255,255,255,0.10)',
+    background: isActive
+      ? 'color-mix(in srgb, var(--accent) 10%, rgba(255,255,255,0.05))'
+      : 'rgba(255,255,255,0.03)',
+    color: 'rgba(255,255,255,0.92)',
+    cursor: disabled ? 'default' : 'pointer',
+    opacity: disabled ? 0.72 : 1,
+    textAlign: 'left',
+    boxShadow: disabled ? 'none' : '0 14px 34px rgba(0,0,0,0.18)',
+    transform: 'translateZ(0)',
+    transition:
+      'transform 140ms ease, border-color 140ms ease, background 140ms ease, box-shadow 140ms ease',
+  }}
+>
+
                     <div
                       style={{
-                        width: 56,
-                        height: 56,
-                        borderRadius: 12,
+                        width: 62,
+                        height: 62,
+                        borderRadius: 14,
                         border: '1px solid rgba(255,255,255,0.14)',
                         background: a.coverUrl
                           ? `url(${a.coverUrl}) center/cover no-repeat`
                           : 'radial-gradient(40px 40px at 30% 20%, rgba(255,255,255,0.14), rgba(255,255,255,0.02))',
+                        boxShadow: '0 18px 40px rgba(0,0,0,0.22)',
+                        overflow: 'hidden',
                       }}
                     />
                     <div style={{minWidth: 0}}>
-                      <div style={{fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
-                        {a.title}
+                      <div style={{display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10}}>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 650,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {a.title}
+                        </div>
+                        <div style={{fontSize: 11, opacity: 0.55}}>{idx + 1}</div>
                       </div>
-                      <div style={{fontSize: 12, opacity: 0.65, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
+
+                      <div
+                        style={{
+                          marginTop: 4,
+                          fontSize: 12,
+                          opacity: 0.68,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
                         {a.artist ?? ''}
                       </div>
                     </div>

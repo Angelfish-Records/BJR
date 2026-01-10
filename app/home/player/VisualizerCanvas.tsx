@@ -1,3 +1,4 @@
+// web/app/home/player/VisualizerCanvas.tsx
 'use client'
 
 import React from 'react'
@@ -9,10 +10,10 @@ import {createOrbitalScriptTheme} from './visualizer/themes/orbitalScript'
 import {createPhaseGlassTheme} from './visualizer/themes/phaseGlass'
 import {audioSurface} from './audioSurface'
 import {mediaSurface, type StageVariant} from './mediaSurface'
-import type {AudioFeatures, Theme} from './visualizer/types'
+import type {Theme} from './visualizer/types'
+import {visualSurface} from './visualSurface'
 
 function themeFromKey(key: string | undefined | null): Theme {
-  // Expand later: 'prism', 'rings', etc.
   switch ((key ?? '').toLowerCase()) {
     case 'gravitational-lattice':
     case 'lattice':
@@ -36,7 +37,9 @@ export default function VisualizerCanvas(props: {variant: StageVariant}) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null)
   const engineRef = React.useRef<VisualizerEngine | null>(null)
 
-  const [activeStage, setActiveStage] = React.useState<StageVariant | null>(() => mediaSurface.getStageVariant())
+  const [activeStage, setActiveStage] = React.useState<StageVariant | null>(() =>
+    mediaSurface.getStageVariant()
+  )
 
   React.useEffect(() => {
     return mediaSurface.subscribe((e) => {
@@ -45,38 +48,46 @@ export default function VisualizerCanvas(props: {variant: StageVariant}) {
   }, [])
 
   // Engine mount once
-  React.useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
+React.useEffect(() => {
+  const canvas = canvasRef.current
+  if (!canvas) return
 
-    const prefersReduced =
-      window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false
+  const prefersReduced =
+    window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false
 
-    const getAudio = (): AudioFeatures => {
-  if (prefersReduced) {
-    const a = audioSurface.get()
-    return {...a, energy: 0.12}
-  }
-  return audioSurface.get()
-}
-
-
-    const engine = new VisualizerEngine({
-      canvas,
-      getAudio,
-      theme: themeFromKey(p.current?.visualTheme),
-    })
-
-    engineRef.current = engine
-
-    if (activeStage === variant) engine.start()
-
-    return () => {
-      engine.dispose()
-      engineRef.current = null
+  const getAudio = () => {
+    if (prefersReduced) {
+      const a = audioSurface.get()
+      return {...a, energy: 0.12}
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // mount only
+    return audioSurface.get()
+  }
+
+  const engine = new VisualizerEngine({
+    canvas,
+    getAudio,
+    theme: themeFromKey(p.current?.visualTheme),
+  })
+
+  engineRef.current = engine
+
+  // register canvas for UI sampling (fullscreen wins)
+  const unreg = visualSurface.registerCanvas(variant, canvas)
+
+  if (activeStage === variant) engine.start()
+
+  return () => {
+    try {
+      engine.stop()
+      engine.dispose()
+    } finally {
+      engineRef.current = null
+      unreg()
+    }
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [])
+
 
   // Start/stop based on stage authority
   React.useEffect(() => {
