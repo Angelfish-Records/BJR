@@ -192,7 +192,7 @@ export default function LyricsOverlay(props: {
             WebkitOverflowScrolling: 'touch',
             padding: `${padTop}px 14px ${padBottom}px 14px`,
             display: 'grid',
-            gap: isInline ? 6 : 10,
+            gap: isInline ? 5 : 9,
             zIndex: 1,
 
             // Firefox
@@ -251,8 +251,8 @@ export default function LyricsOverlay(props: {
                   alignItems: 'center',
 
                   // Give each row breathing room without forcing single-line math.
-                  paddingTop: isInline ? 4 : 6,
-                  paddingBottom: isInline ? 4 : 6,
+                  paddingTop: isInline ? 2 : 4,
+                  paddingBottom: isInline ? 2 : 4,
 
                   // Typography
                   color: 'rgba(255,255,255,0.94)',
@@ -272,35 +272,62 @@ export default function LyricsOverlay(props: {
                   userSelect: 'none',
                 }}
               >
-                {/* A lightweight per-line scrim (active only) so the visualizer still shows through */}
-                <span
-                  style={{
-                    display: 'inline-block',
-                    maxWidth: '100%',
-                    minWidth: 0,
+                {/* Active line: soft blur scrim that fades out at edges (no hard border) */}
+<span
+  style={{
+    position: 'relative',
+    display: 'inline-block',
+    maxWidth: '100%',
+    minWidth: 0,
 
-                    // Wrapping rules (fixes squish)
-                    whiteSpace: 'normal',
-                    overflowWrap: 'anywhere',
-                    wordBreak: 'break-word',
+    // Wrapping rules (keep what you already fixed)
+    whiteSpace: 'normal',
+    overflowWrap: 'anywhere',
+    wordBreak: 'break-word',
+  }}
+>
+  {isActive ? (
+    <span
+      aria-hidden
+      style={{
+        position: 'absolute',
 
-                    // Readability (prefer shadows over big frosted panels)
-                    textShadow,
+        // This is your “padding” but applied to the scrim itself
+        inset: isInline ? '-6px -10px' : '-10px -16px',
 
-                    // Subtle scrim only for active line (optional but recommended)
-                    padding: isActive ? (isInline ? '6px 10px' : '10px 14px') : 0,
-                    borderRadius: 999,
-                    background: isActive
-                      ? 'rgba(0,0,0,0.10)'
-                      : 'transparent',
-                    backdropFilter: isActive ? 'blur(6px)' : 'none',
-                    WebkitBackdropFilter: isActive ? 'blur(6px)' : 'none',
-                    border: isActive ? '1px solid rgba(255,255,255,0.10)' : '1px solid transparent',
-                    boxShadow: isActive ? '0 16px 40px rgba(0,0,0,0.25)' : 'none',
-                  }}
-                >
-                  {cue.text}
-                </span>
+        borderRadius: 999,
+        pointerEvents: 'none',
+
+        // Needs some alpha to make backdrop-filter visible
+        background: isInline ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.14)',
+
+        // The blur that affects ONLY what’s behind this line
+        backdropFilter: isInline ? 'blur(8px)' : 'blur(10px)',
+        WebkitBackdropFilter: isInline ? 'blur(8px)' : 'blur(10px)',
+
+        // The key: fade the scrim out at the edges
+        WebkitMaskImage:
+          'radial-gradient(closest-side at 50% 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 100%)',
+        maskImage:
+          'radial-gradient(closest-side at 50% 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 100%)',
+
+        // Optional: makes the fade feel less “flat”
+        opacity: 0.95,
+      }}
+    />
+  ) : null}
+
+  <span
+    style={{
+      position: 'relative',
+      zIndex: 1,
+      textShadow, // keep your textShadow variable
+    }}
+  >
+    {cue.text}
+  </span>
+</span>
+
               </button>
             )
 
