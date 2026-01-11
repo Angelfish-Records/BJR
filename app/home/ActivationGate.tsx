@@ -58,101 +58,113 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
   const knob = h - pad * 2
   const travel = w - pad * 2 - knob
 
+  const R = 999
+  const RING = 2 // px thickness of the patterned border
+
   return (
-    <button
-      type="button"
-      onClick={disabled ? undefined : onClick}
-      disabled={disabled}
-      aria-checked={checked}
-      role="switch"
+    <div
+      aria-hidden
       style={{
         width: w,
         height: h,
-        borderRadius: 999,
-        border: '1px solid rgba(255,255,255,0.18)',
-        background: checked ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.10)',
+        borderRadius: R,
         position: 'relative',
-        padding: 0,
-        outline: 'none',
-        cursor: disabled ? 'default' : 'pointer',
-        transition:
-          'background 180ms ease, box-shadow 180ms ease, border-color 180ms ease, opacity 180ms ease',
+        padding: RING,
+        overflow: 'hidden',
+        // keep the same “presence” as the old button border
         boxShadow: checked
           ? '0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent), 0 10px 26px rgba(0,0,0,0.35)'
           : '0 10px 26px rgba(0,0,0,0.28)',
         opacity: disabled ? 0.65 : 1,
-        overflow: 'hidden',
+        transition: 'box-shadow 180ms ease, opacity 180ms ease',
       }}
     >
-      {/* ALWAYS-ON patterned border ring (does not depend on checked) */}
+      {/* ALWAYS-ON border pattern (visible only in wrapper padding) */}
       <div
         aria-hidden
         style={{
           position: 'absolute',
           inset: 0,
-          borderRadius: 999,
-          pointerEvents: 'none',
+          borderRadius: R,
           overflow: 'hidden',
-          // show only the border area
-          WebkitMaskImage:
-            'radial-gradient(circle, transparent 0, transparent calc(100% - 2px), #000 calc(100% - 1px))',
-          maskImage:
-            'radial-gradient(circle, transparent 0, transparent calc(100% - 2px), #000 calc(100% - 1px))',
-          opacity: 0.95,
+          pointerEvents: 'none',
         }}
       >
-        <PatternPillUnderlay active opacity={0.38} seed={888} />
-        {/* crisp edge so it reads as a border even when pattern is subtle */}
+        {/* Use the existing PatternPillUnderlay as a cheap “texture plate” */}
+        <PatternPillUnderlay active opacity={0.42} seed={888} radius={R} />
+        {/* crisp ring edge */}
         <div
           aria-hidden
           style={{
             position: 'absolute',
             inset: 0,
-            borderRadius: 999,
+            borderRadius: R,
             boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.18)',
             pointerEvents: 'none',
+            opacity: 0.95,
           }}
         />
       </div>
 
-      {/* pattern interior ONLY when checked */}
-      <PatternPillUnderlay active={checked} opacity={0.32} seed={777} />
-
-      {/* specular layer */}
-      <div
-        aria-hidden
+      {/* Actual interactive control */}
+      <button
+        type="button"
+        onClick={disabled ? undefined : onClick}
+        disabled={disabled}
+        aria-checked={checked}
+        role="switch"
         style={{
-          position: 'absolute',
-          inset: 1,
-          borderRadius: 999,
-          background:
-            'linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.02) 45%, rgba(0,0,0,0.10))',
-          pointerEvents: 'none',
-          mixBlendMode: 'screen',
-          opacity: checked ? 0.55 : 0.35,
-          transition: 'opacity 180ms ease',
+          width: '100%',
+          height: '100%',
+          borderRadius: R,
+          border: '1px solid rgba(255,255,255,0.18)',
+          background: 'rgba(255,255,255,0.10)',
+          position: 'relative',
+          padding: 0,
+          outline: 'none',
+          cursor: disabled ? 'default' : 'pointer',
+          overflow: 'hidden',
         }}
-      />
+      >
+        {/* interior pattern ONLY when checked */}
+        <PatternPillUnderlay active={checked} opacity={0.32} seed={777} radius={R} />
 
-      {/* knob */}
-      <div
-        aria-hidden
-        style={{
-          width: knob,
-          height: knob,
-          borderRadius: 999,
-          position: 'absolute',
-          top: pad,
-          left: pad,
-          transform: `translateX(${checked ? travel : 0}px)`,
-          transition: 'transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease',
-          background: 'rgba(255,255,255,0.98)',
-          boxShadow: checked
-            ? '0 10px 22px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.65) inset'
-            : '0 10px 22px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.45) inset',
-        }}
-      />
-    </button>
+        {/* specular layer */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 1,
+            borderRadius: R,
+            background:
+              'linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.02) 45%, rgba(0,0,0,0.10))',
+            pointerEvents: 'none',
+            mixBlendMode: 'screen',
+            opacity: checked ? 0.55 : 0.35,
+            transition: 'opacity 180ms ease',
+          }}
+        />
+
+        {/* knob */}
+        <div
+          aria-hidden
+          style={{
+            width: knob,
+            height: knob,
+            borderRadius: R,
+            position: 'absolute',
+            top: pad,
+            left: pad,
+            transform: `translateX(${checked ? travel : 0}px)`,
+            transition: 'transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease',
+            background: 'rgba(255,255,255,0.98)',
+            boxShadow: checked
+              ? '0 10px 22px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.65) inset'
+              : '0 10px 22px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.45) inset',
+          }}
+        />
+      </button>
+    </div>
   )
 }
 
