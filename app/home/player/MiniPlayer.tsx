@@ -961,45 +961,56 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
         </div>
 
         {/* Mobile compact mode + sizing vars */}
-        <style>{`
-          /* Defaults (desktop/tablet) */
-          div[data-af-miniplayer]{
-            --af-dock-h: ${DOCK_H}px;
-            --af-mp-btn: 36px;
-          }
+<style>{`
+  /* Defaults (desktop/tablet) */
+  div[data-af-miniplayer]{
+    --af-dock-h: ${DOCK_H}px;
+    --af-mp-btn: 36px;
+  }
 
-          @media (max-width: 520px) {
+  @media (max-width: 520px) {
     div[data-af-miniplayer]{
-      --af-dock-h: 64px;     /* shorter dock */
-      --af-mp-btn: 40px;     /* good tap targets */
+      --af-dock-h: 64px;
+      --af-mp-btn: 40px;
       padding-right: 10px;
     }
 
-    /* Hide right-side actions only (volume/share/retry/menu) */
+    /* Hard-hide actions so it cannot participate in grid layout */
     div[data-af-miniplayer] div[data-af-actions]{
       display: none !important;
+      visibility: hidden !important;
     }
 
-    /* Keep artwork + meta + transport */
+    /* Deterministic 1-row layout: [meta][transport] to the right of the artwork */
     div[data-af-miniplayer] div[data-af-controls]{
-  /* artwork is still the absolute block on the left; this grid is the “content” area to the right of it */
-      grid-template-columns: minmax(0, 1fr) auto; /* meta then transport */
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas: "meta transport";
+      align-items: center;
       gap: 10px;
-      padding-left: calc(var(--af-dock-h, 80px) + 12px); /* keep artwork offset */
+
+      /* keep artwork offset (art is absolute, so content must pad-left) */
+      padding-left: calc(var(--af-dock-h, ${DOCK_H}px) + 12px);
       padding-right: 0;
+
+      height: 100%;
     }
 
     div[data-af-miniplayer] div[data-af-meta]{
-      grid-column: 1;
+      grid-area: meta;
+      min-width: 0;
+      align-self: center;
     }
 
     div[data-af-miniplayer] div[data-af-transport]{
-      grid-column: 2;
+      grid-area: transport;
       justify-self: end;
+      align-self: center;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
       gap: 8px;
       flex-wrap: nowrap;
     }
-
 
     /* Make title more readable in compact mode */
     div[data-af-miniplayer] div[data-af-meta] > div:first-child{
@@ -1007,7 +1018,8 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
       line-height: 1.2 !important;
     }
   }
-        `}</style>
+`}</style>
+
 
         {/* Seek + shimmer */}
         <style>{`
