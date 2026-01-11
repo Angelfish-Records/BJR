@@ -218,8 +218,8 @@ export default function FullPlayer(props: {
 
         <div
           style={{
-            width: 210,
-            height: 210,
+            width: 334,
+            height: 334,
             borderRadius: 18,
             border: '1px solid rgba(255,255,255,0.14)',
             background: album?.artworkUrl
@@ -377,7 +377,7 @@ export default function FullPlayer(props: {
             </div>
 
             <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12}}>
-              {browseAlbums.map((a, idx) => {
+              {browseAlbums.map((a) => {
                 const isActive = album?.id === a.id
                 const disabled = !onSelectAlbum || isBrowsingAlbum || isActive
 
@@ -400,9 +400,8 @@ export default function FullPlayer(props: {
   onClick={() => onSelectAlbum?.(a.slug)}
   style={{
     display: 'grid',
-    gridTemplateColumns: '62px minmax(0, 1fr)',
-    gap: 12,
-    alignItems: 'center',
+    gridTemplateRows: 'auto auto',
+    gap: 10,
     padding: 12,
     borderRadius: 16,
     border: isActive ? '1px solid rgba(255,255,255,0.18)' : '1px solid rgba(255,255,255,0.10)',
@@ -419,50 +418,49 @@ export default function FullPlayer(props: {
       'transform 140ms ease, border-color 140ms ease, background 140ms ease, box-shadow 140ms ease',
   }}
 >
+  {/* full-width cover */}
+  <div
+    style={{
+      width: '100%',
+      aspectRatio: '1 / 1',
+      borderRadius: 14,
+      border: '1px solid rgba(255,255,255,0.14)',
+      background: a.coverUrl
+        ? `url(${a.coverUrl}) center/cover no-repeat`
+        : 'radial-gradient(60px 60px at 30% 20%, rgba(255,255,255,0.14), rgba(255,255,255,0.02))',
+      boxShadow: '0 18px 40px rgba(0,0,0,0.22)',
+      overflow: 'hidden',
+    }}
+  />
 
-                    <div
-                      style={{
-                        width: 62,
-                        height: 62,
-                        borderRadius: 14,
-                        border: '1px solid rgba(255,255,255,0.14)',
-                        background: a.coverUrl
-                          ? `url(${a.coverUrl}) center/cover no-repeat`
-                          : 'radial-gradient(40px 40px at 30% 20%, rgba(255,255,255,0.14), rgba(255,255,255,0.02))',
-                        boxShadow: '0 18px 40px rgba(0,0,0,0.22)',
-                        overflow: 'hidden',
-                      }}
-                    />
-                    <div style={{minWidth: 0}}>
-                      <div style={{display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10}}>
-                        <div
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 650,
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}
-                        >
-                          {a.title}
-                        </div>
-                        <div style={{fontSize: 11, opacity: 0.55}}>{idx + 1}</div>
-                      </div>
+  {/* title below */}
+  <div style={{minWidth: 0}}>
+    <div
+      style={{
+        fontSize: 13,
+        fontWeight: 650,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      }}
+    >
+      {a.title}
+    </div>
+    <div
+      style={{
+        marginTop: 4,
+        fontSize: 12,
+        opacity: 0.68,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      }}
+    >
+      {a.artist ?? ''}
+    </div>
+  </div>
+</button>
 
-                      <div
-                        style={{
-                          marginTop: 4,
-                          fontSize: 12,
-                          opacity: 0.68,
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                      >
-                        {a.artist ?? ''}
-                      </div>
-                    </div>
-                  </button>
                 )
               })}
             </div>

@@ -188,8 +188,8 @@ export function PatternRing(props: {
         overflow: 'hidden',
         pointerEvents: 'none',
         // ring mask
-        WebkitMaskImage: `radial-gradient(circle, transparent ${hole / 2}px, #000 ${hole / 2 + 1}px)`,
-        maskImage: `radial-gradient(circle, transparent ${hole / 2}px, #000 ${hole / 2 + 1}px)`,
+        WebkitMaskImage: `radial-gradient(circle, transparent ${hole / 2}px, #000 ${hole / 2 + 2}px)`,
+        maskImage: `radial-gradient(circle, transparent ${hole / 2}px, #000 ${hole / 2 + 2}px)`,
       }}
     >
       <VisualizerSnapshotCanvas
@@ -199,16 +199,19 @@ export function PatternRing(props: {
         style={{filter: 'saturate(1.05) contrast(1.05)'}}
       />
       <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: 0,
-          borderRadius: 999,
-          boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.18)',
-          opacity: 0.9,
-          pointerEvents: 'none',
-        }}
-      />
+  aria-hidden
+  style={{
+    position: 'absolute',
+    inset: 0,
+    borderRadius: 999,
+    pointerEvents: 'none',
+    background:
+      'radial-gradient(circle, rgba(0,0,0,0) 58%, rgba(0,0,0,0.18) 70%, rgba(0,0,0,0.55) 100%)',
+    mixBlendMode: 'multiply',
+    opacity: 1,
+  }}
+/>
+
     </div>
   )
 }
