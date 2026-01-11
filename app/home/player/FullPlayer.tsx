@@ -203,6 +203,18 @@ export default function FullPlayer(props: {
     queueArtist: p.queueContextArtist,
   })
 
+  const [selectedTrackId, setSelectedTrackId] = React.useState<string | null>(null)
+
+  const isCoarsePointer = (() => {
+    if (typeof window === 'undefined') return false
+    try {
+      return window.matchMedia?.('(pointer: coarse)').matches ?? false
+    } catch {
+      return 'ontouchstart' in window
+    }
+  })()
+
+
   return (
     <div
       style={{
@@ -300,6 +312,7 @@ export default function FullPlayer(props: {
         <div style={{borderTop: '1px solid rgba(255,255,255,0.10)', paddingTop: 14}}>
           {tracks.map((t, i) => {
             const isCur = p.current?.id === t.id
+            const isSelected = selectedTrackId === t.id
             const isPending = p.pendingTrackId === t.id
             const shimmerTitle = isPending || (isCur && p.status === 'loading')
 
@@ -310,6 +323,7 @@ export default function FullPlayer(props: {
                 onMouseEnter={() => prefetchTrack(t)}
                 onFocus={() => prefetchTrack(t)}
                 onClick={() => {
+                  // always keep queue context “armed” for this album
                   p.setQueue(tracks, {
                     contextId: album?.id,
                     artworkUrl: album?.artworkUrl ?? null,
@@ -317,10 +331,26 @@ export default function FullPlayer(props: {
                     contextTitle: album?.title ?? undefined,
                     contextArtist: album?.artist ?? undefined,
                   })
+
+                  // mobile (coarse pointer) = single tap plays
+                  if (isCoarsePointer) {
+                    p.setIntent('play')
+                    p.play(t)
+                    window.dispatchEvent(new Event('af:play-intent'))
+                    return
+                  }
+
+                  // desktop = single click selects only
+                  setSelectedTrackId(t.id)
+                }}
+                onDoubleClick={() => {
+                  // desktop double click = play
+                  if (isCoarsePointer) return
                   p.setIntent('play')
                   p.play(t)
                   window.dispatchEvent(new Event('af:play-intent'))
                 }}
+
                 onContextMenu={(e) => {
                   e.preventDefault()
                   void shareTrack(shareCtx, t)
@@ -334,8 +364,19 @@ export default function FullPlayer(props: {
                   textAlign: 'left',
                   padding: '12px 10px',
                   borderRadius: 14,
-                  border: isCur ? '1px solid rgba(255,255,255,0.16)' : '1px solid rgba(255,255,255,0.00)',
-                  background: isCur ? 'rgba(255,255,255,0.06)' : 'transparent',
+                  border:
+                    isCur
+                      ? '1px solid rgba(255,255,255,0.16)'
+                      : isSelected
+                        ? '1px solid rgba(255,255,255,0.12)'
+                        : '1px solid rgba(255,255,255,0.00)',
+
+                  background:
+                    isCur
+                      ? 'rgba(255,255,255,0.06)'
+                      : isSelected
+                        ? 'rgba(255,255,255,0.035)'
+                        : 'transparent',
                   color: 'rgba(255,255,255,0.92)',
                   cursor: 'pointer',
                   transform: 'translateZ(0)',
@@ -404,14 +445,14 @@ export default function FullPlayer(props: {
     gap: 10,
     padding: 12,
     borderRadius: 16,
-    border: isActive ? '1px solid rgba(255,255,255,0.18)' : '1px solid rgba(255,255,255,0.10)',
+    border: 'none',
     background: isActive
       ? 'color-mix(in srgb, var(--accent) 10%, rgba(255,255,255,0.05))'
       : 'rgba(255,255,255,0.03)',
     color: 'rgba(255,255,255,0.92)',
     cursor: disabled ? 'default' : 'pointer',
     opacity: disabled ? 0.72 : 1,
-    textAlign: 'left',
+    textAlign: 'center',
     boxShadow: disabled ? 'none' : '0 14px 34px rgba(0,0,0,0.18)',
     transform: 'translateZ(0)',
     transition:
