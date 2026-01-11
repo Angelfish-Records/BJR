@@ -699,7 +699,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
               zIndex: 1,
               height: '100%',
               display: 'grid',
-              gridTemplateColumns: 'auto minmax(0, 1fr) auto',
+              gridTemplateColumns: 'var(--af-mp-cols, auto minmax(0, 1fr) auto)',
               alignItems: 'center',
               gap: 12,
 
@@ -966,42 +966,38 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
   div[data-af-miniplayer]{
     --af-dock-h: ${DOCK_H}px;
     --af-mp-btn: 36px;
+    --af-mp-cols: auto minmax(0, 1fr) auto; /* transport | meta | actions */
   }
 
   @media (max-width: 520px) {
     div[data-af-miniplayer]{
       --af-dock-h: 64px;
       --af-mp-btn: 40px;
+
+      /* CRITICAL: collapse to two columns */
+      --af-mp-cols: minmax(0, 1fr) max-content; /* meta | transport */
+
       padding-right: 10px;
     }
 
-    /* Hard-hide actions so it cannot participate in layout at all */
+    /* Hard-hide actions so it cannot participate in layout */
     div[data-af-miniplayer] div[data-af-actions]{
       display: none !important;
       visibility: hidden !important;
     }
 
-    /* Mobile layout: EXACTLY two columns — meta + transport */
+    /* Controls grid: keep artwork offset + sane right padding */
     div[data-af-miniplayer] div[data-af-controls]{
-      display: grid;
-      align-items: center;
       column-gap: 10px;
-
-      /* Meta takes remainder, transport is intrinsic width */
-      grid-template-columns: 1fr max-content;
-      grid-template-rows: 1fr;
-
-      /* Offset for artwork (art is absolute) */
       padding-left: calc(var(--af-dock-h, ${DOCK_H}px) + 12px);
       padding-right: 12px;
-
       height: 100%;
     }
 
-    /* First child = transport */
+    /* Place children by index (your DOM order is: transport, meta, actions) */
     div[data-af-miniplayer] div[data-af-controls] > :nth-child(1){
+      /* transport -> column 2 */
       grid-column: 2;
-      grid-row: 1;
       justify-self: end;
       align-self: center;
 
@@ -1011,43 +1007,39 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
       gap: 8px;
       flex-wrap: nowrap;
 
-      /* transport must NEVER shrink */
       flex: 0 0 auto;
       min-width: max-content;
     }
 
-    /* Second child = meta (text) */
     div[data-af-miniplayer] div[data-af-controls] > :nth-child(2){
+      /* meta -> column 1 */
       grid-column: 1;
-      grid-row: 1;
       align-self: center;
 
-      /* THIS is the critical constraint */
       min-width: 0;
-      max-width: 100%;
       overflow: hidden;
     }
 
-    /* Third child = actions (belt + braces) */
     div[data-af-miniplayer] div[data-af-controls] > :nth-child(3){
+      /* actions -> removed */
       display: none !important;
       visibility: hidden !important;
     }
 
-    /* Ensure all text descendants can shrink */
+    /* Ensure ellipsis can actually trigger */
     div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) *{
       min-width: 0;
       max-width: 100%;
     }
 
-    /* Ellipsis on title + artist */
     div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) > div{
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      max-width: 100%;
     }
 
-    /* Smaller text in compact mode */
+    /* Slightly smaller text */
     div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) > div:first-child{
       font-size: 12px !important;
       line-height: 1.15 !important;
@@ -1058,6 +1050,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
     }
   }
 `}</style>
+
 
 
 
