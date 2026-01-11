@@ -270,7 +270,7 @@ export default function PortalArea(props: {
     display: grid;
     align-items: end;              /* bottom-align logo */
     justify-items: center;
-    padding: 6px 0;
+    padding: 6px 0 2px;            /* slightly tighter to content below */
   }
 
   .afTopBarLogoInner {
@@ -299,8 +299,8 @@ export default function PortalArea(props: {
     .afTopBar {
       grid-template-columns: 1fr;
       grid-template-rows: auto auto; /* logo / controls */
-      gap: 14px;
-      align-items: start;           /* keep mobile breathable */
+      gap: 10px;                      /* tighter */
+      align-items: end;               /* bottom-align overall */
       justify-items: stretch;
     }
 
@@ -308,15 +308,17 @@ export default function PortalArea(props: {
       grid-row: 1;
       grid-column: 1 / -1;
       width: 100%;
-      padding: 14px 0 6px;
+      padding: 10px 0 0;              /* reduce bottom padding so it hugs */
+      align-items: end;
+      justify-items: center;
     }
 
     .afTopBarControls {
       grid-row: 2;
       display: grid;
       grid-template-columns: auto 1fr; /* buttons / actions */
-      align-items: center;
-      gap: 12px;
+      align-items: end;                /* bottom-align within the row */
+      gap: 10px;                       /* slightly tighter */
       width: 100%;
       min-width: 0;
     }
@@ -324,12 +326,14 @@ export default function PortalArea(props: {
     .afTopBarLeft {
       grid-column: 1;
       justify-self: start;
+      align-items: flex-end;           /* keep buttons low */
     }
 
     .afTopBarRight {
       grid-column: 2;
       justify-self: end;
       width: 100%;
+      align-items: flex-end;           /* keep ActivationGate low */
     }
 
     .afTopBarRightInner {

@@ -465,7 +465,16 @@ export default function ActivationGate(props: Props) {
   const toggleOn = isActive || phase === 'code' || isSending || isVerifying
   
     return (
-    <div style={{position: 'relative', display: 'grid', gap: 12, justifyItems: 'center'}}>
+    <div
+  style={{
+    position: 'relative',
+    display: 'grid',
+    gap: 12,
+    justifyItems: 'center',
+    alignContent: 'end',   // ⬅️ THIS is the key line
+  }}
+>
+
       <style>{`
         @keyframes boxDown {
           from { opacity: 0; transform: translateY(-10px); }
