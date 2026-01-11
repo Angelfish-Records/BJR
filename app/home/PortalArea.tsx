@@ -187,23 +187,24 @@ export default function PortalArea(props: {
 }}
   >
     <style>{`
-  /* ---------- Desktop/tablet: 3-lane bar (left / logo / right) ---------- */
+  /* ---------- Desktop/tablet: single-row, 3 lanes ---------- */
   .afTopBar {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
-    grid-template-rows: auto;
+    grid-template-rows: 1fr; /* single row */
     align-items: center;
     gap: 12px;
     min-width: 0;
   }
 
-  /* Key trick: make the wrapper disappear on desktop so Left/Right are grid children */
+  /* Wrapper disappears on desktop so left/right are true grid children */
   .afTopBarControls {
     display: contents;
   }
 
   .afTopBarLeft {
     grid-column: 1;
+    grid-row: 1;
     min-width: 0;
     display: flex;
     align-items: center;
@@ -213,6 +214,7 @@ export default function PortalArea(props: {
 
   .afTopBarLogo {
     grid-column: 2;
+    grid-row: 1;
     min-width: 0;
     display: grid;
     place-items: center;
@@ -227,6 +229,7 @@ export default function PortalArea(props: {
 
   .afTopBarRight {
     grid-column: 3;
+    grid-row: 1;
     min-width: 0;
     display: flex;
     align-items: center;
@@ -257,7 +260,7 @@ export default function PortalArea(props: {
 
     .afTopBarControls {
       grid-row: 2;
-      display: grid;                 /* wrapper becomes real on mobile */
+      display: grid;
       grid-template-columns: auto 1fr; /* buttons / actions */
       align-items: center;
       gap: 12px;
