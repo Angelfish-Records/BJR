@@ -981,46 +981,69 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
       visibility: hidden !important;
     }
 
-    /* Deterministic 1-row layout: [meta][transport] to the right of the artwork */
+    /* Deterministic 1-row layout: meta gets remaining space, transport is max-content */
     div[data-af-miniplayer] div[data-af-controls]{
-      grid-template-columns: minmax(0, 1fr) auto;
-      grid-template-areas: "meta transport";
+      display: grid;
       align-items: center;
       gap: 10px;
 
+      grid-template-columns: 1fr max-content;
+      grid-template-areas: "meta transport";
+
       /* keep artwork offset (art is absolute, so content must pad-left) */
       padding-left: calc(var(--af-dock-h, ${DOCK_H}px) + 12px);
-      padding-right: 0;
+      padding-right: 12px;
 
       height: 100%;
-    }
-
-    div[data-af-miniplayer] div[data-af-meta]{
-      grid-area: meta;
-      min-width: 0;
-      align-self: center;
-      /* critical: allow the grid item to actually shrink */
-      overflow: hidden;
     }
 
     div[data-af-miniplayer] div[data-af-transport]{
       grid-area: transport;
       justify-self: end;
       align-self: center;
+
       display: flex;
       align-items: center;
       justify-content: flex-end;
       gap: 8px;
       flex-wrap: nowrap;
+
+      /* critical: transport should not shrink */
+      flex: 0 0 auto;
+      min-width: max-content;
     }
 
-    /* Make title more readable in compact mode */
+    div[data-af-miniplayer] div[data-af-meta]{
+      grid-area: meta;
+      align-self: center;
+
+      /* critical: allow shrink + clip so ellipsis can work */
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
+    }
+
+    /* Force ellipsis on both lines inside meta */
+    div[data-af-miniplayer] div[data-af-meta] > div{
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Make text slightly smaller in compact mode */
     div[data-af-miniplayer] div[data-af-meta] > div:first-child{
-      font-size: 12px !important;
-      line-height: 1.2 !important;
+      font-size: 13px !important;
+      line-height: 1.15 !important;
+    }
+    div[data-af-miniplayer] div[data-af-meta] > div:nth-child(2){
+      font-size: 11px !important;
+      line-height: 1.15 !important;
     }
   }
 `}</style>
+
 
 
         {/* Seek + shimmer */}
