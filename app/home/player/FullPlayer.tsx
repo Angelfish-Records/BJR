@@ -313,14 +313,17 @@ export default function FullPlayer(props: {
     const isSelected = selectedTrackId === t.id
     const isPending = p.pendingTrackId === t.id
     const shimmerTitle = isPending || (isCur && p.status === 'loading')
+    const isNowPlaying = isCur && (p.status === 'playing' || p.status === 'loading' || p.intent === 'play')
 
-    const titleColor = isCur
+
+    const titleColor = isNowPlaying
       ? 'color-mix(in srgb, var(--accent) 72%, rgba(255,255,255,0.92))'
       : 'rgba(255,255,255,0.92)'
 
-    const subColor = isCur
+    const subColor = isNowPlaying
       ? 'color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.70))'
       : 'rgba(255,255,255,0.70)'
+
 
     const baseBg = isSelected ? 'rgba(255,255,255,0.14)' : 'transparent'
     const restBg = isCur && !isSelected ? 'transparent' : baseBg
@@ -408,8 +411,21 @@ export default function FullPlayer(props: {
             color: subColor,
           }}
         >
-          {isCur ? <NowPlayingPip /> : <span style={{width: 16, display: 'inline-block'}} />}
-          <span>{i + 1}</span>
+          {isNowPlaying ? (
+            <NowPlayingPip />
+          ) : (
+            <span
+              style={{
+                width: 16,
+                display: 'inline-grid',
+                placeItems: 'center',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {i + 1}
+            </span>
+          )}
+
         </div>
 
         <div style={{minWidth: 0}}>
