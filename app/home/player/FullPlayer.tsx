@@ -385,7 +385,7 @@ export default function FullPlayer(props: {
           alignItems: 'center',
           gap: 12,
           textAlign: 'left',
-          padding: '12px 10px',
+          padding: '10px 10px',
           borderRadius: 14,
 
           // Spotify-like: no borders
@@ -431,23 +431,29 @@ export default function FullPlayer(props: {
 
         </div>
 
-        <div style={{minWidth: 0}}>
-          <div
-            className={shimmerTitle ? 'afShimmerText' : undefined}
-            data-reason={isCur && p.status === 'loading' ? p.loadingReason ?? '' : ''}
-            style={{
-              fontSize: 13,
-              opacity: 1,
-              color: titleColor,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              transition: 'opacity 160ms ease, color 160ms ease',
-            }}
-          >
-            {t.title ?? t.id}
-          </div>
-        </div>
+        <div className="afRowMid" style={{minWidth: 0}}>
+  <div
+    className={shimmerTitle ? 'afShimmerText' : undefined}
+    data-reason={isCur && p.status === 'loading' ? p.loadingReason ?? '' : ''}
+    style={{
+      fontSize: 13,
+      opacity: 1,
+      color: titleColor,
+      whiteSpace: 'nowrap',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      transition: 'opacity 160ms ease, color 160ms ease',
+    }}
+  >
+    {t.title ?? t.id}
+  </div>
+
+  {/* mobile-only duration line */}
+  <div className="afRowDurUnder" aria-hidden="true">
+    {renderDur(t)}
+  </div>
+</div>
+
               <div
   style={{
     justifySelf: 'end',
@@ -483,7 +489,7 @@ export default function FullPlayer(props: {
     <ShareIcon />
   </button>
 
-  <div style={{fontSize: 12, opacity: 0.85, color: subColor}}>{renderDur(t)}</div>
+  <div className="afRowDurRight" style={{fontSize: 12, opacity: 0.85, color: subColor}}>{renderDur(t)}</div>
 </div>
 
       </button>
@@ -669,11 +675,38 @@ export default function FullPlayer(props: {
   transition: opacity 120ms ease, transform 120ms ease;
 }
 
-.afTrackRow:hover .afRowShare,
-.afTrackRow:focus-within .afRowShare{
+.afTrackRow:hover .afRowShare{
   opacity: 0.95;
   pointer-events: auto;
   transform: translateX(0);
+}
+
+/* Desktop: duration stays on the right, hide the under-title duration */
+.afRowDurUnder{
+  display: none;
+  margin-top: 4px;
+  font-size: 12px;
+  opacity: 0.65;
+  color: rgba(255,255,255,0.70);
+  line-height: 1.1;
+}
+
+/* Mobile: duration goes under title, share always visible on the right */
+@media (max-width: 520px){
+  .afRowDurUnder{
+    display: block;
+  }
+
+  .afRowDurRight{
+    display: none;
+  }
+
+  /* no hover on mobile, so keep share visible */
+  .afTrackRow .afRowShare{
+    opacity: 0.95;
+    pointer-events: auto;
+    transform: none;
+  }
 }
 
 
