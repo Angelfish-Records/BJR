@@ -187,36 +187,10 @@ export default function PortalArea(props: {
 }}
   >
     <style>{`
-      /* Desktop/tablet: true centered logo */
-      .afTopBar {
-        display: grid;
-        grid-template-columns: 1fr auto 1fr;
-        align-items: center;
-        gap: 12px;
-        min-width: 0;
-      }
-
-      .afTopBarLeft,
-      .afTopBarRight {
-        min-width: 0;
-        display: flex;
-        align-items: center;
-      }
-
-      .afTopBarLeft { justify-content: flex-start; gap: 10px; }
-      .afTopBarRight { justify-content: flex-end; }
-
-      /* Mobile: logo gets its own row, controls sit below */
-      @media (max-width: 720px) {
-        .afTopBar {
-          grid-template-columns: 1fr;
-          grid-template-rows: auto auto;
-          gap: 10px;
-        }
-
-         .afTopBar {
+  /* ---------- Base layout (desktop/tablet) ---------- */
+  .afTopBar {
     display: grid;
-    grid-template-columns: 1fr auto 1fr;
+    grid-template-columns: 1fr auto 1fr; /* left lane, logo lane, right lane */
     align-items: center;
     gap: 12px;
     min-width: 0;
@@ -232,13 +206,13 @@ export default function PortalArea(props: {
   .afTopBarLeft { justify-content: flex-start; gap: 10px; }
   .afTopBarRight { justify-content: flex-end; }
 
-  /* Make the logo cell always occupy a real "lane" */
+  /* Logo lane should behave like a real lane (not shrink-wrap) */
   .afTopBarLogo {
     min-width: 0;
     width: 100%;
     display: grid;
     place-items: center;
-    padding: 6px 0; /* breathing room */
+    padding: 6px 0;
   }
 
   .afTopBarLogoInner {
@@ -248,18 +222,35 @@ export default function PortalArea(props: {
     place-items: center;
   }
 
+  /* ---------- Mobile ---------- */
   @media (max-width: 720px) {
     .afTopBar {
       grid-template-columns: 1fr;
       grid-template-rows: auto auto;
       gap: 10px;
+      justify-items: stretch; /* key: children fill the 1fr track */
     }
 
-    .afTopBarLogo { grid-row: 1; }
-    .afTopBarLeft { grid-row: 2; justify-self: start; }
-    .afTopBarRight { grid-row: 2; justify-self: end; }
+    .afTopBarLogo {
+      grid-row: 1;
+      grid-column: 1 / -1;
+      justify-self: stretch; /* key: override any centering/shrink rules */
+      width: 100%;
+      padding: 10px 0; /* a bit more breathing room on mobile */
+    }
+
+    .afTopBarLeft {
+      grid-row: 2;
+      justify-self: start;
+    }
+
+    .afTopBarRight {
+      grid-row: 2;
+      justify-self: end;
+    }
   }
-    `}</style>
+`}</style>
+
 
     <div className="afTopBar">
       {/* Left: circular panel buttons */}
