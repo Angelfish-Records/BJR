@@ -310,105 +310,132 @@ export default function FullPlayer(props: {
 
       <div style={{marginTop: 18}}>
         <div style={{borderTop: '1px solid rgba(255,255,255,0.10)', paddingTop: 14}}>
-          {tracks.map((t, i) => {
-            const isCur = p.current?.id === t.id
-            const isSelected = selectedTrackId === t.id
-            const isPending = p.pendingTrackId === t.id
-            const shimmerTitle = isPending || (isCur && p.status === 'loading')
+  {tracks.map((t, i) => {
+    const isCur = p.current?.id === t.id
+    const isSelected = selectedTrackId === t.id
+    const isPending = p.pendingTrackId === t.id
+    const shimmerTitle = isPending || (isCur && p.status === 'loading')
 
-            return (
-              <button
-                key={t.id}
-                type="button"
-                onMouseEnter={() => prefetchTrack(t)}
-                onFocus={() => prefetchTrack(t)}
-                onClick={() => {
-                  // always keep queue context “armed” for this album
-                  p.setQueue(tracks, {
-                    contextId: album?.id,
-                    artworkUrl: album?.artworkUrl ?? null,
-                    contextSlug: props.albumSlug,
-                    contextTitle: album?.title ?? undefined,
-                    contextArtist: album?.artist ?? undefined,
-                  })
+    const titleColor = isCur
+      ? 'color-mix(in srgb, var(--accent) 72%, rgba(255,255,255,0.92))'
+      : 'rgba(255,255,255,0.92)'
 
-                  // mobile (coarse pointer) = single tap plays
-                  if (isCoarsePointer) {
-                    p.setIntent('play')
-                    p.play(t)
-                    window.dispatchEvent(new Event('af:play-intent'))
-                    return
-                  }
+    const subColor = isCur
+      ? 'color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.70))'
+      : 'rgba(255,255,255,0.70)'
 
-                  // desktop = single click selects only
-                  setSelectedTrackId(t.id)
-                }}
-                onDoubleClick={() => {
-                  // desktop double click = play
-                  if (isCoarsePointer) return
-                  p.setIntent('play')
-                  p.play(t)
-                  window.dispatchEvent(new Event('af:play-intent'))
-                }}
+    const baseBg = isSelected ? 'rgba(255,255,255,0.14)' : 'transparent'
 
-                onContextMenu={(e) => {
-                  e.preventDefault()
-                  void shareTrack(shareCtx, t)
-                }}
-                style={{
-                  width: '100%',
-                  display: 'grid',
-                  gridTemplateColumns: '34px minmax(0, 1fr) auto',
-                  alignItems: 'center',
-                  gap: 12,
-                  textAlign: 'left',
-                  padding: '12px 10px',
-                  borderRadius: 14,
-                  border:
-                    isCur
-                      ? '1px solid rgba(255,255,255,0.16)'
-                      : isSelected
-                        ? '1px solid rgba(255,255,255,0.12)'
-                        : '1px solid rgba(255,255,255,0.00)',
+    return (
+      <button
+        key={t.id}
+        type="button"
+        onMouseEnter={(e) => {
+          prefetchTrack(t)
+          // Hover styling (desktop only). Don't override selected/current.
+          if (!isCoarsePointer && !isSelected && !isCur) {
+            e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
+          }
+        }}
+        onMouseLeave={(e) => {
+          // Restore deterministic state bg
+          e.currentTarget.style.background = baseBg
+        }}
+        onFocus={() => prefetchTrack(t)}
+        onClick={() => {
+          // always keep queue context “armed” for this album
+          p.setQueue(tracks, {
+            contextId: album?.id,
+            artworkUrl: album?.artworkUrl ?? null,
+            contextSlug: props.albumSlug,
+            contextTitle: album?.title ?? undefined,
+            contextArtist: album?.artist ?? undefined,
+          })
 
-                  background:
-                    isCur
-                      ? 'rgba(255,255,255,0.06)'
-                      : isSelected
-                        ? 'rgba(255,255,255,0.035)'
-                        : 'transparent',
-                  color: 'rgba(255,255,255,0.92)',
-                  cursor: 'pointer',
-                  transform: 'translateZ(0)',
-                }}
-              >
-                <div style={{fontSize: 12, opacity: 0.7, display: 'flex', alignItems: 'center', gap: 6}}>
-                  {isCur ? <NowPlayingPip /> : <span style={{width: 16, display: 'inline-block'}} />}
-                  <span>{i + 1}</span>
-                </div>
+          // mobile (coarse pointer) = single tap plays
+          if (isCoarsePointer) {
+            p.setIntent('play')
+            p.play(t)
+            window.dispatchEvent(new Event('af:play-intent'))
+            return
+          }
 
-                <div style={{minWidth: 0}}>
-                  <div
-                    className={shimmerTitle ? 'afShimmerText' : undefined}
-                    data-reason={isCur && p.status === 'loading' ? p.loadingReason ?? '' : ''}
-                    style={{
-                      fontSize: 13,
-                      opacity: 0.92,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      transition: 'opacity 160ms ease',
-                    }}
-                  >
-                    {t.title ?? t.id}
-                  </div>
-                </div>
+          // desktop = single click selects only
+          setSelectedTrackId(t.id)
+        }}
+        onDoubleClick={() => {
+          // desktop double click = play
+          if (isCoarsePointer) return
+          p.setIntent('play')
+          p.play(t)
+          window.dispatchEvent(new Event('af:play-intent'))
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          void shareTrack(shareCtx, t)
+        }}
+        style={{
+          width: '100%',
+          display: 'grid',
+          gridTemplateColumns: '34px minmax(0, 1fr) auto',
+          alignItems: 'center',
+          gap: 12,
+          textAlign: 'left',
+          padding: '12px 10px',
+          borderRadius: 14,
 
-                <div style={{fontSize: 12, opacity: 0.7}}>{renderDur(t)}</div>
-              </button>
-            )
-          })}
+          // Spotify-like: no borders
+          border: '1px solid rgba(255,255,255,0.00)',
+
+          // State background:
+          // - current: transparent
+          // - selected: solid-ish grey
+          // - hover: applied transiently via mouse enter
+          background: isCur ? 'transparent' : baseBg,
+
+          cursor: 'pointer',
+          transform: 'translateZ(0)',
+          transition: 'background 120ms ease',
+        }}
+      >
+        <div
+          style={{
+            fontSize: 12,
+            opacity: 0.9,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            color: subColor,
+          }}
+        >
+          {isCur ? <NowPlayingPip /> : <span style={{width: 16, display: 'inline-block'}} />}
+          <span>{i + 1}</span>
         </div>
+
+        <div style={{minWidth: 0}}>
+          <div
+            className={shimmerTitle ? 'afShimmerText' : undefined}
+            data-reason={isCur && p.status === 'loading' ? p.loadingReason ?? '' : ''}
+            style={{
+              fontSize: 13,
+              opacity: 1,
+              color: titleColor,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              transition: 'opacity 160ms ease, color 160ms ease',
+            }}
+          >
+            {t.title ?? t.id}
+          </div>
+        </div>
+
+        <div style={{fontSize: 12, opacity: 0.85, color: subColor}}>{renderDur(t)}</div>
+      </button>
+    )
+  })}
+</div>
+
 
         {browseAlbums.length ? (
           <div style={{marginTop: 18}}>
