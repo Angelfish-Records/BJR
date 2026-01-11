@@ -410,7 +410,7 @@ export default function FullPlayer(props: {
             alignItems: 'center',
             gap: 6,
             color: subColor,
-            paddingLeft: 6,
+            paddingLeft: 12,
             justifyContent: 'flex-start',
           }}
         >
@@ -453,7 +453,8 @@ export default function FullPlayer(props: {
     justifySelf: 'end',
     display: 'flex',
     alignItems: 'center',
-    gap: 10,
+    // more breathing room for the duration by pushing the share icon left
+    gap: 14,
     color: subColor,
   }}
 >
@@ -468,16 +469,15 @@ export default function FullPlayer(props: {
       void shareTrack(shareCtx, t)
     }}
     style={{
-      width: 30,
-      height: 30,
+      border: 0,
+      background: 'transparent',
+      padding: 6, // keeps it tappable without forcing row height
       borderRadius: 999,
-      border: '1px solid rgba(255,255,255,0.14)',
-      background: 'rgba(255,255,255,0.06)',
-      color: 'rgba(255,255,255,0.92)',
+      color: 'rgba(255,255,255,0.80)',
       display: 'grid',
       placeItems: 'center',
       cursor: 'pointer',
-      transform: 'translateZ(0)',
+      lineHeight: 0,
     }}
   >
     <ShareIcon />
@@ -485,6 +485,7 @@ export default function FullPlayer(props: {
 
   <div style={{fontSize: 12, opacity: 0.85, color: subColor}}>{renderDur(t)}</div>
 </div>
+
       </button>
     )
   })}
