@@ -514,12 +514,13 @@ export default function ActivationGate(props: Props) {
   style={{
     display: 'flex',
     alignItems: 'center',
-    gap: 12,
+    gap: '0 12px',   // ⬅️ CSS shorthand: row-gap column-gap
     width: '100%',
     minWidth: 0,
-    justifyContent: 'flex-end', // was center
+    justifyContent: 'flex-end',
   }}
 >
+
 
   <div style={{flex: '1 1 auto', minWidth: 0, maxWidth: EMAIL_W}}>
     {!isActive ? (
