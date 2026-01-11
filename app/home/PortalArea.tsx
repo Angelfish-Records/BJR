@@ -322,7 +322,8 @@ export default function PortalArea(props: {
       display: grid;
       grid-template-columns: auto 1fr;
       align-items: stretch;    /* ✅ allow both columns to stretch */
-      gap: 10px;
+      column-gap: 10px;
+      row-gap: 0px;
       width: 100%;
       min-width: 0;
     }
