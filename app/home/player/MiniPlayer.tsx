@@ -117,16 +117,6 @@ function ShareIcon() {
   )
 }
 
-function MenuIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M5 7h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M5 17h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  )
-}
-
 function RetryIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -771,20 +761,33 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
 
             <div data-af-meta style={{minWidth: 0}}>
               <div
-                className={isShimmering ? 'afShimmerText' : undefined}
-                data-reason={p.loadingReason ?? ''}
-                style={{
-                  fontSize: 13,
-                  opacity: 0.92,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  lineHeight: 1.25,
-                  transition: 'opacity 160ms ease',
-                }}
-              >
-                {title}
-              </div>
+  onClick={onExpand}
+  onKeyDown={(e) => {
+    if (!onExpand) return
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onExpand()
+    }
+  }}
+  role={onExpand ? 'button' : undefined}
+  tabIndex={onExpand ? 0 : undefined}
+  aria-label={onExpand ? 'Open player' : undefined}
+  className={isShimmering ? 'afShimmerText' : undefined}
+  data-reason={p.loadingReason ?? ''}
+  style={{
+    fontSize: 13,
+    opacity: 0.92,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    lineHeight: 1.25,
+    transition: 'opacity 160ms ease',
+    cursor: onExpand ? 'pointer' : 'default',
+  }}
+>
+  {title}
+</div>
+
               <div
                 style={{
                   fontSize: 12,
@@ -953,12 +956,6 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
                   <RetryIcon />
                 </IconBtn>
               ) : null}
-
-              {onExpand ? (
-                <IconBtn label="Open player" title="Open player" onClick={onExpand}>
-                  <MenuIcon />
-                </IconBtn>
-              ) : null}
             </div>
           </div>
         </div>
@@ -985,18 +982,24 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
 
     /* Keep artwork + meta + transport */
     div[data-af-miniplayer] div[data-af-controls]{
-      grid-template-columns: auto minmax(0, 1fr) auto;
+  /* artwork is still the absolute block on the left; this grid is the “content” area to the right of it */
+      grid-template-columns: minmax(0, 1fr) auto; /* meta then transport */
       gap: 10px;
-      padding-left: calc(var(--af-dock-h, ${DOCK_H}px) + 12px); /* keep artwork offset */
+      padding-left: calc(var(--af-dock-h, 80px) + 12px); /* keep artwork offset */
       padding-right: 0;
     }
 
-    /* Ensure transport never wraps/squeezes weirdly */
+    div[data-af-miniplayer] div[data-af-meta]{
+      grid-column: 1;
+    }
+
     div[data-af-miniplayer] div[data-af-transport]{
-      gap: 8px;
+      grid-column: 2;
       justify-self: end;
+      gap: 8px;
       flex-wrap: nowrap;
     }
+
 
     /* Make title more readable in compact mode */
     div[data-af-miniplayer] div[data-af-meta] > div:first-child{
