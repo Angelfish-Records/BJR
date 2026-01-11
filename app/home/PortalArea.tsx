@@ -181,7 +181,6 @@ export default function PortalArea(props: {
         width: '100%',
         borderRadius: 0,
         border: 'none',
-        borderBottom: '1px solid rgba(255,255,255,0.10)',
         background: 'transparent',
         padding: 12,
         minWidth: 0,
@@ -215,25 +214,51 @@ export default function PortalArea(props: {
           gap: 10px;
         }
 
-        .afTopBarLogo {
-  grid-row: 1;
-  justify-self: center;
-  width: 100%;
-  display: grid;
-  place-items: center;
-}
+         .afTopBar {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
 
+  .afTopBarLeft,
+  .afTopBarRight {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+  }
 
-        .afTopBarLeft {
-          grid-row: 2;
-          justify-self: start;
-        }
+  .afTopBarLeft { justify-content: flex-start; gap: 10px; }
+  .afTopBarRight { justify-content: flex-end; }
 
-        .afTopBarRight {
-          grid-row: 2;
-          justify-self: end;
-        }
-      }
+  /* Make the logo cell always occupy a real "lane" */
+  .afTopBarLogo {
+    min-width: 0;
+    width: 100%;
+    display: grid;
+    place-items: center;
+    padding: 6px 0; /* breathing room */
+  }
+
+  .afTopBarLogoInner {
+    margin-inline: auto;
+    width: fit-content;
+    display: grid;
+    place-items: center;
+  }
+
+  @media (max-width: 720px) {
+    .afTopBar {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto;
+      gap: 10px;
+    }
+
+    .afTopBarLogo { grid-row: 1; }
+    .afTopBarLeft { grid-row: 2; justify-self: start; }
+    .afTopBarRight { grid-row: 2; justify-self: end; }
+  }
     `}</style>
 
     <div className="afTopBar">
@@ -300,50 +325,47 @@ export default function PortalArea(props: {
       </div>
 
      {/* Center: logo (image if set, else fallback badge) */}
-        <div className="afTopBarLogo" style={{display: 'grid', placeItems: 'center', minWidth: 0}}>
-          {props.topLogoUrl ? (
-            <Image
-          src={props.topLogoUrl}
-          alt="Logo"
-          height={Math.max(16, Math.min(120, props.topLogoHeight ?? 38))}
-          width={Math.round(
-            (Math.max(16, Math.min(120, props.topLogoHeight ?? 38)) * 3)
-          )} // arbitrary but safe aspect buffer
-          priority={false}
-          sizes="(max-width: 720px) 120px, 160px"
-          style={{
-            height: Math.max(16, Math.min(120, props.topLogoHeight ?? 38)),
-            width: 'auto',
-            maxWidth: '100%',
-            objectFit: 'contain',
-            opacity: 0.94,
-            userSelect: 'none',
-            filter: 'drop-shadow(0 10px 22px rgba(0,0,0,0.28))',
-          }}
-        />
-
-  ) : (
-    <div
-      aria-label="AF"
-      title="AF"
-      style={{
-        width: 38,
-        height: 38,
-        borderRadius: 999,
-        border: '1px solid rgba(255,255,255,0.14)',
-        background: 'rgba(0,0,0,0.22)',
-        display: 'grid',
-        placeItems: 'center',
-        fontSize: 13,
-        fontWeight: 700,
-        letterSpacing: 0.5,
-        opacity: 0.92,
-        userSelect: 'none',
-      }}
-    >
-      AF
-    </div>
-  )}
+        <div className="afTopBarLogo">
+  <div className="afTopBarLogoInner">
+    {props.topLogoUrl ? (
+      <Image
+        src={props.topLogoUrl}
+        alt="Logo"
+        height={Math.max(16, Math.min(120, props.topLogoHeight ?? 38))}
+        width={Math.max(16, Math.min(120, props.topLogoHeight ?? 38))} // stop lying about width
+        sizes="(max-width: 720px) 120px, 160px"
+        style={{
+          height: Math.max(16, Math.min(120, props.topLogoHeight ?? 38)),
+          width: 'auto',
+          objectFit: 'contain',
+          opacity: 0.94,
+          userSelect: 'none',
+          filter: 'drop-shadow(0 10px 22px rgba(0,0,0,0.28))',
+        }}
+      />
+    ) : (
+      <div
+        aria-label="AF"
+        title="AF"
+        style={{
+          width: 38,
+          height: 38,
+          borderRadius: 999,
+          border: '1px solid rgba(255,255,255,0.14)',
+          background: 'rgba(0,0,0,0.22)',
+          display: 'grid',
+          placeItems: 'center',
+          fontSize: 13,
+          fontWeight: 700,
+          letterSpacing: 0.5,
+          opacity: 0.92,
+          userSelect: 'none',
+        }}
+      >
+        AF
+      </div>
+    )}
+  </div>
 </div>
 
 
