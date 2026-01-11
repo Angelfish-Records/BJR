@@ -316,11 +316,11 @@ export default function FullPlayer(props: {
     const isNowPlaying = isCur && (p.status === 'playing' || p.status === 'loading' || p.intent === 'play')
 
 
-    const titleColor = isNowPlaying
+    const titleColor = isCur
       ? 'color-mix(in srgb, var(--accent) 72%, rgba(255,255,255,0.92))'
       : 'rgba(255,255,255,0.92)'
 
-    const subColor = isNowPlaying
+    const subColor = isCur
       ? 'color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.70))'
       : 'rgba(255,255,255,0.70)'
 
@@ -333,6 +333,7 @@ export default function FullPlayer(props: {
       <button
         key={t.id}
         type="button"
+        className="afTrackRow"
         onMouseEnter={(e) => {
           prefetchTrack(t)
           // Hover styling (desktop only). Don't override selected/current.
@@ -380,7 +381,7 @@ export default function FullPlayer(props: {
         style={{
           width: '100%',
           display: 'grid',
-          gridTemplateColumns: '34px minmax(0, 1fr) auto',
+          gridTemplateColumns: '44px minmax(0, 1fr) auto',
           alignItems: 'center',
           gap: 12,
           textAlign: 'left',
@@ -409,6 +410,8 @@ export default function FullPlayer(props: {
             alignItems: 'center',
             gap: 6,
             color: subColor,
+            paddingLeft: 6,
+            justifyContent: 'flex-start',
           }}
         >
           {isNowPlaying ? (
@@ -445,8 +448,43 @@ export default function FullPlayer(props: {
             {t.title ?? t.id}
           </div>
         </div>
+              <div
+  style={{
+    justifySelf: 'end',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    color: subColor,
+  }}
+>
+  <button
+    type="button"
+    className="afRowShare"
+    aria-label="Share track"
+    title="Share"
+    onClick={(e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      void shareTrack(shareCtx, t)
+    }}
+    style={{
+      width: 30,
+      height: 30,
+      borderRadius: 999,
+      border: '1px solid rgba(255,255,255,0.14)',
+      background: 'rgba(255,255,255,0.06)',
+      color: 'rgba(255,255,255,0.92)',
+      display: 'grid',
+      placeItems: 'center',
+      cursor: 'pointer',
+      transform: 'translateZ(0)',
+    }}
+  >
+    <ShareIcon />
+  </button>
 
-        <div style={{fontSize: 12, opacity: 0.85, color: subColor}}>{renderDur(t)}</div>
+  <div style={{fontSize: 12, opacity: 0.85, color: subColor}}>{renderDur(t)}</div>
+</div>
       </button>
     )
   })}
@@ -623,6 +661,20 @@ export default function FullPlayer(props: {
         @media (prefers-reduced-motion: reduce){
           .afEq i{ animation: none; }
         }
+          .afTrackRow .afRowShare{
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(2px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.afTrackRow:hover .afRowShare,
+.afTrackRow:focus-within .afRowShare{
+  opacity: 0.95;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
 
       `}</style>
     </div>
