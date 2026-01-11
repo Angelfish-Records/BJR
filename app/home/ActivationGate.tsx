@@ -463,13 +463,15 @@ export default function ActivationGate(props: Props) {
     (pendingPurchase || checkoutSuccess ? 'Sign in to access your purchased content.' : null)
   
   const toggleOn = isActive || phase === 'code' || isSending || isVerifying
+  const showSecondRow = !isActive && shouldShowBox
+
   
     return (
     <div
   style={{
     position: 'relative',
     display: 'grid',
-    gap: 12,
+    gap: showSecondRow ? 12 : 0,
     justifyItems: 'center',
     alignContent: 'end',   // ⬅️ THIS is the key line
   }}
@@ -502,7 +504,7 @@ export default function ActivationGate(props: Props) {
     position: 'relative',
     zIndex: 41,
     display: 'grid',
-    gap: 12,
+    gap: showSecondRow ? 12 : 0,
     justifyItems: 'stretch', // don't center the child; let it fill and be positioned by inner layout
     alignContent: 'end',     // pack contents to bottom of this wrapper
     width: '100%',
