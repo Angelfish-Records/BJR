@@ -52,19 +52,11 @@ function looksLikeNoAccountError(err: unknown): boolean {
 
 function PatternPillBorder(props: {
   radius?: number
-  thickness?: number
   opacity?: number
   seed?: number
-  /** interior fill to “cut out” the ring */
-  innerFill?: string
 }) {
-  const {
-    radius = 999,
-    thickness = 2,
-    opacity = 0.55,
-    seed = 888,
-    innerFill = 'rgba(255,255,255,0.10)',
-  } = props
+  const {radius = 999, opacity = 0.45, seed = 888} = props
+
 
   return (
     <div
@@ -77,24 +69,13 @@ function PatternPillBorder(props: {
         pointerEvents: 'none',
       }}
     >
-      {/* full-bleed pattern */}
+      {/* Pattern across the whole pill; we will mask the centre in Toggle */}
       <VisualizerSnapshotCanvas
         opacity={opacity}
         fps={12}
         sourceRect={{mode: 'random', seed, scale: 0.6}}
         style={{filter: 'contrast(1.05) saturate(1.05)'}}
         active
-      />
-
-      {/* cut out the middle (leaves a “ring” border) */}
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: thickness,
-          borderRadius: radius,
-          background: innerFill,
-        }}
       />
 
       {/* crisp outline */}
@@ -124,6 +105,9 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
   const knob = h - pad * 2
   const travel = w - pad * 2 - knob
 
+  const BORDER = 2
+  const BASE_BG = 'rgba(255,255,255,0.10)'
+
   return (
     <button
       type="button"
@@ -136,7 +120,7 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
         height: h,
         borderRadius: 999,
         border: '1px solid rgba(255,255,255,0.18)',
-        background: 'rgba(255,255,255,0.10)',
+        background: BASE_BG,
         position: 'relative',
         padding: 0,
         outline: 'none',
@@ -150,15 +134,24 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
         overflow: 'hidden',
       }}
     >
-      {/* ALWAYS-ON patterned border ring */}
-      <PatternPillBorder
-        thickness={2}
-        seed={888}
-        opacity={0.55}
-        innerFill="rgba(255,255,255,0.10)"
+      {/* ALWAYS-ON patterned border */}
+      <PatternPillBorder seed={888} opacity={0.45} />
+
+      {/* Centre mask: hides the border pattern from the interior when OFF */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: BORDER,
+          borderRadius: 999,
+          background: BASE_BG,
+          opacity: checked ? 0 : 1,
+          transition: 'opacity 160ms ease',
+          pointerEvents: 'none',
+        }}
       />
 
-      {/* interior pattern ONLY when checked */}
+      {/* Interior pattern ONLY when ON */}
       <PatternPillUnderlay active={checked} opacity={0.32} seed={777} />
 
       {/* specular layer */}
@@ -360,7 +353,7 @@ export default function ActivationGate(props: Props) {
   }, [checkoutSuccess, isActive])
 
   useEffect(() => {
-    // Once activated, clear the pending flag so the page doesn’t “nag” forever.
+    // Once activated, clear the pending flag so the page doesnt “nag” forever.
     if (isActive) {
       safeClearPendingFlag()
       setPendingPurchase(false)
@@ -463,8 +456,10 @@ export default function ActivationGate(props: Props) {
   const message =
     attentionMessage ??
     (pendingPurchase || checkoutSuccess ? 'Sign in to access your purchased content.' : null)
-
-  return (
+  
+  const toggleOn = isActive || phase === 'code' || isSending || isVerifying
+  
+    return (
     <div style={{position: 'relative', display: 'grid', gap: 12, justifyItems: 'center'}}>
       <style>{`
         @keyframes boxDown {
@@ -550,7 +545,8 @@ export default function ActivationGate(props: Props) {
   </div>
 
   <div style={{flex: '0 0 auto'}}>
-    <Toggle checked={isActive} disabled={!toggleClickable} onClick={startEmailCode} />
+<Toggle checked={toggleOn} disabled={!toggleClickable} onClick={startEmailCode} />
+
   </div>
 </div>
 
