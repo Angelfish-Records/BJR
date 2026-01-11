@@ -160,8 +160,8 @@ export default function LyricsOverlay(props: {
           borderRadius: 18,
           border: '1px solid rgba(255,255,255,0.10)',
           background: 'transparent',
-          backdropFilter: isInline ? 'none' : 'blur(4px)',
-          WebkitBackdropFilter: isInline ? 'none' : 'blur(4px)',
+          backdropFilter: 'none',
+          WebkitBackdropFilter: 'none',
           boxShadow: isInline ? 'none' : '0 18px 60px rgba(0,0,0,0.25)',
         }}
       >
@@ -192,7 +192,7 @@ export default function LyricsOverlay(props: {
             WebkitOverflowScrolling: 'touch',
             padding: `${padTop}px 14px ${padBottom}px 14px`,
             display: 'grid',
-            gap: isInline ? 8 : 12,
+            gap: isInline ? 6 : 10,
             zIndex: 1,
 
             // Firefox
@@ -291,10 +291,10 @@ export default function LyricsOverlay(props: {
                     padding: isActive ? (isInline ? '6px 10px' : '10px 14px') : 0,
                     borderRadius: 999,
                     background: isActive
-                      ? isInline
-                        ? 'rgba(0,0,0,0.16)'
-                        : 'rgba(0,0,0,0.12)'
+                      ? 'rgba(0,0,0,0.10)'
                       : 'transparent',
+                    backdropFilter: isActive ? 'blur(6px)' : 'none',
+                    WebkitBackdropFilter: isActive ? 'blur(6px)' : 'none',
                     border: isActive ? '1px solid rgba(255,255,255,0.10)' : '1px solid transparent',
                     boxShadow: isActive ? '0 16px 40px rgba(0,0,0,0.25)' : 'none',
                   }}
