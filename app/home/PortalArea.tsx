@@ -138,7 +138,6 @@ export default function PortalArea(props: {
   albums: AlbumNavItem[]
   checkout?: string | null
   attentionMessage?: string | null
-  loggedIn?: boolean
   tier?: string | null
   hasGold?: boolean
   canManageBilling?: boolean

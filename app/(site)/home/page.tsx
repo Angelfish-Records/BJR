@@ -6,8 +6,8 @@ import {client} from '@/sanity/lib/client'
 import {urlFor} from '@/sanity/lib/image'
 import {auth, currentUser} from '@clerk/nextjs/server'
 import {ensureMemberByClerk} from '@/lib/members'
-import {hasAnyEntitlement, listCurrentEntitlementKeys} from '@/lib/entitlements'
-import {ENT, ENTITLEMENTS, deriveTier, pickAccent} from '@/lib/vocab'
+import {listCurrentEntitlementKeys} from '@/lib/entitlements'
+import {ENTITLEMENTS, deriveTier, pickAccent} from '@/lib/vocab'
 import {fetchPortalPage} from '@/lib/portal'
 import PortalModules from '@/app/home/PortalModules'
 import PortalArea from '@/app/home/PortalArea'
@@ -64,7 +64,6 @@ export default async function Home(props: {
   const checkout = typeof sp.checkout === 'string' ? sp.checkout : null
 
   const {userId} = await auth()
-  const loggedIn = !!userId
 
   // Post-checkout activation case (logged out)
   const showPaymentPrompt = checkout === 'success' && !userId
@@ -92,7 +91,6 @@ export default async function Home(props: {
   let entitlementKeys: string[] = []
   let tier = 'none'
   let accent = '#8b8bff'
-  let accentLabel = 'default'
 
   if (userId && email) {
     const ensured = await ensureMemberByClerk({
@@ -109,19 +107,9 @@ export default async function Home(props: {
 
     const picked = pickAccent(entitlementKeys)
     accent = picked.accent
-    accentLabel = picked.label
   }
 
   const hasGold = entitlementKeys.includes(ENTITLEMENTS.SUBSCRIPTION_GOLD)
-
-  const canSeeMemberBox =
-    member &&
-    (await hasAnyEntitlement(member.id, [
-      ENT.pageView('home'),
-      ENTITLEMENTS.FREE_MEMBER,
-      ENTITLEMENTS.PATRON_ACCESS,
-      ENTITLEMENTS.LIFETIME_ACCESS,
-    ]))
 
   const bgUrl =
     page?.backgroundImage
@@ -292,7 +280,6 @@ export default async function Home(props: {
                 albums={browseAlbums}
                 checkout={checkout}
                 attentionMessage={attentionMessage}
-                loggedIn={loggedIn}
                 tier={tier}
                 hasGold={hasGold}
                 canManageBilling={!!member}
@@ -313,31 +300,6 @@ export default async function Home(props: {
                 gap: 14,
               }}
             >
-              {member && canSeeMemberBox && (
-                <div
-                  style={{
-                    borderRadius: 18,
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    background: 'rgba(255,255,255,0.06)',
-                    padding: '14px 16px',
-                    textAlign: 'left',
-                  }}
-                >
-                  <div style={{display: 'flex', justifyContent: 'space-between', gap: 12}}>
-                    <div>
-                      <div style={{fontSize: 13, opacity: 0.72}}>Member</div>
-                      <div style={{fontSize: 14, opacity: 0.92}}>{member.email}</div>
-                    </div>
-
-                    <div style={{textAlign: 'right'}}>
-                      <div style={{fontSize: 13, opacity: 0.72}}>Tier</div>
-                      <div style={{fontSize: 14, opacity: 0.92}}>
-                        {tier} <span style={{opacity: 0.65}}>({accentLabel})</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               <StageInline
                 height={300}

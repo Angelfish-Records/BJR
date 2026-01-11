@@ -25,6 +25,68 @@ function lockBodyScroll(lock: boolean) {
 type CuesByTrackId = Record<string, LyricCue[]>
 type OffsetByTrackId = Record<string, number>
 
+function IconFullscreen(props: {size?: number}) {
+  const {size = 18} = props
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M8 4H5a1 1 0 0 0-1 1v3m0 8v3a1 1 0 0 0 1 1h3m8-16h3a1 1 0 0 1 1 1v3m0 8v3a1 1 0 0 1-1 1h-3"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+function IconClose(props: {size?: number}) {
+  const {size = 18} = props
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M6 6l12 12M18 6L6 18"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+function RoundIconButton(props: {
+  label: string
+  title?: string
+  onClick: () => void
+  disabled?: boolean
+  children: React.ReactNode
+}) {
+  const {label, title, onClick, disabled, children} = props
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={title ?? label}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      style={{
+        width: 40,
+        height: 40,
+        borderRadius: 999,
+        border: '1px solid rgba(255,255,255,0.14)',
+        background: 'rgba(0,0,0,0.28)',
+        color: 'rgba(255,255,255,0.92)',
+        display: 'grid',
+        placeItems: 'center',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.6 : 1,
+        boxShadow: '0 14px 30px rgba(0,0,0,0.22)',
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
 export default function StageInline(props: {
   height?: number
   cuesByTrackId?: CuesByTrackId
@@ -59,6 +121,8 @@ export default function StageInline(props: {
     }
   }, [])
 
+  const nothingPlaying = !p.current?.id
+
   const overlay =
     mounted && open
       ? createPortal(
@@ -79,73 +143,57 @@ export default function StageInline(props: {
               background: 'rgba(0,0,0,0.80)',
               backdropFilter: 'blur(10px)',
               WebkitBackdropFilter: 'blur(10px)',
-              padding: `calc(14px + env(safe-area-inset-top, 0px)) 14px calc(14px + env(safe-area-inset-bottom, 0px)) 14px`,
+              padding: 0,
               display: 'grid',
-              gridTemplateRows: 'auto 1fr',
-              gap: 10,
             }}
           >
-            <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12}}>
-              <div style={{minWidth: 0}}>
-                <div style={{fontSize: 12, opacity: 0.7}}>Stage</div>
-                <div
-                  style={{
-                    fontSize: 14,
-                    fontWeight: 650,
-                    opacity: 0.92,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  {p.current?.title ?? p.current?.id ?? 'Nothing playing'}
-                </div>
-              </div>
-
-              <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
-                <button
-                  type="button"
-                  onClick={() => void tryRequestFullscreen()}
-                  style={{
-                    borderRadius: 12,
-                    border: '1px solid rgba(255,255,255,0.14)',
-                    background: 'rgba(255,255,255,0.06)',
-                    color: 'rgba(255,255,255,0.92)',
-                    padding: '10px 12px',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Fullscreen
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setOpen(false)}
-                  aria-label="Close"
-                  style={{
-                    width: 38,
-                    height: 38,
-                    borderRadius: 999,
-                    border: '1px solid rgba(255,255,255,0.14)',
-                    background: 'rgba(255,255,255,0.06)',
-                    color: 'rgba(255,255,255,0.92)',
-                    cursor: 'pointer',
-                    fontSize: 18,
-                    lineHeight: '38px',
-                  }}
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-
-            <div style={{position: 'relative', minHeight: 0}}>
+            <div style={{position: 'relative', width: '100%', height: '100%', minHeight: 0}}>
+              {/* Stage fills the overlay */}
               <StageCore
                 variant="fullscreen"
                 cuesByTrackId={cuesByTrackId}
                 offsetByTrackId={offsetByTrackId}
               />
+
+              {/* Top HUD (gives a “space” for controls above lyrics) */}
+              <div
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  height: 64,
+                  background:
+                    'linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0.22) 55%, rgba(0,0,0,0.00))',
+                  pointerEvents: 'none',
+                }}
+              />
+
+              {/* Controls */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: `calc(10px + env(safe-area-inset-top, 0px))`,
+                  right: `calc(10px + env(safe-area-inset-right, 0px))`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  pointerEvents: 'auto',
+                }}
+              >
+                <RoundIconButton
+                  label="Fullscreen"
+                  title="Request fullscreen"
+                  onClick={() => void tryRequestFullscreen()}
+                >
+                  <IconFullscreen />
+                </RoundIconButton>
+
+                <RoundIconButton label="Close" title="Close" onClick={() => setOpen(false)}>
+                  <IconClose />
+                </RoundIconButton>
+              </div>
             </div>
           </div>,
           document.body
@@ -160,36 +208,40 @@ export default function StageInline(props: {
           border: '1px solid rgba(255,255,255,0.12)',
           background: 'rgba(255,255,255,0.05)',
           overflow: 'hidden',
+          height,
+          position: 'relative',
         }}
       >
-        <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 12px 10px 12px'}}>
-          <div style={{minWidth: 0}}>
-            <div style={{fontSize: 12, opacity: 0.7}}>Stage</div>
-            <div style={{fontSize: 13, fontWeight: 650, opacity: 0.92, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
-              {p.current?.title ?? p.current?.id ?? 'Nothing playing'}
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            style={{
-              borderRadius: 12,
-              border: '1px solid rgba(255,255,255,0.14)',
-              background: 'rgba(255,255,255,0.06)',
-              color: 'rgba(255,255,255,0.92)',
-              padding: '10px 12px',
-              fontSize: 12,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Open
-          </button>
+        {/* Stage fills the entire card */}
+        <div style={{position: 'absolute', inset: 0}}>
+          <StageCore variant="inline" cuesByTrackId={cuesByTrackId} offsetByTrackId={offsetByTrackId} />
         </div>
 
-        <div style={{height, position: 'relative'}}>
-          <StageCore variant="inline" cuesByTrackId={cuesByTrackId} offsetByTrackId={offsetByTrackId} />
+        {/* Top HUD (creates a tidy zone for the icon inside the render) */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: 0,
+            height: 56,
+            background:
+              'linear-gradient(180deg, rgba(0,0,0,0.45), rgba(0,0,0,0.18) 55%, rgba(0,0,0,0.00))',
+            pointerEvents: 'none',
+          }}
+        />
+
+        {/* Fullscreen icon (replaces Open button) */}
+        <div style={{position: 'absolute', top: 10, right: 10, pointerEvents: 'auto'}}>
+          <RoundIconButton
+            label="Open stage fullscreen"
+            title={nothingPlaying ? 'Nothing playing' : 'Open fullscreen stage'}
+            disabled={nothingPlaying}
+            onClick={() => setOpen(true)}
+          >
+            <IconFullscreen />
+          </RoundIconButton>
         </div>
       </div>
 
