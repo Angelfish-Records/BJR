@@ -4,6 +4,7 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react'
 import {useAuth, useSignIn, useSignUp, useUser} from '@clerk/nextjs'
 import {useRouter, useSearchParams} from 'next/navigation'
+import SubscribeButton from '@/app/home/SubscribeButton'
 import {PatternPillUnderlay, VisualizerSnapshotCanvas} from '@/app/home/player/VisualizerPattern'
 
 
@@ -484,13 +485,13 @@ export default function ActivationGate(props: Props) {
       ) : null}
 
       <div style={{position: 'relative', zIndex: 41, display: 'grid', gap: 12, justifyItems: 'center'}}>
-        <div
+       <div
   style={{
     display: 'flex',
     alignItems: 'center',
     gap: 12,
     width: '100%',
-    minWidth: 0,            // allow children to shrink
+    minWidth: 0,
     justifyContent: 'center',
   }}
 >
@@ -502,8 +503,8 @@ export default function ActivationGate(props: Props) {
         value={email}
         onChange={(e) => setEmail(e.target.value.trim())}
         style={{
-          width: '100%',      // fill wrapper
-          minWidth: 0,        // critical for flex shrink
+          width: '100%',
+          minWidth: 0,
           padding: '11px 14px',
           borderRadius: 999,
           border: '1px solid rgba(255,255,255,0.18)',
@@ -520,35 +521,84 @@ export default function ActivationGate(props: Props) {
         }}
       />
     ) : (
-      <button
-        type="button"
-        style={{
-          width: '100%',      // fill wrapper
-          minWidth: 0,        // critical for flex shrink
-          padding: '11px 14px',
-          borderRadius: 999,
-          border: '1px solid rgba(255,255,255,0.18)',
-          background: 'rgba(0,0,0,0.26)',
-          color: 'rgba(255,255,255,0.88)',
-          textAlign: 'left',
-          cursor: 'default',
-          boxShadow: '0 14px 30px rgba(0,0,0,0.22)',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
+      <div
         aria-label="Signed in identity"
+        style={{
+          width: '100%',
+          minWidth: 0,
+          height: 32, // match the toggle height
+          display: 'grid',
+          gridTemplateRows: '1fr 1fr',
+          alignItems: 'center',
+          rowGap: 0,
+        }}
       >
-        {displayEmail}
-      </button>
+        {/* line 1: email + cute check */}
+        <div
+          style={{
+            minWidth: 0,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            color: 'rgba(255,255,255,0.82)',
+            fontSize: 12,
+            lineHeight: '16px',
+            letterSpacing: '0.01em',
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 16,
+              height: 16,
+              borderRadius: 999,
+              display: 'grid',
+              placeItems: 'center',
+              background: 'color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.10))',
+              boxShadow:
+                '0 10px 18px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.18)',
+              flex: '0 0 auto',
+            }}
+          >
+            <span
+              style={{
+                fontSize: 11,
+                lineHeight: '11px',
+                transform: 'translateY(-0.5px)',
+                color: 'rgba(255,255,255,0.92)',
+              }}
+            >
+              ✓
+            </span>
+          </span>
+
+          <span
+            style={{
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+            title={displayEmail}
+          >
+            {displayEmail}
+          </span>
+        </div>
+
+        {/* line 2: patron link (placeholder for now) */}
+        <div style={{justifySelf: 'start'}}>
+  <SubscribeButton loggedIn={true} variant="link" label="Become a Patron" />
+</div>
+
+      </div>
     )}
   </div>
 
   <div style={{flex: '0 0 auto'}}>
-<Toggle checked={toggleOn} disabled={!toggleClickable} onClick={startEmailCode} />
-
+    <Toggle checked={toggleOn} disabled={!toggleClickable} onClick={startEmailCode} />
   </div>
 </div>
+
 
 
         {!isActive && shouldShowBox && (

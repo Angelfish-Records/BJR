@@ -1,12 +1,15 @@
+// web/app/home/SubscribeButton.tsx
 'use client'
 
 import {useMemo, useState} from 'react'
 
 type Props = {
   loggedIn: boolean
+  variant?: 'button' | 'link'
+  label?: string
 }
 
-export default function SubscribeButton({loggedIn}: Props) {
+export default function SubscribeButton({loggedIn, variant = 'button', label}: Props) {
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -38,6 +41,8 @@ export default function SubscribeButton({loggedIn}: Props) {
     }
   }
 
+  const text = loading ? 'Redirecting…' : (label ?? (variant === 'link' ? 'Become a Patron' : 'Subscribe (test)'))
+
   return (
     <div style={{display: 'grid', gap: 10, maxWidth: 420}}>
       {!loggedIn && (
@@ -60,17 +65,37 @@ export default function SubscribeButton({loggedIn}: Props) {
       <button
         onClick={startCheckout}
         disabled={loading || !emailOk}
-        style={{
-          padding: 12,
-          borderRadius: 12,
-          border: '1px solid rgba(255,255,255,0.35)',
-          cursor: loading || !emailOk ? 'not-allowed' : 'pointer',
-          background: 'rgba(255,255,255,0.08)',
-          color: 'inherit',
-          fontWeight: 600,
+        style={
+          variant === 'link'
+            ? {
+                padding: 0,
+                margin: 0,
+                border: 'none',
+                background: 'transparent',
+                color: 'color-mix(in srgb, var(--accent) 78%, rgba(255,255,255,0.85))',
+                fontSize: 12,
+                lineHeight: '16px',
+                fontWeight: 600,
+                cursor: loading || !emailOk ? 'not-allowed' : 'pointer',
+                opacity: loading || !emailOk ? 0.6 : 0.95,
+                textAlign: 'left',
+                justifySelf: 'start',
+              }
+            : {
+                padding: 12,
+                borderRadius: 12,
+                border: '1px solid rgba(255,255,255,0.35)',
+                cursor: loading || !emailOk ? 'not-allowed' : 'pointer',
+                background: 'rgba(255,255,255,0.08)',
+                color: 'inherit',
+                fontWeight: 600,
+              }
+        }
+        onMouseDown={(e) => {
+          if (variant === 'link') e.preventDefault()
         }}
       >
-        {loading ? 'Redirecting…' : 'Subscribe (test)'}
+        {text}
       </button>
 
       {error && <div style={{opacity: 0.85}}>⚠️ {error}</div>}
