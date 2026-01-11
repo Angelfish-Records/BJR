@@ -986,18 +986,26 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
       visibility: hidden !important;
     }
 
-    /* Controls grid: keep artwork offset + sane right padding */
+    /* Controls grid: keep artwork offset + FORCE single-row grid */
     div[data-af-miniplayer] div[data-af-controls]{
       column-gap: 10px;
+
+      /* kill implicit second row */
+      grid-template-rows: 1fr !important;
+      grid-auto-flow: column !important;
+      grid-auto-rows: 1fr !important;
+      row-gap: 0 !important;
+
       padding-left: calc(var(--af-dock-h, ${DOCK_H}px) + 12px);
       padding-right: 12px;
       height: 100%;
     }
 
-    /* Place children by index (your DOM order is: transport, meta, actions) */
+    /* Place children by index (DOM order: transport, meta, actions) */
     div[data-af-miniplayer] div[data-af-controls] > :nth-child(1){
       /* transport -> column 2 */
       grid-column: 2;
+      grid-row: 1;
       justify-self: end;
       align-self: center;
 
@@ -1014,6 +1022,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
     div[data-af-miniplayer] div[data-af-controls] > :nth-child(2){
       /* meta -> column 1 */
       grid-column: 1;
+      grid-row: 1;
       align-self: center;
 
       min-width: 0;
@@ -1050,6 +1059,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
     }
   }
 `}</style>
+
 
 
 
