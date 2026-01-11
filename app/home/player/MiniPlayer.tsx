@@ -999,6 +999,8 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
       grid-area: meta;
       min-width: 0;
       align-self: center;
+      /* critical: allow the grid item to actually shrink */
+      overflow: hidden;
     }
 
     div[data-af-miniplayer] div[data-af-transport]{
@@ -1014,7 +1016,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
 
     /* Make title more readable in compact mode */
     div[data-af-miniplayer] div[data-af-meta] > div:first-child{
-      font-size: 14px !important;
+      font-size: 12px !important;
       line-height: 1.2 !important;
     }
   }
