@@ -190,7 +190,7 @@ export default function PortalArea(props: {
   /* ---------- Base layout (desktop/tablet) ---------- */
   .afTopBar {
     display: grid;
-    grid-template-columns: 1fr auto 1fr; /* left lane, logo lane, right lane */
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: 12px;
     min-width: 0;
@@ -206,50 +206,58 @@ export default function PortalArea(props: {
   .afTopBarLeft { justify-content: flex-start; gap: 10px; }
   .afTopBarRight { justify-content: flex-end; }
 
-  /* Logo lane should behave like a real lane (not shrink-wrap) */
   .afTopBarLogo {
     min-width: 0;
-    width: 100%;
     display: grid;
     place-items: center;
     padding: 6px 0;
   }
 
   .afTopBarLogoInner {
-    margin-inline: auto;
     width: fit-content;
     display: grid;
     place-items: center;
   }
 
-  /* ---------- Mobile ---------- */
+  /* ---------- Mobile: 3 explicit rows ---------- */
   @media (max-width: 720px) {
     .afTopBar {
       grid-template-columns: 1fr;
-      grid-template-rows: auto auto;
-      gap: 10px;
-      justify-items: stretch; /* key: children fill the 1fr track */
+      grid-template-rows: auto auto auto; /* logo / buttons / actions */
+      gap: 12px;
+      justify-items: stretch;
+      align-items: start;
     }
 
+    /* Row 1: logo gets full-width breathing space */
     .afTopBarLogo {
       grid-row: 1;
       grid-column: 1 / -1;
-      justify-self: stretch; /* key: override any centering/shrink rules */
+      justify-self: stretch;
       width: 100%;
-      padding: 10px 0; /* a bit more breathing room on mobile */
+      padding: 12px 0 4px;
     }
 
+    /* Row 2: buttons */
     .afTopBarLeft {
       grid-row: 2;
       justify-self: start;
     }
 
+    /* Row 3: actions (ActivationGate + banner) */
     .afTopBarRight {
-      grid-row: 2;
-      justify-self: end;
+      grid-row: 3;
+      justify-self: stretch;
+      width: 100%;
+    }
+
+    .afTopBarRightInner {
+      margin-left: auto; /* keep the actions visually right-aligned */
+      max-width: 520px;
     }
   }
 `}</style>
+
 
 
     <div className="afTopBar">
@@ -362,7 +370,7 @@ export default function PortalArea(props: {
 
       {/* Right: ActivationGate */}
       <div className="afTopBarRight">
-        <div style={{maxWidth: 520, minWidth: 0}}>
+        <div className="afTopBarRightInner" style={{maxWidth: 520, minWidth: 0}}>
           <ActivationGate attentionMessage={attentionMessage}>
             <div style={{display: 'grid', justifyItems: 'center', gap: 10}}>
               {canManageBilling ? (

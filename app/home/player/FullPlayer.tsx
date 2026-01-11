@@ -131,9 +131,7 @@ export default function FullPlayer(props: {
   const p = usePlayer()
   const {albumSlug, album, tracks, albums, onSelectAlbum, isBrowsingAlbum = false} = props
 
-  const albumArtist = album?.artist ?? '—'
   const albumTitle = album?.title ?? '—'
-  const albumMeta = album?.year ? `Album · ${album.year}` : 'Album'
   const albumDesc = album?.description ?? 'This is placeholder copy. Soon: pull album description from Sanity.'
   const browseAlbums = albums.filter((a) => a.id !== album?.id)
 
@@ -216,7 +214,7 @@ export default function FullPlayer(props: {
       }}
     >
       <div style={{display: 'grid', justifyItems: 'center', textAlign: 'center', gap: 10}}>
-        <div style={{fontSize: 12, opacity: 0.75}}>{albumArtist}</div>
+
 
         <div
           style={{
@@ -233,10 +231,7 @@ export default function FullPlayer(props: {
         />
 
         <div style={{fontSize: 22, fontWeight: 650, letterSpacing: 0.2, opacity: 0.96}}>{albumTitle}</div>
-        <div style={{fontSize: 12, opacity: 0.7}}>{albumMeta}</div>
-
         <div style={{maxWidth: 540, fontSize: 12, opacity: 0.62, lineHeight: 1.45}}>{albumDesc}</div>
-
         <div style={{display: 'flex', alignItems: 'center', gap: 10, marginTop: 8}}>
           <IconCircleBtn label="Download" onClick={() => {}}>
             <DownloadIcon />
