@@ -975,30 +975,33 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
       padding-right: 10px;
     }
 
-    /* Hard-hide actions so it cannot participate in grid layout */
+    /* Hard-hide actions so it cannot participate in layout at all */
     div[data-af-miniplayer] div[data-af-actions]{
       display: none !important;
       visibility: hidden !important;
     }
 
-    /* Deterministic 1-row layout: meta gets remaining space, transport is max-content */
+    /* Mobile layout: EXACTLY two columns — meta + transport */
     div[data-af-miniplayer] div[data-af-controls]{
       display: grid;
       align-items: center;
-      gap: 10px;
+      column-gap: 10px;
 
+      /* Meta takes remainder, transport is intrinsic width */
       grid-template-columns: 1fr max-content;
-      grid-template-areas: "meta transport";
+      grid-template-rows: 1fr;
 
-      /* keep artwork offset (art is absolute, so content must pad-left) */
+      /* Offset for artwork (art is absolute) */
       padding-left: calc(var(--af-dock-h, ${DOCK_H}px) + 12px);
       padding-right: 12px;
 
       height: 100%;
     }
 
-    div[data-af-miniplayer] div[data-af-transport]{
-      grid-area: transport;
+    /* First child = transport */
+    div[data-af-miniplayer] div[data-af-controls] > :nth-child(1){
+      grid-column: 2;
+      grid-row: 1;
       justify-self: end;
       align-self: center;
 
@@ -1008,41 +1011,54 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
       gap: 8px;
       flex-wrap: nowrap;
 
-      /* critical: transport should not shrink */
+      /* transport must NEVER shrink */
       flex: 0 0 auto;
       min-width: max-content;
     }
 
-    div[data-af-miniplayer] div[data-af-meta]{
-      grid-area: meta;
+    /* Second child = meta (text) */
+    div[data-af-miniplayer] div[data-af-controls] > :nth-child(2){
+      grid-column: 1;
+      grid-row: 1;
       align-self: center;
 
-      /* critical: allow shrink + clip so ellipsis can work */
+      /* THIS is the critical constraint */
       min-width: 0;
       max-width: 100%;
       overflow: hidden;
     }
 
-    /* Force ellipsis on both lines inside meta */
-    div[data-af-miniplayer] div[data-af-meta] > div{
+    /* Third child = actions (belt + braces) */
+    div[data-af-miniplayer] div[data-af-controls] > :nth-child(3){
+      display: none !important;
+      visibility: hidden !important;
+    }
+
+    /* Ensure all text descendants can shrink */
+    div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) *{
       min-width: 0;
       max-width: 100%;
+    }
+
+    /* Ellipsis on title + artist */
+    div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) > div{
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    /* Make text slightly smaller in compact mode */
-    div[data-af-miniplayer] div[data-af-meta] > div:first-child{
-      font-size: 13px !important;
+    /* Smaller text in compact mode */
+    div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) > div:first-child{
+      font-size: 12px !important;
       line-height: 1.15 !important;
     }
-    div[data-af-miniplayer] div[data-af-meta] > div:nth-child(2){
-      font-size: 11px !important;
+    div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) > div:nth-child(2){
+      font-size: 10px !important;
       line-height: 1.15 !important;
     }
   }
 `}</style>
+
 
 
 
