@@ -110,12 +110,10 @@ function MoreIcon() {
 
 function NowPlayingPip() {
   return (
-    <span aria-hidden="true" style={{display: 'inline-grid', placeItems: 'center', width: 16, height: 16, opacity: 0.9}}>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-        <path d="M11 7 8.5 9H6v6h2.5L11 17V7Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-        <path d="M14.5 9.5c.9.9.9 4.1 0 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        <path d="M17 7c2 2 2 8 0 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.75" />
-      </svg>
+    <span className="afEq" aria-hidden="true">
+      <i />
+      <i />
+      <i />
     </span>
   )
 }
@@ -325,6 +323,8 @@ export default function FullPlayer(props: {
       : 'rgba(255,255,255,0.70)'
 
     const baseBg = isSelected ? 'rgba(255,255,255,0.14)' : 'transparent'
+    const restBg = isCur && !isSelected ? 'transparent' : baseBg
+
 
     return (
       <button
@@ -339,7 +339,7 @@ export default function FullPlayer(props: {
         }}
         onMouseLeave={(e) => {
           // Restore deterministic state bg
-          e.currentTarget.style.background = baseBg
+          e.currentTarget.style.background = restBg
         }}
         onFocus={() => prefetchTrack(t)}
         onClick={() => {
@@ -391,7 +391,7 @@ export default function FullPlayer(props: {
           // - current: transparent
           // - selected: solid-ish grey
           // - hover: applied transiently via mouse enter
-          background: isCur ? 'transparent' : baseBg,
+          background: restBg,
 
           cursor: 'pointer',
           transform: 'translateZ(0)',
@@ -578,6 +578,36 @@ export default function FullPlayer(props: {
             background: none;
           }
         }
+
+                .afEq{
+          width: 16px;
+          height: 16px;
+          display: inline-flex;
+          align-items: flex-end;
+          gap: 2px;
+          color: color-mix(in srgb, var(--accent) 72%, rgba(255,255,255,0.92));
+        }
+        .afEq i{
+          display: block;
+          width: 3px;
+          height: 6px;
+          background: currentColor;
+          border-radius: 2px;
+          animation: afEq 900ms ease-in-out infinite;
+          opacity: 0.9;
+        }
+        .afEq i:nth-child(2){ animation-delay: 120ms; height: 10px; }
+        .afEq i:nth-child(3){ animation-delay: 240ms; height: 8px; }
+
+        @keyframes afEq{
+          0%,100%{ transform: scaleY(0.55); }
+          50%{ transform: scaleY(1.35); }
+        }
+
+        @media (prefers-reduced-motion: reduce){
+          .afEq i{ animation: none; }
+        }
+
       `}</style>
     </div>
   )
