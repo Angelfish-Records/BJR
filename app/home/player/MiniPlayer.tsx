@@ -37,9 +37,10 @@ const IconBtn = React.forwardRef<
       title={title ?? label}
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
+      className="afMpIconBtn"
       style={{
-        width: 36,
-        height: 36,
+        width: 'var(--af-mp-btn, 36px)',
+        height: 'var(--af-mp-btn, 36px)',
         borderRadius: 999,
         border: '1px solid rgba(255,255,255,0.14)',
         background: 'rgba(255,255,255,0.05)',
@@ -50,6 +51,7 @@ const IconBtn = React.forwardRef<
         opacity: disabled ? 0.45 : 0.9,
         userSelect: 'none',
         transform: 'translateZ(0)',
+        flex: '0 0 auto',
       }}
     >
       {children}
@@ -461,7 +463,6 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
   /* ---------------- Layout constants ---------------- */
 
   const DOCK_H = 80
-  const ART_W = DOCK_H
   const TOP_BORDER = 1 // legacy (keep for reference)
   const VIS_H = 3 // visual rail height (pattern needs >1px to read)
   const SEEK_H = 18
@@ -469,7 +470,6 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
 
   // center the 18px seek hitbox on the VIS_H rail at y=0
   const SEEK_TOP = -((SEEK_H - VIS_H) / 2)
-
 
   // visual progress is NOT the range track; it’s our own 1px fill bar
   const progressPct = durKnown ? (sliderValue / durSec) * 100 : 0
@@ -485,7 +485,11 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
         bottom: 0,
         zIndex: 9999,
 
-        height: `calc(${DOCK_H}px + ${SAFE_INSET})`,
+        // Two-row layout: the "band" is vertically centered regardless of safe area.
+        display: 'grid',
+        gridTemplateRows: `var(--af-dock-h, ${DOCK_H}px) ${SAFE_INSET}`,
+
+        height: `calc(var(--af-dock-h, ${DOCK_H}px) + ${SAFE_INSET})`,
 
         paddingTop: 0,
         paddingRight: 12,
@@ -495,7 +499,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
         backdropFilter: 'blur(10px)',
         WebkitBackdropFilter: 'blur(10px)',
 
-        // KEY: let the thumb poke above the dock
+        // let the thumb poke above the dock
         overflow: 'visible',
       }}
     >
@@ -507,7 +511,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
           height: '100%',
         }}
       >
-                {/* Textured rail at the top edge (visual only) */}
+        {/* Textured rail at the top edge (visual only) */}
         <div
           aria-hidden="true"
           style={{
@@ -521,7 +525,6 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
             overflow: 'hidden',
           }}
         >
-          {/* subtle base so there's always a readable line */}
           <div
             aria-hidden="true"
             style={{
@@ -530,18 +533,13 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
               background: 'rgba(255,255,255,0.10)',
             }}
           />
-
-          {/* pattern layer */}
           <PatternPillUnderlay active opacity={0.28} seed={1337} />
-
-          {/* specular sheen */}
           <div
             aria-hidden="true"
             style={{
               position: 'absolute',
               inset: 0,
-              background:
-                'linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.04))',
+              background: 'linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.04))',
               mixBlendMode: 'screen',
               opacity: 0.55,
             }}
@@ -562,7 +560,6 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
             overflow: 'hidden',
           }}
         >
-          {/* stronger base */}
           <div
             aria-hidden="true"
             style={{
@@ -572,11 +569,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
               opacity: 0.9,
             }}
           />
-
-          {/* pattern layer, stronger */}
           <PatternPillUnderlay active opacity={0.55} seed={1337} />
-
-          {/* crisp top edge */}
           <div
             aria-hidden="true"
             style={{
@@ -591,8 +584,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
           />
         </div>
 
-
-        {/* Invisible seek hitbox, centered on y=0, thumb is the only visible part */}
+        {/* Invisible seek hitbox */}
         <div
           ref={seekWrapRef}
           style={{
@@ -701,7 +693,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
               left: 0,
               top: 0,
               bottom: 0,
-              width: ART_W,
+              width: `var(--af-dock-h, ${DOCK_H}px)`,
               background: artworkUrl ? `url(${artworkUrl}) center/cover no-repeat` : 'rgba(255,255,255,0.06)',
               borderRadius: 0,
               borderRight: '1px solid rgba(255,255,255,0.10)',
@@ -711,22 +703,25 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
 
           {/* Controls / text */}
           <div
+            data-af-controls
             style={{
               position: 'relative',
               zIndex: 1,
+              height: '100%',
               display: 'grid',
               gridTemplateColumns: 'auto minmax(0, 1fr) auto',
               alignItems: 'center',
               gap: 12,
 
-              paddingTop: 12,
-              paddingBottom: `calc(12px + ${SAFE_INSET})`,
+              // KEY: no vertical padding fighting centering
+              paddingTop: 0,
+              paddingBottom: 0,
 
-              paddingLeft: ART_W + 12,
+              paddingLeft: `calc(var(--af-dock-h, ${DOCK_H}px) + 12px)`,
               paddingRight: 0,
             }}
           >
-            <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
+            <div data-af-transport style={{display: 'flex', alignItems: 'center', gap: 10}}>
               <IconBtn
                 label="Previous"
                 onClick={() => {
@@ -774,7 +769,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
               </IconBtn>
             </div>
 
-            <div style={{minWidth: 0}}>
+            <div data-af-meta style={{minWidth: 0}}>
               <div
                 className={isShimmering ? 'afShimmerText' : undefined}
                 data-reason={p.loadingReason ?? ''}
@@ -803,7 +798,10 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
               </div>
             </div>
 
-            <div style={{display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end'}}>
+            <div
+              data-af-actions
+              style={{display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end'}}
+            >
               <div style={{display: 'grid', justifyItems: 'center', position: 'relative'}}>
                 <IconBtn ref={volBtnRef} label="Volume" onClick={() => setVolOpen((v) => !v)} title="Volume">
                   <VolumeIcon muted={muted} />
@@ -963,27 +961,50 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
               ) : null}
             </div>
           </div>
-
-          <style>{`
-            @media (max-width: 520px) {
-              div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] {
-                grid-template-columns: 1fr auto;
-                grid-auto-rows: auto;
-                row-gap: 10px;
-              }
-              div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(2) {
-                grid-column: 1 / -1;
-                order: 3;
-              }
-              div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(1) {
-                order: 1;
-              }
-              div[style*="grid-template-columns: auto minmax(0, 1fr) auto"] > div:nth-child(3) {
-                order: 2;
-              }
-            }
-          `}</style>
         </div>
+
+        {/* Mobile compact mode + sizing vars */}
+        <style>{`
+          /* Defaults (desktop/tablet) */
+          div[data-af-miniplayer]{
+            --af-dock-h: ${DOCK_H}px;
+            --af-mp-btn: 36px;
+          }
+
+          @media (max-width: 520px) {
+    div[data-af-miniplayer]{
+      --af-dock-h: 64px;     /* shorter dock */
+      --af-mp-btn: 40px;     /* good tap targets */
+      padding-right: 10px;
+    }
+
+    /* Hide right-side actions only (volume/share/retry/menu) */
+    div[data-af-miniplayer] div[data-af-actions]{
+      display: none !important;
+    }
+
+    /* Keep artwork + meta + transport */
+    div[data-af-miniplayer] div[data-af-controls]{
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 10px;
+      padding-left: calc(var(--af-dock-h, ${DOCK_H}px) + 12px); /* keep artwork offset */
+      padding-right: 0;
+    }
+
+    /* Ensure transport never wraps/squeezes weirdly */
+    div[data-af-miniplayer] div[data-af-transport]{
+      gap: 8px;
+      justify-self: end;
+      flex-wrap: nowrap;
+    }
+
+    /* Make title more readable in compact mode */
+    div[data-af-miniplayer] div[data-af-meta] > div:first-child{
+      font-size: 14px !important;
+      line-height: 1.2 !important;
+    }
+  }
+        `}</style>
 
         {/* Seek + shimmer */}
         <style>{`
@@ -1056,6 +1077,9 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
           }
         `}</style>
       </div>
+
+      {/* Safe-area spacer row (pure space; keeps band perfectly centered) */}
+      <div aria-hidden="true" style={{height: SAFE_INSET}} />
     </div>
   )
 
