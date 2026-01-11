@@ -4,7 +4,8 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react'
 import {useAuth, useSignIn, useSignUp, useUser} from '@clerk/nextjs'
 import {useRouter, useSearchParams} from 'next/navigation'
-import {PatternPillUnderlay} from '@/app/home/player/VisualizerPattern'
+import {PatternPillUnderlay, VisualizerSnapshotCanvas} from '@/app/home/player/VisualizerPattern'
+
 
 
 type Phase = 'idle' | 'code'
@@ -49,6 +50,71 @@ function looksLikeNoAccountError(err: unknown): boolean {
   return false
 }
 
+function PatternPillBorder(props: {
+  radius?: number
+  thickness?: number
+  opacity?: number
+  seed?: number
+  /** interior fill to “cut out” the ring */
+  innerFill?: string
+}) {
+  const {
+    radius = 999,
+    thickness = 2,
+    opacity = 0.55,
+    seed = 888,
+    innerFill = 'rgba(255,255,255,0.10)',
+  } = props
+
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: 'absolute',
+        inset: 0,
+        borderRadius: radius,
+        overflow: 'hidden',
+        pointerEvents: 'none',
+      }}
+    >
+      {/* full-bleed pattern */}
+      <VisualizerSnapshotCanvas
+        opacity={opacity}
+        fps={12}
+        sourceRect={{mode: 'random', seed, scale: 0.6}}
+        style={{filter: 'contrast(1.05) saturate(1.05)'}}
+        active
+      />
+
+      {/* cut out the middle (leaves a “ring” border) */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: thickness,
+          borderRadius: radius,
+          background: innerFill,
+        }}
+      />
+
+      {/* crisp outline */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: 0,
+          borderRadius: radius,
+          boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.18)',
+          pointerEvents: 'none',
+          opacity: 0.95,
+        }}
+      />
+    </div>
+  )
+}
+
+
+
 function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => void}) {
   const {checked, disabled, onClick} = props
 
@@ -58,116 +124,80 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
   const knob = h - pad * 2
   const travel = w - pad * 2 - knob
 
-  const R = 999
-  const RING = 2 // px thickness of the patterned border
-
   return (
-    <div
-      aria-hidden
+    <button
+      type="button"
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      aria-checked={checked}
+      role="switch"
       style={{
         width: w,
         height: h,
-        borderRadius: R,
+        borderRadius: 999,
+        border: '1px solid rgba(255,255,255,0.18)',
+        background: 'rgba(255,255,255,0.10)',
         position: 'relative',
-        padding: RING,
-        overflow: 'hidden',
-        // keep the same “presence” as the old button border
+        padding: 0,
+        outline: 'none',
+        cursor: disabled ? 'default' : 'pointer',
+        transition:
+          'background 180ms ease, box-shadow 180ms ease, border-color 180ms ease, opacity 180ms ease',
         boxShadow: checked
           ? '0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent), 0 10px 26px rgba(0,0,0,0.35)'
           : '0 10px 26px rgba(0,0,0,0.28)',
         opacity: disabled ? 0.65 : 1,
-        transition: 'box-shadow 180ms ease, opacity 180ms ease',
+        overflow: 'hidden',
       }}
     >
-      {/* ALWAYS-ON border pattern (visible only in wrapper padding) */}
+      {/* ALWAYS-ON patterned border ring */}
+      <PatternPillBorder
+        thickness={2}
+        seed={888}
+        opacity={0.55}
+        innerFill="rgba(255,255,255,0.10)"
+      />
+
+      {/* interior pattern ONLY when checked */}
+      <PatternPillUnderlay active={checked} opacity={0.32} seed={777} />
+
+      {/* specular layer */}
       <div
         aria-hidden
         style={{
           position: 'absolute',
-          inset: 0,
-          borderRadius: R,
-          overflow: 'hidden',
+          inset: 1,
+          borderRadius: 999,
+          background:
+            'linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.02) 45%, rgba(0,0,0,0.10))',
           pointerEvents: 'none',
+          mixBlendMode: 'screen',
+          opacity: checked ? 0.55 : 0.35,
+          transition: 'opacity 180ms ease',
         }}
-      >
-        {/* Use the existing PatternPillUnderlay as a cheap “texture plate” */}
-        <PatternPillUnderlay active opacity={0.42} seed={888} radius={R} />
-        {/* crisp ring edge */}
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            borderRadius: R,
-            boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.18)',
-            pointerEvents: 'none',
-            opacity: 0.95,
-          }}
-        />
-      </div>
+      />
 
-      {/* Actual interactive control */}
-      <button
-        type="button"
-        onClick={disabled ? undefined : onClick}
-        disabled={disabled}
-        aria-checked={checked}
-        role="switch"
+      {/* knob */}
+      <div
+        aria-hidden
         style={{
-          width: '100%',
-          height: '100%',
-          borderRadius: R,
-          border: '1px solid rgba(255,255,255,0.18)',
-          background: 'rgba(255,255,255,0.10)',
-          position: 'relative',
-          padding: 0,
-          outline: 'none',
-          cursor: disabled ? 'default' : 'pointer',
-          overflow: 'hidden',
+          width: knob,
+          height: knob,
+          borderRadius: 999,
+          position: 'absolute',
+          top: pad,
+          left: pad,
+          transform: `translateX(${checked ? travel : 0}px)`,
+          transition: 'transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease',
+          background: 'rgba(255,255,255,0.98)',
+          boxShadow: checked
+            ? '0 10px 22px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.65) inset'
+            : '0 10px 22px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.45) inset',
         }}
-      >
-        {/* interior pattern ONLY when checked */}
-        <PatternPillUnderlay active={checked} opacity={0.32} seed={777} radius={R} />
-
-        {/* specular layer */}
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 1,
-            borderRadius: R,
-            background:
-              'linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.02) 45%, rgba(0,0,0,0.10))',
-            pointerEvents: 'none',
-            mixBlendMode: 'screen',
-            opacity: checked ? 0.55 : 0.35,
-            transition: 'opacity 180ms ease',
-          }}
-        />
-
-        {/* knob */}
-        <div
-          aria-hidden
-          style={{
-            width: knob,
-            height: knob,
-            borderRadius: R,
-            position: 'absolute',
-            top: pad,
-            left: pad,
-            transform: `translateX(${checked ? travel : 0}px)`,
-            transition: 'transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease',
-            background: 'rgba(255,255,255,0.98)',
-            boxShadow: checked
-              ? '0 10px 22px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.65) inset'
-              : '0 10px 22px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.45) inset',
-          }}
-        />
-      </button>
-    </div>
+      />
+    </button>
   )
 }
-
 
 
 function normalizeDigits(raw: string): string {
