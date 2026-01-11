@@ -243,7 +243,7 @@ export default function PortalArea(props: {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     grid-template-rows: 1fr; /* single row */
-    align-items: center;
+    align-items: end;              /* bottom-align all lanes */
     gap: 12px;
     min-width: 0;
   }
@@ -258,7 +258,7 @@ export default function PortalArea(props: {
     grid-row: 1;
     min-width: 0;
     display: flex;
-    align-items: center;
+    align-items: flex-end;         /* bottom-align buttons */
     justify-content: flex-start;
     gap: 10px;
   }
@@ -268,14 +268,16 @@ export default function PortalArea(props: {
     grid-row: 1;
     min-width: 0;
     display: grid;
-    place-items: center;
+    align-items: end;              /* bottom-align logo */
+    justify-items: center;
     padding: 6px 0;
   }
 
   .afTopBarLogoInner {
     width: fit-content;
     display: grid;
-    place-items: center;
+    align-items: end;
+    justify-items: center;
   }
 
   .afTopBarRight {
@@ -283,7 +285,7 @@ export default function PortalArea(props: {
     grid-row: 1;
     min-width: 0;
     display: flex;
-    align-items: center;
+    align-items: flex-end;         /* bottom-align ActivationGate */
     justify-content: flex-end;
   }
 
@@ -298,7 +300,7 @@ export default function PortalArea(props: {
       grid-template-columns: 1fr;
       grid-template-rows: auto auto; /* logo / controls */
       gap: 14px;
-      align-items: start;
+      align-items: start;           /* keep mobile breathable */
       justify-items: stretch;
     }
 
@@ -336,6 +338,7 @@ export default function PortalArea(props: {
     }
   }
 `}</style>
+
 
 
 

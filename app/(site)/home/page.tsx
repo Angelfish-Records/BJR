@@ -250,7 +250,7 @@ export default async function Home(props: {
           display: 'grid',
           justifyItems: 'center',
           alignItems: 'start',
-          padding: '86px 24px',
+          padding: `calc(18px + env(safe-area-inset-top, 0px)) 24px 42px`,
         }}
       >
         <section
