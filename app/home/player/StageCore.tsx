@@ -1,3 +1,4 @@
+// web/app/home/player/StageCore.tsx
 'use client'
 
 import React from 'react'
@@ -107,7 +108,9 @@ export default function StageCore(props: {
           inset: 0,
           zIndex: 1,
           background:
-            'radial-gradient(70% 55% at 50% 40%, rgba(0,0,0,0.0), rgba(0,0,0,0.35) 70%), linear-gradient(180deg, rgba(0,0,0,0.30), rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.40))',
+            variant === 'inline'
+              ? 'radial-gradient(70% 55% at 50% 40%, rgba(0,0,0,0.00), rgba(0,0,0,0.22) 72%), linear-gradient(180deg, rgba(0,0,0,0.14), rgba(0,0,0,0.06) 45%, rgba(0,0,0,0.16))'
+              : 'radial-gradient(70% 55% at 50% 40%, rgba(0,0,0,0.00), rgba(0,0,0,0.28) 72%), linear-gradient(180deg, rgba(0,0,0,0.22), rgba(0,0,0,0.10) 45%, rgba(0,0,0,0.24))',
           pointerEvents: 'none',
         }}
       />

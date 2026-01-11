@@ -260,7 +260,7 @@ export default async function Home(props: {
             display: 'grid',
             gridTemplateRows: 'auto auto 1fr',
             alignItems: 'start',
-            gap: 26,
+            gap: '12px 26px',
           }}
         >
 
@@ -302,7 +302,7 @@ export default async function Home(props: {
             >
 
               <StageInline
-                height={300}
+                height={560}
                 cuesByTrackId={albumData.lyrics.cuesByTrackId}
                 offsetByTrackId={albumData.lyrics.offsetByTrackId}
               />

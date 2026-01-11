@@ -131,7 +131,6 @@ export default function LyricsOverlay(props: {
 
   // Typography (inline genuinely smaller)
   const lineFontSize = isInline ? 'clamp(12px, 1.15vw, 14px)' : 'clamp(18px, 2.2vw, 26px)'
-  const lineHeight = isInline ? 22 : 34
 
   // Inline needs tighter padding/fades or it eats the whole panel.
   const padTop = isInline ? 44 : 140
@@ -160,10 +159,10 @@ export default function LyricsOverlay(props: {
           overflow: 'hidden',
           borderRadius: 18,
           border: '1px solid rgba(255,255,255,0.10)',
-          background: isInline ? 'rgba(0,0,0,0.28)' : 'rgba(0,0,0,0.16)',
-          backdropFilter: 'blur(10px)',
-          WebkitBackdropFilter: 'blur(10px)',
-          boxShadow: '0 18px 60px rgba(0,0,0,0.35)',
+          background: 'transparent',
+          backdropFilter: isInline ? 'none' : 'blur(4px)',
+          WebkitBackdropFilter: isInline ? 'none' : 'blur(4px)',
+          boxShadow: isInline ? 'none' : '0 18px 60px rgba(0,0,0,0.25)',
         }}
       >
         <div
@@ -171,7 +170,9 @@ export default function LyricsOverlay(props: {
           style={{
             position: 'absolute',
             inset: 0,
-            background: 'radial-gradient(60% 40% at 50% 40%, rgba(255,255,255,0.08), rgba(0,0,0,0.00) 60%)',
+            background: isInline
+              ? 'transparent'
+              : 'radial-gradient(60% 40% at 50% 40%, rgba(255,255,255,0.06), rgba(0,0,0,0.00) 60%)',
             pointerEvents: 'none',
             zIndex: 0,
           }}
@@ -201,7 +202,7 @@ export default function LyricsOverlay(props: {
           }}
         >
           {cues.map((cue, idx) => {
-            const isActive = idx === activeIdx
+                        const isActive = idx === activeIdx
 
             // When activeIdx is unknown, bias visibility to top so it doesn't look "dead".
             const dist = activeIdx >= 0 ? Math.abs(idx - activeIdx) : idx
@@ -217,6 +218,13 @@ export default function LyricsOverlay(props: {
                     : dist <= 3
                       ? 0.44
                       : 0.26
+
+            const textShadow = isInline
+              ? '0 1px 14px rgba(0,0,0,0.70), 0 0 24px rgba(0,0,0,0.35)'
+              : '0 2px 22px rgba(0,0,0,0.78), 0 0 34px rgba(0,0,0,0.35)'
+
+            // Unitless line-height: wraps correctly across responsive font sizes.
+            const lh = isInline ? 1.25 : 1.22
 
             return (
               <button
@@ -235,25 +243,26 @@ export default function LyricsOverlay(props: {
                   background: 'transparent',
                   padding: 0,
 
-                  // Robust row height (prevents 0-height collapse observed in inline)
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  // Layout
                   width: '100%',
-                  minWidth: 0, // allow ellipsis within centered flex
-                  minHeight: lineHeight,
-                  paddingTop: isInline ? 2 : 4,
-                  paddingBottom: isInline ? 2 : 4,
+                  minWidth: 0,
+                  display: 'grid',
+                  justifyItems: 'center',
+                  alignItems: 'center',
+
+                  // Give each row breathing room without forcing single-line math.
+                  paddingTop: isInline ? 4 : 6,
+                  paddingBottom: isInline ? 4 : 6,
 
                   // Typography
                   color: 'rgba(255,255,255,0.94)',
                   fontSize: lineFontSize,
-                  lineHeight: `${lineHeight}px`,
+                  lineHeight: lh,
                   fontWeight: isActive ? 780 : 650,
                   letterSpacing: 0.2,
                   textAlign: 'center',
 
-                  // Motion/visibility
+                  // Visibility/motion
                   opacity,
                   transition: 'opacity 140ms ease, transform 140ms ease',
                   transform: isActive ? 'translateZ(0) scale(1.02)' : 'translateZ(0) scale(1)',
@@ -261,25 +270,40 @@ export default function LyricsOverlay(props: {
                   // Interaction
                   cursor: onSeek ? 'pointer' : 'default',
                   userSelect: 'none',
-
-                  // Readability
-                  textShadow: isInline ? '0 1px 10px rgba(0,0,0,0.55)' : undefined,
                 }}
               >
-                {/* IMPORTANT: ellipsis must be on a constrained child, not the flex container */}
+                {/* A lightweight per-line scrim (active only) so the visualizer still shows through */}
                 <span
                   style={{
-                    display: 'block',
+                    display: 'inline-block',
                     maxWidth: '100%',
                     minWidth: 0,
+
+                    // Wrapping rules (fixes squish)
                     whiteSpace: 'normal',
-                    overflow: isInline ? 'hidden' : 'visible',
+                    overflowWrap: 'anywhere',
+                    wordBreak: 'break-word',
+
+                    // Readability (prefer shadows over big frosted panels)
+                    textShadow,
+
+                    // Subtle scrim only for active line (optional but recommended)
+                    padding: isActive ? (isInline ? '6px 10px' : '10px 14px') : 0,
+                    borderRadius: 999,
+                    background: isActive
+                      ? isInline
+                        ? 'rgba(0,0,0,0.16)'
+                        : 'rgba(0,0,0,0.12)'
+                      : 'transparent',
+                    border: isActive ? '1px solid rgba(255,255,255,0.10)' : '1px solid transparent',
+                    boxShadow: isActive ? '0 16px 40px rgba(0,0,0,0.25)' : 'none',
                   }}
                 >
                   {cue.text}
                 </span>
               </button>
             )
+
           })}
         </div>
 
