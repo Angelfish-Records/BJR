@@ -9,8 +9,6 @@ import type {PlayerTrack, AlbumInfo, AlbumNavItem} from '@/lib/types'
 import PlayerController from './player/PlayerController'
 
 import ActivationGate from '@/app/home/ActivationGate'
-import SubscribeButton from '@/app/home/SubscribeButton'
-import CancelSubscriptionButton from '@/app/home/CancelSubscriptionButton'
 import Image from 'next/image'
 
 
@@ -99,7 +97,6 @@ export default function PortalArea(props: {
     albums,
     checkout = null,
     attentionMessage = null,
-    loggedIn = false,
     hasGold = false,
     canManageBilling = false,
   } = props
@@ -400,16 +397,11 @@ export default function PortalArea(props: {
     {/* Right: ActivationGate */}
     <div className="afTopBarRight">
       <div className="afTopBarRightInner" style={{maxWidth: 520, minWidth: 0}}>
-        <ActivationGate attentionMessage={attentionMessage}>
-          <div style={{display: 'grid', justifyItems: 'center', gap: 10}}>
-            {canManageBilling ? (
-              <>
-                {!hasGold ? <SubscribeButton loggedIn={loggedIn} /> : null}
-                {hasGold ? <CancelSubscriptionButton /> : null}
-              </>
-            ) : null}
-          </div>
-        </ActivationGate>
+        <ActivationGate attentionMessage={attentionMessage} canManageBilling={canManageBilling} hasGold={hasGold}>
+  <div />
+</ActivationGate>
+
+
 
         <CheckoutBanner checkout={checkout} />
       </div>

@@ -2,7 +2,13 @@
 
 import React from 'react'
 
-export default function CancelSubscriptionButton(props: {disabled?: boolean}) {
+type Props = {
+  disabled?: boolean
+  variant?: 'button' | 'link'
+  label?: string
+}
+
+export default function CancelSubscriptionButton({disabled, variant = 'button', label}: Props) {
   const [busy, setBusy] = React.useState(false)
   const [msg, setMsg] = React.useState<string | null>(null)
 
@@ -31,7 +37,6 @@ export default function CancelSubscriptionButton(props: {disabled?: boolean}) {
           : data.note ?? 'No active subscription found.'
       )
 
-      // Give Stripe a moment; then refresh for server-derived entitlements.
       setTimeout(() => {
         window.location.reload()
       }, 1200)
@@ -42,27 +47,63 @@ export default function CancelSubscriptionButton(props: {disabled?: boolean}) {
     }
   }
 
+  const text = busy ? 'Cancelling…' : (label ?? (variant === 'link' ? 'Cancel subscription' : 'Cancel subscription (now)'))
+  const isDisabled = busy || !!disabled
+
   return (
-    <div style={{display: 'grid', justifyItems: 'center', gap: 8}}>
+    <div
+      style={{
+        display: 'grid',
+        gap: variant === 'link' ? 6 : 8,
+        justifyItems: variant === 'link' ? 'start' : 'center',
+      }}
+    >
       <button
         onClick={onCancel}
-        disabled={busy || props.disabled}
-        style={{
-          padding: '11px 16px',
-          borderRadius: 999,
-          border: '1px solid rgba(255,255,255,0.22)',
-          background: 'rgba(255,255,255,0.06)',
-          color: 'rgba(255,255,255,0.90)',
-          cursor: busy || props.disabled ? 'not-allowed' : 'pointer',
-          fontSize: 14,
-          opacity: busy || props.disabled ? 0.6 : 1,
+        disabled={isDisabled}
+        style={
+          variant === 'link'
+            ? {
+                padding: 0,
+                margin: 0,
+                border: 'none',
+                background: 'transparent',
+                color: 'color-mix(in srgb, var(--accent) 70%, rgba(255,255,255,0.88))',
+                fontSize: 12,
+                lineHeight: '16px',
+                fontWeight: 600,
+                cursor: isDisabled ? 'not-allowed' : 'pointer',
+                opacity: isDisabled ? 0.6 : 0.95,
+                textAlign: 'left',
+                justifySelf: 'start',
+              }
+            : {
+                padding: '11px 16px',
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.22)',
+                background: 'rgba(255,255,255,0.06)',
+                color: 'rgba(255,255,255,0.90)',
+                cursor: isDisabled ? 'not-allowed' : 'pointer',
+                fontSize: 14,
+                opacity: isDisabled ? 0.6 : 1,
+              }
+        }
+        onMouseDown={(e) => {
+          if (variant === 'link') e.preventDefault()
         }}
       >
-        {busy ? 'Cancelling…' : 'Cancel subscription (now)'}
+        {text}
       </button>
 
       {msg ? (
-        <div style={{fontSize: 12, opacity: 0.75, maxWidth: 640, textAlign: 'center'}}>
+        <div
+          style={{
+            fontSize: 12,
+            opacity: 0.75,
+            maxWidth: 640,
+            textAlign: variant === 'link' ? 'left' : 'center',
+          }}
+        >
           {msg}
         </div>
       ) : null}

@@ -5,6 +5,7 @@ import React, {useEffect, useMemo, useRef, useState} from 'react'
 import {useAuth, useSignIn, useSignUp, useUser} from '@clerk/nextjs'
 import {useRouter, useSearchParams} from 'next/navigation'
 import SubscribeButton from '@/app/home/SubscribeButton'
+import CancelSubscriptionButton from '@/app/home/CancelSubscriptionButton'
 import {PatternPillUnderlay, VisualizerSnapshotCanvas} from '@/app/home/player/VisualizerPattern'
 
 
@@ -19,6 +20,8 @@ type Props = {
    * If null, we’ll use a default message.
    */
   attentionMessage?: string | null
+  canManageBilling?: boolean
+  hasGold?: boolean
 }
 
 const PENDING_KEY = 'angelfish_pending_purchase_activation'
@@ -305,7 +308,7 @@ function safeClearPendingFlag(): void {
 }
 
 export default function ActivationGate(props: Props) {
-  const {children, attentionMessage = null} = props
+  const {children, attentionMessage = null, canManageBilling = false, hasGold = false} = props
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -587,8 +590,15 @@ export default function ActivationGate(props: Props) {
 
         {/* line 2: patron link (placeholder for now) */}
         <div style={{justifySelf: 'start'}}>
-  <SubscribeButton loggedIn={true} variant="link" label="Become a Patron" />
+  {canManageBilling ? (
+    hasGold ? (
+      <CancelSubscriptionButton variant="link" label="Cancel subscription" />
+    ) : (
+      <SubscribeButton loggedIn={true} variant="link" label="Become a Patron" />
+    )
+  ) : null}
 </div>
+
 
       </div>
     )}
