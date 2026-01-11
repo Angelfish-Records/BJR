@@ -84,7 +84,38 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
         overflow: 'hidden',
       }}
     >
-      {/* pattern underlay only when checked */}
+      {/* ALWAYS-ON patterned border ring (does not depend on checked) */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: 0,
+          borderRadius: 999,
+          pointerEvents: 'none',
+          overflow: 'hidden',
+          // show only the border area
+          WebkitMaskImage:
+            'radial-gradient(circle, transparent 0, transparent calc(100% - 2px), #000 calc(100% - 1px))',
+          maskImage:
+            'radial-gradient(circle, transparent 0, transparent calc(100% - 2px), #000 calc(100% - 1px))',
+          opacity: 0.95,
+        }}
+      >
+        <PatternPillUnderlay active opacity={0.38} seed={888} />
+        {/* crisp edge so it reads as a border even when pattern is subtle */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: 999,
+            boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.18)',
+            pointerEvents: 'none',
+          }}
+        />
+      </div>
+
+      {/* pattern interior ONLY when checked */}
       <PatternPillUnderlay active={checked} opacity={0.32} seed={777} />
 
       {/* specular layer */}
@@ -124,6 +155,7 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
     </button>
   )
 }
+
 
 
 function normalizeDigits(raw: string): string {
