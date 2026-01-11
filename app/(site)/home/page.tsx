@@ -293,6 +293,7 @@ export default async function Home(props: {
                 checkout={checkout}
                 attentionMessage={attentionMessage}
                 loggedIn={loggedIn}
+                tier={tier}
                 hasGold={hasGold}
                 canManageBilling={!!member}
                 topLogoUrl={page?.topLogoUrl ?? null}

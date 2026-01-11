@@ -22,6 +22,7 @@ type Props = {
   attentionMessage?: string | null
   canManageBilling?: boolean
   hasGold?: boolean
+  tier?: string | null
 }
 
 const PENDING_KEY = 'angelfish_pending_purchase_activation'
@@ -308,7 +309,7 @@ function safeClearPendingFlag(): void {
 }
 
 export default function ActivationGate(props: Props) {
-  const {children, attentionMessage = null, canManageBilling = false, hasGold = false} = props
+  const {children, attentionMessage = null, canManageBilling = false, hasGold = false, tier = null} = props
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -589,7 +590,30 @@ export default function ActivationGate(props: Props) {
         </div>
 
         {/* line 2: patron link (placeholder for now) */}
-        <div style={{justifySelf: 'start'}}>
+        {/* line 2: tier | CTA */}
+<div
+  style={{
+    justifySelf: 'start',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    fontSize: 12,
+    lineHeight: '16px',
+    minWidth: 0,
+    opacity: 0.95,
+  }}
+>
+  {tier ? (
+    <>
+      <span style={{opacity: 0.72}} title={tier}>
+        {tier}
+      </span>
+      <span aria-hidden style={{opacity: 0.35}}>
+        |
+      </span>
+    </>
+  ) : null}
+
   {canManageBilling ? (
     hasGold ? (
       <CancelSubscriptionButton variant="link" label="Cancel subscription" />
