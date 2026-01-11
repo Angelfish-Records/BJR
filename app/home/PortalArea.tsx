@@ -187,16 +187,32 @@ export default function PortalArea(props: {
 }}
   >
     <style>{`
-  /* ---------- Base layout (desktop/tablet) ---------- */
+  /* ---------- Desktop/tablet: 3-lane bar (left / logo / right) ---------- */
   .afTopBar {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
+    grid-template-rows: auto;
     align-items: center;
     gap: 12px;
     min-width: 0;
   }
 
+  /* Key trick: make the wrapper disappear on desktop so Left/Right are grid children */
+  .afTopBarControls {
+    display: contents;
+  }
+
+  .afTopBarLeft {
+    grid-column: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+  }
+
   .afTopBarLogo {
+    grid-column: 2;
     min-width: 0;
     display: grid;
     place-items: center;
@@ -209,15 +225,18 @@ export default function PortalArea(props: {
     place-items: center;
   }
 
-  .afTopBarLeft,
   .afTopBarRight {
+    grid-column: 3;
     min-width: 0;
     display: flex;
     align-items: center;
+    justify-content: flex-end;
   }
 
-  .afTopBarLeft { justify-content: flex-start; gap: 10px; }
-  .afTopBarRight { justify-content: flex-end; }
+  .afTopBarRightInner {
+    max-width: 520px;
+    min-width: 0;
+  }
 
   /* ---------- Mobile: logo row + nested controls row ---------- */
   @media (max-width: 720px) {
@@ -226,9 +245,9 @@ export default function PortalArea(props: {
       grid-template-rows: auto auto; /* logo / controls */
       gap: 14px;
       align-items: start;
+      justify-items: stretch;
     }
 
-    /* Row 1: logo */
     .afTopBarLogo {
       grid-row: 1;
       grid-column: 1 / -1;
@@ -236,10 +255,9 @@ export default function PortalArea(props: {
       padding: 14px 0 6px;
     }
 
-    /* Row 2: controls container */
     .afTopBarControls {
       grid-row: 2;
-      display: grid;
+      display: grid;                 /* wrapper becomes real on mobile */
       grid-template-columns: auto 1fr; /* buttons / actions */
       align-items: center;
       gap: 12px;
@@ -248,20 +266,23 @@ export default function PortalArea(props: {
     }
 
     .afTopBarLeft {
+      grid-column: 1;
       justify-self: start;
     }
 
     .afTopBarRight {
+      grid-column: 2;
       justify-self: end;
       width: 100%;
     }
 
     .afTopBarRightInner {
-      margin-left: auto; /* visually right-align actions */
+      margin-left: auto;
       max-width: 520px;
     }
   }
 `}</style>
+
 
 
 
