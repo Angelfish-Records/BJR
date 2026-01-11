@@ -165,7 +165,7 @@ export default async function Home(props: {
         .shadowHomeGrid {
           display: grid;
           grid-template-columns: minmax(0, 1fr) clamp(300px, 34vw, 380px);
-          gap: '8px 18px',   // ⬅️ CSS shorthand: row-gap column-gap
+          gap: 8px 18px,   // ⬅️ CSS shorthand: row-gap column-gap
           align-items: start;
         }
 
