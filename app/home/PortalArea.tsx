@@ -156,6 +156,12 @@ export default function PortalArea(props: {
   } = props
 
   const [activePanelId, setActivePanelId] = React.useState<string>('player')
+  const [currentAlbumSlug, setCurrentAlbumSlug] = React.useState<string>(albumSlug)
+
+React.useEffect(() => {
+  setCurrentAlbumSlug(albumSlug)
+}, [albumSlug])
+
 
   const [album, setAlbum] = React.useState<AlbumInfo | null>(initialAlbum)
   const [tracks, setTracks] = React.useState<PlayerTrack[]>(initialTracks)
@@ -180,6 +186,7 @@ export default function PortalArea(props: {
 
         setAlbum(json.album ?? null)
         setTracks(Array.isArray(json.tracks) ? json.tracks : [])
+        setCurrentAlbumSlug(slug)
         setActivePanelId('player')
       } catch (e) {
         console.error(e)
@@ -190,6 +197,23 @@ export default function PortalArea(props: {
     [isBrowsingAlbum]
   )
 
+  React.useEffect(() => {
+  const onOpen = (ev: Event) => {
+    const e = ev as CustomEvent<{albumSlug?: string | null}>
+    const slug = e.detail?.albumSlug ?? null
+
+    setActivePanelId('player')
+
+    if (slug && slug !== currentAlbumSlug) {
+      void onSelectAlbum(slug)
+    }
+  }
+
+  window.addEventListener('af:open-player', onOpen as EventListener)
+  return () => window.removeEventListener('af:open-player', onOpen as EventListener)
+}, [onSelectAlbum, currentAlbumSlug])
+
+
   const panels = React.useMemo<PortalPanelSpec[]>(
     () => [
       {
@@ -197,7 +221,7 @@ export default function PortalArea(props: {
         label: 'Player',
         content: (
           <PlayerController
-            albumSlug={albumSlug}
+            albumSlug={currentAlbumSlug}
             album={album}
             tracks={tracks}
             albums={albums}
@@ -211,7 +235,7 @@ export default function PortalArea(props: {
       },
       {id: 'portal', label: 'Portal', content: portalPanel},
     ],
-    [portalPanel, albumSlug, album, tracks, albums, activePanelId, isBrowsingAlbum, onSelectAlbum]
+    [portalPanel, currentAlbumSlug, album, tracks, albums, activePanelId, isBrowsingAlbum, onSelectAlbum]
   )
 
   return (

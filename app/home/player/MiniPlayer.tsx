@@ -59,6 +59,7 @@ const IconBtn = React.forwardRef<
   )
 })
 
+
 function PlayPauseIcon({playing}: {playing: boolean}) {
   return playing ? (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -262,6 +263,19 @@ function useShareUX() {
 export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: string | null}) {
   const {onExpand, artworkUrl = null} = props
   const p = usePlayer()
+  const openPlayerToNowPlaying = React.useCallback(() => {
+  // keep existing behaviour (open panel)
+  onExpand?.()
+
+  // also request the correct album be loaded
+  window.dispatchEvent(
+    new CustomEvent('af:open-player', {
+      detail: {
+        albumSlug: p.queueContextSlug ?? null,
+      },
+    })
+  )
+}, [onExpand, p.queueContextSlug])
   const {shareTarget, fallbackModal} = useShareUX()
 
   const [mounted, setMounted] = React.useState(false)
@@ -761,32 +775,33 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
 
             <div data-af-meta style={{minWidth: 0}}>
               <div
-  onClick={onExpand}
-  onKeyDown={(e) => {
-    if (!onExpand) return
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault()
-      onExpand()
-    }
-  }}
-  role={onExpand ? 'button' : undefined}
-  tabIndex={onExpand ? 0 : undefined}
-  aria-label={onExpand ? 'Open player' : undefined}
-  className={isShimmering ? 'afShimmerText' : undefined}
-  data-reason={p.loadingReason ?? ''}
-  style={{
-    fontSize: 13,
-    opacity: 0.92,
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    lineHeight: 1.25,
-    transition: 'opacity 160ms ease',
-    cursor: onExpand ? 'pointer' : 'default',
-  }}
->
-  {title}
-</div>
+                onClick={onExpand ? openPlayerToNowPlaying : undefined}
+                onKeyDown={(e) => {
+                  if (!onExpand) return
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    openPlayerToNowPlaying()
+                  }
+                }}
+                role={onExpand ? 'button' : undefined}
+                tabIndex={onExpand ? 0 : undefined}
+                aria-label={onExpand ? 'Open player' : undefined}
+                className={isShimmering ? 'afShimmerText' : undefined}
+                data-reason={p.loadingReason ?? ''}
+                style={{
+                  fontSize: 13,
+                  opacity: 0.92,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  lineHeight: 1.25,
+                  transition: 'opacity 160ms ease',
+                  cursor: onExpand ? 'pointer' : 'default',
+                }}
+              >
+                {title}
+              </div>
+
 
               <div
                 style={{
