@@ -243,7 +243,7 @@ export default function PortalArea(props: {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     grid-template-rows: 1fr;
-    align-items: end;
+    align-items: stretch; /* ✅ critical: allow lanes to take full row height */
     gap: 12px;
     min-width: 0;
   }
@@ -255,46 +255,46 @@ export default function PortalArea(props: {
     grid-row: 1;
     min-width: 0;
     display: flex;
-    align-items: flex-end;
+    align-items: flex-end;     /* bottom-align content */
     justify-content: flex-start;
     gap: 10px;
+    align-self: stretch;       /* ensure lane stretches */
   }
 
   .afTopBarLogo {
     grid-column: 2;
     grid-row: 1;
     min-width: 0;
-    display: grid;
-    align-items: end;
-    justify-items: center;
+    display: flex;
+    align-items: flex-end;     /* bottom-align logo */
+    justify-content: center;
     padding: 6px 0 2px;
+    align-self: stretch;       /* ensure lane stretches */
   }
 
   .afTopBarLogoInner {
     width: fit-content;
     display: grid;
-    align-items: end;
-    justify-items: center;
+    place-items: end center;   /* sits at the bottom of the logo lane */
   }
 
-  /* ✅ KEY: let the right lane stretch to the row height */
   .afTopBarRight {
     grid-column: 3;
     grid-row: 1;
     min-width: 0;
     display: flex;
-    align-items: stretch;      /* was flex-end */
+    align-items: flex-end;     /* bottom-align the inner wrapper */
     justify-content: flex-end;
+    align-self: stretch;       /* ✅ stretch to row height */
   }
 
-  /* ✅ KEY: bottom-pack the actual content inside that stretched lane */
   .afTopBarRightInner {
     max-width: 520px;
     min-width: 0;
-    height: 100%;
+    height: 100%;              /* ✅ now this actually has meaning */
     display: flex;
     flex-direction: column;
-    justify-content: flex-end; /* pushes ActivationGate to the bottom */
+    justify-content: flex-end; /* ✅ push ActivationGate to bottom */
   }
 
   /* ---------- Mobile: logo row + nested controls row ---------- */
@@ -303,7 +303,7 @@ export default function PortalArea(props: {
       grid-template-columns: 1fr;
       grid-template-rows: auto auto;
       gap: 10px;
-      align-items: end;
+      align-items: stretch;    /* ✅ same principle */
       justify-items: stretch;
     }
 
@@ -312,15 +312,16 @@ export default function PortalArea(props: {
       grid-column: 1 / -1;
       width: 100%;
       padding: 10px 0 0;
-      align-items: end;
-      justify-items: center;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
     }
 
     .afTopBarControls {
       grid-row: 2;
       display: grid;
       grid-template-columns: auto 1fr;
-      align-items: end;
+      align-items: stretch;    /* ✅ allow both columns to stretch */
       gap: 10px;
       width: 100%;
       min-width: 0;
@@ -329,17 +330,19 @@ export default function PortalArea(props: {
     .afTopBarLeft {
       grid-column: 1;
       justify-self: start;
+      display: flex;
       align-items: flex-end;
+      align-self: stretch;
     }
 
-    /* same stretch+bottom-pack behaviour on mobile row */
     .afTopBarRight {
       grid-column: 2;
       justify-self: end;
       width: 100%;
       display: flex;
-      align-items: stretch;
+      align-items: flex-end;
       justify-content: flex-end;
+      align-self: stretch;     /* ✅ */
     }
 
     .afTopBarRightInner {
