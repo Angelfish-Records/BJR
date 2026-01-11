@@ -23,6 +23,8 @@ type ShadowHomeDoc = {
   title?: string
   subtitle?: string
   backgroundImage?: unknown
+  topLogoUrl?: string | null
+  topLogoHeight?: number | null
 }
 
 type StyleWithAccent = React.CSSProperties & {'--accent'?: string}
@@ -31,9 +33,12 @@ const shadowHomeQuery = `
   *[_type == "shadowHomePage" && slug.current == $slug][0]{
     title,
     subtitle,
-    backgroundImage
+    backgroundImage,
+    "topLogoUrl": topLogo.asset->url,
+    topLogoHeight
   }
 `
+
 
 export async function generateMetadata(): Promise<Metadata> {
   const page = await client.fetch<{title?: string; subtitle?: string}>(
@@ -279,7 +284,7 @@ export default async function Home(props: {
 
             {/* LEFT: portal */}
             <div className="shadowHomeMain" style={{display: 'grid', gap: 18}}>
-              <PortalArea
+             <PortalArea
                 portalPanel={portalPanel}
                 albumSlug={albumSlug}
                 album={albumData.album}
@@ -290,7 +295,10 @@ export default async function Home(props: {
                 loggedIn={loggedIn}
                 hasGold={hasGold}
                 canManageBilling={!!member}
+                topLogoUrl={page?.topLogoUrl ?? null}
+                topLogoHeight={page?.topLogoHeight ?? null}
               />
+
             </div>
 
             {/* RIGHT: membership sidebar */}

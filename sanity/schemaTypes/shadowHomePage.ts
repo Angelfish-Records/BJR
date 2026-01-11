@@ -24,6 +24,24 @@ export const shadowHomePage = defineType({
       options: {source: 'title', maxLength: 96},
       validation: (Rule) => Rule.required(),
     }),
+
+    // ✅ NEW: Top logo image + display height
+    defineField({
+      name: 'topLogo',
+      title: 'Top Logo',
+      type: 'image',
+      options: {hotspot: true},
+      description: 'Logo shown in the portal top bar.',
+    }),
+    defineField({
+      name: 'topLogoHeight',
+      title: 'Top Logo Height (px)',
+      type: 'number',
+      description: 'Display height in pixels. Used only for rendering (no cropping).',
+      initialValue: 38,
+      validation: (Rule) => Rule.min(16).max(120).integer().warning('Typical range is 24–64px.'),
+    }),
+
     defineField({
       name: 'backgroundImage',
       title: 'Background Image',

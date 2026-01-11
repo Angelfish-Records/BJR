@@ -11,6 +11,8 @@ import PlayerController from './player/PlayerController'
 import ActivationGate from '@/app/home/ActivationGate'
 import SubscribeButton from '@/app/home/SubscribeButton'
 import CancelSubscriptionButton from '@/app/home/CancelSubscriptionButton'
+import Image from 'next/image'
+
 
 function QueueBootstrapper(props: {albumId: string | null; tracks: PlayerTrack[]}) {
   const p = usePlayer()
@@ -77,6 +79,8 @@ function CheckoutBanner(props: {checkout: string | null}) {
 
 export default function PortalArea(props: {
   portalPanel: React.ReactNode
+  topLogoUrl?: string | null
+  topLogoHeight?: number | null
   albumSlug: string
   album: AlbumInfo | null
   tracks: PlayerTrack[]
@@ -296,29 +300,53 @@ export default function PortalArea(props: {
         </button>
       </div>
 
-      {/* Center: logo (now truly centered) */}
-      <div className="afTopBarLogo" style={{display: 'grid', placeItems: 'center', minWidth: 0}}>
-        <div
-          aria-label="AF"
-          title="AF"
+     {/* Center: logo (image if set, else fallback badge) */}
+        <div className="afTopBarLogo" style={{display: 'grid', placeItems: 'center', minWidth: 0}}>
+          {props.topLogoUrl ? (
+            <Image
+          src={props.topLogoUrl}
+          alt="Logo"
+          height={Math.max(16, Math.min(120, props.topLogoHeight ?? 38))}
+          width={Math.round(
+            (Math.max(16, Math.min(120, props.topLogoHeight ?? 38)) * 3)
+          )} // arbitrary but safe aspect buffer
+          priority={false}
+          sizes="(max-width: 720px) 120px, 160px"
           style={{
-            width: 38,
-            height: 38,
-            borderRadius: 999,
-            border: '1px solid rgba(255,255,255,0.14)',
-            background: 'rgba(0,0,0,0.22)',
-            display: 'grid',
-            placeItems: 'center',
-            fontSize: 13,
-            fontWeight: 700,
-            letterSpacing: 0.5,
-            opacity: 0.92,
+            height: Math.max(16, Math.min(120, props.topLogoHeight ?? 38)),
+            width: 'auto',
+            maxWidth: '100%',
+            objectFit: 'contain',
+            opacity: 0.94,
             userSelect: 'none',
+            filter: 'drop-shadow(0 10px 22px rgba(0,0,0,0.28))',
           }}
-        >
-          AF
-        </div>
-      </div>
+        />
+
+  ) : (
+    <div
+      aria-label="AF"
+      title="AF"
+      style={{
+        width: 38,
+        height: 38,
+        borderRadius: 999,
+        border: '1px solid rgba(255,255,255,0.14)',
+        background: 'rgba(0,0,0,0.22)',
+        display: 'grid',
+        placeItems: 'center',
+        fontSize: 13,
+        fontWeight: 700,
+        letterSpacing: 0.5,
+        opacity: 0.92,
+        userSelect: 'none',
+      }}
+    >
+      AF
+    </div>
+  )}
+</div>
+
 
       {/* Right: ActivationGate */}
       <div className="afTopBarRight">
