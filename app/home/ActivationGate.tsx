@@ -497,7 +497,19 @@ export default function ActivationGate(props: Props) {
         />
       ) : null}
 
-      <div style={{position: 'relative', zIndex: 41, display: 'grid', gap: 12, justifyItems: 'center'}}>
+      <div
+  style={{
+    position: 'relative',
+    zIndex: 41,
+    display: 'grid',
+    gap: 12,
+    justifyItems: 'stretch', // don't center the child; let it fill and be positioned by inner layout
+    alignContent: 'end',     // pack contents to bottom of this wrapper
+    width: '100%',
+    minWidth: 0,
+  }}
+>
+
        <div
   style={{
     display: 'flex',
@@ -505,9 +517,10 @@ export default function ActivationGate(props: Props) {
     gap: 12,
     width: '100%',
     minWidth: 0,
-    justifyContent: 'center',
+    justifyContent: 'flex-end', // was center
   }}
 >
+
   <div style={{flex: '1 1 auto', minWidth: 0, maxWidth: EMAIL_W}}>
     {!isActive ? (
       <input
