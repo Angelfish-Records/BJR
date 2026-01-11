@@ -43,37 +43,90 @@ function IconPortal() {
   )
 }
 
-function CheckoutBanner(props: {checkout: string | null}) {
-  const {checkout} = props
-  if (checkout !== 'success' && checkout !== 'cancel') return null
-  const isSuccess = checkout === 'success'
+function MessageBar(props: {checkout: string | null; attentionMessage: string | null}) {
+  const {checkout, attentionMessage} = props
+
+  const showCheckout = checkout === 'success' || checkout === 'cancel'
+  const showAttention = !!attentionMessage
+
+  if (!showCheckout && !showAttention) return null
+
+  const checkoutIsSuccess = checkout === 'success'
+
+  let leftIcon: React.ReactNode = null
+  let text: React.ReactNode = null
+  let tone: 'success' | 'neutral' | 'warn' = 'neutral'
+
+  if (showAttention) {
+    tone = 'warn'
+    leftIcon = <span aria-hidden>⚠️</span>
+    text = <>{attentionMessage}</>
+  } else if (showCheckout) {
+    tone = checkoutIsSuccess ? 'success' : 'neutral'
+    leftIcon = <span aria-hidden>{checkoutIsSuccess ? '✅' : '⤺'}</span>
+    text = checkoutIsSuccess ? (
+      <>Checkout completed. If entitlements haven&apos;t appeared yet, refresh once (webhooks can be a beat behind).</>
+    ) : (
+      <>Checkout cancelled.</>
+    )
+  }
+
+  const border =
+    tone === 'success'
+      ? 'color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.14))'
+      : tone === 'warn'
+        ? 'rgba(255,255,255,0.18)'
+        : 'rgba(255,255,255,0.14)'
+
+  const bg =
+    tone === 'success'
+      ? 'color-mix(in srgb, var(--accent) 10%, rgba(0,0,0,0.22))'
+      : tone === 'warn'
+        ? 'rgba(0,0,0,0.28)'
+        : 'rgba(0,0,0,0.22)'
 
   return (
     <div
       style={{
         marginTop: 10,
         borderRadius: 14,
-        border: '1px solid rgba(255,255,255,0.14)',
-        background: isSuccess ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.20)',
+        border: `1px solid ${border}`,
+        background: bg,
         padding: '10px 12px',
         fontSize: 12,
-        opacity: isSuccess ? 0.9 : 0.85,
+        opacity: 0.92,
         lineHeight: 1.45,
         textAlign: 'left',
-        maxWidth: 520,
+        maxWidth: 980, // page-level bar; not the right column
+        width: '100%',
+        display: 'flex',
+        gap: 10,
+        alignItems: 'flex-start',
+        boxShadow: '0 16px 40px rgba(0,0,0,0.22)',
       }}
     >
-      {isSuccess ? (
-        <>
-          ✅ Checkout completed. If entitlements haven&apos;t appeared yet, refresh once (webhooks can be a
-          beat behind).
-        </>
-      ) : (
-        <>Checkout cancelled.</>
-      )}
+      <div
+        aria-hidden
+        style={{
+          width: 18,
+          height: 18,
+          borderRadius: 999,
+          display: 'grid',
+          placeItems: 'center',
+          marginTop: 1,
+          background: 'rgba(255,255,255,0.08)',
+          border: '1px solid rgba(255,255,255,0.14)',
+          flex: '0 0 auto',
+        }}
+      >
+        {leftIcon}
+      </div>
+
+      <div style={{minWidth: 0}}>{text}</div>
     </div>
   )
 }
+
 
 export default function PortalArea(props: {
   portalPanel: React.ReactNode
@@ -401,13 +454,13 @@ export default function PortalArea(props: {
   <div />
 </ActivationGate>
 
-
-
-        <CheckoutBanner checkout={checkout} />
       </div>
     </div>
   </div>
 </div>
+
+{/* New: page-level message bar under topbar */}
+<MessageBar checkout={checkout} attentionMessage={attentionMessage} />
 
   </div>
 )}
