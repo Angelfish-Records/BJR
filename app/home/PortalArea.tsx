@@ -178,15 +178,14 @@ export default function PortalArea(props: {
           header={({activePanelId, setPanel}) => (
   <div
     style={{
-      width: '100%',
-      borderRadius: 18,
-      border: '1px solid rgba(255,255,255,0.12)',
-      background: 'rgba(255,255,255,0.04)',
-      backdropFilter: 'blur(10px)',
-      WebkitBackdropFilter: 'blur(10px)',
-      padding: 12,
-      minWidth: 0,
-    }}
+        width: '100%',
+        borderRadius: 0,
+        border: 'none',
+        borderBottom: '1px solid rgba(255,255,255,0.10)',
+        background: 'transparent',
+        padding: 12,
+        minWidth: 0,
+}}
   >
     <style>{`
       /* Desktop/tablet: true centered logo */
