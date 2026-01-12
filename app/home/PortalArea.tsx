@@ -156,6 +156,17 @@ export default function PortalArea(props: {
   const p = usePlayer()
   const sp = useClientSearchParams()
 
+  const derivedAttentionMessage =
+    attentionMessage ??
+    (p.status === 'blocked' &&
+    (p.blockedCode === 'ANON_CAP_REACHED' ||
+      p.blockedCode === 'ENTITLEMENT_REQUIRED' ||
+      p.blockedCode === 'AUTH_REQUIRED')
+      ? p.lastError ?? null
+      : null)
+
+  const spotlightAttention = !!derivedAttentionMessage
+
   const qAlbum = sp.get('album')
   const qTrack = sp.get('track')
   const qPanel = sp.get('p') ?? sp.get('panel') ?? 'player'
@@ -578,7 +589,7 @@ export default function PortalArea(props: {
                   <div className="afTopBarRight">
                     <div className="afTopBarRightInner" style={{maxWidth: 520, minWidth: 0}}>
                       <ActivationGate
-                        attentionMessage={attentionMessage}
+                        attentionMessage={derivedAttentionMessage}
                         canManageBilling={canManageBilling}
                         hasGold={hasGold}
                         tier={tier}
@@ -590,7 +601,10 @@ export default function PortalArea(props: {
                 </div>
               </div>
 
-              <MessageBar checkout={checkout} attentionMessage={attentionMessage} />
+              <div style={spotlightAttention ? {position: 'relative', zIndex: 41} : undefined}>
+                <MessageBar checkout={checkout} attentionMessage={derivedAttentionMessage} />
+              </div>
+
             </div>
           )}
         />

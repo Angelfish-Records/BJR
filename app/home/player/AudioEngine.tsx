@@ -10,7 +10,7 @@ import {audioSurface} from './audioSurface'
 
 type TokenResponse =
   | {ok: true; token: string; expiresAt: string | number}
-  | {ok: false; blocked: true; action?: string; reason: string; code?: string}
+  | {ok: false; blocked: true; action?: 'login' | 'subscribe' | 'buy' | 'wait'; reason: string; code?: string}
 
 function canPlayNativeHls(a: HTMLMediaElement) {
   return a.canPlayType('application/vnd.apple.mpegurl') !== ''
@@ -338,10 +338,11 @@ export default function AudioEngine() {
         // ----- BLOCKED PATH -----
         if (!res.ok || !data || !('ok' in data) || data.ok !== true) {
           const code = data && 'ok' in data && data.ok === false ? data.code : undefined
+          const action = data && 'ok' in data && data.ok === false ? data.action : undefined
           const reason =
             data && 'ok' in data && data.ok === false ? data.reason : `Token error (${res.status})`
-
-          // stop the *old* track from continuing
+          
+            // stop the *old* track from continuing
           hardStopAndDetach()
 
           // your requested semantics: when anon gating hits, empty the queue
@@ -356,7 +357,7 @@ export default function AudioEngine() {
           // ✅ Stop any autoplay-bridge retries.
           playIntentRef.current = false
 
-          pRef.current.setBlocked(reason)
+          pRef.current.setBlocked(reason, {code, action: action})
           mediaSurface.setStatus('blocked')
           return
         }
@@ -378,7 +379,15 @@ export default function AudioEngine() {
 
     void load()
     return () => ac.abort()
-  }, [p.current?.id, p.current?.muxPlaybackId, p.reloadNonce, hardStopAndDetach])
+      }, [
+      p.current?.id,
+      p.current?.muxPlaybackId,
+      p.reloadNonce,
+      p.intent,      // ✅ triggers attach when user hits play on already-selected preloaded track
+      p.status,      // ✅ covers cases where status flips to loading without id changing
+      hardStopAndDetach,
+    ])
+
 
   /* ---------------- Media element -> time + duration + state ---------------- */
 
@@ -477,10 +486,14 @@ export default function AudioEngine() {
     const onEnded = () => {
       reportPlaythroughComplete(1)
 
+      // ✅ Kill any residual buffered tail before we advance.
+      hardStopAndDetach()
+
       // Ensure next track has a user gesture bridge available if needed.
       window.dispatchEvent(new Event('af:play-intent'))
       pRef.current.next()
     }
+
 
 
     a.addEventListener('timeupdate', onTime)
@@ -504,7 +517,7 @@ export default function AudioEngine() {
       a.removeEventListener('canplaythrough', clearBuffering)
       a.removeEventListener('ended', onEnded)
     }
-  }, [])
+  }, [hardStopAndDetach])
 
   /* ---------------- Seek: PlayerState -> media element ---------------- */
 

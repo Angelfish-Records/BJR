@@ -48,6 +48,10 @@ export type PlayerState = {
   repeat: RepeatMode
 
   durationById: Record<string, number>
+  
+  blockedCode?: string
+  blockedAction?: 'login' | 'subscribe' | 'buy' | 'wait'
+
 }
 
 type PlayerActions = {
@@ -81,7 +85,7 @@ type PlayerActions = {
   cycleRepeat: () => void
   tick: (deltaMs: number) => void
 
-  setBlocked: (reason?: string) => void
+  setBlocked: (reason?: string, meta?: {code?: string; action?: 'login' | 'subscribe' | 'buy' | 'wait'}) => void
   clearError: () => void
 
   bumpReload: () => void
@@ -560,17 +564,28 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
         })
       },
 
-      setBlocked: (reason?: string) =>
-        setState((s) => ({
-          ...s,
-          status: 'blocked',
-          lastError: reason ?? 'Playback blocked.',
-          loadingReason: undefined,
-          intent: null,
-          intentAtMs: undefined,
-        })),
+        setBlocked: (
+          reason?: string,
+          meta?: {code?: string; action?: 'login' | 'subscribe' | 'buy' | 'wait'}
+        ) =>
+          setState((s) => ({
+            ...s,
+            status: 'blocked',
+            lastError: reason ?? 'Playback blocked.',
+            loadingReason: undefined,
+            intent: null,
+            intentAtMs: undefined,
+            blockedCode: meta?.code,
+            blockedAction: meta?.action,
+          })),
 
-      clearError: () => setState((s) => ({...s, lastError: undefined})),
+        clearError: () =>
+          setState((s) => ({
+            ...s,
+            lastError: undefined,
+            blockedCode: undefined,
+            blockedAction: undefined,
+          })),
 
       bumpReload: () =>
         setState((s) => {
