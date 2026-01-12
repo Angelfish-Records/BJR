@@ -65,7 +65,10 @@ function MessageBar(props: {checkout: string | null; attentionMessage: string | 
     tone = checkoutIsSuccess ? 'success' : 'neutral'
     leftIcon = <span aria-hidden>{checkoutIsSuccess ? '✅' : '⤺'}</span>
     text = checkoutIsSuccess ? (
-      <>Checkout completed. If entitlements haven&apos;t appeared yet, refresh once (webhooks can be a beat behind).</>
+      <>
+        Checkout completed. If entitlements haven&apos;t appeared yet, refresh once (webhooks can be a beat
+        behind).
+      </>
     ) : (
       <>Checkout cancelled.</>
     )
@@ -127,6 +130,23 @@ function MessageBar(props: {checkout: string | null; attentionMessage: string | 
   )
 }
 
+/* ---------------- Debug harness (TEMP) ---------------- */
+
+type DebugAttentionMode = 'off' | 'checkout' | 'gated'
+
+function parseDebugAttention(sp: URLSearchParams): DebugAttentionMode {
+  const raw = (sp.get('dbg') ?? sp.get('debug') ?? '').toLowerCase()
+  if (raw === 'checkout') return 'checkout'
+  if (raw === 'gated') return 'gated'
+  return 'off'
+}
+
+function nextDebugAttention(m: DebugAttentionMode): DebugAttentionMode {
+  if (m === 'off') return 'checkout'
+  if (m === 'checkout') return 'gated'
+  return 'off'
+}
+
 export default function PortalArea(props: {
   portalPanel: React.ReactNode
   topLogoUrl?: string | null
@@ -158,23 +178,33 @@ export default function PortalArea(props: {
   const sp = useClientSearchParams()
   const {isSignedIn} = useAuth()
 
-  const purchaseAttention =
-  checkout === 'success' && !isSignedIn
-    ? 'Payment confirmed – sign in to access your purchased content.'
-    : null
+  const dbgAttention = parseDebugAttention(sp)
 
-  const derivedAttentionMessage =
-    attentionMessage ??
-    purchaseAttention ??
-    (p.status === 'blocked' &&
+  const purchaseAttention =
+    checkout === 'success' && !isSignedIn ? 'Payment confirmed – sign in to access your purchased content.' : null
+
+  const gatedAttention =
+    p.status === 'blocked' &&
     (p.blockedCode === 'ANON_CAP_REACHED' ||
       p.blockedCode === 'ENTITLEMENT_REQUIRED' ||
       p.blockedCode === 'AUTH_REQUIRED')
       ? p.lastError ?? null
-      : null)
+      : null
 
-  const spotlightAttention = !!derivedAttentionMessage
+  const debugAttentionMessage =
+    dbgAttention === 'checkout'
+      ? 'Payment confirmed – sign in to access your purchased content.'
+      : dbgAttention === 'gated'
+        ? 'Anonymous listening limit reached. Please log in to continue.'
+        : null
 
+  const debugCheckout = dbgAttention === 'checkout' ? 'success' : null
+
+  const derivedAttentionMessage =
+    debugAttentionMessage ?? attentionMessage ?? gatedAttention ?? purchaseAttention
+
+  // Spotlight only when it’s a *gating* state (or debug=gated).
+  const spotlightAttention = dbgAttention === 'gated' ? true : !!gatedAttention
 
   const qAlbum = sp.get('album')
   const qTrack = sp.get('track')
@@ -184,7 +214,6 @@ export default function PortalArea(props: {
   const qAutoplay = getAutoplayFlag(sp)
 
   // Optional: require a “trusted” token so random links can’t force autoplay.
-  // If you don’t have this yet, leave it: autoplay simply won’t trigger even if autoplay=1 is present.
   const qShareToken = sp.get('st') ?? sp.get('share') ?? null
 
   // single writer (NO Next navigation)
@@ -295,10 +324,7 @@ export default function PortalArea(props: {
     if (!qAutoplay) return
     if (!qTrack) return
 
-    // Require a “trusted” token so autoplay can’t be triggered by random links.
-    // If/when you introduce a real share token, wire it to `st=...` and this starts working.
     if (!qShareToken) {
-      // Don’t keep an inert autoplay param around forever.
       patchQuery({autoplay: null})
       return
     }
@@ -307,10 +333,7 @@ export default function PortalArea(props: {
     if (autoplayFiredRef.current === key) return
     autoplayFiredRef.current = key
 
-    // Important: request play via PlayerState only.
     p.play()
-
-    // Make it one-shot so it can’t re-trigger on qs changes / re-renders.
     patchQuery({autoplay: null})
   }, [qPanel, qAutoplay, qTrack, qAlbum, qShareToken, p, patchQuery])
 
@@ -352,6 +375,21 @@ export default function PortalArea(props: {
   return (
     <>
       <QueueBootstrapper albumId={album?.id ?? null} tracks={tracks} />
+
+      {/* Full-page soft dim + blur ONLY when spotlighting (gating), not checkout */}
+      {spotlightAttention ? (
+        <div
+          aria-hidden
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            zIndex: 40,
+          }}
+        />
+      ) : null}
 
       <div style={{height: '100%', minHeight: 0, minWidth: 0, display: 'grid'}}>
         <PortalShell
@@ -490,7 +528,7 @@ export default function PortalArea(props: {
   }
 `}</style>
 
-              <div className="afTopBar">
+              <div className="afTopBar" style={spotlightAttention ? {position: 'relative', zIndex: 41} : undefined}>
                 <div className="afTopBarLogo">
                   <div className="afTopBarLogoInner">
                     {props.topLogoUrl ? (
@@ -593,6 +631,37 @@ export default function PortalArea(props: {
                     >
                       <IconPortal />
                     </button>
+
+                    {/* TEMP: cycle debug attention state */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = nextDebugAttention(dbgAttention)
+                        patchQuery({dbg: next === 'off' ? null : next})
+                      }}
+                      title={
+                        dbgAttention === 'checkout'
+                          ? 'Debug: post-checkout message (no spotlight)'
+                          : dbgAttention === 'gated'
+                            ? 'Debug: gated message (spotlight)'
+                            : 'Debug: off'
+                      }
+                      style={{
+                        height: 46,
+                        padding: '0 14px',
+                        borderRadius: 999,
+                        border: '1px solid rgba(255,255,255,0.14)',
+                        background: 'rgba(255,255,255,0.04)',
+                        color: 'rgba(255,255,255,0.86)',
+                        cursor: 'pointer',
+                        boxShadow: '0 12px 26px rgba(0,0,0,0.18)',
+                        fontSize: 12,
+                        opacity: 0.9,
+                        userSelect: 'none',
+                      }}
+                    >
+                      {dbgAttention === 'off' ? 'DBG' : dbgAttention.toUpperCase()}
+                    </button>
                   </div>
 
                   <div className="afTopBarRight">
@@ -611,9 +680,8 @@ export default function PortalArea(props: {
               </div>
 
               <div style={spotlightAttention ? {position: 'relative', zIndex: 41} : undefined}>
-                <MessageBar checkout={checkout} attentionMessage={derivedAttentionMessage} />
+                <MessageBar checkout={debugCheckout ?? checkout} attentionMessage={derivedAttentionMessage} />
               </div>
-
             </div>
           )}
         />
