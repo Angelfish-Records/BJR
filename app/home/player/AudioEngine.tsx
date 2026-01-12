@@ -8,24 +8,15 @@ import {muxSignedHlsUrl} from '@/lib/mux'
 import {mediaSurface} from './mediaSurface'
 import {audioSurface} from './audioSurface'
 
-type TokenOk = {ok: true; token: string; expiresAt: string | number}
-type TokenBlocked = {ok: false; blocked: true; action?: string; reason: string; code?: string}
-type TokenResponse = TokenOk | TokenBlocked
+type TokenResponse =
+  | {ok: true; token: string; expiresAt: string}
+  | {ok: false; blocked: true; action: string; reason: string}
 
 function canPlayNativeHls(a: HTMLMediaElement) {
   return a.canPlayType('application/vnd.apple.mpegurl') !== ''
 }
 
-function toExpiresAtMs(expiresAt: string | number): number | null {
-  if (typeof expiresAt === 'number') {
-    // If it looks like seconds (e.g. 1700000000), convert to ms; if already ms, keep.
-    if (expiresAt > 0 && expiresAt < 10_000_000_000) return expiresAt * 1000
-    if (expiresAt >= 10_000_000_000) return expiresAt
-    return null
-  }
-  const ms = Date.parse(expiresAt)
-  return Number.isFinite(ms) ? ms : null
-}
+const COMPLETE_THRESHOLD = 0.9
 
 export default function AudioEngine() {
   const p = usePlayer()
@@ -50,38 +41,76 @@ export default function AudioEngine() {
   const attachedKeyRef = React.useRef<string | null>(null) // `${playbackId}:${reloadNonce}`
   const tokenCacheRef = React.useRef(new Map<string, {token: string; expiresAtMs: number}>())
 
+  // ---- Playthrough completion reporting (90%+) ----
+  // key = `${trackId}:${playbackId}`
+  const completedKeyRef = React.useRef<string | null>(null)
+  const completionSentRef = React.useRef(new Set<string>())
+  const reportingInFlightRef = React.useRef(false)
+
   const pRef = React.useRef(p)
   React.useEffect(() => {
     pRef.current = p
   }, [p])
 
-  async function fetchMuxToken(args: {
-    playbackId: string
-    trackId?: string
-    albumSlug?: string
-    durationMs?: number
-    signal?: AbortSignal
-  }): Promise<TokenResponse> {
-    const {signal, ...payload} = args
-    const res = await fetch('/api/mux/token', {
+  const reportPlaythrough = React.useCallback(async (pct: number) => {
+    const s = pRef.current
+    const trackId = s.current?.id
+    const playbackId = s.current?.muxPlaybackId
+    if (!trackId || !playbackId) return
+
+    const key = `${trackId}:${playbackId}`
+
+    // Prevent duplicates (including rapid timeupdate bursts)
+    if (completionSentRef.current.has(key)) return
+    if (reportingInFlightRef.current) return
+
+    completionSentRef.current.add(key)
+    reportingInFlightRef.current = true
+
+    try {
+      const init: RequestInit = {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(payload),
-      signal,
-    })
-
-    let data: TokenResponse | null = null
-    try {
-      data = (await res.json()) as TokenResponse
-    } catch {
-      data = null
+      keepalive: true,
+      body: JSON.stringify({trackId, playbackId, pct}),
     }
 
-    if (!data) {
-      return {ok: false, blocked: true, reason: `Token error (${res.status})`}
-    }
-    return data
-  }
+    await fetch('/api/playthrough/complete', init)
+
+        } catch {
+          // If it fails, allow one retry on a later signal (ended).
+          completionSentRef.current.delete(key)
+        } finally {
+          reportingInFlightRef.current = false
+        }
+      }, [])
+
+      const maybeReportCompletion = React.useCallback(
+        (a: HTMLAudioElement) => {
+      const s = pRef.current
+      const trackId = s.current?.id
+      const playbackId = s.current?.muxPlaybackId
+      if (!trackId || !playbackId) return
+
+      const key = `${trackId}:${playbackId}`
+
+      // Reset per-track key tracking when track changes
+      if (completedKeyRef.current !== key) {
+        completedKeyRef.current = key
+        // Do not clear the global set; it de-dupes within a session.
+      }
+
+      // Need a real duration to compute pct; prefer media element duration
+      const durSec = Number.isFinite(a.duration) && a.duration > 0 ? a.duration : 0
+      if (durSec <= 0) return
+
+      const pct = a.currentTime / durSec
+      if (pct >= COMPLETE_THRESHOLD) {
+        void reportPlaythrough(Math.min(1, Math.max(0, pct)))
+      }
+    },
+    [reportPlaythrough]
+  )
 
   /* ---------------- AudioContext + analyser (ONCE) ---------------- */
 
@@ -125,49 +154,6 @@ export default function AudioEngine() {
     return () => {
       window.removeEventListener('af:play-intent', onUserGesture)
     }
-  }, [])
-
-  /* ---------------- Token prefetch (AudioEngine owns it) ---------------- */
-
-  React.useEffect(() => {
-    const onPrefetch = (ev: Event) => {
-      const e = ev as CustomEvent
-      const d =
-        (e.detail ?? {}) as Partial<{
-          playbackId: string
-          trackId: string
-          albumSlug: string
-          durationMs: number
-        }>
-
-      const playbackId = d.playbackId
-      if (!playbackId) return
-
-      const cached = tokenCacheRef.current.get(playbackId)
-      if (cached && Date.now() < cached.expiresAtMs - 5000) return
-
-      // Prefetch must be silent: no PlayerState loading, no blocked UI.
-      void (async () => {
-        try {
-          const data = await fetchMuxToken({
-            playbackId,
-            trackId: d.trackId,
-            albumSlug: d.albumSlug,
-            durationMs: d.durationMs,
-          })
-
-          if (!data || data.ok !== true) return
-
-          const expiresAtMs = toExpiresAtMs(data.expiresAt)
-          if (expiresAtMs && Number.isFinite(expiresAtMs)) {
-            tokenCacheRef.current.set(playbackId, {token: data.token, expiresAtMs})
-          }
-        } catch {}
-      })()
-    }
-
-    window.addEventListener('af:prefetch-token', onPrefetch as EventListener)
-    return () => window.removeEventListener('af:prefetch-token', onPrefetch as EventListener)
   }, [])
 
   /* ---------------- Audio feature pump ---------------- */
@@ -260,14 +246,14 @@ export default function AudioEngine() {
     const playbackId = s.current?.muxPlaybackId
     if (!playbackId) return
 
-    // Stage/lyrics consumers always need to know which track is “current”.
     mediaSurface.setTrack(s.current?.id ?? null)
 
     const armed =
+      s.status === 'loading' ||
+      s.status === 'playing' ||
       playIntentRef.current ||
       s.intent === 'play' ||
       s.reloadNonce > 0
-
 
     if (!armed) return
 
@@ -357,23 +343,36 @@ export default function AudioEngine() {
           return
         }
 
-        const s2 = pRef.current
-        const data = await fetchMuxToken({
-          playbackId,
-          trackId: s2.current?.id,
-          durationMs: s2.current?.durationMs,
+        const res = await fetch('/api/mux/token', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          // We can pass duration hint later; for now keep minimal.
+          body: JSON.stringify({
+            playbackId,
+            trackId: s.current?.id,
+            albumSlug: s.queueContextSlug,
+            durationMs: s.current?.durationMs ?? s.durationById[s.current?.id ?? ''] ?? undefined,
+          }),
           signal: ac.signal,
         })
 
-        if (!data || data.ok !== true) {
-          const reason = data && data.ok === false ? data.reason : 'Token error'
+        let data: TokenResponse | null = null
+        try {
+          data = (await res.json()) as TokenResponse
+        } catch {
+          data = null
+        }
+
+        if (!res.ok || !data || !('ok' in data) || data.ok !== true) {
+          const reason =
+            data && 'ok' in data && data.ok === false ? data.reason : `Token error (${res.status})`
           pRef.current.setBlocked(reason)
           mediaSurface.setStatus('blocked')
           return
         }
 
-        const expiresAtMs = toExpiresAtMs(data.expiresAt)
-        if (expiresAtMs && Number.isFinite(expiresAtMs)) {
+        const expiresAtMs = Date.parse(data.expiresAt)
+        if (Number.isFinite(expiresAtMs)) {
           tokenCacheRef.current.set(playbackId, {token: data.token, expiresAtMs})
         }
 
@@ -397,6 +396,9 @@ export default function AudioEngine() {
       const ms = Math.floor(a.currentTime * 1000)
       mediaSurface.setTime(ms)
       pRef.current.setPositionMs(ms)
+
+      // ✅ completion detector (90%+), one-shot per track
+      maybeReportCompletion(a)
     }
 
     const onLoadedMeta = () => {
@@ -420,9 +422,7 @@ export default function AudioEngine() {
       pRef.current.setStatusExternal('playing')
       pRef.current.setLoadingReasonExternal(undefined)
       pRef.current.clearIntent()
-
       applyPendingSeek()
-
       const curId = pRef.current.current?.id
       if (curId) pRef.current.resolvePendingTrack(curId)
     }
@@ -449,6 +449,9 @@ export default function AudioEngine() {
     }
 
     const onEnded = () => {
+      // ✅ ended fallback: if we somehow missed 90% threshold, record 1.0
+      void reportPlaythrough(1)
+
       window.dispatchEvent(new Event('af:play-intent'))
       pRef.current.next()
     }
@@ -482,7 +485,7 @@ export default function AudioEngine() {
 
       a.removeEventListener('ended', onEnded)
     }
-  }, [])
+  }, [maybeReportCompletion, reportPlaythrough])
 
   /* ---------------- Seek: PlayerState -> media element ---------------- */
 
@@ -546,5 +549,13 @@ export default function AudioEngine() {
     return () => window.removeEventListener('af:play-intent', resume)
   }, [])
 
-  return <audio ref={audioRef} crossOrigin="anonymous" preload="metadata" playsInline style={{display: 'none'}} />
+  return (
+    <audio
+      ref={audioRef}
+      crossOrigin="anonymous"
+      preload="metadata"
+      playsInline
+      style={{display: 'none'}}
+    />
+  )
 }
