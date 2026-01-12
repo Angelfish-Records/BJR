@@ -38,6 +38,7 @@ export default function AudioEngine() {
   // Track attachment bookkeeping
   const attachedKeyRef = React.useRef<string | null>(null)
   const tokenCacheRef = React.useRef(new Map<string, {token: string; expiresAtMs: number}>())
+  const blockedNonceRef = React.useRef(new Map<string, number>()) // playbackId -> reloadNonce at time of block
 
   const pRef = React.useRef(p)
   React.useEffect(() => {
@@ -218,6 +219,19 @@ export default function AudioEngine() {
 
     if (!armed) return
 
+    const blockedAt = blockedNonceRef.current.get(playbackId)
+    if (blockedAt === s.reloadNonce) {
+      playIntentRef.current = false
+
+      // ✅ follow-up improvement: ensure nothing continues playing from a prior attachment
+      hardStopAndDetach()
+      mediaSurface.setStatus('blocked') // optional but consistent
+
+      return
+    }
+
+
+
     const attachKey = `${playbackId}:${s.reloadNonce}`
     if (attachedKeyRef.current === attachKey && (a.currentSrc || hlsRef.current)) {
       return
@@ -278,10 +292,6 @@ export default function AudioEngine() {
             pRef.current.setBlocked(`HLS fatal: ${err.details ?? 'error'}`)
             mediaSurface.setStatus('blocked')
             hardStopAndDetach()
-            try {
-              hls.destroy()
-            } catch {}
-            if (hlsRef.current === hls) hlsRef.current = null
           }
         })
 
@@ -339,6 +349,13 @@ export default function AudioEngine() {
             pRef.current.clearQueue()
           }
 
+          // ✅ Latch using the request we just made (stable), not whatever state is now.
+          blockedNonceRef.current.set(playbackId, s.reloadNonce)
+
+
+          // ✅ Stop any autoplay-bridge retries.
+          playIntentRef.current = false
+
           pRef.current.setBlocked(reason)
           mediaSurface.setStatus('blocked')
           return
@@ -350,6 +367,8 @@ export default function AudioEngine() {
         if (Number.isFinite(expiresAtMs)) {
           tokenCacheRef.current.set(playbackId, {token: data.token, expiresAtMs})
         }
+
+        blockedNonceRef.current.delete(playbackId)
 
         attachSrc(muxSignedHlsUrl(playbackId, data.token))
       } catch {
