@@ -28,6 +28,11 @@ export function useClientSearchParams(): URLSearchParams {
   return React.useMemo(() => new URLSearchParams((qs || '').replace(/^\?/, '')), [qs])
 }
 
+export function getAutoplayFlag(sp: URLSearchParams): boolean {
+  const v = (sp.get('autoplay') ?? '').trim().toLowerCase()
+  return v === '1' || v === 'true' || v === 'yes'
+}
+
 export function replaceQuery(patch: Record<string, string | null | undefined>) {
   if (typeof window === 'undefined') return
 

@@ -3,15 +3,13 @@
 
 import React from 'react'
 import PortalShell, {PortalPanelSpec} from './PortalShell'
-import {useClientSearchParams, replaceQuery} from './urlState'
+import {useClientSearchParams, replaceQuery, getAutoplayFlag} from './urlState'
 import {usePlayer} from '@/app/home/player/PlayerState'
 import type {PlayerTrack, AlbumInfo, AlbumNavItem} from '@/lib/types'
 import PlayerController from './player/PlayerController'
 
 import ActivationGate from '@/app/home/ActivationGate'
 import Image from 'next/image'
-
-
 
 function QueueBootstrapper(props: {albumId: string | null; tracks: PlayerTrack[]}) {
   const p = usePlayer()
@@ -24,8 +22,6 @@ function QueueBootstrapper(props: {albumId: string | null; tracks: PlayerTrack[]
 
   return null
 }
-
-
 
 type AlbumPayload = {album: AlbumInfo | null; tracks: PlayerTrack[]}
 
@@ -100,7 +96,7 @@ function MessageBar(props: {checkout: string | null; attentionMessage: string | 
         opacity: 0.92,
         lineHeight: 1.45,
         textAlign: 'left',
-        maxWidth: 980, // page-level bar; not the right column
+        maxWidth: 980,
         width: '100%',
         display: 'flex',
         gap: 10,
@@ -130,7 +126,6 @@ function MessageBar(props: {checkout: string | null; attentionMessage: string | 
   )
 }
 
-
 export default function PortalArea(props: {
   portalPanel: React.ReactNode
   topLogoUrl?: string | null
@@ -159,10 +154,18 @@ export default function PortalArea(props: {
   } = props
 
   const p = usePlayer()
-    const sp = useClientSearchParams()
+  const sp = useClientSearchParams()
+
   const qAlbum = sp.get('album')
   const qTrack = sp.get('track')
   const qPanel = sp.get('p') ?? sp.get('panel') ?? 'player'
+
+  // Futureproofing: explicit opt-in autoplay flag.
+  const qAutoplay = getAutoplayFlag(sp)
+
+  // Optional: require a “trusted” token so random links can’t force autoplay.
+  // If you don’t have this yet, leave it: autoplay simply won’t trigger even if autoplay=1 is present.
+  const qShareToken = sp.get('st') ?? sp.get('share') ?? null
 
   // single writer (NO Next navigation)
   const patchQuery = React.useCallback((patch: Record<string, string | null | undefined>) => {
@@ -175,12 +178,12 @@ export default function PortalArea(props: {
       if (cur === id) return
 
       if (id === 'portal') {
-        // ✅ when portal is active, drop player-only addressing
         patchQuery({
           p: 'portal',
           album: null,
           track: null,
-          t: null, // if anything still uses ?t=
+          t: null,
+          autoplay: null, // don’t carry it into portal
         })
       } else {
         patchQuery({p: 'player'})
@@ -195,7 +198,6 @@ export default function PortalArea(props: {
   const [tracks, setTracks] = React.useState<PlayerTrack[]>(initialTracks)
   const [isBrowsingAlbum, setIsBrowsingAlbum] = React.useState(false)
 
-  // Keep local album/tracks in sync with server-provided props (initial /home render)
   React.useEffect(() => {
     setAlbum(initialAlbum)
     setTracks(initialTracks)
@@ -209,13 +211,11 @@ export default function PortalArea(props: {
     isBrowsingRef.current = isBrowsingAlbum
   }, [isBrowsingAlbum])
 
-
-    const onSelectAlbum = React.useCallback(
+  const onSelectAlbum = React.useCallback(
     async (slug: string) => {
       if (!slug) return
       if (isBrowsingRef.current) return
 
-      // URL canonical first (no navigation now, so this is cheap)
       patchQuery({p: 'player', album: slug, track: null})
 
       setIsBrowsingAlbum(true)
@@ -230,7 +230,6 @@ export default function PortalArea(props: {
         if (!res.ok) throw new Error(`Album fetch failed (${res.status})`)
         const json = (await res.json()) as AlbumPayload
 
-        // ignore stale responses
         if (seq !== fetchSeq.current) return
 
         setAlbum(json.album ?? null)
@@ -246,30 +245,54 @@ export default function PortalArea(props: {
     [patchQuery]
   )
 
-
   // ✅ URL-driven bootstrap (canonical addressing)
-    React.useEffect(() => {
+  React.useEffect(() => {
     if (qPanel !== 'player') return
     if (!qAlbum) return
     if (qAlbum !== currentAlbumSlug) void onSelectAlbum(qAlbum)
   }, [qPanel, qAlbum, currentAlbumSlug, onSelectAlbum])
 
-    React.useEffect(() => {
+  React.useEffect(() => {
     if (qPanel !== 'portal') return
-    if (qAlbum || qTrack || sp.get('t')) {
-      patchQuery({album: null, track: null, t: null})
+    if (qAlbum || qTrack || sp.get('t') || sp.get('autoplay')) {
+      patchQuery({album: null, track: null, t: null, autoplay: null})
     }
   }, [qPanel, qAlbum, qTrack, sp, patchQuery])
 
-
-
-
+  // Select track from URL (select-only)
   React.useEffect(() => {
+    if (qPanel !== 'player') return
     if (!qTrack) return
     p.selectTrack(qTrack)
     p.setPendingTrackId(undefined)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qTrack])
+  }, [qPanel, qTrack])
+
+  // Futureproofing: opt-in autoplay (one-shot)
+  const autoplayFiredRef = React.useRef<string | null>(null)
+  React.useEffect(() => {
+    if (qPanel !== 'player') return
+    if (!qAutoplay) return
+    if (!qTrack) return
+
+    // Require a “trusted” token so autoplay can’t be triggered by random links.
+    // If/when you introduce a real share token, wire it to `st=...` and this starts working.
+    if (!qShareToken) {
+      // Don’t keep an inert autoplay param around forever.
+      patchQuery({autoplay: null})
+      return
+    }
+
+    const key = `${qAlbum ?? ''}:${qTrack}:${qShareToken}`
+    if (autoplayFiredRef.current === key) return
+    autoplayFiredRef.current = key
+
+    // Important: request play via PlayerState only.
+    p.play()
+
+    // Make it one-shot so it can’t re-trigger on qs changes / re-renders.
+    patchQuery({autoplay: null})
+  }, [qPanel, qAutoplay, qTrack, qAlbum, qShareToken, p, patchQuery])
 
   // Existing: MiniPlayer -> open player + optional album request
   React.useEffect(() => {
@@ -311,29 +334,29 @@ export default function PortalArea(props: {
       <QueueBootstrapper albumId={album?.id ?? null} tracks={tracks} />
 
       <div style={{height: '100%', minHeight: 0, minWidth: 0, display: 'grid'}}>
-      <PortalShell
-        panels={panels}
-        defaultPanelId="player"
-        syncToQueryParam
-        headerPortalId="af-portal-topbar-slot"
-        header={({activePanelId, setPanel}) => (
-  <div
-    style={{
-        width: '100%',
-        borderRadius: 0,
-        border: 'none',
-        background: 'transparent',
-        padding: 12,
-        minWidth: 0,
-}}
-  >
-    <style>{`
+        <PortalShell
+          panels={panels}
+          defaultPanelId="player"
+          syncToQueryParam
+          headerPortalId="af-portal-topbar-slot"
+          header={({activePanelId, setPanel}) => (
+            <div
+              style={{
+                width: '100%',
+                borderRadius: 0,
+                border: 'none',
+                background: 'transparent',
+                padding: 12,
+                minWidth: 0,
+              }}
+            >
+              <style>{`
   /* ---------- Desktop/tablet: single-row, 3 lanes ---------- */
   .afTopBar {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     grid-template-rows: 1fr;
-    align-items: stretch; /* ✅ critical: allow lanes to take full row height */
+    align-items: stretch;
     gap: 12px;
     min-width: 0;
   }
@@ -345,10 +368,10 @@ export default function PortalArea(props: {
     grid-row: 1;
     min-width: 0;
     display: flex;
-    align-items: flex-end;     /* bottom-align content */
+    align-items: flex-end;
     justify-content: flex-start;
     gap: 10px;
-    align-self: stretch;       /* ensure lane stretches */
+    align-self: stretch;
   }
 
   .afTopBarLogo {
@@ -356,16 +379,16 @@ export default function PortalArea(props: {
     grid-row: 1;
     min-width: 0;
     display: flex;
-    align-items: flex-end;     /* bottom-align logo */
+    align-items: flex-end;
     justify-content: center;
     padding: 6px 0 2px;
-    align-self: stretch;       /* ensure lane stretches */
+    align-self: stretch;
   }
 
   .afTopBarLogoInner {
     width: fit-content;
     display: grid;
-    place-items: end center;   /* sits at the bottom of the logo lane */
+    place-items: end center;
   }
 
   .afTopBarRight {
@@ -373,18 +396,18 @@ export default function PortalArea(props: {
     grid-row: 1;
     min-width: 0;
     display: flex;
-    align-items: flex-end;     /* bottom-align the inner wrapper */
+    align-items: flex-end;
     justify-content: flex-end;
-    align-self: stretch;       /* ✅ stretch to row height */
+    align-self: stretch;
   }
 
   .afTopBarRightInner {
     max-width: 520px;
     min-width: 0;
-    height: 100%;              /* ✅ now this actually has meaning */
+    height: 100%;
     display: flex;
     flex-direction: column;
-    justify-content: flex-end; /* ✅ push ActivationGate to bottom */
+    justify-content: flex-end;
   }
 
   /* ---------- Mobile: logo row + nested controls row ---------- */
@@ -393,7 +416,7 @@ export default function PortalArea(props: {
       grid-template-columns: 1fr;
       grid-template-rows: auto auto;
       gap: 10px;
-      align-items: stretch;    /* ✅ same principle */
+      align-items: stretch;
       justify-items: stretch;
     }
 
@@ -411,7 +434,7 @@ export default function PortalArea(props: {
       grid-row: 2;
       display: grid;
       grid-template-columns: auto 1fr;
-      align-items: stretch;    /* ✅ allow both columns to stretch */
+      align-items: stretch;
       column-gap: 10px;
       row-gap: 0px;
       width: 100%;
@@ -433,7 +456,7 @@ export default function PortalArea(props: {
       display: flex;
       align-items: flex-end;
       justify-content: flex-end;
-      align-self: stretch;     /* ✅ */
+      align-self: stretch;
     }
 
     .afTopBarRightInner {
@@ -447,136 +470,129 @@ export default function PortalArea(props: {
   }
 `}</style>
 
+              <div className="afTopBar">
+                <div className="afTopBarLogo">
+                  <div className="afTopBarLogoInner">
+                    {props.topLogoUrl ? (
+                      <Image
+                        src={props.topLogoUrl}
+                        alt="Logo"
+                        height={Math.max(16, Math.min(120, props.topLogoHeight ?? 38))}
+                        width={Math.max(16, Math.min(120, props.topLogoHeight ?? 38))}
+                        sizes="(max-width: 720px) 120px, 160px"
+                        style={{
+                          height: Math.max(16, Math.min(120, props.topLogoHeight ?? 38)),
+                          width: 'auto',
+                          objectFit: 'contain',
+                          opacity: 0.94,
+                          userSelect: 'none',
+                          filter: 'drop-shadow(0 10px 22px rgba(0,0,0,0.28))',
+                        }}
+                      />
+                    ) : (
+                      <div
+                        aria-label="AF"
+                        title="AF"
+                        style={{
+                          width: 38,
+                          height: 38,
+                          borderRadius: 999,
+                          border: '1px solid rgba(255,255,255,0.14)',
+                          background: 'rgba(0,0,0,0.22)',
+                          display: 'grid',
+                          placeItems: 'center',
+                          fontSize: 13,
+                          fontWeight: 700,
+                          letterSpacing: 0.5,
+                          opacity: 0.92,
+                          userSelect: 'none',
+                        }}
+                      >
+                        AF
+                      </div>
+                    )}
+                  </div>
+                </div>
 
+                <div className="afTopBarControls">
+                  <div className="afTopBarLeft">
+                    <button
+                      type="button"
+                      aria-label="Player"
+                      title="Player"
+                      onClick={() => setPanel('player')}
+                      style={{
+                        width: 46,
+                        height: 46,
+                        borderRadius: 999,
+                        border: '1px solid rgba(255,255,255,0.14)',
+                        background:
+                          activePanelId === 'player'
+                            ? 'color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))'
+                            : 'rgba(255,255,255,0.04)',
+                        boxShadow:
+                          activePanelId === 'player'
+                            ? '0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)'
+                            : '0 12px 26px rgba(0,0,0,0.18)',
+                        color: 'rgba(255,255,255,0.90)',
+                        cursor: 'pointer',
+                        opacity: activePanelId === 'player' ? 0.98 : 0.78,
+                        display: 'grid',
+                        placeItems: 'center',
+                        userSelect: 'none',
+                      }}
+                    >
+                      <IconPlayer />
+                    </button>
 
+                    <button
+                      type="button"
+                      aria-label="Portal"
+                      title="Portal"
+                      onClick={() => setPanel('portal')}
+                      style={{
+                        width: 46,
+                        height: 46,
+                        borderRadius: 999,
+                        border: '1px solid rgba(255,255,255,0.14)',
+                        background:
+                          activePanelId === 'portal'
+                            ? 'color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))'
+                            : 'rgba(255,255,255,0.04)',
+                        boxShadow:
+                          activePanelId === 'portal'
+                            ? '0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)'
+                            : '0 12px 26px rgba(0,0,0,0.18)',
+                        color: 'rgba(255,255,255,0.90)',
+                        cursor: 'pointer',
+                        opacity: activePanelId === 'portal' ? 0.98 : 0.78,
+                        display: 'grid',
+                        placeItems: 'center',
+                        userSelect: 'none',
+                      }}
+                    >
+                      <IconPortal />
+                    </button>
+                  </div>
 
+                  <div className="afTopBarRight">
+                    <div className="afTopBarRightInner" style={{maxWidth: 520, minWidth: 0}}>
+                      <ActivationGate
+                        attentionMessage={attentionMessage}
+                        canManageBilling={canManageBilling}
+                        hasGold={hasGold}
+                        tier={tier}
+                      >
+                        <div />
+                      </ActivationGate>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-    <div className="afTopBar">
-  {/* Row 1: logo */}
-  <div className="afTopBarLogo">
-    <div className="afTopBarLogoInner">
-      {props.topLogoUrl ? (
-        <Image
-          src={props.topLogoUrl}
-          alt="Logo"
-          height={Math.max(16, Math.min(120, props.topLogoHeight ?? 38))}
-          width={Math.max(16, Math.min(120, props.topLogoHeight ?? 38))}
-          sizes="(max-width: 720px) 120px, 160px"
-          style={{
-            height: Math.max(16, Math.min(120, props.topLogoHeight ?? 38)),
-            width: 'auto',
-            objectFit: 'contain',
-            opacity: 0.94,
-            userSelect: 'none',
-            filter: 'drop-shadow(0 10px 22px rgba(0,0,0,0.28))',
-          }}
-        />
-      ) : (
-        <div
-          aria-label="AF"
-          title="AF"
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: 999,
-            border: '1px solid rgba(255,255,255,0.14)',
-            background: 'rgba(0,0,0,0.22)',
-            display: 'grid',
-            placeItems: 'center',
-            fontSize: 13,
-            fontWeight: 700,
-            letterSpacing: 0.5,
-            opacity: 0.92,
-            userSelect: 'none',
-          }}
-        >
-          AF
-        </div>
-      )}
-    </div>
-  </div>
-
-  {/* Row 2: controls (nested grid on mobile; lanes on desktop) */}
-  <div className="afTopBarControls">
-    {/* Left: circular panel buttons */}
-    <div className="afTopBarLeft">
-      <button
-        type="button"
-        aria-label="Player"
-        title="Player"
-        onClick={() => setPanel('player')}
-        style={{
-          width: 46,
-          height: 46,
-          borderRadius: 999,
-          border: '1px solid rgba(255,255,255,0.14)',
-          background:
-            activePanelId === 'player'
-              ? 'color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))'
-              : 'rgba(255,255,255,0.04)',
-          boxShadow:
-            activePanelId === 'player'
-              ? '0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)'
-              : '0 12px 26px rgba(0,0,0,0.18)',
-          color: 'rgba(255,255,255,0.90)',
-          cursor: 'pointer',
-          opacity: activePanelId === 'player' ? 0.98 : 0.78,
-          display: 'grid',
-          placeItems: 'center',
-          userSelect: 'none',
-        }}
-      >
-        <IconPlayer />
-      </button>
-
-      <button
-        type="button"
-        aria-label="Portal"
-        title="Portal"
-        onClick={() => setPanel('portal')}
-        style={{
-          width: 46,
-          height: 46,
-          borderRadius: 999,
-          border: '1px solid rgba(255,255,255,0.14)',
-          background:
-            activePanelId === 'portal'
-              ? 'color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))'
-              : 'rgba(255,255,255,0.04)',
-          boxShadow:
-            activePanelId === 'portal'
-              ? '0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)'
-              : '0 12px 26px rgba(0,0,0,0.18)',
-          color: 'rgba(255,255,255,0.90)',
-          cursor: 'pointer',
-          opacity: activePanelId === 'portal' ? 0.98 : 0.78,
-          display: 'grid',
-          placeItems: 'center',
-          userSelect: 'none',
-        }}
-      >
-        <IconPortal />
-      </button>
-    </div>
-
-    {/* Right: ActivationGate */}
-    <div className="afTopBarRight">
-      <div className="afTopBarRightInner" style={{maxWidth: 520, minWidth: 0}}>
-        <ActivationGate attentionMessage={attentionMessage} canManageBilling={canManageBilling} hasGold={hasGold} tier={tier}>
-  <div />
-</ActivationGate>
-
-      </div>
-    </div>
-  </div>
-</div>
-
-{/* New: page-level message bar under topbar */}
-<MessageBar checkout={checkout} attentionMessage={attentionMessage} />
-
-  </div>
-)}
-
+              <MessageBar checkout={checkout} attentionMessage={attentionMessage} />
+            </div>
+          )}
         />
       </div>
     </>

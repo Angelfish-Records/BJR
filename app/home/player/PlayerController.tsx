@@ -32,7 +32,6 @@ export default function PlayerController(props: {
   React.useEffect(() => {
     const shouldActivate =
       p.intent === 'play' ||
-      p.status === 'loading' ||
       p.status === 'playing' ||
       p.status === 'paused' ||
       Boolean(p.current) ||

@@ -1,10 +1,8 @@
-// web/app/home/player/FullPlayer.tsx
 'use client'
 
 import React from 'react'
 import {usePlayer} from './PlayerState'
-import type {AlbumInfo, AlbumNavItem} from '@/lib/types'
-import type {PlayerTrack} from '@/lib/types'
+import type {AlbumInfo, AlbumNavItem, PlayerTrack} from '@/lib/types'
 import {deriveShareContext, shareAlbum, shareTrack} from './share'
 import {PatternRing} from './VisualizerPattern'
 
@@ -165,7 +163,6 @@ export default function FullPlayer(props: {
     lockPlayFor(120)
 
     if (playingThisAlbum) {
-      p.setIntent('pause')
       window.dispatchEvent(new Event('af:pause-intent'))
       p.pause()
       return
@@ -177,19 +174,16 @@ export default function FullPlayer(props: {
     p.setQueue(tracks, {
       contextId: album?.id,
       artworkUrl: album?.artworkUrl ?? null,
-      contextSlug: props.albumSlug,
+      contextSlug: albumSlug,
       contextTitle: album?.title ?? undefined,
       contextArtist: album?.artist ?? undefined,
     })
-    p.setIntent('play')
+
     p.play(firstTrack)
     window.dispatchEvent(new Event('af:play-intent'))
   }
 
-  const getDurMs = (t: PlayerTrack) => {
-    return p.durationById?.[t.id] ?? t.durationMs
-  }
-
+  const getDurMs = (t: PlayerTrack) => p.durationById?.[t.id] ?? t.durationMs
   const renderDur = (t: PlayerTrack) => {
     const ms = getDurMs(t) ?? 0
     return ms > 0 ? fmtTime(ms) : '—'
@@ -212,6 +206,16 @@ export default function FullPlayer(props: {
     }
   })()
 
+  const loadingLabel =
+    p.status === 'loading'
+      ? p.loadingReason === 'token'
+        ? 'Loading…'
+        : p.loadingReason === 'attach'
+          ? 'Switching…'
+          : p.loadingReason === 'buffering'
+            ? 'Buffering…'
+            : 'Loading…'
+      : null
 
   return (
     <div
@@ -224,8 +228,6 @@ export default function FullPlayer(props: {
       }}
     >
       <div style={{display: 'grid', justifyItems: 'center', textAlign: 'center', gap: 10}}>
-
-
         <div
           style={{
             width: 334,
@@ -242,6 +244,7 @@ export default function FullPlayer(props: {
 
         <div style={{fontSize: 22, fontWeight: 650, letterSpacing: 0.2, opacity: 0.96}}>{albumTitle}</div>
         <div style={{maxWidth: 540, fontSize: 12, opacity: 0.62, lineHeight: 1.45}}>{albumDesc}</div>
+
         <div style={{display: 'flex', alignItems: 'center', gap: 10, marginTop: 8}}>
           <IconCircleBtn label="Download" onClick={() => {}}>
             <DownloadIcon />
@@ -251,7 +254,6 @@ export default function FullPlayer(props: {
             <BookmarkIcon />
           </IconCircleBtn>
 
-          {/* Big play button + patterned border ring */}
           <div style={{position: 'relative', width: 64, height: 64}}>
             <button
               type="button"
@@ -281,7 +283,6 @@ export default function FullPlayer(props: {
               <PlayPauseBig playing={playingThisAlbum} />
             </button>
 
-            {/* subtle visualizer ring */}
             <div style={{position: 'absolute', inset: -5, borderRadius: 999, zIndex: 1}}>
               <PatternRing size={74} thickness={7} opacity={0.45} seed={913} />
             </div>
@@ -301,6 +302,10 @@ export default function FullPlayer(props: {
           </IconCircleBtn>
         </div>
 
+        {playingThisAlbum && loadingLabel ? (
+          <div style={{fontSize: 12, opacity: 0.65, marginTop: 2}}>{loadingLabel}</div>
+        ) : null}
+
         {p.status === 'blocked' && p.lastError ? (
           <div style={{fontSize: 12, opacity: 0.75, marginTop: 4}}>Playback error</div>
         ) : null}
@@ -308,195 +313,174 @@ export default function FullPlayer(props: {
 
       <div style={{marginTop: 18}}>
         <div style={{borderTop: '1px solid rgba(255,255,255,0.10)', paddingTop: 14}}>
-  {tracks.map((t, i) => {
-    const isCur = p.current?.id === t.id
-    const isSelected = selectedTrackId === t.id
-    const isPending = p.pendingTrackId === t.id
-    const shimmerTitle = isPending || (isCur && p.status === 'loading')
-    const isNowPlaying = isCur && (p.status === 'playing' || p.status === 'loading' || p.intent === 'play')
+          {tracks.map((t, i) => {
+            const isCur = p.current?.id === t.id
+            const isSelected = selectedTrackId === t.id
+            const isPending = p.pendingTrackId === t.id
 
+            const shimmerTitle = isPending || (isCur && p.status === 'loading')
+            const isNowPlaying = isCur && (p.status === 'playing' || p.status === 'loading' || p.intent === 'play')
 
-    const titleColor = isCur
-      ? 'color-mix(in srgb, var(--accent) 72%, rgba(255,255,255,0.92))'
-      : 'rgba(255,255,255,0.92)'
+            const titleColor = isCur
+              ? 'color-mix(in srgb, var(--accent) 72%, rgba(255,255,255,0.92))'
+              : 'rgba(255,255,255,0.92)'
 
-    const subColor = isCur
-      ? 'color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.70))'
-      : 'rgba(255,255,255,0.70)'
+            const subColor = isCur
+              ? 'color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.70))'
+              : 'rgba(255,255,255,0.70)'
 
+            const baseBg = isSelected ? 'rgba(255,255,255,0.14)' : 'transparent'
+            const restBg = isCur && !isSelected ? 'transparent' : baseBg
 
-    const baseBg = isSelected ? 'rgba(255,255,255,0.14)' : 'transparent'
-    const restBg = isCur && !isSelected ? 'transparent' : baseBg
+            return (
+              <button
+                key={t.id}
+                type="button"
+                className="afTrackRow"
+                onMouseEnter={(e) => {
+                  prefetchTrack(t)
+                  if (!isCoarsePointer && !isSelected && !isCur) {
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = restBg
+                }}
+                onFocus={() => prefetchTrack(t)}
+                onClick={() => {
+                  p.setQueue(tracks, {
+                    contextId: album?.id,
+                    artworkUrl: album?.artworkUrl ?? null,
+                    contextSlug: albumSlug,
+                    contextTitle: album?.title ?? undefined,
+                    contextArtist: album?.artist ?? undefined,
+                  })
 
+                  if (isCoarsePointer) {
+                    p.play(t)
+                    window.dispatchEvent(new Event('af:play-intent'))
+                    return
+                  }
 
-    return (
-      <button
-        key={t.id}
-        type="button"
-        className="afTrackRow"
-        onMouseEnter={(e) => {
-          prefetchTrack(t)
-          // Hover styling (desktop only). Don't override selected/current.
-          if (!isCoarsePointer && !isSelected && !isCur) {
-            e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
-          }
-        }}
-        onMouseLeave={(e) => {
-          // Restore deterministic state bg
-          e.currentTarget.style.background = restBg
-        }}
-        onFocus={() => prefetchTrack(t)}
-        onClick={() => {
-          // always keep queue context “armed” for this album
-          p.setQueue(tracks, {
-            contextId: album?.id,
-            artworkUrl: album?.artworkUrl ?? null,
-            contextSlug: props.albumSlug,
-            contextTitle: album?.title ?? undefined,
-            contextArtist: album?.artist ?? undefined,
-          })
+                  setSelectedTrackId(t.id)
+                }}
+                onDoubleClick={() => {
+                  if (isCoarsePointer) return
+                  p.play(t)
+                  window.dispatchEvent(new Event('af:play-intent'))
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  void shareTrack(shareCtx, t)
+                }}
+                style={{
+                  width: '100%',
+                  display: 'grid',
+                  gridTemplateColumns: '44px minmax(0, 1fr) auto',
+                  alignItems: 'center',
+                  gap: 12,
+                  textAlign: 'left',
+                  padding: '10px 10px',
+                  borderRadius: 14,
+                  border: '1px solid rgba(255,255,255,0.00)',
+                  background: restBg,
+                  cursor: 'pointer',
+                  transform: 'translateZ(0)',
+                  transition: 'background 120ms ease',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 12,
+                    opacity: 0.9,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    color: subColor,
+                    paddingLeft: 12,
+                    justifyContent: 'flex-start',
+                  }}
+                >
+                  {isNowPlaying ? (
+                    <NowPlayingPip />
+                  ) : (
+                    <span
+                      style={{
+                        width: 16,
+                        display: 'inline-grid',
+                        placeItems: 'center',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      {i + 1}
+                    </span>
+                  )}
+                </div>
 
-          // mobile (coarse pointer) = single tap plays
-          if (isCoarsePointer) {
-            p.setIntent('play')
-            p.play(t)
-            window.dispatchEvent(new Event('af:play-intent'))
-            return
-          }
+                <div className="afRowMid" style={{minWidth: 0}}>
+                  <div
+                    className={shimmerTitle ? 'afShimmerText' : undefined}
+                    data-reason={isCur && p.status === 'loading' ? p.loadingReason ?? '' : ''}
+                    style={{
+                      fontSize: 13,
+                      opacity: 1,
+                      color: titleColor,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      transition: 'opacity 160ms ease, color 160ms ease',
+                    }}
+                  >
+                    {t.title ?? t.id}
+                  </div>
 
-          // desktop = single click selects only
-          setSelectedTrackId(t.id)
-        }}
-        onDoubleClick={() => {
-          // desktop double click = play
-          if (isCoarsePointer) return
-          p.setIntent('play')
-          p.play(t)
-          window.dispatchEvent(new Event('af:play-intent'))
-        }}
-        onContextMenu={(e) => {
-          e.preventDefault()
-          void shareTrack(shareCtx, t)
-        }}
-        style={{
-          width: '100%',
-          display: 'grid',
-          gridTemplateColumns: '44px minmax(0, 1fr) auto',
-          alignItems: 'center',
-          gap: 12,
-          textAlign: 'left',
-          padding: '10px 10px',
-          borderRadius: 14,
+                  <div className="afRowDurUnder" aria-hidden="true">
+                    {renderDur(t)}
+                  </div>
+                </div>
 
-          // Spotify-like: no borders
-          border: '1px solid rgba(255,255,255,0.00)',
+                <div
+                  style={{
+                    justifySelf: 'end',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 14,
+                    color: subColor,
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="afRowShare"
+                    aria-label="Share track"
+                    title="Share"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      void shareTrack(shareCtx, t)
+                    }}
+                    style={{
+                      border: 0,
+                      background: 'transparent',
+                      padding: 6,
+                      borderRadius: 999,
+                      color: 'rgba(255,255,255,0.80)',
+                      display: 'grid',
+                      placeItems: 'center',
+                      cursor: 'pointer',
+                      lineHeight: 0,
+                    }}
+                  >
+                    <ShareIcon />
+                  </button>
 
-          // State background:
-          // - current: transparent
-          // - selected: solid-ish grey
-          // - hover: applied transiently via mouse enter
-          background: restBg,
-
-          cursor: 'pointer',
-          transform: 'translateZ(0)',
-          transition: 'background 120ms ease',
-        }}
-      >
-        <div
-          style={{
-            fontSize: 12,
-            opacity: 0.9,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            color: subColor,
-            paddingLeft: 12,
-            justifyContent: 'flex-start',
-          }}
-        >
-          {isNowPlaying ? (
-            <NowPlayingPip />
-          ) : (
-            <span
-              style={{
-                width: 16,
-                display: 'inline-grid',
-                placeItems: 'center',
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
-              {i + 1}
-            </span>
-          )}
-
+                  <div className="afRowDurRight" style={{fontSize: 12, opacity: 0.85, color: subColor}}>
+                    {renderDur(t)}
+                  </div>
+                </div>
+              </button>
+            )
+          })}
         </div>
-
-        <div className="afRowMid" style={{minWidth: 0}}>
-  <div
-    className={shimmerTitle ? 'afShimmerText' : undefined}
-    data-reason={isCur && p.status === 'loading' ? p.loadingReason ?? '' : ''}
-    style={{
-      fontSize: 13,
-      opacity: 1,
-      color: titleColor,
-      whiteSpace: 'nowrap',
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-      transition: 'opacity 160ms ease, color 160ms ease',
-    }}
-  >
-    {t.title ?? t.id}
-  </div>
-
-  {/* mobile-only duration line */}
-  <div className="afRowDurUnder" aria-hidden="true">
-    {renderDur(t)}
-  </div>
-</div>
-
-              <div
-  style={{
-    justifySelf: 'end',
-    display: 'flex',
-    alignItems: 'center',
-    // more breathing room for the duration by pushing the share icon left
-    gap: 14,
-    color: subColor,
-  }}
->
-  <button
-    type="button"
-    className="afRowShare"
-    aria-label="Share track"
-    title="Share"
-    onClick={(e) => {
-      e.preventDefault()
-      e.stopPropagation()
-      void shareTrack(shareCtx, t)
-    }}
-    style={{
-      border: 0,
-      background: 'transparent',
-      padding: 6, // keeps it tappable without forcing row height
-      borderRadius: 999,
-      color: 'rgba(255,255,255,0.80)',
-      display: 'grid',
-      placeItems: 'center',
-      cursor: 'pointer',
-      lineHeight: 0,
-    }}
-  >
-    <ShareIcon />
-  </button>
-
-  <div className="afRowDurRight" style={{fontSize: 12, opacity: 0.85, color: subColor}}>{renderDur(t)}</div>
-</div>
-
-      </button>
-    )
-  })}
-</div>
-
 
         {browseAlbums.length ? (
           <div style={{marginTop: 18}}>
@@ -512,84 +496,81 @@ export default function FullPlayer(props: {
 
                 return (
                   <button
-  key={a.id}
-  type="button"
-  disabled={disabled}
-  onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-    prefetchAlbumArt(a.coverUrl)
-    if (disabled) return
-    e.currentTarget.style.transform = 'translateZ(0) translateY(-1px)'
-    e.currentTarget.style.boxShadow = '0 16px 38px rgba(0,0,0,0.22)'
-  }}
-  onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
-    e.currentTarget.style.transform = 'translateZ(0)'
-    e.currentTarget.style.boxShadow = disabled ? 'none' : '0 14px 34px rgba(0,0,0,0.18)'
-  }}
-  onFocus={() => prefetchAlbumArt(a.coverUrl)}
-  onClick={() => onSelectAlbum?.(a.slug)}
-  style={{
-    display: 'grid',
-    gridTemplateRows: 'auto auto',
-    gap: 10,
-    padding: 12,
-    borderRadius: 16,
-    border: 'none',
-    background: isActive
-      ? 'color-mix(in srgb, var(--accent) 10%, rgba(255,255,255,0.05))'
-      : 'rgba(255,255,255,0.03)',
-    color: 'rgba(255,255,255,0.92)',
-    cursor: disabled ? 'default' : 'pointer',
-    opacity: disabled ? 0.72 : 1,
-    textAlign: 'center',
-    boxShadow: disabled ? 'none' : '0 14px 34px rgba(0,0,0,0.18)',
-    transform: 'translateZ(0)',
-    transition:
-      'transform 140ms ease, border-color 140ms ease, background 140ms ease, box-shadow 140ms ease',
-  }}
->
-  {/* full-width cover */}
-  <div
-    style={{
-      width: '100%',
-      aspectRatio: '1 / 1',
-      borderRadius: 14,
-      border: '1px solid rgba(255,255,255,0.14)',
-      background: a.coverUrl
-        ? `url(${a.coverUrl}) center/cover no-repeat`
-        : 'radial-gradient(60px 60px at 30% 20%, rgba(255,255,255,0.14), rgba(255,255,255,0.02))',
-      boxShadow: '0 18px 40px rgba(0,0,0,0.22)',
-      overflow: 'hidden',
-    }}
-  />
+                    key={a.id}
+                    type="button"
+                    disabled={disabled}
+                    onMouseEnter={(e) => {
+                      prefetchAlbumArt(a.coverUrl)
+                      if (disabled) return
+                      e.currentTarget.style.transform = 'translateZ(0) translateY(-1px)'
+                      e.currentTarget.style.boxShadow = '0 16px 38px rgba(0,0,0,0.22)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateZ(0)'
+                      e.currentTarget.style.boxShadow = disabled ? 'none' : '0 14px 34px rgba(0,0,0,0.18)'
+                    }}
+                    onFocus={() => prefetchAlbumArt(a.coverUrl)}
+                    onClick={() => onSelectAlbum?.(a.slug)}
+                    style={{
+                      display: 'grid',
+                      gridTemplateRows: 'auto auto',
+                      gap: 10,
+                      padding: 12,
+                      borderRadius: 16,
+                      border: 'none',
+                      background: isActive
+                        ? 'color-mix(in srgb, var(--accent) 10%, rgba(255,255,255,0.05))'
+                        : 'rgba(255,255,255,0.03)',
+                      color: 'rgba(255,255,255,0.92)',
+                      cursor: disabled ? 'default' : 'pointer',
+                      opacity: disabled ? 0.72 : 1,
+                      textAlign: 'center',
+                      boxShadow: disabled ? 'none' : '0 14px 34px rgba(0,0,0,0.18)',
+                      transform: 'translateZ(0)',
+                      transition:
+                        'transform 140ms ease, border-color 140ms ease, background 140ms ease, box-shadow 140ms ease',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '100%',
+                        aspectRatio: '1 / 1',
+                        borderRadius: 14,
+                        border: '1px solid rgba(255,255,255,0.14)',
+                        background: a.coverUrl
+                          ? `url(${a.coverUrl}) center/cover no-repeat`
+                          : 'radial-gradient(60px 60px at 30% 20%, rgba(255,255,255,0.14), rgba(255,255,255,0.02))',
+                        boxShadow: '0 18px 40px rgba(0,0,0,0.22)',
+                        overflow: 'hidden',
+                      }}
+                    />
 
-  {/* title below */}
-  <div style={{minWidth: 0}}>
-    <div
-      style={{
-        fontSize: 13,
-        fontWeight: 650,
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-      }}
-    >
-      {a.title}
-    </div>
-    <div
-      style={{
-        marginTop: 4,
-        fontSize: 12,
-        opacity: 0.68,
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-      }}
-    >
-      {a.artist ?? ''}
-    </div>
-  </div>
-</button>
-
+                    <div style={{minWidth: 0}}>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 650,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {a.title}
+                      </div>
+                      <div
+                        style={{
+                          marginTop: 4,
+                          fontSize: 12,
+                          opacity: 0.68,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {a.artist ?? ''}
+                      </div>
+                    </div>
+                  </button>
                 )
               })}
             </div>
@@ -640,7 +621,7 @@ export default function FullPlayer(props: {
           }
         }
 
-                .afEq{
+        .afEq{
           width: 16px;
           height: 16px;
           display: inline-flex;
@@ -668,48 +649,38 @@ export default function FullPlayer(props: {
         @media (prefers-reduced-motion: reduce){
           .afEq i{ animation: none; }
         }
+
+        .afTrackRow .afRowShare{
+          opacity: 0;
+          pointer-events: none;
+          transform: translateX(2px);
+          transition: opacity 120ms ease, transform 120ms ease;
+        }
+
+        .afTrackRow:hover .afRowShare{
+          opacity: 0.95;
+          pointer-events: auto;
+          transform: translateX(0);
+        }
+
+        .afRowDurUnder{
+          display: none;
+          margin-top: 4px;
+          font-size: 12px;
+          opacity: 0.65;
+          color: rgba(255,255,255,0.70);
+          line-height: 1.1;
+        }
+
+        @media (max-width: 520px){
+          .afRowDurUnder{ display: block; }
+          .afRowDurRight{ display: none; }
           .afTrackRow .afRowShare{
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(2px);
-  transition: opacity 120ms ease, transform 120ms ease;
-}
-
-.afTrackRow:hover .afRowShare{
-  opacity: 0.95;
-  pointer-events: auto;
-  transform: translateX(0);
-}
-
-/* Desktop: duration stays on the right, hide the under-title duration */
-.afRowDurUnder{
-  display: none;
-  margin-top: 4px;
-  font-size: 12px;
-  opacity: 0.65;
-  color: rgba(255,255,255,0.70);
-  line-height: 1.1;
-}
-
-/* Mobile: duration goes under title, share always visible on the right */
-@media (max-width: 520px){
-  .afRowDurUnder{
-    display: block;
-  }
-
-  .afRowDurRight{
-    display: none;
-  }
-
-  /* no hover on mobile, so keep share visible */
-  .afTrackRow .afRowShare{
-    opacity: 0.95;
-    pointer-events: auto;
-    transform: none;
-  }
-}
-
-
+            opacity: 0.95;
+            pointer-events: auto;
+            transform: none;
+          }
+        }
       `}</style>
     </div>
   )

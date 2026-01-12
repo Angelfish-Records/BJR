@@ -2,7 +2,6 @@
 'use client'
 
 import React from 'react'
-
 import type {PlayerTrack} from '@/lib/types'
 
 type PlayerStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'blocked'
@@ -198,8 +197,7 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           intentAtMs: i ? Date.now() : undefined,
         })),
 
-      clearIntent: () =>
-        setState((s) => (s.intent ? {...s, intent: null, intentAtMs: undefined} : s)),
+      clearIntent: () => setState((s) => (s.intent ? {...s, intent: null, intentAtMs: undefined} : s)),
 
       /* ---------------- Selection / pending track ---------------- */
 
@@ -252,12 +250,14 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
             pendingTrackId: nextTrack.id,
           }
 
-          // Resume: same track + paused -> keep position, don't force loading/token.
+          // ✅ Resume: same track + paused -> DO NOT claim "playing" yet.
+          // Let AudioEngine's media element 'playing' event be the only authority.
           if (sameTrack && s.status === 'paused') {
             return {
               ...base,
               current: hydrateTrack(s.current!, s.durationById),
-              status: 'playing',
+              // Keep status as paused until engine confirms playback.
+              status: 'paused',
               loadingReason: undefined,
             }
           }
@@ -283,7 +283,8 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           ...s,
           intent: 'pause',
           intentAtMs: Date.now(),
-          status: s.status === 'playing' ? 'paused' : s.status,
+          // ✅ Don't force status here; media element 'pause' event is authoritative.
+          // (Keeps UI honest if pause is blocked / no-op.)
         })),
 
       next: () => {
@@ -343,11 +344,19 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           return {
             ...s,
             status: 'paused',
-            loadingReason: undefined,
             intent: 'pause',
             intentAtMs: Date.now(),
+
+            // hard reset to start so UI + <audio> agree
+            positionMs: 0,
+            pendingSeekMs: 0,
+            seeking: true,
+            seekNonce: s.seekNonce + 1,
+
+            loadingReason: undefined,
             pendingTrackId: undefined,
           }
+
         })
       },
 

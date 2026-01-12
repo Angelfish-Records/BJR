@@ -1,9 +1,9 @@
-// web/app/home/player/MiniPlayer.tsx
 'use client'
 
 import React from 'react'
 import {createPortal} from 'react-dom'
 import {usePlayer} from './PlayerState'
+import type {PlayerTrack} from '@/lib/types'
 import {buildShareTarget, performShare, type ShareTarget} from '@/lib/share'
 import {PatternPillUnderlay} from './VisualizerPattern'
 import {replaceQuery} from '@/app/home/urlState'
@@ -59,7 +59,6 @@ const IconBtn = React.forwardRef<
     </button>
   )
 })
-
 
 function PlayPauseIcon({playing}: {playing: boolean}) {
   return playing ? (
@@ -128,10 +127,7 @@ function RetryIcon() {
   )
 }
 
-/**
- * Local share UX: tries native share, falls back to copy, and if clipboard isn't available
- * shows a tiny modal with the URL.
- */
+/** Local share UX */
 function useShareUX() {
   const [fallback, setFallback] = React.useState<{url: string; title?: string} | null>(null)
   const close = React.useCallback(() => setFallback(null), [])
@@ -261,27 +257,24 @@ function useShareUX() {
   return {shareTarget, fallbackModal}
 }
 
+function findTrackById(queue: PlayerTrack[], id?: string | null): PlayerTrack | null {
+  if (!id) return null
+  return queue.find((t) => t.id === id) ?? null
+}
+
 export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: string | null}) {
   const {onExpand, artworkUrl = null} = props
   const p = usePlayer()
+
   const openPlayerToNowPlaying = () => {
-  const patch: Record<string, string | null | undefined> = {p: 'player'}
-
-  // navigate to the album that’s actually playing (if known)
-  if (p.queueContextSlug) patch.album = p.queueContextSlug
-
-  // optionally include the current track (if known)
-  if (p.current?.id) patch.track = p.current.id
-
-  // nuke legacy / irrelevant keys
-  patch.panel = null
-  patch.t = null
-
-  replaceQuery(patch)
-
-  // keep your existing expand behaviour
-  onExpand?.()
-}
+    const patch: Record<string, string | null | undefined> = {p: 'player'}
+    if (p.queueContextSlug) patch.album = p.queueContextSlug
+    if (p.current?.id) patch.track = p.current.id
+    patch.panel = null
+    patch.t = null
+    replaceQuery(patch)
+    onExpand?.()
+  }
 
   const {shareTarget, fallbackModal} = useShareUX()
 
@@ -289,6 +282,10 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
   React.useEffect(() => setMounted(true), [])
 
   const playingish = p.status === 'playing' || p.status === 'loading' || p.intent === 'play'
+
+  // Pending-first display (truthy UI during transitions)
+  const pendingTrack = findTrackById(p.queue, p.pendingTrackId) ?? null
+  const displayTrack = pendingTrack ?? p.current ?? null
 
   /* ---------------- Small anti-doubletap locks ---------------- */
 
@@ -304,7 +301,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
     window.setTimeout(() => setPlayLock(false), ms)
   }
 
-  /* ---------------- Seek (optimistic + scrub without fighting timeupdate) ---------------- */
+  /* ---------------- Seek (based on current track, not pending) ---------------- */
 
   const curId = p.current?.id ?? ''
   const durMs = Number((p.durationById?.[curId] ?? p.current?.durationMs ?? 0) || 0)
@@ -338,7 +335,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
 
   const sliderValue = scrubbing ? scrubSec : safePending ?? safePosReal
 
-  /* ---------------- Seek tooltip (hover + scrub) ---------------- */
+  /* ---------------- Seek tooltip ---------------- */
 
   const seekWrapRef = React.useRef<HTMLDivElement | null>(null)
   const [seekTip, setSeekTip] = React.useState<{open: boolean; sec: number; x: number; y: number}>({
@@ -368,7 +365,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
     setSeekTip((s) => (s.open ? {...s, open: false} : s))
   }, [])
 
-  /* ---------------- Volume popup anchoring + “expensive” tooltip ---------------- */
+  /* ---------------- Volume popup ---------------- */
 
   const [volOpen, setVolOpen] = React.useState(false)
   const vol = p.volume
@@ -418,11 +415,11 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
 
   /* ---------------- Copy ---------------- */
 
-  const title = p.current?.title ?? p.current?.id ?? 'Nothing queued'
+  const title = displayTrack?.title ?? displayTrack?.id ?? 'Nothing queued'
 
   const statusLine = (() => {
     if (p.status === 'blocked') return 'Playback error'
-    return p.current?.artist ?? ''
+    return displayTrack?.artist ?? ''
   })()
 
   /* ---------------- Share ---------------- */
@@ -434,9 +431,9 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
 
     const origin = window.location.origin
     const albumTitle = (p.queueContextTitle ?? albumSlug).toString().trim() || albumSlug
-    const artistName = p.queueContextArtist ?? ((p.current?.artist ?? '').toString().trim() || undefined)
+    const artistName = p.queueContextArtist ?? ((displayTrack?.artist ?? '').toString().trim() || undefined)
 
-    const cur = p.current
+    const cur = displayTrack
     if (cur?.id) {
       const target = buildShareTarget({
         type: 'track',
@@ -474,17 +471,17 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
   /* ---------------- Layout constants ---------------- */
 
   const DOCK_H = 80
-  const TOP_BORDER = 1 // legacy (keep for reference)
-  const VIS_H = 3 // visual rail height (pattern needs >1px to read)
+  const TOP_BORDER = 1
+  const VIS_H = 3
   const SEEK_H = 18
   const SAFE_INSET = 'env(safe-area-inset-bottom, 0px)'
-
-  // center the 18px seek hitbox on the VIS_H rail at y=0
   const SEEK_TOP = -((SEEK_H - VIS_H) / 2)
 
-  // visual progress is NOT the range track; it’s our own 1px fill bar
   const progressPct = durKnown ? (sliderValue / durSec) * 100 : 0
-  const isShimmering = p.status === 'loading' && !!p.current
+
+  const shimmerMeta =
+    // shimmer while loading (pending or current)
+    (Boolean(p.pendingTrackId) && p.status === 'loading') || (p.status === 'loading' && Boolean(p.current))
 
   const dock = (
     <div
@@ -495,34 +492,20 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
         right: 0,
         bottom: 0,
         zIndex: 9999,
-
-        // Two-row layout: the "band" is vertically centered regardless of safe area.
         display: 'grid',
         gridTemplateRows: `var(--af-dock-h, ${DOCK_H}px) ${SAFE_INSET}`,
-
         height: `calc(var(--af-dock-h, ${DOCK_H}px) + ${SAFE_INSET})`,
-
         paddingTop: 0,
         paddingRight: 12,
         paddingLeft: 0,
-
         background: 'rgba(0,0,0,0.55)',
         backdropFilter: 'blur(10px)',
         WebkitBackdropFilter: 'blur(10px)',
-
-        // let the thumb poke above the dock
         overflow: 'visible',
       }}
     >
-      <div
-        data-af-band
-        style={{
-          position: 'relative',
-          width: '100%',
-          height: '100%',
-        }}
-      >
-        {/* Textured rail at the top edge (visual only) */}
+      <div data-af-band style={{position: 'relative', width: '100%', height: '100%'}}>
+        {/* top textured rail */}
         <div
           aria-hidden="true"
           style={{
@@ -536,14 +519,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
             overflow: 'hidden',
           }}
         >
-          <div
-            aria-hidden="true"
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: 'rgba(255,255,255,0.10)',
-            }}
-          />
+          <div aria-hidden="true" style={{position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.10)'}} />
           <PatternPillUnderlay active opacity={0.28} seed={1337} />
           <div
             aria-hidden="true"
@@ -557,7 +533,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
           />
         </div>
 
-        {/* Textured progress fill (visual only) */}
+        {/* progress fill */}
         <div
           aria-hidden="true"
           style={{
@@ -595,7 +571,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
           />
         </div>
 
-        {/* Invisible seek hitbox */}
+        {/* seek hitbox */}
         <div
           ref={seekWrapRef}
           style={{
@@ -723,11 +699,8 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
               gridTemplateColumns: 'var(--af-mp-cols, auto minmax(0, 1fr) auto)',
               alignItems: 'center',
               gap: 12,
-
-              // KEY: no vertical padding fighting centering
               paddingTop: 0,
               paddingBottom: 0,
-
               paddingLeft: `calc(var(--af-dock-h, ${DOCK_H}px) + 12px)`,
               paddingRight: 0,
             }}
@@ -749,20 +722,17 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
                 label={playingish ? 'Pause' : 'Play'}
                 onClick={() => {
                   lockPlayFor(120)
-
                   if (playingish) {
-                    p.setIntent('pause')
                     window.dispatchEvent(new Event('af:pause-intent'))
                     p.pause()
                   } else {
                     const t = p.current ?? p.queue[0]
                     if (!t) return
-                    p.setIntent('play')
                     p.play(t)
                     window.dispatchEvent(new Event('af:play-intent'))
                   }
                 }}
-                disabled={(!!(!p.current && p.queue.length === 0)) || playLock}
+                disabled={(!p.current && p.queue.length === 0) || playLock}
               >
                 <PlayPauseIcon playing={playingish} />
               </IconBtn>
@@ -793,7 +763,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
                 role={onExpand ? 'button' : undefined}
                 tabIndex={onExpand ? 0 : undefined}
                 aria-label={onExpand ? 'Open player' : undefined}
-                className={isShimmering ? 'afShimmerText' : undefined}
+                className={shimmerMeta ? 'afShimmerText' : undefined}
                 data-reason={p.loadingReason ?? ''}
                 style={{
                   fontSize: 13,
@@ -809,7 +779,6 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
                 {title}
               </div>
 
-
               <div
                 style={{
                   fontSize: 12,
@@ -823,10 +792,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
               </div>
             </div>
 
-            <div
-              data-af-actions
-              style={{display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end'}}
-            >
+            <div data-af-actions style={{display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end'}}>
               <div style={{display: 'grid', justifyItems: 'center', position: 'relative'}}>
                 <IconBtn ref={volBtnRef} label="Volume" onClick={() => setVolOpen((v) => !v)} title="Volume">
                   <VolumeIcon muted={muted} />
@@ -970,7 +936,6 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
                   label="Retry"
                   title="Retry"
                   onClick={() => {
-                    p.setIntent('play')
                     window.dispatchEvent(new Event('af:play-intent'))
                     p.bumpReload()
                   }}
@@ -983,109 +948,86 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
         </div>
 
         {/* Mobile compact mode + sizing vars */}
-<style>{`
-  /* Defaults (desktop/tablet) */
-  div[data-af-miniplayer]{
-    --af-dock-h: ${DOCK_H}px;
-    --af-mp-btn: 36px;
-    --af-mp-cols: auto minmax(0, 1fr) auto; /* transport | meta | actions */
-  }
+        <style>{`
+          div[data-af-miniplayer]{
+            --af-dock-h: ${DOCK_H}px;
+            --af-mp-btn: 36px;
+            --af-mp-cols: auto minmax(0, 1fr) auto;
+          }
 
-  @media (max-width: 520px) {
-    div[data-af-miniplayer]{
-      --af-dock-h: 64px;
-      --af-mp-btn: 40px;
+          @media (max-width: 520px) {
+            div[data-af-miniplayer]{
+              --af-dock-h: 64px;
+              --af-mp-btn: 40px;
+              --af-mp-cols: minmax(0, 1fr) max-content;
+              padding-right: 10px;
+            }
 
-      /* CRITICAL: collapse to two columns */
-      --af-mp-cols: minmax(0, 1fr) max-content; /* meta | transport */
+            div[data-af-miniplayer] div[data-af-actions]{
+              display: none !important;
+              visibility: hidden !important;
+            }
 
-      padding-right: 10px;
-    }
+            div[data-af-miniplayer] div[data-af-controls]{
+              column-gap: 10px;
+              grid-template-rows: 1fr !important;
+              grid-auto-flow: column !important;
+              grid-auto-rows: 1fr !important;
+              row-gap: 0 !important;
+              padding-left: calc(var(--af-dock-h, ${DOCK_H}px) + 12px);
+              padding-right: 12px;
+              height: 100%;
+            }
 
-    /* Hard-hide actions so it cannot participate in layout */
-    div[data-af-miniplayer] div[data-af-actions]{
-      display: none !important;
-      visibility: hidden !important;
-    }
+            div[data-af-miniplayer] div[data-af-controls] > :nth-child(1){
+              grid-column: 2;
+              grid-row: 1;
+              justify-self: end;
+              align-self: center;
+              display: flex;
+              align-items: center;
+              justify-content: flex-end;
+              gap: 8px;
+              flex-wrap: nowrap;
+              flex: 0 0 auto;
+              min-width: max-content;
+            }
 
-    /* Controls grid: keep artwork offset + FORCE single-row grid */
-    div[data-af-miniplayer] div[data-af-controls]{
-      column-gap: 10px;
+            div[data-af-miniplayer] div[data-af-controls] > :nth-child(2){
+              grid-column: 1;
+              grid-row: 1;
+              align-self: center;
+              min-width: 0;
+              overflow: hidden;
+            }
 
-      /* kill implicit second row */
-      grid-template-rows: 1fr !important;
-      grid-auto-flow: column !important;
-      grid-auto-rows: 1fr !important;
-      row-gap: 0 !important;
+            div[data-af-miniplayer] div[data-af-controls] > :nth-child(3){
+              display: none !important;
+              visibility: hidden !important;
+            }
 
-      padding-left: calc(var(--af-dock-h, ${DOCK_H}px) + 12px);
-      padding-right: 12px;
-      height: 100%;
-    }
+            div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) *{
+              min-width: 0;
+              max-width: 100%;
+            }
 
-    /* Place children by index (DOM order: transport, meta, actions) */
-    div[data-af-miniplayer] div[data-af-controls] > :nth-child(1){
-      /* transport -> column 2 */
-      grid-column: 2;
-      grid-row: 1;
-      justify-self: end;
-      align-self: center;
+            div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) > div{
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+              max-width: 100%;
+            }
 
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      gap: 8px;
-      flex-wrap: nowrap;
-
-      flex: 0 0 auto;
-      min-width: max-content;
-    }
-
-    div[data-af-miniplayer] div[data-af-controls] > :nth-child(2){
-      /* meta -> column 1 */
-      grid-column: 1;
-      grid-row: 1;
-      align-self: center;
-
-      min-width: 0;
-      overflow: hidden;
-    }
-
-    div[data-af-miniplayer] div[data-af-controls] > :nth-child(3){
-      /* actions -> removed */
-      display: none !important;
-      visibility: hidden !important;
-    }
-
-    /* Ensure ellipsis can actually trigger */
-    div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) *{
-      min-width: 0;
-      max-width: 100%;
-    }
-
-    div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) > div{
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      max-width: 100%;
-    }
-
-    /* Slightly smaller text */
-    div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) > div:first-child{
-      font-size: 12px !important;
-      line-height: 1.15 !important;
-    }
-    div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) > div:nth-child(2){
-      font-size: 10px !important;
-      line-height: 1.15 !important;
-    }
-  }
-`}</style>
-
-
-
-
-
+            div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) > div:first-child{
+              font-size: 12px !important;
+              line-height: 1.15 !important;
+            }
+            div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) > div:nth-child(2){
+              font-size: 10px !important;
+              line-height: 1.15 !important;
+            }
+          }
+        `}</style>
 
         {/* Seek + shimmer */}
         <style>{`
@@ -1148,18 +1090,12 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
             animation: afShimmer 1.1s linear infinite;
           }
 
-          .afShimmerText[data-reason="token"],
-          .afShimmerText[data-reason="attach"] { opacity: 0.85; }
-
-          .afShimmerText[data-reason="buffering"] { opacity: 1; }
-
           @media (prefers-reduced-motion: reduce) {
             .afShimmerText { animation: none; color: rgba(255,255,255,0.92); background: none; }
           }
         `}</style>
       </div>
 
-      {/* Safe-area spacer row (pure space; keeps band perfectly centered) */}
       <div aria-hidden="true" style={{height: SAFE_INSET}} />
     </div>
   )

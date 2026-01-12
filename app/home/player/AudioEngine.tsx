@@ -8,12 +8,23 @@ import {muxSignedHlsUrl} from '@/lib/mux'
 import {mediaSurface} from './mediaSurface'
 import {audioSurface} from './audioSurface'
 
-type TokenResponse =
-  | {ok: true; token: string; expiresAt: string}
-  | {ok: false; blocked: true; action: string; reason: string}
+type TokenOk = {ok: true; token: string; expiresAt: string | number}
+type TokenBlocked = {ok: false; blocked: true; action?: string; reason: string; code?: string}
+type TokenResponse = TokenOk | TokenBlocked
 
 function canPlayNativeHls(a: HTMLMediaElement) {
   return a.canPlayType('application/vnd.apple.mpegurl') !== ''
+}
+
+function toExpiresAtMs(expiresAt: string | number): number | null {
+  if (typeof expiresAt === 'number') {
+    // If it looks like seconds (e.g. 1700000000), convert to ms; if already ms, keep.
+    if (expiresAt > 0 && expiresAt < 10_000_000_000) return expiresAt * 1000
+    if (expiresAt >= 10_000_000_000) return expiresAt
+    return null
+  }
+  const ms = Date.parse(expiresAt)
+  return Number.isFinite(ms) ? ms : null
 }
 
 export default function AudioEngine() {
@@ -44,6 +55,34 @@ export default function AudioEngine() {
     pRef.current = p
   }, [p])
 
+  async function fetchMuxToken(args: {
+    playbackId: string
+    trackId?: string
+    albumSlug?: string
+    durationMs?: number
+    signal?: AbortSignal
+  }): Promise<TokenResponse> {
+    const {signal, ...payload} = args
+    const res = await fetch('/api/mux/token', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+      signal,
+    })
+
+    let data: TokenResponse | null = null
+    try {
+      data = (await res.json()) as TokenResponse
+    } catch {
+      data = null
+    }
+
+    if (!data) {
+      return {ok: false, blocked: true, reason: `Token error (${res.status})`}
+    }
+    return data
+  }
+
   /* ---------------- AudioContext + analyser (ONCE) ---------------- */
 
   React.useEffect(() => {
@@ -73,7 +112,6 @@ export default function AudioEngine() {
 
       freqDataRef.current = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount)) as U8AB
       timeDataRef.current = new Uint8Array(new ArrayBuffer(analyser.fftSize)) as U8AB
-
     }
 
     const onUserGesture = async () => {
@@ -87,6 +125,49 @@ export default function AudioEngine() {
     return () => {
       window.removeEventListener('af:play-intent', onUserGesture)
     }
+  }, [])
+
+  /* ---------------- Token prefetch (AudioEngine owns it) ---------------- */
+
+  React.useEffect(() => {
+    const onPrefetch = (ev: Event) => {
+      const e = ev as CustomEvent
+      const d =
+        (e.detail ?? {}) as Partial<{
+          playbackId: string
+          trackId: string
+          albumSlug: string
+          durationMs: number
+        }>
+
+      const playbackId = d.playbackId
+      if (!playbackId) return
+
+      const cached = tokenCacheRef.current.get(playbackId)
+      if (cached && Date.now() < cached.expiresAtMs - 5000) return
+
+      // Prefetch must be silent: no PlayerState loading, no blocked UI.
+      void (async () => {
+        try {
+          const data = await fetchMuxToken({
+            playbackId,
+            trackId: d.trackId,
+            albumSlug: d.albumSlug,
+            durationMs: d.durationMs,
+          })
+
+          if (!data || data.ok !== true) return
+
+          const expiresAtMs = toExpiresAtMs(data.expiresAt)
+          if (expiresAtMs && Number.isFinite(expiresAtMs)) {
+            tokenCacheRef.current.set(playbackId, {token: data.token, expiresAtMs})
+          }
+        } catch {}
+      })()
+    }
+
+    window.addEventListener('af:prefetch-token', onPrefetch as EventListener)
+    return () => window.removeEventListener('af:prefetch-token', onPrefetch as EventListener)
   }, [])
 
   /* ---------------- Audio feature pump ---------------- */
@@ -169,7 +250,6 @@ export default function AudioEngine() {
   }, [p.volume, p.muted])
 
   /* ---------------- Track attach (HLS / native) ---------------- */
-  // Recommendation: only attach when track/reloadNonce changes, NOT on pause/play/status/intent.
   React.useEffect(() => {
     const a = audioRef.current
     if (!a) return
@@ -184,11 +264,10 @@ export default function AudioEngine() {
     mediaSurface.setTrack(s.current?.id ?? null)
 
     const armed =
-      s.status === 'loading' ||
-      s.status === 'playing' ||
       playIntentRef.current ||
       s.intent === 'play' ||
       s.reloadNonce > 0
+
 
     if (!armed) return
 
@@ -197,16 +276,13 @@ export default function AudioEngine() {
       return
     }
 
-    // We are (re)attaching.
     attachedKeyRef.current = null
     const seq = ++loadSeq.current
 
-    // reflect “loading” quickly for stage consumers
     mediaSurface.setStatus('loading')
     pRef.current.setStatusExternal('loading')
     pRef.current.setLoadingReasonExternal('attach')
 
-    // teardown existing HLS instance
     if (hlsRef.current) {
       try {
         hlsRef.current.destroy()
@@ -214,13 +290,11 @@ export default function AudioEngine() {
       hlsRef.current = null
     }
 
-    // cancel any in-flight token request
     tokenAbortRef.current?.abort()
     const ac = new AbortController()
     tokenAbortRef.current = ac
 
     const hardResetElement = () => {
-      // stop any current playback and remove current source
       try {
         a.pause()
       } catch {}
@@ -236,7 +310,6 @@ export default function AudioEngine() {
       if (seq !== loadSeq.current) return
 
       hardResetElement()
-
       if (seq !== loadSeq.current) return
 
       if (canPlayNativeHls(a)) {
@@ -269,7 +342,6 @@ export default function AudioEngine() {
 
       attachedKeyRef.current = attachKey
 
-      // If the user asked to play but autoplay was blocked earlier, try now.
       if (playIntentRef.current) {
         void a.play().finally(() => {
           playIntentRef.current = false
@@ -285,30 +357,23 @@ export default function AudioEngine() {
           return
         }
 
-        const res = await fetch('/api/mux/playback-token', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({playbackId}),
+        const s2 = pRef.current
+        const data = await fetchMuxToken({
+          playbackId,
+          trackId: s2.current?.id,
+          durationMs: s2.current?.durationMs,
           signal: ac.signal,
         })
 
-        let data: TokenResponse | null = null
-        try {
-          data = (await res.json()) as TokenResponse
-        } catch {
-          data = null
-        }
-
-        if (!res.ok || !data || !('ok' in data) || data.ok !== true) {
-          const reason =
-            data && 'ok' in data && data.ok === false ? data.reason : `Token error (${res.status})`
+        if (!data || data.ok !== true) {
+          const reason = data && data.ok === false ? data.reason : 'Token error'
           pRef.current.setBlocked(reason)
           mediaSurface.setStatus('blocked')
           return
         }
 
-        const expiresAtMs = Date.parse(data.expiresAt)
-        if (Number.isFinite(expiresAtMs)) {
+        const expiresAtMs = toExpiresAtMs(data.expiresAt)
+        if (expiresAtMs && Number.isFinite(expiresAtMs)) {
           tokenCacheRef.current.set(playbackId, {token: data.token, expiresAtMs})
         }
 
@@ -356,7 +421,6 @@ export default function AudioEngine() {
       pRef.current.setLoadingReasonExternal(undefined)
       pRef.current.clearIntent()
 
-      // If a seek was queued before we were ready, apply it once we’re actually playing.
       applyPendingSeek()
 
       const curId = pRef.current.current?.id
@@ -364,7 +428,6 @@ export default function AudioEngine() {
     }
 
     const markPaused = () => {
-      // NOTE: pause fires for both user-pauses and natural pauses during source swaps.
       mediaSurface.setStatus('paused')
       pRef.current.setStatusExternal('paused')
       pRef.current.setLoadingReasonExternal(undefined)
@@ -386,7 +449,6 @@ export default function AudioEngine() {
     }
 
     const onEnded = () => {
-      // Ensure next track has a user gesture bridge available if needed.
       window.dispatchEvent(new Event('af:play-intent'))
       pRef.current.next()
     }
@@ -434,7 +496,6 @@ export default function AudioEngine() {
     try {
       a.currentTime = Math.max(0, ms / 1000)
     } catch {
-      // Not seekable yet; we retry on canplay/canplaythrough via applyPendingSeek().
       return
     }
 
@@ -461,7 +522,6 @@ export default function AudioEngine() {
       void a.play().then(
         () => pRef.current.clearIntent(),
         () => {
-          // Autoplay blocked: remember intent, and we’ll retry on user gesture.
           playIntentRef.current = true
         }
       )
