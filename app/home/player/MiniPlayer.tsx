@@ -6,6 +6,7 @@ import {createPortal} from 'react-dom'
 import {usePlayer} from './PlayerState'
 import {buildShareTarget, performShare, type ShareTarget} from '@/lib/share'
 import {PatternPillUnderlay} from './VisualizerPattern'
+import {replaceQuery} from '@/app/home/urlState'
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
@@ -263,19 +264,25 @@ function useShareUX() {
 export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: string | null}) {
   const {onExpand, artworkUrl = null} = props
   const p = usePlayer()
-  const openPlayerToNowPlaying = React.useCallback(() => {
-  // keep existing behaviour (open panel)
-  onExpand?.()
+  const openPlayerToNowPlaying = () => {
+  const patch: Record<string, string | null | undefined> = {p: 'player'}
 
-  // also request the correct album be loaded
-  window.dispatchEvent(
-    new CustomEvent('af:open-player', {
-      detail: {
-        albumSlug: p.queueContextSlug ?? null,
-      },
-    })
-  )
-}, [onExpand, p.queueContextSlug])
+  // navigate to the album that’s actually playing (if known)
+  if (p.queueContextSlug) patch.album = p.queueContextSlug
+
+  // optionally include the current track (if known)
+  if (p.current?.id) patch.track = p.current.id
+
+  // nuke legacy / irrelevant keys
+  patch.panel = null
+  patch.t = null
+
+  replaceQuery(patch)
+
+  // keep your existing expand behaviour
+  onExpand?.()
+}
+
   const {shareTarget, fallbackModal} = useShareUX()
 
   const [mounted, setMounted] = React.useState(false)
