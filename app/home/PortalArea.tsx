@@ -162,6 +162,7 @@ export default function PortalArea(props: {
   const sp = useSearchParams()
   const qAlbum = sp.get('album')
   const qTrack = sp.get('track')
+  const qPanel = sp.get('p') ?? sp.get('panel') ?? 'player'
 
     const router = useRouter()
 
@@ -246,13 +247,13 @@ export default function PortalArea(props: {
 
   // ✅ URL-driven bootstrap (canonical addressing)
   React.useEffect(() => {
-    if (!qAlbum) return
+  // Only bootstrap album addressing while we're actually in the player panel.
+  if (qPanel !== 'player') return
+  if (!qAlbum) return
 
-    // keep panel coherent, but don't spam replaces
-    forcePanel('player')
+  if (qAlbum !== currentAlbumSlug) void onSelectAlbum(qAlbum)
+}, [qPanel, qAlbum, currentAlbumSlug, onSelectAlbum])
 
-    if (qAlbum !== currentAlbumSlug) void onSelectAlbum(qAlbum)
-  }, [qAlbum, currentAlbumSlug, onSelectAlbum, forcePanel])
 
 
   React.useEffect(() => {

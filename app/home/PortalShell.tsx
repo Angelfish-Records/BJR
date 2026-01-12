@@ -25,25 +25,12 @@ type Props = {
   /** If true, mirrors selected panel into the URL query param */
   syncToQueryParam?: boolean
   onPanelChange?: (panelId: string) => void
-
-  /**
-   * Optional controlled mode:
-   * if provided, PortalShell will render this as the active panel
-   * and will not own its own active state.
-   */
   activePanelId?: string
-
-  /** Optional header row UI. */
   header?: HeaderRenderer
-
-  /**
-   * Optional DOM id to portal header into (lets header span main+sidebar layout).
-   * If not found, header renders inline at top of PortalShell.
-   */
   headerPortalId?: string
 }
 
-const PANEL_QS_KEY = 'p' // ✅ new canonical param
+const PANEL_QS_KEY = 'p' // ✅ canonical
 const LEGACY_PANEL_QS_KEY = 'panel' // ❌ deprecated
 
 export default function PortalShell(props: Props) {
@@ -61,22 +48,33 @@ export default function PortalShell(props: Props) {
   const sp = useSearchParams()
 
   const panelIds = React.useMemo(() => new Set(panels.map((p) => p.id)), [panels])
-
   const isControlled = typeof controlledActive === 'string' && controlledActive.length > 0
 
   const readPanelFromQuery = React.useCallback(() => {
     if (!syncToQueryParam) return null
-    // prefer new, fall back to legacy
     return sp.get(PANEL_QS_KEY) ?? sp.get(LEGACY_PANEL_QS_KEY)
   }, [sp, syncToQueryParam])
 
   const writePanelToQuery = React.useCallback(
     (id: string) => {
       if (!syncToQueryParam) return
+
       const params = new URLSearchParams(sp.toString())
       params.set(PANEL_QS_KEY, id)
-      params.delete(LEGACY_PANEL_QS_KEY) // ✅ self-heal old URLs
-      router.replace(`?${params.toString()}`, {scroll: false})
+      params.delete(LEGACY_PANEL_QS_KEY) // ✅ self-heal legacy
+
+      // ✅ canonical: portal panel should not carry album addressing
+      if (id === 'portal') {
+        params.delete('album')
+        params.delete('track')
+        params.delete('t') // legacy deep-link param
+      }
+
+      const nextQs = params.toString()
+      const curQs = sp.toString()
+      if (nextQs === curQs) return // ✅ avoid jitter
+
+      router.replace(`?${nextQs}`, {scroll: false})
     },
     [router, sp, syncToQueryParam]
   )
@@ -104,7 +102,6 @@ export default function PortalShell(props: Props) {
       if (!panelIds.has(id)) return
 
       if (isControlled) {
-        // Controlled: parent owns state; URL mirroring handled by effect below.
         onPanelChange?.(id)
         return
       }
@@ -141,7 +138,6 @@ export default function PortalShell(props: Props) {
     writePanelToQuery(active)
   }, [active, isControlled, readPanelFromQuery, syncToQueryParam, writePanelToQuery])
 
-  // Header node (rendered inline or portaled)
   const headerNode =
     typeof header === 'function'
       ? header({activePanelId: active, setPanel, panels})
@@ -151,8 +147,7 @@ export default function PortalShell(props: Props) {
   React.useEffect(() => setMounted(true), [])
 
   const headerPortalEl = mounted && headerPortalId ? document.getElementById(headerPortalId) : null
-
-  const DOCK_H = 84 // mini player padding space
+  const DOCK_H = 84
 
   return (
     <div
@@ -165,7 +160,6 @@ export default function PortalShell(props: Props) {
         paddingBottom: `calc(${DOCK_H}px + env(safe-area-inset-bottom, 0px))`,
       }}
     >
-      {/* If we can portal into the grid-wide slot, do that. Otherwise render inline. */}
       {headerNode ? (headerPortalEl ? createPortal(headerNode, headerPortalEl) : headerNode) : null}
 
       <div style={{display: 'grid', minWidth: 0}}>
