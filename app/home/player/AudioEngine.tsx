@@ -9,14 +9,12 @@ import {mediaSurface} from './mediaSurface'
 import {audioSurface} from './audioSurface'
 
 type TokenResponse =
-  | {ok: true; token: string; expiresAt: string}
-  | {ok: false; blocked: true; action: string; reason: string}
+  | {ok: true; token: string; expiresAt: string | number}
+  | {ok: false; blocked: true; action?: string; reason: string; code?: string}
 
 function canPlayNativeHls(a: HTMLMediaElement) {
   return a.canPlayType('application/vnd.apple.mpegurl') !== ''
 }
-
-const COMPLETE_THRESHOLD = 0.9
 
 export default function AudioEngine() {
   const p = usePlayer()
@@ -30,7 +28,6 @@ export default function AudioEngine() {
   const audioCtxRef = React.useRef<AudioContext | null>(null)
   const analyserRef = React.useRef<AnalyserNode | null>(null)
   type U8AB = Uint8Array<ArrayBuffer>
-
   const freqDataRef = React.useRef<U8AB | null>(null)
   const timeDataRef = React.useRef<U8AB | null>(null)
 
@@ -38,79 +35,41 @@ export default function AudioEngine() {
   const playIntentRef = React.useRef(false)
 
   // Track attachment bookkeeping
-  const attachedKeyRef = React.useRef<string | null>(null) // `${playbackId}:${reloadNonce}`
+  const attachedKeyRef = React.useRef<string | null>(null)
   const tokenCacheRef = React.useRef(new Map<string, {token: string; expiresAtMs: number}>())
-
-  // ---- Playthrough completion reporting (90%+) ----
-  // key = `${trackId}:${playbackId}`
-  const completedKeyRef = React.useRef<string | null>(null)
-  const completionSentRef = React.useRef(new Set<string>())
-  const reportingInFlightRef = React.useRef(false)
 
   const pRef = React.useRef(p)
   React.useEffect(() => {
     pRef.current = p
   }, [p])
 
-  const reportPlaythrough = React.useCallback(async (pct: number) => {
-    const s = pRef.current
-    const trackId = s.current?.id
-    const playbackId = s.current?.muxPlaybackId
-    if (!trackId || !playbackId) return
+  /* ---------------- helpers ---------------- */
 
-    const key = `${trackId}:${playbackId}`
-
-    // Prevent duplicates (including rapid timeupdate bursts)
-    if (completionSentRef.current.has(key)) return
-    if (reportingInFlightRef.current) return
-
-    completionSentRef.current.add(key)
-    reportingInFlightRef.current = true
+  const hardStopAndDetach = React.useCallback(() => {
+    const a = audioRef.current
+    if (!a) return
 
     try {
-      const init: RequestInit = {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      keepalive: true,
-      body: JSON.stringify({trackId, playbackId, pct}),
+      a.pause()
+    } catch {}
+
+    // teardown HLS instance
+    if (hlsRef.current) {
+      try {
+        hlsRef.current.destroy()
+      } catch {}
+      hlsRef.current = null
     }
 
-    await fetch('/api/playthrough/complete', init)
+    attachedKeyRef.current = null
 
-        } catch {
-          // If it fails, allow one retry on a later signal (ended).
-          completionSentRef.current.delete(key)
-        } finally {
-          reportingInFlightRef.current = false
-        }
-      }, [])
-
-      const maybeReportCompletion = React.useCallback(
-        (a: HTMLAudioElement) => {
-      const s = pRef.current
-      const trackId = s.current?.id
-      const playbackId = s.current?.muxPlaybackId
-      if (!trackId || !playbackId) return
-
-      const key = `${trackId}:${playbackId}`
-
-      // Reset per-track key tracking when track changes
-      if (completedKeyRef.current !== key) {
-        completedKeyRef.current = key
-        // Do not clear the global set; it de-dupes within a session.
-      }
-
-      // Need a real duration to compute pct; prefer media element duration
-      const durSec = Number.isFinite(a.duration) && a.duration > 0 ? a.duration : 0
-      if (durSec <= 0) return
-
-      const pct = a.currentTime / durSec
-      if (pct >= COMPLETE_THRESHOLD) {
-        void reportPlaythrough(Math.min(1, Math.max(0, pct)))
-      }
-    },
-    [reportPlaythrough]
-  )
+    try {
+      a.removeAttribute('src')
+    } catch {}
+    try {
+      a.load()
+    } catch {}
+  }, [])
 
   /* ---------------- AudioContext + analyser (ONCE) ---------------- */
 
@@ -236,6 +195,7 @@ export default function AudioEngine() {
   }, [p.volume, p.muted])
 
   /* ---------------- Track attach (HLS / native) ---------------- */
+
   React.useEffect(() => {
     const a = audioRef.current
     if (!a) return
@@ -305,6 +265,7 @@ export default function AudioEngine() {
         if (!Hls.isSupported()) {
           pRef.current.setBlocked('This browser cannot play HLS.')
           mediaSurface.setStatus('blocked')
+          hardStopAndDetach()
           return
         }
 
@@ -315,6 +276,7 @@ export default function AudioEngine() {
           if (err?.fatal) {
             pRef.current.setBlocked(`HLS fatal: ${err.details ?? 'error'}`)
             mediaSurface.setStatus('blocked')
+            hardStopAndDetach()
             try {
               hls.destroy()
             } catch {}
@@ -346,12 +308,11 @@ export default function AudioEngine() {
         const res = await fetch('/api/mux/token', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          // We can pass duration hint later; for now keep minimal.
           body: JSON.stringify({
             playbackId,
             trackId: s.current?.id,
             albumSlug: s.queueContextSlug,
-            durationMs: s.current?.durationMs ?? s.durationById[s.current?.id ?? ''] ?? undefined,
+            durationMs: s.current?.durationMs ?? s.durationById?.[s.current?.id ?? ''],
           }),
           signal: ac.signal,
         })
@@ -363,15 +324,28 @@ export default function AudioEngine() {
           data = null
         }
 
+        // ----- BLOCKED PATH -----
         if (!res.ok || !data || !('ok' in data) || data.ok !== true) {
+          const code = data && 'ok' in data && data.ok === false ? data.code : undefined
           const reason =
             data && 'ok' in data && data.ok === false ? data.reason : `Token error (${res.status})`
+
+          // stop the *old* track from continuing
+          hardStopAndDetach()
+
+          // your requested semantics: when anon gating hits, empty the queue
+          if (code === 'ANON_CAP_REACHED') {
+            pRef.current.clearQueue()
+          }
+
           pRef.current.setBlocked(reason)
           mediaSurface.setStatus('blocked')
           return
         }
 
-        const expiresAtMs = Date.parse(data.expiresAt)
+        const expiresAtMs =
+          typeof data.expiresAt === 'number' ? data.expiresAt * 1000 : Date.parse(String(data.expiresAt))
+
         if (Number.isFinite(expiresAtMs)) {
           tokenCacheRef.current.set(playbackId, {token: data.token, expiresAtMs})
         }
@@ -384,9 +358,9 @@ export default function AudioEngine() {
 
     void load()
     return () => ac.abort()
-  }, [p.current?.id, p.current?.muxPlaybackId, p.reloadNonce])
+  }, [p.current?.id, p.current?.muxPlaybackId, p.reloadNonce, hardStopAndDetach])
 
-  /* ---------------- Media element -> time + duration + state (single source) ---------------- */
+  /* ---------------- Media element -> time + duration + state ---------------- */
 
   React.useEffect(() => {
     const a = audioRef.current
@@ -396,9 +370,6 @@ export default function AudioEngine() {
       const ms = Math.floor(a.currentTime * 1000)
       mediaSurface.setTime(ms)
       pRef.current.setPositionMs(ms)
-
-      // ✅ completion detector (90%+), one-shot per track
-      maybeReportCompletion(a)
     }
 
     const onLoadedMeta = () => {
@@ -449,43 +420,32 @@ export default function AudioEngine() {
     }
 
     const onEnded = () => {
-      // ✅ ended fallback: if we somehow missed 90% threshold, record 1.0
-      void reportPlaythrough(1)
-
       window.dispatchEvent(new Event('af:play-intent'))
       pRef.current.next()
     }
 
     a.addEventListener('timeupdate', onTime)
     a.addEventListener('loadedmetadata', onLoadedMeta)
-
     a.addEventListener('playing', markPlaying)
     a.addEventListener('pause', markPaused)
-
     a.addEventListener('waiting', markBuffering)
     a.addEventListener('stalled', markBuffering)
-
     a.addEventListener('canplay', clearBuffering)
     a.addEventListener('canplaythrough', clearBuffering)
-
     a.addEventListener('ended', onEnded)
 
     return () => {
       a.removeEventListener('timeupdate', onTime)
       a.removeEventListener('loadedmetadata', onLoadedMeta)
-
       a.removeEventListener('playing', markPlaying)
       a.removeEventListener('pause', markPaused)
-
       a.removeEventListener('waiting', markBuffering)
       a.removeEventListener('stalled', markBuffering)
-
       a.removeEventListener('canplay', clearBuffering)
       a.removeEventListener('canplaythrough', clearBuffering)
-
       a.removeEventListener('ended', onEnded)
     }
-  }, [maybeReportCompletion, reportPlaythrough])
+  }, [])
 
   /* ---------------- Seek: PlayerState -> media element ---------------- */
 
@@ -549,13 +509,5 @@ export default function AudioEngine() {
     return () => window.removeEventListener('af:play-intent', resume)
   }, [])
 
-  return (
-    <audio
-      ref={audioRef}
-      crossOrigin="anonymous"
-      preload="metadata"
-      playsInline
-      style={{display: 'none'}}
-    />
-  )
+  return <audio ref={audioRef} crossOrigin="anonymous" preload="metadata" playsInline style={{display: 'none'}} />
 }

@@ -23,86 +23,67 @@ export type PlayerState = {
   queue: PlayerTrack[]
   lastError?: string
 
-  // identifies what the queue represents (album-ish context)
   queueContextId?: string
   queueContextSlug?: string
   queueContextTitle?: string
   queueContextArtist?: string
   queueContextArtworkUrl?: string | null
 
-  // Optimistic UI
   intent: Intent
   intentAtMs?: number
   selectedTrackId?: string
   pendingTrackId?: string
 
-  // Seek optimism
   pendingSeekMs?: number
   seeking: boolean
 
-  // Loading micro-feedback
   loadingReason?: LoadingReason
-
-  // Retry hook for AudioEngine
   reloadNonce: number
 
-  // UI-facing playback telemetry
   positionMs: number
   seekNonce: number
 
-  volume: number // 0..1
+  volume: number
   muted: boolean
   repeat: RepeatMode
 
-  // session cache: durations learned (or primed) during this session
   durationById: Record<string, number>
 }
 
 type PlayerActions = {
-  // transport-ish
   play: (track?: PlayerTrack) => void
   pause: () => void
   next: () => void
   prev: () => void
 
-  // queue mgmt
   setQueue: (tracks: PlayerTrack[], opts?: QueueContext) => void
   enqueue: (track: PlayerTrack) => void
+  clearQueue: () => void
 
-  // telemetry
   setPositionMs: (ms: number) => void
   setDurationMs: (ms: number) => void
 
-  // external status updates from engine
   setStatusExternal: (s: PlayerStatus) => void
   setLoadingReasonExternal: (r?: LoadingReason) => void
 
-  // intents + optimistic selection
   setIntent: (i: Intent) => void
   clearIntent: () => void
   selectTrack: (id?: string) => void
   setPendingTrackId: (id?: string) => void
   resolvePendingTrack: (id: string) => void
 
-  // seeking
   seek: (ms: number) => void
   clearPendingSeek: () => void
 
-  // volume
   setVolume: (v: number) => void
   toggleMute: () => void
 
-  // repeat
   cycleRepeat: () => void
-
-  // optional: fake tick
   tick: (deltaMs: number) => void
 
-  // errors
   setBlocked: (reason?: string) => void
   clearError: () => void
 
-  // retry
   bumpReload: () => void
 }
 
@@ -136,8 +117,6 @@ function hydrateTracks(ts: PlayerTrack[], durationById: Record<string, number>) 
 }
 
 function primeDurationById(prev: Record<string, number>, tracks: PlayerTrack[]): Record<string, number> {
-  // Only set from Sanity values when present and positive.
-  // Never overwrite an existing cached value (keeps “Sanity is canonical” stable).
   let next = prev
   for (const t of tracks) {
     if (!t?.id) continue
@@ -188,8 +167,6 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
     return {
       ...state,
 
-      /* ---------------- Intent ---------------- */
-
       setIntent: (i: Intent) =>
         setState((s) => ({
           ...s,
@@ -198,8 +175,6 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
         })),
 
       clearIntent: () => setState((s) => (s.intent ? {...s, intent: null, intentAtMs: undefined} : s)),
-
-      /* ---------------- Selection / pending track ---------------- */
 
       selectTrack: (id?: string) =>
         setState((s) => ({
@@ -218,8 +193,6 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           if (s.pendingTrackId !== id) return s
           return {...s, pendingTrackId: undefined}
         }),
-
-      /* ---------------- Transport ---------------- */
 
       play: (track?: PlayerTrack) => {
         setState((s) => {
@@ -250,24 +223,19 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
             pendingTrackId: nextTrack.id,
           }
 
-          // ✅ Resume: same track + paused -> DO NOT claim "playing" yet.
-          // Let AudioEngine's media element 'playing' event be the only authority.
           if (sameTrack && s.status === 'paused') {
             return {
               ...base,
               current: hydrateTrack(s.current!, s.durationById),
-              // Keep status as paused until engine confirms playback.
               status: 'paused',
               loadingReason: undefined,
             }
           }
 
-          // Already playing/loading same track -> don't clobber position/status.
           if (sameTrack && (s.status === 'playing' || s.status === 'loading')) {
             return {...base, loadingReason: s.loadingReason}
           }
 
-          // New track -> reset position + go loading.
           return {
             ...base,
             current: nextTrack,
@@ -283,8 +251,6 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           ...s,
           intent: 'pause',
           intentAtMs: Date.now(),
-          // ✅ Don't force status here; media element 'pause' event is authoritative.
-          // (Keeps UI honest if pause is blocked / no-op.)
         })),
 
       next: () => {
@@ -295,7 +261,6 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           const idx = s.queue.findIndex((t) => t.id === cur.id)
           const at = idx >= 0 ? idx : 0
 
-          // repeat-one: stay on track, restart
           if (s.repeat === 'one') {
             return {
               ...s,
@@ -325,7 +290,6 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
             }
           }
 
-          // end of queue
           if (s.repeat === 'all' && s.queue.length > 0) {
             const t = hydrateTrack(s.queue[0], s.durationById)
             return {
@@ -346,17 +310,13 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
             status: 'paused',
             intent: 'pause',
             intentAtMs: Date.now(),
-
-            // hard reset to start so UI + <audio> agree
             positionMs: 0,
             pendingSeekMs: 0,
             seeking: true,
             seekNonce: s.seekNonce + 1,
-
             loadingReason: undefined,
             pendingTrackId: undefined,
           }
-
         })
       },
 
@@ -365,7 +325,6 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           const cur = s.current
           if (!cur || s.queue.length === 0) return s
 
-          // ✅ restart-on-prev ONLY while actually playing (not paused)
           if (s.status === 'playing' && s.positionMs > 3000) {
             return {
               ...s,
@@ -398,7 +357,6 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
             }
           }
 
-          // at start
           if (s.repeat === 'all' && s.queue.length > 0) {
             const t = hydrateTrack(s.queue[s.queue.length - 1], s.durationById)
             return {
@@ -414,7 +372,6 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
             }
           }
 
-          // default: restart current
           return {
             ...s,
             positionMs: 0,
@@ -427,8 +384,6 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           }
         })
       },
-
-      /* ---------------- Queue ---------------- */
 
       setQueue: (tracks: PlayerTrack[], opts?: QueueContext) =>
         setState((s) => {
@@ -478,7 +433,31 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           }
         }),
 
-      /* ---------------- Telemetry ---------------- */
+      clearQueue: () =>
+        setState((s) => ({
+          ...s,
+          queue: [],
+          current: undefined,
+          selectedTrackId: undefined,
+          pendingTrackId: undefined,
+
+          // clear queue context as well (this is “no longer browsing/listening”)
+          queueContextId: undefined,
+          queueContextSlug: undefined,
+          queueContextTitle: undefined,
+          queueContextArtist: undefined,
+          queueContextArtworkUrl: null,
+
+          // hard-reset playback telemetry
+          status: 'idle',
+          intent: null,
+          intentAtMs: undefined,
+          positionMs: 0,
+          pendingSeekMs: undefined,
+          seeking: false,
+          seekNonce: s.seekNonce + 1,
+          loadingReason: undefined,
+        })),
 
       setPositionMs: (ms: number) =>
         setState((s) => ({
@@ -486,7 +465,6 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           positionMs: Math.max(0, ms),
         })),
 
-      // ✅ “Sanity is canonical”
       setDurationMs: (ms: number) =>
         setState((s) => {
           const cur = s.current
@@ -521,8 +499,6 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
       setLoadingReasonExternal: (r?: LoadingReason) =>
         setState((s) => (s.loadingReason === r ? s : {...s, loadingReason: r})),
 
-      /* ---------------- Seeking ---------------- */
-
       seek: (ms: number) => {
         setState((s) => {
           const curId = s.current?.id ?? ''
@@ -544,16 +520,10 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           return {...s, seeking: false, pendingSeekMs: undefined}
         }),
 
-      /* ---------------- Volume ---------------- */
-
       setVolume: (v: number) => setState((s) => ({...s, volume: clamp(v, 0, 1)})),
       toggleMute: () => setState((s) => ({...s, muted: !s.muted})),
 
-      /* ---------------- Repeat ---------------- */
-
       cycleRepeat: () => setState((s) => ({...s, repeat: nextRepeat(s.repeat)})),
-
-      /* ---------------- Optional fake tick ---------------- */
 
       tick: (deltaMs: number) => {
         setState((s) => {
@@ -586,8 +556,6 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
         })
       },
 
-      /* ---------------- Errors / blocked ---------------- */
-
       setBlocked: (reason?: string) =>
         setState((s) => ({
           ...s,
@@ -599,8 +567,6 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
         })),
 
       clearError: () => setState((s) => ({...s, lastError: undefined})),
-
-      /* ---------------- Retry ---------------- */
 
       bumpReload: () =>
         setState((s) => {
