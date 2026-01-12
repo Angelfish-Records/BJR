@@ -3,13 +3,14 @@
 
 import React from 'react'
 import PortalShell, {PortalPanelSpec} from './PortalShell'
-
+import {useSearchParams} from 'next/navigation'
 import {usePlayer} from '@/app/home/player/PlayerState'
 import type {PlayerTrack, AlbumInfo, AlbumNavItem} from '@/lib/types'
 import PlayerController from './player/PlayerController'
 
 import ActivationGate from '@/app/home/ActivationGate'
 import Image from 'next/image'
+
 
 
 function QueueBootstrapper(props: {albumId: string | null; tracks: PlayerTrack[]}) {
@@ -23,6 +24,8 @@ function QueueBootstrapper(props: {albumId: string | null; tracks: PlayerTrack[]
 
   return null
 }
+
+
 
 type AlbumPayload = {album: AlbumInfo | null; tracks: PlayerTrack[]}
 
@@ -155,30 +158,37 @@ export default function PortalArea(props: {
     canManageBilling = false,
   } = props
 
+  const p = usePlayer()
+  const sp = useSearchParams()
+  const qAlbum = sp.get('album')
+  const qTrack = sp.get('track')
+
   const [activePanelId, setActivePanelId] = React.useState<string>('player')
   const [currentAlbumSlug, setCurrentAlbumSlug] = React.useState<string>(albumSlug)
-
-React.useEffect(() => {
-  setCurrentAlbumSlug(albumSlug)
-}, [albumSlug])
-
 
   const [album, setAlbum] = React.useState<AlbumInfo | null>(initialAlbum)
   const [tracks, setTracks] = React.useState<PlayerTrack[]>(initialTracks)
   const [isBrowsingAlbum, setIsBrowsingAlbum] = React.useState(false)
 
+  // Keep local album/tracks in sync with server-provided props (e.g. initial /home render)
   React.useEffect(() => {
     setAlbum(initialAlbum)
     setTracks(initialTracks)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialAlbum?.id, initialTracks.length])
+    setCurrentAlbumSlug(albumSlug)
+  }, [albumSlug, initialAlbum, initialTracks])
 
   const onSelectAlbum = React.useCallback(
     async (slug: string) => {
       if (!slug) return
       if (isBrowsingAlbum) return
 
+      // ✅ commit “intent” immediately (kills flicker)
       setIsBrowsingAlbum(true)
+      setActivePanelId('player')
+      setCurrentAlbumSlug(slug)
+      setAlbum(null)
+      setTracks([])
+
       try {
         const res = await fetch(`/api/albums/${encodeURIComponent(slug)}`, {method: 'GET'})
         if (!res.ok) throw new Error(`Album fetch failed (${res.status})`)
@@ -186,8 +196,6 @@ React.useEffect(() => {
 
         setAlbum(json.album ?? null)
         setTracks(Array.isArray(json.tracks) ? json.tracks : [])
-        setCurrentAlbumSlug(slug)
-        setActivePanelId('player')
       } catch (e) {
         console.error(e)
       } finally {
@@ -197,22 +205,33 @@ React.useEffect(() => {
     [isBrowsingAlbum]
   )
 
+  // ✅ URL-driven bootstrap (canonical addressing)
   React.useEffect(() => {
-  const onOpen = (ev: Event) => {
-    const e = ev as CustomEvent<{albumSlug?: string | null}>
-    const slug = e.detail?.albumSlug ?? null
-
+    if (!qAlbum) return
     setActivePanelId('player')
+    if (qAlbum !== currentAlbumSlug) void onSelectAlbum(qAlbum)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qAlbum])
 
-    if (slug && slug !== currentAlbumSlug) {
-      void onSelectAlbum(slug)
+  React.useEffect(() => {
+    if (!qTrack) return
+    p.selectTrack(qTrack)
+    p.setPendingTrackId(undefined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qTrack])
+
+  // Existing: MiniPlayer -> open player + optional album request
+  React.useEffect(() => {
+    const onOpen = (ev: Event) => {
+      const e = ev as CustomEvent<{albumSlug?: string | null}>
+      const slug = e.detail?.albumSlug ?? null
+      setActivePanelId('player')
+      if (slug) void onSelectAlbum(slug)
     }
-  }
 
-  window.addEventListener('af:open-player', onOpen as EventListener)
-  return () => window.removeEventListener('af:open-player', onOpen as EventListener)
-}, [onSelectAlbum, currentAlbumSlug])
-
+    window.addEventListener('af:open-player', onOpen as EventListener)
+    return () => window.removeEventListener('af:open-player', onOpen as EventListener)
+  }, [onSelectAlbum])
 
   const panels = React.useMemo<PortalPanelSpec[]>(
     () => [

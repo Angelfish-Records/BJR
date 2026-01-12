@@ -2,10 +2,9 @@
 import React from 'react'
 import {notFound} from 'next/navigation'
 
-import PortalArea from '@/app/home/PortalArea'
 import AlbumDeepLinkBridge from './AlbumDeepLinkBridge'
-import {getAlbumBySlug, listAlbumsForBrowse} from '@/lib/albums'
-import type {AlbumInfo, AlbumNavItem} from '@/lib/types'
+import {getAlbumBySlug} from '@/lib/albums'
+import type {AlbumInfo} from '@/lib/types'
 import type {PlayerTrack} from '@/lib/types'
 import {urlFor} from '@/sanity/lib/image'
 
@@ -84,72 +83,48 @@ export default async function AlbumPage(props: {
   searchParams?: Promise<PageSearchParams>
 }) {
   const {slug} = await props.params
-  const sp = (props.searchParams ? await props.searchParams : {}) ?? {}
-  const tRaw = sp.t
-  const initialTrackId = (Array.isArray(tRaw) ? tRaw[0] : tRaw) ?? null
 
+  // Validate slug exists (keeps 404 behaviour consistent)
   const albumData = await getAlbumBySlug(slug)
   if (!albumData.album) notFound()
 
-  const album = albumData.album as AlbumInfo
-  const tracks = albumData.tracks as PlayerTrack[]
-
-  const browseAlbumsRaw = await listAlbumsForBrowse()
-  const browseAlbums: AlbumNavItem[] = browseAlbumsRaw
-    .filter((a) => a.slug && a.title)
-    .map((a) => ({
-      id: a.id,
-      slug: a.slug,
-      title: a.title,
-      artist: a.artist ?? undefined,
-      year: a.year ?? undefined,
-      coverUrl: a.artwork ? urlFor(a.artwork).width(400).height(400).quality(80).url() : null,
-    }))
-
-  const albumContextId = album.id
-
-  // best-effort artwork for miniplayer context
-  const albumArtworkUrl =
-    hasArtwork(album) && album.artwork
-      ? urlFor(album.artwork).width(400).height(400).quality(80).url()
-      : null
-
   return (
     <>
-      <AlbumDeepLinkBridge
-        albumContextId={albumContextId}
-        albumArtworkUrl={albumArtworkUrl}
-        tracks={tracks}
-        initialTrackId={initialTrackId}
-      />
+      {/* Client-side resolver: /albums/:slug(?t=) -> /home?p=player&album=...&track=... */}
+      <AlbumDeepLinkBridge />
 
-      <PortalArea
-        albumSlug={slug}
-        album={album}
-        tracks={tracks}
-        albums={browseAlbums}
-        portalPanel={
-          <div
-            style={{
-              borderRadius: 18,
-              border: '1px solid rgba(255,255,255,0.10)',
-              background: 'rgba(255,255,255,0.04)',
-              padding: 16,
-              fontSize: 13,
-              opacity: 0.78,
-              lineHeight: 1.55,
-            }}
-          >
-            Album: <code style={{opacity: 0.9}}>{slug}</code>
-            {initialTrackId ? (
-              <>
-                <br />
-                Track: <code style={{opacity: 0.9}}>{initialTrackId}</code>
-              </>
-            ) : null}
-          </div>
-        }
-      />
+      {/* Minimal fallback content (in case the redirect is delayed/blocked) */}
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'grid',
+          placeItems: 'center',
+          padding: 24,
+        }}
+      >
+        <div
+          style={{
+            borderRadius: 18,
+            border: '1px solid rgba(255,255,255,0.10)',
+            background: 'rgba(255,255,255,0.04)',
+            padding: 16,
+            fontSize: 13,
+            opacity: 0.82,
+            lineHeight: 1.55,
+            maxWidth: 680,
+            width: '100%',
+          }}
+        >
+          Redirecting to the player…
+
+          <noscript>
+            <div style={{marginTop: 10}}>
+              JavaScript is required to open the player. You can try:{' '}
+              <a href={`/home?p=player&album=${encodeURIComponent(slug)}`}>open player</a>.
+            </div>
+          </noscript>
+        </div>
+      </div>
     </>
   )
 }

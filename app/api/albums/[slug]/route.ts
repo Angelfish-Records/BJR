@@ -1,3 +1,4 @@
+// web/app/api/albums/[slug]/route.ts
 import 'server-only'
 import {NextResponse} from 'next/server'
 import {getAlbumBySlug} from '@/lib/albums'

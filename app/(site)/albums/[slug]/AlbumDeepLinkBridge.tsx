@@ -2,31 +2,29 @@
 'use client'
 
 import React from 'react'
-import {usePlayer} from '@/app/home/player/PlayerState'
-import type {PlayerTrack} from '@/lib/types'
+import {useParams, useSearchParams, useRouter, usePathname} from 'next/navigation'
 
-export default function AlbumDeepLinkBridge(props: {
-  albumContextId?: string
-  albumArtworkUrl?: string | null
-  tracks: PlayerTrack[]
-  initialTrackId?: string | null
-}) {
-  const {albumContextId, albumArtworkUrl, tracks, initialTrackId} = props
-  const p = usePlayer()
+export default function AlbumDeepLinkBridge() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const params = useParams<{slug: string}>()
+  const sp = useSearchParams()
 
   React.useEffect(() => {
-    // Always ensure the queue is album-scoped for this page view.
-    if (tracks?.length) {
-      p.setQueue(tracks, {contextId: albumContextId, artworkUrl: albumArtworkUrl ?? null})
-    }
+    // paranoia: never redirect if we’re already on /home
+    if (pathname?.startsWith('/home')) return
 
-    // If ?t= exists, select it (no autoplay).
-    if (initialTrackId) {
-      p.selectTrack(initialTrackId)
-      p.setPendingTrackId(undefined)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [albumContextId, albumArtworkUrl, initialTrackId, tracks?.length])
+    const slug = params?.slug
+    if (!slug) return
+
+    const t = sp.get('t') // existing share param
+    const next = new URLSearchParams()
+    next.set('p', 'player')
+    next.set('album', slug)
+    if (t) next.set('track', t)
+
+    router.replace(`/home?${next.toString()}`)
+  }, [router, pathname, params?.slug, sp])
 
   return null
 }
