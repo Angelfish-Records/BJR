@@ -163,16 +163,38 @@ export default function PortalArea(props: {
   const qAlbum = sp.get('album')
   const qTrack = sp.get('track')
 
-  const router = useRouter()
+    const router = useRouter()
+
+  // Generic query patcher (single writer, self-heals legacy ?panel=)
+  const patchQuery = React.useCallback(
+    (patch: Record<string, string | null | undefined>) => {
+      const params = new URLSearchParams(sp.toString())
+
+      for (const [k, v] of Object.entries(patch)) {
+        if (v == null || v === '') params.delete(k)
+        else params.set(k, v)
+      }
+
+      // legacy cleanup
+      params.delete('panel')
+
+      const nextQs = params.toString()
+      const curQs = sp.toString()
+      if (nextQs === curQs) return // ✅ avoid jitter/loops
+
+      router.replace(`?${nextQs}`, {scroll: false})
+    },
+    [router, sp]
+  )
 
   const forcePanel = React.useCallback(
     (id: 'player' | 'portal') => {
-      const params = new URLSearchParams(sp.toString())
-      params.set('p', id)
-      params.delete('panel') // legacy cleanup
-      router.replace(`?${params.toString()}`, {scroll: false})
+      // ✅ only write if it actually changes
+      const cur = sp.get('p') ?? sp.get('panel')
+      if (cur === id) return
+      patchQuery({p: id})
     },
-    [router, sp]
+    [patchQuery, sp]
   )
 
   const [currentAlbumSlug, setCurrentAlbumSlug] = React.useState<string>(albumSlug)
@@ -181,7 +203,7 @@ export default function PortalArea(props: {
   const [tracks, setTracks] = React.useState<PlayerTrack[]>(initialTracks)
   const [isBrowsingAlbum, setIsBrowsingAlbum] = React.useState(false)
 
-  // Keep local album/tracks in sync with server-provided props (e.g. initial /home render)
+  // Keep local album/tracks in sync with server-provided props (initial /home render)
   React.useEffect(() => {
     setAlbum(initialAlbum)
     setTracks(initialTracks)
@@ -193,9 +215,15 @@ export default function PortalArea(props: {
       if (!slug) return
       if (isBrowsingAlbum) return
 
-      // ✅ commit “intent” immediately (kills flicker)
+      // ✅ make URL canonical FIRST (prevents snap-back)
+      patchQuery({
+        p: 'player',
+        album: slug,
+        track: null, // switching albums should clear prior track deep-link
+      })
+
+      // ✅ optimistic UI
       setIsBrowsingAlbum(true)
-      forcePanel('player')
       setCurrentAlbumSlug(slug)
       setAlbum(null)
       setTracks([])
@@ -213,15 +241,19 @@ export default function PortalArea(props: {
         setIsBrowsingAlbum(false)
       }
     },
-    [isBrowsingAlbum, forcePanel]
+    [isBrowsingAlbum, patchQuery]
   )
 
   // ✅ URL-driven bootstrap (canonical addressing)
   React.useEffect(() => {
-  if (!qAlbum) return
-  forcePanel('player')
-  if (qAlbum !== currentAlbumSlug) void onSelectAlbum(qAlbum)
-}, [qAlbum, currentAlbumSlug, onSelectAlbum, forcePanel])
+    if (!qAlbum) return
+
+    // keep panel coherent, but don't spam replaces
+    forcePanel('player')
+
+    if (qAlbum !== currentAlbumSlug) void onSelectAlbum(qAlbum)
+  }, [qAlbum, currentAlbumSlug, onSelectAlbum, forcePanel])
+
 
   React.useEffect(() => {
     if (!qTrack) return
