@@ -436,28 +436,32 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
       clearQueue: () =>
         setState((s) => ({
           ...s,
+
+          // ✅ clear playback + queue
           queue: [],
           current: undefined,
           selectedTrackId: undefined,
           pendingTrackId: undefined,
 
-          // clear queue context as well (this is “no longer browsing/listening”)
-          queueContextId: undefined,
-          queueContextSlug: undefined,
-          queueContextTitle: undefined,
-          queueContextArtist: undefined,
-          queueContextArtworkUrl: null,
-
-          // hard-reset playback telemetry
-          status: 'idle',
-          intent: null,
-          intentAtMs: undefined,
+          // ✅ hard-reset playback telemetry
           positionMs: 0,
           pendingSeekMs: undefined,
           seeking: false,
           seekNonce: s.seekNonce + 1,
           loadingReason: undefined,
+
+          // ✅ do NOT clear album-ish context
+          // queueContextId: keep
+          // queueContextSlug: keep
+          // queueContextTitle: keep
+          // queueContextArtist: keep
+          // queueContextArtworkUrl: keep
+
+          // ✅ also do NOT force status/intent here.
+          // AudioEngine will call setBlocked(reason) after this when gating hits,
+          // and that becomes the UI truth.
         })),
+
 
       setPositionMs: (ms: number) =>
         setState((s) => ({

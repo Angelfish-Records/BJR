@@ -33,6 +33,7 @@ export default function AudioEngine() {
 
   // ---- Playback intent ----
   const playIntentRef = React.useRef(false)
+  const playthroughSentRef = React.useRef(new Set<string>()) // key: `${trackId}:${playbackId}`
 
   // Track attachment bookkeeping
   const attachedKeyRef = React.useRef<string | null>(null)
@@ -366,11 +367,46 @@ export default function AudioEngine() {
     const a = audioRef.current
     if (!a) return
 
+  const reportPlaythroughComplete = (pct: number) => {
+  const trackId = pRef.current.current?.id ?? ''
+  const playbackId = pRef.current.current?.muxPlaybackId ?? ''
+  if (!trackId || !playbackId) return
+
+  const key = `${trackId}:${playbackId}`
+  if (playthroughSentRef.current.has(key)) return
+  if (pct < 0.9) return
+
+  playthroughSentRef.current.add(key)
+
+  // fire-and-forget; keepalive helps during navigations/unloads
+  fetch('/api/playthrough/complete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({trackId, playbackId, pct}),
+    keepalive: true,
+  }).catch(() => {})
+}
+
+
     const onTime = () => {
       const ms = Math.floor(a.currentTime * 1000)
       mediaSurface.setTime(ms)
       pRef.current.setPositionMs(ms)
+
+      // try to compute duration from best available source
+      const curId = pRef.current.current?.id ?? ''
+      const durFromState =
+        (curId ? pRef.current.durationById[curId] : 0) || pRef.current.current?.durationMs || 0
+
+      const durFromEl = Number.isFinite(a.duration) && a.duration > 0 ? Math.floor(a.duration * 1000) : 0
+      const durMs = durFromState || durFromEl
+
+      if (durMs > 0) {
+        const pct = ms / durMs
+        reportPlaythroughComplete(pct)
+      }
     }
+
 
     const onLoadedMeta = () => {
       const d = a.duration
@@ -420,9 +456,13 @@ export default function AudioEngine() {
     }
 
     const onEnded = () => {
+      reportPlaythroughComplete(1)
+
+      // Ensure next track has a user gesture bridge available if needed.
       window.dispatchEvent(new Event('af:play-intent'))
       pRef.current.next()
     }
+
 
     a.addEventListener('timeupdate', onTime)
     a.addEventListener('loadedmetadata', onLoadedMeta)
