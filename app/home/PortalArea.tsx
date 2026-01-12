@@ -156,16 +156,39 @@ export default function PortalArea(props: {
   const p = usePlayer()
   const sp = useClientSearchParams()
 
+    const DEBUG_SPOTLIGHT_KEY = 'af:debugSpotlight'
+
+  const [debugSpotlight, setDebugSpotlight] = React.useState(false)
+
+  React.useEffect(() => {
+    try {
+      setDebugSpotlight(window.sessionStorage.getItem(DEBUG_SPOTLIGHT_KEY) === '1')
+    } catch {}
+  }, [])
+
+  const toggleDebugSpotlight = React.useCallback(() => {
+    setDebugSpotlight((v) => {
+      const next = !v
+      try {
+        window.sessionStorage.setItem(DEBUG_SPOTLIGHT_KEY, next ? '1' : '0')
+      } catch {}
+      return next
+    })
+  }, [])
+
   const derivedAttentionMessage =
-    attentionMessage ??
-    (p.status === 'blocked' &&
-    (p.blockedCode === 'ANON_CAP_REACHED' ||
-      p.blockedCode === 'ENTITLEMENT_REQUIRED' ||
-      p.blockedCode === 'AUTH_REQUIRED')
-      ? p.lastError ?? null
-      : null)
+    debugSpotlight
+      ? 'DEBUG: Anonymous listening limit reached. Please log in to continue.'
+      : attentionMessage ??
+        (p.status === 'blocked' &&
+        (p.blockedCode === 'ANON_CAP_REACHED' ||
+          p.blockedCode === 'ENTITLEMENT_REQUIRED' ||
+          p.blockedCode === 'AUTH_REQUIRED')
+          ? p.lastError ?? null
+          : null)
 
   const spotlightAttention = !!derivedAttentionMessage
+
 
   const qAlbum = sp.get('album')
   const qTrack = sp.get('track')
@@ -343,6 +366,21 @@ export default function PortalArea(props: {
   return (
     <>
       <QueueBootstrapper albumId={album?.id ?? null} tracks={tracks} />
+
+      {spotlightAttention ? (
+        <div
+          aria-hidden
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            zIndex: 40,
+          }}
+        />
+      ) : null}
+
 
       <div style={{height: '100%', minHeight: 0, minWidth: 0, display: 'grid'}}>
         <PortalShell
@@ -584,6 +622,35 @@ export default function PortalArea(props: {
                     >
                       <IconPortal />
                     </button>
+
+                    <button
+                      type="button"
+                      aria-label="Toggle debug spotlight"
+                      title="Toggle debug spotlight"
+                      onClick={toggleDebugSpotlight}
+                      style={{
+                        height: 46,
+                        padding: '0 12px',
+                        borderRadius: 999,
+                        border: '1px solid rgba(255,255,255,0.14)',
+                        background: debugSpotlight
+                          ? 'color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))'
+                          : 'rgba(255,255,255,0.04)',
+                        boxShadow: debugSpotlight
+                          ? '0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)'
+                          : '0 12px 26px rgba(0,0,0,0.18)',
+                        color: 'rgba(255,255,255,0.90)',
+                        cursor: 'pointer',
+                        opacity: debugSpotlight ? 0.98 : 0.78,
+                        userSelect: 'none',
+                        fontSize: 12,
+                        letterSpacing: 0.3,
+                      }}
+                    >
+                      DBG
+                    </button>
+
+
                   </div>
 
                   <div className="afTopBarRight">
