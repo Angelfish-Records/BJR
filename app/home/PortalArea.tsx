@@ -3,7 +3,7 @@
 
 import React from 'react'
 import PortalShell, {PortalPanelSpec} from './PortalShell'
-import {useSearchParams} from 'next/navigation'
+import {useRouter, useSearchParams} from 'next/navigation'
 import {usePlayer} from '@/app/home/player/PlayerState'
 import type {PlayerTrack, AlbumInfo, AlbumNavItem} from '@/lib/types'
 import PlayerController from './player/PlayerController'
@@ -163,7 +163,18 @@ export default function PortalArea(props: {
   const qAlbum = sp.get('album')
   const qTrack = sp.get('track')
 
-  const [activePanelId, setActivePanelId] = React.useState<string>('player')
+  const router = useRouter()
+
+  const forcePanel = React.useCallback(
+    (id: 'player' | 'portal') => {
+      const params = new URLSearchParams(sp.toString())
+      params.set('p', id)
+      params.delete('panel') // legacy cleanup
+      router.replace(`?${params.toString()}`, {scroll: false})
+    },
+    [router, sp]
+  )
+
   const [currentAlbumSlug, setCurrentAlbumSlug] = React.useState<string>(albumSlug)
 
   const [album, setAlbum] = React.useState<AlbumInfo | null>(initialAlbum)
@@ -184,7 +195,7 @@ export default function PortalArea(props: {
 
       // ✅ commit “intent” immediately (kills flicker)
       setIsBrowsingAlbum(true)
-      setActivePanelId('player')
+      forcePanel('player')
       setCurrentAlbumSlug(slug)
       setAlbum(null)
       setTracks([])
@@ -202,16 +213,15 @@ export default function PortalArea(props: {
         setIsBrowsingAlbum(false)
       }
     },
-    [isBrowsingAlbum]
+    [isBrowsingAlbum, forcePanel]
   )
 
   // ✅ URL-driven bootstrap (canonical addressing)
   React.useEffect(() => {
-    if (!qAlbum) return
-    setActivePanelId('player')
-    if (qAlbum !== currentAlbumSlug) void onSelectAlbum(qAlbum)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qAlbum])
+  if (!qAlbum) return
+  forcePanel('player')
+  if (qAlbum !== currentAlbumSlug) void onSelectAlbum(qAlbum)
+}, [qAlbum, currentAlbumSlug, onSelectAlbum, forcePanel])
 
   React.useEffect(() => {
     if (!qTrack) return
@@ -225,13 +235,13 @@ export default function PortalArea(props: {
     const onOpen = (ev: Event) => {
       const e = ev as CustomEvent<{albumSlug?: string | null}>
       const slug = e.detail?.albumSlug ?? null
-      setActivePanelId('player')
+      forcePanel('player')
       if (slug) void onSelectAlbum(slug)
     }
 
     window.addEventListener('af:open-player', onOpen as EventListener)
     return () => window.removeEventListener('af:open-player', onOpen as EventListener)
-  }, [onSelectAlbum])
+  }, [onSelectAlbum, forcePanel])
 
   const panels = React.useMemo<PortalPanelSpec[]>(
     () => [
@@ -246,15 +256,13 @@ export default function PortalArea(props: {
             albums={albums}
             onSelectAlbum={onSelectAlbum}
             isBrowsingAlbum={isBrowsingAlbum}
-            activePanelId={activePanelId}
-            playerPanelId="player"
-            openPlayerPanel={() => setActivePanelId('player')}
+            openPlayerPanel={() => forcePanel('player')}
           />
         ),
       },
       {id: 'portal', label: 'Portal', content: portalPanel},
     ],
-    [portalPanel, currentAlbumSlug, album, tracks, albums, activePanelId, isBrowsingAlbum, onSelectAlbum]
+    [portalPanel, currentAlbumSlug, album, tracks, albums, forcePanel, isBrowsingAlbum, onSelectAlbum]
   )
 
   return (
@@ -262,14 +270,12 @@ export default function PortalArea(props: {
       <QueueBootstrapper albumId={album?.id ?? null} tracks={tracks} />
 
       <div style={{height: '100%', minHeight: 0, minWidth: 0, display: 'grid'}}>
-        <PortalShell
-          panels={panels}
-          defaultPanelId="player"
-          activePanelId={activePanelId}
-          syncToQueryParam
-          onPanelChange={setActivePanelId}
-          headerPortalId="af-portal-topbar-slot"
-          header={({activePanelId, setPanel}) => (
+      <PortalShell
+        panels={panels}
+        defaultPanelId="player"
+        syncToQueryParam
+        headerPortalId="af-portal-topbar-slot"
+        header={({activePanelId, setPanel}) => (
   <div
     style={{
         width: '100%',

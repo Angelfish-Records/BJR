@@ -22,7 +22,7 @@ type HeaderRenderer = React.ReactNode | ((ctx: HeaderCtx) => React.ReactNode)
 type Props = {
   panels: PortalPanelSpec[]
   defaultPanelId?: string
-  /** If true, mirrors selected panel into ?panel= */
+  /** If true, mirrors selected panel into the URL query param */
   syncToQueryParam?: boolean
   onPanelChange?: (panelId: string) => void
 
@@ -43,6 +43,9 @@ type Props = {
   headerPortalId?: string
 }
 
+const PANEL_QS_KEY = 'p' // ✅ new canonical param
+const LEGACY_PANEL_QS_KEY = 'panel' // ❌ deprecated
+
 export default function PortalShell(props: Props) {
   const {
     panels,
@@ -61,8 +64,25 @@ export default function PortalShell(props: Props) {
 
   const isControlled = typeof controlledActive === 'string' && controlledActive.length > 0
 
+  const readPanelFromQuery = React.useCallback(() => {
+    if (!syncToQueryParam) return null
+    // prefer new, fall back to legacy
+    return sp.get(PANEL_QS_KEY) ?? sp.get(LEGACY_PANEL_QS_KEY)
+  }, [sp, syncToQueryParam])
+
+  const writePanelToQuery = React.useCallback(
+    (id: string) => {
+      if (!syncToQueryParam) return
+      const params = new URLSearchParams(sp.toString())
+      params.set(PANEL_QS_KEY, id)
+      params.delete(LEGACY_PANEL_QS_KEY) // ✅ self-heal old URLs
+      router.replace(`?${params.toString()}`, {scroll: false})
+    },
+    [router, sp, syncToQueryParam]
+  )
+
   const [uncontrolledActive, setUncontrolledActive] = React.useState<string>(() => {
-    const fromQuery = syncToQueryParam ? sp.get('panel') : null
+    const fromQuery = readPanelFromQuery()
     const initial = fromQuery ?? defaultPanelId ?? panels[0]?.id ?? 'portal'
     return panelIds.has(initial) ? initial : (panels[0]?.id ?? 'portal')
   })
@@ -76,7 +96,6 @@ export default function PortalShell(props: Props) {
     if (!fallback) return
     if (!isControlled) setUncontrolledActive(fallback)
     onPanelChange?.(fallback)
-    // In controlled mode, parent must respond.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelIds, panels, defaultPanelId])
 
@@ -92,41 +111,35 @@ export default function PortalShell(props: Props) {
 
       setUncontrolledActive(id)
       onPanelChange?.(id)
-
-      if (!syncToQueryParam) return
-      const params = new URLSearchParams(sp.toString())
-      params.set('panel', id)
-      router.replace(`?${params.toString()}`, {scroll: false})
+      writePanelToQuery(id)
     },
-    [isControlled, onPanelChange, panelIds, router, sp, syncToQueryParam]
+    [isControlled, onPanelChange, panelIds, writePanelToQuery]
   )
 
-  // Uncontrolled: respond to back/forward (?panel= changes) without creating loops.
+  // Uncontrolled: respond to back/forward (query changes) without loops.
   React.useEffect(() => {
     if (!syncToQueryParam) return
     if (isControlled) return
 
-    const q = sp.get('panel')
+    const q = readPanelFromQuery()
     if (!q) return
     if (!panelIds.has(q)) return
     if (q === active) return
 
     setUncontrolledActive(q)
     onPanelChange?.(q)
-  }, [active, isControlled, onPanelChange, panelIds, sp, syncToQueryParam])
+  }, [active, isControlled, onPanelChange, panelIds, readPanelFromQuery, syncToQueryParam])
 
   // Controlled: mirror active into URL (single direction).
   React.useEffect(() => {
     if (!syncToQueryParam) return
     if (!isControlled) return
 
-    const current = sp.get('panel')
+    const current = readPanelFromQuery()
     if (current === active) return
 
-    const params = new URLSearchParams(sp.toString())
-    params.set('panel', active)
-    router.replace(`?${params.toString()}`, {scroll: false})
-  }, [active, isControlled, router, sp, syncToQueryParam])
+    writePanelToQuery(active)
+  }, [active, isControlled, readPanelFromQuery, syncToQueryParam, writePanelToQuery])
 
   // Header node (rendered inline or portaled)
   const headerNode =
@@ -137,8 +150,7 @@ export default function PortalShell(props: Props) {
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
 
-  const headerPortalEl =
-    mounted && headerPortalId ? document.getElementById(headerPortalId) : null
+  const headerPortalEl = mounted && headerPortalId ? document.getElementById(headerPortalId) : null
 
   const DOCK_H = 84 // mini player padding space
 
@@ -154,11 +166,7 @@ export default function PortalShell(props: Props) {
       }}
     >
       {/* If we can portal into the grid-wide slot, do that. Otherwise render inline. */}
-      {headerNode
-        ? headerPortalEl
-          ? createPortal(headerNode, headerPortalEl)
-          : headerNode
-        : null}
+      {headerNode ? (headerPortalEl ? createPortal(headerNode, headerPortalEl) : headerNode) : null}
 
       <div style={{display: 'grid', minWidth: 0}}>
         {panels.map((p) => (

@@ -12,26 +12,14 @@ import type {LyricCue} from './stage/LyricsOverlay'
 
 export default function PlayerController(props: {
   albumSlug: string
-  activePanelId: string
   openPlayerPanel: () => void
-  playerPanelId?: string
   album: AlbumInfo | null
   tracks: PlayerTrack[]
   albums: AlbumNavItem[]
   onSelectAlbum: (slug: string) => void
   isBrowsingAlbum: boolean
 }) {
-  const {
-    albumSlug,
-    activePanelId,
-    openPlayerPanel,
-    playerPanelId = 'player',
-    album,
-    tracks,
-    albums,
-    onSelectAlbum,
-    isBrowsingAlbum,
-  } = props
+  const {albumSlug, openPlayerPanel, album, tracks, albums, onSelectAlbum, isBrowsingAlbum} = props
 
   const p = usePlayer()
 
@@ -58,8 +46,6 @@ export default function PlayerController(props: {
     }
   }, [miniActive, p])
 
-  const showFull = activePanelId === playerPanelId
-
   // Stage overlay toggle
   const [stageOpen, setStageOpen] = React.useState(false)
   const openStage = React.useCallback(() => setStageOpen(true), [])
@@ -72,18 +58,17 @@ export default function PlayerController(props: {
 
   return (
     <>
-      {showFull ? (
-        <FullPlayer
-          albumSlug={albumSlug}
-          album={album}
-          tracks={tracks}
-          albums={albums}
-          onSelectAlbum={onSelectAlbum}
-          isBrowsingAlbum={isBrowsingAlbum}
-          // @ts-expect-error: intentional opt-in prop; see patch below
-          onOpenStage={openStage}
-        />
-      ) : null}
+      {/* Full player always renders within the "player" panel; PortalShell handles visibility */}
+      <FullPlayer
+        albumSlug={albumSlug}
+        album={album}
+        tracks={tracks}
+        albums={albums}
+        onSelectAlbum={onSelectAlbum}
+        isBrowsingAlbum={isBrowsingAlbum}
+        // @ts-expect-error: intentional opt-in prop; see patch below
+        onOpenStage={openStage}
+      />
 
       {miniActive ? (
         <MiniPlayer
