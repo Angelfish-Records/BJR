@@ -3,6 +3,7 @@ import {NextRequest, NextResponse} from 'next/server'
 import {auth} from '@clerk/nextjs/server'
 import {importPKCS8, SignJWT} from 'jose'
 import crypto from 'crypto'
+import {countAnonDistinctCompletedTracks} from '@/lib/events'
 
 type TokenReq = {
   playbackId: string
@@ -22,6 +23,9 @@ type TokenBlocked = {
 }
 
 const AUD = 'v'
+const ANON_COOKIE = 'af_anon'
+const ANON_DISTINCT_TRACK_CAP = 3
+const ANON_WINDOW_DAYS = 30
 
 function mustEnv(...names: string[]) {
   for (const n of names) {
@@ -41,34 +45,33 @@ function blocked(
   return NextResponse.json(out, {status})
 }
 
-// ---- Key normalization / conversion ----
-// Accept either raw PEM (multiline) or base64(PEM). Normalize \\n -> \n.
-// jose importPKCS8 requires PKCS#8 ("BEGIN PRIVATE KEY").
-// If input is PKCS#1 ("BEGIN RSA PRIVATE KEY"), convert it losslessly to PKCS#8.
 function normalizePemMaybe(input: string): string {
-  const s0 = (input ?? '').trim()
-
-  const looksLikePem = s0.includes('-----BEGIN ') && s0.includes('-----END ')
-  if (looksLikePem) return s0.replace(/\\n/g, '\n')
-
-  return Buffer.from(s0, 'base64').toString('utf8').trim().replace(/\\n/g, '\n')
+  const raw = (input ?? '').trim()
+  const looksLikePem = raw.includes('-----BEGIN ') && raw.includes('-----END ')
+  if (looksLikePem) {
+    return raw.replace(/\\n/g, '\n')
+  }
+  return Buffer.from(raw, 'base64')
+    .toString('utf8')
+    .trim()
+    .replace(/\\n/g, '\n')
 }
 
 function toPkcs8Pem(pem: string): string {
+  // jose importPKCS8 requires PKCS#8: "BEGIN PRIVATE KEY"
   if (pem.includes('-----BEGIN PRIVATE KEY-----')) return pem
   const keyObj = crypto.createPrivateKey(pem)
   return keyObj.export({format: 'pem', type: 'pkcs8'}) as string
 }
 
-// ---- Policy hooks (cookie-backed for now) ----
 function getAnonId(req: NextRequest) {
-  const c = req.cookies.get('af_anon')?.value
+  const c = req.cookies.get(ANON_COOKIE)?.value
   if (c && /^[a-zA-Z0-9_-]{16,}$/.test(c)) return c
   return crypto.randomBytes(18).toString('base64url')
 }
 
 function persistAnonId(res: NextResponse, anonId: string) {
-  res.cookies.set('af_anon', anonId, {
+  res.cookies.set(ANON_COOKIE, anonId, {
     httpOnly: true,
     sameSite: 'lax',
     secure: true,
@@ -77,24 +80,7 @@ function persistAnonId(res: NextResponse, anonId: string) {
   })
 }
 
-function getAnonListenCount(req: NextRequest) {
-  const raw = req.cookies.get('af_anon_listens')?.value
-  const n = raw ? Number(raw) : 0
-  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0
-}
-
-function bumpAnonListenCount(res: NextResponse, nextCount: number) {
-  res.cookies.set('af_anon_listens', String(nextCount), {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: true,
-    path: '/',
-    maxAge: 60 * 60 * 24 * 30,
-  })
-}
-
-// Stub for now; references args to keep eslint quiet.
-// Replace with Neon-backed policy without touching AudioEngine.
+// Stub: replace with Neon-backed entitlement check later (album/track scoping).
 async function hasPlaybackEntitlement(userId: string, albumSlug?: string, trackId?: string) {
   if (!userId) return false
   void albumSlug
@@ -102,16 +88,13 @@ async function hasPlaybackEntitlement(userId: string, albumSlug?: string, trackI
   return true
 }
 
-async function safeJson<T>(req: NextRequest): Promise<T | null> {
-  try {
-    return (await req.json()) as T
-  } catch {
-    return null
-  }
-}
-
 export async function POST(req: NextRequest) {
-  const body = await safeJson<TokenReq>(req)
+  let body: TokenReq | null = null
+  try {
+    body = (await req.json()) as TokenReq
+  } catch {
+    body = null
+  }
 
   const playbackId = body?.playbackId
   if (!playbackId || typeof playbackId !== 'string') {
@@ -121,10 +104,14 @@ export async function POST(req: NextRequest) {
   const {userId} = await auth()
   const anonId = getAnonId(req)
 
-  // Anonymous cap: TEMP (counts token mints, not playthrough completion).
+  // ---- Anonymous cap (REAL): based on completed playthrough events in Neon ----
   if (!userId) {
-    const count = getAnonListenCount(req)
-    if (count >= 3) {
+    const distinctCompleted = await countAnonDistinctCompletedTracks({
+      anonId,
+      sinceDays: ANON_WINDOW_DAYS,
+    })
+
+    if (distinctCompleted >= ANON_DISTINCT_TRACK_CAP) {
       const res = blocked(
         'ANON_CAP_REACHED',
         'Anonymous listening limit reached. Please log in to continue.',
@@ -136,6 +123,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // ---- Logged-in entitlement check (placeholder for now) ----
   if (userId) {
     const entitled = await hasPlaybackEntitlement(userId, body?.albumSlug, body?.trackId)
     if (!entitled) {
@@ -152,13 +140,15 @@ export async function POST(req: NextRequest) {
 
   // ---- Mux Secure Playback signing ----
   const keyId = mustEnv('MUX_SIGNING_KEY_ID', 'MUX_PLAYBACK_SIGNING_KEY_ID')
-  const rawKey = mustEnv('MUX_SIGNING_KEY_SECRET', 'MUX_SIGNING_PRIVATE_KEY', 'MUX_PLAYBACK_SIGNING_PRIVATE_KEY')
+  const raw = mustEnv(
+    'MUX_SIGNING_KEY_SECRET',
+    'MUX_SIGNING_PRIVATE_KEY',
+    'MUX_PLAYBACK_SIGNING_PRIVATE_KEY'
+  )
 
-  const pemMaybe = normalizePemMaybe(rawKey)
-  const pkcs8Pem = toPkcs8Pem(pemMaybe)
+  const pkcs8Pem = toPkcs8Pem(normalizePemMaybe(raw))
   const pk = await importPKCS8(pkcs8Pem, 'RS256')
 
-  // TTL: base + ensure >= duration + buffer, capped.
   const now = Math.floor(Date.now() / 1000)
   const baseTtl = Number(process.env.MUX_TOKEN_TTL_SECONDS ?? 900)
 
@@ -184,14 +174,6 @@ export async function POST(req: NextRequest) {
 
   const out: TokenOk = {ok: true, token: jwt, expiresAt: exp}
   const res = NextResponse.json(out)
-
   persistAnonId(res, anonId)
-
-  // TEMP: still counts mints; next stage will move this to playthrough completion (90%+).
-  if (!userId) {
-    const count = getAnonListenCount(req)
-    bumpAnonListenCount(res, count + 1)
-  }
-
   return res
 }

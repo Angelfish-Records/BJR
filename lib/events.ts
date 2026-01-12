@@ -57,6 +57,47 @@ export async function logMemberEvent(params: {
   }
 }
 
+/* ---- reads (for enforcement) ---- */
+
+export async function countAnonTrackPlayCompletions(params: {
+  anonId: string
+  sinceDays?: number
+}): Promise<number> {
+  const {anonId, sinceDays = 30} = params
+  if (!anonId) return 0
+
+  const sinceIso = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000).toISOString()
+
+  const r = await sql<{n: number}>`
+    select count(*)::int as n
+    from member_events
+    where event_type = 'track_play_completed'
+      and payload->>'anon_id' = ${anonId}
+      and occurred_at >= ${sinceIso}::timestamptz
+  `
+  return r.rows?.[0]?.n ?? 0
+}
+
+export async function countAnonDistinctCompletedTracks(params: {
+  anonId: string
+  sinceDays?: number
+}): Promise<number> {
+  const {anonId, sinceDays = 30} = params
+  if (!anonId) return 0
+
+  const sinceIso = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000).toISOString()
+
+  const r = await sql<{n: number}>`
+    select count(distinct payload->>'track_id')::int as n
+    from member_events
+    where event_type = 'track_play_completed'
+      and payload->>'anon_id' = ${anonId}
+      and occurred_at >= ${sinceIso}::timestamptz
+      and coalesce(payload->>'track_id','') <> ''
+  `
+  return r.rows?.[0]?.n ?? 0
+}
+
 /* ---- semantic wrappers (keep your event stream consistent) ---- */
 
 export async function logMemberCreated(params: {
