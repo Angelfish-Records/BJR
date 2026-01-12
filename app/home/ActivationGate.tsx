@@ -3,7 +3,7 @@
 
 import React, {useEffect, useMemo, useRef, useState} from 'react'
 import {useAuth, useSignIn, useSignUp, useUser} from '@clerk/nextjs'
-import {useRouter, useSearchParams} from 'next/navigation'
+import {useRouter} from 'next/navigation'
 import SubscribeButton from '@/app/home/SubscribeButton'
 import CancelSubscriptionButton from '@/app/home/CancelSubscriptionButton'
 import {PatternPillUnderlay, VisualizerSnapshotCanvas} from '@/app/home/player/VisualizerPattern'
@@ -24,8 +24,6 @@ type Props = {
   hasGold?: boolean
   tier?: string | null
 }
-
-const PENDING_KEY = 'angelfish_pending_purchase_activation'
 
 function getClerkErrorMessage(err: unknown): string {
   if (!err || typeof err !== 'object') return 'Something went wrong'
@@ -284,34 +282,9 @@ function OtpBoxes(props: {
   )
 }
 
-function safeGetPendingFlag(): boolean {
-  try {
-    return window.localStorage.getItem(PENDING_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-function safeSetPendingFlag(): void {
-  try {
-    window.localStorage.setItem(PENDING_KEY, '1')
-  } catch {
-    // ignore
-  }
-}
-
-function safeClearPendingFlag(): void {
-  try {
-    window.localStorage.removeItem(PENDING_KEY)
-  } catch {
-    // ignore
-  }
-}
-
 export default function ActivationGate(props: Props) {
   const {children, attentionMessage = null, canManageBilling = false, hasGold = false, tier = null} = props
   const router = useRouter()
-  const searchParams = useSearchParams()
 
   const {isSignedIn} = useAuth()
   const {user} = useUser()
@@ -337,39 +310,9 @@ export default function ActivationGate(props: Props) {
       user?.emailAddresses?.[0]?.emailAddress ??
       '') || email
 
-  // Only treat as “needs activation spotlight” if:
-  // - we returned from Stripe checkout success while signed out, OR
-  // - we previously returned from checkout success while signed out (persisted flag)
-  const checkoutSuccess = searchParams?.get('checkout') === 'success'
-
-  const [pendingPurchase, setPendingPurchase] = useState(false)
-
-  useEffect(() => {
-    // On first mount, load any persisted pending flag.
-    setPendingPurchase(safeGetPendingFlag())
-  }, [])
-
-  useEffect(() => {
-    // If we land on checkout success and are signed out, persist the pending flag.
-    if (!isActive && checkoutSuccess) {
-      safeSetPendingFlag()
-      setPendingPurchase(true)
-    }
-  }, [checkoutSuccess, isActive])
-
-  useEffect(() => {
-    // Once activated, clear the pending flag so the page doesnt “nag” forever.
-    if (isActive) {
-      safeClearPendingFlag()
-      setPendingPurchase(false)
-      router.refresh()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive])
-
   const EMAIL_W = 320
-  const needsAttention = !isActive && (checkoutSuccess || pendingPurchase || !!attentionMessage)
-  const shouldShowBox = !isActive && (needsAttention || phase === 'code')
+  const needsAttention = !isActive && !!attentionMessage
+  const shouldShowBox = !isActive && phase === 'code'
 
   const toggleClickable = !isActive && phase === 'idle' && emailValid && clerkLoaded
 
@@ -457,10 +400,6 @@ export default function ActivationGate(props: Props) {
     void verifyCode(code)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, phase])
-
-  const message =
-    attentionMessage ??
-    (pendingPurchase || checkoutSuccess ? 'Sign in to access your purchased content.' : null)
   
   const toggleOn = isActive || phase === 'code' || isSending || isVerifying
   const showSecondRow = !isActive && shouldShowBox
@@ -483,21 +422,6 @@ export default function ActivationGate(props: Props) {
           to   { opacity: 1; transform: translateY(0px); }
         }
       `}</style>
-
-      {/* Full-page soft dim + blur when we specifically need to spotlight activation */}
-      {!isActive && needsAttention ? (
-        <div
-          aria-hidden
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.55)',
-            backdropFilter: 'blur(6px)',
-            WebkitBackdropFilter: 'blur(6px)',
-            zIndex: 40,
-          }}
-        />
-      ) : null}
 
       <div
   style={{
@@ -675,23 +599,6 @@ export default function ActivationGate(props: Props) {
               minHeight: 72,
             }}
           >
-            {/* Message layer */}
-            <div
-              style={{
-                position: 'absolute',
-                inset: 12,
-                display: 'grid',
-                placeItems: 'center',
-                textAlign: 'center',
-                fontSize: 13,
-                opacity: phase !== 'code' && message ? 0.92 : 0,
-                pointerEvents: phase !== 'code' && message ? 'auto' : 'none',
-                transition: 'opacity 180ms ease',
-              }}
-            >
-              {message}
-            </div>
-
             {/* OTP layer */}
             <div
               style={{
