@@ -6,30 +6,44 @@ import {auth} from '@clerk/nextjs/server'
 import {logMemberEvent, newCorrelationId} from '@/lib/events'
 import {EVENT_SOURCES} from '@/lib/vocab'
 
-const ANON_COOKIE = 'anon_id'
+const ANON_COOKIE = 'af_anon'
+const COMPLETE_THRESHOLD = 0.9
 
 export async function POST(req: Request) {
   const correlationId = newCorrelationId()
+
   let trackId = ''
   let playbackId = ''
   let pct = 0
 
   try {
-    const body = (await req.json()) as {trackId?: string; playbackId?: string; pct?: number}
+    const body = (await req.json()) as {
+      trackId?: string
+      playbackId?: string
+      pct?: number
+    }
+
     trackId = (body.trackId ?? '').toString().trim()
     playbackId = (body.playbackId ?? '').toString().trim()
     pct = typeof body.pct === 'number' && Number.isFinite(body.pct) ? body.pct : 0
   } catch {}
 
-  if (!trackId || !playbackId) return NextResponse.json({ok: false}, {status: 400})
+  if (!trackId || !playbackId) {
+    return NextResponse.json({ok: false}, {status: 400})
+  }
 
-  const session = await auth()
-  const userId = session.userId ?? null
+  // Only count near-full listens
+  if (pct < COMPLETE_THRESHOLD) {
+    return NextResponse.json({ok: true, ignored: true})
+  }
+
+  const {userId} = await auth()
   const jar = await cookies()
   const anonId = jar.get(ANON_COOKIE)?.value ?? null
 
+
   await logMemberEvent({
-    memberId: null, // keep null here; if you want, you can resolve to memberId when userId exists
+    memberId: null, // resolve later when entitlements are DB-backed
     eventType: 'track_play_completed',
     source: EVENT_SOURCES.SERVER,
     correlationId,

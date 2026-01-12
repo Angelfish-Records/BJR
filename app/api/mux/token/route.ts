@@ -1,3 +1,4 @@
+// web/app/api/mux/token/route.ts
 import {NextRequest, NextResponse} from 'next/server'
 import {auth} from '@clerk/nextjs/server'
 import {importPKCS8, SignJWT} from 'jose'
@@ -40,6 +41,26 @@ function blocked(
   return NextResponse.json(out, {status})
 }
 
+// ---- Key normalization / conversion ----
+// Accept either raw PEM (multiline) or base64(PEM). Normalize \\n -> \n.
+// jose importPKCS8 requires PKCS#8 ("BEGIN PRIVATE KEY").
+// If input is PKCS#1 ("BEGIN RSA PRIVATE KEY"), convert it losslessly to PKCS#8.
+function normalizePemMaybe(input: string): string {
+  const s0 = (input ?? '').trim()
+
+  const looksLikePem = s0.includes('-----BEGIN ') && s0.includes('-----END ')
+  if (looksLikePem) return s0.replace(/\\n/g, '\n')
+
+  return Buffer.from(s0, 'base64').toString('utf8').trim().replace(/\\n/g, '\n')
+}
+
+function toPkcs8Pem(pem: string): string {
+  if (pem.includes('-----BEGIN PRIVATE KEY-----')) return pem
+  const keyObj = crypto.createPrivateKey(pem)
+  return keyObj.export({format: 'pem', type: 'pkcs8'}) as string
+}
+
+// ---- Policy hooks (cookie-backed for now) ----
 function getAnonId(req: NextRequest) {
   const c = req.cookies.get('af_anon')?.value
   if (c && /^[a-zA-Z0-9_-]{16,}$/.test(c)) return c
@@ -72,27 +93,25 @@ function bumpAnonListenCount(res: NextResponse, nextCount: number) {
   })
 }
 
-// Stub for now, but references args so eslint doesn’t complain.
+// Stub for now; references args to keep eslint quiet.
 // Replace with Neon-backed policy without touching AudioEngine.
 async function hasPlaybackEntitlement(userId: string, albumSlug?: string, trackId?: string) {
-  // If you ever reach this with no userId, it’s a bug upstream.
   if (!userId) return false
-
-  // Placeholder “shape” of future policy:
-  // - if we know the album or track, we *could* check entitlements
-  // - for now, any logged-in user is allowed
   void albumSlug
   void trackId
   return true
 }
 
-export async function POST(req: NextRequest) {
-  let body: TokenReq | null = null
+async function safeJson<T>(req: NextRequest): Promise<T | null> {
   try {
-    body = (await req.json()) as TokenReq
+    return (await req.json()) as T
   } catch {
-    body = null
+    return null
   }
+}
+
+export async function POST(req: NextRequest) {
+  const body = await safeJson<TokenReq>(req)
 
   const playbackId = body?.playbackId
   if (!playbackId || typeof playbackId !== 'string') {
@@ -102,7 +121,7 @@ export async function POST(req: NextRequest) {
   const {userId} = await auth()
   const anonId = getAnonId(req)
 
-  // Anonymous cap: temporary (counts mints, not completions).
+  // Anonymous cap: TEMP (counts token mints, not playthrough completion).
   if (!userId) {
     const count = getAnonListenCount(req)
     if (count >= 3) {
@@ -133,13 +152,11 @@ export async function POST(req: NextRequest) {
 
   // ---- Mux Secure Playback signing ----
   const keyId = mustEnv('MUX_SIGNING_KEY_ID', 'MUX_PLAYBACK_SIGNING_KEY_ID')
-  const privateKeyB64 = mustEnv(
-    'MUX_SIGNING_KEY_SECRET',
-    'MUX_SIGNING_PRIVATE_KEY',
-    'MUX_PLAYBACK_SIGNING_PRIVATE_KEY'
-  )
+  const rawKey = mustEnv('MUX_SIGNING_KEY_SECRET', 'MUX_SIGNING_PRIVATE_KEY', 'MUX_PLAYBACK_SIGNING_PRIVATE_KEY')
 
-  const pem = Buffer.from(privateKeyB64, 'base64').toString('utf8')
+  const pemMaybe = normalizePemMaybe(rawKey)
+  const pkcs8Pem = toPkcs8Pem(pemMaybe)
+  const pk = await importPKCS8(pkcs8Pem, 'RS256')
 
   // TTL: base + ensure >= duration + buffer, capped.
   const now = Math.floor(Date.now() / 1000)
@@ -156,7 +173,6 @@ export async function POST(req: NextRequest) {
 
   const playbackRestrictionId = process.env.MUX_PLAYBACK_RESTRICTION_ID?.trim() || undefined
 
-  const pk = await importPKCS8(pem, 'RS256')
   const jwt = await new SignJWT({
     sub: playbackId,
     aud: AUD,
@@ -171,7 +187,7 @@ export async function POST(req: NextRequest) {
 
   persistAnonId(res, anonId)
 
-  // TEMP: still counts mints; next stage will move this to playthrough completion.
+  // TEMP: still counts mints; next stage will move this to playthrough completion (90%+).
   if (!userId) {
     const count = getAnonListenCount(req)
     bumpAnonListenCount(res, count + 1)
