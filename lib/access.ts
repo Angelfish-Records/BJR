@@ -1,3 +1,4 @@
+// web/lib/access.ts
 import 'server-only'
 import {findAnyEntitlement} from './entitlements'
 import {logAccessDecision} from './events'

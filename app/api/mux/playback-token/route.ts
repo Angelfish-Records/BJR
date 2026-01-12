@@ -45,15 +45,13 @@ function shouldUseSecureCookie(): boolean {
   return process.env.NODE_ENV === 'production'
 }
 
-async function countAnonDistinctPlaysToday(params: {anonId: string}): Promise<number> {
+async function countAnonDistinctCompletedPlaysToday(params: {anonId: string}): Promise<number> {
   const {anonId} = params
   const res = await sql`
-    select count(distinct (payload->'resource'->>'id'))::int as n
+    select count(distinct (payload->>'track_id'))::int as n
     from member_events
-    where member_id is null
-      and event_type = 'access_allowed'
-      and payload->>'action' = ${ACCESS_ACTIONS.PLAYBACK_TOKEN_ISSUE}
-      and payload->>'anon_id' = ${anonId}
+    where payload->>'anon_id' = ${anonId}
+      and event_type = 'track_play_completed'
       and occurred_at >= (now() - interval '24 hours')
   `
   return (res.rows[0]?.n as number | undefined) ?? 0
@@ -180,7 +178,7 @@ export async function POST(req: Request) {
   // Anonymous / tier-none fallback (metered)
   // ---------------------------
   const {anonId, isNew} = await getOrCreateAnonId()
-  const used = await countAnonDistinctPlaysToday({anonId})
+  const used = await countAnonDistinctCompletedPlaysToday({anonId})
 
   if (used >= ANON_FREE_TRACKS_PER_DAY) {
     await logMemberEvent({

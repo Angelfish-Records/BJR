@@ -27,13 +27,16 @@ export default function AudioEngine() {
   // ---- Audio analysis ----
   const audioCtxRef = React.useRef<AudioContext | null>(null)
   const analyserRef = React.useRef<AnalyserNode | null>(null)
-  const freqDataRef = React.useRef<Uint8Array<ArrayBuffer> | null>(null)
-  const timeDataRef = React.useRef<Uint8Array<ArrayBuffer> | null>(null)
+  type U8AB = Uint8Array<ArrayBuffer>
+
+  const freqDataRef = React.useRef<U8AB | null>(null)
+  const timeDataRef = React.useRef<U8AB | null>(null)
 
   // ---- Playback intent ----
   const playIntentRef = React.useRef(false)
-  const attachedPlaybackIdRef = React.useRef<string | null>(null)
 
+  // Track attachment bookkeeping
+  const attachedKeyRef = React.useRef<string | null>(null) // `${playbackId}:${reloadNonce}`
   const tokenCacheRef = React.useRef(new Map<string, {token: string; expiresAtMs: number}>())
 
   const pRef = React.useRef(p)
@@ -67,8 +70,10 @@ export default function AudioEngine() {
       analyser.connect(ctx.destination)
 
       analyserRef.current = analyser
-      freqDataRef.current = new Uint8Array(analyser.frequencyBinCount)
-      timeDataRef.current = new Uint8Array(analyser.fftSize)
+
+      freqDataRef.current = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount)) as U8AB
+      timeDataRef.current = new Uint8Array(new ArrayBuffer(analyser.fftSize)) as U8AB
+
     }
 
     const onUserGesture = async () => {
@@ -99,8 +104,8 @@ export default function AudioEngine() {
         return
       }
 
-      analyser.getByteFrequencyData(freq)
-      analyser.getByteTimeDomainData(time)
+      analyser.getByteFrequencyData(freqDataRef.current!)
+      analyser.getByteTimeDomainData(timeDataRef.current!)
 
       let sum = 0
       for (let i = 0; i < time.length; i++) {
@@ -164,7 +169,7 @@ export default function AudioEngine() {
   }, [p.volume, p.muted])
 
   /* ---------------- Track attach (HLS / native) ---------------- */
-
+  // Recommendation: only attach when track/reloadNonce changes, NOT on pause/play/status/intent.
   React.useEffect(() => {
     const a = audioRef.current
     if (!a) return
@@ -175,7 +180,7 @@ export default function AudioEngine() {
     const playbackId = s.current?.muxPlaybackId
     if (!playbackId) return
 
-    // Surface is for stage/lyrics consumers (time, track, status).
+    // Stage/lyrics consumers always need to know which track is “current”.
     mediaSurface.setTrack(s.current?.id ?? null)
 
     const armed =
@@ -187,41 +192,60 @@ export default function AudioEngine() {
 
     if (!armed) return
 
-    const alreadyAttached =
-      attachedPlaybackIdRef.current === playbackId &&
-      (Boolean(a.currentSrc) || Boolean(hlsRef.current))
+    const attachKey = `${playbackId}:${s.reloadNonce}`
+    if (attachedKeyRef.current === attachKey && (a.currentSrc || hlsRef.current)) {
+      return
+    }
 
-    if (alreadyAttached) return
-
+    // We are (re)attaching.
+    attachedKeyRef.current = null
     const seq = ++loadSeq.current
 
+    // reflect “loading” quickly for stage consumers
+    mediaSurface.setStatus('loading')
+    pRef.current.setStatusExternal('loading')
+    pRef.current.setLoadingReasonExternal('attach')
+
+    // teardown existing HLS instance
     if (hlsRef.current) {
       try {
         hlsRef.current.destroy()
       } catch {}
       hlsRef.current = null
-      attachedPlaybackIdRef.current = null
     }
 
+    // cancel any in-flight token request
     tokenAbortRef.current?.abort()
     const ac = new AbortController()
     tokenAbortRef.current = ac
 
-    const attachSrc = (src: string) => {
-      a.crossOrigin = 'anonymous'
-      a.pause()
-      a.removeAttribute('src')
-      a.load()
+    const hardResetElement = () => {
+      // stop any current playback and remove current source
+      try {
+        a.pause()
+      } catch {}
+      try {
+        a.removeAttribute('src')
+      } catch {}
+      try {
+        a.load()
+      } catch {}
+    }
+
+    const attachSrc = (srcUrl: string) => {
+      if (seq !== loadSeq.current) return
+
+      hardResetElement()
 
       if (seq !== loadSeq.current) return
 
       if (canPlayNativeHls(a)) {
-        a.src = src
+        a.src = srcUrl
         a.load()
-        attachedPlaybackIdRef.current = playbackId
       } else {
         if (!Hls.isSupported()) {
           pRef.current.setBlocked('This browser cannot play HLS.')
+          mediaSurface.setStatus('blocked')
           return
         }
 
@@ -231,17 +255,21 @@ export default function AudioEngine() {
         hls.on(Hls.Events.ERROR, (_e, err) => {
           if (err?.fatal) {
             pRef.current.setBlocked(`HLS fatal: ${err.details ?? 'error'}`)
+            mediaSurface.setStatus('blocked')
             try {
               hls.destroy()
             } catch {}
+            if (hlsRef.current === hls) hlsRef.current = null
           }
         })
 
-        hls.loadSource(src)
+        hls.loadSource(srcUrl)
         hls.attachMedia(a)
-        attachedPlaybackIdRef.current = playbackId
       }
 
+      attachedKeyRef.current = attachKey
+
+      // If the user asked to play but autoplay was blocked earlier, try now.
       if (playIntentRef.current) {
         void a.play().finally(() => {
           playIntentRef.current = false
@@ -251,9 +279,6 @@ export default function AudioEngine() {
 
     const load = async () => {
       try {
-        // If we’re switching tracks, reflect “loading” quickly for stage consumers.
-        mediaSurface.setStatus('loading')
-
         const cached = tokenCacheRef.current.get(playbackId)
         if (cached && Date.now() < cached.expiresAtMs - 5000) {
           attachSrc(muxSignedHlsUrl(playbackId, cached.token))
@@ -267,9 +292,17 @@ export default function AudioEngine() {
           signal: ac.signal,
         })
 
-        const data = (await res.json()) as TokenResponse
-        if (!res.ok || !data.ok) {
-          pRef.current.setBlocked(!data.ok ? data.reason : 'Token error')
+        let data: TokenResponse | null = null
+        try {
+          data = (await res.json()) as TokenResponse
+        } catch {
+          data = null
+        }
+
+        if (!res.ok || !data || !('ok' in data) || data.ok !== true) {
+          const reason =
+            data && 'ok' in data && data.ok === false ? data.reason : `Token error (${res.status})`
+          pRef.current.setBlocked(reason)
           mediaSurface.setStatus('blocked')
           return
         }
@@ -281,13 +314,13 @@ export default function AudioEngine() {
 
         attachSrc(muxSignedHlsUrl(playbackId, data.token))
       } catch {
-        // ignore
+        // ignore (abort / transient)
       }
     }
 
     void load()
     return () => ac.abort()
-  }, [p.current?.id, p.current?.muxPlaybackId, p.status, p.intent, p.reloadNonce])
+  }, [p.current?.id, p.current?.muxPlaybackId, p.reloadNonce])
 
   /* ---------------- Media element -> time + duration + state (single source) ---------------- */
 
@@ -322,6 +355,8 @@ export default function AudioEngine() {
       pRef.current.setStatusExternal('playing')
       pRef.current.setLoadingReasonExternal(undefined)
       pRef.current.clearIntent()
+
+      // If a seek was queued before we were ready, apply it once we’re actually playing.
       applyPendingSeek()
 
       const curId = pRef.current.current?.id
@@ -329,6 +364,7 @@ export default function AudioEngine() {
     }
 
     const markPaused = () => {
+      // NOTE: pause fires for both user-pauses and natural pauses during source swaps.
       mediaSurface.setStatus('paused')
       pRef.current.setStatusExternal('paused')
       pRef.current.setLoadingReasonExternal(undefined)
@@ -346,11 +382,11 @@ export default function AudioEngine() {
 
     const clearBuffering = () => {
       pRef.current.setLoadingReasonExternal(undefined)
-      // If a seek happened before we were ready, apply once we can play.
       applyPendingSeek()
     }
 
     const onEnded = () => {
+      // Ensure next track has a user gesture bridge available if needed.
       window.dispatchEvent(new Event('af:play-intent'))
       pRef.current.next()
     }
@@ -398,7 +434,7 @@ export default function AudioEngine() {
     try {
       a.currentTime = Math.max(0, ms / 1000)
     } catch {
-      // If we can't seek yet (not enough metadata), we'll retry on canplay/canplaythrough.
+      // Not seekable yet; we retry on canplay/canplaythrough via applyPendingSeek().
       return
     }
 
@@ -425,6 +461,7 @@ export default function AudioEngine() {
       void a.play().then(
         () => pRef.current.clearIntent(),
         () => {
+          // Autoplay blocked: remember intent, and we’ll retry on user gesture.
           playIntentRef.current = true
         }
       )
