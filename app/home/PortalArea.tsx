@@ -3,7 +3,7 @@
 
 import React from 'react'
 import PortalShell, {PortalPanelSpec} from './PortalShell'
-import {useRouter, useSearchParams} from 'next/navigation'
+import {useClientSearchParams, replaceQuery} from './urlState'
 import {usePlayer} from '@/app/home/player/PlayerState'
 import type {PlayerTrack, AlbumInfo, AlbumNavItem} from '@/lib/types'
 import PlayerController from './player/PlayerController'
@@ -159,41 +159,32 @@ export default function PortalArea(props: {
   } = props
 
   const p = usePlayer()
-  const sp = useSearchParams()
+    const sp = useClientSearchParams()
   const qAlbum = sp.get('album')
   const qTrack = sp.get('track')
   const qPanel = sp.get('p') ?? sp.get('panel') ?? 'player'
 
-    const router = useRouter()
-
-  // Generic query patcher (single writer, self-heals legacy ?panel=)
-  const patchQuery = React.useCallback(
-    (patch: Record<string, string | null | undefined>) => {
-      const params = new URLSearchParams(sp.toString())
-
-      for (const [k, v] of Object.entries(patch)) {
-        if (v == null || v === '') params.delete(k)
-        else params.set(k, v)
-      }
-
-      // legacy cleanup
-      params.delete('panel')
-
-      const nextQs = params.toString()
-      const curQs = sp.toString()
-      if (nextQs === curQs) return // ✅ avoid jitter/loops
-
-      router.replace(`?${nextQs}`, {scroll: false})
-    },
-    [router, sp]
-  )
+  // single writer (NO Next navigation)
+  const patchQuery = React.useCallback((patch: Record<string, string | null | undefined>) => {
+    replaceQuery(patch)
+  }, [])
 
   const forcePanel = React.useCallback(
     (id: 'player' | 'portal') => {
-      // ✅ only write if it actually changes
       const cur = sp.get('p') ?? sp.get('panel')
       if (cur === id) return
-      patchQuery({p: id})
+
+      if (id === 'portal') {
+        // ✅ when portal is active, drop player-only addressing
+        patchQuery({
+          p: 'portal',
+          album: null,
+          track: null,
+          t: null, // if anything still uses ?t=
+        })
+      } else {
+        patchQuery({p: 'player'})
+      }
     },
     [patchQuery, sp]
   )
@@ -211,48 +202,65 @@ export default function PortalArea(props: {
     setCurrentAlbumSlug(albumSlug)
   }, [albumSlug, initialAlbum, initialTracks])
 
-  const onSelectAlbum = React.useCallback(
+  const fetchSeq = React.useRef(0)
+  const isBrowsingRef = React.useRef(false)
+
+  React.useEffect(() => {
+    isBrowsingRef.current = isBrowsingAlbum
+  }, [isBrowsingAlbum])
+
+
+    const onSelectAlbum = React.useCallback(
     async (slug: string) => {
       if (!slug) return
-      if (isBrowsingAlbum) return
+      if (isBrowsingRef.current) return
 
-      // ✅ make URL canonical FIRST (prevents snap-back)
-      patchQuery({
-        p: 'player',
-        album: slug,
-        track: null, // switching albums should clear prior track deep-link
-      })
+      // URL canonical first (no navigation now, so this is cheap)
+      patchQuery({p: 'player', album: slug, track: null})
 
-      // ✅ optimistic UI
       setIsBrowsingAlbum(true)
       setCurrentAlbumSlug(slug)
       setAlbum(null)
       setTracks([])
+
+      const seq = ++fetchSeq.current
 
       try {
         const res = await fetch(`/api/albums/${encodeURIComponent(slug)}`, {method: 'GET'})
         if (!res.ok) throw new Error(`Album fetch failed (${res.status})`)
         const json = (await res.json()) as AlbumPayload
 
+        // ignore stale responses
+        if (seq !== fetchSeq.current) return
+
         setAlbum(json.album ?? null)
         setTracks(Array.isArray(json.tracks) ? json.tracks : [])
       } catch (e) {
+        if (seq !== fetchSeq.current) return
         console.error(e)
       } finally {
+        if (seq !== fetchSeq.current) return
         setIsBrowsingAlbum(false)
       }
     },
-    [isBrowsingAlbum, patchQuery]
+    [patchQuery]
   )
 
-  // ✅ URL-driven bootstrap (canonical addressing)
-  React.useEffect(() => {
-  // Only bootstrap album addressing while we're actually in the player panel.
-  if (qPanel !== 'player') return
-  if (!qAlbum) return
 
-  if (qAlbum !== currentAlbumSlug) void onSelectAlbum(qAlbum)
-}, [qPanel, qAlbum, currentAlbumSlug, onSelectAlbum])
+  // ✅ URL-driven bootstrap (canonical addressing)
+    React.useEffect(() => {
+    if (qPanel !== 'player') return
+    if (!qAlbum) return
+    if (qAlbum !== currentAlbumSlug) void onSelectAlbum(qAlbum)
+  }, [qPanel, qAlbum, currentAlbumSlug, onSelectAlbum])
+
+    React.useEffect(() => {
+    if (qPanel !== 'portal') return
+    if (qAlbum || qTrack || sp.get('t')) {
+      patchQuery({album: null, track: null, t: null})
+    }
+  }, [qPanel, qAlbum, qTrack, sp, patchQuery])
+
 
 
 

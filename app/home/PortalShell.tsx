@@ -3,7 +3,7 @@
 
 import React from 'react'
 import {createPortal} from 'react-dom'
-import {useRouter, useSearchParams} from 'next/navigation'
+import {replaceQuery, useClientSearchParams} from './urlState'
 
 export type PortalPanelSpec = {
   id: string
@@ -25,8 +25,21 @@ type Props = {
   /** If true, mirrors selected panel into the URL query param */
   syncToQueryParam?: boolean
   onPanelChange?: (panelId: string) => void
+
+  /**
+   * Optional controlled mode:
+   * if provided, PortalShell will render this as the active panel
+   * and will not own its own active state.
+   */
   activePanelId?: string
+
+  /** Optional header row UI. */
   header?: HeaderRenderer
+
+  /**
+   * Optional DOM id to portal header into (lets header span main+sidebar layout).
+   * If not found, header renders inline at top of PortalShell.
+   */
   headerPortalId?: string
 }
 
@@ -44,9 +57,7 @@ export default function PortalShell(props: Props) {
     headerPortalId = 'af-portal-topbar-slot',
   } = props
 
-  const router = useRouter()
-  const sp = useSearchParams()
-
+  const sp = useClientSearchParams()
   const panelIds = React.useMemo(() => new Set(panels.map((p) => p.id)), [panels])
   const isControlled = typeof controlledActive === 'string' && controlledActive.length > 0
 
@@ -58,25 +69,10 @@ export default function PortalShell(props: Props) {
   const writePanelToQuery = React.useCallback(
     (id: string) => {
       if (!syncToQueryParam) return
-
-      const params = new URLSearchParams(sp.toString())
-      params.set(PANEL_QS_KEY, id)
-      params.delete(LEGACY_PANEL_QS_KEY) // ✅ self-heal legacy
-
-      // ✅ canonical: portal panel should not carry album addressing
-      if (id === 'portal') {
-        params.delete('album')
-        params.delete('track')
-        params.delete('t') // legacy deep-link param
-      }
-
-      const nextQs = params.toString()
-      const curQs = sp.toString()
-      if (nextQs === curQs) return // ✅ avoid jitter
-
-      router.replace(`?${nextQs}`, {scroll: false})
+      // self-heal legacy key too
+      replaceQuery({[PANEL_QS_KEY]: id, [LEGACY_PANEL_QS_KEY]: null})
     },
-    [router, sp, syncToQueryParam]
+    [syncToQueryParam]
   )
 
   const [uncontrolledActive, setUncontrolledActive] = React.useState<string>(() => {
@@ -147,6 +143,7 @@ export default function PortalShell(props: Props) {
   React.useEffect(() => setMounted(true), [])
 
   const headerPortalEl = mounted && headerPortalId ? document.getElementById(headerPortalId) : null
+
   const DOCK_H = 84
 
   return (
