@@ -15,7 +15,7 @@ type Props = {
   children: React.ReactNode
   attentionMessage?: string | null
   canManageBilling?: boolean
-  hasGold?: boolean
+  isPatron?: boolean
   tier?: string | null
 }
 
@@ -254,7 +254,7 @@ function OtpBoxes(props: {
 }
 
 export default function ActivationGate(props: Props) {
-  const {children, attentionMessage = null, canManageBilling = false, hasGold = false, tier = null} =
+  const {children, attentionMessage = null, canManageBilling = false, isPatron = false, tier = null} =
     props
   const router = useRouter()
 
@@ -535,7 +535,7 @@ export default function ActivationGate(props: Props) {
                     ) : null}
 
                     {canManageBilling ? (
-                      hasGold ? (
+                      isPatron ? (
                         <CancelSubscriptionButton variant="link" label="Cancel subscription" />
                       ) : (
                         <SubscribeButton loggedIn={true} variant="link" label="Become a Patron" />

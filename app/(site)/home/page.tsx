@@ -7,7 +7,7 @@ import {urlFor} from '@/sanity/lib/image'
 import {auth, currentUser} from '@clerk/nextjs/server'
 import {ensureMemberByClerk} from '@/lib/members'
 import {listCurrentEntitlementKeys} from '@/lib/entitlements'
-import {ENTITLEMENTS, deriveTier, pickAccent} from '@/lib/vocab'
+import {deriveTier} from '@/lib/vocab'
 import {fetchPortalPage} from '@/lib/portal'
 import PortalModules from '@/app/home/PortalModules'
 import PortalArea from '@/app/home/PortalArea'
@@ -26,8 +26,6 @@ type ShadowHomeDoc = {
   topLogoUrl?: string | null
   topLogoHeight?: number | null
 }
-
-type StyleWithAccent = React.CSSProperties & {'--accent'?: string}
 
 const shadowHomeQuery = `
   *[_type == "shadowHomePage" && slug.current == $slug][0]{
@@ -90,7 +88,6 @@ export default async function Home(props: {
 
   let entitlementKeys: string[] = []
   let tier = 'none'
-  let accent = '#8b8bff'
 
   if (userId && email) {
     const ensured = await ensureMemberByClerk({
@@ -104,24 +101,20 @@ export default async function Home(props: {
 
     entitlementKeys = await listCurrentEntitlementKeys(ensured.id)
     tier = deriveTier(entitlementKeys)
-
-    const picked = pickAccent(entitlementKeys)
-    accent = picked.accent
   }
 
-  const hasGold = entitlementKeys.includes(ENTITLEMENTS.SUBSCRIPTION_GOLD)
+  const isPatron = tier === 'patron'
 
   const bgUrl =
     page?.backgroundImage
       ? urlFor(page.backgroundImage).width(2400).height(1400).quality(80).url()
       : null
 
-  const mainStyle: StyleWithAccent = {
+  const mainStyle: React.CSSProperties = {
     minHeight: '100svh',
     position: 'relative',
     backgroundColor: '#050506',
     color: 'rgba(255,255,255,0.92)',
-    '--accent': accent,
   }
 
   const portalPanel = portal?.modules?.length ? (
@@ -281,7 +274,7 @@ export default async function Home(props: {
                 checkout={checkout}
                 attentionMessage={attentionMessage}
                 tier={tier}
-                hasGold={hasGold}
+                isPatron={isPatron}
                 canManageBilling={!!member}
                 topLogoUrl={page?.topLogoUrl ?? null}
                 topLogoHeight={page?.topLogoHeight ?? null}

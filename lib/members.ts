@@ -25,7 +25,7 @@ async function ensureBaselineEntitlements(memberId: string, reason: string) {
 
   await grantEntitlement({
     memberId,
-    entitlementKey: ENTITLEMENTS.FREE_MEMBER,
+    entitlementKey: ENTITLEMENTS.TIER_FRIEND,
     grantedBy: 'system',
     grantReason: reason,
     grantSource: 'clerk',
@@ -57,7 +57,7 @@ export async function getMemberIdByEmail(email: string): Promise<string | null> 
  * 4) Else insert a new member row with clerk_user_id + email.
  *
  * Provisioning contract:
- * - Any member returned from this function must have baseline FREE_MEMBER entitlement.
+ * - Any member returned from this function must have baseline TIER_FRIEND entitlement.
  *
  * Returns {id, created} where created=true only for fresh inserts.
  */

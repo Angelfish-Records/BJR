@@ -138,7 +138,7 @@ export default function PortalArea(props: {
   checkout?: string | null
   attentionMessage?: string | null
   tier?: string | null
-  hasGold?: boolean
+  isPatron?: boolean
   canManageBilling?: boolean
 }) {
   const {
@@ -150,7 +150,7 @@ export default function PortalArea(props: {
     checkout = null,
     attentionMessage = null,
     tier = null,
-    hasGold = false,
+    isPatron = false,
     canManageBilling = false,
   } = props
 
@@ -622,7 +622,7 @@ header={({activePanelId, setPanel}) => (
             <ActivationGate
               attentionMessage={derivedAttentionMessage}
               canManageBilling={canManageBilling}
-              hasGold={hasGold}
+              isPatron={isPatron}
               tier={tier}
             >
               <div />
