@@ -14,10 +14,20 @@ export type EntitlementMatch = {
 
 export type HasEntitlementOptions = {
   allowGlobalFallback?: boolean
+  allowCatalogFallback?: boolean
+  catalogScopeId?: string // default 'catalog'
 }
 
 const uuidOk = (v: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v)
+
+function normCatalog(opts: HasEntitlementOptions) {
+  return {
+    allowGlobalFallback: opts.allowGlobalFallback ?? true,
+    allowCatalogFallback: opts.allowCatalogFallback ?? true,
+    catalogScopeId: (opts.catalogScopeId ?? 'catalog').trim() || 'catalog',
+  }
+}
 
 /**
  * Returns the matched entitlement row (if any) so callers can log/inspect *why* access was granted.
@@ -29,7 +39,7 @@ export async function findEntitlement(
   opts: HasEntitlementOptions = {}
 ): Promise<EntitlementMatch | null> {
   if (!uuidOk(memberId)) return null
-  const allowGlobalFallback = opts.allowGlobalFallback ?? true
+  const {allowGlobalFallback, allowCatalogFallback, catalogScopeId} = normCatalog(opts)
 
   const res = await sql`
     select entitlement_key, scope_id, granted_at, expires_at
@@ -40,11 +50,16 @@ export async function findEntitlement(
         (${scopeId ?? null}::text is null and scope_id is null)
         or (${scopeId ?? null}::text is not null and (
               scope_id = ${scopeId ?? null}::text
+              or (${allowCatalogFallback}::boolean and scope_id = ${catalogScopeId}::text)
               or (${allowGlobalFallback}::boolean and scope_id is null)
            ))
       )
     order by
-      case when scope_id = ${scopeId ?? null}::text then 0 else 1 end,
+      case
+        when scope_id = ${scopeId ?? null}::text then 0
+        when scope_id = ${catalogScopeId}::text then 1
+        else 2
+      end,
       granted_at desc
     limit 1
   `
@@ -80,7 +95,7 @@ export async function findAnyEntitlement(
 ): Promise<EntitlementMatch | null> {
   if (!uuidOk(memberId)) return null
   if (entitlementKeys.length === 0) return null
-  const allowGlobalFallback = opts.allowGlobalFallback ?? true
+  const {allowGlobalFallback, allowCatalogFallback, catalogScopeId} = normCatalog(opts)
 
   const keysJson = JSON.stringify(entitlementKeys)
 
@@ -96,11 +111,16 @@ export async function findAnyEntitlement(
         (${scopeId ?? null}::text is null and mec.scope_id is null)
         or (${scopeId ?? null}::text is not null and (
               mec.scope_id = ${scopeId ?? null}::text
+              or (${allowCatalogFallback}::boolean and mec.scope_id = ${catalogScopeId}::text)
               or (${allowGlobalFallback}::boolean and mec.scope_id is null)
            ))
       )
     order by
-      case when mec.scope_id = ${scopeId ?? null}::text then 0 else 1 end,
+      case
+        when mec.scope_id = ${scopeId ?? null}::text then 0
+        when mec.scope_id = ${catalogScopeId}::text then 1
+        else 2
+      end,
       mec.granted_at desc
     limit 1
   `

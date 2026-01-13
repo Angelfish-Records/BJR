@@ -3,6 +3,7 @@ import 'server-only'
 
 export const ENTITLEMENTS = {
   FREE_MEMBER: 'free_member',
+  PLAY_ALBUM: 'play_album',
   PATRON_ACCESS: 'patron_access',
   LIFETIME_ACCESS: 'lifetime_access',
   TRACK_SHARE_GRANT: 'track_share_grant',
@@ -41,6 +42,7 @@ export const ACCESS_ACTIONS = {
   SIGNUP: 'signup',
   PLAYBACK_TOKEN_ISSUE: 'playback_token_issue',
   SHARE_TOKEN_REDEEM: 'share_token_redeem',
+  ACCESS_CHECK: 'access_check',
 } as const
 
 export type AccessAction = (typeof ACCESS_ACTIONS)[keyof typeof ACCESS_ACTIONS]

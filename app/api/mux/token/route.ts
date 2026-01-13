@@ -3,7 +3,6 @@ import {NextRequest, NextResponse} from 'next/server'
 import {auth} from '@clerk/nextjs/server'
 import {importPKCS8, SignJWT} from 'jose'
 import crypto from 'crypto'
-import {sql} from '@vercel/postgres'
 import {countAnonDistinctCompletedTracks, newCorrelationId} from '@/lib/events'
 import {checkAccess} from '@/lib/access'
 import {ACCESS_ACTIONS, ENTITLEMENTS} from '@/lib/vocab'
@@ -12,8 +11,7 @@ type TokenReq = {
   playbackId: string
   trackId?: string
   albumSlug?: string
-  // NEW (recommended): stable canonical album id, e.g. label catalogue id
-  albumId?: string
+  albumId?: string // stable canonical album id (label catalogue id)
   durationMs?: number
 }
 
@@ -55,13 +53,8 @@ function blocked(
 function normalizePemMaybe(input: string): string {
   const raw = (input ?? '').trim()
   const looksLikePem = raw.includes('-----BEGIN ') && raw.includes('-----END ')
-  if (looksLikePem) {
-    return raw.replace(/\\n/g, '\n')
-  }
-  return Buffer.from(raw, 'base64')
-    .toString('utf8')
-    .trim()
-    .replace(/\\n/g, '\n')
+  if (looksLikePem) return raw.replace(/\\n/g, '\n')
+  return Buffer.from(raw, 'base64').toString('utf8').trim().replace(/\\n/g, '\n')
 }
 
 function toPkcs8Pem(pem: string): string {
@@ -87,6 +80,7 @@ function persistAnonId(res: NextResponse, anonId: string) {
 }
 
 async function getMemberIdByClerkUserId(userId: string): Promise<string | null> {
+  const {sql} = await import('@vercel/postgres')
   if (!userId) return null
   const r = await sql<{id: string}>`
     select id
@@ -104,7 +98,6 @@ function computeAlbumScopeId(body: TokenReq | null): string | null {
   const rawSlug = (body?.albumSlug ?? '').trim()
   if (rawSlug) return `alb_slug:${rawSlug}`
 
-  // If you truly have no album context, treat as unscoped for now.
   return null
 }
 
@@ -128,11 +121,7 @@ export async function POST(req: NextRequest) {
 
   // ---- Anonymous cap (REAL): based on completed playthrough events in Neon ----
   if (!userId) {
-    const distinctCompleted = await countAnonDistinctCompletedTracks({
-      anonId,
-      sinceDays: ANON_WINDOW_DAYS,
-    })
-
+    const distinctCompleted = await countAnonDistinctCompletedTracks({anonId, sinceDays: ANON_WINDOW_DAYS})
     if (distinctCompleted >= ANON_DISTINCT_TRACK_CAP) {
       const res = blocked(
         correlationId,
@@ -146,10 +135,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ---- Logged-in access: album-canonical check (global fallback allowed) ----
+  // ---- Logged-in access: require album context (album is canonical) ----
   if (userId) {
     const memberId = await getMemberIdByClerkUserId(userId)
-
     if (!memberId) {
       const res = blocked(
         correlationId,
@@ -163,12 +151,21 @@ export async function POST(req: NextRequest) {
     }
 
     const albumScopeId = computeAlbumScopeId(body)
+    if (!albumScopeId) {
+      const res = blocked(
+        correlationId,
+        'INVALID_REQUEST',
+        'Missing album context (albumId or albumSlug).',
+        undefined,
+        400
+      )
+      persistAnonId(res, anonId)
+      return res
+    }
 
     const decision = await checkAccess(
       memberId,
-      albumScopeId
-        ? {kind: 'album', albumScopeId, required: [ENTITLEMENTS.FREE_MEMBER]}
-        : {kind: 'global', required: [ENTITLEMENTS.FREE_MEMBER]},
+      {kind: 'album', albumScopeId, required: [ENTITLEMENTS.PLAY_ALBUM]},
       {log: true, action: ACCESS_ACTIONS.PLAYBACK_TOKEN_ISSUE, correlationId}
     )
 
@@ -187,11 +184,7 @@ export async function POST(req: NextRequest) {
 
   // ---- Mux Secure Playback signing ----
   const keyId = mustEnv('MUX_SIGNING_KEY_ID', 'MUX_PLAYBACK_SIGNING_KEY_ID')
-  const raw = mustEnv(
-    'MUX_SIGNING_KEY_SECRET',
-    'MUX_SIGNING_PRIVATE_KEY',
-    'MUX_PLAYBACK_SIGNING_PRIVATE_KEY'
-  )
+  const raw = mustEnv('MUX_SIGNING_KEY_SECRET', 'MUX_SIGNING_PRIVATE_KEY', 'MUX_PLAYBACK_SIGNING_PRIVATE_KEY')
 
   const pkcs8Pem = toPkcs8Pem(normalizePemMaybe(raw))
   const pk = await importPKCS8(pkcs8Pem, 'RS256')

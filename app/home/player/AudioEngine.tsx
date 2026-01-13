@@ -322,7 +322,8 @@ export default function AudioEngine() {
           body: JSON.stringify({
             playbackId,
             trackId: s.current?.id,
-            albumSlug: s.queueContextSlug,
+            albumId: s.queueContextId,          // ✅ NEW (canonical album id)
+            albumSlug: s.queueContextSlug,      // existing (human fallback)
             durationMs: s.current?.durationMs ?? s.durationById?.[s.current?.id ?? ''],
           }),
           signal: ac.signal,

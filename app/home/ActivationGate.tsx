@@ -395,7 +395,7 @@ export default function ActivationGate(props: Props) {
           minWidth: 0,
           maxWidth: EMAIL_W,
           display: 'grid',
-          gap: 12,
+          gap: 4,
           justifyItems: 'stretch',
           alignContent: 'end',
         }}
@@ -405,7 +405,7 @@ export default function ActivationGate(props: Props) {
           style={{
             position: 'relative',
             zIndex: 42,
-            transform: otpOpen ? 'translateY(-10px)' : 'translateY(0px)', // subtle lift (no flying away)
+            transform: otpOpen ? 'translateY(-6px)' : 'translateY(0px)', // subtle lift (no flying away)
             transition: 'transform 220ms cubic-bezier(.2,.8,.2,1)',
             willChange: 'transform',
             width: '100%',
@@ -566,7 +566,7 @@ export default function ActivationGate(props: Props) {
               overflow: 'hidden',
               maxHeight: otpOpen ? OTP_MAX_H : 0,
               opacity: otpOpen ? 1 : 0,
-              marginTop: otpOpen ? 0 : -12, // helps it feel “under” the header
+              marginTop: otpOpen ? 0 : -4, // helps it feel “under” the header
               transition: 'max-height 240ms cubic-bezier(.2,.8,.2,1), opacity 160ms ease, margin-top 240ms cubic-bezier(.2,.8,.2,1)',
               pointerEvents: otpOpen ? 'auto' : 'none',
               willChange: 'max-height, opacity, margin-top',

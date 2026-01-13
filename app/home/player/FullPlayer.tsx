@@ -172,7 +172,7 @@ export default function FullPlayer(props: {
     if (!firstTrack) return
 
     p.setQueue(tracks, {
-      contextId: album?.id,
+      contextId: album?.catalogId ?? album?.id,
       artworkUrl: album?.artworkUrl ?? null,
       contextSlug: albumSlug,
       contextTitle: album?.title ?? undefined,

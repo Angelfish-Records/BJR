@@ -1,3 +1,4 @@
+// sanity/schemaTypes/album.ts
 import {defineType, defineField} from 'sanity'
 
 const THEME_OPTIONS = [
@@ -12,6 +13,20 @@ export default defineType({
   title: 'Album',
   type: 'document',
   fields: [
+    defineField({
+      name: 'catalogId',
+      title: 'Catalogue ID',
+      type: 'string',
+      description:
+        'Stable canonical ID for this album (label catalogue). Used for entitlements, URLs, and future variants. Example: AF-ALB-0001',
+      validation: (r) =>
+        r
+          .required()
+          .min(3)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{2,}$/)
+          .warning('Use a stable ID: letters/numbers plus . _ : -'),
+    }),
+
     defineField({
       name: 'title',
       type: 'string',
@@ -59,11 +74,28 @@ export default defineType({
           title: 'Track',
           fields: [
             defineField({
-              name: 'id',
+              name: 'catalogId',
+              title: 'Track Catalogue ID',
               type: 'string',
-              description: 'Stable track id (your canonical id).',
+              description:
+                'Stable canonical ID for this track (label catalogue). Example: AF-TRK-0001-A (use suffixes for variants).',
+              validation: (r) =>
+                r
+                  .required()
+                  .min(3)
+                  .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{2,}$/)
+                  .warning('Use a stable ID: letters/numbers plus . _ : -'),
+            }),
+
+            defineField({
+              name: 'id',
+              title: 'Legacy Track ID',
+              type: 'string',
+              description:
+                'Deprecated. Kept for backwards compatibility with existing lyrics + playback wiring. Prefer Track Catalogue ID.',
               validation: (r) => r.required(),
             }),
+
             defineField({
               name: 'title',
               type: 'string',
@@ -91,10 +123,21 @@ export default defineType({
             }),
           ],
           preview: {
-            select: {title: 'title', subtitle: 'muxPlaybackId', theme: 'visualTheme'},
-            prepare({title, subtitle, theme}: {title?: string; subtitle?: string; theme?: string}) {
+            select: {title: 'title', subtitle: 'muxPlaybackId', theme: 'visualTheme', cat: 'catalogId'},
+            prepare({
+              title,
+              subtitle,
+              theme,
+              cat,
+            }: {
+              title?: string
+              subtitle?: string
+              theme?: string
+              cat?: string
+            }) {
               const t = typeof theme === 'string' && theme.trim().length ? theme.trim() : 'album default'
-              return {title, subtitle: `${subtitle ?? ''}${subtitle ? ' · ' : ''}${t}`}
+              const cid = typeof cat === 'string' && cat.trim().length ? cat.trim() : 'no catalogId'
+              return {title, subtitle: `${subtitle ?? ''}${subtitle ? ' · ' : ''}${t} · ${cid}`}
             },
           },
         },
@@ -102,4 +145,11 @@ export default defineType({
       validation: (r) => r.min(1),
     }),
   ],
+  preview: {
+    select: {title: 'title', cat: 'catalogId', artist: 'artist', year: 'year'},
+    prepare({title, cat, artist, year}: {title?: string; cat?: string; artist?: string; year?: number}) {
+      const bits = [artist, typeof year === 'number' ? String(year) : undefined, cat].filter(Boolean)
+      return {title: title ?? 'Untitled', subtitle: bits.join(' · ')}
+    },
+  },
 })

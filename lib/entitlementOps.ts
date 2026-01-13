@@ -11,6 +11,8 @@ const SUBSCRIPTION = {
   GOLD: 'subscription_gold',
 } as const
 
+const CATALOG_SCOPE_ID = 'catalog'
+
 type GrantParams = {
   memberId: string
   entitlementKey: string
@@ -50,9 +52,24 @@ async function applySideEffectGrants(params: {
   grantSource: string
   grantSourceRef: string | null
 }) {
-  const {memberId, entitlementKey, expiresAt, correlationId, eventSource, grantedBy, grantSource, grantSourceRef} = params
+  const {memberId, entitlementKey, expiresAt, correlationId, eventSource, grantedBy, grantSource, grantSourceRef} =
+    params
 
   if (entitlementKey === ENTITLEMENTS.FREE_MEMBER) {
+    // NEW: free_member implies the catalog-wide right to play albums
+    await grantEntitlement({
+      memberId,
+      entitlementKey: ENTITLEMENTS.PLAY_ALBUM,
+      scopeId: CATALOG_SCOPE_ID,
+      scopeMeta: {implied_by: ENTITLEMENTS.FREE_MEMBER},
+      grantedBy,
+      grantReason: 'implied: free member can play albums (catalog)',
+      grantSource,
+      grantSourceRef,
+      correlationId,
+      eventSource,
+    })
+
     await grantEntitlement({
       memberId,
       entitlementKey: ENT.pageView('home'),

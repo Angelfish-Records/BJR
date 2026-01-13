@@ -1,12 +1,12 @@
 // web/lib/albums.ts
 import {client} from '@/sanity/lib/client'
 import {urlFor} from '@/sanity/lib/image'
-import type {AlbumInfo} from '@/lib/types'
-import type {PlayerTrack} from '@/lib/types'
+import type {AlbumInfo, PlayerTrack} from '@/lib/types'
 import type {LyricCue} from '@/app/home/player/stage/LyricsOverlay'
 
 type AlbumDoc = {
   _id?: string
+  catalogId?: string
   title?: string
   artist?: string
   year?: number
@@ -14,7 +14,8 @@ type AlbumDoc = {
   artwork?: unknown
   visualTheme?: string
   tracks?: Array<{
-    id: string
+    id: string // legacy
+    catalogId?: string // new canonical
     title?: string
     artist?: string
     durationMs?: number
@@ -24,7 +25,7 @@ type AlbumDoc = {
 }
 
 type TrackLyricsDoc = {
-  trackId?: string
+  trackId?: string // still legacy for now
   offsetMs?: number
   cues?: Array<{tMs?: number; text?: string; endMs?: number}>
 }
@@ -32,10 +33,12 @@ type TrackLyricsDoc = {
 export type AlbumBrowseItem = {
   id: string
   slug: string
+  catalogId?: string
   title: string
   artist?: string
   year?: number
   artwork?: unknown
+  artworkUrl?: string | null
 }
 
 export type AlbumLyricsBundle = {
@@ -60,12 +63,24 @@ function normalizeCues(input: TrackLyricsDoc['cues']): LyricCue[] {
   return out
 }
 
+function normStr(v: unknown): string | undefined {
+  if (typeof v !== 'string') return undefined
+  const s = v.trim()
+  return s.length ? s : undefined
+}
+
+function normTheme(v: unknown): string | undefined {
+  const s = normStr(v)
+  return s && s !== '' ? s : undefined
+}
+
 export async function getAlbumBySlug(
   slug: string
 ): Promise<{album: AlbumInfo | null; tracks: PlayerTrack[]; lyrics: AlbumLyricsBundle}> {
   const q = `
     *[_type == "album" && slug.current == $slug][0]{
       _id,
+      catalogId,
       title,
       artist,
       year,
@@ -74,6 +89,7 @@ export async function getAlbumBySlug(
       visualTheme,
       "tracks": tracks[]{
         id,
+        catalogId,
         title,
         artist,
         durationMs,
@@ -89,38 +105,43 @@ export async function getAlbumBySlug(
     return {album: null, tracks: [], lyrics: {cuesByTrackId: {}, offsetByTrackId: {}}}
   }
 
+  const albumCatalogId = normStr(doc.catalogId) ?? doc._id // fallback so nothing breaks while you populate
+  const albumTheme = normTheme(doc.visualTheme)
+
   const album: AlbumInfo = {
     id: doc._id,
+    catalogId: albumCatalogId,
     title: doc.title ?? 'Untitled',
-    artist: doc.artist ?? undefined,
-    year: doc.year ?? undefined,
-    description: doc.description ?? undefined,
+    artist: normStr(doc.artist),
+    year: typeof doc.year === 'number' && Number.isFinite(doc.year) ? doc.year : undefined,
+    description: normStr(doc.description),
     artworkUrl: doc.artwork ? urlFor(doc.artwork).width(900).height(900).quality(85).url() : null,
+    //visualTheme: albumTheme,
   }
 
-  const albumTheme =
-  typeof doc.visualTheme === 'string' && doc.visualTheme.trim().length > 0 ? doc.visualTheme.trim() : undefined
-
+  // Tracks: keep legacy id as the runtime player id (so lyrics + existing wiring keep working),
+  // but attach catalogId for future-proofing and entitlement scoping if you later go track-level.
   const tracks: PlayerTrack[] = Array.isArray(doc.tracks)
     ? doc.tracks
         .filter((t) => t?.id)
         .map((t) => {
           const raw = t.durationMs
           const n = typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined
+          const trackTheme = normTheme(t.visualTheme)
 
-          const trackTheme =
-          typeof t.visualTheme === 'string' && t.visualTheme.trim().length > 0 ? t.visualTheme.trim() : undefined
           return {
-            id: t.id,
-            title: t.title ?? undefined,
-            artist: t.artist ?? undefined,
-            muxPlaybackId: t.muxPlaybackId ?? undefined,
+            id: t.id, // legacy runtime ID (matches lyrics today)
+            catalogId: normStr(t.catalogId) ?? t.id,
+            title: normStr(t.title),
+            artist: normStr(t.artist),
+            muxPlaybackId: normStr(t.muxPlaybackId),
             durationMs: typeof n === 'number' && n > 0 ? n : undefined,
-            visualTheme: trackTheme ?? albumTheme ?? undefined,
+            visualTheme: trackTheme ?? albumTheme,
           }
         })
     : []
 
+  // Lyrics are still keyed by legacy trackId for now.
   const trackIds = tracks.map((t) => t.id).filter((x): x is string => typeof x === 'string' && x.length > 0)
 
   const lyricsQ = `
@@ -151,6 +172,7 @@ export async function listAlbumsForBrowse(): Promise<AlbumBrowseItem[]> {
   const q = `
     *[_type=="album"]|order(year desc, _createdAt desc){
       "id": _id,
+      "catalogId": catalogId,
       "slug": slug.current,
       title,
       artist,
@@ -160,5 +182,13 @@ export async function listAlbumsForBrowse(): Promise<AlbumBrowseItem[]> {
   `
 
   const data = await client.fetch<AlbumBrowseItem[]>(q)
-  return Array.isArray(data) ? data : []
+
+  const items = Array.isArray(data) ? data : []
+  return items.map((a) => ({
+    ...a,
+    catalogId: normStr(a.catalogId),
+    artist: normStr(a.artist),
+    title: a.title ?? 'Untitled',
+    artworkUrl: a.artwork ? urlFor(a.artwork).width(600).height(600).quality(80).url() : null,
+  }))
 }
