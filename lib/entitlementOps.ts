@@ -11,8 +11,6 @@ const SUBSCRIPTION = {
   GOLD: 'subscription_gold',
 } as const
 
-const CATALOG_SCOPE_ID = 'catalog'
-
 type GrantParams = {
   memberId: string
   entitlementKey: string
@@ -31,6 +29,9 @@ async function ensureEntitlementType(entitlementKey: string, scopeId: string | n
   const key = entitlementKey?.trim()
   if (!key) return
 
+  // Contract:
+  // - scope_id NULL => "global" entitlements (this includes catalog-wide rights)
+  // - scope_id NOT NULL => "scoped" entitlements (album-scoped, etc)
   const scope = scopeId ? 'scoped' : 'global'
 
   await sql`
@@ -55,15 +56,17 @@ async function applySideEffectGrants(params: {
   const {memberId, entitlementKey, expiresAt, correlationId, eventSource, grantedBy, grantSource, grantSourceRef} =
     params
 
+  // NOTE: This block is legacy-friendly. If you’re about to "nuke" FREE_MEMBER / themes / tiers,
+  // delete or simplify these side effects AFTER you’ve migrated existing members.
   if (entitlementKey === ENTITLEMENTS.FREE_MEMBER) {
-    // NEW: free_member implies the catalog-wide right to play albums
+    // Catalog-wide == GLOBAL == scope_id NULL
     await grantEntitlement({
       memberId,
       entitlementKey: ENTITLEMENTS.PLAY_ALBUM,
-      scopeId: CATALOG_SCOPE_ID,
+      scopeId: null,
       scopeMeta: {implied_by: ENTITLEMENTS.FREE_MEMBER},
       grantedBy,
-      grantReason: 'implied: free member can play albums (catalog)',
+      grantReason: 'implied: free member can play albums (global/catalog)',
       grantSource,
       grantSourceRef,
       correlationId,
@@ -73,6 +76,7 @@ async function applySideEffectGrants(params: {
     await grantEntitlement({
       memberId,
       entitlementKey: ENT.pageView('home'),
+      scopeId: null,
       scopeMeta: {implied_by: ENTITLEMENTS.FREE_MEMBER},
       grantedBy,
       grantReason: 'implied: free member can view home',
@@ -85,6 +89,7 @@ async function applySideEffectGrants(params: {
     await grantEntitlement({
       memberId,
       entitlementKey: ENT.theme('default'),
+      scopeId: null,
       scopeMeta: {implied_by: ENTITLEMENTS.FREE_MEMBER},
       grantedBy,
       grantReason: 'implied: assign default theme',
@@ -99,6 +104,7 @@ async function applySideEffectGrants(params: {
     await grantEntitlement({
       memberId,
       entitlementKey: ENT.tier('premium'),
+      scopeId: null,
       expiresAt,
       grantedBy,
       grantReason: 'implied: gold subscription implies premium tier',
@@ -111,6 +117,7 @@ async function applySideEffectGrants(params: {
     await grantEntitlement({
       memberId,
       entitlementKey: ENT.theme('gold'),
+      scopeId: null,
       expiresAt,
       grantedBy,
       grantReason: 'implied: gold subscription grants gold theme',

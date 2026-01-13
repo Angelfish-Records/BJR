@@ -1,3 +1,4 @@
+// web/app/api/access/check/route.ts
 import {NextRequest, NextResponse} from 'next/server'
 import {auth} from '@clerk/nextjs/server'
 import {sql} from '@vercel/postgres'
@@ -21,13 +22,18 @@ export async function GET(req: NextRequest) {
   const {userId} = await auth()
 
   const url = new URL(req.url)
+
+  // IMPORTANT:
+  // - albumId is expected to be the canonical *catalog id* (the thing you scope as alb:<id>).
+  // - albumSlug is *routing/marketing*, not canonical, but we keep it as a temporary legacy fallback
+  //   for old alb_slug:<slug> grants during migration.
   const albumId = (url.searchParams.get('albumId') ?? '').trim()
   const albumSlug = (url.searchParams.get('albumSlug') ?? '').trim()
 
   const albumScopeId = albumId
     ? `alb:${albumId}`
     : albumSlug
-      ? `alb_slug:${albumSlug}`
+      ? `alb_slug:${albumSlug}` // TEMP: remove once you have no slug-scoped grants
       : null
 
   if (!userId) {
