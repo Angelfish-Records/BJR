@@ -20,7 +20,7 @@ const uuidOk = (v: string) =>
 async function ensureBaselineEntitlements(memberId: string, reason: string) {
   if (!uuidOk(memberId)) return
 
-  // This is intentionally idempotent: grantEntitlement won't duplicate active grants.
+  // Idempotent: grantEntitlement won't create duplicates for an active, non-expiring grant.
   const correlationId = newCorrelationId()
 
   await grantEntitlement({
@@ -87,7 +87,6 @@ export async function ensureMemberByClerk(params: {
   `
   if (byClerk.rows[0]?.id) {
     const id = byClerk.rows[0].id as string
-
     await sql`
       update members
       set email = ${email},
@@ -96,9 +95,7 @@ export async function ensureMemberByClerk(params: {
           source_detail = members.source_detail || ${JSON.stringify(sourceDetail)}::jsonb
       where id = ${id}
     `
-
     await ensureBaselineEntitlements(id, 'clerk login (existing member)')
-
     return {id, created: false}
   }
 
@@ -115,9 +112,7 @@ export async function ensureMemberByClerk(params: {
   `
   if (claimed.rows[0]?.id) {
     const id = claimed.rows[0].id as string
-
     await ensureBaselineEntitlements(id, 'clerk login (email claim)')
-
     return {id, created: false}
   }
 
@@ -167,7 +162,11 @@ export async function ensureMemberByClerk(params: {
 
 /**
  * Idempotent upsert by email. Returns {id, created}.
- * Postgres trick: xmax = 0 is true for freshly inserted rows.
+ *
+ * NOTE: We intentionally avoid ON CONFLICT inference here because your schema currently
+ * has a members_email_key object that Postgres will not accept as the arbiter for
+ * ON CONFLICT (email). This version is robust regardless of whether uniqueness is
+ * enforced by a constraint, expression index, or is temporarily absent.
  */
 export async function ensureMemberByEmail(params: {
   email: string
@@ -182,31 +181,61 @@ export async function ensureMemberByEmail(params: {
   const sourceDetail = params.sourceDetail ?? {}
   const marketingOptIn = params.marketingOptIn ?? true
 
-  const res = await sql`
-    insert into members (
-      email,
-      source,
-      source_detail,
-      consent_first_at,
-      consent_latest_at,
-      consent_latest_version,
-      marketing_opt_in
-    )
-    values (
-      ${email},
-      ${source},
-      ${JSON.stringify(sourceDetail)}::jsonb,
-      now(),
-      now(),
-      null,
-      ${marketingOptIn}
-    )
-    on conflict (email) do update
-      set consent_latest_at = now(),
-          marketing_opt_in = ${marketingOptIn},
-          source_detail = members.source_detail || ${JSON.stringify(sourceDetail)}::jsonb
-    returning id, (xmax = 0) as created
-  `
+  try {
+    const ins = await sql`
+      insert into members (
+        email,
+        source,
+        source_detail,
+        consent_first_at,
+        consent_latest_at,
+        consent_latest_version,
+        marketing_opt_in
+      )
+      values (
+        ${email},
+        ${source},
+        ${JSON.stringify(sourceDetail)}::jsonb,
+        now(),
+        now(),
+        null,
+        ${marketingOptIn}
+      )
+      returning id
+    `
+    return {id: ins.rows[0].id as string, created: true}
+  } catch (err: unknown) {
+    const e = err as {code?: string; message?: string}
 
-  return {id: res.rows[0].id as string, created: res.rows[0].created as boolean}
+    // Duplicate (unique/index) violation — treat as upsert
+    if (e?.code === '23505') {
+      const upd = await sql`
+        update members
+        set consent_latest_at = now(),
+            marketing_opt_in = ${marketingOptIn},
+            source_detail = members.source_detail || ${JSON.stringify(sourceDetail)}::jsonb
+        where email = ${email}
+        returning id
+      `
+
+      if (upd.rows[0]?.id) {
+        return {id: upd.rows[0].id as string, created: false}
+      }
+
+      // Extremely rare: duplicate was raised on a uniqueness rule not matching `where email = ...`
+      // Fall back to lookup.
+      const sel = await sql`
+        select id
+        from members
+        where email = ${email}
+        limit 1
+      `
+      if (sel.rows[0]?.id) return {id: sel.rows[0].id as string, created: false}
+
+      throw new Error(`ensureMemberByEmail: duplicate detected but member not found for ${email}`)
+    }
+
+    // Bubble anything else
+    throw err
+  }
 }
