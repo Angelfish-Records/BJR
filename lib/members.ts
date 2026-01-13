@@ -1,6 +1,9 @@
 // web/lib/members.ts
 import 'server-only'
 import {sql} from '@vercel/postgres'
+import {grantEntitlement} from '@/lib/entitlementOps'
+import {ENTITLEMENTS, EVENT_SOURCES} from '@/lib/vocab'
+import {newCorrelationId} from '@/lib/events'
 
 export function normalizeEmail(input: string): string {
   return (input ?? '').toString().trim().toLowerCase()
@@ -9,6 +12,26 @@ export function normalizeEmail(input: string): string {
 export function assertLooksLikeEmail(email: string): void {
   const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
   if (!ok) throw new Error('Invalid email')
+}
+
+const uuidOk = (v: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v)
+
+async function ensureBaselineEntitlements(memberId: string, reason: string) {
+  if (!uuidOk(memberId)) return
+
+  // This is intentionally idempotent: grantEntitlement won't duplicate active grants.
+  const correlationId = newCorrelationId()
+
+  await grantEntitlement({
+    memberId,
+    entitlementKey: ENTITLEMENTS.FREE_MEMBER,
+    grantedBy: 'system',
+    grantReason: reason,
+    grantSource: 'clerk',
+    correlationId,
+    eventSource: EVENT_SOURCES.CLERK,
+  })
 }
 
 export async function getMemberIdByEmail(email: string): Promise<string | null> {
@@ -32,6 +55,9 @@ export async function getMemberIdByEmail(email: string): Promise<string | null> 
  * 2) Else claim existing row by email ONLY if unclaimed (clerk_user_id is null).
  * 3) If email exists but is already claimed by another clerk_user_id, throw loud.
  * 4) Else insert a new member row with clerk_user_id + email.
+ *
+ * Provisioning contract:
+ * - Any member returned from this function must have baseline FREE_MEMBER entitlement.
  *
  * Returns {id, created} where created=true only for fresh inserts.
  */
@@ -61,6 +87,7 @@ export async function ensureMemberByClerk(params: {
   `
   if (byClerk.rows[0]?.id) {
     const id = byClerk.rows[0].id as string
+
     await sql`
       update members
       set email = ${email},
@@ -69,6 +96,9 @@ export async function ensureMemberByClerk(params: {
           source_detail = members.source_detail || ${JSON.stringify(sourceDetail)}::jsonb
       where id = ${id}
     `
+
+    await ensureBaselineEntitlements(id, 'clerk login (existing member)')
+
     return {id, created: false}
   }
 
@@ -84,7 +114,11 @@ export async function ensureMemberByClerk(params: {
     returning id
   `
   if (claimed.rows[0]?.id) {
-    return {id: claimed.rows[0].id as string, created: false}
+    const id = claimed.rows[0].id as string
+
+    await ensureBaselineEntitlements(id, 'clerk login (email claim)')
+
+    return {id, created: false}
   }
 
   // 3) If email exists but is claimed by someone else, fail loud
@@ -123,7 +157,12 @@ export async function ensureMemberByClerk(params: {
     returning id, (xmax = 0) as created
   `
 
-  return {id: inserted.rows[0].id as string, created: inserted.rows[0].created as boolean}
+  const id = inserted.rows[0].id as string
+  const created = inserted.rows[0].created as boolean
+
+  await ensureBaselineEntitlements(id, 'clerk signup (new member)')
+
+  return {id, created}
 }
 
 /**
