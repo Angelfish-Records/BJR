@@ -48,12 +48,11 @@ function looksLikeNoAccountError(err: unknown): boolean {
 }
 
 /**
- * We keep this around because the patterned edge is still nice,
- * but we remove the “outer purple stroke” by using a much lower opacity
- * and relying on the off-white outline for crispness.
+ * Very subtle edge texture (NOT a second outline).
+ * We intentionally do not draw a crisp stroke here — the button border is the single outline.
  */
 function PatternPillBorder(props: {radius?: number; opacity?: number; seed?: number}) {
-  const {radius = 999, opacity = 0.18, seed = 888} = props
+  const {radius = 999, opacity = 0.14, seed = 888} = props
 
   return (
     <div
@@ -73,18 +72,6 @@ function PatternPillBorder(props: {radius?: number; opacity?: number; seed?: num
         style={{filter: 'contrast(1.05) saturate(1.05)'}}
         active
       />
-
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: 0,
-          borderRadius: radius,
-          boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.18)',
-          pointerEvents: 'none',
-          opacity: 1,
-        }}
-      />
     </div>
   )
 }
@@ -98,8 +85,6 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
   const knob = h - pad * 2
   const travel = w - pad * 2 - knob
 
-  // Remove the "double border" effect: only one crisp outline.
-  // Also remove the unintended dim/overlay: no dark scrim layers.
   const BASE_BG_OFF = 'rgba(255,255,255,0.10)'
   const BASE_BG_ON = 'color-mix(in srgb, var(--accent) 26%, rgba(255,255,255,0.10))'
 
@@ -114,30 +99,29 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
         width: w,
         height: h,
         borderRadius: 999,
-        border: '1px solid rgba(255,255,255,0.18)',
+        border: '1px solid rgba(255,255,255,0.18)', // single outline
         background: checked ? BASE_BG_ON : BASE_BG_OFF,
         position: 'relative',
         padding: 0,
         outline: 'none',
         cursor: disabled ? 'default' : 'pointer',
-        transition:
-          'background 180ms ease, box-shadow 180ms ease, border-color 180ms ease, opacity 180ms ease',
+        transition: 'background 180ms ease, box-shadow 180ms ease, border-color 180ms ease, opacity 180ms ease',
         boxShadow: checked
           ? '0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent), 0 10px 26px rgba(0,0,0,0.35)'
           : '0 10px 26px rgba(0,0,0,0.28)',
         opacity: disabled ? 0.65 : 1,
         overflow: 'hidden',
         display: 'grid',
-        alignItems: 'center', // helps ensure vertical centering
+        alignItems: 'center',
       }}
     >
-      {/* Very subtle edge texture (not a purple stroke) */}
-      <PatternPillBorder seed={888} opacity={0.16} />
+      {/* Subtle edge texture only (no extra stroke) */}
+      <PatternPillBorder seed={888} opacity={0.12} />
 
       {/* Interior pattern ONLY when ON */}
       <PatternPillUnderlay active={checked} opacity={0.28} seed={777} />
 
-      {/* specular layer — keep it, but avoid “darkening” */}
+      {/* specular highlight (no dark scrim) */}
       <div
         aria-hidden
         style={{
@@ -145,10 +129,10 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
           inset: 1,
           borderRadius: 999,
           background:
-            'linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.04) 45%, rgba(255,255,255,0.00))',
+            'linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.05) 45%, rgba(255,255,255,0.00))',
           pointerEvents: 'none',
           mixBlendMode: 'screen',
-          opacity: checked ? 0.55 : 0.4,
+          opacity: checked ? 0.55 : 0.42,
           transition: 'opacity 180ms ease',
         }}
       />
@@ -183,9 +167,9 @@ function OtpBoxes(props: {
   value: string
   onChange: (next: string) => void
   disabled?: boolean
-  width: number
+  maxWidth?: number
 }) {
-  const {value, onChange, disabled, width} = props
+  const {value, onChange, disabled, maxWidth = 360} = props
   const digits = (value + '______').slice(0, 6).split('')
   const refs = useRef<Array<HTMLInputElement | null>>([])
 
@@ -194,11 +178,18 @@ function OtpBoxes(props: {
   }
 
   const gap = 10
-  const boxW = Math.floor((width - gap * 5) / 6)
 
   return (
-    <div style={{display: 'grid', gap: 10, justifyItems: 'center'}}>
-      <div style={{display: 'flex', gap}}>
+    <div style={{width: '100%', display: 'grid', justifyItems: 'center'}}>
+      <div
+        style={{
+          width: '100%',
+          maxWidth,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
+          gap,
+        }}
+      >
         {digits.map((d, i) => (
           <input
             key={i}
@@ -243,7 +234,7 @@ function OtpBoxes(props: {
               setTimeout(() => focus(idx), 0)
             }}
             style={{
-              width: boxW,
+              width: '100%',
               height: 48,
               borderRadius: 12,
               border: '1px solid rgba(255,255,255,0.18)',
@@ -253,6 +244,7 @@ function OtpBoxes(props: {
               fontSize: 18,
               outline: 'none',
               boxShadow: '0 12px 26px rgba(0,0,0,0.24)',
+              boxSizing: 'border-box',
             }}
           />
         ))}
@@ -289,11 +281,9 @@ export default function ActivationGate(props: Props) {
     (user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? '') ||
     email
 
-  // Slightly wider so 6 boxes never clip on common mobile widths.
   const EMAIL_W = 360
   const needsAttention = !isActive && !!attentionMessage
 
-  const shouldShowBox = !isActive && phase === 'code'
   const toggleClickable = !isActive && phase === 'idle' && emailValid && clerkLoaded
 
   async function startEmailCode() {
@@ -305,7 +295,6 @@ export default function ActivationGate(props: Props) {
     setFlow(null)
     setIsVerifying(false)
     setIsSending(true)
-
     setPhase('code')
 
     try {
@@ -383,11 +372,11 @@ export default function ActivationGate(props: Props) {
 
   // Toggle tracks auth + flow state (and becomes clickable only in the idle/email-valid state).
   const toggleOn = isActive || phase === 'code' || isSending || isVerifying
+  const otpOpen = !isActive && phase === 'code'
 
-  // “Tray reveal” animation constants.
-  const HEADER_H = 44
-  const REVEAL_H = 104
-  const REVEALING = !isActive && shouldShowBox
+  // We keep DOM stable: the OTP tray is always mounted (when logged out),
+  // and we animate its maxHeight/opacity so the header never “teleports”.
+  const OTP_MAX_H = 170 // roomy enough for boxes + messages
 
   return (
     <div
@@ -398,35 +387,29 @@ export default function ActivationGate(props: Props) {
         alignContent: 'end',
       }}
     >
-      <style>{`
-        @keyframes boxDown {
-          from { opacity: 0; transform: translateY(-10px); }
-          to   { opacity: 1; transform: translateY(0px); }
-        }
-      `}</style>
-
-      {/* This wrapper owns the “slide to reveal” illusion.
-          Height animates; OTP tray is absolutely positioned underneath. */}
       <div
         style={{
           position: 'relative',
           zIndex: 41,
           width: '100%',
           minWidth: 0,
-          maxWidth: 360,
-          height: REVEALING ? HEADER_H + REVEAL_H : HEADER_H,
-          transition: 'height 220ms cubic-bezier(.2,.8,.2,1)',
-          willChange: 'height',
+          maxWidth: EMAIL_W,
+          display: 'grid',
+          gap: 12,
+          justifyItems: 'stretch',
+          alignContent: 'end',
         }}
       >
-        {/* TOP ROW (email + toggle) slides up to reveal tray */}
+        {/* HEADER ROW */}
         <div
           style={{
             position: 'relative',
             zIndex: 42,
-            transform: REVEALING ? `translateY(-${REVEAL_H}px)` : 'translateY(0px)',
+            transform: otpOpen ? 'translateY(-10px)' : 'translateY(0px)', // subtle lift (no flying away)
             transition: 'transform 220ms cubic-bezier(.2,.8,.2,1)',
             willChange: 'transform',
+            width: '100%',
+            minWidth: 0,
           }}
         >
           <div
@@ -569,59 +552,57 @@ export default function ActivationGate(props: Props) {
           </div>
         </div>
 
-        {/* OTP TRAY (underlay) */}
+        {/* OTP TRAY (always mounted when logged out; animated open/close) */}
         {!isActive && (
           <div
             style={{
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              bottom: 0,
-              display: 'grid',
-              justifyItems: 'center',
-              pointerEvents: REVEALING ? 'auto' : 'none',
-              opacity: REVEALING ? 1 : 0,
-              transform: REVEALING ? 'translateY(0px)' : 'translateY(10px)',
-              transition: 'opacity 160ms ease, transform 220ms cubic-bezier(.2,.8,.2,1)',
+              width: '100%',
+              borderRadius: 16,
+              border: '1px solid rgba(255,255,255,0.14)',
+              background: 'rgba(0,0,0,0.28)',
+              padding: 12,
+              boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
+              position: 'relative',
+              overflow: 'hidden',
+              maxHeight: otpOpen ? OTP_MAX_H : 0,
+              opacity: otpOpen ? 1 : 0,
+              marginTop: otpOpen ? 0 : -12, // helps it feel “under” the header
+              transition: 'max-height 240ms cubic-bezier(.2,.8,.2,1), opacity 160ms ease, margin-top 240ms cubic-bezier(.2,.8,.2,1)',
+              pointerEvents: otpOpen ? 'auto' : 'none',
+              willChange: 'max-height, opacity, margin-top',
             }}
           >
             <div
               style={{
-                maxWidth: 360,
-                width: '100%',
-                borderRadius: 16,
-                border: '1px solid rgba(255,255,255,0.14)',
-                background: 'rgba(0,0,0,0.28)',
-                padding: 12,
-                boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
-                position: 'relative',
-                overflow: 'hidden',
-                minHeight: 72,
+                opacity: otpOpen ? 1 : 0,
+                transform: otpOpen ? 'translateY(0px)' : 'translateY(-6px)',
+                transition: 'opacity 160ms ease, transform 220ms cubic-bezier(.2,.8,.2,1)',
+                display: 'grid',
+                gap: 10,
+                justifyItems: 'center',
               }}
             >
-              <div style={{display: 'grid', gap: 10, justifyItems: 'center'}}>
-                <OtpBoxes
-                  width={Math.min(EMAIL_W - 2, 360 - 2)}
-                  value={code}
-                  onChange={(next) => setCode(normalizeDigits(next))}
-                  disabled={isVerifying}
-                />
+              <OtpBoxes
+                maxWidth={EMAIL_W}
+                value={code}
+                onChange={(next) => setCode(normalizeDigits(next))}
+                disabled={isVerifying}
+              />
 
-                {(isSending || !flow) && <div style={{fontSize: 12, opacity: 0.7}}>Sending code…</div>}
-                {isVerifying && <div style={{fontSize: 12, opacity: 0.7}}>Verifying…</div>}
+              {(isSending || !flow) && <div style={{fontSize: 12, opacity: 0.7}}>Sending code…</div>}
+              {isVerifying && <div style={{fontSize: 12, opacity: 0.7}}>Verifying…</div>}
 
-                {error && (
-                  <div style={{fontSize: 12, opacity: 0.88, color: '#ffb4b4', textAlign: 'center'}}>
-                    {error}
-                  </div>
-                )}
-              </div>
+              {error && (
+                <div style={{fontSize: 12, opacity: 0.88, color: '#ffb4b4', textAlign: 'center'}}>
+                  {error}
+                </div>
+              )}
             </div>
           </div>
         )}
-      </div>
 
-      {isActive && <>{children}</>}
+        {isActive && <>{children}</>}
+      </div>
     </div>
   )
 }

@@ -15,7 +15,7 @@ import {ACCESS_ACTIONS} from './vocab'
 
 export type AccessCheck =
   | {kind: 'global'; required: string[]}
-  | {kind: 'track'; trackId: string; required: string[]}
+  | {kind: 'album'; albumScopeId: string; required: string[]}
 
 export type AccessDecision =
   | {
@@ -39,7 +39,7 @@ export async function checkAccess(
     correlationId?: string | null
   }
 ): Promise<AccessDecision> {
-  const scopeId = check.kind === 'track' ? check.trackId : null
+  const scopeId = check.kind === 'album' ? check.albumScopeId : null
   const action = opts?.action ?? ACCESS_ACTIONS.PLAYBACK_TOKEN_ISSUE
   const shouldLog = opts?.log ?? false
   const correlationId = opts?.correlationId ?? null

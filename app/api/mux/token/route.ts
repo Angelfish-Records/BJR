@@ -12,10 +12,12 @@ type TokenReq = {
   playbackId: string
   trackId?: string
   albumSlug?: string
+  // NEW (recommended): stable canonical album id, e.g. label catalogue id
+  albumId?: string
   durationMs?: number
 }
 
-type TokenOk = {ok: true; token: string; expiresAt: number}
+type TokenOk = {ok: true; token: string; expiresAt: number; correlationId: string}
 
 type TokenBlocked = {
   ok: false
@@ -23,6 +25,7 @@ type TokenBlocked = {
   code: 'AUTH_REQUIRED' | 'ANON_CAP_REACHED' | 'ENTITLEMENT_REQUIRED' | 'EMBARGO' | 'INVALID_REQUEST'
   reason: string
   action?: 'login' | 'subscribe' | 'buy' | 'wait'
+  correlationId: string
 }
 
 const AUD = 'v'
@@ -39,12 +42,13 @@ function mustEnv(...names: string[]) {
 }
 
 function blocked(
+  correlationId: string,
   code: TokenBlocked['code'],
   reason: string,
   action?: TokenBlocked['action'],
   status: number = 403
 ) {
-  const out: TokenBlocked = {ok: false, blocked: true, code, reason, action}
+  const out: TokenBlocked = {ok: false, blocked: true, code, reason, action, correlationId}
   return NextResponse.json(out, {status})
 }
 
@@ -61,7 +65,6 @@ function normalizePemMaybe(input: string): string {
 }
 
 function toPkcs8Pem(pem: string): string {
-  // jose importPKCS8 requires PKCS#8: "BEGIN PRIVATE KEY"
   if (pem.includes('-----BEGIN PRIVATE KEY-----')) return pem
   const keyObj = crypto.createPrivateKey(pem)
   return keyObj.export({format: 'pem', type: 'pkcs8'}) as string
@@ -94,6 +97,17 @@ async function getMemberIdByClerkUserId(userId: string): Promise<string | null> 
   return (r.rows?.[0]?.id as string | undefined) ?? null
 }
 
+function computeAlbumScopeId(body: TokenReq | null): string | null {
+  const rawAlbumId = (body?.albumId ?? '').trim()
+  if (rawAlbumId) return `alb:${rawAlbumId}`
+
+  const rawSlug = (body?.albumSlug ?? '').trim()
+  if (rawSlug) return `alb_slug:${rawSlug}`
+
+  // If you truly have no album context, treat as unscoped for now.
+  return null
+}
+
 export async function POST(req: NextRequest) {
   const correlationId = newCorrelationId()
 
@@ -106,7 +120,7 @@ export async function POST(req: NextRequest) {
 
   const playbackId = body?.playbackId
   if (!playbackId || typeof playbackId !== 'string') {
-    return blocked('INVALID_REQUEST', 'Missing playbackId', undefined, 400)
+    return blocked(correlationId, 'INVALID_REQUEST', 'Missing playbackId', undefined, 400)
   }
 
   const {userId} = await auth()
@@ -121,6 +135,7 @@ export async function POST(req: NextRequest) {
 
     if (distinctCompleted >= ANON_DISTINCT_TRACK_CAP) {
       const res = blocked(
+        correlationId,
         'ANON_CAP_REACHED',
         'Anonymous listening limit reached. Please log in to continue.',
         'login',
@@ -131,13 +146,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ---- Logged-in access: MUST have FREE_MEMBER (Friend) ----
+  // ---- Logged-in access: album-canonical check (global fallback allowed) ----
   if (userId) {
     const memberId = await getMemberIdByClerkUserId(userId)
 
-    // If the member row hasn't been created yet (webhook lag), fail gently.
     if (!memberId) {
       const res = blocked(
+        correlationId,
         'AUTH_REQUIRED',
         'Signed in, but your member profile is still being created. Refresh in a moment.',
         'wait',
@@ -147,17 +162,22 @@ export async function POST(req: NextRequest) {
       return res
     }
 
+    const albumScopeId = computeAlbumScopeId(body)
+
     const decision = await checkAccess(
       memberId,
-      {kind: 'global', required: [ENTITLEMENTS.FREE_MEMBER]},
+      albumScopeId
+        ? {kind: 'album', albumScopeId, required: [ENTITLEMENTS.FREE_MEMBER]}
+        : {kind: 'global', required: [ENTITLEMENTS.FREE_MEMBER]},
       {log: true, action: ACCESS_ACTIONS.PLAYBACK_TOKEN_ISSUE, correlationId}
     )
 
     if (!decision.allowed) {
       const res = blocked(
-        'AUTH_REQUIRED',
-        'Your membership is still provisioning. Refresh in a moment.',
-        'wait',
+        correlationId,
+        'ENTITLEMENT_REQUIRED',
+        'You do not have access to play this album.',
+        'subscribe',
         403
       )
       persistAnonId(res, anonId)
@@ -199,7 +219,7 @@ export async function POST(req: NextRequest) {
     .setProtectedHeader({alg: 'RS256', kid: keyId, typ: 'JWT'})
     .sign(pk)
 
-  const out: TokenOk = {ok: true, token: jwt, expiresAt: exp}
+  const out: TokenOk = {ok: true, token: jwt, expiresAt: exp, correlationId}
   const res = NextResponse.json(out)
   persistAnonId(res, anonId)
   return res
