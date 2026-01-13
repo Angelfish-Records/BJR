@@ -1,15 +1,11 @@
 // web/lib/entitlementOps.ts
 import 'server-only'
 import {sql} from '@vercel/postgres'
-import {ENT, ENTITLEMENTS, EVENT_SOURCES, type EventSource} from './vocab'
+import {EVENT_SOURCES, type EventSource} from './vocab'
 import {logEntitlementGranted, logEntitlementRevoked} from './events'
 
 const uuidOk = (v: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v)
-
-const SUBSCRIPTION = {
-  GOLD: 'subscription_gold',
-} as const
 
 type GrantParams = {
   memberId: string
@@ -41,92 +37,6 @@ async function ensureEntitlementType(entitlementKey: string, scopeId: string | n
       select 1 from entitlement_types et where et.key = ${key}
     )
   `
-}
-
-async function applySideEffectGrants(params: {
-  memberId: string
-  entitlementKey: string
-  expiresAt: Date | null
-  correlationId: string | null
-  eventSource: EventSource | string
-  grantedBy: string
-  grantSource: string
-  grantSourceRef: string | null
-}) {
-  const {memberId, entitlementKey, expiresAt, correlationId, eventSource, grantedBy, grantSource, grantSourceRef} =
-    params
-
-  // NOTE: This block is legacy-friendly. If you’re about to "nuke" FREE_MEMBER / themes / tiers,
-  // delete or simplify these side effects AFTER you’ve migrated existing members.
-  if (entitlementKey === ENTITLEMENTS.FREE_MEMBER) {
-    // Catalog-wide == GLOBAL == scope_id NULL
-    await grantEntitlement({
-      memberId,
-      entitlementKey: ENTITLEMENTS.PLAY_ALBUM,
-      scopeId: null,
-      scopeMeta: {implied_by: ENTITLEMENTS.FREE_MEMBER},
-      grantedBy,
-      grantReason: 'implied: free member can play albums (global/catalog)',
-      grantSource,
-      grantSourceRef,
-      correlationId,
-      eventSource,
-    })
-
-    await grantEntitlement({
-      memberId,
-      entitlementKey: ENT.pageView('home'),
-      scopeId: null,
-      scopeMeta: {implied_by: ENTITLEMENTS.FREE_MEMBER},
-      grantedBy,
-      grantReason: 'implied: free member can view home',
-      grantSource,
-      grantSourceRef,
-      correlationId,
-      eventSource,
-    })
-
-    await grantEntitlement({
-      memberId,
-      entitlementKey: ENT.theme('default'),
-      scopeId: null,
-      scopeMeta: {implied_by: ENTITLEMENTS.FREE_MEMBER},
-      grantedBy,
-      grantReason: 'implied: assign default theme',
-      grantSource,
-      grantSourceRef,
-      correlationId,
-      eventSource,
-    })
-  }
-
-  if (entitlementKey === SUBSCRIPTION.GOLD) {
-    await grantEntitlement({
-      memberId,
-      entitlementKey: ENT.tier('premium'),
-      scopeId: null,
-      expiresAt,
-      grantedBy,
-      grantReason: 'implied: gold subscription implies premium tier',
-      grantSource,
-      grantSourceRef,
-      correlationId,
-      eventSource,
-    })
-
-    await grantEntitlement({
-      memberId,
-      entitlementKey: ENT.theme('gold'),
-      scopeId: null,
-      expiresAt,
-      grantedBy,
-      grantReason: 'implied: gold subscription grants gold theme',
-      grantSource,
-      grantSourceRef,
-      correlationId,
-      eventSource,
-    })
-  }
 }
 
 export async function grantEntitlement(params: GrantParams): Promise<void> {
@@ -198,21 +108,6 @@ export async function grantEntitlement(params: GrantParams): Promise<void> {
       expires_at: expiresAt ? expiresAt.toISOString() : null,
     },
   })
-
-  try {
-    await applySideEffectGrants({
-      memberId,
-      entitlementKey,
-      expiresAt,
-      correlationId,
-      eventSource,
-      grantedBy,
-      grantSource,
-      grantSourceRef,
-    })
-  } catch (err) {
-    console.error('applySideEffectGrants failed', {memberId, entitlementKey, err})
-  }
 }
 
 export async function revokeEntitlement(params: {

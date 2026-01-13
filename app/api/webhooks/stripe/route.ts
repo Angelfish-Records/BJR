@@ -16,7 +16,13 @@ type PriceEntitlementRow = {
   scope_meta: unknown
 }
 
+function safeErrMessage(err: unknown): string {
+  if (err instanceof Error) return err.message
+  return String(err)
+}
+
 async function getMemberIdByClerkUserId(clerkUserId: string): Promise<string | null> {
+  if (!clerkUserId) return null
   const res = await sql`
     select id
     from members
@@ -24,160 +30,6 @@ async function getMemberIdByClerkUserId(clerkUserId: string): Promise<string | n
     limit 1
   `
   return (res.rows[0]?.id as string | undefined) ?? null
-}
-
-async function attachStripeCustomerId(memberId: string, customerId: string) {
-  if (!customerId) return
-  await sql`
-    update members
-    set stripe_customer_id = ${customerId}
-    where id = ${memberId}::uuid
-      and (stripe_customer_id is null or stripe_customer_id = ${customerId})
-  `
-}
-
-function safeErrMessage(err: unknown): string {
-  if (err instanceof Error) return err.message
-  return String(err)
-}
-
-export async function POST(req: Request) {
-  const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY ?? ''
-  const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? ''
-
-  // Missing env vars is a server misconfig; return 500 so you notice.
-  if (!STRIPE_SECRET_KEY || !STRIPE_WEBHOOK_SECRET) {
-    return NextResponse.json({ok: false, error: 'Missing Stripe env vars'}, {status: 500})
-  }
-
-  const sig = req.headers.get('stripe-signature')
-  if (!sig) {
-    // Signature missing is a bad request; return 400.
-    return NextResponse.json({ok: false, error: 'Missing stripe-signature'}, {status: 400})
-  }
-
-  const body = await req.text()
-  const stripe = new Stripe(STRIPE_SECRET_KEY)
-
-  let event: Stripe.Event
-  try {
-    event = stripe.webhooks.constructEvent(body, sig, STRIPE_WEBHOOK_SECRET)
-  } catch (e) {
-    // Invalid signature should be a 400; Stripe will not keep retrying forever.
-    const msg = e instanceof Error ? e.message : 'Invalid signature'
-    return NextResponse.json({ok: false, error: msg}, {status: 400})
-  }
-
-  // From here on: never 500 to Stripe. Log + 200 so retries don't become “business logic”.
-  try {
-    // ---- Subscription lifecycle (authoritative for subscription entitlements) ----
-    if (
-      event.type === 'customer.subscription.created' ||
-      event.type === 'customer.subscription.updated' ||
-      event.type === 'customer.subscription.deleted'
-    ) {
-      const sub = event.data.object as Stripe.Subscription
-      await reconcileStripeSubscription({stripe, subscription: sub})
-      return NextResponse.json({ok: true})
-    }
-
-    // ---- Checkout session completed (useful for one-off purchases) ----
-    if (event.type !== 'checkout.session.completed') {
-      return NextResponse.json({ok: true})
-    }
-
-    const session = event.data.object as Stripe.Checkout.Session
-
-    // ---- Checkout session completed ----
-if (event.type === 'checkout.session.completed') {
-  const session = event.data.object as Stripe.Checkout.Session
-
-const customerId =
-  (typeof session.customer === 'string' ? session.customer : session.customer?.id) ?? ''
-
-let memberId: string | null = null
-
-// 1) Best: resolve by stripe_customer_id
-if (customerId) {
-  memberId = await getMemberIdByStripeCustomerId(customerId)
-}
-
-// 2) Next: resolve by Clerk user id
-if (!memberId) {
-  const clerkUserId = (session.client_reference_id ?? '').toString().trim()
-  if (clerkUserId) memberId = await getMemberIdByClerkUserId(clerkUserId)
-}
-
-// 3) Last: resolve by email
-if (!memberId) {
-  const emailRaw =
-    (session.customer_details?.email ?? session.customer_email ?? '').toString().trim()
-  const email = normalizeEmail(emailRaw)
-  if (email) {
-    const ensured = await ensureMemberByEmail({
-      email,
-      source: 'stripe',
-      sourceDetail: {checkout_session_id: session.id},
-      marketingOptIn: true,
-    })
-    memberId = ensured.id
-  }
-}
-
-if (!memberId) return NextResponse.json({ok: true})
-
-// Now that we have memberId, attach customer id (idempotent)
-if (customerId) await attachStripeCustomerId(memberId, customerId)
-
-
-if (session.mode === 'subscription') {
-  // Attach customer → member linkage (as you already do)
-  const customerId =
-    (typeof session.customer === 'string'
-      ? session.customer
-      : session.customer?.id) ?? ''
-
-  if (customerId) {
-    const clerkUserId = (session.client_reference_id ?? '').toString().trim()
-    let memberId: string | null = null
-
-    if (clerkUserId) {
-      memberId = await getMemberIdByClerkUserId(clerkUserId)
-    }
-
-    if (!memberId) {
-      const emailRaw =
-        (session.customer_details?.email ?? session.customer_email ?? '')
-          .toString()
-          .trim()
-      const email = normalizeEmail(emailRaw)
-      if (email) {
-        const ensured = await ensureMemberByEmail({
-          email,
-          source: 'stripe',
-          sourceDetail: {checkout_session_id: session.id},
-          marketingOptIn: true,
-        })
-        memberId = ensured.id
-      }
-    }
-
-    if (memberId) {
-      await attachStripeCustomerId(memberId, customerId)
-    }
-  }
-
-  // 🔑 NEW: immediately reconcile the subscription
-  if (typeof session.subscription === 'string') {
-    const sub = await stripe.subscriptions.retrieve(session.subscription)
-    await reconcileStripeSubscription({stripe, subscription: sub})
-  }
-
-  return NextResponse.json({ok: true})
-}
-
-
-  // ---- One-off purchases continue below ----
 }
 
 async function getMemberIdByStripeCustomerId(customerId: string): Promise<string | null> {
@@ -191,52 +43,120 @@ async function getMemberIdByStripeCustomerId(customerId: string): Promise<string
   return (res.rows[0]?.id as string | undefined) ?? null
 }
 
+async function attachStripeCustomerId(memberId: string, customerId: string): Promise<void> {
+  if (!memberId || !customerId) return
+  await sql`
+    update members
+    set stripe_customer_id = ${customerId}
+    where id = ${memberId}::uuid
+      and (stripe_customer_id is null or stripe_customer_id = ${customerId})
+  `
+}
 
-    // Resolve member via Clerk if present; otherwise via email (logged-out purchases)
-    const clerkUserId = (session.client_reference_id ?? '').toString().trim()
-    let memberId: string | null = null
+async function resolveMemberIdFromSession(session: Stripe.Checkout.Session): Promise<{
+  memberId: string | null
+  customerId: string
+}> {
+  const customerId =
+    (typeof session.customer === 'string' ? session.customer : session.customer?.id) ?? ''
 
-    if (clerkUserId) {
-      memberId = await getMemberIdByClerkUserId(clerkUserId)
-    }
+  // 1) Best: already linked by customer id
+  if (customerId) {
+    const byCustomer = await getMemberIdByStripeCustomerId(customerId)
+    if (byCustomer) return {memberId: byCustomer, customerId}
+  }
 
-    if (!memberId) {
-      const emailRaw =
-        (session.customer_details?.email ?? session.customer_email ?? '').toString().trim()
-      const email = normalizeEmail(emailRaw)
-      if (email) {
-        const ensured = await ensureMemberByEmail({
-          email,
-          source: 'stripe',
-          sourceDetail: {checkout_session_id: session.id},
-          marketingOptIn: true,
-        })
-        memberId = ensured.id
-      }
-    }
+  // 2) Next: Clerk user id in client_reference_id
+  const clerkUserId = (session.client_reference_id ?? '').toString().trim()
+  if (clerkUserId) {
+    const byClerk = await getMemberIdByClerkUserId(clerkUserId)
+    if (byClerk) return {memberId: byClerk, customerId}
+  }
 
-    if (!memberId) {
-      // Can't safely attribute to a member; acknowledge to avoid Stripe retries
+  // 3) Last: email
+  const emailRaw = (session.customer_details?.email ?? session.customer_email ?? '').toString().trim()
+  const email = normalizeEmail(emailRaw)
+  if (email) {
+    const ensured = await ensureMemberByEmail({
+      email,
+      source: 'stripe',
+      sourceDetail: {checkout_session_id: session.id},
+      marketingOptIn: true,
+    })
+    return {memberId: ensured.id, customerId}
+  }
+
+  return {memberId: null, customerId}
+}
+
+export async function POST(req: Request) {
+  const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY ?? ''
+  const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? ''
+
+  if (!STRIPE_SECRET_KEY || !STRIPE_WEBHOOK_SECRET) {
+    return NextResponse.json({ok: false, error: 'Missing Stripe env vars'}, {status: 500})
+  }
+
+  const sig = req.headers.get('stripe-signature')
+  if (!sig) {
+    return NextResponse.json({ok: false, error: 'Missing stripe-signature'}, {status: 400})
+  }
+
+  const body = await req.text()
+  const stripe = new Stripe(STRIPE_SECRET_KEY)
+
+  let event: Stripe.Event
+  try {
+    event = stripe.webhooks.constructEvent(body, sig, STRIPE_WEBHOOK_SECRET)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Invalid signature'
+    return NextResponse.json({ok: false, error: msg}, {status: 400})
+  }
+
+  try {
+    // ---- Subscription lifecycle (authoritative for subscription entitlements) ----
+    if (
+      event.type === 'customer.subscription.created' ||
+      event.type === 'customer.subscription.updated' ||
+      event.type === 'customer.subscription.deleted'
+    ) {
+      const sub = event.data.object as Stripe.Subscription
+      await reconcileStripeSubscription({stripe, subscription: sub})
       return NextResponse.json({ok: true})
     }
 
-    // Attach customer id if available (helps future subscription linking)
-    const customerId =
-      (typeof session.customer === 'string' ? session.customer : session.customer?.id) ?? ''
+    // ---- Checkout session completed (one-offs + immediate subscription reconcile) ----
+    if (event.type !== 'checkout.session.completed') {
+      return NextResponse.json({ok: true})
+    }
+
+    const session = event.data.object as Stripe.Checkout.Session
+
+    const {memberId, customerId} = await resolveMemberIdFromSession(session)
+    if (!memberId) return NextResponse.json({ok: true})
+
+    // Attach linkage if present
     if (customerId) await attachStripeCustomerId(memberId, customerId)
 
-    const lineItems = await stripe.checkout.sessions.listLineItems(session.id, {limit: 100})
+    // If it’s a subscription checkout, reconcile immediately (don’t wait for other webhooks)
+    if (session.mode === 'subscription') {
+      if (typeof session.subscription === 'string' && session.subscription) {
+        const sub = await stripe.subscriptions.retrieve(session.subscription)
+        await reconcileStripeSubscription({stripe, subscription: sub})
+      }
+      return NextResponse.json({ok: true})
+    }
 
+    // Otherwise: one-off purchase, map line items -> entitlements
+    const lineItems = await stripe.checkout.sessions.listLineItems(session.id, {limit: 100})
     const priceIds = lineItems.data.map((li) => li.price?.id).filter((v): v is string => !!v)
     if (priceIds.length === 0) return NextResponse.json({ok: true})
 
-    // Batch fetch mappings (driver-safe array handling)
-    const priceIdsJson = JSON.stringify(priceIds)
     const mapped = await sql`
       select price_id, entitlement_key, scope_id, scope_meta
       from stripe_price_entitlements
       where price_id in (
-        select jsonb_array_elements_text(${priceIdsJson}::jsonb)
+        select jsonb_array_elements_text(${JSON.stringify(priceIds)}::jsonb)
       )
     `
     const rows = mapped.rows as PriceEntitlementRow[]
@@ -264,7 +184,7 @@ async function getMemberIdByStripeCustomerId(customerId: string): Promise<string
       type: event.type,
       message: safeErrMessage(err),
     })
-    // IMPORTANT: acknowledge anyway so Stripe doesn't retry forever.
+    // Always ACK so Stripe retries don't become business logic.
     return NextResponse.json({ok: true})
   }
 }

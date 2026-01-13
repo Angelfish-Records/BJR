@@ -3,7 +3,6 @@ import 'server-only'
 import {sql} from '@vercel/postgres'
 import Stripe from 'stripe'
 import {ensureMemberByEmail, normalizeEmail} from './members'
-import {ENT, ENTITLEMENTS} from './vocab'
 
 type PriceEntitlementRow = {
   price_id: string
@@ -19,15 +18,6 @@ function toDateFromUnixSeconds(s: number | null | undefined): Date | null {
 
 function keyOf(entitlementKey: string, scopeId: string | null): string {
   return `${entitlementKey}::${scopeId ?? ''}`
-}
-
-function maxDate(dates: Array<Date | null>): Date | null {
-  let best: Date | null = null
-  for (const d of dates) {
-    if (!d) continue
-    if (!best || d.getTime() > best.getTime()) best = d
-  }
-  return best
 }
 
 async function attachStripeCustomerId(memberId: string, customerId: string): Promise<void> {
@@ -90,6 +80,11 @@ export async function reconcileStripeSubscription(params: {
   const items = sub.items?.data ?? []
   const priceIds = items.map((it) => it.price?.id).filter(Boolean) as string[]
 
+  // 3) Terminal statuses expire immediately
+  const status = (sub.status ?? '').toString()
+  const expireNow =
+    status === 'canceled' || status === 'incomplete_expired' || status === 'unpaid'
+
   if (priceIds.length === 0) {
     // No items: expire all currently-active grants tied to this subscription
     await sql`
@@ -111,7 +106,7 @@ export async function reconcileStripeSubscription(params: {
     endByPriceId.set(pid, toDateFromUnixSeconds(it.current_period_end ?? null))
   }
 
-  // 3) Map prices -> entitlements (single query)
+  // 4) Map prices -> entitlements (single query)
   const mapped = await sql`
     select price_id, entitlement_key, scope_id, scope_meta
     from stripe_price_entitlements
@@ -119,37 +114,27 @@ export async function reconcileStripeSubscription(params: {
       select jsonb_array_elements_text(${JSON.stringify(priceIds)}::jsonb)
     )
   `
-  const entRows = mapped.rows as PriceEntitlementRow[]
-
-  // 4) Terminal statuses expire immediately
-  const status = (sub.status ?? '').toString()
-  const expireNow =
-    status === 'canceled' || status === 'incomplete_expired' || status === 'unpaid'
-
-  const subscriptionWindowEnd = expireNow
-    ? new Date()
-    : maxDate(Array.from(endByPriceId.values()))
-
-  // 4b) Optional implied entitlements when SUBSCRIPTION_GOLD is present
-  const hasGold = entRows.some((r) => r.entitlement_key === ENTITLEMENTS.SUBSCRIPTION_GOLD)
-  const impliedRows: PriceEntitlementRow[] = hasGold
-    ? [
-        {price_id: '__implied__', entitlement_key: ENT.tier('premium'), scope_id: null, scope_meta: {}},
-        {price_id: '__implied__', entitlement_key: ENT.theme('gold'), scope_id: null, scope_meta: {}},
-      ]
-    : []
-
-  const desiredRows = [...entRows, ...impliedRows]
+  const desiredRows = mapped.rows as PriceEntitlementRow[]
   const desiredKeys = new Set(desiredRows.map((r) => keyOf(r.entitlement_key, r.scope_id)))
+
+  // If the mapping is empty, treat it as “this subscription grants nothing”:
+  // expire any existing grants tied to this subscription so nothing lingers.
+  if (desiredRows.length === 0) {
+    await sql`
+      update entitlement_grants
+      set expires_at = now()
+      where member_id = ${memberId}::uuid
+        and grant_source = 'stripe_subscription'
+        and grant_source_ref = ${sub.id}
+        and revoked_at is null
+        and (expires_at is null or expires_at > now())
+    `
+    return
+  }
 
   // 5) Insert desired grants if not already active for this (member,key,scope,source,ref)
   for (const r of desiredRows) {
-    const expiry =
-      expireNow
-        ? new Date()
-        : r.price_id === '__implied__'
-          ? subscriptionWindowEnd
-          : (endByPriceId.get(r.price_id) ?? null)
+    const expiry = expireNow ? new Date() : (endByPriceId.get(r.price_id) ?? null)
 
     await sql`
       insert into entitlement_grants (
@@ -187,7 +172,7 @@ export async function reconcileStripeSubscription(params: {
     `
   }
 
-  // 6) Expire stale grants tied to this subscription that are no longer implied
+  // 6) Expire stale grants tied to this subscription that are no longer desired
   const activeGrantsForSub = await sql`
     select entitlement_key, scope_id
     from entitlement_grants

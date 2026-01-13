@@ -2,12 +2,14 @@
 import 'server-only'
 
 export const ENTITLEMENTS = {
-  FREE_MEMBER: 'free_member',
+  // permissions (capabilities)
   PLAY_ALBUM: 'play_album',
-  PATRON_ACCESS: 'patron_access',
-  LIFETIME_ACCESS: 'lifetime_access',
   TRACK_SHARE_GRANT: 'track_share_grant',
-  SUBSCRIPTION_GOLD: 'subscription_gold',
+
+  // human tiers (membership)
+  TIER_FRIEND: 'tier_friend',
+  TIER_PATRON: 'tier_patron',
+  TIER_PARTNER: 'tier_partner',
 } as const
 
 export type EntitlementKey = (typeof ENTITLEMENTS)[keyof typeof ENTITLEMENTS]
@@ -75,54 +77,22 @@ export function entKey(obj: Record<string, unknown>): StructuredEntitlementKey {
  * (These do not replace ENTITLEMENTS; they complement them.)
  */
 export const ENT = {
-  // Pages
   pageView: (page: string) => entKey({kind: 'page_view', page}),
-
-  // Themes / cosmetic accents (display-only today, but still canonical if you choose)
-  theme: (name: string) => entKey({kind: 'theme', name}),
-
-  // Media access (Mux later)
+  theme: (name: string) => entKey({kind: 'theme', name}), // keep only if you still want structured themes later
   mediaPlay: (trackId: string) => entKey({kind: 'media_play', trackId}),
-
-  // Downloads (later)
   download: (assetId: string) => entKey({kind: 'download', assetId}),
   downloadAlbum: (slug: string) => `download_album_${slug}`,
 
-
-  // Optional explicit tier signals (still derived in code; you can choose whether to grant these)
-  tier: (name: 'free' | 'premium' | 'lifetime' | string) => entKey({kind: 'tier', name}),
+  // optional: if you still want a helper for the new tiers
+  tier: (name: 'friend' | 'patron' | 'partner') => `tier_${name}`,
 } as const
 
-export type Tier = 'none' | 'free' | 'premium' | 'lifetime'
+export type Tier = 'none' | 'friend' | 'patron' | 'partner'
 
-/**
- * Derived tier: *never* written as truth; it’s a function of entitlements.
- * Rule: highest wins.
- */
 export function deriveTier(keys: string[]): Tier {
   const s = new Set(keys)
-
-  if (s.has(ENTITLEMENTS.LIFETIME_ACCESS) || s.has(ENT.tier('lifetime'))) return 'lifetime'
-  if (s.has(ENTITLEMENTS.PATRON_ACCESS) || s.has(ENT.tier('premium'))) return 'premium'
-  if (s.has(ENTITLEMENTS.FREE_MEMBER) || s.has(ENT.tier('free'))) return 'free'
-
+  if (s.has(ENTITLEMENTS.TIER_PARTNER)) return 'partner'
+  if (s.has(ENTITLEMENTS.TIER_PATRON)) return 'patron'
+  if (s.has(ENTITLEMENTS.TIER_FRIEND)) return 'friend'
   return 'none'
-}
-
-/**
- * Cosmetic: pick a deterministic accent based on entitlements.
- * This is intentionally “light touch”: it should feel like recognition, not manipulation.
- */
-export function pickAccent(keys: string[]): {accent: string; label: string} {
-  const s = new Set(keys)
-
-  if (s.has(ENT.theme('gold'))) return {accent: '#d6b25e', label: 'gold'}
-  if (s.has(ENT.theme('ember'))) return {accent: '#ff6a3d', label: 'ember'}
-
-  const tier = deriveTier(keys)
-  if (tier === 'lifetime') return {accent: '#6ee7ff', label: 'lifetime'}
-  if (tier === 'premium') return {accent: '#a7f3d0', label: 'premium'}
-  if (tier === 'free') return {accent: '#8b8bff', label: 'free'}
-
-  return {accent: '#8b8bff', label: 'default'}
 }
