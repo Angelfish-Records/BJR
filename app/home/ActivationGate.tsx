@@ -8,17 +8,11 @@ import SubscribeButton from '@/app/home/SubscribeButton'
 import CancelSubscriptionButton from '@/app/home/CancelSubscriptionButton'
 import {PatternPillUnderlay, VisualizerSnapshotCanvas} from '@/app/home/player/VisualizerPattern'
 
-
-
 type Phase = 'idle' | 'code'
 type Flow = 'signin' | 'signup' | null
 
 type Props = {
   children: React.ReactNode
-  /**
-   * Optional override copy when we *already* know we should spotlight activation.
-   * If null, we’ll use a default message.
-   */
   attentionMessage?: string | null
   canManageBilling?: boolean
   hasGold?: boolean
@@ -53,13 +47,13 @@ function looksLikeNoAccountError(err: unknown): boolean {
   return false
 }
 
-function PatternPillBorder(props: {
-  radius?: number
-  opacity?: number
-  seed?: number
-}) {
-  const {radius = 999, opacity = 0.45, seed = 888} = props
-
+/**
+ * We keep this around because the patterned edge is still nice,
+ * but we remove the “outer purple stroke” by using a much lower opacity
+ * and relying on the off-white outline for crispness.
+ */
+function PatternPillBorder(props: {radius?: number; opacity?: number; seed?: number}) {
+  const {radius = 999, opacity = 0.18, seed = 888} = props
 
   return (
     <div
@@ -72,7 +66,6 @@ function PatternPillBorder(props: {
         pointerEvents: 'none',
       }}
     >
-      {/* Pattern across the whole pill; we will mask the centre in Toggle */}
       <VisualizerSnapshotCanvas
         opacity={opacity}
         fps={12}
@@ -81,7 +74,6 @@ function PatternPillBorder(props: {
         active
       />
 
-      {/* crisp outline */}
       <div
         aria-hidden
         style={{
@@ -90,14 +82,12 @@ function PatternPillBorder(props: {
           borderRadius: radius,
           boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.18)',
           pointerEvents: 'none',
-          opacity: 0.95,
+          opacity: 1,
         }}
       />
     </div>
   )
 }
-
-
 
 function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => void}) {
   const {checked, disabled, onClick} = props
@@ -108,8 +98,10 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
   const knob = h - pad * 2
   const travel = w - pad * 2 - knob
 
-  const BORDER = 2
-  const BASE_BG = 'rgba(255,255,255,0.10)'
+  // Remove the "double border" effect: only one crisp outline.
+  // Also remove the unintended dim/overlay: no dark scrim layers.
+  const BASE_BG_OFF = 'rgba(255,255,255,0.10)'
+  const BASE_BG_ON = 'color-mix(in srgb, var(--accent) 26%, rgba(255,255,255,0.10))'
 
   return (
     <button
@@ -123,7 +115,7 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
         height: h,
         borderRadius: 999,
         border: '1px solid rgba(255,255,255,0.18)',
-        background: BASE_BG,
+        background: checked ? BASE_BG_ON : BASE_BG_OFF,
         position: 'relative',
         padding: 0,
         outline: 'none',
@@ -135,29 +127,17 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
           : '0 10px 26px rgba(0,0,0,0.28)',
         opacity: disabled ? 0.65 : 1,
         overflow: 'hidden',
+        display: 'grid',
+        alignItems: 'center', // helps ensure vertical centering
       }}
     >
-      {/* ALWAYS-ON patterned border */}
-      <PatternPillBorder seed={888} opacity={0.45} />
-
-      {/* Centre mask: hides the border pattern from the interior when OFF */}
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: BORDER,
-          borderRadius: 999,
-          background: BASE_BG,
-          opacity: checked ? 0 : 1,
-          transition: 'opacity 160ms ease',
-          pointerEvents: 'none',
-        }}
-      />
+      {/* Very subtle edge texture (not a purple stroke) */}
+      <PatternPillBorder seed={888} opacity={0.16} />
 
       {/* Interior pattern ONLY when ON */}
-      <PatternPillUnderlay active={checked} opacity={0.32} seed={777} />
+      <PatternPillUnderlay active={checked} opacity={0.28} seed={777} />
 
-      {/* specular layer */}
+      {/* specular layer — keep it, but avoid “darkening” */}
       <div
         aria-hidden
         style={{
@@ -165,10 +145,10 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
           inset: 1,
           borderRadius: 999,
           background:
-            'linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.02) 45%, rgba(0,0,0,0.10))',
+            'linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.04) 45%, rgba(255,255,255,0.00))',
           pointerEvents: 'none',
           mixBlendMode: 'screen',
-          opacity: checked ? 0.55 : 0.35,
+          opacity: checked ? 0.55 : 0.4,
           transition: 'opacity 180ms ease',
         }}
       />
@@ -194,7 +174,6 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
     </button>
   )
 }
-
 
 function normalizeDigits(raw: string): string {
   return raw.replace(/\D/g, '').slice(0, 6)
@@ -283,7 +262,8 @@ function OtpBoxes(props: {
 }
 
 export default function ActivationGate(props: Props) {
-  const {children, attentionMessage = null, canManageBilling = false, hasGold = false, tier = null} = props
+  const {children, attentionMessage = null, canManageBilling = false, hasGold = false, tier = null} =
+    props
   const router = useRouter()
 
   const {isSignedIn} = useAuth()
@@ -306,14 +286,14 @@ export default function ActivationGate(props: Props) {
   const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), [email])
 
   const displayEmail =
-    (user?.primaryEmailAddress?.emailAddress ??
-      user?.emailAddresses?.[0]?.emailAddress ??
-      '') || email
+    (user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? '') ||
+    email
 
-  const EMAIL_W = 320
+  // Slightly wider so 6 boxes never clip on common mobile widths.
+  const EMAIL_W = 360
   const needsAttention = !isActive && !!attentionMessage
-  const shouldShowBox = !isActive && phase === 'code'
 
+  const shouldShowBox = !isActive && phase === 'code'
   const toggleClickable = !isActive && phase === 'idle' && emailValid && clerkLoaded
 
   async function startEmailCode() {
@@ -400,22 +380,24 @@ export default function ActivationGate(props: Props) {
     void verifyCode(code)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, phase])
-  
+
+  // Toggle tracks auth + flow state (and becomes clickable only in the idle/email-valid state).
   const toggleOn = isActive || phase === 'code' || isSending || isVerifying
-  const showSecondRow = !isActive && shouldShowBox
 
-  
-    return (
+  // “Tray reveal” animation constants.
+  const HEADER_H = 44
+  const REVEAL_H = 104
+  const REVEALING = !isActive && shouldShowBox
+
+  return (
     <div
-  style={{
-    position: 'relative',
-    display: 'grid',
-    gap: showSecondRow ? 12 : 0,
-    justifyItems: 'center',
-    alignContent: 'end',   // ⬅️ THIS is the key line
-  }}
->
-
+      style={{
+        position: 'relative',
+        display: 'grid',
+        justifyItems: 'center',
+        alignContent: 'end',
+      }}
+    >
       <style>{`
         @keyframes boxDown {
           from { opacity: 0; transform: translateY(-10px); }
@@ -423,215 +405,223 @@ export default function ActivationGate(props: Props) {
         }
       `}</style>
 
+      {/* This wrapper owns the “slide to reveal” illusion.
+          Height animates; OTP tray is absolutely positioned underneath. */}
       <div
-  style={{
-    position: 'relative',
-    zIndex: 41,
-    display: 'grid',
-    gap: showSecondRow ? 12 : 0,
-    justifyItems: 'stretch', // don't center the child; let it fill and be positioned by inner layout
-    alignContent: 'end',     // pack contents to bottom of this wrapper
-    width: '100%',
-    minWidth: 0,
-  }}
->
-
-       <div
-  style={{
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0 12px',   // ⬅️ CSS shorthand: row-gap column-gap
-    width: '100%',
-    minWidth: 0,
-    justifyContent: 'flex-end',
-  }}
->
-
-
-  <div style={{flex: '1 1 auto', minWidth: 0, maxWidth: EMAIL_W}}>
-    {!isActive ? (
-      <input
-        type="email"
-        placeholder="you@email.com"
-        value={email}
-        onChange={(e) => setEmail(e.target.value.trim())}
         style={{
+          position: 'relative',
+          zIndex: 41,
           width: '100%',
           minWidth: 0,
-          padding: '11px 14px',
-          borderRadius: 999,
-          border: '1px solid rgba(255,255,255,0.18)',
-          background: 'rgba(0,0,0,0.35)',
-          color: 'rgba(255,255,255,0.92)',
-          outline: 'none',
-          textAlign: 'left',
-          boxShadow: needsAttention
-            ? `0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent),
-               0 0 26px color-mix(in srgb, var(--accent) 40%, transparent),
-               0 14px 30px rgba(0,0,0,0.22)`
-            : '0 14px 30px rgba(0,0,0,0.22)',
-          transition: 'box-shadow 220ms ease',
-        }}
-      />
-    ) : (
-      <div
-        aria-label="Signed in identity"
-        style={{
-          width: '100%',
-          minWidth: 0,
-          height: 32, // match the toggle height
-          display: 'grid',
-          gridTemplateRows: '1fr 1fr',
-          alignItems: 'center',
-          rowGap: 0,
+          maxWidth: 360,
+          height: REVEALING ? HEADER_H + REVEAL_H : HEADER_H,
+          transition: 'height 220ms cubic-bezier(.2,.8,.2,1)',
+          willChange: 'height',
         }}
       >
-        {/* line 1: email + cute check */}
+        {/* TOP ROW (email + toggle) slides up to reveal tray */}
         <div
           style={{
-            minWidth: 0,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            color: 'rgba(255,255,255,0.82)',
-            fontSize: 12,
-            lineHeight: '16px',
-            letterSpacing: '0.01em',
+            position: 'relative',
+            zIndex: 42,
+            transform: REVEALING ? `translateY(-${REVEAL_H}px)` : 'translateY(0px)',
+            transition: 'transform 220ms cubic-bezier(.2,.8,.2,1)',
+            willChange: 'transform',
           }}
         >
-          <span
-            aria-hidden
-            style={{
-              width: 16,
-              height: 16,
-              borderRadius: 999,
-              display: 'grid',
-              placeItems: 'center',
-              background: 'color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.10))',
-              boxShadow:
-                '0 10px 18px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.18)',
-              flex: '0 0 auto',
-            }}
-          >
-            <span
-              style={{
-                fontSize: 11,
-                lineHeight: '11px',
-                transform: 'translateY(-0.5px)',
-                color: 'rgba(255,255,255,0.92)',
-              }}
-            >
-              ✓
-            </span>
-          </span>
-
-          <span
-            style={{
-              minWidth: 0,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-            title={displayEmail}
-          >
-            {displayEmail}
-          </span>
-        </div>
-
-        {/* line 2: patron link (placeholder for now) */}
-        {/* line 2: tier | CTA */}
-<div
-  style={{
-    justifySelf: 'start',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    fontSize: 12,
-    lineHeight: '16px',
-    minWidth: 0,
-    opacity: 0.95,
-  }}
->
-  {tier ? (
-    <>
-      <span style={{opacity: 0.72}} title={tier}>
-        {tier}
-      </span>
-      <span aria-hidden style={{opacity: 0.35}}>
-        |
-      </span>
-    </>
-  ) : null}
-
-  {canManageBilling ? (
-    hasGold ? (
-      <CancelSubscriptionButton variant="link" label="Cancel subscription" />
-    ) : (
-      <SubscribeButton loggedIn={true} variant="link" label="Become a Patron" />
-    )
-  ) : null}
-</div>
-
-
-      </div>
-    )}
-  </div>
-
-  <div style={{flex: '0 0 auto'}}>
-    <Toggle checked={toggleOn} disabled={!toggleClickable} onClick={startEmailCode} />
-  </div>
-</div>
-
-
-
-        {!isActive && shouldShowBox && (
           <div
             style={{
-              width: 'min(100%, 320px)',
-              borderRadius: 16,
-              border: '1px solid rgba(255,255,255,0.14)',
-              background: 'rgba(0,0,0,0.28)',
-              padding: 12,
-              animation: 'boxDown 160ms ease-out',
-              boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
-              position: 'relative',
-              overflow: 'hidden',
-              minHeight: 72,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0 12px',
+              width: '100%',
+              minWidth: 0,
+              justifyContent: 'flex-end',
             }}
           >
-            {/* OTP layer */}
-            <div
-              style={{
-                opacity: phase === 'code' ? 1 : 0,
-                transform: phase === 'code' ? 'translateY(0px)' : 'translateY(-4px)',
-                transition: 'opacity 180ms ease, transform 180ms ease',
-                pointerEvents: phase === 'code' ? 'auto' : 'none',
-                display: 'grid',
-                gap: 10,
-                justifyItems: 'center',
-              }}
-            >
-              <OtpBoxes
-                width={Math.min(EMAIL_W - 2, 320 - 2)}
-                value={code}
-                onChange={(next) => setCode(normalizeDigits(next))}
-                disabled={isVerifying}
-              />
+            <div style={{flex: '1 1 auto', minWidth: 0, maxWidth: EMAIL_W}}>
+              {!isActive ? (
+                <input
+                  type="email"
+                  placeholder="you@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value.trim())}
+                  style={{
+                    width: '100%',
+                    minWidth: 0,
+                    padding: '11px 14px',
+                    borderRadius: 999,
+                    border: '1px solid rgba(255,255,255,0.18)',
+                    background: 'rgba(0,0,0,0.35)',
+                    color: 'rgba(255,255,255,0.92)',
+                    outline: 'none',
+                    textAlign: 'left',
+                    boxShadow: needsAttention
+                      ? `0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent),
+                         0 0 26px color-mix(in srgb, var(--accent) 40%, transparent),
+                         0 14px 30px rgba(0,0,0,0.22)`
+                      : '0 14px 30px rgba(0,0,0,0.22)',
+                    transition: 'box-shadow 220ms ease',
+                  }}
+                />
+              ) : (
+                <div
+                  aria-label="Signed in identity"
+                  style={{
+                    width: '100%',
+                    minWidth: 0,
+                    height: 32, // match the toggle height
+                    display: 'grid',
+                    gridTemplateRows: '1fr 1fr',
+                    alignItems: 'center',
+                    rowGap: 0,
+                  }}
+                >
+                  <div
+                    style={{
+                      minWidth: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      color: 'rgba(255,255,255,0.82)',
+                      fontSize: 12,
+                      lineHeight: '16px',
+                      letterSpacing: '0.01em',
+                    }}
+                  >
+                    <span
+                      aria-hidden
+                      style={{
+                        width: 16,
+                        height: 16,
+                        borderRadius: 999,
+                        display: 'grid',
+                        placeItems: 'center',
+                        background: 'color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.10))',
+                        boxShadow:
+                          '0 10px 18px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.18)',
+                        flex: '0 0 auto',
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 11,
+                          lineHeight: '11px',
+                          transform: 'translateY(-0.5px)',
+                          color: 'rgba(255,255,255,0.92)',
+                        }}
+                      >
+                        ✓
+                      </span>
+                    </span>
 
-              {(isSending || !flow) && <div style={{fontSize: 12, opacity: 0.7}}>Sending code…</div>}
-              {isVerifying && <div style={{fontSize: 12, opacity: 0.7}}>Verifying…</div>}
+                    <span
+                      style={{
+                        minWidth: 0,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                      title={displayEmail}
+                    >
+                      {displayEmail}
+                    </span>
+                  </div>
 
-              {error && (
-                <div style={{fontSize: 12, opacity: 0.88, color: '#ffb4b4', textAlign: 'center'}}>
-                  {error}
+                  <div
+                    style={{
+                      justifySelf: 'start',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      fontSize: 12,
+                      lineHeight: '16px',
+                      minWidth: 0,
+                      opacity: 0.95,
+                    }}
+                  >
+                    {tier ? (
+                      <>
+                        <span style={{opacity: 0.72}} title={tier}>
+                          {tier}
+                        </span>
+                        <span aria-hidden style={{opacity: 0.35}}>
+                          |
+                        </span>
+                      </>
+                    ) : null}
+
+                    {canManageBilling ? (
+                      hasGold ? (
+                        <CancelSubscriptionButton variant="link" label="Cancel subscription" />
+                      ) : (
+                        <SubscribeButton loggedIn={true} variant="link" label="Become a Patron" />
+                      )
+                    ) : null}
+                  </div>
                 </div>
               )}
             </div>
+
+            <div style={{flex: '0 0 auto', display: 'grid', alignItems: 'center'}}>
+              <Toggle checked={toggleOn} disabled={!toggleClickable} onClick={startEmailCode} />
+            </div>
+          </div>
+        </div>
+
+        {/* OTP TRAY (underlay) */}
+        {!isActive && (
+          <div
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: 'grid',
+              justifyItems: 'center',
+              pointerEvents: REVEALING ? 'auto' : 'none',
+              opacity: REVEALING ? 1 : 0,
+              transform: REVEALING ? 'translateY(0px)' : 'translateY(10px)',
+              transition: 'opacity 160ms ease, transform 220ms cubic-bezier(.2,.8,.2,1)',
+            }}
+          >
+            <div
+              style={{
+                maxWidth: 360,
+                width: '100%',
+                borderRadius: 16,
+                border: '1px solid rgba(255,255,255,0.14)',
+                background: 'rgba(0,0,0,0.28)',
+                padding: 12,
+                boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
+                position: 'relative',
+                overflow: 'hidden',
+                minHeight: 72,
+              }}
+            >
+              <div style={{display: 'grid', gap: 10, justifyItems: 'center'}}>
+                <OtpBoxes
+                  width={Math.min(EMAIL_W - 2, 360 - 2)}
+                  value={code}
+                  onChange={(next) => setCode(normalizeDigits(next))}
+                  disabled={isVerifying}
+                />
+
+                {(isSending || !flow) && <div style={{fontSize: 12, opacity: 0.7}}>Sending code…</div>}
+                {isVerifying && <div style={{fontSize: 12, opacity: 0.7}}>Verifying…</div>}
+
+                {error && (
+                  <div style={{fontSize: 12, opacity: 0.88, color: '#ffb4b4', textAlign: 'center'}}>
+                    {error}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
-
-        {isActive && <>{children}</>}
       </div>
+
+      {isActive && <>{children}</>}
     </div>
   )
 }

@@ -1,3 +1,4 @@
+// web/lib/entitlementOps.ts
 import 'server-only'
 import {sql} from '@vercel/postgres'
 import {ENT, ENTITLEMENTS, EVENT_SOURCES, type EventSource} from './vocab'

@@ -1,3 +1,4 @@
+// web/app/api/mux/token/route.ts
 import {NextRequest, NextResponse} from 'next/server'
 import {auth} from '@clerk/nextjs/server'
 import {importPKCS8, SignJWT} from 'jose'
