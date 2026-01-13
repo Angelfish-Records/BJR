@@ -32,6 +32,19 @@ async function ensureBaselineEntitlements(memberId: string, reason: string) {
     correlationId,
     eventSource: EVENT_SOURCES.CLERK,
   })
+
+  // ✅ NEW: catalog-wide play permission (this is what checkAccess is looking for via fallback)
+  await grantEntitlement({
+    memberId,
+    entitlementKey: ENTITLEMENTS.PLAY_ALBUM,
+    scopeId: 'catalog',
+    scopeMeta: {implied_by: ENTITLEMENTS.TIER_FRIEND},
+    grantedBy: 'system',
+    grantReason: reason,
+    grantSource: 'clerk',
+    correlationId,
+    eventSource: EVENT_SOURCES.CLERK,
+  })
 }
 
 export async function getMemberIdByEmail(email: string): Promise<string | null> {
