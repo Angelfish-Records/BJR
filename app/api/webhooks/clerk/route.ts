@@ -73,7 +73,7 @@ export async function POST(req: Request) {
     // 2) Ensure baseline “Friend” entitlement exists.
     await grantEntitlement({
       memberId,
-      entitlementKey: ENTITLEMENTS.FREE_MEMBER,
+      entitlementKey: ENTITLEMENTS.TIER_FRIEND,
       grantedBy: 'system',
       grantReason: evt.type,
       grantSource: 'clerk',

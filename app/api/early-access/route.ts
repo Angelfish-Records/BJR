@@ -55,11 +55,11 @@ export async function POST(req: Request) {
     )
   `
 
-  // Baseline entitlement (FREE_MEMBER). Side-effects (home page view, theme default)
+  // Baseline entitlement (TIER_FRIEND). Side-effects (home page view, theme default)
   // should be handled inside grantEntitlement now.
   await grantEntitlement({
     memberId,
-    entitlementKey: ENTITLEMENTS.FREE_MEMBER,
+    entitlementKey: ENTITLEMENTS.TIER_FRIEND,
     grantedBy: 'system',
     grantReason: 'initial signup',
     grantSource: 'landing_form',
