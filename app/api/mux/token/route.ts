@@ -154,9 +154,9 @@ export async function POST(req: NextRequest) {
 
     if (!decision.allowed) {
       const res = blocked(
-        'ENTITLEMENT_REQUIRED',
-        'Sign in to access playback.',
-        'login',
+        'AUTH_REQUIRED',
+        'Your membership is still provisioning. Refresh in a moment.',
+        'wait',
         403
       )
       persistAnonId(res, anonId)

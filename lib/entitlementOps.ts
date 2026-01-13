@@ -1,4 +1,3 @@
-// web/lib/entitlementOps.ts
 import 'server-only'
 import {sql} from '@vercel/postgres'
 import {ENT, ENTITLEMENTS, EVENT_SOURCES, type EventSource} from './vocab'
@@ -25,6 +24,22 @@ type GrantParams = {
   expiresAt?: Date | null
   correlationId?: string | null
   eventSource?: EventSource | string
+}
+
+// Ensure entitlement_types has a row for every key we might grant (incl structured ENT.* keys).
+async function ensureEntitlementType(entitlementKey: string, scopeId: string | null) {
+  const key = (entitlementKey ?? '').toString().trim()
+  if (!key) return
+
+  // Keep it simple: global if no scopeId, scoped otherwise.
+  // (If you later add richer scopes, you can evolve this without changing storage keys.)
+  const scope = scopeId ? 'scoped' : 'global'
+
+  await sql`
+    insert into entitlement_types (key, description, scope)
+    values (${key}, ${'auto-registered'}, ${scope})
+    on conflict (key) do nothing
+  `
 }
 
 // Side-effect grants: add-only policy.
@@ -133,39 +148,43 @@ export async function grantEntitlement(params: GrantParams): Promise<void> {
     eventSource = EVENT_SOURCES.SERVER,
   } = params
 
-  // Insert only if an active non-expiring grant doesn't already exist for this (member,key,scope)
-  await sql`
-    insert into entitlement_grants (
-      member_id,
-      entitlement_key,
-      scope_id,
-      scope_meta,
-      granted_by,
-      grant_reason,
-      grant_source,
-      grant_source_ref,
-      expires_at
+  // ✅ Make FK-safe for *all* entitlement keys (incl structured ENT.* keys).
+  await ensureEntitlementType(entitlementKey, scopeId)
+
+  // ✅ Idempotent insert via ON CONFLICT.
+  // We only log/apply side-effects if a new row was actually inserted.
+  const inserted = await sql<{inserted: boolean}>`
+    with ins as (
+      insert into entitlement_grants (
+        member_id,
+        entitlement_key,
+        scope_id,
+        scope_meta,
+        granted_by,
+        grant_reason,
+        grant_source,
+        grant_source_ref,
+        expires_at
+      )
+      values (
+        ${memberId}::uuid,
+        ${entitlementKey},
+        ${scopeId}::text,
+        ${JSON.stringify(scopeMeta)}::jsonb,
+        ${grantedBy},
+        ${grantReason},
+        ${grantSource},
+        ${grantSourceRef},
+        ${expiresAt ? expiresAt.toISOString() : null}::timestamptz
+      )
+      on conflict (member_id, entitlement_key, scope_id) do nothing
+      returning 1 as one
     )
-    select
-      ${memberId}::uuid,
-      ${entitlementKey},
-      ${scopeId}::text,
-      ${JSON.stringify(scopeMeta)}::jsonb,
-      ${grantedBy},
-      ${grantReason},
-      ${grantSource},
-      ${grantSourceRef},
-      ${expiresAt ? expiresAt.toISOString() : null}::timestamptz
-    where not exists (
-      select 1
-      from entitlement_grants eg
-      where eg.member_id = ${memberId}::uuid
-        and eg.entitlement_key = ${entitlementKey}
-        and coalesce(eg.scope_id, '') = coalesce(${scopeId}::text, '')
-        and eg.revoked_at is null
-        and eg.expires_at is null
-    )
+    select (exists(select 1 from ins)) as inserted
   `
+
+  const didInsert = inserted.rows?.[0]?.inserted ?? false
+  if (!didInsert) return
 
   await logEntitlementGranted({
     memberId,
@@ -182,16 +201,22 @@ export async function grantEntitlement(params: GrantParams): Promise<void> {
     },
   })
 
-  await applySideEffectGrants({
-    memberId,
-    entitlementKey,
-    expiresAt,
-    correlationId,
-    eventSource,
-    grantedBy,
-    grantSource,
-    grantSourceRef,
-  })
+  // Side effects should never prevent the base grant from existing.
+  // If a side-effect fails, we want the primary entitlement to remain true.
+  try {
+    await applySideEffectGrants({
+      memberId,
+      entitlementKey,
+      expiresAt,
+      correlationId,
+      eventSource,
+      grantedBy,
+      grantSource,
+      grantSourceRef,
+    })
+  } catch (err) {
+    console.error('applySideEffectGrants failed', {memberId, entitlementKey, err})
+  }
 }
 
 export async function revokeEntitlement(params: {
