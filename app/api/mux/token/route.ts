@@ -1,9 +1,11 @@
-// web/app/api/mux/token/route.ts
 import {NextRequest, NextResponse} from 'next/server'
 import {auth} from '@clerk/nextjs/server'
 import {importPKCS8, SignJWT} from 'jose'
 import crypto from 'crypto'
-import {countAnonDistinctCompletedTracks} from '@/lib/events'
+import {sql} from '@vercel/postgres'
+import {countAnonDistinctCompletedTracks, newCorrelationId} from '@/lib/events'
+import {checkAccess} from '@/lib/access'
+import {ACCESS_ACTIONS, ENTITLEMENTS} from '@/lib/vocab'
 
 type TokenReq = {
   playbackId: string
@@ -80,15 +82,20 @@ function persistAnonId(res: NextResponse, anonId: string) {
   })
 }
 
-// Stub: replace with Neon-backed entitlement check later (album/track scoping).
-async function hasPlaybackEntitlement(userId: string, albumSlug?: string, trackId?: string) {
-  if (!userId) return false
-  void albumSlug
-  void trackId
-  return true
+async function getMemberIdByClerkUserId(userId: string): Promise<string | null> {
+  if (!userId) return null
+  const r = await sql<{id: string}>`
+    select id
+    from members
+    where clerk_user_id = ${userId}
+    limit 1
+  `
+  return (r.rows?.[0]?.id as string | undefined) ?? null
 }
 
 export async function POST(req: NextRequest) {
+  const correlationId = newCorrelationId()
+
   let body: TokenReq | null = null
   try {
     body = (await req.json()) as TokenReq
@@ -123,14 +130,33 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ---- Logged-in entitlement check (placeholder for now) ----
+  // ---- Logged-in access: MUST have FREE_MEMBER (Friend) ----
   if (userId) {
-    const entitled = await hasPlaybackEntitlement(userId, body?.albumSlug, body?.trackId)
-    if (!entitled) {
+    const memberId = await getMemberIdByClerkUserId(userId)
+
+    // If the member row hasn't been created yet (webhook lag), fail gently.
+    if (!memberId) {
+      const res = blocked(
+        'AUTH_REQUIRED',
+        'Signed in, but your member profile is still being created. Refresh in a moment.',
+        'wait',
+        403
+      )
+      persistAnonId(res, anonId)
+      return res
+    }
+
+    const decision = await checkAccess(
+      memberId,
+      {kind: 'global', required: [ENTITLEMENTS.FREE_MEMBER]},
+      {log: true, action: ACCESS_ACTIONS.PLAYBACK_TOKEN_ISSUE, correlationId}
+    )
+
+    if (!decision.allowed) {
       const res = blocked(
         'ENTITLEMENT_REQUIRED',
-        'This track is for members or purchasers.',
-        'subscribe',
+        'Sign in to access playback.',
+        'login',
         403
       )
       persistAnonId(res, anonId)

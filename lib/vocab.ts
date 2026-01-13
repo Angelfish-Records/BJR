@@ -1,3 +1,4 @@
+// web/lib/vocab.ts
 import 'server-only'
 
 export const ENTITLEMENTS = {

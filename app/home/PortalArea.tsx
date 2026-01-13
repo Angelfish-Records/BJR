@@ -65,10 +65,7 @@ function MessageBar(props: {checkout: string | null; attentionMessage: string | 
     tone = checkoutIsSuccess ? 'success' : 'neutral'
     leftIcon = <span aria-hidden>{checkoutIsSuccess ? '✅' : '⤺'}</span>
     text = checkoutIsSuccess ? (
-      <>
-        Checkout completed. If entitlements haven&apos;t appeared yet, refresh once (webhooks can be a beat
-        behind).
-      </>
+      <>Checkout completed. If entitlements haven&apos;t appeared yet, refresh once (webhooks can be a beat behind).</>
     ) : (
       <>Checkout cancelled.</>
     )
@@ -100,7 +97,7 @@ function MessageBar(props: {checkout: string | null; attentionMessage: string | 
         opacity: 0.92,
         lineHeight: 1.45,
         textAlign: 'left',
-        maxWidth: 980,
+        maxWidth: '100%',
         width: '100%',
         display: 'flex',
         gap: 10,
@@ -128,23 +125,6 @@ function MessageBar(props: {checkout: string | null; attentionMessage: string | 
       <div style={{minWidth: 0}}>{text}</div>
     </div>
   )
-}
-
-/* ---------------- Debug harness (TEMP) ---------------- */
-
-type DebugAttentionMode = 'off' | 'checkout' | 'gated'
-
-function parseDebugAttention(sp: URLSearchParams): DebugAttentionMode {
-  const raw = (sp.get('dbg') ?? sp.get('debug') ?? '').toLowerCase()
-  if (raw === 'checkout') return 'checkout'
-  if (raw === 'gated') return 'gated'
-  return 'off'
-}
-
-function nextDebugAttention(m: DebugAttentionMode): DebugAttentionMode {
-  if (m === 'off') return 'checkout'
-  if (m === 'checkout') return 'gated'
-  return 'off'
 }
 
 export default function PortalArea(props: {
@@ -178,33 +158,23 @@ export default function PortalArea(props: {
   const sp = useClientSearchParams()
   const {isSignedIn} = useAuth()
 
-  const dbgAttention = parseDebugAttention(sp)
-
   const purchaseAttention =
-    checkout === 'success' && !isSignedIn ? 'Payment confirmed – sign in to access your purchased content.' : null
+  checkout === 'success' && !isSignedIn
+    ? 'Payment confirmed – sign in to access your purchased content.'
+    : null
 
-  const gatedAttention =
-    p.status === 'blocked' &&
+  const derivedAttentionMessage =
+    attentionMessage ??
+    purchaseAttention ??
+    (p.status === 'blocked' &&
     (p.blockedCode === 'ANON_CAP_REACHED' ||
       p.blockedCode === 'ENTITLEMENT_REQUIRED' ||
       p.blockedCode === 'AUTH_REQUIRED')
       ? p.lastError ?? null
-      : null
+      : null)
 
-  const debugAttentionMessage =
-    dbgAttention === 'checkout'
-      ? 'Payment confirmed – sign in to access your purchased content.'
-      : dbgAttention === 'gated'
-        ? 'Anonymous listening limit reached. Please log in to continue.'
-        : null
+  const spotlightAttention = !!derivedAttentionMessage
 
-  const debugCheckout = dbgAttention === 'checkout' ? 'success' : null
-
-  const derivedAttentionMessage =
-    debugAttentionMessage ?? attentionMessage ?? gatedAttention ?? purchaseAttention
-
-  // Spotlight only when it’s a *gating* state (or debug=gated).
-  const spotlightAttention = dbgAttention === 'gated' ? true : !!gatedAttention
 
   const qAlbum = sp.get('album')
   const qTrack = sp.get('track')
@@ -214,6 +184,7 @@ export default function PortalArea(props: {
   const qAutoplay = getAutoplayFlag(sp)
 
   // Optional: require a “trusted” token so random links can’t force autoplay.
+  // If you don’t have this yet, leave it: autoplay simply won’t trigger even if autoplay=1 is present.
   const qShareToken = sp.get('st') ?? sp.get('share') ?? null
 
   // single writer (NO Next navigation)
@@ -324,7 +295,10 @@ export default function PortalArea(props: {
     if (!qAutoplay) return
     if (!qTrack) return
 
+    // Require a “trusted” token so autoplay can’t be triggered by random links.
+    // If/when you introduce a real share token, wire it to `st=...` and this starts working.
     if (!qShareToken) {
+      // Don’t keep an inert autoplay param around forever.
       patchQuery({autoplay: null})
       return
     }
@@ -333,7 +307,10 @@ export default function PortalArea(props: {
     if (autoplayFiredRef.current === key) return
     autoplayFiredRef.current = key
 
+    // Important: request play via PlayerState only.
     p.play()
+
+    // Make it one-shot so it can’t re-trigger on qs changes / re-renders.
     patchQuery({autoplay: null})
   }, [qPanel, qAutoplay, qTrack, qAlbum, qShareToken, p, patchQuery])
 
@@ -376,83 +353,147 @@ export default function PortalArea(props: {
     <>
       <QueueBootstrapper albumId={album?.id ?? null} tracks={tracks} />
 
-      {/* Full-page soft dim + blur ONLY when spotlighting (gating), not checkout */}
-      {spotlightAttention ? (
-        <div
-          aria-hidden
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.55)',
-            backdropFilter: 'blur(6px)',
-            WebkitBackdropFilter: 'blur(6px)',
-            zIndex: 40,
-          }}
-        />
-      ) : null}
-
       <div style={{height: '100%', minHeight: 0, minWidth: 0, display: 'grid'}}>
         <PortalShell
           panels={panels}
           defaultPanelId="player"
           syncToQueryParam
           headerPortalId="af-portal-topbar-slot"
-          header={({activePanelId, setPanel}) => (
-            <div
-              style={{
-                width: '100%',
-                borderRadius: 0,
-                border: 'none',
-                background: 'transparent',
-                padding: 12,
-                minWidth: 0,
-              }}
-            >
-              <style>{`
-  /* ---------- Desktop/tablet: single-row, 3 lanes ---------- */
+          // --- inside <PortalShell ... header={({activePanelId, setPanel}) => ( ... )} ---
+// (wrap header in a relative container; add blur overlay when spotlightAttention;
+//  lift ActivationGate above the overlay)
+
+header={({activePanelId, setPanel}) => (
+  <div
+    style={{
+      width: '100%',
+      borderRadius: 0,
+      border: 'none',
+      background: 'transparent',
+      padding: 12,
+      minWidth: 0,
+      position: 'relative', // ✅ allow overlay
+    }}
+  >
+    {/* ✅ Spotlight blur overlay: blurs everything in header except the gate (which we lift above it) */}
+    {spotlightAttention ? (
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          zIndex: 10,
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          background: 'rgba(0,0,0,0.18)',
+        }}
+      />
+    ) : null}
+
+    <style>{`
+/* ---------- Desktop/tablet: single-row, 3 lanes ---------- */
+.afTopBar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  grid-template-rows: 1fr;
+  align-items: stretch;
+  gap: 12px;
+  min-width: 0;
+}
+
+.afTopBarControls { display: contents; }
+
+.afTopBarLeft {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 10px;
+  align-self: stretch;
+}
+
+.afTopBarLogo {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 6px 0 2px;
+  align-self: stretch;
+}
+
+.afTopBarLogoInner {
+  width: fit-content;
+  display: grid;
+  place-items: end center;
+}
+
+.afTopBarRight {
+  grid-column: 3;
+  grid-row: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  align-self: stretch;
+}
+
+.afTopBarRightInner {
+  max-width: 520px;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+/* ---------- Mobile: logo row + nested controls row ---------- */
+@media (max-width: 720px) {
   .afTopBar {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    grid-template-rows: 1fr;
-    align-items: stretch;
-    gap: 12px;
-    min-width: 0;
-  }
-
-  .afTopBarControls { display: contents; }
-
-  .afTopBarLeft {
-    grid-column: 1;
-    grid-row: 1;
-    min-width: 0;
-    display: flex;
-    align-items: flex-end;
-    justify-content: flex-start;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
     gap: 10px;
-    align-self: stretch;
+    align-items: stretch;
+    justify-items: stretch;
   }
 
   .afTopBarLogo {
-    grid-column: 2;
     grid-row: 1;
-    min-width: 0;
+    grid-column: 1 / -1;
+    width: 100%;
+    padding: 10px 0 0;
     display: flex;
     align-items: flex-end;
     justify-content: center;
-    padding: 6px 0 2px;
+  }
+
+  .afTopBarControls {
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: stretch;
+    column-gap: 10px;
+    row-gap: 0px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .afTopBarLeft {
+    grid-column: 1;
+    justify-self: start;
+    display: flex;
+    align-items: flex-end;
     align-self: stretch;
   }
 
-  .afTopBarLogoInner {
-    width: fit-content;
-    display: grid;
-    place-items: end center;
-  }
-
   .afTopBarRight {
-    grid-column: 3;
-    grid-row: 1;
-    min-width: 0;
+    grid-column: 2;
+    justify-self: end;
+    width: 100%;
     display: flex;
     align-items: flex-end;
     justify-content: flex-end;
@@ -460,230 +501,144 @@ export default function PortalArea(props: {
   }
 
   .afTopBarRightInner {
+    margin-left: auto;
     max-width: 520px;
-    min-width: 0;
     height: 100%;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
   }
-
-  /* ---------- Mobile: logo row + nested controls row ---------- */
-  @media (max-width: 720px) {
-    .afTopBar {
-      grid-template-columns: 1fr;
-      grid-template-rows: auto auto;
-      gap: 10px;
-      align-items: stretch;
-      justify-items: stretch;
-    }
-
-    .afTopBarLogo {
-      grid-row: 1;
-      grid-column: 1 / -1;
-      width: 100%;
-      padding: 10px 0 0;
-      display: flex;
-      align-items: flex-end;
-      justify-content: center;
-    }
-
-    .afTopBarControls {
-      grid-row: 2;
-      display: grid;
-      grid-template-columns: auto 1fr;
-      align-items: stretch;
-      column-gap: 10px;
-      row-gap: 0px;
-      width: 100%;
-      min-width: 0;
-    }
-
-    .afTopBarLeft {
-      grid-column: 1;
-      justify-self: start;
-      display: flex;
-      align-items: flex-end;
-      align-self: stretch;
-    }
-
-    .afTopBarRight {
-      grid-column: 2;
-      justify-self: end;
-      width: 100%;
-      display: flex;
-      align-items: flex-end;
-      justify-content: flex-end;
-      align-self: stretch;
-    }
-
-    .afTopBarRightInner {
-      margin-left: auto;
-      max-width: 520px;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-end;
-    }
-  }
+}
 `}</style>
 
-              <div className="afTopBar" style={spotlightAttention ? {position: 'relative', zIndex: 41} : undefined}>
-                <div className="afTopBarLogo">
-                  <div className="afTopBarLogoInner">
-                    {props.topLogoUrl ? (
-                      <Image
-                        src={props.topLogoUrl}
-                        alt="Logo"
-                        height={Math.max(16, Math.min(120, props.topLogoHeight ?? 38))}
-                        width={Math.max(16, Math.min(120, props.topLogoHeight ?? 38))}
-                        sizes="(max-width: 720px) 120px, 160px"
-                        style={{
-                          height: Math.max(16, Math.min(120, props.topLogoHeight ?? 38)),
-                          width: 'auto',
-                          objectFit: 'contain',
-                          opacity: 0.94,
-                          userSelect: 'none',
-                          filter: 'drop-shadow(0 10px 22px rgba(0,0,0,0.28))',
-                        }}
-                      />
-                    ) : (
-                      <div
-                        aria-label="AF"
-                        title="AF"
-                        style={{
-                          width: 38,
-                          height: 38,
-                          borderRadius: 999,
-                          border: '1px solid rgba(255,255,255,0.14)',
-                          background: 'rgba(0,0,0,0.22)',
-                          display: 'grid',
-                          placeItems: 'center',
-                          fontSize: 13,
-                          fontWeight: 700,
-                          letterSpacing: 0.5,
-                          opacity: 0.92,
-                          userSelect: 'none',
-                        }}
-                      >
-                        AF
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="afTopBarControls">
-                  <div className="afTopBarLeft">
-                    <button
-                      type="button"
-                      aria-label="Player"
-                      title="Player"
-                      onClick={() => setPanel('player')}
-                      style={{
-                        width: 46,
-                        height: 46,
-                        borderRadius: 999,
-                        border: '1px solid rgba(255,255,255,0.14)',
-                        background:
-                          activePanelId === 'player'
-                            ? 'color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))'
-                            : 'rgba(255,255,255,0.04)',
-                        boxShadow:
-                          activePanelId === 'player'
-                            ? '0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)'
-                            : '0 12px 26px rgba(0,0,0,0.18)',
-                        color: 'rgba(255,255,255,0.90)',
-                        cursor: 'pointer',
-                        opacity: activePanelId === 'player' ? 0.98 : 0.78,
-                        display: 'grid',
-                        placeItems: 'center',
-                        userSelect: 'none',
-                      }}
-                    >
-                      <IconPlayer />
-                    </button>
-
-                    <button
-                      type="button"
-                      aria-label="Portal"
-                      title="Portal"
-                      onClick={() => setPanel('portal')}
-                      style={{
-                        width: 46,
-                        height: 46,
-                        borderRadius: 999,
-                        border: '1px solid rgba(255,255,255,0.14)',
-                        background:
-                          activePanelId === 'portal'
-                            ? 'color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))'
-                            : 'rgba(255,255,255,0.04)',
-                        boxShadow:
-                          activePanelId === 'portal'
-                            ? '0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)'
-                            : '0 12px 26px rgba(0,0,0,0.18)',
-                        color: 'rgba(255,255,255,0.90)',
-                        cursor: 'pointer',
-                        opacity: activePanelId === 'portal' ? 0.98 : 0.78,
-                        display: 'grid',
-                        placeItems: 'center',
-                        userSelect: 'none',
-                      }}
-                    >
-                      <IconPortal />
-                    </button>
-
-                    {/* TEMP: cycle debug attention state */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next = nextDebugAttention(dbgAttention)
-                        patchQuery({dbg: next === 'off' ? null : next})
-                      }}
-                      title={
-                        dbgAttention === 'checkout'
-                          ? 'Debug: post-checkout message (no spotlight)'
-                          : dbgAttention === 'gated'
-                            ? 'Debug: gated message (spotlight)'
-                            : 'Debug: off'
-                      }
-                      style={{
-                        height: 46,
-                        padding: '0 14px',
-                        borderRadius: 999,
-                        border: '1px solid rgba(255,255,255,0.14)',
-                        background: 'rgba(255,255,255,0.04)',
-                        color: 'rgba(255,255,255,0.86)',
-                        cursor: 'pointer',
-                        boxShadow: '0 12px 26px rgba(0,0,0,0.18)',
-                        fontSize: 12,
-                        opacity: 0.9,
-                        userSelect: 'none',
-                      }}
-                    >
-                      {dbgAttention === 'off' ? 'DBG' : dbgAttention.toUpperCase()}
-                    </button>
-                  </div>
-
-                  <div className="afTopBarRight">
-                    <div className="afTopBarRightInner" style={{maxWidth: 520, minWidth: 0}}>
-                      <ActivationGate
-                        attentionMessage={derivedAttentionMessage}
-                        canManageBilling={canManageBilling}
-                        hasGold={hasGold}
-                        tier={tier}
-                      >
-                        <div />
-                      </ActivationGate>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div style={spotlightAttention ? {position: 'relative', zIndex: 41} : undefined}>
-                <MessageBar checkout={debugCheckout ?? checkout} attentionMessage={derivedAttentionMessage} />
-              </div>
+    <div className="afTopBar" style={{position: 'relative', zIndex: 5}}>
+      <div className="afTopBarLogo">
+        <div className="afTopBarLogoInner">
+          {props.topLogoUrl ? (
+            <Image
+              src={props.topLogoUrl}
+              alt="Logo"
+              height={Math.max(16, Math.min(120, props.topLogoHeight ?? 38))}
+              width={Math.max(16, Math.min(120, props.topLogoHeight ?? 38))}
+              sizes="(max-width: 720px) 120px, 160px"
+              style={{
+                height: Math.max(16, Math.min(120, props.topLogoHeight ?? 38)),
+                width: 'auto',
+                objectFit: 'contain',
+                opacity: 0.94,
+                userSelect: 'none',
+                filter: 'drop-shadow(0 10px 22px rgba(0,0,0,0.28))',
+              }}
+            />
+          ) : (
+            <div
+              aria-label="AF"
+              title="AF"
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.14)',
+                background: 'rgba(0,0,0,0.22)',
+                display: 'grid',
+                placeItems: 'center',
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: 0.5,
+                opacity: 0.92,
+                userSelect: 'none',
+              }}
+            >
+              AF
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="afTopBarControls">
+        <div className="afTopBarLeft">
+          <button
+            type="button"
+            aria-label="Player"
+            title="Player"
+            onClick={() => setPanel('player')}
+            style={{
+              width: 46,
+              height: 46,
+              borderRadius: 999,
+              border: '1px solid rgba(255,255,255,0.14)',
+              background:
+                activePanelId === 'player'
+                  ? 'color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))'
+                  : 'rgba(255,255,255,0.04)',
+              boxShadow:
+                activePanelId === 'player'
+                  ? '0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)'
+                  : '0 12px 26px rgba(0,0,0,0.18)',
+              color: 'rgba(255,255,255,0.90)',
+              cursor: 'pointer',
+              opacity: activePanelId === 'player' ? 0.98 : 0.78,
+              display: 'grid',
+              placeItems: 'center',
+              userSelect: 'none',
+            }}
+          >
+            <IconPlayer />
+          </button>
+
+          <button
+            type="button"
+            aria-label="Portal"
+            title="Portal"
+            onClick={() => setPanel('portal')}
+            style={{
+              width: 46,
+              height: 46,
+              borderRadius: 999,
+              border: '1px solid rgba(255,255,255,0.14)',
+              background:
+                activePanelId === 'portal'
+                  ? 'color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))'
+                  : 'rgba(255,255,255,0.04)',
+              boxShadow:
+                activePanelId === 'portal'
+                  ? '0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)'
+                  : '0 12px 26px rgba(0,0,0,0.18)',
+              color: 'rgba(255,255,255,0.90)',
+              cursor: 'pointer',
+              opacity: activePanelId === 'portal' ? 0.98 : 0.78,
+              display: 'grid',
+              placeItems: 'center',
+              userSelect: 'none',
+            }}
+          >
+            <IconPortal />
+          </button>
+        </div>
+
+        <div className="afTopBarRight">
+          {/* ✅ lift gate above blur overlay */}
+          <div className="afTopBarRightInner" style={{maxWidth: 520, minWidth: 0, position: 'relative', zIndex: 20}}>
+            <ActivationGate
+              attentionMessage={derivedAttentionMessage}
+              canManageBilling={canManageBilling}
+              hasGold={hasGold}
+              tier={tier}
+            >
+              <div />
+            </ActivationGate>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* MessageBar should ALSO be above blur overlay (so text is crisp) */}
+    <div style={spotlightAttention ? {position: 'relative', zIndex: 20} : undefined}>
+      <MessageBar checkout={checkout} attentionMessage={derivedAttentionMessage} />
+    </div>
+  </div>
+)}
+
         />
       </div>
     </>

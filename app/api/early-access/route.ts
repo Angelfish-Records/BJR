@@ -1,3 +1,4 @@
+// web/app/api/early-access/route.ts
 import {NextResponse} from 'next/server'
 import {sql} from '@vercel/postgres'
 import {ensureMemberByEmail, normalizeEmail, assertLooksLikeEmail} from '@/lib/members'
