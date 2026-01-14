@@ -23,18 +23,9 @@ export async function GET(req: NextRequest) {
 
   const url = new URL(req.url)
 
-  // IMPORTANT:
-  // - albumId is expected to be the canonical *catalog id* (the thing you scope as alb:<id>).
-  // - albumSlug is *routing/marketing*, not canonical, but we keep it as a temporary legacy fallback
-  //   for old alb_slug:<slug> grants during migration.
   const albumId = (url.searchParams.get('albumId') ?? '').trim()
-  const albumSlug = (url.searchParams.get('albumSlug') ?? '').trim()
 
-  const albumScopeId = albumId
-    ? `alb:${albumId}`
-    : albumSlug
-      ? `alb_slug:${albumSlug}` // TEMP: remove once you have no slug-scoped grants
-      : null
+  const albumScopeId = albumId ? `alb:${albumId}` : null
 
   if (!userId) {
     return NextResponse.json({ok: true, allowed: false, reason: 'AUTH_REQUIRED', correlationId})

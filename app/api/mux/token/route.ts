@@ -10,7 +10,6 @@ import {ACCESS_ACTIONS, ENTITLEMENTS} from '@/lib/vocab'
 type TokenReq = {
   playbackId: string
   trackId?: string
-  albumSlug?: string
   albumId?: string // stable canonical album id (label catalogue id)
   durationMs?: number
 }
@@ -94,10 +93,6 @@ async function getMemberIdByClerkUserId(userId: string): Promise<string | null> 
 function computeAlbumScopeId(body: TokenReq | null): string | null {
   const rawAlbumId = (body?.albumId ?? '').trim()
   if (rawAlbumId) return `alb:${rawAlbumId}`
-
-  const rawSlug = (body?.albumSlug ?? '').trim()
-  if (rawSlug) return `alb_slug:${rawSlug}`
-
   return null
 }
 
@@ -155,7 +150,7 @@ export async function POST(req: NextRequest) {
       const res = blocked(
         correlationId,
         'INVALID_REQUEST',
-        'Missing album context (albumId or albumSlug).',
+        'Missing albumId (canonical album context).',
         undefined,
         400
       )

@@ -18,11 +18,13 @@ function QueueBootstrapper(props: {albumId: string | null; tracks: PlayerTrack[]
   React.useEffect(() => {
     if (p.queue.length > 0) return
     if (!props.tracks.length) return
-    p.setQueue(props.tracks)
-  }, [p, props.tracks])
+
+    p.setQueue(props.tracks, {contextId: props.albumId ?? undefined})
+  }, [p, p.queue.length, props.albumId, props.tracks])
 
   return null
 }
+
 
 type AlbumPayload = {album: AlbumInfo | null; tracks: PlayerTrack[]}
 
@@ -351,7 +353,7 @@ export default function PortalArea(props: {
 
   return (
     <>
-      <QueueBootstrapper albumId={album?.id ?? null} tracks={tracks} />
+      <QueueBootstrapper albumId={album?.catalogId ?? album?.id ?? null} tracks={tracks} />
 
       <div style={{height: '100%', minHeight: 0, minWidth: 0, display: 'grid'}}>
         <PortalShell

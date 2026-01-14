@@ -1,3 +1,4 @@
+// web/app/api/debug/entitlements/route.ts
 import {NextResponse} from 'next/server'
 import {sql} from '@vercel/postgres'
 import {ensureMemberByEmail, normalizeEmail} from '@/lib/members'

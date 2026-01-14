@@ -193,6 +193,7 @@ export default function FullPlayer(props: {
     albumSlug,
     album,
     queueArtist: p.queueContextArtist,
+    albumId: p.queueContextId, // ✅ canonical ID for slug resolution
   })
 
   const [selectedTrackId, setSelectedTrackId] = React.useState<string | null>(null)

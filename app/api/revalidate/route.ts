@@ -1,3 +1,4 @@
+// web/app/api/revalidate/route.ts
 import {revalidatePath, revalidateTag} from 'next/cache'
 
 type SanityWebhookPayload = {
@@ -83,6 +84,22 @@ export async function POST(req: Request) {
       note: 'Unknown docType; defaulted to landingPage revalidation',
       path: '/',
     })
+  }
+
+    // Albums
+  if (docType === 'album') {
+    tags.push('albums')
+    revalidatePath('/albums') // if you have an index route
+    // If your album pages depend on tags, also tag them:
+    // tags.push(`album:${docId ?? ''}`) // optional if you tag-fetch by id
+  }
+
+  // Lyrics / tracks docs can affect album pages too (depending on your query model)
+  if (docType === 'lyrics') {
+    tags.push('lyrics')
+    // safest cheap refresh:
+    tags.push('albums')
+    revalidatePath('/albums')
   }
 
   for (const t of tags) reTag(t)

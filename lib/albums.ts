@@ -6,7 +6,7 @@ import type {LyricCue} from '@/app/home/player/stage/LyricsOverlay'
 
 type AlbumDoc = {
   _id?: string
-  catalogId?: string
+  catalogId?: string | null
   title?: string
   artist?: string
   year?: number
@@ -33,7 +33,7 @@ type TrackLyricsDoc = {
 export type AlbumBrowseItem = {
   id: string
   slug: string
-  catalogId?: string
+  catalogId?: string | null
   title: string
   artist?: string
   year?: number
@@ -105,7 +105,7 @@ export async function getAlbumBySlug(
     return {album: null, tracks: [], lyrics: {cuesByTrackId: {}, offsetByTrackId: {}}}
   }
 
-  const albumCatalogId = normStr(doc.catalogId) ?? doc._id // fallback so nothing breaks while you populate
+  const albumCatalogId = normStr(doc.catalogId) ?? null
   const albumTheme = normTheme(doc.visualTheme)
 
   const album: AlbumInfo = {
@@ -131,7 +131,7 @@ export async function getAlbumBySlug(
 
           return {
             id: t.id, // legacy runtime ID (matches lyrics today)
-            catalogId: normStr(t.catalogId) ?? t.id,
+            catalogId: normStr(t.catalogId) ?? null,
             title: normStr(t.title),
             artist: normStr(t.artist),
             muxPlaybackId: normStr(t.muxPlaybackId),
@@ -186,7 +186,7 @@ export async function listAlbumsForBrowse(): Promise<AlbumBrowseItem[]> {
   const items = Array.isArray(data) ? data : []
   return items.map((a) => ({
     ...a,
-    catalogId: normStr(a.catalogId),
+    catalogId: normStr(a.catalogId) ?? null,
     artist: normStr(a.artist),
     title: a.title ?? 'Untitled',
     artworkUrl: a.artwork ? urlFor(a.artwork).width(600).height(600).quality(80).url() : null,

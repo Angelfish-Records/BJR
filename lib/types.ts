@@ -1,7 +1,8 @@
 // web/lib/types.ts
+
 export type AlbumInfo = {
   id: string
-  catalogId?: string
+  catalogId: string | null
   title: string
   artist?: string
   year?: number
@@ -19,7 +20,7 @@ export type AlbumNavItem = {
 
 export type PlayerTrack = {
   id: string
-  catalogId?: string
+  catalogId: string | null
   title?: string
   artist?: string
   durationMs?: number
