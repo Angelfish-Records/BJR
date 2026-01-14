@@ -1,4 +1,3 @@
-// web/app/api/mux/token/route.ts
 import {NextRequest, NextResponse} from 'next/server'
 import {auth} from '@clerk/nextjs/server'
 import {importPKCS8, SignJWT} from 'jose'
@@ -6,11 +5,13 @@ import crypto from 'crypto'
 import {countAnonDistinctCompletedTracks, newCorrelationId} from '@/lib/events'
 import {checkAccess} from '@/lib/access'
 import {ACCESS_ACTIONS, ENTITLEMENTS} from '@/lib/vocab'
+import {getAlbumPolicyByAlbumId, isEmbargoed, type TierName} from '@/lib/albumPolicy'
+import {listCurrentEntitlementKeys} from '@/lib/entitlements'
 
 type TokenReq = {
   playbackId: string
   trackId?: string
-  albumId?: string // stable canonical album id (label catalogue id)
+  albumId?: string // canonical album id (catalogId preferred)
   durationMs?: number
 }
 
@@ -19,7 +20,7 @@ type TokenOk = {ok: true; token: string; expiresAt: number; correlationId: strin
 type TokenBlocked = {
   ok: false
   blocked: true
-  code: 'AUTH_REQUIRED' | 'ANON_CAP_REACHED' | 'ENTITLEMENT_REQUIRED' | 'EMBARGO' | 'INVALID_REQUEST'
+  code: 'AUTH_REQUIRED' | 'ANON_CAP_REACHED' | 'ENTITLEMENT_REQUIRED' | 'EMBARGO' | 'TIER_REQUIRED' | 'INVALID_REQUEST'
   reason: string
   action?: 'login' | 'subscribe' | 'buy' | 'wait'
   correlationId: string
@@ -90,10 +91,13 @@ async function getMemberIdByClerkUserId(userId: string): Promise<string | null> 
   return (r.rows?.[0]?.id as string | undefined) ?? null
 }
 
-function computeAlbumScopeId(body: TokenReq | null): string | null {
-  const rawAlbumId = (body?.albumId ?? '').trim()
-  if (rawAlbumId) return `alb:${rawAlbumId}`
-  return null
+function tierAtOrAbove(min: TierName) {
+  // ordered ascending
+  const order: TierName[] = ['friend', 'patron', 'partner']
+  const idx = order.indexOf(min)
+  const allowed = idx >= 0 ? order.slice(idx) : ['friend', 'patron', 'partner']
+  const keys = allowed.map((t) => `tier_${t}`)
+  return keys
 }
 
 export async function POST(req: NextRequest) {
@@ -130,7 +134,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ---- Logged-in access: require album context (album is canonical) ----
+  // ---- Logged-in access: enforce policy + entitlements ----
   if (userId) {
     const memberId = await getMemberIdByClerkUserId(userId)
     if (!memberId) {
@@ -145,19 +149,75 @@ export async function POST(req: NextRequest) {
       return res
     }
 
-    const albumScopeId = computeAlbumScopeId(body)
-    if (!albumScopeId) {
-      const res = blocked(
-        correlationId,
-        'INVALID_REQUEST',
-        'Missing albumId (canonical album context).',
-        undefined,
-        400
-      )
+    const rawAlbumId = (body?.albumId ?? '').trim()
+    if (!rawAlbumId) {
+      const res = blocked(correlationId, 'INVALID_REQUEST', 'Missing albumId (canonical album context).', undefined, 400)
       persistAnonId(res, anonId)
       return res
     }
 
+    const albumScopeId = `alb:${rawAlbumId}`
+
+    const policy = await getAlbumPolicyByAlbumId(rawAlbumId)
+    const embargoed = isEmbargoed(policy)
+
+    if (embargoed) {
+      // 1) explicit album-share override (press links etc.)
+      const override = await checkAccess(
+        memberId,
+        {kind: 'album', albumScopeId, required: [ENTITLEMENTS.ALBUM_SHARE_GRANT]},
+        {log: true, action: ACCESS_ACTIONS.PLAYBACK_TOKEN_ISSUE, correlationId}
+      )
+
+      if (!override.allowed) {
+        // 2) early-access tiers during embargo (if enabled)
+        if (policy?.earlyAccessEnabled && policy.earlyAccessTiers.length > 0) {
+          const keys = await listCurrentEntitlementKeys(memberId)
+          const s = new Set(keys)
+          const allowedTierKeys = policy.earlyAccessTiers.map((t) => `tier_${t}`)
+          const ok = allowedTierKeys.some((k) => s.has(k))
+
+          if (!ok) {
+            const res = blocked(
+              correlationId,
+              'EMBARGO',
+              'This album is not released yet. Upgrade for early access.',
+              'subscribe',
+              403
+            )
+            persistAnonId(res, anonId)
+            return res
+          }
+          // allowed by early-access tier -> continue
+        } else {
+          const res = blocked(correlationId, 'EMBARGO', 'This album is not released yet.', 'wait', 403)
+          persistAnonId(res, anonId)
+          return res
+        }
+      }
+      // override allowed -> continue
+    }
+
+    // Post-release (or embargo bypassed): apply min-tier playback gate if configured
+    if (policy?.minTierForPlayback) {
+      const keys = await listCurrentEntitlementKeys(memberId)
+      const s = new Set(keys)
+      const requiredTierKeys = tierAtOrAbove(policy.minTierForPlayback)
+      const ok = requiredTierKeys.some((k) => s.has(k))
+      if (!ok) {
+        const res = blocked(
+          correlationId,
+          'TIER_REQUIRED',
+          `This album requires ${policy.minTierForPlayback} tier or higher.`,
+          'subscribe',
+          403
+        )
+        persistAnonId(res, anonId)
+        return res
+      }
+    }
+
+    // Finally: entitlement gate (play_album) with explicit album scope, allowing catalog fallback.
     const decision = await checkAccess(
       memberId,
       {kind: 'album', albumScopeId, required: [ENTITLEMENTS.PLAY_ALBUM]},
@@ -165,13 +225,7 @@ export async function POST(req: NextRequest) {
     )
 
     if (!decision.allowed) {
-      const res = blocked(
-        correlationId,
-        'ENTITLEMENT_REQUIRED',
-        'You do not have access to play this album.',
-        'subscribe',
-        403
-      )
+      const res = blocked(correlationId, 'ENTITLEMENT_REQUIRED', 'You do not have access to play this album.', 'subscribe', 403)
       persistAnonId(res, anonId)
       return res
     }

@@ -6,11 +6,15 @@ export const ENTITLEMENTS = {
   PLAY_ALBUM: 'play_album',
   TRACK_SHARE_GRANT: 'track_share_grant',
 
+  // ✅ album-level share/press override during embargo
+  ALBUM_SHARE_GRANT: 'album_share_grant',
+
   // human tiers (membership)
   TIER_FRIEND: 'tier_friend',
   TIER_PATRON: 'tier_patron',
   TIER_PARTNER: 'tier_partner',
 } as const
+
 
 export type EntitlementKey = (typeof ENTITLEMENTS)[keyof typeof ENTITLEMENTS]
 

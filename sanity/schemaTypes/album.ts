@@ -8,6 +8,16 @@ const THEME_OPTIONS = [
   {title: 'Phase Glass', value: 'phase-glass'},
 ]
 
+const TIER_OPTIONS = [
+  {title: 'Friend', value: 'friend'},
+  {title: 'Patron', value: 'patron'},
+  {title: 'Partner', value: 'partner'},
+] as const
+
+type AlbumDocForVisibility = {
+  earlyAccessEnabled?: boolean
+}
+
 export default defineType({
   name: 'album',
   title: 'Album',
@@ -18,7 +28,7 @@ export default defineType({
       title: 'Catalogue ID',
       type: 'string',
       description:
-        'Stable canonical ID for this album (label catalogue). Used for entitlements, URLs, and future variants. Example: AF-ALB-0001',
+        'Stable canonical ID for this album (label catalogue). Used for entitlements and future variants. Example: AF-ALB-0001',
       validation: (r) =>
         r
           .required()
@@ -49,6 +59,53 @@ export default defineType({
     }),
 
     defineField({name: 'description', type: 'text'}),
+
+    // ---- Release + access policy (Approach A) ----
+
+    defineField({
+      name: 'publicPageVisible',
+      title: 'Public page visible',
+      type: 'boolean',
+      description: 'If disabled, hide from browse and block direct load (useful for drafts).',
+      initialValue: true,
+    }),
+
+    defineField({
+      name: 'releaseAt',
+      title: 'Public release date/time',
+      type: 'datetime',
+      description:
+        'If set in the future, playback is embargoed for the public unless entitlements grant access.',
+    }),
+
+    defineField({
+      name: 'earlyAccessEnabled',
+      title: 'Enable early access during embargo',
+      type: 'boolean',
+      initialValue: true,
+      description:
+        'Editorial flag. If enabled and releaseAt is in the future, selected tiers may be granted early access.',
+    }),
+
+    defineField({
+      name: 'earlyAccessTiers',
+      title: 'Early access tiers',
+      type: 'array',
+      of: [{type: 'string'}],
+      options: {list: TIER_OPTIONS as unknown as {title: string; value: string}[]},
+      initialValue: ['patron', 'partner'],
+      hidden: ({document}) => !((document as AlbumDocForVisibility | undefined)?.earlyAccessEnabled),
+      description: 'Editorial guidance for which tiers should bypass embargo (entitlements still decide).',
+    }),
+
+    defineField({
+      name: 'minTierToLoad',
+      title: 'Minimum tier to load album',
+      type: 'string',
+      options: {list: [{title: 'None', value: ''}, ...(TIER_OPTIONS as unknown as {title: string; value: string}[])]},
+      description:
+        'If set, the album is locked in Browse and via /api/albums/:slug unless the viewer is at this tier or higher.',
+    }),
 
     // ✅ Album default theme (track can override)
     defineField({

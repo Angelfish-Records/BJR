@@ -1,3 +1,4 @@
+// web/app/home/player/FullPlayer.tsx
 'use client'
 
 import React from 'react'
@@ -132,12 +133,50 @@ export default function FullPlayer(props: {
   const browseAlbums = albums.filter((a) => a.id !== album?.id)
 
   const playingish = p.status === 'playing' || p.status === 'loading' || p.intent === 'play'
+  const [accessAllowed, setAccessAllowed] = React.useState<boolean | null>(null)
+
+  React.useEffect(() => {
+    if (!album?.catalogId) return
+
+    let cancelled = false
+    fetch(`/api/access/check?albumId=${encodeURIComponent(album.catalogId)}`)
+      .then((r) => r.json())
+      .then((j) => {
+        if (!cancelled) setAccessAllowed(Boolean(j.allowed))
+      })
+      .catch(() => {
+        if (!cancelled) setAccessAllowed(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [album?.catalogId])
+
+  const [nowMs, setNowMs] = React.useState<number>(() => Date.now())
+
+  React.useEffect(() => {
+    const rel = album?.policy?.releaseAt ? Date.parse(album.policy.releaseAt) : NaN
+    if (!Number.isFinite(rel)) return
+
+    // set immediately (covers rapid album switching)
+    setNowMs(Date.now())
+
+    const delay = rel - Date.now()
+    if (delay <= 0) return
+
+    const t = window.setTimeout(() => setNowMs(Date.now()), delay + 50) // small buffer
+    return () => window.clearTimeout(t)
+  }, [album?.policy?.releaseAt])
+
+  const releaseAtMs = album?.policy?.releaseAt ? Date.parse(album.policy.releaseAt) : null
+  const isEmbargoed = releaseAtMs !== null && releaseAtMs > nowMs
+
+  const canPlay = tracks.length > 0 && accessAllowed !== false
 
   const isThisAlbumActive = Boolean(album?.id && p.queueContextId === album.id)
   const currentIsInBrowsedAlbum = Boolean(p.current && tracks.some((t) => t.id === p.current!.id))
   const playingThisAlbum = playingish && (isThisAlbumActive || currentIsInBrowsedAlbum)
-
-  const canPlay = tracks.length > 0
 
   const [playLock, setPlayLock] = React.useState(false)
   const lockPlayFor = (ms: number) => {
@@ -193,7 +232,7 @@ export default function FullPlayer(props: {
     albumSlug,
     album,
     queueArtist: p.queueContextArtist,
-    albumId: p.queueContextId, // ✅ canonical ID for slug resolution
+    albumId: album?.catalogId ?? album?.id ?? undefined,
   })
 
   const [selectedTrackId, setSelectedTrackId] = React.useState<string | null>(null)
@@ -246,6 +285,20 @@ export default function FullPlayer(props: {
         <div style={{fontSize: 22, fontWeight: 650, letterSpacing: 0.2, opacity: 0.96}}>{albumTitle}</div>
         <div style={{maxWidth: 540, fontSize: 12, opacity: 0.62, lineHeight: 1.45}}>{albumDesc}</div>
 
+        {isEmbargoed ? (
+          <div style={{fontSize: 12, opacity: 0.75, marginTop: 6}}>
+            Releases{' '}
+            {new Date(releaseAtMs!).toLocaleDateString(undefined, {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            })}
+            . Instant early access for patrons.
+          </div>
+        ) : null}
+
+
+
         <div style={{display: 'flex', alignItems: 'center', gap: 10, marginTop: 8}}>
           <IconCircleBtn label="Download" onClick={() => {}}>
             <DownloadIcon />
@@ -274,7 +327,7 @@ export default function FullPlayer(props: {
                 display: 'grid',
                 placeItems: 'center',
                 cursor: canPlay ? 'pointer' : 'default',
-                opacity: canPlay ? 0.98 : 0.55,
+                opacity: canPlay ? 1 : 0.55,
                 boxShadow: playingThisAlbum ? '0 18px 50px rgba(0,0,0,0.35)' : '0 18px 50px rgba(0,0,0,0.30)',
                 transform: 'translateZ(0)',
                 position: 'relative',
@@ -322,13 +375,18 @@ export default function FullPlayer(props: {
             const shimmerTitle = isPending || (isCur && p.status === 'loading')
             const isNowPlaying = isCur && (p.status === 'playing' || p.status === 'loading' || p.intent === 'play')
 
-            const titleColor = isCur
-              ? 'color-mix(in srgb, var(--accent) 72%, rgba(255,255,255,0.92))'
-              : 'rgba(255,255,255,0.92)'
+            const titleColor = !canPlay
+              ? 'rgba(255,255,255,0.38)'
+              : isCur
+                ? 'color-mix(in srgb, var(--accent) 72%, rgba(255,255,255,0.92))'
+                : 'rgba(255,255,255,0.92)'
 
-            const subColor = isCur
-              ? 'color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.70))'
-              : 'rgba(255,255,255,0.70)'
+            const subColor = !canPlay
+              ? 'rgba(255,255,255,0.32)'
+              : isCur
+                ? 'color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.70))'
+                : 'rgba(255,255,255,0.70)'
+
 
             const baseBg = isSelected ? 'rgba(255,255,255,0.14)' : 'transparent'
             const restBg = isCur && !isSelected ? 'transparent' : baseBg
@@ -340,6 +398,7 @@ export default function FullPlayer(props: {
                 className="afTrackRow"
                 onMouseEnter={(e) => {
                   prefetchTrack(t)
+                  if (!canPlay) return
                   if (!isCoarsePointer && !isSelected && !isCur) {
                     e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
                   }
@@ -349,8 +408,9 @@ export default function FullPlayer(props: {
                 }}
                 onFocus={() => prefetchTrack(t)}
                 onClick={() => {
+                  if (!canPlay) return
                   p.setQueue(tracks, {
-                    contextId: album?.id,
+                    contextId: album?.catalogId ?? album?.id,
                     artworkUrl: album?.artworkUrl ?? null,
                     contextSlug: albumSlug,
                     contextTitle: album?.title ?? undefined,

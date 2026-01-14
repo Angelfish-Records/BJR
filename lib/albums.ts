@@ -13,6 +13,12 @@ type AlbumDoc = {
   description?: string
   artwork?: unknown
   visualTheme?: string
+  // ⬇️ new
+  publicPageVisible?: boolean
+  releaseAt?: string
+  earlyAccessEnabled?: boolean
+  earlyAccessTiers?: string[]
+  minTierToLoad?: string
   tracks?: Array<{
     id: string // legacy
     catalogId?: string // new canonical
@@ -39,6 +45,15 @@ export type AlbumBrowseItem = {
   year?: number
   artwork?: unknown
   artworkUrl?: string | null
+  
+  // raw fields from GROQ
+  publicPageVisible?: boolean
+  minTierToLoad?: string
+
+  policy?: {
+    publicPageVisible: boolean
+    minTierToLoad?: string | null
+  }
 }
 
 export type AlbumLyricsBundle = {
@@ -87,6 +102,11 @@ export async function getAlbumBySlug(
       description,
       artwork,
       visualTheme,
+      publicPageVisible,
+      releaseAt,
+      earlyAccessEnabled,
+      earlyAccessTiers,
+      minTierToLoad,
       "tracks": tracks[]{
         id,
         catalogId,
@@ -105,7 +125,7 @@ export async function getAlbumBySlug(
     return {album: null, tracks: [], lyrics: {cuesByTrackId: {}, offsetByTrackId: {}}}
   }
 
-  const albumCatalogId = normStr(doc.catalogId) ?? null
+  const albumCatalogId = normStr(doc.catalogId) ?? undefined
   const albumTheme = normTheme(doc.visualTheme)
 
   const album: AlbumInfo = {
@@ -116,8 +136,15 @@ export async function getAlbumBySlug(
     year: typeof doc.year === 'number' && Number.isFinite(doc.year) ? doc.year : undefined,
     description: normStr(doc.description),
     artworkUrl: doc.artwork ? urlFor(doc.artwork).width(900).height(900).quality(85).url() : null,
-    //visualTheme: albumTheme,
+    policy: {
+      publicPageVisible: doc.publicPageVisible !== false,
+      releaseAt: doc.releaseAt ?? null,
+      earlyAccessEnabled: !!doc.earlyAccessEnabled,
+      earlyAccessTiers: Array.isArray(doc.earlyAccessTiers) ? doc.earlyAccessTiers : [],
+      minTierToLoad: normStr(doc.minTierToLoad) ?? null,
+    },
   }
+
 
   // Tracks: keep legacy id as the runtime player id (so lyrics + existing wiring keep working),
   // but attach catalogId for future-proofing and entitlement scoping if you later go track-level.
@@ -177,7 +204,9 @@ export async function listAlbumsForBrowse(): Promise<AlbumBrowseItem[]> {
       title,
       artist,
       year,
-      artwork
+      artwork,
+      publicPageVisible,
+      minTierToLoad
     }
   `
 
@@ -190,5 +219,9 @@ export async function listAlbumsForBrowse(): Promise<AlbumBrowseItem[]> {
     artist: normStr(a.artist),
     title: a.title ?? 'Untitled',
     artworkUrl: a.artwork ? urlFor(a.artwork).width(600).height(600).quality(80).url() : null,
+    policy: {
+      publicPageVisible: a.publicPageVisible !== false,
+      minTierToLoad: normStr(a.minTierToLoad) ?? null,
+  },
   }))
 }

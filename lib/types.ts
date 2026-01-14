@@ -2,12 +2,21 @@
 
 export type AlbumInfo = {
   id: string
-  catalogId: string | null
+  catalogId?: string
   title: string
   artist?: string
   year?: number
   description?: string
   artworkUrl?: string | null
+  policy?: AlbumPolicy
+}
+
+export type AlbumPolicy = {
+  publicPageVisible: boolean
+  releaseAt?: string | null
+  earlyAccessEnabled?: boolean
+  earlyAccessTiers?: string[]
+  minTierToLoad?: string | null
 }
 
 export type AlbumNavItem = {

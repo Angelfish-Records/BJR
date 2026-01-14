@@ -1,4 +1,3 @@
-// web/lib/entitlements.ts
 import 'server-only'
 import {sql} from '@vercel/postgres'
 
@@ -31,6 +30,7 @@ function normCatalog(opts: HasEntitlementOptions) {
 
 /**
  * Returns the matched entitlement row (if any) so callers can log/inspect *why* access was granted.
+ * NOTE: expired entitlements are ignored (expires_at must be null or in the future).
  */
 export async function findEntitlement(
   memberId: string,
@@ -46,6 +46,7 @@ export async function findEntitlement(
     from member_entitlements_current
     where member_id = ${memberId}::uuid
       and entitlement_key = ${entitlementKey}
+      and (expires_at is null or expires_at > now())
       and (
         (${scopeId ?? null}::text is null and scope_id is null)
         or (${scopeId ?? null}::text is not null and (
@@ -75,18 +76,6 @@ export async function findEntitlement(
   }
 }
 
-export async function hasEntitlement(
-  memberId: string,
-  entitlementKey: EntitlementKey,
-  scopeId?: EntitlementScopeId | null,
-  opts: HasEntitlementOptions = {}
-): Promise<boolean> {
-  return (await findEntitlement(memberId, entitlementKey, scopeId, opts)) !== null
-}
-
-/**
- * Single-query “any of these keys” check that also returns the matching entitlement.
- */
 export async function findAnyEntitlement(
   memberId: string,
   entitlementKeys: EntitlementKey[],
@@ -107,6 +96,7 @@ export async function findAnyEntitlement(
     from member_entitlements_current mec
     join keys k on k.ent_key = mec.entitlement_key
     where mec.member_id = ${memberId}::uuid
+      and (mec.expires_at is null or mec.expires_at > now())
       and (
         (${scopeId ?? null}::text is null and mec.scope_id is null)
         or (${scopeId ?? null}::text is not null and (
@@ -134,6 +124,16 @@ export async function findAnyEntitlement(
     grantedAt: row.granted_at as string,
     expiresAt: (row.expires_at as string | null) ?? null,
   }
+}
+
+// (rest of file unchanged)
+export async function hasEntitlement(
+  memberId: string,
+  entitlementKey: EntitlementKey,
+  scopeId?: EntitlementScopeId | null,
+  opts: HasEntitlementOptions = {}
+): Promise<boolean> {
+  return (await findEntitlement(memberId, entitlementKey, scopeId, opts)) !== null
 }
 
 export async function hasAnyEntitlement(
