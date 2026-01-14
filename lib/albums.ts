@@ -1,7 +1,7 @@
 // web/lib/albums.ts
 import {client} from '@/sanity/lib/client'
 import {urlFor} from '@/sanity/lib/image'
-import type {AlbumInfo, PlayerTrack} from '@/lib/types'
+import type {AlbumInfo, PlayerTrack, TierName} from '@/lib/types'
 import type {LyricCue} from '@/app/home/player/stage/LyricsOverlay'
 
 type AlbumDoc = {
@@ -89,6 +89,18 @@ function normTheme(v: unknown): string | undefined {
   return s && s !== '' ? s : undefined
 }
 
+function parseTierName(v: unknown): TierName | null {
+  const s = normStr(v)
+  if (!s) return null
+  if (s === 'friend' || s === 'patron' || s === 'partner') return s
+  return null
+}
+
+function parseTierNameArray(v: unknown): TierName[] {
+  if (!Array.isArray(v)) return []
+  return v.map(parseTierName).filter((x): x is TierName => x !== null)
+}
+
 export async function getAlbumBySlug(
   slug: string
 ): Promise<{album: AlbumInfo | null; tracks: PlayerTrack[]; lyrics: AlbumLyricsBundle}> {
@@ -140,8 +152,9 @@ export async function getAlbumBySlug(
       publicPageVisible: doc.publicPageVisible !== false,
       releaseAt: doc.releaseAt ?? null,
       earlyAccessEnabled: !!doc.earlyAccessEnabled,
-      earlyAccessTiers: Array.isArray(doc.earlyAccessTiers) ? doc.earlyAccessTiers : [],
-      minTierToLoad: normStr(doc.minTierToLoad) ?? null,
+      earlyAccessTiers: parseTierNameArray(doc.earlyAccessTiers),
+      minTierToLoad: parseTierName(doc.minTierToLoad),
+
     },
   }
 
@@ -221,7 +234,7 @@ export async function listAlbumsForBrowse(): Promise<AlbumBrowseItem[]> {
     artworkUrl: a.artwork ? urlFor(a.artwork).width(600).height(600).quality(80).url() : null,
     policy: {
       publicPageVisible: a.publicPageVisible !== false,
-      minTierToLoad: normStr(a.minTierToLoad) ?? null,
+      minTierToLoad: parseTierName(a.minTierToLoad),
   },
   }))
 }

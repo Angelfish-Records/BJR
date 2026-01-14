@@ -18,7 +18,7 @@ export type AlbumPolicy = {
   publicPageVisible: boolean
   releaseAt?: string | null
   earlyAccessEnabled?: boolean
-  earlyAccessTiers?: string[]
+  earlyAccessTiers?: TierName[]
   minTierToLoad?: TierName | null
 }
 
