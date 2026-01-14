@@ -5,9 +5,11 @@ import {sql} from '@vercel/postgres'
 import {checkAccess} from '@/lib/access'
 import {ACCESS_ACTIONS, ENTITLEMENTS} from '@/lib/vocab'
 import {newCorrelationId} from '@/lib/events'
-import {redeemShareTokenForMember} from '@/lib/shareTokens'
+import crypto from 'crypto'
+import {redeemShareTokenForMember, validateShareToken} from '@/lib/shareTokens'
 import {getAlbumPolicyByAlbumId, isEmbargoed, type TierName} from '@/lib/albumPolicy'
 import {listCurrentEntitlementKeys} from '@/lib/entitlements'
+
 
 async function getMemberIdByClerkUserId(userId: string): Promise<string | null> {
   if (!userId) return null
@@ -53,14 +55,61 @@ export async function GET(req: NextRequest) {
 
   const albumScopeId = `alb:${albumId}`
 
+    // --- allow press token access without auth ---
   if (!userId) {
+    if (st) {
+      const anonId =
+        (req.cookies.get('af_anon')?.value ?? '').trim() ||
+        crypto.randomUUID() // you can also set this as a cookie in a middleware later
+
+      const policy = await getAlbumPolicyByAlbumId(albumId)
+      const releaseAt = policy?.releaseAt ?? null
+      const embargoed = isEmbargoed(policy)
+
+      const v = await validateShareToken({
+        token: st,
+        expectedScopeId: albumScopeId,
+        anonId,
+        resourceKind: 'album',
+        resourceId: albumScopeId,
+        action: 'access',
+      })
+
+      if (!v.ok) {
+        return NextResponse.json({
+          ok: true,
+          allowed: false,
+          embargoed,
+          releaseAt,
+          code: v.code,
+          action: 'login' as const,
+          reason: 'Invalid or expired share token.',
+          correlationId,
+          redeemed: {ok: false, code: v.code},
+        })
+      }
+
+      // share token grants access (bypasses tier + PLAY_ALBUM entitlements for anon users)
+      return NextResponse.json({
+        ok: true,
+        allowed: true,
+        embargoed: false,
+        releaseAt,
+        code: null,
+        action: null,
+        reason: null,
+        correlationId,
+        redeemed: {ok: true},
+      })
+    }
+
     return NextResponse.json({
       ok: true,
       allowed: false,
       embargoed: false,
       releaseAt: null,
       code: 'AUTH_REQUIRED',
-      action: 'login' satisfies Action,
+      action: 'login',
       reason: 'Sign in required',
       correlationId,
       redeemed: null,
@@ -105,7 +154,7 @@ export async function GET(req: NextRequest) {
   if (embargoed) {
     const override = await checkAccess(
       memberId,
-      {kind: 'album', albumScopeId, required: [ENTITLEMENTS.ALBUM_SHARE_GRANT]},
+      {kind: 'album', albumScopeId, required: [ENTITLEMENTS.PLAY_ALBUM]},
       {log: true, action: ACCESS_ACTIONS.ACCESS_CHECK, correlationId}
     )
 

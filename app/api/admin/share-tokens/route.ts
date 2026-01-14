@@ -1,9 +1,8 @@
 // web/app/api/admin/share-tokens/route.ts
 import 'server-only'
 import {NextResponse} from 'next/server'
-import {sql} from '@vercel/postgres'
 import {ENTITLEMENTS} from '@/lib/vocab'
-import crypto from 'crypto'
+import {createShareToken, type TokenGrant} from '@/lib/shareTokens'
 
 function requireAdmin(req: Request) {
   const got = req.headers.get('x-admin-secret') ?? ''
@@ -42,10 +41,6 @@ function parseExpiresAt(expiresAt: string | null | undefined): string | null {
   return new Date(t).toISOString()
 }
 
-function sha256Hex(input: string): string {
-  return crypto.createHash('sha256').update(input, 'utf8').digest('hex')
-}
-
 export async function POST(req: Request) {
   try {
     requireAdmin(req)
@@ -60,71 +55,38 @@ export async function POST(req: Request) {
       return NextResponse.json({ok: false, error: 'albumId is required'}, {status: 400})
     }
 
-    const maxRedemptions =
-      raw.maxRedemptions == null ? null : Math.max(1, Math.floor(raw.maxRedemptions))
-
+    const maxRedemptions = raw.maxRedemptions == null ? null : Math.max(1, Math.floor(raw.maxRedemptions))
     const expiresIso = parseExpiresAt(raw.expiresAt)
-
-    // This is the *bearer token* you’ll copy into URLs as `st=...`
-    // Keep it short, URL-safe, and recognizable.
-    const token = `st_${crypto.randomBytes(24).toString('base64url')}`
-
-    // Store only the hash (so DB leaks don’t leak live tokens).
-    const tokenHash = sha256Hex(token)
-
-    // Canonical album scope used everywhere else.
     const scopeId = `alb:${albumId}`
 
-    // Grants are declarative; later you’ll redeem -> write ENTITLEMENTS.ALBUM_SHARE_GRANT scoped to scopeId.
-    // For now we just store the intended grants in the token row.
-    const grants = [
-    {
-      key: ENTITLEMENTS.PLAY_ALBUM,
-      scopeId,                      
-    },
-]
+    const note = cleanStr(raw.note)
 
-    const ins = await sql<{
-      id: string
-      created_at: string
-      kind: string
-      scope_id: string | null
-      expires_at: string | null
-      max_redemptions: number | null
-    }>`
-      insert into share_tokens (
-        token_hash,
-        kind,
-        scope_id,
-        grants,
-        expires_at,
-        max_redemptions
-      )
-      values (
-        ${tokenHash},
-        'album_press',
-        ${scopeId},
-        ${JSON.stringify(grants)}::jsonb,
-        ${expiresIso}::timestamptz,
-        ${maxRedemptions}
-      )
-      returning id, created_at, kind, scope_id, expires_at, max_redemptions
-    `
+    const grants: TokenGrant[] = [
+      {
+        key: ENTITLEMENTS.PLAY_ALBUM,
+        scopeId,
+        ...(note ? {scopeMeta: {note}} : {}),
+      },
+    ]
 
-    const row = ins.rows?.[0]
-    if (!row?.id) {
-      return NextResponse.json({ok: false, error: 'Insert failed'}, {status: 500})
-    }
+    const created = await createShareToken({
+      kind: 'album_press',
+      scopeId,
+      grants,
+      expiresAt: expiresIso,
+      maxRedemptions,
+      createdByMemberId: null,
+    })
 
     return NextResponse.json({
       ok: true,
-      token: token, // IMPORTANT: returned once; only the hash is stored
-      tokenId: row.id,
-      kind: row.kind,
-      scopeId: row.scope_id,
-      expiresAt: row.expires_at,
-      maxRedemptions: row.max_redemptions,
-      createdAt: row.created_at,
+      token: created.token,
+      tokenId: created.tokenId,
+      kind: created.kind,
+      scopeId: created.scopeId,
+      expiresAt: created.expiresAt,
+      maxRedemptions: created.maxRedemptions,
+      createdAt: created.createdAt,
     })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'error'

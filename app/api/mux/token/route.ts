@@ -1,9 +1,11 @@
+// web/app/api/mux/token/route.ts
 import {NextRequest, NextResponse} from 'next/server'
 import {auth} from '@clerk/nextjs/server'
 import {importPKCS8, SignJWT} from 'jose'
 import crypto from 'crypto'
 import {countAnonDistinctCompletedTracks, newCorrelationId} from '@/lib/events'
 import {ACCESS_ACTIONS} from '@/lib/vocab'
+import {validateShareToken} from '@/lib/shareTokens'
 import {decideAlbumPlaybackAccess} from '@/lib/accessOracle'
 
 type TokenReq = {
@@ -11,6 +13,7 @@ type TokenReq = {
   trackId?: string
   albumId?: string // canonical album id (catalogId preferred)
   durationMs?: number
+  st?: string // share/press token (optional)
 }
 
 type TokenOk = {ok: true; token: string; expiresAt: number; correlationId: string}
@@ -18,7 +21,14 @@ type TokenOk = {ok: true; token: string; expiresAt: number; correlationId: strin
 type TokenBlocked = {
   ok: false
   blocked: true
-  code: 'AUTH_REQUIRED' | 'ANON_CAP_REACHED' | 'ENTITLEMENT_REQUIRED' | 'EMBARGO' | 'TIER_REQUIRED' | 'INVALID_REQUEST' | 'PROVISIONING'
+  code:
+    | 'AUTH_REQUIRED'
+    | 'ANON_CAP_REACHED'
+    | 'ENTITLEMENT_REQUIRED'
+    | 'EMBARGO'
+    | 'TIER_REQUIRED'
+    | 'INVALID_REQUEST'
+    | 'PROVISIONING'
   reason: string
   action?: 'login' | 'subscribe' | 'buy' | 'wait'
   correlationId: string
@@ -104,11 +114,41 @@ export async function POST(req: NextRequest) {
     return blocked(correlationId, 'INVALID_REQUEST', 'Missing playbackId', undefined, 400)
   }
 
+  // ✅ Require album context always.
+  const rawAlbumId = (body?.albumId ?? '').trim()
+  if (!rawAlbumId) {
+    return blocked(correlationId, 'INVALID_REQUEST', 'Missing albumId (canonical album context).', undefined, 400)
+  }
+  const albumScopeId = `alb:${rawAlbumId}`
+
   const {userId} = await auth()
   const anonId = getAnonId(req)
 
+  const url = new URL(req.url)
+  const st = (body?.st ?? '').trim() || (url.searchParams.get('st') ?? '').trim() || (url.searchParams.get('share') ?? '').trim()
+
+  // ---- Capability mode via share token (bypass anon cap + oracle checks) ----
+  let tokenAllowsPlayback = false
+  if (st) {
+    const v = await validateShareToken({
+      token: st,
+      expectedScopeId: albumScopeId,
+      anonId,
+      resourceKind: 'album',
+      resourceId: albumScopeId,
+      action: 'playback',
+    })
+
+    tokenAllowsPlayback = v.ok
+    if (!v.ok) {
+      const res = blocked(correlationId, 'ENTITLEMENT_REQUIRED', 'Invalid or expired share token.', 'login', 403)
+      persistAnonId(res, anonId)
+      return res
+    }
+  }
+
   // ---- Anonymous cap (REAL): based on completed playthrough events in Neon ----
-  if (!userId) {
+  if (!userId && !tokenAllowsPlayback) {
     const distinctCompleted = await countAnonDistinctCompletedTracks({anonId, sinceDays: ANON_WINDOW_DAYS})
     if (distinctCompleted >= ANON_DISTINCT_TRACK_CAP) {
       const res = blocked(
@@ -124,7 +164,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ---- Logged-in access: enforce via oracle ----
-  if (userId) {
+  if (userId && !tokenAllowsPlayback) {
     const memberId = await getMemberIdByClerkUserId(userId)
     if (!memberId) {
       const res = blocked(
@@ -134,13 +174,6 @@ export async function POST(req: NextRequest) {
         'wait',
         403
       )
-      persistAnonId(res, anonId)
-      return res
-    }
-
-    const rawAlbumId = (body?.albumId ?? '').trim()
-    if (!rawAlbumId) {
-      const res = blocked(correlationId, 'INVALID_REQUEST', 'Missing albumId (canonical album context).', undefined, 400)
       persistAnonId(res, anonId)
       return res
     }
@@ -155,11 +188,15 @@ export async function POST(req: NextRequest) {
     if (!d.allowed) {
       const res = blocked(
         correlationId,
-        d.code === 'INVALID_REQUEST' ? 'INVALID_REQUEST' :
-        d.code === 'EMBARGO' ? 'EMBARGO' :
-        d.code === 'TIER_REQUIRED' ? 'TIER_REQUIRED' :
-        d.code === 'PROVISIONING' ? 'PROVISIONING' :
-        'ENTITLEMENT_REQUIRED',
+        d.code === 'INVALID_REQUEST'
+          ? 'INVALID_REQUEST'
+          : d.code === 'EMBARGO'
+            ? 'EMBARGO'
+            : d.code === 'TIER_REQUIRED'
+              ? 'TIER_REQUIRED'
+              : d.code === 'PROVISIONING'
+                ? 'PROVISIONING'
+                : 'ENTITLEMENT_REQUIRED',
         d.reason,
         d.action ?? undefined,
         403
