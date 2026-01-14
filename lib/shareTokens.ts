@@ -118,6 +118,8 @@ async function logPlay(params: {
       resource_kind,
       resource_id,
       action,
+      outcome,
+      metadata,
       occurred_at
     )
     values (
@@ -127,6 +129,8 @@ async function logPlay(params: {
       ${params.resourceKind},
       ${params.resourceId},
       ${params.action},
+      'allowed',
+      '{}'::jsonb,
       now()
     )
   `
