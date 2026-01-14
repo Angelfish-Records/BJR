@@ -316,18 +316,29 @@ export default function AudioEngine() {
           return
         }
 
+        // Pull st/share from current URL if present (client-side only)
+        let st: string | null = null
+        try {
+          const sp = new URLSearchParams(window.location.search)
+          st = (sp.get('st') ?? sp.get('share') ?? '').trim() || null
+        } catch {
+          st = null
+        }
+
         const res = await fetch('/api/mux/token', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
             playbackId,
             trackId: s.current?.id,
-            albumId: s.queueContextId,          // ✅ NEW (canonical album id)
-            albumSlug: s.queueContextSlug,      // existing (human fallback)
+            albumId: s.queueContextId, // ✅ canonical album id (should be catalogId)
+            albumSlug: s.queueContextSlug, // keep if you still want it
             durationMs: s.current?.durationMs ?? s.durationById?.[s.current?.id ?? ''],
+            ...(st ? {st} : {}), // ✅ include press token if present
           }),
-          signal: ac.signal,
+          signal: ac.signal, // ✅ KEEP THIS
         })
+
 
         let data: TokenResponse | null = null
         try {

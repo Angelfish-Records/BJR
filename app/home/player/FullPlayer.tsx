@@ -130,6 +130,16 @@ function NowPlayingPip() {
   )
 }
 
+type AccessPayload = {
+  ok?: boolean
+  allowed?: boolean
+  embargoed?: boolean
+  releaseAt?: string | null
+  code?: string | null
+  action?: string | null
+  reason?: string | null
+}
+
 export default function FullPlayer(props: {
   albumSlug: string
   album: AlbumInfo | null
@@ -146,7 +156,7 @@ export default function FullPlayer(props: {
   const albumDesc = album?.description ?? 'This is placeholder copy. Soon: pull album description from Sanity.'
   const browseAlbums = albums.filter((a) => a.id !== album?.id)
 
-    const playingish = p.status === 'playing' || p.status === 'loading' || p.intent === 'play'
+  const playingish = p.status === 'playing' || p.status === 'loading' || p.intent === 'play'
 
   const [access, setAccess] = React.useState<{
     allowed: boolean
@@ -157,52 +167,76 @@ export default function FullPlayer(props: {
     reason?: string
   } | null>(null)
 
+  // Canonical album key used in queue context + gating
+  const albumKey = album?.catalogId ?? album?.id ?? null
+
   React.useEffect(() => {
-  if (!album?.catalogId) return
+    if (!album?.catalogId) return
 
-  let cancelled = false
+    let cancelled = false
+    const ac = new AbortController()
 
-  // Pull st/share from current URL if present
-  let st: string | null = null
-  try {
-    const sp = new URLSearchParams(window.location.search)
-    st = (sp.get('st') ?? sp.get('share') ?? '').trim() || null
-  } catch {
-    st = null
-  }
+    // Pull st/share from current URL if present
+    let st: string | null = null
+    try {
+      const sp = new URLSearchParams(window.location.search)
+      st = (sp.get('st') ?? sp.get('share') ?? '').trim() || null
+    } catch {
+      st = null
+    }
 
-  const u = new URL('/api/access/check', window.location.origin)
-  u.searchParams.set('albumId', album.catalogId)
-  if (st) u.searchParams.set('st', st)
+    const u = new URL('/api/access/check', window.location.origin)
+    u.searchParams.set('albumId', album.catalogId)
+    if (st) u.searchParams.set('st', st)
 
-  fetch(u.toString())
-    .then((r) => r.json())
-    .then((j) => {
-      if (cancelled) return
-      setAccess({
-        allowed: Boolean(j.allowed),
-        embargoed: Boolean(j.embargoed),
-        releaseAt: typeof j.releaseAt === 'string' ? j.releaseAt : null,
-        code: typeof j.code === 'string' ? j.code : undefined,
-        action: typeof j.action === 'string' ? j.action : null,
-        reason: typeof j.reason === 'string' ? j.reason : undefined,
-      })
-    })
-    .catch(() => {
-      if (!cancelled) setAccess({allowed: false, embargoed: false, releaseAt: null, code: 'FAILED', action: null})
-    })
+    ;(async () => {
+      try {
+        const r = await fetch(u.toString(), {method: 'GET', signal: ac.signal})
+        const j = (await r.json()) as AccessPayload
 
-  return () => {
-    cancelled = true
-  }
-}, [album?.catalogId])
+        if (cancelled) return
 
+        const allowed = j?.allowed !== false
+        const embargoed = j?.embargoed === true
+        const releaseAt = (j?.releaseAt ?? null) as string | null
 
+        setAccess({
+          allowed,
+          embargoed,
+          releaseAt,
+          code: (j?.code ?? undefined) ?? undefined,
+          action: (j?.action ?? null) ?? null,
+          reason: (j?.reason ?? undefined) ?? undefined,
+        })
+      } catch (e) {
+        if (cancelled) return
+        console.error('FullPlayer access check failed', e)
+        // Fail-open for UX, but keep a reason for debugging.
+        setAccess({
+          allowed: true,
+          embargoed: false,
+          releaseAt: null,
+          code: 'ACCESS_CHECK_ERROR',
+          action: null,
+          reason: 'Access check failed (client).',
+        })
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      ac.abort()
+    }
+  }, [album?.catalogId])
+
+  // NOTE: allow play unless the access check explicitly denies.
   const canPlay = tracks.length > 0 && access?.allowed !== false
+
   const releaseAtMs = access?.releaseAt ? Date.parse(access.releaseAt) : NaN
   const showEmbargo = access?.embargoed && Number.isFinite(releaseAtMs)
 
-  const isThisAlbumActive = Boolean(album?.id && p.queueContextId === album.id)
+  // IMPORTANT: p.queueContextId now holds catalogId (your new contextId).
+  const isThisAlbumActive = Boolean(albumKey && p.queueContextId === albumKey)
   const currentIsInBrowsedAlbum = Boolean(p.current && tracks.some((t) => t.id === p.current!.id))
   const playingThisAlbum = playingish && (isThisAlbumActive || currentIsInBrowsedAlbum)
 
@@ -229,6 +263,8 @@ export default function FullPlayer(props: {
   const onTogglePlay = () => {
     lockPlayFor(120)
 
+    if (!canPlay) return
+
     if (playingThisAlbum) {
       window.dispatchEvent(new Event('af:pause-intent'))
       p.pause()
@@ -239,7 +275,7 @@ export default function FullPlayer(props: {
     if (!firstTrack) return
 
     p.setQueue(tracks, {
-      contextId: album?.catalogId ?? album?.id,
+      contextId: albumKey ?? undefined,
       artworkUrl: album?.artworkUrl ?? null,
       contextSlug: albumSlug,
       contextTitle: album?.title ?? undefined,
@@ -260,7 +296,7 @@ export default function FullPlayer(props: {
     albumSlug,
     album,
     queueArtist: p.queueContextArtist,
-    albumId: album?.catalogId ?? album?.id ?? undefined,
+    albumId: albumKey ?? undefined,
   })
 
   const [selectedTrackId, setSelectedTrackId] = React.useState<string | null>(null)
@@ -325,7 +361,6 @@ export default function FullPlayer(props: {
           </div>
         ) : null}
 
-
         <div style={{display: 'flex', alignItems: 'center', gap: 10, marginTop: 8}}>
           <IconCircleBtn label="Download" onClick={() => {}}>
             <DownloadIcon />
@@ -383,13 +418,9 @@ export default function FullPlayer(props: {
           </IconCircleBtn>
         </div>
 
-        {playingThisAlbum && loadingLabel ? (
-          <div style={{fontSize: 12, opacity: 0.65, marginTop: 2}}>{loadingLabel}</div>
-        ) : null}
+        {playingThisAlbum && loadingLabel ? <div style={{fontSize: 12, opacity: 0.65, marginTop: 2}}>{loadingLabel}</div> : null}
 
-        {p.status === 'blocked' && p.lastError ? (
-          <div style={{fontSize: 12, opacity: 0.75, marginTop: 4}}>Playback error</div>
-        ) : null}
+        {p.status === 'blocked' && p.lastError ? <div style={{fontSize: 12, opacity: 0.75, marginTop: 4}}>Playback error</div> : null}
       </div>
 
       <div style={{marginTop: 18}}>
@@ -414,7 +445,6 @@ export default function FullPlayer(props: {
                 ? 'color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.70))'
                 : 'rgba(255,255,255,0.70)'
 
-
             const baseBg = isSelected ? 'rgba(255,255,255,0.14)' : 'transparent'
             const restBg = isCur && !isSelected ? 'transparent' : baseBg
 
@@ -437,7 +467,7 @@ export default function FullPlayer(props: {
                 onClick={() => {
                   if (!canPlay) return
                   p.setQueue(tracks, {
-                    contextId: album?.catalogId ?? album?.id,
+                    contextId: albumKey ?? undefined,
                     artworkUrl: album?.artworkUrl ?? null,
                     contextSlug: albumSlug,
                     contextTitle: album?.title ?? undefined,
@@ -454,6 +484,7 @@ export default function FullPlayer(props: {
                 }}
                 onDoubleClick={() => {
                   if (isCoarsePointer) return
+                  if (!canPlay) return
                   p.play(t)
                   window.dispatchEvent(new Event('af:play-intent'))
                 }}
@@ -472,9 +503,10 @@ export default function FullPlayer(props: {
                   borderRadius: 14,
                   border: '1px solid rgba(255,255,255,0.00)',
                   background: restBg,
-                  cursor: 'pointer',
+                  cursor: canPlay ? 'pointer' : 'default',
                   transform: 'translateZ(0)',
                   transition: 'background 120ms ease',
+                  opacity: canPlay ? 1 : 0.75,
                 }}
               >
                 <div
@@ -584,7 +616,6 @@ export default function FullPlayer(props: {
                 const canLoadByTier = !min || tierRank(viewerTier) >= tierRank(min)
                 const disabled = !onSelectAlbum || isBrowsingAlbum || isActive || !canLoadByTier
 
-
                 return (
                   <button
                     key={a.id}
@@ -659,14 +690,11 @@ export default function FullPlayer(props: {
                         }}
                       >
                         {a.artist ?? ''}
-
-                        {!canLoadByTier && min ? (
-                          <div style={{marginTop: 6, fontSize: 11, opacity: 0.6}}>
-                            Requires {tierLabel(min)}
-                          </div>
-                        ) : null}
-
                       </div>
+
+                      {!canLoadByTier && min ? (
+                        <div style={{marginTop: 6, fontSize: 11, opacity: 0.6}}>Requires {tierLabel(min)}</div>
+                      ) : null}
                     </div>
                   </button>
                 )

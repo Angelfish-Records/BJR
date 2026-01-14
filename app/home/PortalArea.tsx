@@ -158,6 +158,7 @@ export default function PortalArea(props: {
 
   const p = usePlayer()
   const sp = useClientSearchParams()
+  const hasSt = ((sp.get('st') ?? sp.get('share') ?? '').trim().length > 0)
   const {isSignedIn} = useAuth()
 
   const purchaseAttention =
@@ -356,7 +357,10 @@ export default function PortalArea(props: {
 
   return (
     <>
-      <QueueBootstrapper albumId={album?.catalogId ?? album?.id ?? null} tracks={tracks} />
+      <QueueBootstrapper
+        albumId={hasSt ? (album?.catalogId ?? null) : (album?.catalogId ?? album?.id ?? null)}
+        tracks={tracks}
+      />
 
       <div style={{height: '100%', minHeight: 0, minWidth: 0, display: 'grid'}}>
         <PortalShell

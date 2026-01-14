@@ -3,13 +3,17 @@
 import React from 'react'
 import type {AlbumBrowseItem} from '@/lib/albums'
 
-type Props = {
-  albums: AlbumBrowseItem[]
+type Props = {albums: AlbumBrowseItem[]}
+
+type MintOk = {
+  ok: true
+  token: string
+  tokenId: string
 }
 
-type MintResp =
-  | {ok: true; token: string; tokenId: string; kind: string; scopeId: string | null; expiresAt: string | null; maxRedemptions: number | null; createdAt: string}
-  | {ok: false; error: string}
+type MintErr = {ok: false; error: string}
+
+type MintResp = MintOk | MintErr
 
 function fmtLocalInputValue(d: Date) {
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -17,44 +21,61 @@ function fmtLocalInputValue(d: Date) {
 }
 
 export default function AdminMintShareTokenForm({albums}: Props) {
-  const [albumId, setAlbumId] = React.useState<string>(() => (albums[0]?.catalogId ?? albums[0]?.id ?? ''))
-  const [expiresEnabled, setExpiresEnabled] = React.useState(false)
-  const [expiresAtLocal, setExpiresAtLocal] = React.useState<string>(() => fmtLocalInputValue(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)))
-  const [maxRedemptions, setMaxRedemptions] = React.useState<string>('')
+  const mintable = React.useMemo(() => albums.filter((a) => !!a.catalogId), [albums])
+  const hasUnmintable = React.useMemo(() => albums.some((a) => !a.catalogId), [albums])
 
+  const [albumCatalogId, setAlbumCatalogId] = React.useState<string>(() => (mintable[0]?.catalogId ?? '') as string)
+
+  const [expiresEnabled, setExpiresEnabled] = React.useState(false)
+  const [expiresAtLocal, setExpiresAtLocal] = React.useState<string>(() =>
+    fmtLocalInputValue(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))
+  )
+
+  const [maxRedemptions, setMaxRedemptions] = React.useState<string>('')
   const [note, setNote] = React.useState<string>('')
 
   const [busy, setBusy] = React.useState(false)
   const [result, setResult] = React.useState<MintResp | null>(null)
 
-  const selected = albums.find((a) => (a.catalogId ?? a.id) === albumId)
-  const slug = selected?.slug ?? null
+  const selected = React.useMemo(
+    () => mintable.find((a) => (a.catalogId as string) === albumCatalogId) ?? null,
+    [mintable, albumCatalogId]
+  )
 
-  const deepLink =
-    result && result.ok
-      ? (() => {
-          const origin = typeof window !== 'undefined' ? window.location.origin : ''
-          if (!origin) return null
-          if (slug) return `${origin}/albums/${slug}?st=${encodeURIComponent(result.token)}`
-          // fallback if no slug
-          return `${origin}/home?st=${encodeURIComponent(result.token)}`
-        })()
-      : null
+  const deepLink = React.useMemo(() => {
+    if (!result?.ok) return null
+    if (typeof window === 'undefined') return null
+    const slug = selected?.slug
+    if (!slug) return null
+    const u = new URL(`/albums/${encodeURIComponent(slug)}`, window.location.origin)
+    u.searchParams.set('st', result.token)
+    return u.toString()
+  }, [result, selected?.slug])
 
   async function onMint() {
     setBusy(true)
     setResult(null)
+
     try {
+      if (!albumCatalogId) {
+        setResult({ok: false, error: 'No catalogId selected (album must have catalogId).'})
+        return
+      }
+
       const expiresAt = expiresEnabled ? new Date(expiresAtLocal).toISOString() : null
-      const max = maxRedemptions.trim() ? Number(maxRedemptions.trim()) : null
+
+      const rawMax = maxRedemptions.trim()
+      const n = rawMax ? Number(rawMax) : null
+      const max =
+        n != null && Number.isFinite(n) && n > 0 ? Math.floor(n) : null
 
       const resp = await fetch('/api/admin/share-tokens/mint', {
         method: 'POST',
         headers: {'content-type': 'application/json'},
         body: JSON.stringify({
-          albumId,
+          albumId: albumCatalogId, // ✅ ALWAYS catalogId
           expiresAt,
-          maxRedemptions: Number.isFinite(max as number) ? max : null,
+          maxRedemptions: max,
           note: note.trim() || null,
         }),
       })
@@ -69,29 +90,51 @@ export default function AdminMintShareTokenForm({albums}: Props) {
     }
   }
 
-  function copy(text: string) {
-    void navigator.clipboard.writeText(text)
+  async function copy(text: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      // ignore
+    }
+  }
+
+  if (!mintable.length) {
+    return (
+      <div style={{padding: 12, border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12}}>
+        <div style={{fontWeight: 800, marginBottom: 6}}>No mintable albums</div>
+        <div style={{opacity: 0.85}}>
+          No albums have <code>catalogId</code> set. Add a <code>catalogId</code> in Sanity before minting press tokens.
+        </div>
+      </div>
+    )
   }
 
   return (
     <div style={{display: 'grid', gap: 12}}>
       <label style={{display: 'grid', gap: 6}}>
-        <div style={{fontWeight: 600}}>Album</div>
-        <select value={albumId} onChange={(e) => setAlbumId(e.target.value)} style={{padding: 10, borderRadius: 10}}>
-          {albums.map((a) => {
-            const id = (a.catalogId ?? a.id) as string
-            return (
-              <option key={id} value={id}>
-                {a.title} {a.year ? `(${a.year})` : ''} — {a.slug}
-              </option>
-            )
-          })}
+        <div style={{fontWeight: 700}}>Album</div>
+        <select
+          value={albumCatalogId}
+          onChange={(e) => setAlbumCatalogId(e.target.value)}
+          style={{padding: 10, borderRadius: 10}}
+        >
+          {mintable.map((a) => (
+            <option key={a.catalogId as string} value={a.catalogId as string}>
+              {a.title} {a.year ? `(${a.year})` : ''} — {a.slug}
+            </option>
+          ))}
         </select>
+
+        {hasUnmintable ? (
+          <div style={{opacity: 0.75, fontSize: 13}}>
+            Some albums are hidden because they have no <code>catalogId</code> (we avoid minting broken-scope tokens).
+          </div>
+        ) : null}
       </label>
 
       <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12}}>
         <label style={{display: 'grid', gap: 6}}>
-          <div style={{fontWeight: 600}}>Max redemptions (optional)</div>
+          <div style={{fontWeight: 700}}>Max redemptions (optional)</div>
           <input
             value={maxRedemptions}
             onChange={(e) => setMaxRedemptions(e.target.value)}
@@ -102,19 +145,24 @@ export default function AdminMintShareTokenForm({albums}: Props) {
         </label>
 
         <label style={{display: 'grid', gap: 6}}>
-          <div style={{fontWeight: 600}}>Note (optional)</div>
-          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. The Spinoff review" style={{padding: 10, borderRadius: 10}} />
+          <div style={{fontWeight: 700}}>Note (optional)</div>
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="e.g. RNZ review"
+            style={{padding: 10, borderRadius: 10}}
+          />
         </label>
       </div>
 
       <label style={{display: 'flex', gap: 10, alignItems: 'center'}}>
         <input type="checkbox" checked={expiresEnabled} onChange={(e) => setExpiresEnabled(e.target.checked)} />
-        <span style={{fontWeight: 600}}>Set expiry</span>
+        <span style={{fontWeight: 700}}>Set expiry</span>
       </label>
 
       {expiresEnabled ? (
         <label style={{display: 'grid', gap: 6}}>
-          <div style={{fontWeight: 600}}>Expires at (local time)</div>
+          <div style={{fontWeight: 700}}>Expires at (local time)</div>
           <input
             type="datetime-local"
             value={expiresAtLocal}
@@ -127,8 +175,8 @@ export default function AdminMintShareTokenForm({albums}: Props) {
       <button
         type="button"
         onClick={onMint}
-        disabled={busy || !albumId}
-        style={{padding: '12px 14px', borderRadius: 12, fontWeight: 700}}
+        disabled={busy || !albumCatalogId}
+        style={{padding: '12px 14px', borderRadius: 12, fontWeight: 800}}
       >
         {busy ? 'Minting…' : 'Mint token'}
       </button>
@@ -138,9 +186,11 @@ export default function AdminMintShareTokenForm({albums}: Props) {
           {result.ok ? (
             <div style={{display: 'grid', gap: 10}}>
               <div>
-                <div style={{fontWeight: 800, marginBottom: 6}}>Token (shown once)</div>
+                <div style={{fontWeight: 800, marginBottom: 6}}>Token</div>
                 <div style={{display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap'}}>
-                  <code style={{padding: '6px 8px', borderRadius: 10, background: 'rgba(255,255,255,0.06)'}}>{result.token}</code>
+                  <code style={{padding: '6px 8px', borderRadius: 10, background: 'rgba(255,255,255,0.06)'}}>
+                    {result.token}
+                  </code>
                   <button type="button" onClick={() => copy(result.token)} style={{padding: '6px 10px', borderRadius: 10}}>
                     Copy token
                   </button>
@@ -151,7 +201,9 @@ export default function AdminMintShareTokenForm({albums}: Props) {
                 <div>
                   <div style={{fontWeight: 800, marginBottom: 6}}>Deep link</div>
                   <div style={{display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap'}}>
-                    <code style={{padding: '6px 8px', borderRadius: 10, background: 'rgba(255,255,255,0.06)'}}>{deepLink}</code>
+                    <code style={{padding: '6px 8px', borderRadius: 10, background: 'rgba(255,255,255,0.06)'}}>
+                      {deepLink}
+                    </code>
                     <button type="button" onClick={() => copy(deepLink)} style={{padding: '6px 10px', borderRadius: 10}}>
                       Copy link
                     </button>
@@ -160,8 +212,7 @@ export default function AdminMintShareTokenForm({albums}: Props) {
               ) : null}
 
               <div style={{opacity: 0.8, fontSize: 13}}>
-                tokenId: <code>{result.tokenId}</code> • scopeId: <code>{result.scopeId}</code> • expiresAt:{' '}
-                <code>{String(result.expiresAt ?? 'null')}</code> • maxRedemptions: <code>{String(result.maxRedemptions ?? 'null')}</code>
+                catalogId: <code>{albumCatalogId}</code> • tokenId: <code>{result.tokenId}</code>
               </div>
             </div>
           ) : (
