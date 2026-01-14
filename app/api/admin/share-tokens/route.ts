@@ -2,6 +2,7 @@
 import 'server-only'
 import {NextResponse} from 'next/server'
 import {sql} from '@vercel/postgres'
+import {ENTITLEMENTS} from '@/lib/vocab'
 import crypto from 'crypto'
 
 function requireAdmin(req: Request) {
@@ -77,11 +78,11 @@ export async function POST(req: Request) {
     // Grants are declarative; later you’ll redeem -> write ENTITLEMENTS.ALBUM_SHARE_GRANT scoped to scopeId.
     // For now we just store the intended grants in the token row.
     const grants = [
-      {
-        key: 'album_share_grant',
-        scopeId,
-      },
-    ]
+    {
+      key: ENTITLEMENTS.PLAY_ALBUM,
+      scopeId,                      
+    },
+]
 
     const ins = await sql<{
       id: string
