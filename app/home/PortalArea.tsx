@@ -6,7 +6,7 @@ import {useAuth} from '@clerk/nextjs'
 import PortalShell, {PortalPanelSpec} from './PortalShell'
 import {useClientSearchParams, replaceQuery, getAutoplayFlag} from './urlState'
 import {usePlayer} from '@/app/home/player/PlayerState'
-import type {PlayerTrack, AlbumInfo, AlbumNavItem} from '@/lib/types'
+import type {PlayerTrack, AlbumInfo, AlbumNavItem, Tier} from '@/lib/types'
 import PlayerController from './player/PlayerController'
 
 import ActivationGate from '@/app/home/ActivationGate'
@@ -329,6 +329,8 @@ export default function PortalArea(props: {
     return () => window.removeEventListener('af:open-player', onOpen as EventListener)
   }, [onSelectAlbum, forcePanel])
 
+  const viewerTier: Tier = (tier === 'friend' || tier === 'patron' || tier === 'partner' ? tier : 'none')
+
   const panels = React.useMemo<PortalPanelSpec[]>(
     () => [
       {
@@ -343,12 +345,13 @@ export default function PortalArea(props: {
             onSelectAlbum={onSelectAlbum}
             isBrowsingAlbum={isBrowsingAlbum}
             openPlayerPanel={() => forcePanel('player')}
+            viewerTier={viewerTier}
           />
         ),
       },
       {id: 'portal', label: 'Portal', content: portalPanel},
     ],
-    [portalPanel, currentAlbumSlug, album, tracks, albums, forcePanel, isBrowsingAlbum, onSelectAlbum]
+    [portalPanel, currentAlbumSlug, album, tracks, albums, forcePanel, isBrowsingAlbum, onSelectAlbum, viewerTier]
   )
 
   return (

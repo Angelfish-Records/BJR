@@ -1,3 +1,4 @@
+// web/lib/entitlements.ts
 import 'server-only'
 import {sql} from '@vercel/postgres'
 

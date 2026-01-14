@@ -3,7 +3,7 @@
 
 import React from 'react'
 import {usePlayer} from './PlayerState'
-import type {AlbumInfo, AlbumNavItem, PlayerTrack} from '@/lib/types'
+import type {AlbumInfo, AlbumNavItem, PlayerTrack, Tier, TierName} from '@/lib/types'
 import {deriveShareContext, shareAlbum, shareTrack} from './share'
 import {PatternRing} from './VisualizerPattern'
 
@@ -12,6 +12,19 @@ function fmtTime(ms: number) {
   const m = Math.floor(s / 60)
   const r = s % 60
   return `${m}:${String(r).padStart(2, '0')}`
+}
+
+function tierRank(t: Tier): number {
+  if (t === 'partner') return 3
+  if (t === 'patron') return 2
+  if (t === 'friend') return 1
+  return 0
+}
+
+function tierLabel(t: TierName): string {
+  if (t === 'friend') return 'Friend+'
+  if (t === 'patron') return 'Patron+'
+  return 'Partner+'
 }
 
 function IconCircleBtn(props: {
@@ -124,55 +137,70 @@ export default function FullPlayer(props: {
   albums: AlbumNavItem[]
   onSelectAlbum?: (slug: string) => void
   isBrowsingAlbum?: boolean
+  viewerTier?: Tier
 }) {
   const p = usePlayer()
-  const {albumSlug, album, tracks, albums, onSelectAlbum, isBrowsingAlbum = false} = props
+  const {albumSlug, album, tracks, albums, onSelectAlbum, isBrowsingAlbum = false, viewerTier = 'none'} = props
 
   const albumTitle = album?.title ?? '—'
   const albumDesc = album?.description ?? 'This is placeholder copy. Soon: pull album description from Sanity.'
   const browseAlbums = albums.filter((a) => a.id !== album?.id)
 
-  const playingish = p.status === 'playing' || p.status === 'loading' || p.intent === 'play'
-  const [accessAllowed, setAccessAllowed] = React.useState<boolean | null>(null)
+    const playingish = p.status === 'playing' || p.status === 'loading' || p.intent === 'play'
+
+  const [access, setAccess] = React.useState<{
+    allowed: boolean
+    embargoed: boolean
+    releaseAt: string | null
+    code?: string
+    action?: string | null
+    reason?: string
+  } | null>(null)
 
   React.useEffect(() => {
-    if (!album?.catalogId) return
+  if (!album?.catalogId) return
 
-    let cancelled = false
-    fetch(`/api/access/check?albumId=${encodeURIComponent(album.catalogId)}`)
-      .then((r) => r.json())
-      .then((j) => {
-        if (!cancelled) setAccessAllowed(Boolean(j.allowed))
+  let cancelled = false
+
+  // Pull st/share from current URL if present
+  let st: string | null = null
+  try {
+    const sp = new URLSearchParams(window.location.search)
+    st = (sp.get('st') ?? sp.get('share') ?? '').trim() || null
+  } catch {
+    st = null
+  }
+
+  const u = new URL('/api/access/check', window.location.origin)
+  u.searchParams.set('albumId', album.catalogId)
+  if (st) u.searchParams.set('st', st)
+
+  fetch(u.toString())
+    .then((r) => r.json())
+    .then((j) => {
+      if (cancelled) return
+      setAccess({
+        allowed: Boolean(j.allowed),
+        embargoed: Boolean(j.embargoed),
+        releaseAt: typeof j.releaseAt === 'string' ? j.releaseAt : null,
+        code: typeof j.code === 'string' ? j.code : undefined,
+        action: typeof j.action === 'string' ? j.action : null,
+        reason: typeof j.reason === 'string' ? j.reason : undefined,
       })
-      .catch(() => {
-        if (!cancelled) setAccessAllowed(false)
-      })
+    })
+    .catch(() => {
+      if (!cancelled) setAccess({allowed: false, embargoed: false, releaseAt: null, code: 'FAILED', action: null})
+    })
 
-    return () => {
-      cancelled = true
-    }
-  }, [album?.catalogId])
+  return () => {
+    cancelled = true
+  }
+}, [album?.catalogId])
 
-  const [nowMs, setNowMs] = React.useState<number>(() => Date.now())
 
-  React.useEffect(() => {
-    const rel = album?.policy?.releaseAt ? Date.parse(album.policy.releaseAt) : NaN
-    if (!Number.isFinite(rel)) return
-
-    // set immediately (covers rapid album switching)
-    setNowMs(Date.now())
-
-    const delay = rel - Date.now()
-    if (delay <= 0) return
-
-    const t = window.setTimeout(() => setNowMs(Date.now()), delay + 50) // small buffer
-    return () => window.clearTimeout(t)
-  }, [album?.policy?.releaseAt])
-
-  const releaseAtMs = album?.policy?.releaseAt ? Date.parse(album.policy.releaseAt) : null
-  const isEmbargoed = releaseAtMs !== null && releaseAtMs > nowMs
-
-  const canPlay = tracks.length > 0 && accessAllowed !== false
+  const canPlay = tracks.length > 0 && access?.allowed !== false
+  const releaseAtMs = access?.releaseAt ? Date.parse(access.releaseAt) : NaN
+  const showEmbargo = access?.embargoed && Number.isFinite(releaseAtMs)
 
   const isThisAlbumActive = Boolean(album?.id && p.queueContextId === album.id)
   const currentIsInBrowsedAlbum = Boolean(p.current && tracks.some((t) => t.id === p.current!.id))
@@ -285,10 +313,10 @@ export default function FullPlayer(props: {
         <div style={{fontSize: 22, fontWeight: 650, letterSpacing: 0.2, opacity: 0.96}}>{albumTitle}</div>
         <div style={{maxWidth: 540, fontSize: 12, opacity: 0.62, lineHeight: 1.45}}>{albumDesc}</div>
 
-        {isEmbargoed ? (
+        {showEmbargo ? (
           <div style={{fontSize: 12, opacity: 0.75, marginTop: 6}}>
             Releases{' '}
-            {new Date(releaseAtMs!).toLocaleDateString(undefined, {
+            {new Date(releaseAtMs).toLocaleDateString(undefined, {
               day: 'numeric',
               month: 'short',
               year: 'numeric',
@@ -296,7 +324,6 @@ export default function FullPlayer(props: {
             . Instant early access for patrons.
           </div>
         ) : null}
-
 
 
         <div style={{display: 'flex', alignItems: 'center', gap: 10, marginTop: 8}}>
@@ -553,7 +580,10 @@ export default function FullPlayer(props: {
             <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12}}>
               {browseAlbums.map((a) => {
                 const isActive = album?.id === a.id
-                const disabled = !onSelectAlbum || isBrowsingAlbum || isActive
+                const min = a.policy?.minTierToLoad ?? null
+                const canLoadByTier = !min || tierRank(viewerTier) >= tierRank(min)
+                const disabled = !onSelectAlbum || isBrowsingAlbum || isActive || !canLoadByTier
+
 
                 return (
                   <button
@@ -629,6 +659,13 @@ export default function FullPlayer(props: {
                         }}
                       >
                         {a.artist ?? ''}
+
+                        {!canLoadByTier && min ? (
+                          <div style={{marginTop: 6, fontSize: 11, opacity: 0.6}}>
+                            Requires {tierLabel(min)}
+                          </div>
+                        ) : null}
+
                       </div>
                     </div>
                   </button>

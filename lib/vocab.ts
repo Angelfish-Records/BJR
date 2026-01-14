@@ -15,6 +15,8 @@ export const ENTITLEMENTS = {
   TIER_PARTNER: 'tier_partner',
 } as const
 
+// Canonical scope IDs
+export const SCOPE_CATALOG = 'catalog' as const
 
 export type EntitlementKey = (typeof ENTITLEMENTS)[keyof typeof ENTITLEMENTS]
 

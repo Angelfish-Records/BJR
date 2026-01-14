@@ -72,7 +72,8 @@ export async function POST(req: Request) {
     })
     const memberId = ensured.id
 
-    // ---- Grants ----
+   // ---- Grants ----
+
     for (const g of body.grant ?? []) {
       await sql`
         insert into entitlement_grants (
@@ -80,6 +81,7 @@ export async function POST(req: Request) {
           entitlement_key,
           scope_id,
           scope_meta,
+          expires_at,
           granted_by,
           grant_reason,
           grant_source
@@ -89,6 +91,7 @@ export async function POST(req: Request) {
           ${g.key},
           ${g.scopeId ?? null},
           ${JSON.stringify(g.scopeMeta ?? {})}::jsonb,
+          ${g.expiresAt ?? null}::timestamptz,
           'admin',
           ${reason},
           'admin_api'
@@ -103,6 +106,7 @@ export async function POST(req: Request) {
         )
       `
     }
+
 
     // ---- Revokes ----
     for (const r of body.revoke ?? []) {

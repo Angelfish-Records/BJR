@@ -1,5 +1,8 @@
 // web/lib/types.ts
 
+export type TierName = 'friend' | 'patron' | 'partner'
+export type Tier = 'none' | TierName
+
 export type AlbumInfo = {
   id: string
   catalogId?: string
@@ -16,7 +19,7 @@ export type AlbumPolicy = {
   releaseAt?: string | null
   earlyAccessEnabled?: boolean
   earlyAccessTiers?: string[]
-  minTierToLoad?: string | null
+  minTierToLoad?: TierName | null
 }
 
 export type AlbumNavItem = {
@@ -24,7 +27,14 @@ export type AlbumNavItem = {
   slug: string
   title: string
   artist?: string
+  year?: number
   coverUrl?: string | null
+
+  // browse-click gating (load gate)
+  policy?: {
+    publicPageVisible: boolean
+    minTierToLoad: TierName | null
+  }
 }
 
 export type PlayerTrack = {

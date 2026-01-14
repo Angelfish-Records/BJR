@@ -141,8 +141,15 @@ export default async function Home(props: {
   const albumSlug = featuredAlbumSlug
   const browseAlbumsRaw = await listAlbumsForBrowse()
 
+    const asTierName = (v: unknown): 'friend' | 'patron' | 'partner' | null => {
+    const s = typeof v === 'string' ? v.trim().toLowerCase() : ''
+    if (s === 'friend' || s === 'patron' || s === 'partner') return s
+    return null
+  }
+
   const browseAlbums: AlbumNavItem[] = browseAlbumsRaw
     .filter((a) => a.slug && a.title)
+    .filter((a) => a.policy?.publicPageVisible !== false)
     .map((a) => ({
       id: a.id,
       slug: a.slug,
@@ -150,6 +157,10 @@ export default async function Home(props: {
       artist: a.artist ?? undefined,
       year: a.year ?? undefined,
       coverUrl: a.artwork ? urlFor(a.artwork).width(400).height(400).quality(80).url() : null,
+      policy: {
+        publicPageVisible: a.policy?.publicPageVisible !== false,
+        minTierToLoad: asTierName(a.policy?.minTierToLoad),
+      },
     }))
 
   return (
