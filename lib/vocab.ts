@@ -5,9 +5,10 @@ export const ENTITLEMENTS = {
   // permissions (capabilities)
   PLAY_ALBUM: 'play_album',
   TRACK_SHARE_GRANT: 'track_share_grant',
-
-  // ✅ album-level share/press override during embargo
   ALBUM_SHARE_GRANT: 'album_share_grant',
+
+  // ✅ admin
+  ADMIN: 'admin',
 
   // human tiers (membership)
   TIER_FRIEND: 'tier_friend',
