@@ -29,6 +29,12 @@ function tierAtOrAbove(min: TierName) {
   return allowed.map((t) => `tier_${t}`)
 }
 
+function normalizeAlbumId(raw: string): string {
+  const s = (raw ?? '').trim()
+  if (!s) return ''
+  return s.startsWith('alb:') ? s.slice(4) : s
+}
+
 type Action = 'login' | 'subscribe' | 'buy' | 'wait' | null
 
 export async function GET(req: NextRequest) {
@@ -36,7 +42,8 @@ export async function GET(req: NextRequest) {
   const {userId} = await auth()
 
   const url = new URL(req.url)
-  const albumId = (url.searchParams.get('albumId') ?? '').trim()
+  const rawAlbumId = (url.searchParams.get('albumId') ?? '').trim()
+  const albumId = normalizeAlbumId(rawAlbumId)
   const st = (url.searchParams.get('st') ?? url.searchParams.get('share') ?? '').trim()
 
   if (!albumId) {

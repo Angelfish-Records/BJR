@@ -47,6 +47,12 @@ function mustEnv(...names: string[]) {
   throw new Error(`Missing env var: one of [${names.join(', ')}]`)
 }
 
+function normalizeAlbumId(raw: string): string {
+  const s = (raw ?? '').trim()
+  if (!s) return ''
+  return s.startsWith('alb:') ? s.slice(4) : s
+}
+
 function blocked(
   correlationId: string,
   code: TokenBlocked['code'],
@@ -113,16 +119,21 @@ export async function POST(req: NextRequest) {
   if (!playbackId || typeof playbackId !== 'string') {
     return blocked(correlationId, 'INVALID_REQUEST', 'Missing playbackId', undefined, 400)
   }
-
+  const {userId} = await auth()
+  const anonId = getAnonId(req)
   // ✅ Require album context always.
   const rawAlbumId = (body?.albumId ?? '').trim()
   if (!rawAlbumId) {
     return blocked(correlationId, 'INVALID_REQUEST', 'Missing albumId (canonical album context).', undefined, 400)
   }
-  const albumScopeId = `alb:${rawAlbumId}`
+  const albumId = normalizeAlbumId(rawAlbumId)
 
-  const {userId} = await auth()
-  const anonId = getAnonId(req)
+if (!albumId) {
+  const res = blocked(correlationId, 'INVALID_REQUEST', 'Missing albumId (canonical album context).', undefined, 400)
+  persistAnonId(res, anonId)
+  return res
+}
+  const albumScopeId = `alb:${rawAlbumId}`
 
   const url = new URL(req.url)
   const st = (body?.st ?? '').trim() || (url.searchParams.get('st') ?? '').trim() || (url.searchParams.get('share') ?? '').trim()
