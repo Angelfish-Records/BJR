@@ -28,6 +28,22 @@ function QueueBootstrapper(props: {albumId: string | null; tracks: PlayerTrack[]
 
 type AlbumPayload = {album: AlbumInfo | null; tracks: PlayerTrack[]}
 
+function getSavedSt(slug: string): string {
+  try {
+    return (sessionStorage.getItem(`af_st:${slug}`) ?? '').trim()
+  } catch {
+    return ''
+  }
+}
+
+function setSavedSt(slug: string, st: string) {
+  try {
+    sessionStorage.setItem(`af_st:${slug}`, st)
+  } catch {
+    // ignore
+  }
+}
+
 function IconPlayer() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -239,7 +255,9 @@ export default function PortalArea(props: {
       if (!slug) return
       if (isBrowsingRef.current) return
 
-      patchQuery({p: 'player', album: slug, track: null, st: null, share: null})
+      const saved = getSavedSt(slug)
+
+      patchQuery({p: 'player', album: slug, track: null, st: saved || null, share: null})
 
       setIsBrowsingAlbum(true)
       setCurrentAlbumSlug(slug)
@@ -316,6 +334,29 @@ export default function PortalArea(props: {
     // Make it one-shot so it can’t re-trigger on qs changes / re-renders.
     patchQuery({autoplay: null})
   }, [qPanel, qAutoplay, qTrack, qAlbum, qShareToken, p, patchQuery])
+
+// Persist token per album slug, and restore it when returning to that album.
+React.useEffect(() => {
+  if (qPanel !== 'player') return
+
+  const slug = qAlbum ?? currentAlbumSlug
+  if (!slug) return
+
+  const stFromUrl = (sp.get('st') ?? sp.get('share') ?? '').trim()
+
+  if (stFromUrl) {
+    setSavedSt(slug, stFromUrl)
+    return
+  }
+
+  // No token in URL — if we have a saved token for this album, re-attach it.
+  const saved = getSavedSt(slug)
+  if (saved) {
+    patchQuery({st: saved, share: null})
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [qPanel, qAlbum, currentAlbumSlug])
+
 
   // Existing: MiniPlayer -> open player + optional album request
   React.useEffect(() => {
