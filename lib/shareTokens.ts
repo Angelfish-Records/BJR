@@ -37,6 +37,15 @@ function isPlainObject(x: unknown): x is Record<string, unknown> {
   return !!x && typeof x === 'object' && !Array.isArray(x)
 }
 
+function normalizeScopeId(input: string | null | undefined): string | null {
+  let s = (input ?? '').trim()
+  if (!s) return null
+  // collapse any accidental double-prefixing
+  while (s.startsWith('alb:')) s = s.slice(4)
+  s = s.trim()
+  return s ? `alb:${s}` : null
+}
+
 /**
  * share_tokens.grants is stored as jsonb.
  * We accept only the shape we know how to apply: {key, scopeId?, scopeMeta?, expiresAt?}
@@ -227,8 +236,10 @@ export async function redeemShareTokenForMember(params: {
   if (row.revoked_at) return {ok: false, code: 'REVOKED'}
   if (isExpired(row.expires_at)) return {ok: false, code: 'EXPIRED'}
 
-  const expectedScopeId = params.expectedScopeId ?? null
-  if (expectedScopeId && row.scope_id && row.scope_id !== expectedScopeId) {
+  const expected = normalizeScopeId(params.expectedScopeId ?? null)
+  const found = normalizeScopeId(row.scope_id)
+
+  if (expected && found && found !== expected) {
     return {ok: false, code: 'SCOPE_MISMATCH'}
   }
 
@@ -314,8 +325,15 @@ export async function validateShareToken(params: {
   if (row.revoked_at) return {ok: false, code: 'REVOKED'}
   if (isExpired(row.expires_at)) return {ok: false, code: 'EXPIRED'}
 
-  const expectedScopeId = params.expectedScopeId ?? null
-  if (expectedScopeId && row.scope_id && row.scope_id !== expectedScopeId) {
+  const expected = normalizeScopeId(params.expectedScopeId ?? null)
+  const found = normalizeScopeId(row.scope_id)
+
+  console.log('[shareTokens] scope mismatch', {
+  expectedScopeId: params.expectedScopeId,
+  tokenScopeId: row.scope_id,
+})
+
+  if (expected && found && found !== expected) {
     return {ok: false, code: 'SCOPE_MISMATCH'}
   }
 

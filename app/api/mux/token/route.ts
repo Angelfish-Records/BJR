@@ -48,9 +48,11 @@ function mustEnv(...names: string[]) {
 }
 
 function normalizeAlbumId(raw: string): string {
-  const s = (raw ?? '').trim()
+  let s = (raw ?? '').trim()
   if (!s) return ''
-  return s.startsWith('alb:') ? s.slice(4) : s
+  // Strip *all* leading alb: prefixes (defensive)
+  while (s.startsWith('alb:')) s = s.slice(4)
+  return s.trim()
 }
 
 function blocked(
@@ -133,7 +135,7 @@ if (!albumId) {
   persistAnonId(res, anonId)
   return res
 }
-  const albumScopeId = `alb:${rawAlbumId}`
+  const albumScopeId = `alb:${albumId}` // ✅ normalized, never double-prefix
 
   const url = new URL(req.url)
   const st = (body?.st ?? '').trim() || (url.searchParams.get('st') ?? '').trim() || (url.searchParams.get('share') ?? '').trim()

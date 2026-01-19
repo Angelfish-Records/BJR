@@ -30,9 +30,11 @@ function tierAtOrAbove(min: TierName) {
 }
 
 function normalizeAlbumId(raw: string): string {
-  const s = (raw ?? '').trim()
+  let s = (raw ?? '').trim()
   if (!s) return ''
-  return s.startsWith('alb:') ? s.slice(4) : s
+  // Strip *all* leading alb: prefixes (defensive)
+  while (s.startsWith('alb:')) s = s.slice(4)
+  return s.trim()
 }
 
 type Action = 'login' | 'subscribe' | 'buy' | 'wait' | null
@@ -83,6 +85,12 @@ export async function GET(req: NextRequest) {
       })
 
       if (!v.ok) {
+          console.log('[access/check] share token reject', { //temp - remove after debugging
+          rawAlbumId,
+          albumId,
+          expectedScopeId: albumScopeId,
+          code: v.code,
+        }) // temp - remove to here
         return NextResponse.json({
           ok: true,
           allowed: false,

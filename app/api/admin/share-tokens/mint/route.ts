@@ -1,3 +1,4 @@
+// web/app/api/admin/share-tokens/mint/route.ts
 import 'server-only'
 import {NextRequest, NextResponse} from 'next/server'
 import {auth} from '@clerk/nextjs/server'
@@ -85,7 +86,8 @@ export async function POST(req: NextRequest) {
     const expiresAt = parseExpiresAt(raw.expiresAt)
     const note = cleanStr(raw.note)
 
-    const scopeId = `alb:${albumId}`
+    const canonicalAlbumId = albumId.startsWith('alb:') ? albumId.slice(4) : albumId
+    const scopeId = `alb:${canonicalAlbumId}`
 
     const grants: TokenGrant[] = [
       {
