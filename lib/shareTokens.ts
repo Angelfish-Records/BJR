@@ -126,12 +126,16 @@ async function enforceDistinctConsumerCap(params: {
   consumerKey: string
 }): Promise<{ok: true} | {ok: false; outcome: 'quota_exceeded'}> {
   const capBucket = (params.capBucket ?? '*').trim() || '*'
-  const lockKey = `${params.tokenId}:${capBucket}`
+
+  // ✅ If cap is cross-action, canonicalize action to '*'
+  const bucketAction = capBucket === '*' ? '*' : params.action
+
+  // Serialize per token+bucketAction
+  const lockKey = `${params.tokenId}:${bucketAction}`
 
   const r = await sql<{
     already: boolean
     inserted: number
-    used: number
   }>`
     with
       _lock as (
@@ -141,7 +145,7 @@ async function enforceDistinctConsumerCap(params: {
         select 1 as ok
         from share_token_consumers
         where share_token_id = ${params.tokenId}::uuid
-          and (${capBucket} = '*' or action = ${params.action})
+          and action = ${bucketAction}
           and consumer_key = ${params.consumerKey}
         limit 1
       ),
@@ -149,29 +153,22 @@ async function enforceDistinctConsumerCap(params: {
         select count(*)::int as n
         from share_token_consumers
         where share_token_id = ${params.tokenId}::uuid
-          and (${capBucket} = '*' or action = ${params.action})
+          and action = ${bucketAction}
       ),
       ins as (
         insert into share_token_consumers (share_token_id, action, consumer_key)
         select
           ${params.tokenId}::uuid,
-          ${params.action},
+          ${bucketAction},
           ${params.consumerKey}
         where not exists (select 1 from existing)
           and (select n from used_before) < ${params.max}::int
         on conflict (share_token_id, action, consumer_key) do nothing
         returning 1
-      ),
-      used_after as (
-        select count(*)::int as n
-        from share_token_consumers
-        where share_token_id = ${params.tokenId}::uuid
-          and (${capBucket} = '*' or action = ${params.action})
       )
     select
       exists(select 1 from existing) as already,
-      (select count(*)::int from ins) as inserted,
-      (select n from used_after) as used
+      (select count(*)::int from ins) as inserted
   `
 
   const row = r.rows?.[0]

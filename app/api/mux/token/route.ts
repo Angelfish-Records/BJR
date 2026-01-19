@@ -7,13 +7,15 @@ import {countAnonDistinctCompletedTracks, newCorrelationId} from '@/lib/events'
 import {ACCESS_ACTIONS} from '@/lib/vocab'
 import {validateShareToken} from '@/lib/shareTokens'
 import {decideAlbumPlaybackAccess} from '@/lib/accessOracle'
+import {ensureAnonId} from '@/lib/anon'
+import {sql} from '@vercel/postgres'
 
 type TokenReq = {
   playbackId: string
   trackId?: string
-  albumId?: string // canonical album id (catalogId preferred)
+  albumId?: string
   durationMs?: number
-  st?: string // share/press token (optional)
+  st?: string
 }
 
 type TokenOk = {ok: true; token: string; expiresAt: number; correlationId: string}
@@ -35,7 +37,6 @@ type TokenBlocked = {
 }
 
 const AUD = 'v'
-const ANON_COOKIE = 'af_anon'
 const ANON_DISTINCT_TRACK_CAP = 3
 const ANON_WINDOW_DAYS = 30
 
@@ -50,7 +51,6 @@ function mustEnv(...names: string[]) {
 function normalizeAlbumId(raw: string): string {
   let s = (raw ?? '').trim()
   if (!s) return ''
-  // Strip *all* leading alb: prefixes (defensive)
   while (s.startsWith('alb:')) s = s.slice(4)
   return s.trim()
 }
@@ -81,24 +81,7 @@ function toPkcs8Pem(pem: string): string {
   return keyObj.export({format: 'pem', type: 'pkcs8'}) as string
 }
 
-function getAnonId(req: NextRequest) {
-  const c = req.cookies.get(ANON_COOKIE)?.value
-  if (c && /^[a-zA-Z0-9_-]{16,}$/.test(c)) return c
-  return crypto.randomBytes(18).toString('base64url')
-}
-
-function persistAnonId(res: NextResponse, anonId: string) {
-  res.cookies.set(ANON_COOKIE, anonId, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: true,
-    path: '/',
-    maxAge: 60 * 60 * 24 * 365,
-  })
-}
-
 async function getMemberIdByClerkUserId(userId: string): Promise<string | null> {
-  const {sql} = await import('@vercel/postgres')
   if (!userId) return null
   const r = await sql<{id: string}>`
     select id
@@ -123,26 +106,37 @@ export async function POST(req: NextRequest) {
   if (!playbackId || typeof playbackId !== 'string') {
     return blocked(correlationId, 'INVALID_REQUEST', 'Missing playbackId', undefined, 400)
   }
+
   const {userId} = await auth()
-  const anonId = getAnonId(req)
-  // ✅ Require album context always.
+
+  // ✅ Always attach anon id + persist if missing/invalid (cookie stability)
+  const resProto = NextResponse.next()
+  const {anonId} = ensureAnonId(req, resProto)
+
   const rawAlbumId = (body?.albumId ?? '').trim()
   if (!rawAlbumId) {
-    return blocked(correlationId, 'INVALID_REQUEST', 'Missing albumId (canonical album context).', undefined, 400)
+    const res = blocked(correlationId, 'INVALID_REQUEST', 'Missing albumId (canonical album context).', undefined, 400)
+    // persist anon cookie if we minted one
+    resProto.cookies.getAll().forEach((c) => res.cookies.set(c))
+    return res
   }
-  const albumId = normalizeAlbumId(rawAlbumId)
 
-if (!albumId) {
-  const res = blocked(correlationId, 'INVALID_REQUEST', 'Missing albumId (canonical album context).', undefined, 400)
-  persistAnonId(res, anonId)
-  return res
-}
-  const albumScopeId = `alb:${albumId}` // ✅ normalized, never double-prefix
+  const albumId = normalizeAlbumId(rawAlbumId)
+  if (!albumId) {
+    const res = blocked(correlationId, 'INVALID_REQUEST', 'Missing albumId (canonical album context).', undefined, 400)
+    resProto.cookies.getAll().forEach((c) => res.cookies.set(c))
+    return res
+  }
+
+  const albumScopeId = `alb:${albumId}`
 
   const url = new URL(req.url)
-  const st = (body?.st ?? '').trim() || (url.searchParams.get('st') ?? '').trim() || (url.searchParams.get('share') ?? '').trim()
+  const st =
+    (body?.st ?? '').trim() ||
+    (url.searchParams.get('st') ?? '').trim() ||
+    (url.searchParams.get('share') ?? '').trim()
 
-  // ---- Capability mode via share token (bypass anon cap + oracle checks) ----
+  // ---- Capability mode via share token ----
   let tokenAllowsPlayback = false
   if (st) {
     const v = await validateShareToken({
@@ -157,12 +151,12 @@ if (!albumId) {
     tokenAllowsPlayback = v.ok
     if (!v.ok) {
       const res = blocked(correlationId, 'ENTITLEMENT_REQUIRED', 'Invalid or expired share token.', 'login', 403)
-      persistAnonId(res, anonId)
+      resProto.cookies.getAll().forEach((c) => res.cookies.set(c))
       return res
     }
   }
 
-  // ---- Anonymous cap (REAL): based on completed playthrough events in Neon ----
+  // ---- Anonymous cap ----
   if (!userId && !tokenAllowsPlayback) {
     const distinctCompleted = await countAnonDistinctCompletedTracks({anonId, sinceDays: ANON_WINDOW_DAYS})
     if (distinctCompleted >= ANON_DISTINCT_TRACK_CAP) {
@@ -173,12 +167,12 @@ if (!albumId) {
         'login',
         403
       )
-      persistAnonId(res, anonId)
+      resProto.cookies.getAll().forEach((c) => res.cookies.set(c))
       return res
     }
   }
 
-  // ---- Logged-in access: enforce via oracle ----
+  // ---- Logged-in access ----
   if (userId && !tokenAllowsPlayback) {
     const memberId = await getMemberIdByClerkUserId(userId)
     if (!memberId) {
@@ -189,13 +183,13 @@ if (!albumId) {
         'wait',
         403
       )
-      persistAnonId(res, anonId)
+      resProto.cookies.getAll().forEach((c) => res.cookies.set(c))
       return res
     }
 
     const d = await decideAlbumPlaybackAccess({
       memberId,
-      albumId: albumId,
+      albumId,
       correlationId,
       action: ACCESS_ACTIONS.PLAYBACK_TOKEN_ISSUE,
     })
@@ -216,7 +210,7 @@ if (!albumId) {
         d.action ?? undefined,
         403
       )
-      persistAnonId(res, anonId)
+      resProto.cookies.getAll().forEach((c) => res.cookies.set(c))
       return res
     }
   }
@@ -254,6 +248,8 @@ if (!albumId) {
   const out: TokenOk = {ok: true, token: jwt, expiresAt: exp, correlationId}
   const res = NextResponse.json(out)
   res.headers.set('x-correlation-id', correlationId)
-  persistAnonId(res, anonId)
+
+  // persist anon cookie if ensureAnonId minted it
+  resProto.cookies.getAll().forEach((c) => res.cookies.set(c))
   return res
 }
