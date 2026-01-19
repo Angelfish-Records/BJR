@@ -1,5 +1,6 @@
 // web/app/api/access/check/route.ts
 import {NextRequest, NextResponse} from 'next/server'
+import {cookies} from 'next/headers'
 import {auth} from '@clerk/nextjs/server'
 import {sql} from '@vercel/postgres'
 import {checkAccess} from '@/lib/access'
@@ -35,6 +36,21 @@ function normalizeAlbumId(raw: string): string {
   // Strip *all* leading alb: prefixes (defensive)
   while (s.startsWith('alb:')) s = s.slice(4)
   return s.trim()
+}
+
+async function readAdminDebugCookie(): Promise<{tier?: string; force?: string} | null> {
+  if (process.env.NEXT_PUBLIC_ADMIN_DEBUG !== '1') return null
+
+  const c = await cookies()
+  const raw = c.get('af_dbg')?.value ?? ''
+  if (!raw) return null
+
+  try {
+    const o = JSON.parse(raw) as {tier?: string; force?: string}
+    return o && typeof o === 'object' ? o : null
+  } catch {
+    return null
+  }
 }
 
 type Action = 'login' | 'subscribe' | 'buy' | 'wait' | null
@@ -145,6 +161,44 @@ export async function GET(req: NextRequest) {
       redeemed: null,
     })
   }
+
+  // --- admin debug override (real endpoint, session-only) ---
+const dbg = await readAdminDebugCookie()
+if (dbg && memberId) {
+  const isAdmin = (await checkAccess(memberId, {kind:'global', required:[ENTITLEMENTS.ADMIN]}, {log:false})).allowed
+  if (isAdmin) {
+    const force = (dbg.force ?? 'none').toString()
+    if (force === 'AUTH_REQUIRED') {
+      return NextResponse.json({
+        ok: true, allowed: false, embargoed: false, releaseAt: null,
+        code: 'AUTH_REQUIRED', action: 'login', reason: 'Sign in required',
+        correlationId, redeemed: null,
+      })
+    }
+    if (force === 'ENTITLEMENT_REQUIRED') {
+      return NextResponse.json({
+        ok: true, allowed: false, embargoed: false, releaseAt: null,
+        code: 'ENTITLEMENT_REQUIRED', action: 'subscribe', reason: 'Entitlement required',
+        correlationId, redeemed: null,
+      })
+    }
+    if (force === 'ANON_CAP_REACHED') {
+      return NextResponse.json({
+        ok: true, allowed: false, embargoed: false, releaseAt: null,
+        code: 'ANON_CAP_REACHED', action: 'login', reason: 'Anon cap reached',
+        correlationId, redeemed: null,
+      })
+    }
+    if (force === 'EMBARGOED') {
+      return NextResponse.json({
+        ok: true, allowed: false, embargoed: true, releaseAt: new Date().toISOString(),
+        code: 'EMBARGOED', action: 'wait', reason: 'Embargoed',
+        correlationId, redeemed: null,
+      })
+    }
+  }
+}
+
 
   // 1) If a share token is present, redeem it first (grants entitlements).
   let redeemed: {ok: boolean; code?: string} | null = null

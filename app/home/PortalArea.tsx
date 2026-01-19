@@ -8,6 +8,7 @@ import {useClientSearchParams, replaceQuery, getAutoplayFlag} from './urlState'
 import {usePlayer} from '@/app/home/player/PlayerState'
 import type {PlayerTrack, AlbumInfo, AlbumNavItem, Tier} from '@/lib/types'
 import PlayerController from './player/PlayerController'
+import AdminDebugBar from '@/app/home/AdminDebugBar'
 
 import ActivationGate from '@/app/home/ActivationGate'
 import Image from 'next/image'
@@ -157,6 +158,7 @@ export default function PortalArea(props: {
   attentionMessage?: string | null
   tier?: string | null
   isPatron?: boolean
+  isAdmin?: boolean
   canManageBilling?: boolean
 }) {
   const {
@@ -667,6 +669,14 @@ header={({activePanelId, setPanel}) => (
         </div>
 
         <div className="afTopBarRight">
+
+{props.isAdmin ? (
+  <div style={{marginBottom: 8}}>
+    <AdminDebugBar />
+  </div>
+) : null}
+
+
           {/* ✅ lift gate above blur overlay */}
           <div className="afTopBarRightInner" style={{maxWidth: 520, minWidth: 0, position: 'relative', zIndex: 20}}>
             <ActivationGate

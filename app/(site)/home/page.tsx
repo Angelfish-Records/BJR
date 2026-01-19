@@ -7,6 +7,8 @@ import {urlFor} from '@/sanity/lib/image'
 import {auth, currentUser} from '@clerk/nextjs/server'
 import {ensureMemberByClerk} from '@/lib/members'
 import {listCurrentEntitlementKeys} from '@/lib/entitlements'
+import {ENTITLEMENTS} from '@/lib/vocab'
+import {checkAccess} from '@/lib/access'
 import {deriveTier} from '@/lib/vocab'
 import {fetchPortalPage} from '@/lib/portal'
 import PortalModules from '@/app/home/PortalModules'
@@ -104,6 +106,12 @@ export default async function Home(props: {
   }
 
   const isPatron = tier === 'patron'
+
+  let isAdmin = false
+if (member?.id) {
+  const d = await checkAccess(member.id, {kind: 'global', required: [ENTITLEMENTS.ADMIN]}, {log: false})
+  isAdmin = d.allowed
+}
 
   const bgUrl =
     page?.backgroundImage
@@ -302,6 +310,7 @@ export default async function Home(props: {
                 attentionMessage={attentionMessage}
                 tier={tier}
                 isPatron={isPatron}
+                isAdmin={isAdmin}
                 canManageBilling={!!member}
                 topLogoUrl={page?.topLogoUrl ?? null}
                 topLogoHeight={page?.topLogoHeight ?? null}
