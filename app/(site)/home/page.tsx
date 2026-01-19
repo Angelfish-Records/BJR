@@ -8,6 +8,7 @@ import {auth, currentUser} from '@clerk/nextjs/server'
 import {ensureMemberByClerk} from '@/lib/members'
 import {listCurrentEntitlementKeys} from '@/lib/entitlements'
 import {ENTITLEMENTS} from '@/lib/vocab'
+import AdminDebugBar from '@/app/home/AdminDebugBar'
 import {checkAccess} from '@/lib/access'
 import {deriveTier} from '@/lib/vocab'
 import {fetchPortalPage} from '@/lib/portal'
@@ -189,6 +190,7 @@ if (member?.id) {
 
   return (
     <main style={mainStyle}>
+       <AdminDebugBar />
       <style>{`
         .shadowHomeGrid {
           display: grid;
