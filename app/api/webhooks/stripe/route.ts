@@ -113,6 +113,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ok: false, error: msg}, {status: 400})
   }
 
+    // --- Idempotency: dedupe webhook deliveries by Stripe event.id ---
+  // Requires table stripe_webhook_events(event_id text unique, type text, created_at timestamptz default now()).
+  const dedupe = await sql`
+    insert into stripe_webhook_events (event_id, type)
+    values (${event.id}, ${event.type})
+    on conflict (event_id) do nothing
+    returning event_id
+  `
+  if (dedupe.rowCount === 0) {
+    // Already processed this exact Stripe event delivery
+    return NextResponse.json({ok: true, deduped: true})
+  }
+
+
   try {
     // ---- Subscription lifecycle (authoritative for subscription entitlements) ----
     if (

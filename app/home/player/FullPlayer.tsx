@@ -192,7 +192,9 @@ export default function FullPlayer(props: {
     ;(async () => {
       try {
         const r = await fetch(u.toString(), {method: 'GET', signal: ac.signal})
+        const corr = r.headers.get('x-correlation-id') ?? null
         const j = (await r.json()) as AccessPayload
+
 
         if (cancelled) return
 
@@ -229,7 +231,7 @@ export default function FullPlayer(props: {
 
         // ---- propagate to PlayerState for global UX (ActivationGate + blur) ----
         if (!allowed) {
-          p.setBlocked(reason ?? 'Playback blocked.', {code, action})
+          p.setBlocked(reason ?? 'Playback blocked.', {code, action, correlationId: corr})
         } else {
           if (p.lastError || p.blockedCode || p.blockedAction) {
             p.clearError()

@@ -63,7 +63,9 @@ function blocked(
   status: number = 403
 ) {
   const out: TokenBlocked = {ok: false, blocked: true, code, reason, action, correlationId}
-  return NextResponse.json(out, {status})
+  const res = NextResponse.json(out, {status})
+  res.headers.set('x-correlation-id', correlationId)
+  return res
 }
 
 function normalizePemMaybe(input: string): string {
@@ -193,7 +195,7 @@ if (!albumId) {
 
     const d = await decideAlbumPlaybackAccess({
       memberId,
-      albumId: rawAlbumId,
+      albumId: albumId,
       correlationId,
       action: ACCESS_ACTIONS.PLAYBACK_TOKEN_ISSUE,
     })
@@ -251,6 +253,7 @@ if (!albumId) {
 
   const out: TokenOk = {ok: true, token: jwt, expiresAt: exp, correlationId}
   const res = NextResponse.json(out)
+  res.headers.set('x-correlation-id', correlationId)
   persistAnonId(res, anonId)
   return res
 }

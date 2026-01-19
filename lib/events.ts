@@ -10,6 +10,15 @@ export function newCorrelationId(): string {
   return crypto.randomUUID()
 }
 
+function asUuidOrNull(input: unknown): string | null {
+  const s = typeof input === 'string' ? input.trim() : ''
+  if (!s) return null
+  // uuid v4-ish (accepts any variant; good enough for “cast safety”)
+  const ok =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+  return ok ? s : null
+}
+
 export async function logMemberEvent(params: {
   memberId?: string | null
   eventType: EventType | string
@@ -27,6 +36,8 @@ export async function logMemberEvent(params: {
     correlationId = null,
   } = params
 
+  const corrUuid = asUuidOrNull(correlationId)
+
   try {
     if (occurredAt) {
       await sql`
@@ -37,7 +48,7 @@ export async function logMemberEvent(params: {
           ${occurredAt.toISOString()}::timestamptz,
           ${source},
           ${JSON.stringify(payload)}::jsonb,
-          ${correlationId}::uuid
+          ${corrUuid}::uuid
         )
       `
     } else {
@@ -48,7 +59,7 @@ export async function logMemberEvent(params: {
           ${eventType},
           ${source},
           ${JSON.stringify(payload)}::jsonb,
-          ${correlationId}::uuid
+          ${corrUuid}::uuid
         )
       `
     }
@@ -98,7 +109,7 @@ export async function countAnonDistinctCompletedTracks(params: {
   return r.rows?.[0]?.n ?? 0
 }
 
-/* ---- semantic wrappers (keep your event stream consistent) ---- */
+/* ---- semantic wrappers ---- */
 
 export async function logMemberCreated(params: {
   memberId: string

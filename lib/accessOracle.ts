@@ -1,3 +1,4 @@
+// web/lib/accessOracle.ts
 import 'server-only'
 import {checkAccess} from '@/lib/access'
 import {getAlbumPolicyByAlbumId, isEmbargoed, type TierName} from '@/lib/albumPolicy'
@@ -63,13 +64,20 @@ function safeParseReleaseAt(releaseAt: string | null | undefined): string | null
   return s
 }
 
+function normalizeAlbumId(raw: string): string {
+  let s = (raw ?? '').trim()
+  if (!s) return ''
+  while (s.startsWith('alb:')) s = s.slice(4)
+  return s.trim()
+}
+
 export async function decideAlbumPlaybackAccess(params: {
   memberId: string
   albumId: string
   correlationId: string
   action?: AccessAction | string
 }): Promise<AlbumPlaybackOracleDecision> {
-  const albumId = (params.albumId ?? '').trim()
+  const albumId = normalizeAlbumId(params.albumId)
   const correlationId = params.correlationId
   const action = params.action ?? ACCESS_ACTIONS.ACCESS_CHECK
 

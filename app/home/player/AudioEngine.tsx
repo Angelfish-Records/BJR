@@ -339,6 +339,7 @@ export default function AudioEngine() {
           signal: ac.signal, // ✅ KEEP THIS
         })
 
+        const corr = res.headers.get('x-correlation-id') ?? null
 
         let data: TokenResponse | null = null
         try {
@@ -369,7 +370,7 @@ export default function AudioEngine() {
           // ✅ Stop any autoplay-bridge retries.
           playIntentRef.current = false
 
-          pRef.current.setBlocked(reason, {code, action: action})
+          pRef.current.setBlocked(reason, {code, action, correlationId: corr})
           mediaSurface.setStatus('blocked')
           return
         }

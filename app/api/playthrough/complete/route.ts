@@ -37,6 +37,7 @@ export async function POST(req: Request) {
   } catch {}
 
   if (!trackId || !playbackId) {
+    
     return NextResponse.json({ok: false}, {status: 400})
   }
 

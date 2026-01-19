@@ -51,6 +51,8 @@ export type PlayerState = {
   
   blockedCode?: string
   blockedAction?: 'login' | 'subscribe' | 'buy' | 'wait'
+  blockedCorrelationId?: string | null
+
 
 }
 
@@ -85,9 +87,11 @@ type PlayerActions = {
   cycleRepeat: () => void
   tick: (deltaMs: number) => void
 
-  setBlocked: (reason?: string, meta?: {code?: string; action?: 'login' | 'subscribe' | 'buy' | 'wait'}) => void
+  setBlocked: (
+    reason?: string,
+    meta?: {code?: string; action?: 'login' | 'subscribe' | 'buy' | 'wait'; correlationId?: string | null}
+  ) => void
   clearError: () => void
-
   bumpReload: () => void
 }
 
@@ -502,7 +506,15 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
           }
         }),
 
-      setStatusExternal: (st: PlayerStatus) => setState((s) => (s.status === st ? s : {...s, status: st})),
+      setStatusExternal: (st: PlayerStatus) =>
+      setState((s) => {
+        if (s.blockedCode || s.blockedAction || s.lastError) {
+          // stay visually stable while blocked/error
+          return s
+        }
+        return s.status === st ? s : {...s, status: st}
+      }),
+
 
       setLoadingReasonExternal: (r?: LoadingReason) =>
         setState((s) => (s.loadingReason === r ? s : {...s, loadingReason: r})),
@@ -566,7 +578,7 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
 
         setBlocked: (
           reason?: string,
-          meta?: {code?: string; action?: 'login' | 'subscribe' | 'buy' | 'wait'}
+          meta?: {code?: string; action?: 'login' | 'subscribe' | 'buy' | 'wait'; correlationId?: string | null}
         ) =>
           setState((s) => ({
             ...s,
@@ -577,7 +589,9 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
             intentAtMs: undefined,
             blockedCode: meta?.code,
             blockedAction: meta?.action,
+            blockedCorrelationId: meta?.correlationId ?? s.blockedCorrelationId ?? null,
           })),
+
 
         clearError: () =>
           setState((s) => ({
@@ -585,6 +599,7 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
             lastError: undefined,
             blockedCode: undefined,
             blockedAction: undefined,
+            blockedCorrelationId: null,
           })),
 
       bumpReload: () =>

@@ -40,17 +40,11 @@ function isPlainObject(x: unknown): x is Record<string, unknown> {
 function normalizeScopeId(input: string | null | undefined): string | null {
   let s = (input ?? '').trim()
   if (!s) return null
-  // collapse any accidental double-prefixing
   while (s.startsWith('alb:')) s = s.slice(4)
   s = s.trim()
   return s ? `alb:${s}` : null
 }
 
-/**
- * share_tokens.grants is stored as jsonb.
- * We accept only the shape we know how to apply: {key, scopeId?, scopeMeta?, expiresAt?}
- * Everything else is ignored.
- */
 function coerceTokenGrants(input: unknown): TokenGrant[] {
   if (!Array.isArray(input)) return []
 
@@ -100,14 +94,24 @@ function isExpired(expiresAt: string | null) {
   return Number.isFinite(exp) && Date.now() > exp
 }
 
-async function capReached(params: {tokenId: string; max: number; action: string}): Promise<boolean> {
-  const c = await sql<{n: number}>`
-    select count(*)::int as n
+/**
+ * CAP SEMANTICS:
+ * - max_redemptions is treated as "distinct consumers" rather than raw request count.
+ * - consumer identity is coalesce(member_id, anon_id) so retries don't burn the cap.
+ * - we default to counting across ALL actions (capAction='*') so access+redeem share one cap.
+ */
+async function capReached(params: {tokenId: string; max: number; capAction?: string}): Promise<boolean> {
+  const capAction = (params.capAction ?? '*').trim() || '*'
+
+  const r = await sql<{n: number}>`
+    select count(distinct coalesce(member_id::text, anon_id))::int as n
     from share_token_plays
     where share_token_id = ${params.tokenId}::uuid
-      and action = ${params.action}
+      and outcome = 'allowed'
+      and coalesce(member_id::text, anon_id) is not null
+      and (${capAction} = '*' or action = ${capAction})
   `
-  const used = c.rows?.[0]?.n ?? 0
+  const used = r.rows?.[0]?.n ?? 0
   return used >= params.max
 }
 
@@ -118,6 +122,8 @@ async function logPlay(params: {
   resourceKind: string
   resourceId: string | null
   action: string
+  outcome: 'allowed' | 'denied'
+  metadata?: Record<string, unknown>
 }) {
   await sql`
     insert into share_token_plays (
@@ -138,8 +144,8 @@ async function logPlay(params: {
       ${params.resourceKind},
       ${params.resourceId},
       ${params.action},
-      'allowed',
-      '{}'::jsonb,
+      ${params.outcome},
+      ${JSON.stringify(params.metadata ?? {})}::jsonb,
       now()
     )
   `
@@ -238,21 +244,17 @@ export async function redeemShareTokenForMember(params: {
 
   const expected = normalizeScopeId(params.expectedScopeId ?? null)
   const found = normalizeScopeId(row.scope_id)
-
-  if (expected && found && found !== expected) {
-    return {ok: false, code: 'SCOPE_MISMATCH'}
-  }
+  if (expected && found && found !== expected) return {ok: false, code: 'SCOPE_MISMATCH'}
 
   const action = normalizeAction(params.action, 'redeem')
 
   if (typeof row.max_redemptions === 'number' && row.max_redemptions > 0) {
-    const reached = await capReached({tokenId: row.id, max: row.max_redemptions, action})
+    const reached = await capReached({tokenId: row.id, max: row.max_redemptions, capAction: '*'})
     if (reached) return {ok: false, code: 'CAP_REACHED'}
   }
 
   const grants = coerceTokenGrants(row.grants)
 
-  // 1) log redemption
   await logPlay({
     tokenId: row.id,
     memberId: params.memberId,
@@ -260,9 +262,11 @@ export async function redeemShareTokenForMember(params: {
     resourceKind: params.resourceKind ?? 'album',
     resourceId: params.resourceId ?? row.scope_id ?? null,
     action,
+    outcome: 'allowed',
+    metadata: {cap_bucket: '*'},
   })
 
-  // 2) apply grants (idempotent-ish)
+  // apply grants (idempotent-ish)
   for (const g of grants) {
     const key = (g?.key ?? '').toString().trim()
     if (!key) continue
@@ -327,20 +331,12 @@ export async function validateShareToken(params: {
 
   const expected = normalizeScopeId(params.expectedScopeId ?? null)
   const found = normalizeScopeId(row.scope_id)
-
-  console.log('[shareTokens] scope mismatch', {
-  expectedScopeId: params.expectedScopeId,
-  tokenScopeId: row.scope_id,
-})
-
-  if (expected && found && found !== expected) {
-    return {ok: false, code: 'SCOPE_MISMATCH'}
-  }
+  if (expected && found && found !== expected) return {ok: false, code: 'SCOPE_MISMATCH'}
 
   const action = normalizeAction(params.action, 'access')
 
   if (typeof row.max_redemptions === 'number' && row.max_redemptions > 0) {
-    const reached = await capReached({tokenId: row.id, max: row.max_redemptions, action})
+    const reached = await capReached({tokenId: row.id, max: row.max_redemptions, capAction: '*'})
     if (reached) return {ok: false, code: 'CAP_REACHED'}
   }
 
@@ -353,6 +349,8 @@ export async function validateShareToken(params: {
     resourceKind: params.resourceKind ?? 'album',
     resourceId: params.resourceId ?? row.scope_id ?? null,
     action,
+    outcome: 'allowed',
+    metadata: {cap_bucket: '*'},
   })
 
   return {ok: true, tokenId: row.id, scopeId: row.scope_id, kind: row.kind, grants}
