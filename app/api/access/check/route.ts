@@ -1,18 +1,21 @@
 // web/app/api/access/check/route.ts
+import 'server-only'
 import {NextRequest, NextResponse} from 'next/server'
 import {cookies} from 'next/headers'
 import {auth} from '@clerk/nextjs/server'
 import {sql} from '@vercel/postgres'
 import {checkAccess} from '@/lib/access'
 import {ACCESS_ACTIONS, ENTITLEMENTS} from '@/lib/vocab'
-import {newCorrelationId} from '@/lib/events'
-import crypto from 'crypto'
+import {ensureAnonId} from '@/lib/anon'
+import {countAnonDistinctCompletedTracks, newCorrelationId} from '@/lib/events'
 import {redeemShareTokenForMember, validateShareToken} from '@/lib/shareTokens'
 import {getAlbumPolicyByAlbumId, isEmbargoed, type TierName} from '@/lib/albumPolicy'
 import {listCurrentEntitlementKeys} from '@/lib/entitlements'
 
-const ANON_COOKIE = 'af_anon'
-const ANON_COOKIE_MAX_AGE = 60 * 60 * 24 * 365 // 1y
+const ANON_DISTINCT_TRACK_CAP = 3
+const ANON_WINDOW_DAYS = 30
+
+type Action = 'login' | 'subscribe' | 'buy' | 'wait' | null
 
 async function getMemberIdByClerkUserId(userId: string): Promise<string | null> {
   if (!userId) return null
@@ -54,40 +57,21 @@ async function readAdminDebugCookie(): Promise<{tier?: string; force?: string} |
   }
 }
 
-type Action = 'login' | 'subscribe' | 'buy' | 'wait' | null
-
-type JsonOpts = {
-  correlationId: string
-  anon?: {id: string; shouldSetCookie: boolean} | null
-  status?: number
-}
-
-/**
- * Canonical JSON responder:
- * - always sets x-correlation-id for client tracing
- * - optionally persists anon cookie for stable caps + analytics
- */
-function json<T extends Record<string, unknown>>(body: T, opts: JsonOpts) {
+function baseJson<T extends Record<string, unknown>>(body: T, opts: {correlationId: string; status?: number}) {
   const res = NextResponse.json(body, {status: opts.status ?? 200})
   res.headers.set('x-correlation-id', opts.correlationId)
-
-  if (opts.anon?.shouldSetCookie) {
-    res.cookies.set(ANON_COOKIE, opts.anon.id, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: true,
-      path: '/',
-      maxAge: ANON_COOKIE_MAX_AGE,
-    })
-  }
-
   return res
 }
 
-function getOrMintAnon(req: NextRequest): {id: string; shouldSetCookie: boolean} {
-  const cookieVal = (req.cookies.get(ANON_COOKIE)?.value ?? '').trim()
-  if (cookieVal) return {id: cookieVal, shouldSetCookie: false}
-  return {id: crypto.randomUUID(), shouldSetCookie: true}
+function anonJson<T extends Record<string, unknown>>(
+  req: NextRequest,
+  body: T,
+  opts: {correlationId: string; status?: number}
+) {
+  const res = NextResponse.json(body, {status: opts.status ?? 200})
+  ensureAnonId(req, res) // persist cookie if missing/invalid
+  res.headers.set('x-correlation-id', opts.correlationId)
+  return res
 }
 
 export async function GET(req: NextRequest) {
@@ -100,7 +84,7 @@ export async function GET(req: NextRequest) {
   const st = (url.searchParams.get('st') ?? url.searchParams.get('share') ?? '').trim()
 
   if (!albumId) {
-    return json(
+    return baseJson(
       {
         ok: true,
         allowed: false,
@@ -112,33 +96,54 @@ export async function GET(req: NextRequest) {
         correlationId,
         redeemed: null,
       },
-      {correlationId, anon: null}
+      {correlationId}
     )
   }
 
   const albumScopeId = `alb:${albumId}`
 
-  // ---- Unauthed: always establish anon identity for coherent caps/analytics ----
+  // ---- Unauthed: anon sampling + optional share-token capability ----
   if (!userId) {
-    const anon = getOrMintAnon(req)
+    // Always ensure anon cookie exists for coherent caps/analytics
+    const {anonId} = ensureAnonId(req)
 
-    // --- allow press/share token access without auth ---
+    const policy = await getAlbumPolicyByAlbumId(albumId)
+    const releaseAt = policy?.releaseAt ?? null
+    const embargoed = isEmbargoed(policy)
+
+    // Embargo applies to anon unless share token grants access
+    if (embargoed && !st) {
+      return anonJson(
+        req,
+        {
+          ok: true,
+          allowed: false,
+          embargoed: true,
+          releaseAt,
+          code: 'EMBARGO',
+          action: 'wait' satisfies Action,
+          reason: 'This album is not released yet.',
+          correlationId,
+          redeemed: null,
+        },
+        {correlationId}
+      )
+    }
+
+    // Share token path (press link): validate + log; if ok, allow
     if (st) {
-      const policy = await getAlbumPolicyByAlbumId(albumId)
-      const releaseAt = policy?.releaseAt ?? null
-      const embargoed = isEmbargoed(policy)
-
       const v = await validateShareToken({
         token: st,
         expectedScopeId: albumScopeId,
-        anonId: anon.id,
+        anonId, // ✅ string
         resourceKind: 'album',
         resourceId: albumScopeId,
         action: 'access',
       })
 
       if (!v.ok) {
-        return json(
+        return anonJson(
+          req,
           {
             ok: true,
             allowed: false,
@@ -150,16 +155,16 @@ export async function GET(req: NextRequest) {
             correlationId,
             redeemed: {ok: false, code: v.code},
           },
-          {correlationId, anon}
+          {correlationId}
         )
       }
 
-      // share token grants access (bypasses tier + PLAY_ALBUM entitlements for anon users)
-      return json(
+      return anonJson(
+        req,
         {
           ok: true,
           allowed: true,
-          embargoed: false,
+          embargoed,
           releaseAt,
           code: null,
           action: null,
@@ -167,31 +172,53 @@ export async function GET(req: NextRequest) {
           correlationId,
           redeemed: {ok: true},
         },
-        {correlationId, anon}
+        {correlationId}
       )
     }
 
-    // no token: must auth (still set anon cookie so later mux/token + playthrough are coherent)
-    return json(
+    // No token: anon sampling cap (distinct completed tracks)
+    const distinctCompleted = await countAnonDistinctCompletedTracks({anonId, sinceDays: ANON_WINDOW_DAYS})
+    if (distinctCompleted >= ANON_DISTINCT_TRACK_CAP) {
+      return anonJson(
+        req,
+        {
+          ok: true,
+          allowed: false,
+          embargoed: false,
+          releaseAt,
+          code: 'ANON_CAP_REACHED',
+          action: 'login' as const,
+          reason: 'Anonymous listening limit reached. Please log in to continue.',
+          correlationId,
+          redeemed: null,
+          cap: {used: distinctCompleted, max: ANON_DISTINCT_TRACK_CAP, windowDays: ANON_WINDOW_DAYS},
+        },
+        {correlationId}
+      )
+    }
+
+    return anonJson(
+      req,
       {
         ok: true,
-        allowed: false,
-        embargoed: false,
-        releaseAt: null,
-        code: 'AUTH_REQUIRED',
-        action: 'login' as const,
-        reason: 'Sign in required',
+        allowed: true,
+        embargoed,
+        releaseAt,
+        code: null,
+        action: null,
+        reason: null,
         correlationId,
         redeemed: null,
+        cap: {used: distinctCompleted, max: ANON_DISTINCT_TRACK_CAP, windowDays: ANON_WINDOW_DAYS},
       },
-      {correlationId, anon}
+      {correlationId}
     )
   }
 
   // ---- Authed: resolve member ----
   const memberId = await getMemberIdByClerkUserId(userId)
   if (!memberId) {
-    return json(
+    return baseJson(
       {
         ok: true,
         allowed: false,
@@ -203,18 +230,19 @@ export async function GET(req: NextRequest) {
         correlationId,
         redeemed: null,
       },
-      {correlationId, anon: null}
+      {correlationId}
     )
   }
 
-  // --- admin debug override (real endpoint, session-only) ---
+  // --- admin debug override ---
   const dbg = await readAdminDebugCookie()
-  if (dbg && memberId) {
+  if (dbg) {
     const isAdmin = (await checkAccess(memberId, {kind: 'global', required: [ENTITLEMENTS.ADMIN]}, {log: false})).allowed
     if (isAdmin) {
       const force = (dbg.force ?? 'none').toString()
+
       if (force === 'AUTH_REQUIRED') {
-        return json(
+        return baseJson(
           {
             ok: true,
             allowed: false,
@@ -226,11 +254,11 @@ export async function GET(req: NextRequest) {
             correlationId,
             redeemed: null,
           },
-          {correlationId, anon: null}
+          {correlationId}
         )
       }
       if (force === 'ENTITLEMENT_REQUIRED') {
-        return json(
+        return baseJson(
           {
             ok: true,
             allowed: false,
@@ -242,11 +270,11 @@ export async function GET(req: NextRequest) {
             correlationId,
             redeemed: null,
           },
-          {correlationId, anon: null}
+          {correlationId}
         )
       }
       if (force === 'ANON_CAP_REACHED') {
-        return json(
+        return baseJson(
           {
             ok: true,
             allowed: false,
@@ -258,11 +286,11 @@ export async function GET(req: NextRequest) {
             correlationId,
             redeemed: null,
           },
-          {correlationId, anon: null}
+          {correlationId}
         )
       }
       if (force === 'EMBARGOED') {
-        return json(
+        return baseJson(
           {
             ok: true,
             allowed: false,
@@ -274,13 +302,13 @@ export async function GET(req: NextRequest) {
             correlationId,
             redeemed: null,
           },
-          {correlationId, anon: null}
+          {correlationId}
         )
       }
     }
   }
 
-  // 1) If a share token is present, redeem it first (grants entitlements).
+  // 1) If share token present, redeem first (grants entitlements)
   let redeemed: {ok: boolean; code?: string} | null = null
   if (st) {
     const r = await redeemShareTokenForMember({
@@ -314,7 +342,7 @@ export async function GET(req: NextRequest) {
         const allowedTierKeys = policy.earlyAccessTiers.map((t) => `tier_${t}`)
         const ok = allowedTierKeys.some((k) => s.has(k))
         if (!ok) {
-          return json(
+          return baseJson(
             {
               ok: true,
               allowed: false,
@@ -326,12 +354,12 @@ export async function GET(req: NextRequest) {
               correlationId,
               redeemed,
             },
-            {correlationId, anon: null}
+            {correlationId}
           )
         }
         // early access qualifies -> continue
       } else {
-        return json(
+        return baseJson(
           {
             ok: true,
             allowed: false,
@@ -343,7 +371,7 @@ export async function GET(req: NextRequest) {
             correlationId,
             redeemed,
           },
-          {correlationId, anon: null}
+          {correlationId}
         )
       }
     }
@@ -357,7 +385,7 @@ export async function GET(req: NextRequest) {
     const requiredTierKeys = tierAtOrAbove(policy.minTierForPlayback)
     const ok = requiredTierKeys.some((k) => s.has(k))
     if (!ok) {
-      return json(
+      return baseJson(
         {
           ok: true,
           allowed: false,
@@ -369,7 +397,7 @@ export async function GET(req: NextRequest) {
           correlationId,
           redeemed,
         },
-        {correlationId, anon: null}
+        {correlationId}
       )
     }
   }
@@ -381,7 +409,7 @@ export async function GET(req: NextRequest) {
     {log: true, action: ACCESS_ACTIONS.ACCESS_CHECK, correlationId}
   )
 
-  return json(
+  return baseJson(
     {
       ok: true,
       allowed: decision.allowed,
@@ -393,6 +421,6 @@ export async function GET(req: NextRequest) {
       correlationId,
       redeemed,
     },
-    {correlationId, anon: null}
+    {correlationId}
   )
 }

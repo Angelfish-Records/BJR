@@ -10,13 +10,9 @@ export function newCorrelationId(): string {
   return crypto.randomUUID()
 }
 
-function asUuidOrNull(input: unknown): string | null {
+function normCorr(input: unknown): string | null {
   const s = typeof input === 'string' ? input.trim() : ''
-  if (!s) return null
-  // uuid v4-ish (accepts any variant; good enough for “cast safety”)
-  const ok =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
-  return ok ? s : null
+  return s || null
 }
 
 export async function logMemberEvent(params: {
@@ -36,7 +32,7 @@ export async function logMemberEvent(params: {
     correlationId = null,
   } = params
 
-  const corrUuid = asUuidOrNull(correlationId)
+  const corr = normCorr(correlationId)
 
   try {
     if (occurredAt) {
@@ -48,7 +44,7 @@ export async function logMemberEvent(params: {
           ${occurredAt.toISOString()}::timestamptz,
           ${source},
           ${JSON.stringify(payload)}::jsonb,
-          ${corrUuid}::uuid
+          ${corr}
         )
       `
     } else {
@@ -59,7 +55,7 @@ export async function logMemberEvent(params: {
           ${eventType},
           ${source},
           ${JSON.stringify(payload)}::jsonb,
-          ${corrUuid}::uuid
+          ${corr}
         )
       `
     }

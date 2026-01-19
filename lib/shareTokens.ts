@@ -10,6 +10,15 @@ export type TokenGrant = {
   expiresAt?: string | null
 }
 
+export type ShareTokenOutcome =
+  | 'allowed'
+  | 'expired'
+  | 'revoked'
+  | 'quota_exceeded'
+  | 'scope_mismatch'
+  | 'invalid'
+  | 'error'
+
 type ShareTokenRow = {
   id: string
   created_at: string
@@ -47,11 +56,9 @@ function normalizeScopeId(input: string | null | undefined): string | null {
 
 function coerceTokenGrants(input: unknown): TokenGrant[] {
   if (!Array.isArray(input)) return []
-
   const out: TokenGrant[] = []
   for (const item of input) {
     if (!isPlainObject(item)) continue
-
     const key = typeof item.key === 'string' ? item.key.trim() : ''
     if (!key) continue
 
@@ -69,7 +76,6 @@ function coerceTokenGrants(input: unknown): TokenGrant[] {
 
     out.push({key, scopeId, scopeMeta, expiresAt})
   }
-
   return out
 }
 
@@ -94,25 +100,86 @@ function isExpired(expiresAt: string | null) {
   return Number.isFinite(exp) && Date.now() > exp
 }
 
-/**
- * CAP SEMANTICS:
- * - max_redemptions is treated as "distinct consumers" rather than raw request count.
- * - consumer identity is coalesce(member_id, anon_id) so retries don't burn the cap.
- * - we default to counting across ALL actions (capAction='*') so access+redeem share one cap.
- */
-async function capReached(params: {tokenId: string; max: number; capAction?: string}): Promise<boolean> {
-  const capAction = (params.capAction ?? '*').trim() || '*'
+function consumerKeyFor(params: {memberId?: string | null; anonId?: string | null}): string | null {
+  const m = (params.memberId ?? '').trim()
+  if (m) return `member:${m}`
+  const a = (params.anonId ?? '').trim()
+  if (a) return `anon:${a}`
+  return null
+}
 
-  const r = await sql<{n: number}>`
-    select count(distinct coalesce(member_id::text, anon_id))::int as n
-    from share_token_plays
-    where share_token_id = ${params.tokenId}::uuid
-      and outcome = 'allowed'
-      and coalesce(member_id::text, anon_id) is not null
-      and (${capAction} = '*' or action = ${capAction})
+/**
+ * STRICT cap enforcement:
+ * - Uses share_token_consumers as the source of truth.
+ * - Serializes per token+capBucket via pg_advisory_xact_lock inside ONE statement (atomic).
+ * - Allows unlimited retries by the same consumer_key even if cap is reached.
+ *
+ * capBucket:
+ * - '*' means "cap across all actions" (default).
+ * - otherwise, cap is per-action.
+ */
+async function enforceDistinctConsumerCap(params: {
+  tokenId: string
+  max: number
+  action: string
+  capBucket?: string // default '*'
+  consumerKey: string
+}): Promise<{ok: true} | {ok: false; outcome: 'quota_exceeded'}> {
+  const capBucket = (params.capBucket ?? '*').trim() || '*'
+  const lockKey = `${params.tokenId}:${capBucket}`
+
+  const r = await sql<{
+    already: boolean
+    inserted: number
+    used: number
+  }>`
+    with
+      _lock as (
+        select pg_advisory_xact_lock(hashtext(${lockKey}))
+      ),
+      existing as (
+        select 1 as ok
+        from share_token_consumers
+        where share_token_id = ${params.tokenId}::uuid
+          and (${capBucket} = '*' or action = ${params.action})
+          and consumer_key = ${params.consumerKey}
+        limit 1
+      ),
+      used_before as (
+        select count(*)::int as n
+        from share_token_consumers
+        where share_token_id = ${params.tokenId}::uuid
+          and (${capBucket} = '*' or action = ${params.action})
+      ),
+      ins as (
+        insert into share_token_consumers (share_token_id, action, consumer_key)
+        select
+          ${params.tokenId}::uuid,
+          ${params.action},
+          ${params.consumerKey}
+        where not exists (select 1 from existing)
+          and (select n from used_before) < ${params.max}::int
+        on conflict (share_token_id, action, consumer_key) do nothing
+        returning 1
+      ),
+      used_after as (
+        select count(*)::int as n
+        from share_token_consumers
+        where share_token_id = ${params.tokenId}::uuid
+          and (${capBucket} = '*' or action = ${params.action})
+      )
+    select
+      exists(select 1 from existing) as already,
+      (select count(*)::int from ins) as inserted,
+      (select n from used_after) as used
   `
-  const used = r.rows?.[0]?.n ?? 0
-  return used >= params.max
+
+  const row = r.rows?.[0]
+  const already = row?.already ?? false
+  const inserted = (row?.inserted ?? 0) > 0
+
+  if (already || inserted) return {ok: true}
+  return {ok: false, outcome: 'quota_exceeded'}
 }
 
 async function logPlay(params: {
@@ -122,33 +189,37 @@ async function logPlay(params: {
   resourceKind: string
   resourceId: string | null
   action: string
-  outcome: 'allowed' | 'denied'
+  outcome: ShareTokenOutcome
   metadata?: Record<string, unknown>
 }) {
-  await sql`
-    insert into share_token_plays (
-      share_token_id,
-      member_id,
-      anon_id,
-      resource_kind,
-      resource_id,
-      action,
-      outcome,
-      metadata,
-      occurred_at
-    )
-    values (
-      ${params.tokenId}::uuid,
-      ${params.memberId ?? null}::uuid,
-      ${params.anonId ?? null},
-      ${params.resourceKind},
-      ${params.resourceId},
-      ${params.action},
-      ${params.outcome},
-      ${JSON.stringify(params.metadata ?? {})}::jsonb,
-      now()
-    )
-  `
+  try {
+    await sql`
+      insert into share_token_plays (
+        share_token_id,
+        member_id,
+        anon_id,
+        resource_kind,
+        resource_id,
+        action,
+        outcome,
+        metadata,
+        occurred_at
+      )
+      values (
+        ${params.tokenId}::uuid,
+        ${params.memberId ?? null}::uuid,
+        ${params.anonId ?? null},
+        ${params.resourceKind},
+        ${params.resourceId},
+        ${params.action},
+        ${params.outcome},
+        ${JSON.stringify(params.metadata ?? {})}::jsonb,
+        now()
+      )
+    `
+  } catch (err) {
+    console.error('share_token_plays insert failed', {tokenId: params.tokenId, outcome: params.outcome, err})
+  }
 }
 
 export async function createShareToken(params: {
@@ -234,23 +305,73 @@ export async function redeemShareTokenForMember(params: {
   | {ok: true; tokenId: string; scopeId: string | null; kind: string; grants: TokenGrant[]}
   | {ok: false; code: 'INVALID' | 'EXPIRED' | 'REVOKED' | 'SCOPE_MISMATCH' | 'CAP_REACHED'}
 > {
+  const action = normalizeAction(params.action, 'redeem')
   const tokenHash = hashShareToken((params.token ?? '').trim())
+
   if (!tokenHash) return {ok: false, code: 'INVALID'}
 
   const row = await loadTokenRow(tokenHash)
   if (!row) return {ok: false, code: 'INVALID'}
-  if (row.revoked_at) return {ok: false, code: 'REVOKED'}
-  if (isExpired(row.expires_at)) return {ok: false, code: 'EXPIRED'}
 
   const expected = normalizeScopeId(params.expectedScopeId ?? null)
   const found = normalizeScopeId(row.scope_id)
-  if (expected && found && found !== expected) return {ok: false, code: 'SCOPE_MISMATCH'}
 
-  const action = normalizeAction(params.action, 'redeem')
+  // Precompute logging fields
+  const resourceKind = params.resourceKind ?? 'album'
+  const resourceId = params.resourceId ?? row.scope_id ?? null
 
+  // Validate
+  if (row.revoked_at) {
+    await logPlay({tokenId: row.id, memberId: params.memberId, anonId: null, resourceKind, resourceId, action, outcome: 'revoked'})
+    return {ok: false, code: 'REVOKED'}
+  }
+  if (isExpired(row.expires_at)) {
+    await logPlay({tokenId: row.id, memberId: params.memberId, anonId: null, resourceKind, resourceId, action, outcome: 'expired'})
+    return {ok: false, code: 'EXPIRED'}
+  }
+  if (expected && found && found !== expected) {
+    await logPlay({
+      tokenId: row.id,
+      memberId: params.memberId,
+      anonId: null,
+      resourceKind,
+      resourceId,
+      action,
+      outcome: 'scope_mismatch',
+      metadata: {expected, found},
+    })
+    return {ok: false, code: 'SCOPE_MISMATCH'}
+  }
+
+  // Strict cap (distinct consumers)
   if (typeof row.max_redemptions === 'number' && row.max_redemptions > 0) {
-    const reached = await capReached({tokenId: row.id, max: row.max_redemptions, capAction: '*'})
-    if (reached) return {ok: false, code: 'CAP_REACHED'}
+    const ck = consumerKeyFor({memberId: params.memberId})
+    if (!ck) {
+      await logPlay({tokenId: row.id, memberId: params.memberId, anonId: null, resourceKind, resourceId, action, outcome: 'invalid'})
+      return {ok: false, code: 'INVALID'}
+    }
+
+    const capBucket = '*' // you explicitly want cross-action caps by default
+    const cap = await enforceDistinctConsumerCap({
+      tokenId: row.id,
+      max: row.max_redemptions,
+      action,
+      capBucket,
+      consumerKey: ck,
+    })
+    if (!cap.ok) {
+      await logPlay({
+        tokenId: row.id,
+        memberId: params.memberId,
+        anonId: null,
+        resourceKind,
+        resourceId,
+        action,
+        outcome: 'quota_exceeded',
+        metadata: {cap_bucket: capBucket, max: row.max_redemptions},
+      })
+      return {ok: false, code: 'CAP_REACHED'}
+    }
   }
 
   const grants = coerceTokenGrants(row.grants)
@@ -259,14 +380,14 @@ export async function redeemShareTokenForMember(params: {
     tokenId: row.id,
     memberId: params.memberId,
     anonId: null,
-    resourceKind: params.resourceKind ?? 'album',
-    resourceId: params.resourceId ?? row.scope_id ?? null,
+    resourceKind,
+    resourceId,
     action,
     outcome: 'allowed',
     metadata: {cap_bucket: '*'},
   })
 
-  // apply grants (idempotent-ish)
+  // Apply grants (idempotent-ish)
   for (const g of grants) {
     const key = (g?.key ?? '').toString().trim()
     if (!key) continue
@@ -321,23 +442,71 @@ export async function validateShareToken(params: {
   | {ok: true; tokenId: string; scopeId: string | null; kind: string; grants: TokenGrant[]}
   | {ok: false; code: 'INVALID' | 'EXPIRED' | 'REVOKED' | 'SCOPE_MISMATCH' | 'CAP_REACHED'}
 > {
+  const action = normalizeAction(params.action, 'access')
   const tokenHash = hashShareToken((params.token ?? '').trim())
+
   if (!tokenHash) return {ok: false, code: 'INVALID'}
 
   const row = await loadTokenRow(tokenHash)
   if (!row) return {ok: false, code: 'INVALID'}
-  if (row.revoked_at) return {ok: false, code: 'REVOKED'}
-  if (isExpired(row.expires_at)) return {ok: false, code: 'EXPIRED'}
 
   const expected = normalizeScopeId(params.expectedScopeId ?? null)
   const found = normalizeScopeId(row.scope_id)
-  if (expected && found && found !== expected) return {ok: false, code: 'SCOPE_MISMATCH'}
 
-  const action = normalizeAction(params.action, 'access')
+  const resourceKind = params.resourceKind ?? 'album'
+  const resourceId = params.resourceId ?? row.scope_id ?? null
 
+  if (row.revoked_at) {
+    await logPlay({tokenId: row.id, memberId: null, anonId: params.anonId ?? null, resourceKind, resourceId, action, outcome: 'revoked'})
+    return {ok: false, code: 'REVOKED'}
+  }
+  if (isExpired(row.expires_at)) {
+    await logPlay({tokenId: row.id, memberId: null, anonId: params.anonId ?? null, resourceKind, resourceId, action, outcome: 'expired'})
+    return {ok: false, code: 'EXPIRED'}
+  }
+  if (expected && found && found !== expected) {
+    await logPlay({
+      tokenId: row.id,
+      memberId: null,
+      anonId: params.anonId ?? null,
+      resourceKind,
+      resourceId,
+      action,
+      outcome: 'scope_mismatch',
+      metadata: {expected, found},
+    })
+    return {ok: false, code: 'SCOPE_MISMATCH'}
+  }
+
+  // Strict cap enforcement for anon access/usage
   if (typeof row.max_redemptions === 'number' && row.max_redemptions > 0) {
-    const reached = await capReached({tokenId: row.id, max: row.max_redemptions, capAction: '*'})
-    if (reached) return {ok: false, code: 'CAP_REACHED'}
+    const ck = consumerKeyFor({anonId: params.anonId ?? null})
+    if (!ck) {
+      await logPlay({tokenId: row.id, memberId: null, anonId: params.anonId ?? null, resourceKind, resourceId, action, outcome: 'invalid'})
+      return {ok: false, code: 'INVALID'}
+    }
+
+    const capBucket = '*' // cross-action cap by default
+    const cap = await enforceDistinctConsumerCap({
+      tokenId: row.id,
+      max: row.max_redemptions,
+      action,
+      capBucket,
+      consumerKey: ck,
+    })
+    if (!cap.ok) {
+      await logPlay({
+        tokenId: row.id,
+        memberId: null,
+        anonId: params.anonId ?? null,
+        resourceKind,
+        resourceId,
+        action,
+        outcome: 'quota_exceeded',
+        metadata: {cap_bucket: capBucket, max: row.max_redemptions},
+      })
+      return {ok: false, code: 'CAP_REACHED'}
+    }
   }
 
   const grants = coerceTokenGrants(row.grants)
@@ -346,8 +515,8 @@ export async function validateShareToken(params: {
     tokenId: row.id,
     memberId: null,
     anonId: params.anonId ?? null,
-    resourceKind: params.resourceKind ?? 'album',
-    resourceId: params.resourceId ?? row.scope_id ?? null,
+    resourceKind,
+    resourceId,
     action,
     outcome: 'allowed',
     metadata: {cap_bucket: '*'},

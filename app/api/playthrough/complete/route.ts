@@ -1,13 +1,12 @@
 // web/app/api/playthrough/complete/route.ts
 import 'server-only'
-import {NextResponse} from 'next/server'
-import {cookies} from 'next/headers'
+import {NextRequest, NextResponse} from 'next/server'
 import {auth} from '@clerk/nextjs/server'
 import {sql} from '@vercel/postgres'
 import {logMemberEvent, newCorrelationId} from '@/lib/events'
 import {EVENT_SOURCES} from '@/lib/vocab'
+import {ensureAnonId} from '@/lib/anon'
 
-const ANON_COOKIE = 'af_anon'
 const COMPLETE_THRESHOLD = 0.9
 
 async function getMemberIdByClerkUserId(userId: string): Promise<string | null> {
@@ -21,7 +20,7 @@ async function getMemberIdByClerkUserId(userId: string): Promise<string | null> 
   return (r.rows?.[0]?.id as string | undefined) ?? null
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const correlationId = newCorrelationId()
 
   let trackId = ''
@@ -30,30 +29,34 @@ export async function POST(req: Request) {
 
   try {
     const body = (await req.json()) as {trackId?: string; playbackId?: string; pct?: number}
-
     trackId = (body.trackId ?? '').toString().trim()
     playbackId = (body.playbackId ?? '').toString().trim()
     pct = typeof body.pct === 'number' && Number.isFinite(body.pct) ? body.pct : 0
   } catch {}
 
   if (!trackId || !playbackId) {
-    
-    return NextResponse.json({ok: false}, {status: 400})
+    const res = NextResponse.json({ok: false}, {status: 400})
+    res.headers.set('x-correlation-id', correlationId)
+    return res
   }
 
-  // Only count near-full listens
   if (pct < COMPLETE_THRESHOLD) {
-    return NextResponse.json({ok: true, ignored: true})
+    const res = NextResponse.json({ok: true, ignored: true})
+    res.headers.set('x-correlation-id', correlationId)
+    return res
   }
+
+  const res = NextResponse.json({ok: true})
+  res.headers.set('x-correlation-id', correlationId)
+
+  // Ensure anon id (cap enforcement depends on this being stable)
+  const {anonId} = ensureAnonId(req, res)
 
   const {userId} = await auth()
-  const jar = await cookies()
-  const anonId = jar.get(ANON_COOKIE)?.value ?? null
-
   const memberId = userId ? await getMemberIdByClerkUserId(userId) : null
 
   await logMemberEvent({
-    memberId, // ✅ now filled when logged in
+    memberId,
     eventType: 'track_play_completed',
     source: EVENT_SOURCES.SERVER,
     correlationId,
@@ -66,5 +69,5 @@ export async function POST(req: Request) {
     },
   })
 
-  return NextResponse.json({ok: true})
+  return res
 }
