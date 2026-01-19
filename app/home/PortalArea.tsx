@@ -239,7 +239,7 @@ export default function PortalArea(props: {
       if (!slug) return
       if (isBrowsingRef.current) return
 
-      patchQuery({p: 'player', album: slug, track: null})
+      patchQuery({p: 'player', album: slug, track: null, st: null, share: null})
 
       setIsBrowsingAlbum(true)
       setCurrentAlbumSlug(slug)

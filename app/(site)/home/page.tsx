@@ -136,10 +136,26 @@ export default async function Home(props: {
     </div>
   )
 
-  const featuredAlbumSlug = 'consolers'
-  const albumData = await getAlbumBySlug(featuredAlbumSlug)
-  const albumSlug = featuredAlbumSlug
-  const browseAlbumsRaw = await listAlbumsForBrowse()
+    // ---- choose initial album from URL (authoritative) ----
+    const featuredAlbumSlug = 'consolers'
+
+    const qAlbumSlug =
+      typeof sp.album === 'string' && sp.album.trim() ? sp.album.trim() : null
+
+    // Prefer URL album; fallback to featured
+    const requestedSlug = qAlbumSlug ?? featuredAlbumSlug
+
+    let albumSlug = requestedSlug
+    let albumData = await getAlbumBySlug(albumSlug)
+
+    // If URL requested slug is invalid, fallback to featured
+    if (!albumData.album && requestedSlug !== featuredAlbumSlug) {
+      albumSlug = featuredAlbumSlug
+      albumData = await getAlbumBySlug(albumSlug)
+    }
+
+    const browseAlbumsRaw = await listAlbumsForBrowse()
+
 
     const asTierName = (v: unknown): 'friend' | 'patron' | 'partner' | null => {
     const s = typeof v === 'string' ? v.trim().toLowerCase() : ''
