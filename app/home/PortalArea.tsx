@@ -184,14 +184,9 @@ export default function PortalArea(props: {
     : null
 
   const derivedAttentionMessage =
-    attentionMessage ??
-    purchaseAttention ??
-    (p.status === 'blocked' &&
-    (p.blockedCode === 'ANON_CAP_REACHED' ||
-      p.blockedCode === 'ENTITLEMENT_REQUIRED' ||
-      p.blockedCode === 'AUTH_REQUIRED')
-      ? p.lastError ?? null
-      : null)
+  attentionMessage ??
+  purchaseAttention ??
+  (p.status === 'blocked' ? (p.lastError ?? null) : null)
 
   const spotlightAttention = !!derivedAttentionMessage
 

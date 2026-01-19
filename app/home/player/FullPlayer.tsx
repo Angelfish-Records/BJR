@@ -170,13 +170,13 @@ export default function FullPlayer(props: {
   // Canonical album key used in queue context + gating
   const albumKey = album?.catalogId ?? album?.id ?? null
 
-  React.useEffect(() => {
+    React.useEffect(() => {
     if (!album?.catalogId) return
 
     let cancelled = false
     const ac = new AbortController()
 
-    // Pull st/share from current URL if present
+    // Read st/share directly from the URL (stable enough for this surface)
     let st: string | null = null
     try {
       const sp = new URLSearchParams(window.location.search)
@@ -196,22 +196,53 @@ export default function FullPlayer(props: {
 
         if (cancelled) return
 
+        type BlockAction = 'login' | 'subscribe' | 'buy' | 'wait'
+        const asBlockAction = (v: unknown): BlockAction | undefined =>
+          v === 'login' || v === 'subscribe' || v === 'buy' || v === 'wait'
+            ? v
+            : undefined
+
         const allowed = j?.allowed !== false
         const embargoed = j?.embargoed === true
         const releaseAt = (j?.releaseAt ?? null) as string | null
+
+        const code =
+          typeof j?.code === 'string' && j.code.trim()
+            ? j.code
+            : undefined
+
+        const action = asBlockAction(j?.action)
+
+        const reason =
+          typeof j?.reason === 'string' && j.reason.trim()
+            ? j.reason
+            : undefined
 
         setAccess({
           allowed,
           embargoed,
           releaseAt,
-          code: (j?.code ?? undefined) ?? undefined,
-          action: (j?.action ?? null) ?? null,
-          reason: (j?.reason ?? undefined) ?? undefined,
+          code,
+          action: action ?? null,
+          reason,
         })
+
+        // ---- propagate to PlayerState for global UX (ActivationGate + blur) ----
+        if (!allowed) {
+          p.setBlocked(reason ?? 'Playback blocked.', {code, action})
+        } else {
+          if (p.lastError || p.blockedCode || p.blockedAction) {
+            p.clearError()
+          }
+          if (p.status === 'blocked') {
+            p.setStatusExternal('idle')
+          }
+        }
       } catch (e) {
         if (cancelled) return
         console.error('FullPlayer access check failed', e)
-        // Fail-open for UX, but keep a reason for debugging.
+
+        // Fail-open, but keep debug signal
         setAccess({
           allowed: true,
           embargoed: false,
@@ -220,6 +251,13 @@ export default function FullPlayer(props: {
           action: null,
           reason: 'Access check failed (client).',
         })
+
+        if (p.lastError || p.blockedCode || p.blockedAction) {
+          p.clearError()
+        }
+        if (p.status === 'blocked') {
+          p.setStatusExternal('idle')
+        }
       }
     })()
 
@@ -227,7 +265,7 @@ export default function FullPlayer(props: {
       cancelled = true
       ac.abort()
     }
-  }, [album?.catalogId])
+  }, [album?.catalogId, p])
 
   // NOTE: allow play unless the access check explicitly denies.
   const canPlay = tracks.length > 0 && access?.allowed !== false
