@@ -51,6 +51,12 @@ export default function AudioEngine() {
     const a = audioRef.current
     if (!a) return
 
+    // stop any in-flight token request
+    try {
+      tokenAbortRef.current?.abort()
+    } catch {}
+    tokenAbortRef.current = null
+
     try {
       a.pause()
     } catch {}
@@ -72,6 +78,17 @@ export default function AudioEngine() {
       a.load()
     } catch {}
   }, [])
+
+  /* ---------------- NEW: global "blocked means SILENCE" invariant ---------------- */
+  React.useEffect(() => {
+    // If UI is blocked for ANY reason (token gate, access-check, etc),
+    // guarantee the media element is not still running behind the blur.
+    if (p.status !== 'blocked') return
+
+    playIntentRef.current = false
+    hardStopAndDetach()
+    mediaSurface.setStatus('blocked')
+  }, [p.status, hardStopAndDetach])
 
   /* ---------------- AudioContext + analyser (ONCE) ---------------- */
 
@@ -210,6 +227,9 @@ export default function AudioEngine() {
 
     mediaSurface.setTrack(s.current?.id ?? null)
 
+    // If we're blocked, never attach.
+    if (s.status === 'blocked') return
+
     const armed =
       s.status === 'loading' ||
       s.status === 'playing' ||
@@ -222,15 +242,10 @@ export default function AudioEngine() {
     const blockedAt = blockedNonceRef.current.get(playbackId)
     if (blockedAt === s.reloadNonce) {
       playIntentRef.current = false
-
-      // ✅ follow-up improvement: ensure nothing continues playing from a prior attachment
       hardStopAndDetach()
-      mediaSurface.setStatus('blocked') // optional but consistent
-
+      mediaSurface.setStatus('blocked')
       return
     }
-
-
 
     const attachKey = `${playbackId}:${s.reloadNonce}`
     if (attachedKeyRef.current === attachKey && (a.currentSrc || hlsRef.current)) {
@@ -331,12 +346,12 @@ export default function AudioEngine() {
           body: JSON.stringify({
             playbackId,
             trackId: s.current?.id,
-            albumId: s.queueContextId, // ✅ canonical album id (should be catalogId)
-            albumSlug: s.queueContextSlug, // keep if you still want it
+            albumId: s.queueContextId,
+            albumSlug: s.queueContextSlug,
             durationMs: s.current?.durationMs ?? s.durationById?.[s.current?.id ?? ''],
-            ...(st ? {st} : {}), // ✅ include press token if present
+            ...(st ? {st} : {}),
           }),
-          signal: ac.signal, // ✅ KEEP THIS
+          signal: ac.signal,
         })
 
         const corr = res.headers.get('x-correlation-id') ?? null
@@ -354,20 +369,14 @@ export default function AudioEngine() {
           const action = data && 'ok' in data && data.ok === false ? data.action : undefined
           const reason =
             data && 'ok' in data && data.ok === false ? data.reason : `Token error (${res.status})`
-          
-            // stop the *old* track from continuing
+
+          // Always stop the media element.
           hardStopAndDetach()
 
-          // your requested semantics: when anon gating hits, empty the queue
-          if (code === 'ANON_CAP_REACHED') {
-            pRef.current.clearQueue()
-          }
+          // IMPORTANT: do NOT clear queue here.
+          // We want the *blocked* (next) track to remain selected so auth can resume cleanly.
 
-          // ✅ Latch using the request we just made (stable), not whatever state is now.
           blockedNonceRef.current.set(playbackId, s.reloadNonce)
-
-
-          // ✅ Stop any autoplay-bridge retries.
           playIntentRef.current = false
 
           pRef.current.setBlocked(reason, {code, action, correlationId: corr})
@@ -392,15 +401,14 @@ export default function AudioEngine() {
 
     void load()
     return () => ac.abort()
-      }, [
-      p.current?.id,
-      p.current?.muxPlaybackId,
-      p.reloadNonce,
-      p.intent,      // ✅ triggers attach when user hits play on already-selected preloaded track
-      p.status,      // ✅ covers cases where status flips to loading without id changing
-      hardStopAndDetach,
-    ])
-
+  }, [
+    p.current?.id,
+    p.current?.muxPlaybackId,
+    p.reloadNonce,
+    p.intent,
+    p.status,
+    hardStopAndDetach,
+  ])
 
   /* ---------------- Media element -> time + duration + state ---------------- */
 
@@ -408,33 +416,30 @@ export default function AudioEngine() {
     const a = audioRef.current
     if (!a) return
 
-  const reportPlaythroughComplete = (pct: number) => {
-  const trackId = pRef.current.current?.id ?? ''
-  const playbackId = pRef.current.current?.muxPlaybackId ?? ''
-  if (!trackId || !playbackId) return
+    const reportPlaythroughComplete = (pct: number) => {
+      const trackId = pRef.current.current?.id ?? ''
+      const playbackId = pRef.current.current?.muxPlaybackId ?? ''
+      if (!trackId || !playbackId) return
 
-  const key = `${trackId}:${playbackId}`
-  if (playthroughSentRef.current.has(key)) return
-  if (pct < 0.9) return
+      const key = `${trackId}:${playbackId}`
+      if (playthroughSentRef.current.has(key)) return
+      if (pct < 0.9) return
 
-  playthroughSentRef.current.add(key)
+      playthroughSentRef.current.add(key)
 
-  // fire-and-forget; keepalive helps during navigations/unloads
-  fetch('/api/playthrough/complete', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({trackId, playbackId, pct}),
-    keepalive: true,
-  }).catch(() => {})
-}
-
+      fetch('/api/playthrough/complete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({trackId, playbackId, pct}),
+        keepalive: true,
+      }).catch(() => {})
+    }
 
     const onTime = () => {
       const ms = Math.floor(a.currentTime * 1000)
       mediaSurface.setTime(ms)
       pRef.current.setPositionMs(ms)
 
-      // try to compute duration from best available source
       const curId = pRef.current.current?.id ?? ''
       const durFromState =
         (curId ? pRef.current.durationById[curId] : 0) || pRef.current.current?.durationMs || 0
@@ -447,7 +452,6 @@ export default function AudioEngine() {
         reportPlaythroughComplete(pct)
       }
     }
-
 
     const onLoadedMeta = () => {
       const d = a.duration
@@ -466,6 +470,13 @@ export default function AudioEngine() {
     }
 
     const markPlaying = () => {
+      // If we’re blocked, don’t let media events resurrect UI state.
+      if (pRef.current.status === 'blocked') {
+        hardStopAndDetach()
+        mediaSurface.setStatus('blocked')
+        return
+      }
+
       mediaSurface.setStatus('playing')
       pRef.current.setStatusExternal('playing')
       pRef.current.setLoadingReasonExternal(undefined)
@@ -476,6 +487,7 @@ export default function AudioEngine() {
     }
 
     const markPaused = () => {
+      if (pRef.current.status === 'blocked') return
       mediaSurface.setStatus('paused')
       pRef.current.setStatusExternal('paused')
       pRef.current.setLoadingReasonExternal(undefined)
@@ -484,6 +496,7 @@ export default function AudioEngine() {
 
     const markBuffering = () => {
       const s = pRef.current
+      if (s.status === 'blocked') return
       const shouldBePlaying = s.intent === 'play' || s.status === 'playing' || s.status === 'loading'
       if (!shouldBePlaying) return
       mediaSurface.setStatus('loading')
@@ -492,22 +505,17 @@ export default function AudioEngine() {
     }
 
     const clearBuffering = () => {
+      if (pRef.current.status === 'blocked') return
       pRef.current.setLoadingReasonExternal(undefined)
       applyPendingSeek()
     }
 
     const onEnded = () => {
       reportPlaythroughComplete(1)
-
-      // ✅ Kill any residual buffered tail before we advance.
       hardStopAndDetach()
-
-      // Ensure next track has a user gesture bridge available if needed.
       window.dispatchEvent(new Event('af:play-intent'))
       pRef.current.next()
     }
-
-
 
     a.addEventListener('timeupdate', onTime)
     a.addEventListener('loadedmetadata', onLoadedMeta)
@@ -556,6 +564,12 @@ export default function AudioEngine() {
     const a = audioRef.current
     if (!a) return
 
+    if (p.status === 'blocked') {
+      // A final guard: blocked means no play/pause intent should do anything.
+      playIntentRef.current = false
+      return
+    }
+
     if (p.intent === 'pause') {
       a.pause()
       pRef.current.clearIntent()
@@ -574,7 +588,7 @@ export default function AudioEngine() {
         }
       )
     }
-  }, [p.intent])
+  }, [p.intent, p.status])
 
   /* ---------------- User gesture bridge ---------------- */
 
@@ -583,6 +597,8 @@ export default function AudioEngine() {
     if (!a) return
 
     const resume = () => {
+      if (pRef.current.status === 'blocked') return
+
       if (audioCtxRef.current?.state === 'suspended') {
         audioCtxRef.current.resume().catch(() => {})
       }

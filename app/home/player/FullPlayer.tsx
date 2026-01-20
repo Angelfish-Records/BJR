@@ -481,15 +481,15 @@ export default function FullPlayer(props: {
               !canPlay
                 ? 'rgba(255,255,255,0.38)'
                 : isCur
-                  ? 'color-mix(in srgb, var(--accent) 72%, rgba(255,255,255,0.92))'
-                  : 'rgba(255,255,255,0.92)'
+                  ? 'color-mix(in srgb, var(--accent) 72%, rgba(107, 25, 141, 0.92))'
+                  : 'rgba(107, 25, 141, 0.92)'
 
             const subColor =
               !canPlay
                 ? 'rgba(255,255,255,0.32)'
                 : isCur
-                  ? 'color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.70))'
-                  : 'rgba(255,255,255,0.70)'
+                  ? 'color-mix(in srgb, var(--accent) 55%, rgba(107, 25, 141, 0.92))'
+                  : 'rgba(107, 25, 141, 0.92)'
 
             const baseBg = isSelected ? 'rgba(255,255,255,0.14)' : 'transparent'
             const restBg = isCur && !isSelected ? 'transparent' : baseBg
@@ -502,7 +502,7 @@ export default function FullPlayer(props: {
                 onMouseEnter={(e) => {
                   prefetchTrack(t)
                   if (!canPlay) return
-                  if (!isCoarsePointer && !isSelected && !isCur) e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
+                  if (!isCoarsePointer && !isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = restBg
