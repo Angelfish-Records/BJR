@@ -99,6 +99,7 @@ export default function AdminDebugBar() {
             }}
           >
             <div
+            id="af-admin-debugbar" 
               style={{
                 width: 'min(1040px, 100%)',
                 height: 'min(78vh, 760px)',

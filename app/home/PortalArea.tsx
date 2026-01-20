@@ -14,13 +14,12 @@ import ActivationGate from '@/app/home/ActivationGate'
 import Image from 'next/image'
 
 const LEGACY_PORTAL_P = 'portal'
+const DEFAULT_PORTAL_TAB = 'download'
 
 function normalizeP(raw: string | null | undefined): string {
   const v = (raw ?? '').trim()
   return v || 'player'
 }
-
-const DEFAULT_PORTAL_TAB = 'download'
 
 function QueueBootstrapper(props: {albumId: string | null; tracks: PlayerTrack[]}) {
   const p = usePlayer()
@@ -204,11 +203,54 @@ function BodyPortal(props: {children: React.ReactNode}) {
   return createPortal(props.children, document.body)
 }
 
+function useAnchorRect(ref: React.RefObject<HTMLElement | null>, enabled: boolean) {
+  const [rect, setRect] = React.useState<DOMRect | null>(null)
+
+  React.useEffect(() => {
+    if (!enabled) {
+      setRect(null)
+      return
+    }
+
+    const el = ref.current
+    if (!el) return
+
+    const update = () => {
+      const r = el.getBoundingClientRect()
+      // DOMRect is live-ish in some browsers; copy primitives.
+      setRect(
+        new DOMRect(
+          Math.round(r.x),
+          Math.round(r.y),
+          Math.round(r.width),
+          Math.round(r.height)
+        )
+      )
+    }
+
+    update()
+
+    const ro = new ResizeObserver(() => update())
+    ro.observe(el)
+
+    const onScroll = () => update()
+    const onResize = () => update()
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', onResize)
+
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('resize', onResize)
+    }
+  }, [ref, enabled])
+
+  return rect
+}
+
 /**
- * Global “SpotlightAttention” veil:
- * - Blurs/obscures the *entire* app surface (including MiniPlayer)
- * - Blocks interaction everywhere underneath
- * - Portaled to body so transforms/stacking contexts can’t neuter it
+ * Full-screen blur + interaction blocker.
+ * Also lifts #af-admin-debugbar above the veil so you can always toggle spotlight off.
  */
 function SpotlightVeil(props: {active: boolean}) {
   const {active} = props
@@ -222,6 +264,25 @@ function SpotlightVeil(props: {active: boolean}) {
     }
   }, [active])
 
+  React.useEffect(() => {
+    // “escape hatch” — keep debug bar clickable above veil
+    const el = typeof document !== 'undefined' ? document.getElementById('af-admin-debugbar') : null
+    if (!el) return
+
+    const prev = el.getAttribute('style') ?? ''
+    if (active) {
+      // make it win against stacking contexts
+      el.setAttribute(
+        'style',
+        `${prev}; position: relative; z-index: 50000; pointer-events: auto;`
+      )
+    } else {
+      // restore exact previous inline style (or remove if empty)
+      if (prev.trim()) el.setAttribute('style', prev)
+      else el.removeAttribute('style')
+    }
+  }, [active])
+
   if (!active) return null
 
   return (
@@ -231,8 +292,8 @@ function SpotlightVeil(props: {active: boolean}) {
         style={{
           position: 'fixed',
           inset: 0,
-          zIndex: 10000,
-          pointerEvents: 'auto',
+          zIndex: 20000,
+          pointerEvents: 'auto', // blocks everything underneath
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
           background: 'rgba(0,0,0,0.30)',
@@ -243,38 +304,29 @@ function SpotlightVeil(props: {active: boolean}) {
 }
 
 /**
- * Dock that sits ABOVE the veil and hosts the interactive spotlight UI
- * (ActivationGate + MessageBar), unaffected by blur.
+ * Render a clone “above” the veil at the *exact same* screen position as the anchor.
+ * The in-place version stays in the DOM (visibility:hidden) to preserve layout perfectly.
  */
-function SpotlightDock(props: {active: boolean; gate: React.ReactNode; message: React.ReactNode}) {
-  const {active, gate, message} = props
+function SpotlightClone(props: {active: boolean; anchorRect: DOMRect | null; children: React.ReactNode}) {
+  const {active, anchorRect, children} = props
   if (!active) return null
+  if (!anchorRect) return null
 
   return (
     <BodyPortal>
       <div
         style={{
           position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 11000, // > veil
-          pointerEvents: 'none',
+          top: anchorRect.top,
+          left: anchorRect.left,
+          width: anchorRect.width,
+          height: anchorRect.height,
+          zIndex: 30000, // above veil
+          pointerEvents: 'auto',
+          display: 'block',
         }}
       >
-        <div
-          style={{
-            padding: 12,
-            display: 'flex',
-            justifyContent: 'flex-end',
-            alignItems: 'flex-start',
-          }}
-        >
-          <div style={{width: 'min(520px, 100%)', pointerEvents: 'auto'}}>
-            {gate}
-            {message}
-          </div>
-        </div>
+        {children}
       </div>
     </BodyPortal>
   )
@@ -324,10 +376,6 @@ export default function PortalArea(props: {
   const qAlbum = sp.get('album')
   const qTrack = sp.get('track')
 
-  // Canonical: p drives surface+tab.
-  // - p=player => player surface
-  // - p=<tabId> => portal surface, tabId is p
-  // Legacy: p=portal + pt=<tabId>
   const rawP = normalizeP(sp.get('p') ?? sp.get('panel') ?? 'player')
   const legacyPt = (sp.get('pt') ?? '').trim() || null
 
@@ -335,7 +383,6 @@ export default function PortalArea(props: {
   const isPlayer = effectiveP === 'player'
   const portalTabId = isPlayer ? null : effectiveP
 
-  // autoplay (opt-in)
   const qAutoplay = getAutoplayFlag(sp)
   const qShareToken = sp.get('st') ?? sp.get('share') ?? null
 
@@ -343,7 +390,6 @@ export default function PortalArea(props: {
     replaceQuery(patch)
   }, [])
 
-  // One-time legacy migration: p=portal&pt=... -> p=<tabId>, delete pt/panel
   React.useEffect(() => {
     const curP = (sp.get('p') ?? '').trim()
     const curPt = (sp.get('pt') ?? '').trim()
@@ -353,13 +399,11 @@ export default function PortalArea(props: {
       return
     }
 
-    // If pt exists without p=player and p is empty, migrate pt -> p
     if (curPt && (!curP || curP === '')) {
       patchQuery({p: curPt, pt: null, panel: null})
       return
     }
 
-    // If pt exists while we're on player, delete it (stop pollution)
     if (curPt && curP === 'player') {
       patchQuery({pt: null})
     }
@@ -468,14 +512,12 @@ export default function PortalArea(props: {
     [patchQuery]
   )
 
-  // URL-driven album load
   React.useEffect(() => {
     if (!isPlayer) return
     if (!qAlbum) return
     if (qAlbum !== currentAlbumSlug) void onSelectAlbum(qAlbum)
   }, [isPlayer, qAlbum, currentAlbumSlug, onSelectAlbum])
 
-  // When in portal, strip player-ish params
   React.useEffect(() => {
     if (isPlayer) return
     if (qAlbum || qTrack || sp.get('t') || sp.get('autoplay')) {
@@ -483,7 +525,6 @@ export default function PortalArea(props: {
     }
   }, [isPlayer, qAlbum, qTrack, sp, patchQuery])
 
-  // Track select from URL
   React.useEffect(() => {
     if (!isPlayer) return
     if (!qTrack) return
@@ -492,7 +533,6 @@ export default function PortalArea(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlayer, qTrack])
 
-  // Autoplay one-shot (requires trusted token)
   const autoplayFiredRef = React.useRef<string | null>(null)
   React.useEffect(() => {
     if (!isPlayer) return
@@ -512,7 +552,6 @@ export default function PortalArea(props: {
     patchQuery({autoplay: null})
   }, [isPlayer, qAutoplay, qTrack, qAlbum, qShareToken, p, patchQuery])
 
-  // Persist token per album slug, restore when returning
   React.useEffect(() => {
     if (!isPlayer) return
 
@@ -531,7 +570,6 @@ export default function PortalArea(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlayer, qAlbum, currentAlbumSlug])
 
-  // MiniPlayer -> open player + optional album
   React.useEffect(() => {
     const onOpen = (ev: Event) => {
       const e = ev as CustomEvent<{albumSlug?: string | null}>
@@ -569,26 +607,35 @@ export default function PortalArea(props: {
     [portalPanel, currentAlbumSlug, album, tracks, albums, forceSurface, isBrowsingAlbum, onSelectAlbum, viewerTier]
   )
 
+  // Anchor that defines the *exact* place the user expects the spotlight UI to live.
+  const spotlightAnchorRef = React.useRef<HTMLDivElement | null>(null)
+  const spotlightRect = useAnchorRect(spotlightAnchorRef, spotlightAttention)
+
+  const gateNode = (
+    <ActivationGate
+      attentionMessage={derivedAttentionMessage}
+      canManageBilling={canManageBilling}
+      isPatron={isPatron}
+      tier={tier}
+    >
+      <div />
+    </ActivationGate>
+  )
+
+  const msgNode = <MessageBar checkout={checkout} attentionMessage={derivedAttentionMessage} />
+
   return (
     <>
-      {/* Blur+block EVERYTHING, including MiniPlayer */}
+      {/* Blur+block EVERYTHING else (including MiniPlayer). */}
       <SpotlightVeil active={spotlightAttention} />
 
-      {/* Keep ActivationGate + MessageBar crisp and interactive above the veil */}
-      <SpotlightDock
-        active={spotlightAttention}
-        gate={
-          <ActivationGate
-            attentionMessage={derivedAttentionMessage}
-            canManageBilling={canManageBilling}
-            isPatron={isPatron}
-            tier={tier}
-          >
-            <div />
-          </ActivationGate>
-        }
-        message={<MessageBar checkout={checkout} attentionMessage={derivedAttentionMessage} />}
-      />
+      {/* Clone the spotlight UI ABOVE the veil, but at the exact same on-screen position. */}
+      <SpotlightClone active={spotlightAttention} anchorRect={spotlightRect}>
+        <div style={{pointerEvents: 'auto'}}>
+          {gateNode}
+          {msgNode}
+        </div>
+      </SpotlightClone>
 
       <QueueBootstrapper
         albumId={hasSt ? (album?.catalogId ?? null) : (album?.catalogId ?? album?.id ?? null)}
@@ -739,32 +786,30 @@ export default function PortalArea(props: {
 
                   <div className="afTopBarRight">
                     <div className="afTopBarRightInner" style={{maxWidth: 520, minWidth: 0}}>
-                      {/* When spotlight is active, we render the real gate in SpotlightDock (body-portal). */}
-                      {spotlightAttention ? <div style={{height: 46}} /> : (
-                        <ActivationGate
-                          attentionMessage={derivedAttentionMessage}
-                          canManageBilling={canManageBilling}
-                          isPatron={isPatron}
-                          tier={tier}
-                        >
-                          <div />
-                        </ActivationGate>
-                      )}
+                      {/* Anchor defines the exact visual location; when spotlight is active we hide in-place UI
+                          but keep layout identical, and render the interactive clone above the veil. */}
+                      <div
+                        ref={spotlightAnchorRef}
+                        style={{
+                          // Keep it in the normal flow always.
+                          position: 'relative',
+                          // While spotlighting, keep layout but hide visuals + block clicks.
+                          visibility: spotlightAttention ? 'hidden' : 'visible',
+                          pointerEvents: spotlightAttention ? 'none' : 'auto',
+                        }}
+                      >
+                        {gateNode}
+                        {msgNode}
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-
-              {/* When spotlight is active, we render the real MessageBar in SpotlightDock (body-portal). */}
-              {spotlightAttention ? null : (
-                <MessageBar checkout={checkout} attentionMessage={derivedAttentionMessage} />
-              )}
             </div>
           )}
         />
 
-        {/* ✅ persistent mini player (stays mounted even when portal panel is active)
-            It is still blocked+blurred by SpotlightVeil when spotlightAttention is true. */}
+        {/* Persistent mini player stays mounted, but is blurred+blocked by SpotlightVeil when spotlightAttention is true. */}
         <MiniPlayerHost onExpand={() => forceSurface('player')} />
       </div>
     </>
