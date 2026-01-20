@@ -41,11 +41,22 @@ export type PortalModuleDownloads = {
   assets?: Array<{assetId: string; label?: string}>
 }
 
+export type PortalModuleArtistPosts = {
+  _key: string
+  _type: 'moduleArtistPosts'
+  title?: string
+  pageSize?: number
+  requireAuthAfter?: number
+  minVisibility?: 'public' | 'friend' | 'patron' | 'partner'
+}
+
+
 export type PortalModule =
   | PortalModuleHeading
   | PortalModuleRichText
   | PortalModuleCardGrid
   | PortalModuleDownloads
+  | PortalModuleArtistPosts
 
 export type PortalPageDoc = {
   title?: string
@@ -79,7 +90,12 @@ const portalPageQuery = `
       // moduleDownloads
       albumSlug,
       teaserCopy,
-      assets[]{assetId, label}
+      assets[]{assetId, label},
+
+      // moduleArtistPosts
+      pageSize,
+      requireAuthAfter,
+      minVisibility
     }
   }
 `

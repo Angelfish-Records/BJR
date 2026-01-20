@@ -27,6 +27,7 @@ export const portalPage = defineType({
         {type: 'moduleRichText'},
         {type: 'moduleCardGrid'},
         {type: 'moduleDownloads'},
+        {type: 'moduleArtistPosts'}
       ],
       validation: (r) => r.required().min(1),
     }),

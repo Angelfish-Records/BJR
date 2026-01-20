@@ -6,6 +6,7 @@ import {getAlbumOffer, type AlbumOfferAsset} from '../../lib/albumOffers'
 import BuyAlbumButton from './modules/BuyAlbumButton'
 import DownloadAlbumButton from './modules/DownloadAlbumButton'
 import PortalTabs, {type PortalTabSpec} from './PortalTabs'
+import PortalArtistPosts from './modules/PortalArtistPosts'
 
 // --------------------
 // Module discriminated unions
@@ -38,7 +39,16 @@ type ModuleDownloads = {
   assets?: Array<{assetId: string; label?: string}>
 }
 
-type PortalModule = ModuleHeading | ModuleRichText | ModuleCardGrid | ModuleDownloads
+type ModuleArtistPosts = {
+  _key: string
+  _type: 'moduleArtistPosts'
+  title?: string
+  pageSize?: number
+  requireAuthAfter?: number
+  minVisibility?: 'public' | 'friend' | 'patron' | 'partner'
+}
+
+type PortalModule = ModuleHeading | ModuleRichText | ModuleCardGrid | ModuleDownloads | ModuleArtistPosts
 
 type Props = {
   modules: PortalModule[]
@@ -262,6 +272,18 @@ function renderModule(m: PortalModule, entitlementKeys: string[]) {
       teaserCopy={m.teaserCopy}
       owned={owned}
       assets={m.assets}
+    />
+  )
+}
+
+if (m._type === 'moduleArtistPosts') {
+  return (
+    <PortalArtistPosts
+      key={m._key}
+      title={m.title ?? 'Posts'}
+      pageSize={m.pageSize ?? 10}
+      requireAuthAfter={m.requireAuthAfter ?? 3}
+      minVisibility={m.minVisibility ?? 'public'}
     />
   )
 }

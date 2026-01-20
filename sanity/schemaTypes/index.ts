@@ -7,10 +7,12 @@ import {moduleHeading} from './moduleHeading'
 import {moduleCardGrid} from './moduleCardGrid'
 import {moduleDownloads} from './moduleDownloads'
 import {moduleRichText} from './modules/moduleRichText'
+import {artistPost} from './artistPost'
+import {moduleArtistPosts} from './moduleArtistPosts'
 import album from './album'
 import lyrics from './lyrics'
 
 
 export const schema: {types: SchemaTypeDefinition[]} = {
-  types: [landingPage, shadowHomePage, siteFlags, portalPage, moduleHeading, moduleCardGrid, moduleDownloads, moduleRichText, album, lyrics],
+  types: [landingPage, shadowHomePage, siteFlags, portalPage, moduleHeading, moduleCardGrid, moduleDownloads, moduleRichText, artistPost, moduleArtistPosts, album, lyrics],
 }
