@@ -148,7 +148,7 @@ export default function AdminDebugBar() {
               <iframe
                 title="Share tokens admin"
                 // optional: you can later add ?embed=1 and simplify the server page chrome for iframe mode
-                src="/admin/share-tokens"
+                src="/admin/access?embed=1"
                 style={{
                   width: '100%',
                   height: '100%',
@@ -207,8 +207,9 @@ export default function AdminDebugBar() {
           }}
         >
           <button style={btn} onClick={() => setTokensOpen(true)}>
-            Share tokens
+            Access dashboard
           </button>
+
 
           <span
             aria-hidden
