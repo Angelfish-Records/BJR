@@ -8,6 +8,7 @@ import {useClientSearchParams, replaceQuery, getAutoplayFlag} from './urlState'
 import {usePlayer} from '@/app/home/player/PlayerState'
 import type {PlayerTrack, AlbumInfo, AlbumNavItem, Tier} from '@/lib/types'
 import PlayerController from './player/PlayerController'
+import MiniPlayer from './player/MiniPlayer'
 import ActivationGate from '@/app/home/ActivationGate'
 import Image from 'next/image'
 
@@ -30,6 +31,36 @@ function QueueBootstrapper(props: {albumId: string | null; tracks: PlayerTrack[]
   }, [p, p.queue.length, props.albumId, props.tracks])
 
   return null
+}
+
+function MiniPlayerHost(props: {onExpand: () => void}) {
+  const {onExpand} = props
+  const p = usePlayer()
+
+  const [miniActive, setMiniActive] = React.useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.sessionStorage.getItem('af:miniActive') === '1'
+  })
+
+  React.useEffect(() => {
+    const shouldActivate =
+      p.intent === 'play' ||
+      p.status === 'playing' ||
+      p.status === 'paused' ||
+      Boolean(p.current) ||
+      p.queue.length > 0
+
+    if (!miniActive && shouldActivate) {
+      setMiniActive(true)
+      try {
+        window.sessionStorage.setItem('af:miniActive', '1')
+      } catch {}
+    }
+  }, [miniActive, p])
+
+  if (!miniActive) return null
+
+  return <MiniPlayer onExpand={onExpand} artworkUrl={p.queueContextArtworkUrl ?? null} />
 }
 
 type AlbumPayload = {album: AlbumInfo | null; tracks: PlayerTrack[]}
@@ -608,6 +639,10 @@ export default function PortalArea(props: {
             </div>
           )}
         />
+
+          {/* ✅ persistent mini player (stays mounted even when portal panel is active) */}
+          <MiniPlayerHost onExpand={() => forceSurface('player')} />
+
       </div>
     </>
   )

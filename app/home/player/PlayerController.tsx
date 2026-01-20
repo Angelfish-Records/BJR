@@ -3,8 +3,6 @@
 
 import React from 'react'
 import FullPlayer from './FullPlayer'
-import MiniPlayer from './MiniPlayer'
-import {usePlayer} from './PlayerState'
 import type {AlbumInfo, AlbumNavItem, PlayerTrack, Tier} from '@/lib/types'
 import StageOverlay from './stage/StageOverlay'
 import type {LyricCue} from './stage/LyricsOverlay'
@@ -19,30 +17,7 @@ export default function PlayerController(props: {
   isBrowsingAlbum: boolean
   viewerTier?: Tier
 }) {
-  const {albumSlug, openPlayerPanel, album, tracks, albums, onSelectAlbum, isBrowsingAlbum, viewerTier = 'none'} = props
-
-  const p = usePlayer()
-
-  const [miniActive, setMiniActive] = React.useState(() => {
-    if (typeof window === 'undefined') return false
-    return window.sessionStorage.getItem('af:miniActive') === '1'
-  })
-
-  React.useEffect(() => {
-    const shouldActivate =
-      p.intent === 'play' ||
-      p.status === 'playing' ||
-      p.status === 'paused' ||
-      Boolean(p.current) ||
-      p.queue.length > 0
-
-    if (!miniActive && shouldActivate) {
-      setMiniActive(true)
-      try {
-        window.sessionStorage.setItem('af:miniActive', '1')
-      } catch {}
-    }
-  }, [miniActive, p])
+  const {albumSlug, album, tracks, albums, onSelectAlbum, isBrowsingAlbum, viewerTier = 'none'} = props
 
   const [stageOpen, setStageOpen] = React.useState(false)
   const openStage = React.useCallback(() => setStageOpen(true), [])
@@ -61,18 +36,10 @@ export default function PlayerController(props: {
         onSelectAlbum={onSelectAlbum}
         isBrowsingAlbum={isBrowsingAlbum}
         viewerTier={viewerTier}
-        // @ts-expect-error: intentional opt-in prop; see patch below
+        // If FullPlayer doesn't declare this prop, either remove it or add it to FullPlayer's prop types.
+        // @ts-expect-error intentional opt-in prop
         onOpenStage={openStage}
       />
-
-      {miniActive ? (
-        <MiniPlayer
-          onExpand={openPlayerPanel}
-          artworkUrl={p.queueContextArtworkUrl ?? null}
-          // @ts-expect-error: intentional opt-in prop; see patch below
-          onOpenStage={openStage}
-        />
-      ) : null}
 
       <StageOverlay open={stageOpen} onClose={closeStage} cues={cues} offsetMs={offsetMs} />
     </>
