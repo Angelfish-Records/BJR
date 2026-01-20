@@ -340,51 +340,11 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
   const posSecReal = (p.positionMs ?? 0) / 1000
   const safePosReal = durKnown ? clamp(posSecReal, 0, durSec) : 0
 
-  // --- smooth visual progress (UI only) ---
-const [visPos, setVisPos] = React.useState(0)
-const visRef = React.useRef({sec: 0, t: 0})
-
-const [scrubbing, setScrubbing] = React.useState(false)
-const [scrubSec, setScrubSec] = React.useState(0)
-
-React.useEffect(() => {
-  // reset when track changes
-  visRef.current = {sec: safePosReal, t: performance.now()}
-  setVisPos(safePosReal)
-}, [p.current?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-React.useEffect(() => {
-  // whenever real position updates, re-anchor
-  visRef.current = {sec: safePosReal, t: performance.now()}
-  if (!scrubbing) setVisPos(safePosReal)
-}, [safePosReal, scrubbing])
-
-React.useEffect(() => {
-  if (!durKnown) return
-  if (scrubbing) return
-  if (!playingish) return
-
-  let raf = 0
-  const tick = () => {
-    const now = performance.now()
-    const base = visRef.current.sec
-    const dt = (now - visRef.current.t) / 1000
-
-    // advance visually at 1x, clamped
-    const next = clamp(base + dt, 0, durSec)
-    setVisPos(next)
-
-    // keep raf going while playing
-    raf = requestAnimationFrame(tick)
-  }
-
-  raf = requestAnimationFrame(tick)
-  return () => cancelAnimationFrame(raf)
-}, [durKnown, durSec, scrubbing, playingish])
-
-
-  const pendingSec = p.pendingSeekMs != null ? Math.round(p.pendingSeekMs / 1000) : null
+  const pendingSec = p.pendingSeekMs != null ? p.pendingSeekMs / 1000 : null
   const safePending = pendingSec != null && durKnown ? clamp(pendingSec, 0, durSec) : pendingSec ?? undefined
+
+  const [scrubbing, setScrubbing] = React.useState(false)
+  const [scrubSec, setScrubSec] = React.useState(0)
 
   React.useEffect(() => {
     setScrubbing(false)
@@ -395,7 +355,7 @@ React.useEffect(() => {
     if (!scrubbing) setScrubSec(safePosReal)
   }, [safePosReal, scrubbing])
 
-  const sliderValue = scrubbing ? scrubSec : safePending ?? visPos
+  const sliderValue = scrubbing ? scrubSec : safePending ?? safePosReal
 
   /* ---------------- Seek tooltip ---------------- */
 
@@ -654,6 +614,7 @@ React.useEffect(() => {
             type="range"
             min={0}
             max={durSec}
+            step={0.05}
             disabled={!durKnown}
             value={sliderValue}
             onPointerDown={(e) => {
@@ -1112,7 +1073,6 @@ React.useEffect(() => {
             box-shadow:
               0 0 0 1px rgba(0,0,0,0.35),
               0 4px 10px rgba(0,0,0,0.25);
-            transition: transform 90ms linear;
           }
 
           input[aria-label="Seek"]::-moz-range-track {

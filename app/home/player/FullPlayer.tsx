@@ -477,19 +477,18 @@ export default function FullPlayer(props: {
             const shimmerTitle = isPending || (isCur && p.status === 'loading')
             const isNowPlaying = isCur && (p.status === 'playing' || p.status === 'loading' || p.intent === 'play')
 
-            const titleColor =
-              !canPlay
-                ? 'rgba(255,255,255,0.38)'
-                : isCur
-                  ? 'color-mix(in srgb, var(--accent) 72%, rgba(107, 25, 141, 0.92))'
-                  : 'rgba(107, 25, 141, 0.92)'
+            const titleColor = !canPlay
+              ? 'rgba(255,255,255,0.38)'
+              : isCur
+                ? 'var(--accent)'
+                : 'rgba(255,255,255,0.92)'
 
-            const subColor =
-              !canPlay
-                ? 'rgba(255,255,255,0.32)'
-                : isCur
-                  ? 'color-mix(in srgb, var(--accent) 55%, rgba(107, 25, 141, 0.92))'
-                  : 'rgba(107, 25, 141, 0.92)'
+            const subColor = !canPlay
+              ? 'rgba(255,255,255,0.32)'
+              : isCur
+                ? 'color-mix(in srgb, var(--accent) 70%, rgba(255,255,255,0.70))'
+                : 'rgba(255,255,255,0.70)'
+
 
             const baseBg = isSelected ? 'rgba(255,255,255,0.14)' : 'transparent'
             const restBg = isCur && !isSelected ? 'transparent' : baseBg
