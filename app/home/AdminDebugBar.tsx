@@ -2,6 +2,7 @@
 'use client'
 
 import React from 'react'
+import {createPortal} from 'react-dom'
 
 const ENABLED = process.env.NEXT_PUBLIC_ADMIN_DEBUG === '1'
 
@@ -30,11 +31,30 @@ const FORCE_OPTS: ForceOpt[] = [
 ]
 
 export default function AdminDebugBar() {
-  // Hooks must always run, even if the component returns null later.
+  // Hooks must always run, even if we return null later.
   const [force, setForce] = React.useState<string>('none')
+  const [tokensOpen, setTokensOpen] = React.useState(false)
+  const [mounted, setMounted] = React.useState(false)
 
-  // Optional: reflect currently-set force from cookie/server later if you want.
-  // For now we keep it simple and deterministic.
+  React.useEffect(() => setMounted(true), [])
+
+  // ESC to close + lock scroll while modal open
+  React.useEffect(() => {
+    if (!tokensOpen) return
+
+    const prevOverflow = document.documentElement.style.overflow
+    document.documentElement.style.overflow = 'hidden'
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setTokensOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+
+    return () => {
+      document.documentElement.style.overflow = prevOverflow
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [tokensOpen])
 
   if (!ENABLED) return null
 
@@ -56,106 +76,201 @@ export default function AdminDebugBar() {
     position: 'relative',
   }
 
-  return (
-    <div
-      style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 9999,
-        width: '100%',
-        minHeight: 40,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-        padding: '6px 12px',
-        background: 'rgba(10,10,14,0.88)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-        borderBottom: '1px solid rgba(255,255,255,0.12)',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
-      }}
-    >
-      <div
-        style={{
-          fontSize: 12,
-          letterSpacing: '0.04em',
-          textTransform: 'uppercase',
-          opacity: 0.6,
-          userSelect: 'none',
-        }}
-      >
-        Admin debug
-      </div>
-
-      <div
-        style={{
-          display: 'flex',
-          gap: 8,
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-        }}
-      >
-        {/* Force state dropdown (collapsed controls) */}
-        <div style={{position: 'relative', display: 'grid'}}>
-          <select
-            aria-label="Force state"
-            value={force}
-            onChange={(e) => setForce(e.currentTarget.value)}
-            style={selectStyle}
-          >
-            {FORCE_OPTS.map((o) => (
-              <option key={o.id} value={o.id}>
-                Force: {o.label}
-              </option>
-            ))}
-          </select>
-
-          {/* caret */}
+  const modal =
+    mounted && tokensOpen
+      ? createPortal(
           <div
-            aria-hidden
+            role="dialog"
+            aria-modal="true"
+            aria-label="Share tokens admin"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) setTokensOpen(false)
+            }}
             style={{
-              position: 'absolute',
-              right: 10,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              pointerEvents: 'none',
-              opacity: 0.8,
-              fontSize: 10,
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.55)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
+              zIndex: 100000,
+              display: 'grid',
+              placeItems: 'center',
+              padding: 16,
             }}
           >
-            ▼
-          </div>
-        </div>
+            <div
+              style={{
+                width: 'min(1040px, 100%)',
+                height: 'min(78vh, 760px)',
+                borderRadius: 18,
+                border: '1px solid rgba(255,255,255,0.14)',
+                background: 'rgba(10,10,12,0.85)',
+                boxShadow: '0 22px 70px rgba(0,0,0,0.55)',
+                overflow: 'hidden',
+                display: 'grid',
+                gridTemplateRows: 'auto 1fr',
+              }}
+            >
+              <div
+                style={{
+                  padding: '10px 12px',
+                  borderBottom: '1px solid rgba(255,255,255,0.10)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 10,
+                }}
+              >
+                <div style={{minWidth: 0}}>
+                  <div style={{fontSize: 12, fontWeight: 650, opacity: 0.92}}>Admin — Share tokens</div>
+                  <div style={{fontSize: 11, opacity: 0.62}}>Inline modal shell (server page inside iframe)</div>
+                </div>
 
-        <button
-          style={btn}
-          onClick={() => {
-            void setDebug({force})
+                <button
+                  type="button"
+                  onClick={() => setTokensOpen(false)}
+                  aria-label="Close"
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: 999,
+                    border: '1px solid rgba(255,255,255,0.14)',
+                    background: 'rgba(255,255,255,0.06)',
+                    color: 'rgba(255,255,255,0.90)',
+                    cursor: 'pointer',
+                    lineHeight: 0,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+              <iframe
+                title="Share tokens admin"
+                // optional: you can later add ?embed=1 and simplify the server page chrome for iframe mode
+                src="/admin/share-tokens"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  border: 0,
+                  background: 'transparent',
+                }}
+              />
+            </div>
+          </div>,
+          document.body
+        )
+      : null
+
+  return (
+    <>
+      <div
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 9999,
+          width: '100%',
+          minHeight: 40,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          padding: '6px 12px',
+          background: 'rgba(10,10,14,0.88)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          borderBottom: '1px solid rgba(255,255,255,0.12)',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+        }}
+      >
+        {/* Left: label */}
+        <div
+          style={{
+            fontSize: 12,
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            opacity: 0.6,
+            userSelect: 'none',
           }}
         >
-          Apply
-        </button>
+          Admin debug
+        </div>
 
-        <span
-          aria-hidden
+        {/* Right: controls */}
+        <div
           style={{
-            width: 1,
-            height: 18,
-            background: 'rgba(255,255,255,0.18)',
-            margin: '0 4px',
+            display: 'flex',
+            gap: 8,
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
           }}
-        />
+        >
+          <button style={btn} onClick={() => setTokensOpen(true)}>
+            Share tokens
+          </button>
 
-        <button style={btn} onClick={() => void setDebug({force: 'none'})}>
-          Clear force
-        </button>
+          <span
+            aria-hidden
+            style={{
+              width: 1,
+              height: 18,
+              background: 'rgba(255,255,255,0.18)',
+              margin: '0 4px',
+            }}
+          />
 
-        <button style={btn} onClick={clearDebug}>
-          Reset
-        </button>
+          {/* Force state dropdown (collapsed) */}
+          <div style={{position: 'relative', display: 'grid'}}>
+            <select
+              aria-label="Force state"
+              value={force}
+              onChange={(e) => setForce(e.currentTarget.value)}
+              style={selectStyle}
+            >
+              {FORCE_OPTS.map((o) => (
+                <option key={o.id} value={o.id}>
+                  Force: {o.label}
+                </option>
+              ))}
+            </select>
+
+            <div
+              aria-hidden
+              style={{
+                position: 'absolute',
+                right: 10,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                pointerEvents: 'none',
+                opacity: 0.8,
+                fontSize: 10,
+              }}
+            >
+              ▼
+            </div>
+          </div>
+
+          <button
+            style={btn}
+            onClick={() => {
+              void setDebug({force})
+            }}
+          >
+            Apply
+          </button>
+
+          <button style={btn} onClick={() => void setDebug({force: 'none'})}>
+            Clear force
+          </button>
+
+          <button style={btn} onClick={clearDebug}>
+            Reset
+          </button>
+        </div>
       </div>
-    </div>
+
+      {modal}
+    </>
   )
 }
