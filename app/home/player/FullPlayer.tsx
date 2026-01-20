@@ -334,17 +334,6 @@ export default function FullPlayer(props: {
     }
   })()
 
-  const loadingLabel =
-    p.status === 'loading'
-      ? p.loadingReason === 'token'
-        ? 'Loading…'
-        : p.loadingReason === 'attach'
-          ? 'Switching…'
-          : p.loadingReason === 'buffering'
-            ? 'Buffering…'
-            : 'Loading…'
-      : null
-
   // Prev/Next disabled logic: operate on PlayerState queue.
   const curId = p.current?.id ?? ''
   const idx = curId ? p.queue.findIndex((t) => t.id === curId) : -1
@@ -476,14 +465,6 @@ export default function FullPlayer(props: {
             <ShareIcon />
           </IconCircleBtn>
         </div>
-
-        {playingThisAlbum && loadingLabel ? (
-          <div style={{fontSize: 12, opacity: 0.65, marginTop: 2}}>{loadingLabel}</div>
-        ) : null}
-
-        {p.status === 'blocked' && p.lastError ? (
-          <div style={{fontSize: 12, opacity: 0.75, marginTop: 4}}>Playback error</div>
-        ) : null}
       </div>
 
       <div style={{marginTop: 18}}>

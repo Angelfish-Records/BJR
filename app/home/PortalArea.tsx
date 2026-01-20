@@ -2,6 +2,7 @@
 'use client'
 
 import React from 'react'
+import {createPortal} from 'react-dom'
 import {useAuth} from '@clerk/nextjs'
 import PortalShell, {PortalPanelSpec} from './PortalShell'
 import {useClientSearchParams, replaceQuery, getAutoplayFlag} from './urlState'
@@ -195,6 +196,49 @@ function MessageBar(props: {checkout: string | null; attentionMessage: string | 
   )
 }
 
+/**
+ * Global “SpotlightAttention” veil:
+ * - Blurs/obscures the *entire* app surface
+ * - Blocks interaction everywhere *except* lifted elements above it (ActivationGate + MessageBar)
+ * - Uses a body portal so it can’t be trapped by transforms/stacking contexts in PortalShell
+ */
+function SpotlightVeil(props: {active: boolean}) {
+  const {active} = props
+  const [mounted, setMounted] = React.useState(false)
+
+  React.useEffect(() => setMounted(true), [])
+
+  // Optional: lock scrolling while gated
+  React.useEffect(() => {
+    if (!active) return
+    const prev = document.documentElement.style.overflow
+    document.documentElement.style.overflow = 'hidden'
+    return () => {
+      document.documentElement.style.overflow = prev
+    }
+  }, [active])
+
+  if (!active) return null
+  if (!mounted) return null
+  if (typeof document === 'undefined') return null
+
+  return createPortal(
+    <div
+      aria-hidden
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 1200,
+        pointerEvents: 'auto', // blocks clicks to everything underneath
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        background: 'rgba(0,0,0,0.30)',
+      }}
+    />,
+    document.body
+  )
+}
+
 export default function PortalArea(props: {
   portalPanel: React.ReactNode
   topLogoUrl?: string | null
@@ -239,10 +283,6 @@ export default function PortalArea(props: {
   const qAlbum = sp.get('album')
   const qTrack = sp.get('track')
 
-  // Canonical: p drives surface+tab.
-  // - p=player => player surface
-  // - p=<tabId> => portal surface, tabId is p
-  // Legacy: p=portal + pt=<tabId>
   const rawP = normalizeP(sp.get('p') ?? sp.get('panel') ?? 'player')
   const legacyPt = (sp.get('pt') ?? '').trim() || null
 
@@ -250,7 +290,6 @@ export default function PortalArea(props: {
   const isPlayer = effectiveP === 'player'
   const portalTabId = isPlayer ? null : effectiveP
 
-  // autoplay (opt-in)
   const qAutoplay = getAutoplayFlag(sp)
   const qShareToken = sp.get('st') ?? sp.get('share') ?? null
 
@@ -258,7 +297,6 @@ export default function PortalArea(props: {
     replaceQuery(patch)
   }, [])
 
-  // One-time legacy migration: p=portal&pt=... -> p=<tabId>, delete pt/panel
   React.useEffect(() => {
     const curP = (sp.get('p') ?? '').trim()
     const curPt = (sp.get('pt') ?? '').trim()
@@ -268,13 +306,11 @@ export default function PortalArea(props: {
       return
     }
 
-    // If pt exists without p=player and p is empty, migrate pt -> p
     if (curPt && (!curP || curP === '')) {
       patchQuery({p: curPt, pt: null, panel: null})
       return
     }
 
-    // If pt exists while we're on player, delete it (stop pollution)
     if (curPt && curP === 'player') {
       patchQuery({pt: null})
     }
@@ -282,13 +318,16 @@ export default function PortalArea(props: {
   }, [])
 
   React.useEffect(() => {
-  if (isPlayer) return
-  if (portalTabId) setLastPortalTab(portalTabId)
-}, [isPlayer, portalTabId])
+    if (isPlayer) return
+    if (portalTabId) setLastPortalTab(portalTabId)
+  }, [isPlayer, portalTabId])
 
   const forceSurface = React.useCallback(
     (surface: 'player' | 'portal', tabId?: string | null) => {
-      const desiredP = surface === 'player' ? 'player' : (tabId ?? getLastPortalTab() ?? portalTabId ?? legacyPt ?? DEFAULT_PORTAL_TAB)
+      const desiredP =
+        surface === 'player'
+          ? 'player'
+          : tabId ?? getLastPortalTab() ?? portalTabId ?? legacyPt ?? DEFAULT_PORTAL_TAB
 
       const curP = normalizeP(sp.get('p') ?? sp.get('panel') ?? 'player')
       const curEffective = curP === LEGACY_PORTAL_P ? (legacyPt ?? DEFAULT_PORTAL_TAB) : curP
@@ -380,14 +419,12 @@ export default function PortalArea(props: {
     [patchQuery]
   )
 
-  // URL-driven album load
   React.useEffect(() => {
     if (!isPlayer) return
     if (!qAlbum) return
     if (qAlbum !== currentAlbumSlug) void onSelectAlbum(qAlbum)
   }, [isPlayer, qAlbum, currentAlbumSlug, onSelectAlbum])
 
-  // When in portal, strip player-ish params
   React.useEffect(() => {
     if (isPlayer) return
     if (qAlbum || qTrack || sp.get('t') || sp.get('autoplay')) {
@@ -395,7 +432,6 @@ export default function PortalArea(props: {
     }
   }, [isPlayer, qAlbum, qTrack, sp, patchQuery])
 
-  // Track select from URL
   React.useEffect(() => {
     if (!isPlayer) return
     if (!qTrack) return
@@ -404,7 +440,6 @@ export default function PortalArea(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlayer, qTrack])
 
-  // Autoplay one-shot (requires trusted token)
   const autoplayFiredRef = React.useRef<string | null>(null)
   React.useEffect(() => {
     if (!isPlayer) return
@@ -424,7 +459,6 @@ export default function PortalArea(props: {
     patchQuery({autoplay: null})
   }, [isPlayer, qAutoplay, qTrack, qAlbum, qShareToken, p, patchQuery])
 
-  // Persist token per album slug, restore when returning
   React.useEffect(() => {
     if (!isPlayer) return
 
@@ -443,7 +477,6 @@ export default function PortalArea(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlayer, qAlbum, currentAlbumSlug])
 
-  // MiniPlayer -> open player + optional album
   React.useEffect(() => {
     const onOpen = (ev: Event) => {
       const e = ev as CustomEvent<{albumSlug?: string | null}>
@@ -483,7 +516,13 @@ export default function PortalArea(props: {
 
   return (
     <>
-      <QueueBootstrapper albumId={hasSt ? (album?.catalogId ?? null) : (album?.catalogId ?? album?.id ?? null)} tracks={tracks} />
+      {/* Global veil that blurs EVERYTHING underneath */}
+      <SpotlightVeil active={spotlightAttention} />
+
+      <QueueBootstrapper
+        albumId={hasSt ? (album?.catalogId ?? null) : (album?.catalogId ?? album?.id ?? null)}
+        tracks={tracks}
+      />
 
       <div style={{height: '100%', minHeight: 0, minWidth: 0, display: 'grid'}}>
         <PortalShell
@@ -508,21 +547,6 @@ export default function PortalArea(props: {
                 position: 'relative',
               }}
             >
-              {spotlightAttention ? (
-                <div
-                  aria-hidden
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    pointerEvents: 'none',
-                    zIndex: 10,
-                    backdropFilter: 'blur(10px)',
-                    WebkitBackdropFilter: 'blur(10px)',
-                    background: 'rgba(0,0,0,0.18)',
-                  }}
-                />
-              ) : null}
-
               <style>{`
 .afTopBar { display:grid; grid-template-columns:1fr auto 1fr; grid-template-rows:1fr; align-items:stretch; gap:12px; min-width:0; }
 .afTopBarControls { display: contents; }
@@ -643,8 +667,23 @@ export default function PortalArea(props: {
                   </div>
 
                   <div className="afTopBarRight">
-                    <div className="afTopBarRightInner" style={{maxWidth: 520, minWidth: 0, position: 'relative', zIndex: 20}}>
-                      <ActivationGate attentionMessage={derivedAttentionMessage} canManageBilling={canManageBilling} isPatron={isPatron} tier={tier}>
+                    {/* Lift ABOVE the global veil */}
+                    <div
+                      className="afTopBarRightInner"
+                      style={{
+                        maxWidth: 520,
+                        minWidth: 0,
+                        position: 'relative',
+                        zIndex: 1400, // > SpotlightVeil (1200)
+                        pointerEvents: 'auto',
+                      }}
+                    >
+                      <ActivationGate
+                        attentionMessage={derivedAttentionMessage}
+                        canManageBilling={canManageBilling}
+                        isPatron={isPatron}
+                        tier={tier}
+                      >
                         <div />
                       </ActivationGate>
                     </div>
@@ -652,16 +691,16 @@ export default function PortalArea(props: {
                 </div>
               </div>
 
-              <div style={spotlightAttention ? {position: 'relative', zIndex: 20} : undefined}>
+              {/* MessageBar also lifted above veil */}
+              <div style={{position: 'relative', zIndex: 1400, pointerEvents: 'auto'}}>
                 <MessageBar checkout={checkout} attentionMessage={derivedAttentionMessage} />
               </div>
             </div>
           )}
         />
 
-          {/* ✅ persistent mini player (stays mounted even when portal panel is active) */}
-          <MiniPlayerHost onExpand={() => forceSurface('player')} />
-
+        {/* ✅ persistent mini player (stays mounted even when portal panel is active) */}
+        <MiniPlayerHost onExpand={() => forceSurface('player')} />
       </div>
     </>
   )
