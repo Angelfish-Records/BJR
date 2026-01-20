@@ -440,7 +440,7 @@ export default function FullPlayer(props: {
             </button>
 
             <div style={{position: 'absolute', inset: -5, borderRadius: 999, zIndex: 1}}>
-              <PatternRing size={74} thickness={7} opacity={0.75} seed={913} />
+              <PatternRing size={74} thickness={7} opacity={0.55} seed={913} />
             </div>
           </div>
 
@@ -468,12 +468,7 @@ export default function FullPlayer(props: {
       </div>
 
       <div style={{marginTop: 18}}>
-        <div style={{
-          border: '1px solid rgba(255,255,255,0.10)',
-          borderRadius: 14,
-          overflow: 'hidden',
-          padding: 6,
-        }}>
+        <div style={{borderTop: '1px solid rgba(255,255,255,0.10)', paddingTop: 14}}>
           {tracks.map((t, i) => {
             const isCur = p.current?.id === t.id
             const isSelected = selectedTrackId === t.id
@@ -497,6 +492,10 @@ export default function FullPlayer(props: {
 
             const baseBg = isSelected ? 'rgba(255,255,255,0.14)' : 'transparent'
             const restBg = isCur && !isSelected ? 'transparent' : baseBg
+
+            const isFirst = i === 0
+            const isLast = i === tracks.length - 1
+            const rowRadius = isFirst ? '14px 14px 0 0' : isLast ? '0 0 14px 14px' : '0'
 
             return (
               <button
@@ -548,7 +547,7 @@ export default function FullPlayer(props: {
                   gap: 12,
                   textAlign: 'left',
                   padding: '10px 10px',
-                  borderRadius: 0,
+                  borderRadius: rowRadius,
                   border: '1px solid rgba(255,255,255,0.00)',
                   background: restBg,
                   cursor: canPlay ? 'pointer' : 'default',
