@@ -80,7 +80,6 @@ export default function AdminDebugBar() {
     mounted && tokensOpen
       ? createPortal(
           <div
-          id="af-admin-debugbar" 
             role="dialog"
             aria-modal="true"
             aria-label="Share tokens admin"
@@ -166,6 +165,7 @@ export default function AdminDebugBar() {
   return (
     <>
       <div
+      id="af-admin-debugbar" 
         style={{
           position: 'sticky',
           top: 0,
