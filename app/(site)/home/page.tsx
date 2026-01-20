@@ -17,6 +17,7 @@ import PortalArea from '@/app/home/PortalArea'
 import {listAlbumsForBrowse, getAlbumBySlug} from '@/lib/albums'
 import type {AlbumNavItem} from '@/lib/types'
 import StageInline from '@/app/home/player/StageInline'
+import FooterDrawer from '@/app/home/FooterDrawer'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -339,6 +340,13 @@ if (member?.id) {
               />
             </aside>
           </div>
+
+ <FooterDrawer
+            // set this env var in Vercel: NEXT_PUBLIC_LABEL_SITE_URL="https://label.example.com"
+            licensingHref={process.env.NEXT_PUBLIC_LABEL_SITE_URL ?? ''}
+            emailTo={process.env.NEXT_PUBLIC_CONTACT_EMAIL ?? 'administration@angelfishrecords.com'}
+          />
+
         </section>
       </div>
     </main>
