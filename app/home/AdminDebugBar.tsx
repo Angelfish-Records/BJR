@@ -30,7 +30,7 @@ const FORCE_OPTS: ForceOpt[] = [
   {id: 'EMBARGOED', label: 'EMBARGOED'},
 ]
 
-export default function AdminDebugBar() {
+export default function AdminDebugBar(props: {isAdmin: boolean}) {
   // Hooks must always run, even if we return null later.
   const [force, setForce] = React.useState<string>('none')
   const [tokensOpen, setTokensOpen] = React.useState(false)
@@ -57,6 +57,7 @@ export default function AdminDebugBar() {
   }, [tokensOpen])
 
   if (!ENABLED) return null
+  if (!props.isAdmin) return null
 
   const btn: React.CSSProperties = {
     padding: '6px 10px',

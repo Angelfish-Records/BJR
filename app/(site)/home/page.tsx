@@ -191,7 +191,7 @@ if (member?.id) {
 
   return (
     <main style={mainStyle}>
-       <AdminDebugBar />
+       {isAdmin ? <AdminDebugBar isAdmin /> : null}
       <style>{`
         .shadowHomeGrid {
           display: grid;
