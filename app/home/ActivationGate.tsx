@@ -131,7 +131,7 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
           background:
             'linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.05) 45%, rgba(255,255,255,0.00))',
           pointerEvents: 'none',
-          mixBlendMode: 'screen',
+          mixBlendMode: 'normal',
           opacity: checked ? 0.55 : 0.42,
           transition: 'opacity 180ms ease',
         }}

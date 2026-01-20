@@ -724,6 +724,7 @@ export default function FullPlayer(props: {
                   >
                     <div
                       style={{
+                        position: 'relative',
                         width: '100%',
                         aspectRatio: '1 / 1',
                         borderRadius: 14,
@@ -734,7 +735,22 @@ export default function FullPlayer(props: {
                         boxShadow: '0 18px 40px rgba(0,0,0,0.22)',
                         overflow: 'hidden',
                       }}
-                    />
+                    >
+                      {isPendingPick ? (
+                      <div
+                        aria-hidden="true"
+                        className="afShimmerBlock"
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          borderRadius: 14,
+                          pointerEvents: 'none',
+                          opacity: 0.95,
+                        }}
+                      />
+                    ) : null}
+                    </div>
+
 
                     <div style={{minWidth: 0}}>
                       <div
@@ -765,20 +781,6 @@ export default function FullPlayer(props: {
                         <div style={{marginTop: 6, fontSize: 11, opacity: 0.6}}>Requires {tierLabel(min)}</div>
                       ) : null}
                     </div>
-
-                    {isPendingPick ? (
-                      <div
-                        aria-hidden="true"
-                        className="afShimmerBlock"
-                        style={{
-                          position: 'absolute',
-                          inset: 0,
-                          borderRadius: 16,
-                          pointerEvents: 'none',
-                          opacity: 0.95,
-                        }}
-                      />
-                    ) : null}
                   </button>
                 )
               })}
