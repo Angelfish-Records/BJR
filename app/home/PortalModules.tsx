@@ -344,8 +344,8 @@ function inferTabs(modules: PortalModule[], entitlementKeys: string[]): BuiltTab
     // If no heading has appeared yet, create a default tab
     if (!current) {
       current = {
-        id: 'portal',
-        title: 'Portal',
+        id: 'download',
+        title: 'Download',
         locked: false,
         lockedHint: null,
         modules: [],

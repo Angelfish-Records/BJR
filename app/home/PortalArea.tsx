@@ -81,6 +81,20 @@ function setSavedSt(slug: string, st: string) {
   }
 }
 
+function getLastPortalTab(): string | null {
+  try {
+    return (sessionStorage.getItem('af:lastPortalTab') ?? '').trim() || null
+  } catch {
+    return null
+  }
+}
+
+function setLastPortalTab(id: string) {
+  try {
+    sessionStorage.setItem('af:lastPortalTab', id)
+  } catch {}
+}
+
 function IconPlayer() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -267,9 +281,14 @@ export default function PortalArea(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  React.useEffect(() => {
+  if (isPlayer) return
+  if (portalTabId) setLastPortalTab(portalTabId)
+}, [isPlayer, portalTabId])
+
   const forceSurface = React.useCallback(
     (surface: 'player' | 'portal', tabId?: string | null) => {
-      const desiredP = surface === 'player' ? 'player' : (tabId ?? portalTabId ?? legacyPt ?? DEFAULT_PORTAL_TAB)
+      const desiredP = surface === 'player' ? 'player' : (tabId ?? getLastPortalTab() ?? portalTabId ?? legacyPt ?? DEFAULT_PORTAL_TAB)
 
       const curP = normalizeP(sp.get('p') ?? sp.get('panel') ?? 'player')
       const curEffective = curP === LEGACY_PORTAL_P ? (legacyPt ?? DEFAULT_PORTAL_TAB) : curP
