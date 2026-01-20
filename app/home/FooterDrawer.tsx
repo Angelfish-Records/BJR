@@ -4,18 +4,27 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react'
 
 type FooterKey = 'privacy' | 'terms' | 'rights' | 'ai' | 'licensing' | 'security'
+type Item = {key: FooterKey; title: string; body: React.ReactNode}
 
-type Item = {
-  key: FooterKey
-  title: string
-  body: React.ReactNode
+const STORAGE_KEY = 'af_footer_drawer_open_v2'
+
+function useIsMobile(breakpointPx = 640) {
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpointPx}px)`)
+    const apply = () => setIsMobile(mq.matches)
+    apply()
+    mq.addEventListener?.('change', apply)
+    return () => mq.removeEventListener?.('change', apply)
+  }, [breakpointPx])
+
+  return isMobile
 }
 
-const STORAGE_KEY = 'af_footer_drawer_open_v1'
-
 export default function FooterDrawer(props: {
-  emailTo?: string // default: licensing@yourdomain, or just "hello@..."
-  licensingHref?: string // recommend: process.env.NEXT_PUBLIC_LABEL_SITE_URL
+  emailTo?: string
+  licensingHref?: string
 }) {
   const emailTo = props.emailTo ?? 'hello@angelfishrecords.com'
   const licensingHref = props.licensingHref ?? ''
@@ -76,30 +85,23 @@ export default function FooterDrawer(props: {
         body: (
           <>
             Catalogue available for sync and licensing: controlled rights, clean metadata, and rapid clearance.
-            For briefs, placements, or catalogue partnerships, contact the label.{' '}
+            For briefs, placements, or catalogue partnerships, contact the label.
             {licensingHref ? (
-              <a
-                href={licensingHref}
-                target="_blank"
-                rel="noreferrer"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  marginLeft: 10,
-                  padding: '7px 10px',
-                  borderRadius: 999,
-                  border: '1px solid rgba(255,255,255,0.16)',
-                  background: 'rgba(255,255,255,0.06)',
-                  textDecoration: 'none',
-                  color: 'rgba(255,255,255,0.92)',
-                  fontSize: 12,
-                  lineHeight: 1,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Licensing &amp; Sync →
-              </a>
+              <>
+                {' '}
+                <a
+                  href={licensingHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    color: 'rgba(255,255,255,0.70)',
+                    textDecoration: 'underline',
+                    textUnderlineOffset: 3,
+                  }}
+                >
+                  Licensing &amp; Sync →
+                </a>
+              </>
             ) : null}
           </>
         ),
@@ -114,7 +116,7 @@ export default function FooterDrawer(props: {
             <a
               href={`mailto:${emailTo}`}
               style={{
-                color: 'rgba(255,255,255,0.92)',
+                color: 'rgba(255,255,255,0.70)',
                 textDecoration: 'underline',
                 textUnderlineOffset: 3,
               }}
@@ -129,142 +131,186 @@ export default function FooterDrawer(props: {
     [emailTo, licensingHref]
   )
 
+  const isMobile = useIsMobile(640)
+
   const [openKey, setOpenKey] = useState<FooterKey | null>(null)
 
-  // height animation plumbing (single panel)
-  const contentRef = useRef<HTMLDivElement | null>(null)
-  const [contentHeight, setContentHeight] = useState<number>(0)
+  // Desktop shared-panel height animation
+  const sharedRef = useRef<HTMLDivElement | null>(null)
+  const [sharedH, setSharedH] = useState(0)
+
+  // Mobile per-item height animation
+  const itemRefs = useRef(new Map<FooterKey, HTMLDivElement>())
+  const [mobileHeights, setMobileHeights] = useState<Record<string, number>>({})
 
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY)
       if (saved && items.some((i) => i.key === saved)) setOpenKey(saved as FooterKey)
-    } catch {
-      // ignore
-    }
+    } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     try {
       if (openKey) window.localStorage.setItem(STORAGE_KEY, openKey)
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, [openKey])
 
+  // Re-measure desktop panel
   useEffect(() => {
-    // measure on openKey changes
-    const el = contentRef.current
+    if (isMobile) return
+    const el = sharedRef.current
     if (!el) return
-    if (!openKey) {
-      setContentHeight(0)
-      return
-    }
-    // Use rAF so the DOM has committed the new content before measuring
+    if (!openKey) return setSharedH(0)
+    const raf = requestAnimationFrame(() => setSharedH(el.scrollHeight))
+    return () => cancelAnimationFrame(raf)
+  }, [openKey, isMobile])
+
+  // Re-measure mobile open item
+  useEffect(() => {
+    if (!isMobile) return
+    if (!openKey) return
+    const el = itemRefs.current.get(openKey)
+    if (!el) return
     const raf = requestAnimationFrame(() => {
-      const next = el.scrollHeight
-      setContentHeight(next)
+      setMobileHeights((prev) => ({...prev, [openKey]: el.scrollHeight}))
     })
     return () => cancelAnimationFrame(raf)
-  }, [openKey])
+  }, [openKey, isMobile])
 
   const active = openKey ? items.find((i) => i.key === openKey) ?? null : null
 
-  const shellStyle: React.CSSProperties = {
-    marginTop: 18,
-    borderRadius: 18,
-    border: '1px solid rgba(255,255,255,0.10)',
-    background: 'rgba(255,255,255,0.04)',
-    overflow: 'hidden',
+  const rootStyle: React.CSSProperties = {
+    marginTop: 16,
+    padding: '10px 2px 2px',
   }
 
-  const tabRowStyle: React.CSSProperties = {
+  const titleRowStyle: React.CSSProperties = {
     display: 'flex',
-    flexWrap: 'nowrap',
-    gap: 6,
-    padding: '10px 10px',
+    gap: 16,
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'nowrap',
+    padding: '0 2px 8px',
   }
 
-  const tabButtonStyle = (isOpen: boolean): React.CSSProperties => ({
-    flex: '1 1 0',
-    minWidth: 0,
+  const titleStyle = (isOpen: boolean): React.CSSProperties => ({
     appearance: 'none',
-    border: '1px solid rgba(255,255,255,0.12)',
-    background: isOpen ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.04)',
-    color: 'rgba(255,255,255,0.86)',
-    borderRadius: 999,
-    padding: '8px 10px',
-    fontSize: 12,
-    lineHeight: 1,
-    letterSpacing: 0.2,
+    border: 'none',
+    background: 'transparent',
+    padding: 0,
+    margin: 0,
     cursor: 'pointer',
+    color: isOpen ? 'rgba(255,255,255,0.78)' : 'rgba(255,255,255,0.46)',
+    fontSize: 12,
+    letterSpacing: 0.2,
+    lineHeight: 1.2,
+    textDecoration: isOpen ? 'underline' : 'none',
+    textUnderlineOffset: 5,
     whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    transition: 'background 160ms ease, border-color 160ms ease, transform 120ms ease',
   })
 
-  const panelOuterStyle: React.CSSProperties = {
-    height: openKey ? contentHeight : 0,
-    transition: 'height 200ms ease',
+  const desktopPanelOuter: React.CSSProperties = {
+    height: openKey ? sharedH : 0,
     overflow: 'hidden',
-    borderTop: openKey ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(255,255,255,0.00)',
+    transition: 'height 200ms ease',
   }
 
-  const panelInnerStyle: React.CSSProperties = {
-    padding: '12px 14px 14px',
+  const panelInner: React.CSSProperties = {
+    padding: '8px 2px 10px',
     fontSize: 13,
-    lineHeight: 1.55,
-    color: 'rgba(255,255,255,0.78)',
+    lineHeight: 1.6,
+    color: 'rgba(255,255,255,0.62)',
+    maxWidth: 860,
   }
 
+  const divider: React.CSSProperties = {
+    height: 1,
+    background: 'rgba(255,255,255,0.06)',
+    margin: '8px 0 0',
+  }
+
+  if (!isMobile) {
+    // Desktop: horizontal titles + one shared panel underneath
+    return (
+      <footer style={rootStyle} aria-label="Footer drawer">
+        <div style={titleRowStyle}>
+          {items.map((it) => {
+            const isOpen = openKey === it.key
+            return (
+              <button
+                key={it.key}
+                type="button"
+                aria-expanded={isOpen}
+                onClick={() => setOpenKey((prev) => (prev === it.key ? null : it.key))}
+                style={titleStyle(isOpen)}
+              >
+                {it.title}
+              </button>
+            )
+          })}
+        </div>
+
+        <div style={divider} />
+
+        <div style={desktopPanelOuter} aria-hidden={!openKey}>
+          <div ref={sharedRef} style={panelInner}>
+            {active ? active.body : null}
+          </div>
+        </div>
+      </footer>
+    )
+  }
+
+  // Mobile: vertical list; panel opens directly beneath the clicked title
   return (
-    <footer style={shellStyle} aria-label="Footer drawer">
-      <div style={tabRowStyle}>
+    <footer style={rootStyle} aria-label="Footer drawer">
+      <div style={divider} />
+
+      <div style={{display: 'grid', gap: 10, paddingTop: 10}}>
         {items.map((it) => {
           const isOpen = openKey === it.key
+          const h = isOpen ? mobileHeights[it.key] ?? 0 : 0
+
           return (
-            <button
-              key={it.key}
-              type="button"
-              aria-expanded={isOpen}
-              aria-controls={`footer-drawer-panel-${it.key}`}
-              onClick={() => setOpenKey((prev) => (prev === it.key ? null : it.key))}
-              style={tabButtonStyle(isOpen)}
-              onMouseDown={(e) => {
-                // tiny tactile feel without messing with focus rings
-                ;(e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.99)'
-                window.setTimeout(() => {
-                  try {
-                    ;(e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'
-                  } catch {}
-                }, 90)
-              }}
-            >
-              {it.title}
-            </button>
+            <div key={it.key} style={{display: 'grid', gap: 6}}>
+              <button
+                type="button"
+                aria-expanded={isOpen}
+                onClick={() => setOpenKey((prev) => (prev === it.key ? null : it.key))}
+                style={{
+                  ...titleStyle(isOpen),
+                  textAlign: 'left',
+                  width: 'fit-content',
+                }}
+              >
+                {it.title}
+              </button>
+
+              <div
+                style={{
+                  height: h,
+                  overflow: 'hidden',
+                  transition: 'height 200ms ease',
+                }}
+                aria-hidden={!isOpen}
+              >
+                <div
+                  ref={(node) => {
+                    if (!node) return
+                    itemRefs.current.set(it.key, node)
+                  }}
+                  style={panelInner}
+                >
+                  {it.body}
+                </div>
+              </div>
+
+              <div style={{height: 1, background: 'rgba(255,255,255,0.06)'}} />
+            </div>
           )
         })}
-      </div>
-
-      <div style={panelOuterStyle} aria-hidden={!openKey}>
-        <div
-          ref={contentRef}
-          id={openKey ? `footer-drawer-panel-${openKey}` : undefined}
-          style={panelInnerStyle}
-        >
-          {active ? (
-            <>
-              <div style={{fontSize: 12, letterSpacing: 0.3, opacity: 0.75, marginBottom: 6}}>
-                {active.title}
-              </div>
-              <div>{active.body}</div>
-            </>
-          ) : null}
-        </div>
       </div>
     </footer>
   )

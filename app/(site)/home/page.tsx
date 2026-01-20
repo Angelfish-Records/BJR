@@ -281,7 +281,7 @@ if (member?.id) {
           display: 'grid',
           justifyItems: 'center',
           alignItems: 'start',
-          padding: `calc(18px + env(safe-area-inset-top, 0px)) 24px 42px`,
+          padding: `calc(18px + env(safe-area-inset-top, 0px)) 24px calc(42px + var(--af-mini-player-h, 96px) + env(safe-area-inset-bottom, 0px))`,
         }}
       >
         <section

@@ -281,6 +281,27 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
 
+    React.useEffect(() => {
+    if (!mounted) return
+    const el = document.getElementById('af-mini-player')
+    if (!el) return
+
+    const set = () => {
+      const h = Math.ceil(el.getBoundingClientRect().height || 0)
+      document.documentElement.style.setProperty('--af-mini-player-h', `${h}px`)
+    }
+
+    set()
+    const ro = new ResizeObserver(() => set())
+    ro.observe(el)
+    window.addEventListener('resize', set)
+
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', set)
+    }
+  }, [mounted])
+
   const playingish = p.status === 'playing' || p.status === 'loading' || p.intent === 'play'
 
   // Pending-first display (truthy UI during transitions)
@@ -485,6 +506,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
 
   const dock = (
     <div
+    id="af-mini-player"
       data-af-miniplayer
       style={{
         position: 'fixed',
