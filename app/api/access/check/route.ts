@@ -6,7 +6,7 @@ import {auth} from '@clerk/nextjs/server'
 import {sql} from '@vercel/postgres'
 import {checkAccess} from '@/lib/access'
 import {ACCESS_ACTIONS, ENTITLEMENTS} from '@/lib/vocab'
-import {ensureAnonId} from '@/lib/anon'
+import {ensureAnonId, persistAnonId} from '@/lib/anon'
 import {countAnonDistinctCompletedTracks, newCorrelationId} from '@/lib/events'
 import {redeemShareTokenForMember, validateShareToken} from '@/lib/shareTokens'
 import {getAlbumPolicyByAlbumId, isEmbargoed, type TierName} from '@/lib/albumPolicy'
@@ -64,13 +64,13 @@ function baseJson<T extends Record<string, unknown>>(body: T, opts: {correlation
 }
 
 function anonJson<T extends Record<string, unknown>>(
-  req: NextRequest,
+  anon: {anonId: string; isNew: boolean},
   body: T,
   opts: {correlationId: string; status?: number}
 ) {
   const res = NextResponse.json(body, {status: opts.status ?? 200})
-  ensureAnonId(req, res) // persist cookie if missing/invalid
   res.headers.set('x-correlation-id', opts.correlationId)
+  if (anon.isNew) persistAnonId(res, anon.anonId) // ✅ persist THE SAME anonId we used for logic
   return res
 }
 
@@ -104,17 +104,15 @@ export async function GET(req: NextRequest) {
 
   // ---- Unauthed: anon sampling + optional share-token capability ----
   if (!userId) {
-    // Always ensure anon cookie exists for coherent caps/analytics
-    const {anonId} = ensureAnonId(req)
+    const anon = ensureAnonId(req) // ✅ mint once; persist later via anonJson()
 
     const policy = await getAlbumPolicyByAlbumId(albumId)
     const releaseAt = policy?.releaseAt ?? null
     const embargoed = isEmbargoed(policy)
 
-    // Embargo applies to anon unless share token grants access
     if (embargoed && !st) {
       return anonJson(
-        req,
+        anon,
         {
           ok: true,
           allowed: false,
@@ -130,12 +128,11 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // Share token path (press link): validate + log; if ok, allow
     if (st) {
       const v = await validateShareToken({
         token: st,
         expectedScopeId: albumScopeId,
-        anonId, // ✅ string
+        anonId: anon.anonId,
         resourceKind: 'album',
         resourceId: albumScopeId,
         action: 'access',
@@ -143,7 +140,7 @@ export async function GET(req: NextRequest) {
 
       if (!v.ok) {
         return anonJson(
-          req,
+          anon,
           {
             ok: true,
             allowed: false,
@@ -160,11 +157,11 @@ export async function GET(req: NextRequest) {
       }
 
       return anonJson(
-        req,
+        anon,
         {
           ok: true,
           allowed: true,
-          embargoed,
+          embargoed: false,
           releaseAt,
           code: null,
           action: null,
@@ -176,11 +173,10 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // No token: anon sampling cap (distinct completed tracks)
-    const distinctCompleted = await countAnonDistinctCompletedTracks({anonId, sinceDays: ANON_WINDOW_DAYS})
+    const distinctCompleted = await countAnonDistinctCompletedTracks({anonId: anon.anonId, sinceDays: ANON_WINDOW_DAYS})
     if (distinctCompleted >= ANON_DISTINCT_TRACK_CAP) {
       return anonJson(
-        req,
+        anon,
         {
           ok: true,
           allowed: false,
@@ -198,11 +194,11 @@ export async function GET(req: NextRequest) {
     }
 
     return anonJson(
-      req,
+      anon,
       {
         ok: true,
         allowed: true,
-        embargoed,
+        embargoed: false,
         releaseAt,
         code: null,
         action: null,
@@ -234,7 +230,6 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  // --- admin debug override ---
   const dbg = await readAdminDebugCookie()
   if (dbg) {
     const isAdmin = (await checkAccess(memberId, {kind: 'global', required: [ENTITLEMENTS.ADMIN]}, {log: false})).allowed
@@ -243,72 +238,31 @@ export async function GET(req: NextRequest) {
 
       if (force === 'AUTH_REQUIRED') {
         return baseJson(
-          {
-            ok: true,
-            allowed: false,
-            embargoed: false,
-            releaseAt: null,
-            code: 'AUTH_REQUIRED',
-            action: 'login',
-            reason: 'Sign in required',
-            correlationId,
-            redeemed: null,
-          },
+          {ok: true, allowed: false, embargoed: false, releaseAt: null, code: 'AUTH_REQUIRED', action: 'login', reason: 'Sign in required', correlationId, redeemed: null},
           {correlationId}
         )
       }
       if (force === 'ENTITLEMENT_REQUIRED') {
         return baseJson(
-          {
-            ok: true,
-            allowed: false,
-            embargoed: false,
-            releaseAt: null,
-            code: 'ENTITLEMENT_REQUIRED',
-            action: 'subscribe',
-            reason: 'Entitlement required',
-            correlationId,
-            redeemed: null,
-          },
+          {ok: true, allowed: false, embargoed: false, releaseAt: null, code: 'ENTITLEMENT_REQUIRED', action: 'subscribe', reason: 'Entitlement required', correlationId, redeemed: null},
           {correlationId}
         )
       }
       if (force === 'ANON_CAP_REACHED') {
         return baseJson(
-          {
-            ok: true,
-            allowed: false,
-            embargoed: false,
-            releaseAt: null,
-            code: 'ANON_CAP_REACHED',
-            action: 'login',
-            reason: 'Anon cap reached',
-            correlationId,
-            redeemed: null,
-          },
+          {ok: true, allowed: false, embargoed: false, releaseAt: null, code: 'ANON_CAP_REACHED', action: 'login', reason: 'Anon cap reached', correlationId, redeemed: null},
           {correlationId}
         )
       }
       if (force === 'EMBARGOED') {
         return baseJson(
-          {
-            ok: true,
-            allowed: false,
-            embargoed: true,
-            releaseAt: new Date().toISOString(),
-            code: 'EMBARGOED',
-            action: 'wait',
-            reason: 'Embargoed',
-            correlationId,
-            redeemed: null,
-          },
+          {ok: true, allowed: false, embargoed: true, releaseAt: new Date().toISOString(), code: 'EMBARGOED', action: 'wait', reason: 'Embargoed', correlationId, redeemed: null},
           {correlationId}
         )
       }
     }
   }
 
-  // 1) If share token present, redeem first (grants entitlements)
   let redeemed: {ok: boolean; code?: string} | null = null
   if (st) {
     const r = await redeemShareTokenForMember({
@@ -322,12 +276,10 @@ export async function GET(req: NextRequest) {
     redeemed = r.ok ? {ok: true} : {ok: false, code: r.code}
   }
 
-  // 2) Policy from Sanity
   const policy = await getAlbumPolicyByAlbumId(albumId)
   const releaseAt = policy?.releaseAt ?? null
   const embargoed = isEmbargoed(policy)
 
-  // 3) Embargo gate: allow if share-grant OR early access tier qualifies.
   if (embargoed) {
     const override = await checkAccess(
       memberId,
@@ -343,42 +295,19 @@ export async function GET(req: NextRequest) {
         const ok = allowedTierKeys.some((k) => s.has(k))
         if (!ok) {
           return baseJson(
-            {
-              ok: true,
-              allowed: false,
-              embargoed: true,
-              releaseAt,
-              code: 'EMBARGO',
-              action: 'subscribe' satisfies Action,
-              reason: 'This album is not released yet. Upgrade for early access.',
-              correlationId,
-              redeemed,
-            },
+            {ok: true, allowed: false, embargoed: true, releaseAt, code: 'EMBARGO', action: 'subscribe' satisfies Action, reason: 'This album is not released yet. Upgrade for early access.', correlationId, redeemed},
             {correlationId}
           )
         }
-        // early access qualifies -> continue
       } else {
         return baseJson(
-          {
-            ok: true,
-            allowed: false,
-            embargoed: true,
-            releaseAt,
-            code: 'EMBARGO',
-            action: 'wait' satisfies Action,
-            reason: 'This album is not released yet.',
-            correlationId,
-            redeemed,
-          },
+          {ok: true, allowed: false, embargoed: true, releaseAt, code: 'EMBARGO', action: 'wait' satisfies Action, reason: 'This album is not released yet.', correlationId, redeemed},
           {correlationId}
         )
       }
     }
-    // override allowed -> continue
   }
 
-  // 4) Post-release (or embargo bypassed): min tier gate
   if (policy?.minTierForPlayback) {
     const keys = await listCurrentEntitlementKeys(memberId)
     const s = new Set(keys)
@@ -386,23 +315,12 @@ export async function GET(req: NextRequest) {
     const ok = requiredTierKeys.some((k) => s.has(k))
     if (!ok) {
       return baseJson(
-        {
-          ok: true,
-          allowed: false,
-          embargoed: false,
-          releaseAt,
-          code: 'TIER_REQUIRED',
-          action: 'subscribe' satisfies Action,
-          reason: `This album requires ${policy.minTierForPlayback} tier or higher.`,
-          correlationId,
-          redeemed,
-        },
+        {ok: true, allowed: false, embargoed: false, releaseAt, code: 'TIER_REQUIRED', action: 'subscribe' satisfies Action, reason: `This album requires ${policy.minTierForPlayback} tier or higher.`, correlationId, redeemed},
         {correlationId}
       )
     }
   }
 
-  // 5) Final entitlement gate: PLAY_ALBUM
   const decision = await checkAccess(
     memberId,
     {kind: 'album', albumScopeId, required: [ENTITLEMENTS.PLAY_ALBUM]},

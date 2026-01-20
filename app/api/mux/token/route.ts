@@ -1,4 +1,5 @@
 // web/app/api/mux/token/route.ts
+import 'server-only'
 import {NextRequest, NextResponse} from 'next/server'
 import {auth} from '@clerk/nextjs/server'
 import {importPKCS8, SignJWT} from 'jose'
@@ -8,7 +9,6 @@ import {ACCESS_ACTIONS} from '@/lib/vocab'
 import {validateShareToken} from '@/lib/shareTokens'
 import {decideAlbumPlaybackAccess} from '@/lib/accessOracle'
 import {ensureAnonId} from '@/lib/anon'
-import {sql} from '@vercel/postgres'
 
 type TokenReq = {
   playbackId: string
@@ -31,6 +31,7 @@ type TokenBlocked = {
     | 'TIER_REQUIRED'
     | 'INVALID_REQUEST'
     | 'PROVISIONING'
+    | 'CAP_REACHED'
   reason: string
   action?: 'login' | 'subscribe' | 'buy' | 'wait'
   correlationId: string
@@ -55,7 +56,8 @@ function normalizeAlbumId(raw: string): string {
   return s.trim()
 }
 
-function blocked(
+function respondBlocked(
+  req: NextRequest,
   correlationId: string,
   code: TokenBlocked['code'],
   reason: string,
@@ -65,6 +67,7 @@ function blocked(
   const out: TokenBlocked = {ok: false, blocked: true, code, reason, action, correlationId}
   const res = NextResponse.json(out, {status})
   res.headers.set('x-correlation-id', correlationId)
+  ensureAnonId(req, res) // ✅ persist anon cookie if missing/invalid (local dev safe)
   return res
 }
 
@@ -82,6 +85,7 @@ function toPkcs8Pem(pem: string): string {
 }
 
 async function getMemberIdByClerkUserId(userId: string): Promise<string | null> {
+  const {sql} = await import('@vercel/postgres')
   if (!userId) return null
   const r = await sql<{id: string}>`
     select id
@@ -104,31 +108,23 @@ export async function POST(req: NextRequest) {
 
   const playbackId = body?.playbackId
   if (!playbackId || typeof playbackId !== 'string') {
-    return blocked(correlationId, 'INVALID_REQUEST', 'Missing playbackId', undefined, 400)
+    return respondBlocked(req, correlationId, 'INVALID_REQUEST', 'Missing playbackId', undefined, 400)
   }
-
-  const {userId} = await auth()
-
-  // ✅ Always attach anon id + persist if missing/invalid (cookie stability)
-  const resProto = NextResponse.next()
-  const {anonId} = ensureAnonId(req, resProto)
 
   const rawAlbumId = (body?.albumId ?? '').trim()
   if (!rawAlbumId) {
-    const res = blocked(correlationId, 'INVALID_REQUEST', 'Missing albumId (canonical album context).', undefined, 400)
-    // persist anon cookie if we minted one
-    resProto.cookies.getAll().forEach((c) => res.cookies.set(c))
-    return res
+    return respondBlocked(req, correlationId, 'INVALID_REQUEST', 'Missing albumId (canonical album context).', undefined, 400)
   }
-
   const albumId = normalizeAlbumId(rawAlbumId)
   if (!albumId) {
-    const res = blocked(correlationId, 'INVALID_REQUEST', 'Missing albumId (canonical album context).', undefined, 400)
-    resProto.cookies.getAll().forEach((c) => res.cookies.set(c))
-    return res
+    return respondBlocked(req, correlationId, 'INVALID_REQUEST', 'Missing albumId (canonical album context).', undefined, 400)
   }
-
   const albumScopeId = `alb:${albumId}`
+
+  const {userId} = await auth()
+
+  // ✅ Single canonical anon identity path (cookie-stable)
+  const {anonId} = ensureAnonId(req)
 
   const url = new URL(req.url)
   const st =
@@ -136,7 +132,7 @@ export async function POST(req: NextRequest) {
     (url.searchParams.get('st') ?? '').trim() ||
     (url.searchParams.get('share') ?? '').trim()
 
-  // ---- Capability mode via share token ----
+  // ---- Capability mode via share token (bypass anon cap + oracle checks) ----
   let tokenAllowsPlayback = false
   if (st) {
     const v = await validateShareToken({
@@ -150,41 +146,41 @@ export async function POST(req: NextRequest) {
 
     tokenAllowsPlayback = v.ok
     if (!v.ok) {
-      const res = blocked(correlationId, 'ENTITLEMENT_REQUIRED', 'Invalid or expired share token.', 'login', 403)
-      resProto.cookies.getAll().forEach((c) => res.cookies.set(c))
-      return res
+      // preserve semantics
+      if (v.code === 'CAP_REACHED') {
+        return respondBlocked(req, correlationId, 'CAP_REACHED', 'Share link cap reached.', 'login', 403)
+      }
+      return respondBlocked(req, correlationId, 'ENTITLEMENT_REQUIRED', 'Invalid or expired share token.', 'login', 403)
     }
   }
 
-  // ---- Anonymous cap ----
+  // ---- Anonymous cap (REAL): based on completed playthrough events in Neon ----
   if (!userId && !tokenAllowsPlayback) {
     const distinctCompleted = await countAnonDistinctCompletedTracks({anonId, sinceDays: ANON_WINDOW_DAYS})
     if (distinctCompleted >= ANON_DISTINCT_TRACK_CAP) {
-      const res = blocked(
+      return respondBlocked(
+        req,
         correlationId,
         'ANON_CAP_REACHED',
         'Anonymous listening limit reached. Please log in to continue.',
         'login',
         403
       )
-      resProto.cookies.getAll().forEach((c) => res.cookies.set(c))
-      return res
     }
   }
 
-  // ---- Logged-in access ----
+  // ---- Logged-in access: enforce via oracle ----
   if (userId && !tokenAllowsPlayback) {
     const memberId = await getMemberIdByClerkUserId(userId)
     if (!memberId) {
-      const res = blocked(
+      return respondBlocked(
+        req,
         correlationId,
         'PROVISIONING',
         'Signed in, but your member profile is still being created. Refresh in a moment.',
         'wait',
         403
       )
-      resProto.cookies.getAll().forEach((c) => res.cookies.set(c))
-      return res
     }
 
     const d = await decideAlbumPlaybackAccess({
@@ -195,8 +191,7 @@ export async function POST(req: NextRequest) {
     })
 
     if (!d.allowed) {
-      const res = blocked(
-        correlationId,
+      const code: TokenBlocked['code'] =
         d.code === 'INVALID_REQUEST'
           ? 'INVALID_REQUEST'
           : d.code === 'EMBARGO'
@@ -205,13 +200,9 @@ export async function POST(req: NextRequest) {
               ? 'TIER_REQUIRED'
               : d.code === 'PROVISIONING'
                 ? 'PROVISIONING'
-                : 'ENTITLEMENT_REQUIRED',
-        d.reason,
-        d.action ?? undefined,
-        403
-      )
-      resProto.cookies.getAll().forEach((c) => res.cookies.set(c))
-      return res
+                : 'ENTITLEMENT_REQUIRED'
+
+      return respondBlocked(req, correlationId, code, d.reason, d.action ?? undefined, 403)
     }
   }
 
@@ -248,8 +239,6 @@ export async function POST(req: NextRequest) {
   const out: TokenOk = {ok: true, token: jwt, expiresAt: exp, correlationId}
   const res = NextResponse.json(out)
   res.headers.set('x-correlation-id', correlationId)
-
-  // persist anon cookie if ensureAnonId minted it
-  resProto.cookies.getAll().forEach((c) => res.cookies.set(c))
+  ensureAnonId(req, res) // ✅ persist anon cookie if missing/invalid
   return res
 }
