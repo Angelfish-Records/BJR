@@ -26,7 +26,7 @@ type Post = {
   publishedAt: string
   visibility: Visibility
   pinned?: boolean
-  body: PortableTextBlock[] // includes image blocks in practice; PortableText handles them via components.types.image
+  body: PortableTextBlock[]
 }
 
 type ArtistPostsResponse = {
@@ -54,14 +54,21 @@ function isTall(aspectRatio: number | null | undefined) {
 function shareUrlFor(slug: string) {
   if (typeof window === 'undefined') return ''
   const url = new URL(window.location.href)
-  url.searchParams.set('p', 'portal')
-  url.searchParams.set('pt', url.searchParams.get('pt') || 'posts')
+
+  // Canonical: p drives surface+tab. Posts tab is p=posts.
+  url.searchParams.set('p', 'posts')
   url.searchParams.set('post', slug)
+
+  // retire legacy
+  url.searchParams.delete('pt')
+  url.searchParams.delete('panel')
+
   // strip player-ish params
   url.searchParams.delete('album')
   url.searchParams.delete('track')
   url.searchParams.delete('t')
   url.searchParams.delete('autoplay')
+
   return url.toString()
 }
 
@@ -109,7 +116,11 @@ export default function PortalArtistPosts(props: {
         u.searchParams.set('limit', String(pageSize))
         u.searchParams.set('minVisibility', minVisibility)
         u.searchParams.set('requireAuthAfter', String(requireAuthAfter))
-        if (nextCursor) u.searchParams.set('cursor', nextCursor)
+        if (nextCursor) {
+          // Your API currently uses offset, but you’re passing cursor. Keep your existing behavior:
+          // treat cursor as offset string.
+          u.searchParams.set('offset', nextCursor)
+        }
 
         const res = await fetch(u.toString(), {method: 'GET'})
         if (!res.ok) throw new Error(`Fetch failed (${res.status})`)
@@ -194,23 +205,22 @@ export default function PortalArtistPosts(props: {
     async (slug: string) => {
       const url = shareUrlFor(slug)
       try {
-        if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(url)
-        }
+        if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(url)
       } catch {}
 
-      // keep user in-feed; just update query for stable link
+      // Keep user in-feed; just update query for stable link
       replaceQuery({
-        p: 'portal',
-        pt: sp.get('pt') ?? 'posts',
+        p: 'posts',
         post: slug,
+        pt: null,
+        panel: null,
         album: null,
         track: null,
         t: null,
         autoplay: null,
       })
     },
-    [sp]
+    []
   )
 
   const components: PortableTextComponents = React.useMemo(
@@ -225,14 +235,7 @@ export default function PortalArtistPosts(props: {
           const maxWidth = tall ? 520 : undefined
 
           return (
-            <div
-              style={{
-                marginTop: 10,
-                marginBottom: 10,
-                display: 'flex',
-                justifyContent: 'center',
-              }}
-            >
+            <div style={{margin: '12px 0', display: 'flex', justifyContent: 'center'}}>
               <div
                 style={{
                   width: '100%',
@@ -260,7 +263,7 @@ export default function PortalArtistPosts(props: {
       },
       block: {
         normal: ({children}) => (
-          <p style={{margin: '10px 0', lineHeight: 1.6, fontSize: 13, opacity: 0.9}}>{children}</p>
+          <p style={{margin: '10px 0', lineHeight: 1.65, fontSize: 13, opacity: 0.92}}>{children}</p>
         ),
       },
       marks: {
@@ -288,17 +291,11 @@ export default function PortalArtistPosts(props: {
   )
 
   return (
-    <div
-      style={{
-        borderRadius: 18,
-        border: '1px solid rgba(255,255,255,0.10)',
-        background: 'rgba(255,255,255,0.04)',
-        padding: 14,
-        minWidth: 0,
-      }}
-    >
+    <div style={{minWidth: 0}}>
+      {/* Header row stays minimal (Ghost-ish) */}
       <div style={{display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10}}>
-        <div style={{fontSize: 15, opacity: 0.92}}>{title}</div>
+        <div style={{fontSize: 14, opacity: 0.86, letterSpacing: 0.2}}>{title}</div>
+
         {cursor ? (
           <button
             type="button"
@@ -307,7 +304,7 @@ export default function PortalArtistPosts(props: {
             style={{
               border: 'none',
               background: 'transparent',
-              color: 'rgba(255,255,255,0.75)',
+              color: 'rgba(255,255,255,0.70)',
               cursor: loading ? 'default' : 'pointer',
               fontSize: 12,
               textDecoration: 'underline',
@@ -319,6 +316,8 @@ export default function PortalArtistPosts(props: {
           </button>
         ) : null}
       </div>
+
+      <div style={{height: 1, background: 'rgba(255,255,255,0.07)', marginTop: 10}} />
 
       {requiresAuth ? (
         <div style={{marginTop: 12, fontSize: 13, opacity: 0.85, lineHeight: 1.55}}>
@@ -332,81 +331,93 @@ export default function PortalArtistPosts(props: {
         </div>
       ) : null}
 
-      <div style={{marginTop: 10, display: 'grid', gap: 12}}>
-        {posts.map((p) => (
-          <div
-            key={p.slug}
-            ref={(el) => {
-              if (!el) postEls.current.delete(p.slug)
-              else postEls.current.set(p.slug, el)
-            }}
-            data-slug={p.slug}
-            style={{
-              borderRadius: 16,
-              border:
-                deepSlug === p.slug
-                  ? '1px solid color-mix(in srgb, var(--accent) 35%, rgba(255,255,255,0.12))'
-                  : '1px solid rgba(255,255,255,0.10)',
-              background: 'rgba(0,0,0,0.22)',
-              padding: 14,
-              boxShadow:
-                deepSlug === p.slug
-                  ? '0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent)'
-                  : undefined,
-            }}
-          >
-            <div style={{display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10}}>
-              <div style={{minWidth: 0}}>
-                {p.title ? (
-                  <div
-                    style={{
-                      fontSize: 14,
-                      opacity: 0.92,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
-                    {p.title}
+      {/* Feed: fluid, subtle dividers, no boxed cards */}
+      <div style={{marginTop: 6}}>
+        {posts.map((p, idx) => {
+          const isDeep = deepSlug === p.slug
+          return (
+            <div
+              key={p.slug}
+              ref={(el) => {
+                if (!el) postEls.current.delete(p.slug)
+                else postEls.current.set(p.slug, el)
+              }}
+              data-slug={p.slug}
+              style={{
+                padding: '14px 0',
+                borderBottom: '1px solid rgba(255,255,255,0.07)',
+              }}
+            >
+              {/* Body first */}
+              <div
+                style={
+                  isDeep
+                    ? {
+                        borderRadius: 16,
+                        padding: '10px 12px',
+                        background: 'rgba(255,255,255,0.03)',
+                        boxShadow: '0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent)',
+                      }
+                    : undefined
+                }
+              >
+                <PortableText value={p.body ?? []} components={components} />
+
+                {/* Meta row: subtle, after content */}
+                <div
+                  style={{
+                    marginTop: 10,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    fontSize: 12,
+                    opacity: 0.62,
+                  }}
+                >
+                  <div style={{minWidth: 0}}>
+                    <span>{fmtDate(p.publishedAt)}</span>
+                    {p.pinned ? <span style={{marginLeft: 8, opacity: 0.85}}>• pinned</span> : null}
+                    {/* title exists for slugging, but we don't lead with it */}
+                    {p.title ? (
+                      <span style={{marginLeft: 8, opacity: 0.0, position: 'absolute', left: -9999}}>
+                        {p.title}
+                      </span>
+                    ) : null}
                   </div>
-                ) : null}
-                <div style={{fontSize: 12, opacity: 0.65}}>
-                  {fmtDate(p.publishedAt)}
-                  {p.pinned ? <span style={{marginLeft: 8, opacity: 0.8}}>• pinned</span> : null}
+
+                  <button
+                    type="button"
+                    onClick={() => void onShare(p.slug)}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'rgba(255,255,255,0.72)',
+                      cursor: 'pointer',
+                      fontSize: 12,
+                      textDecoration: 'underline',
+                      textUnderlineOffset: 3,
+                      opacity: 0.9,
+                      flex: '0 0 auto',
+                    }}
+                    title="Copy share link"
+                    aria-label="Share post"
+                  >
+                    Share
+                  </button>
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => void onShare(p.slug)}
-                style={{
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  background: 'rgba(255,255,255,0.04)',
-                  color: 'rgba(255,255,255,0.86)',
-                  borderRadius: 999,
-                  padding: '6px 10px',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  opacity: 0.9,
-                  flex: '0 0 auto',
-                }}
-                title="Copy share link"
-                aria-label="Share post"
-              >
-                Share
-              </button>
+              {/* extra breathing room before next divider */}
+              {idx === posts.length - 1 ? <div style={{height: 4}} /> : null}
             </div>
+          )
+        })}
 
-            <div style={{marginTop: 8}}>
-              <PortableText value={p.body ?? []} components={components} />
-            </div>
-          </div>
-        ))}
-
-        {loading ? <div style={{fontSize: 12, opacity: 0.7}}>Loading…</div> : null}
+        {loading ? <div style={{fontSize: 12, opacity: 0.7, padding: '12px 0'}}>Loading…</div> : null}
 
         {!loading && !requiresAuth && posts.length === 0 ? (
-          <div style={{fontSize: 13, opacity: 0.75}}>No posts yet.</div>
+          <div style={{fontSize: 13, opacity: 0.75, padding: '12px 0'}}>No posts yet.</div>
         ) : null}
       </div>
     </div>

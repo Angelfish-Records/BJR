@@ -43,8 +43,8 @@ type Props = {
   headerPortalId?: string
 }
 
-const PANEL_QS_KEY = 'p' // ✅ canonical
-const LEGACY_PANEL_QS_KEY = 'panel' // ❌ deprecated
+const PANEL_QS_KEY = 'p' // canonical (but you can disable syncToQueryParam)
+const LEGACY_PANEL_QS_KEY = 'panel' // deprecated
 
 export default function PortalShell(props: Props) {
   const {
@@ -69,7 +69,6 @@ export default function PortalShell(props: Props) {
   const writePanelToQuery = React.useCallback(
     (id: string) => {
       if (!syncToQueryParam) return
-      // self-heal legacy key too
       replaceQuery({[PANEL_QS_KEY]: id, [LEGACY_PANEL_QS_KEY]: null})
     },
     [syncToQueryParam]
@@ -146,6 +145,8 @@ export default function PortalShell(props: Props) {
 
   const DOCK_H = 84
 
+  const activePanel = panels.find((p) => p.id === active) ?? panels[0] ?? null
+
   return (
     <div
       className="portalShell"
@@ -159,12 +160,9 @@ export default function PortalShell(props: Props) {
     >
       {headerNode ? (headerPortalEl ? createPortal(headerNode, headerPortalEl) : headerNode) : null}
 
+      {/* CRITICAL: render ONLY the active panel so inactive UI can't mutate query params */}
       <div style={{display: 'grid', minWidth: 0}}>
-        {panels.map((p) => (
-          <div key={p.id} hidden={p.id !== active} style={{minWidth: 0}}>
-            {p.content}
-          </div>
-        ))}
+        {activePanel ? <div style={{minWidth: 0}}>{activePanel.content}</div> : null}
       </div>
     </div>
   )

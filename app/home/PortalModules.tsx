@@ -397,5 +397,5 @@ export default async function PortalModules(props: Props) {
     ),
   }))
 
-  return <PortalTabs tabs={tabs} defaultTabId={tabs[0]?.id ?? null} queryParam="pt" />
+  return <PortalTabs tabs={tabs} defaultTabId={tabs[0]?.id ?? null} queryParam="p" />
 }
