@@ -5,6 +5,7 @@ import PortalRichText from './modules/PortalRichText'
 import {getAlbumOffer, type AlbumOfferAsset} from '../../lib/albumOffers'
 import BuyAlbumButton from './modules/BuyAlbumButton'
 import DownloadAlbumButton from './modules/DownloadAlbumButton'
+import PortalTabs, {type PortalTabSpec} from './PortalTabs'
 
 // --------------------
 // Module discriminated unions
@@ -51,6 +52,16 @@ type Props = {
 function hasKey(entitlementKeys: string[], key: string | null | undefined): boolean {
   if (!key) return true
   return entitlementKeys.includes(key)
+}
+
+function slugify(s: string): string {
+  return s
+    .toLowerCase()
+    .trim()
+    .replace(/['"]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
 }
 
 function PanelCard(props: {title: string; body?: string; locked?: boolean}) {
@@ -107,14 +118,10 @@ function DownloadsModule(props: DownloadsModuleProps) {
   if (configured) {
     for (const sel of configured) {
       const found = offerAssets.find((a) => a.id === sel.assetId)
-      if (found) {
-        assetsToRender.push({asset: found, labelOverride: sel.label})
-      }
+      if (found) assetsToRender.push({asset: found, labelOverride: sel.label})
     }
   } else {
-    for (const asset of offerAssets) {
-      assetsToRender.push({asset})
-    }
+    for (const asset of offerAssets) assetsToRender.push({asset})
   }
 
   const missingConfiguredIds =
@@ -150,8 +157,7 @@ function DownloadsModule(props: DownloadsModuleProps) {
             <>
               {missingConfiguredIds.length > 0 ? (
                 <div style={{marginTop: 10, opacity: 0.75}}>
-                  Invalid assetId(s) referenced in Sanity:{' '}
-                  {missingConfiguredIds.map((x) => x.assetId).join(', ')}
+                  Invalid assetId(s) referenced in Sanity: {missingConfiguredIds.map((x) => x.assetId).join(', ')}
                 </div>
               ) : null}
 
@@ -205,6 +211,149 @@ function DownloadsModule(props: DownloadsModuleProps) {
 }
 
 // --------------------
+// Module renderer (reused per tab)
+// --------------------
+
+function renderModule(m: PortalModule, entitlementKeys: string[]) {
+  if (m._type === 'moduleHeading') {
+    // headings become tabs; we don’t render them inside tab content
+    return null
+  }
+
+  if (m._type === 'moduleRichText') {
+    const entitled = hasKey(entitlementKeys, m.requiresEntitlement)
+    const blocks = entitled ? m.full ?? m.teaser ?? [] : m.teaser ?? []
+    return (
+      <PortalRichText
+        key={m._key}
+        title={m.title}
+        blocks={blocks}
+        locked={!!m.requiresEntitlement && !entitled}
+      />
+    )
+  }
+
+  if (m._type === 'moduleCardGrid') {
+    return (
+      <div key={m._key} style={{borderRadius: 18, padding: 16}}>
+        <div className="portalCardGrid2up">
+          {m.cards.map((c) => (
+            <PanelCard
+              key={c._key}
+              title={c.title}
+              body={c.body}
+              locked={!!c.requiresEntitlement && !hasKey(entitlementKeys, c.requiresEntitlement)}
+            />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (m._type === 'moduleDownloads') {
+  const offer = getAlbumOffer(m.albumSlug)
+  const owned = !!(offer && entitlementKeys.includes(offer.entitlementKey))
+
+  return (
+    <DownloadsModule
+      key={m._key}
+      title={m.title}
+      albumSlug={m.albumSlug}
+      teaserCopy={m.teaserCopy}
+      owned={owned}
+      assets={m.assets}
+    />
+  )
+}
+
+  return null
+}
+
+// --------------------
+// Tab inference
+// --------------------
+
+type BuiltTab = {
+  id: string
+  title: string
+  locked?: boolean
+  lockedHint?: string | null
+  modules: PortalModule[]
+}
+
+/**
+ * Tab-level gating (convention-based, no schema change):
+ * If the first non-heading module in a tab is moduleRichText with requiresEntitlement,
+ * we treat the tab as "tab-locked" when not entitled.
+ *
+ * You can use this to make whole tabs gated by:
+ * - putting teaser = small gate blurb
+ * - putting full = the actual tab content (or follow-on modules that you only include when entitled)
+ */
+function inferTabs(modules: PortalModule[], entitlementKeys: string[]): BuiltTab[] {
+  const out: BuiltTab[] = []
+
+  let current: BuiltTab | null = null
+
+  const pushCurrent = () => {
+    if (!current) return
+    // drop empty tabs
+    if (current.modules.length === 0) return
+    out.push(current)
+  }
+
+  for (const m of modules) {
+    if (m._type === 'moduleHeading') {
+      pushCurrent()
+
+      const title = (m.title ?? '').trim() || 'Portal'
+      const id = slugify(title) || m._key
+
+      current = {
+        id,
+        title,
+        locked: false,
+        lockedHint: null,
+        modules: [],
+      }
+      continue
+    }
+
+    // If no heading has appeared yet, create a default tab
+    if (!current) {
+      current = {
+        id: 'portal',
+        title: 'Portal',
+        locked: false,
+        lockedHint: null,
+        modules: [],
+      }
+    }
+
+    current.modules.push(m)
+  }
+
+  pushCurrent()
+
+  // Compute tab-level lock using the convention
+  for (const t of out) {
+    const first = t.modules.find((x) => x._type !== 'moduleHeading') ?? null
+    if (first && first._type === 'moduleRichText' && first.requiresEntitlement) {
+      const entitled = hasKey(entitlementKeys, first.requiresEntitlement)
+      if (!entitled) {
+        t.locked = true
+        t.lockedHint = 'Locked'
+        // Optional stricter mode (commented): hide everything except the first module when locked.
+        // If you want “entire tab gated” in practice, uncomment this so only the gate blurb shows.
+        // t.modules = [first]
+      }
+    }
+  }
+
+  return out
+}
+
+// --------------------
 // Main renderer
 // --------------------
 
@@ -212,71 +361,19 @@ export default async function PortalModules(props: Props) {
   const {modules, memberId} = props
   const entitlementKeys = memberId ? await listCurrentEntitlementKeys(memberId) : []
 
-  return (
-    <div style={{display: 'grid', gap: 14, minWidth: 0}}>
-      {modules.map((m) => {
-        if (m._type === 'moduleHeading') {
-          return (
-            <div key={m._key} style={{padding: '6px 2px'}}>
-              <div style={{fontSize: 16, opacity: 0.92}}>{m.title}</div>
-              {m.blurb ? (
-                <div style={{marginTop: 6, fontSize: 13, opacity: 0.72}}>
-                  {m.blurb}
-                </div>
-              ) : null}
-            </div>
-          )
-        }
+  const tabsBuilt = inferTabs(modules, entitlementKeys)
 
-        if (m._type === 'moduleRichText') {
-          const entitled = hasKey(entitlementKeys, m.requiresEntitlement)
-          const blocks = entitled ? m.full ?? m.teaser ?? [] : m.teaser ?? []
-          return (
-            <PortalRichText
-              key={m._key}
-              title={m.title}
-              blocks={blocks}
-              locked={!!m.requiresEntitlement && !entitled}
-            />
-          )
-        }
-
-        if (m._type === 'moduleCardGrid') {
-  return (
-    <div key={m._key} style={{borderRadius: 18, padding: 16}}>
-      <div className="portalCardGrid2up">
-        {m.cards.map((c) => (
-          <PanelCard
-            key={c._key}
-            title={c.title}
-            body={c.body}
-            locked={!!c.requiresEntitlement && !hasKey(entitlementKeys, c.requiresEntitlement)}
-          />
-        ))}
+  const tabs: PortalTabSpec[] = tabsBuilt.map((t) => ({
+    id: t.id,
+    title: t.title,
+    locked: t.locked,
+    lockedHint: t.lockedHint,
+    content: (
+      <div style={{display: 'grid', gap: 14, minWidth: 0}}>
+        {t.modules.map((m) => renderModule(m, entitlementKeys))}
       </div>
-    </div>
-  )
-}
+    ),
+  }))
 
-
-        if (m._type === 'moduleDownloads') {
-          const offer = getAlbumOffer(m.albumSlug)
-          const owned = !!(offer && entitlementKeys.includes(offer.entitlementKey))
-
-          return (
-            <DownloadsModule
-              key={m._key}
-              title={m.title}
-              albumSlug={m.albumSlug}
-              teaserCopy={m.teaserCopy}
-              owned={owned}
-              assets={m.assets}
-            />
-          )
-        }
-
-        return null
-      })}
-    </div>
-  )
+  return <PortalTabs tabs={tabs} defaultTabId={tabs[0]?.id ?? null} queryParam="pt" />
 }

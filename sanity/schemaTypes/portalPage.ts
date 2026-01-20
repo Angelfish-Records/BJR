@@ -1,3 +1,4 @@
+// sanity/schemaTypes/portalPage.ts
 import {defineField, defineType} from 'sanity'
 
 export const portalPage = defineType({

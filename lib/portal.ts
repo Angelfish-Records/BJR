@@ -38,6 +38,7 @@ export type PortalModuleDownloads = {
   title?: string
   albumSlug: string
   teaserCopy?: string
+  assets?: Array<{assetId: string; label?: string}>
 }
 
 export type PortalModule =
@@ -77,7 +78,8 @@ const portalPageQuery = `
 
       // moduleDownloads
       albumSlug,
-      teaserCopy
+      teaserCopy,
+      assets[]{assetId, label}
     }
   }
 `

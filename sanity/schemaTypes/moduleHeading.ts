@@ -1,3 +1,4 @@
+// sanity/schemaTypes/moduleHeading.ts
 import {defineField, defineType} from 'sanity'
 
 export const moduleHeading = defineType({

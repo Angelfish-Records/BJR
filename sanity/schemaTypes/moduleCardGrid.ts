@@ -1,3 +1,4 @@
+// sanity/schemaTypes/moduleCardGrid.ts
 import {defineField, defineType} from 'sanity'
 
 export const moduleCardGrid = defineType({

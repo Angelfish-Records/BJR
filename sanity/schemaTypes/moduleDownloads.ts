@@ -1,3 +1,4 @@
+// sanity/schemaTypes/moduleDownloads.ts
 import {defineField, defineType} from 'sanity'
 
 export const moduleDownloads = defineType({

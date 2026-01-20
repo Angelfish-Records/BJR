@@ -181,19 +181,25 @@ export default function FooterDrawer(props: {
 
   const active = openKey ? items.find((i) => i.key === openKey) ?? null : null
 
-  const rootStyle: React.CSSProperties = {
-    marginTop: 16,
-    padding: '10px 2px 2px',
-  }
+  // replace rootStyle
+const rootStyle: React.CSSProperties = {
+  marginTop: 16,
+  padding: '10px 2px 2px',
+  maxWidth: 860,
+  marginLeft: 'auto',
+  marginRight: 'auto',
+}
 
-  const titleRowStyle: React.CSSProperties = {
-    display: 'flex',
-    gap: 16,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'nowrap',
-    padding: '0 2px 8px',
-  }
+// replace titleRowStyle
+const titleRowStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: 12,                 // tighter
+  alignItems: 'center',
+  justifyContent: 'flex-start', // key change
+  flexWrap: 'wrap',        // optional but nice if viewport gets narrow
+  padding: '0 2px 8px',
+}
+
 
   const titleStyle = (isOpen: boolean): React.CSSProperties => ({
     appearance: 'none',
@@ -268,13 +274,13 @@ export default function FooterDrawer(props: {
     <footer style={rootStyle} aria-label="Footer drawer">
       <div style={divider} />
 
-      <div style={{display: 'grid', gap: 10, paddingTop: 10}}>
+      <div style={{display: 'grid', gap: 6, paddingTop: 8}}>
         {items.map((it) => {
           const isOpen = openKey === it.key
           const h = isOpen ? mobileHeights[it.key] ?? 0 : 0
 
           return (
-            <div key={it.key} style={{display: 'grid', gap: 6}}>
+            <div key={it.key} style={{display: 'grid', gap: 4}}>
               <button
                 type="button"
                 aria-expanded={isOpen}
