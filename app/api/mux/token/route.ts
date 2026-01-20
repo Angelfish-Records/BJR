@@ -67,7 +67,7 @@ function respondBlocked(
   const out: TokenBlocked = {ok: false, blocked: true, code, reason, action, correlationId}
   const res = NextResponse.json(out, {status})
   res.headers.set('x-correlation-id', correlationId)
-  ensureAnonId(req, res) // ✅ persist anon cookie if missing/invalid (local dev safe)
+  ensureAnonId(req, res) // ✅ persist cookie consistently
   return res
 }
 
@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
 
   const {userId} = await auth()
 
-  // ✅ Single canonical anon identity path (cookie-stable)
+  // ✅ stable anon id (cookie-backed)
   const {anonId} = ensureAnonId(req)
 
   const url = new URL(req.url)
@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
     (url.searchParams.get('st') ?? '').trim() ||
     (url.searchParams.get('share') ?? '').trim()
 
-  // ---- Capability mode via share token (bypass anon cap + oracle checks) ----
+  // ---- Capability mode via share token ----
   let tokenAllowsPlayback = false
   if (st) {
     const v = await validateShareToken({
@@ -146,7 +146,6 @@ export async function POST(req: NextRequest) {
 
     tokenAllowsPlayback = v.ok
     if (!v.ok) {
-      // preserve semantics
       if (v.code === 'CAP_REACHED') {
         return respondBlocked(req, correlationId, 'CAP_REACHED', 'Share link cap reached.', 'login', 403)
       }
@@ -154,7 +153,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ---- Anonymous cap (REAL): based on completed playthrough events in Neon ----
+  // ---- Anonymous cap ----
   if (!userId && !tokenAllowsPlayback) {
     const distinctCompleted = await countAnonDistinctCompletedTracks({anonId, sinceDays: ANON_WINDOW_DAYS})
     if (distinctCompleted >= ANON_DISTINCT_TRACK_CAP) {
@@ -169,7 +168,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ---- Logged-in access: enforce via oracle ----
+  // ---- Logged-in access via oracle ----
   if (userId && !tokenAllowsPlayback) {
     const memberId = await getMemberIdByClerkUserId(userId)
     if (!memberId) {
@@ -239,6 +238,6 @@ export async function POST(req: NextRequest) {
   const out: TokenOk = {ok: true, token: jwt, expiresAt: exp, correlationId}
   const res = NextResponse.json(out)
   res.headers.set('x-correlation-id', correlationId)
-  ensureAnonId(req, res) // ✅ persist anon cookie if missing/invalid
+  ensureAnonId(req, res) // ✅ persist cookie if missing/invalid
   return res
 }

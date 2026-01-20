@@ -150,6 +150,8 @@ export default function FullPlayer(props: {
   viewerTier?: Tier
 }) {
   const p = usePlayer()
+  const pRef = React.useRef(p)
+  React.useEffect(() => { pRef.current = p }, [p])
   const {albumSlug, album, tracks, albums, onSelectAlbum, isBrowsingAlbum = false, viewerTier = 'none'} = props
 
   const albumTitle = album?.title ?? '—'
@@ -169,6 +171,7 @@ export default function FullPlayer(props: {
 
   // Canonical album key used in queue context + gating
   const albumKey = album?.catalogId ?? album?.id ?? null
+  
 
     React.useEffect(() => {
     if (!album?.catalogId) return
@@ -229,15 +232,18 @@ export default function FullPlayer(props: {
           reason,
         })
 
+        const player = pRef.current
+
         // ---- propagate to PlayerState for global UX (ActivationGate + blur) ----
         if (!allowed) {
-          p.setBlocked(reason ?? 'Playback blocked.', {code, action, correlationId: corr})
+          
+          player.setBlocked(reason ?? 'Playback blocked.', {code, action, correlationId: corr})
         } else {
-          if (p.lastError || p.blockedCode || p.blockedAction) {
-            p.clearError()
+          if (player.lastError || player.blockedCode || player.blockedAction) {
+            player.clearError()
           }
-          if (p.status === 'blocked') {
-            p.setStatusExternal('idle')
+          if (player.status === 'blocked') {
+            player.setStatusExternal('idle')
           }
         }
       } catch (e) {
@@ -254,11 +260,12 @@ export default function FullPlayer(props: {
           reason: 'Access check failed (client).',
         })
 
-        if (p.lastError || p.blockedCode || p.blockedAction) {
-          p.clearError()
+        const player = pRef.current
+        if (player.lastError || player.blockedCode || player.blockedAction) {
+          player.clearError()
         }
-        if (p.status === 'blocked') {
-          p.setStatusExternal('idle')
+        if (player.status === 'blocked') {
+          player.setStatusExternal('idle')
         }
       }
     })()
@@ -267,7 +274,7 @@ export default function FullPlayer(props: {
       cancelled = true
       ac.abort()
     }
-  }, [album?.catalogId, p])
+  }, [album?.catalogId])
 
   // NOTE: allow play unless the access check explicitly denies.
   const canPlay = tracks.length > 0 && access?.allowed !== false
