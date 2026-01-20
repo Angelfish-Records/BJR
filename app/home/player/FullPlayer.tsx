@@ -440,7 +440,7 @@ export default function FullPlayer(props: {
             </button>
 
             <div style={{position: 'absolute', inset: -5, borderRadius: 999, zIndex: 1}}>
-              <PatternRing size={74} thickness={7} opacity={0.45} seed={913} />
+              <PatternRing size={74} thickness={7} opacity={0.75} seed={913} />
             </div>
           </div>
 
@@ -468,7 +468,12 @@ export default function FullPlayer(props: {
       </div>
 
       <div style={{marginTop: 18}}>
-        <div style={{borderTop: '1px solid rgba(255,255,255,0.10)', paddingTop: 14}}>
+        <div style={{
+          border: '1px solid rgba(255,255,255,0.10)',
+          borderRadius: 14,
+          overflow: 'hidden',
+          padding: 6,
+        }}>
           {tracks.map((t, i) => {
             const isCur = p.current?.id === t.id
             const isSelected = selectedTrackId === t.id
@@ -543,7 +548,7 @@ export default function FullPlayer(props: {
                   gap: 12,
                   textAlign: 'left',
                   padding: '10px 10px',
-                  borderRadius: 14,
+                  borderRadius: 0,
                   border: '1px solid rgba(255,255,255,0.00)',
                   background: restBg,
                   cursor: canPlay ? 'pointer' : 'default',
