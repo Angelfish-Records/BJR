@@ -19,7 +19,23 @@ async function clearDebug() {
   window.location.reload()
 }
 
+type ForceOpt = {id: string; label: string}
+
+const FORCE_OPTS: ForceOpt[] = [
+  {id: 'none', label: 'None'},
+  {id: 'AUTH_REQUIRED', label: 'AUTH_REQUIRED'},
+  {id: 'ENTITLEMENT_REQUIRED', label: 'ENTITLEMENT_REQUIRED'},
+  {id: 'ANON_CAP_REACHED', label: 'ANON_CAP'},
+  {id: 'EMBARGOED', label: 'EMBARGOED'},
+]
+
 export default function AdminDebugBar() {
+  // Hooks must always run, even if the component returns null later.
+  const [force, setForce] = React.useState<string>('none')
+
+  // Optional: reflect currently-set force from cookie/server later if you want.
+  // For now we keep it simple and deterministic.
+
   if (!ENABLED) return null
 
   const btn: React.CSSProperties = {
@@ -31,6 +47,13 @@ export default function AdminDebugBar() {
     fontSize: 12,
     cursor: 'pointer',
     whiteSpace: 'nowrap',
+  }
+
+  const selectStyle: React.CSSProperties = {
+    ...btn,
+    appearance: 'none',
+    paddingRight: 28,
+    position: 'relative',
   }
 
   return (
@@ -53,7 +76,6 @@ export default function AdminDebugBar() {
         boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
       }}
     >
-      {/* Left: label */}
       <div
         style={{
           fontSize: 12,
@@ -66,7 +88,6 @@ export default function AdminDebugBar() {
         Admin debug
       </div>
 
-      {/* Right: controls */}
       <div
         style={{
           display: 'flex',
@@ -76,20 +97,45 @@ export default function AdminDebugBar() {
           justifyContent: 'flex-end',
         }}
       >
-        <button style={btn} onClick={() => setDebug({force: 'AUTH_REQUIRED'})}>
-          AUTH_REQUIRED
-        </button>
-        <button style={btn} onClick={() => setDebug({force: 'ENTITLEMENT_REQUIRED'})}>
-          ENTITLEMENT_REQUIRED
-        </button>
-        <button style={btn} onClick={() => setDebug({force: 'ANON_CAP_REACHED'})}>
-          ANON_CAP
-        </button>
-        <button style={btn} onClick={() => setDebug({force: 'EMBARGOED'})}>
-          EMBARGOED
-        </button>
-        <button style={btn} onClick={() => setDebug({force: 'none'})}>
-          Clear force
+        {/* Force state dropdown (collapsed controls) */}
+        <div style={{position: 'relative', display: 'grid'}}>
+          <select
+            aria-label="Force state"
+            value={force}
+            onChange={(e) => setForce(e.currentTarget.value)}
+            style={selectStyle}
+          >
+            {FORCE_OPTS.map((o) => (
+              <option key={o.id} value={o.id}>
+                Force: {o.label}
+              </option>
+            ))}
+          </select>
+
+          {/* caret */}
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              right: 10,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              pointerEvents: 'none',
+              opacity: 0.8,
+              fontSize: 10,
+            }}
+          >
+            ▼
+          </div>
+        </div>
+
+        <button
+          style={btn}
+          onClick={() => {
+            void setDebug({force})
+          }}
+        >
+          Apply
         </button>
 
         <span
@@ -101,6 +147,10 @@ export default function AdminDebugBar() {
             margin: '0 4px',
           }}
         />
+
+        <button style={btn} onClick={() => void setDebug({force: 'none'})}>
+          Clear force
+        </button>
 
         <button style={btn} onClick={clearDebug}>
           Reset

@@ -22,10 +22,7 @@ function useIsMobile(breakpointPx = 640) {
   return isMobile
 }
 
-export default function FooterDrawer(props: {
-  emailTo?: string
-  licensingHref?: string
-}) {
+export default function FooterDrawer(props: {emailTo?: string; licensingHref?: string}) {
   const emailTo = props.emailTo ?? 'hello@angelfishrecords.com'
   const licensingHref = props.licensingHref ?? ''
 
@@ -143,27 +140,29 @@ export default function FooterDrawer(props: {
   const itemRefs = useRef(new Map<FooterKey, HTMLDivElement>())
   const [mobileHeights, setMobileHeights] = useState<Record<string, number>>({})
 
+  // Always start closed on load (and nuke any old persisted state).
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem(STORAGE_KEY)
-      if (saved && items.some((i) => i.key === saved)) setOpenKey(saved as FooterKey)
+      window.localStorage.removeItem(STORAGE_KEY)
     } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Optional: keep writing for analytics/debug, but do not restore on load.
   useEffect(() => {
     try {
       if (openKey) window.localStorage.setItem(STORAGE_KEY, openKey)
+      else window.localStorage.removeItem(STORAGE_KEY)
     } catch {}
   }, [openKey])
 
-  // Re-measure desktop panel
+  // Re-measure desktop panel (no synchronous setState in effect body)
   useEffect(() => {
     if (isMobile) return
     const el = sharedRef.current
     if (!el) return
-    if (!openKey) return setSharedH(0)
-    const raf = requestAnimationFrame(() => setSharedH(el.scrollHeight))
+    const raf = requestAnimationFrame(() => {
+      setSharedH(openKey ? el.scrollHeight : 0)
+    })
     return () => cancelAnimationFrame(raf)
   }, [openKey, isMobile])
 
@@ -181,25 +180,24 @@ export default function FooterDrawer(props: {
 
   const active = openKey ? items.find((i) => i.key === openKey) ?? null : null
 
-  // replace rootStyle
-const rootStyle: React.CSSProperties = {
-  marginTop: 16,
-  padding: '10px 2px 2px',
-  maxWidth: 860,
-  marginLeft: 'auto',
-  marginRight: 'auto',
-}
+  // Stable width: let the parent section control alignment; footer should fill available width.
+  const rootStyle: React.CSSProperties = {
+    marginTop: 16,
+    padding: '10px 2px 2px',
+    width: '100%',
+    maxWidth: '100%',
+    marginLeft: 0,
+    marginRight: 0,
+  }
 
-// replace titleRowStyle
-const titleRowStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: 12,                 // tighter
-  alignItems: 'center',
-  justifyContent: 'flex-start', // key change
-  flexWrap: 'wrap',        // optional but nice if viewport gets narrow
-  padding: '0 2px 8px',
-}
-
+  const titleRowStyle: React.CSSProperties = {
+    display: 'flex',
+    gap: 12,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    flexWrap: 'wrap',
+    padding: '0 2px 8px',
+  }
 
   const titleStyle = (isOpen: boolean): React.CSSProperties => ({
     appearance: 'none',
@@ -228,7 +226,8 @@ const titleRowStyle: React.CSSProperties = {
     fontSize: 13,
     lineHeight: 1.6,
     color: 'rgba(255,255,255,0.62)',
-    maxWidth: 860,
+    width: '100%',
+    maxWidth: '100%',
   }
 
   const divider: React.CSSProperties = {
@@ -238,7 +237,6 @@ const titleRowStyle: React.CSSProperties = {
   }
 
   if (!isMobile) {
-    // Desktop: horizontal titles + one shared panel underneath
     return (
       <footer style={rootStyle} aria-label="Footer drawer">
         <div style={titleRowStyle}>
@@ -269,7 +267,6 @@ const titleRowStyle: React.CSSProperties = {
     )
   }
 
-  // Mobile: vertical list; panel opens directly beneath the clicked title
   return (
     <footer style={rootStyle} aria-label="Footer drawer">
       <div style={divider} />

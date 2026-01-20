@@ -1,3 +1,4 @@
+// web/app/home/player/MiniPlayer.tsx
 'use client'
 
 import React from 'react'

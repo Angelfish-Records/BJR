@@ -6,6 +6,7 @@ import {usePlayer} from './PlayerState'
 import type {AlbumInfo, AlbumNavItem, PlayerTrack, Tier, TierName} from '@/lib/types'
 import {deriveShareContext, shareAlbum, shareTrack} from './share'
 import {PatternRing} from './VisualizerPattern'
+import {replaceQuery} from '@/app/home/urlState'
 
 function fmtTime(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000))
@@ -79,21 +80,32 @@ function DownloadIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
       <path d="M12 3v10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M8 11l4 4 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M8 11l4 4 4-4"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
       <path d="M5 20h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   )
 }
 
-function BookmarkIcon() {
+function PrevIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M7 4h10a1.5 1.5 0 0 1 1.5 1.5V21l-6-3-6 3V5.5A1.5 1.5 0 0 1 7 4Z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="6" y="6" width="2" height="12" />
+      <polygon points="18,7 10,12 18,17" />
+    </svg>
+  )
+}
+
+function NextIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="16" y="6" width="2" height="12" />
+      <polygon points="6,7 14,12 6,17" />
     </svg>
   )
 }
@@ -106,16 +118,6 @@ function ShareIcon() {
       <path d="M16 22a3 3 0 1 0-2.9-3.7A3 3 0 0 0 16 22Z" stroke="currentColor" strokeWidth="2" />
       <path d="M8.7 11.2l5-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       <path d="M8.7 12.8l5 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function MoreIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-      <circle cx="6.5" cy="12" r="1.6" />
-      <circle cx="12" cy="12" r="1.6" />
-      <circle cx="17.5" cy="12" r="1.6" />
     </svg>
   )
 }
@@ -151,7 +153,10 @@ export default function FullPlayer(props: {
 }) {
   const p = usePlayer()
   const pRef = React.useRef(p)
-  React.useEffect(() => { pRef.current = p }, [p])
+  React.useEffect(() => {
+    pRef.current = p
+  }, [p])
+
   const {albumSlug, album, tracks, albums, onSelectAlbum, isBrowsingAlbum = false, viewerTier = 'none'} = props
 
   const albumTitle = album?.title ?? '—'
@@ -171,15 +176,13 @@ export default function FullPlayer(props: {
 
   // Canonical album key used in queue context + gating
   const albumKey = album?.catalogId ?? album?.id ?? null
-  
 
-    React.useEffect(() => {
+  React.useEffect(() => {
     if (!album?.catalogId) return
 
     let cancelled = false
     const ac = new AbortController()
 
-    // Read st/share directly from the URL (stable enough for this surface)
     let st: string | null = null
     try {
       const sp = new URLSearchParams(window.location.search)
@@ -198,59 +201,34 @@ export default function FullPlayer(props: {
         const corr = r.headers.get('x-correlation-id') ?? null
         const j = (await r.json()) as AccessPayload
 
-
         if (cancelled) return
 
         type BlockAction = 'login' | 'subscribe' | 'buy' | 'wait'
         const asBlockAction = (v: unknown): BlockAction | undefined =>
-          v === 'login' || v === 'subscribe' || v === 'buy' || v === 'wait'
-            ? v
-            : undefined
+          v === 'login' || v === 'subscribe' || v === 'buy' || v === 'wait' ? v : undefined
 
         const allowed = j?.allowed !== false
         const embargoed = j?.embargoed === true
         const releaseAt = (j?.releaseAt ?? null) as string | null
 
-        const code =
-          typeof j?.code === 'string' && j.code.trim()
-            ? j.code
-            : undefined
-
+        const code = typeof j?.code === 'string' && j.code.trim() ? j.code : undefined
         const action = asBlockAction(j?.action)
 
-        const reason =
-          typeof j?.reason === 'string' && j.reason.trim()
-            ? j.reason
-            : undefined
+        const reason = typeof j?.reason === 'string' && j.reason.trim() ? j.reason : undefined
 
-        setAccess({
-          allowed,
-          embargoed,
-          releaseAt,
-          code,
-          action: action ?? null,
-          reason,
-        })
+        setAccess({allowed, embargoed, releaseAt, code, action: action ?? null, reason})
 
         const player = pRef.current
-
-        // ---- propagate to PlayerState for global UX (ActivationGate + blur) ----
         if (!allowed) {
-          
           player.setBlocked(reason ?? 'Playback blocked.', {code, action, correlationId: corr})
         } else {
-          if (player.lastError || player.blockedCode || player.blockedAction) {
-            player.clearError()
-          }
-          if (player.status === 'blocked') {
-            player.setStatusExternal('idle')
-          }
+          if (player.lastError || player.blockedCode || player.blockedAction) player.clearError()
+          if (player.status === 'blocked') player.setStatusExternal('idle')
         }
       } catch (e) {
         if (cancelled) return
         console.error('FullPlayer access check failed', e)
 
-        // Fail-open, but keep debug signal
         setAccess({
           allowed: true,
           embargoed: false,
@@ -261,12 +239,8 @@ export default function FullPlayer(props: {
         })
 
         const player = pRef.current
-        if (player.lastError || player.blockedCode || player.blockedAction) {
-          player.clearError()
-        }
-        if (player.status === 'blocked') {
-          player.setStatusExternal('idle')
-        }
+        if (player.lastError || player.blockedCode || player.blockedAction) player.clearError()
+        if (player.status === 'blocked') player.setStatusExternal('idle')
       }
     })()
 
@@ -276,13 +250,11 @@ export default function FullPlayer(props: {
     }
   }, [album?.catalogId])
 
-  // NOTE: allow play unless the access check explicitly denies.
   const canPlay = tracks.length > 0 && access?.allowed !== false
 
   const releaseAtMs = access?.releaseAt ? Date.parse(access.releaseAt) : NaN
   const showEmbargo = access?.embargoed && Number.isFinite(releaseAtMs)
 
-  // IMPORTANT: p.queueContextId now holds catalogId (your new contextId).
   const isThisAlbumActive = Boolean(albumKey && p.queueContextId === albumKey)
   const currentIsInBrowsedAlbum = Boolean(p.current && tracks.some((t) => t.id === p.current!.id))
   const playingThisAlbum = playingish && (isThisAlbumActive || currentIsInBrowsedAlbum)
@@ -291,6 +263,12 @@ export default function FullPlayer(props: {
   const lockPlayFor = (ms: number) => {
     setPlayLock(true)
     window.setTimeout(() => setPlayLock(false), ms)
+  }
+
+  const [transportLock, setTransportLock] = React.useState(false)
+  const lockTransportFor = (ms: number) => {
+    setTransportLock(true)
+    window.setTimeout(() => setTransportLock(false), ms)
   }
 
   const prefetchTrack = (t?: PlayerTrack) => {
@@ -309,7 +287,6 @@ export default function FullPlayer(props: {
 
   const onTogglePlay = () => {
     lockPlayFor(120)
-
     if (!canPlay) return
 
     if (playingThisAlbum) {
@@ -368,6 +345,25 @@ export default function FullPlayer(props: {
             : 'Loading…'
       : null
 
+  // Prev/Next disabled logic: operate on PlayerState queue.
+  const curId = p.current?.id ?? ''
+  const idx = curId ? p.queue.findIndex((t) => t.id === curId) : -1
+  const atStart = idx <= 0
+  const atEnd = idx >= 0 && idx === p.queue.length - 1
+  const prevDisabled = !p.current || transportLock || atStart
+  const nextDisabled = !p.current || transportLock || atEnd
+
+  const gotoDownload = () => {
+    const patch: Record<string, string | null | undefined> = {
+      p: 'download',
+      // keep album pinned if we can
+      album: albumSlug,
+      track: null,
+      t: null,
+    }
+    replaceQuery(patch)
+  }
+
   return (
     <div
       style={{
@@ -409,12 +405,20 @@ export default function FullPlayer(props: {
         ) : null}
 
         <div style={{display: 'flex', alignItems: 'center', gap: 10, marginTop: 8}}>
-          <IconCircleBtn label="Download" onClick={() => {}}>
+          <IconCircleBtn label="Download" onClick={gotoDownload}>
             <DownloadIcon />
           </IconCircleBtn>
 
-          <IconCircleBtn label="Save" onClick={() => {}}>
-            <BookmarkIcon />
+          <IconCircleBtn
+            label="Previous"
+            disabled={prevDisabled}
+            onClick={() => {
+              lockTransportFor(350)
+              window.dispatchEvent(new Event('af:play-intent'))
+              p.prev()
+            }}
+          >
+            <PrevIcon />
           </IconCircleBtn>
 
           <div style={{position: 'relative', width: 64, height: 64}}>
@@ -452,6 +456,18 @@ export default function FullPlayer(props: {
           </div>
 
           <IconCircleBtn
+            label="Next"
+            disabled={nextDisabled}
+            onClick={() => {
+              lockTransportFor(350)
+              window.dispatchEvent(new Event('af:play-intent'))
+              p.next()
+            }}
+          >
+            <NextIcon />
+          </IconCircleBtn>
+
+          <IconCircleBtn
             label="Share"
             onClick={() => {
               void shareAlbum(shareCtx)
@@ -459,15 +475,15 @@ export default function FullPlayer(props: {
           >
             <ShareIcon />
           </IconCircleBtn>
-
-          <IconCircleBtn label="More" onClick={() => {}}>
-            <MoreIcon />
-          </IconCircleBtn>
         </div>
 
-        {playingThisAlbum && loadingLabel ? <div style={{fontSize: 12, opacity: 0.65, marginTop: 2}}>{loadingLabel}</div> : null}
+        {playingThisAlbum && loadingLabel ? (
+          <div style={{fontSize: 12, opacity: 0.65, marginTop: 2}}>{loadingLabel}</div>
+        ) : null}
 
-        {p.status === 'blocked' && p.lastError ? <div style={{fontSize: 12, opacity: 0.75, marginTop: 4}}>Playback error</div> : null}
+        {p.status === 'blocked' && p.lastError ? (
+          <div style={{fontSize: 12, opacity: 0.75, marginTop: 4}}>Playback error</div>
+        ) : null}
       </div>
 
       <div style={{marginTop: 18}}>
@@ -480,17 +496,19 @@ export default function FullPlayer(props: {
             const shimmerTitle = isPending || (isCur && p.status === 'loading')
             const isNowPlaying = isCur && (p.status === 'playing' || p.status === 'loading' || p.intent === 'play')
 
-            const titleColor = !canPlay
-              ? 'rgba(255,255,255,0.38)'
-              : isCur
-                ? 'color-mix(in srgb, var(--accent) 72%, rgba(255,255,255,0.92))'
-                : 'rgba(255,255,255,0.92)'
+            const titleColor =
+              !canPlay
+                ? 'rgba(255,255,255,0.38)'
+                : isCur
+                  ? 'color-mix(in srgb, var(--accent) 72%, rgba(255,255,255,0.92))'
+                  : 'rgba(255,255,255,0.92)'
 
-            const subColor = !canPlay
-              ? 'rgba(255,255,255,0.32)'
-              : isCur
-                ? 'color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.70))'
-                : 'rgba(255,255,255,0.70)'
+            const subColor =
+              !canPlay
+                ? 'rgba(255,255,255,0.32)'
+                : isCur
+                  ? 'color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.70))'
+                  : 'rgba(255,255,255,0.70)'
 
             const baseBg = isSelected ? 'rgba(255,255,255,0.14)' : 'transparent'
             const restBg = isCur && !isSelected ? 'transparent' : baseBg
@@ -503,9 +521,7 @@ export default function FullPlayer(props: {
                 onMouseEnter={(e) => {
                   prefetchTrack(t)
                   if (!canPlay) return
-                  if (!isCoarsePointer && !isSelected && !isCur) {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
-                  }
+                  if (!isCoarsePointer && !isSelected && !isCur) e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = restBg
@@ -606,15 +622,7 @@ export default function FullPlayer(props: {
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    justifySelf: 'end',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 14,
-                    color: subColor,
-                  }}
-                >
+                <div style={{justifySelf: 'end', display: 'flex', alignItems: 'center', gap: 14, color: subColor}}>
                   <button
                     type="button"
                     className="afRowShare"
@@ -739,9 +747,7 @@ export default function FullPlayer(props: {
                         {a.artist ?? ''}
                       </div>
 
-                      {!canLoadByTier && min ? (
-                        <div style={{marginTop: 6, fontSize: 11, opacity: 0.6}}>Requires {tierLabel(min)}</div>
-                      ) : null}
+                      {!canLoadByTier && min ? <div style={{marginTop: 6, fontSize: 11, opacity: 0.6}}>Requires {tierLabel(min)}</div> : null}
                     </div>
                   </button>
                 )
