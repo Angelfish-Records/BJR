@@ -142,6 +142,12 @@ type AccessPayload = {
   reason?: string | null
 }
 
+type StableView = {
+  albumSlug: string
+  album: AlbumInfo | null
+  tracks: PlayerTrack[]
+}
+
 export default function FullPlayer(props: {
   albumSlug: string
   album: AlbumInfo | null
@@ -159,9 +165,28 @@ export default function FullPlayer(props: {
 
   const {albumSlug, album, tracks, albums, onSelectAlbum, isBrowsingAlbum = false, viewerTier = 'none'} = props
 
-  const albumTitle = album?.title ?? '—'
-  const albumDesc = album?.description ?? 'This is placeholder copy. Soon: pull album description from Sanity.'
-  const browseAlbums = albums.filter((a) => a.id !== album?.id)
+  // ---- optimistic UI cache (state, not ref) to satisfy react-hooks/refs lint ----
+  const [stableView, setStableView] = React.useState<StableView | null>(null)
+
+  React.useEffect(() => {
+    if (album && tracks && tracks.length) {
+      setStableView({albumSlug, album, tracks})
+    }
+  }, [albumSlug, album, tracks])
+
+  const showCached = Boolean(isBrowsingAlbum && stableView?.album && (!album || !tracks?.length))
+  const effAlbumSlug = showCached ? stableView!.albumSlug : albumSlug
+  const effAlbum = showCached ? stableView!.album : album
+  const effTracks = showCached ? stableView!.tracks : tracks
+
+  const [pendingAlbumSlug, setPendingAlbumSlug] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    if (!isBrowsingAlbum) setPendingAlbumSlug(null)
+  }, [isBrowsingAlbum])
+
+  const albumTitle = effAlbum?.title ?? '—'
+  const albumDesc = effAlbum?.description ?? 'This is placeholder copy. Soon: pull album description from Sanity.'
+  const browseAlbums = albums.filter((a) => a.id !== effAlbum?.id)
 
   const playingish = p.status === 'playing' || p.status === 'loading' || p.intent === 'play'
 
@@ -175,10 +200,10 @@ export default function FullPlayer(props: {
   } | null>(null)
 
   // Canonical album key used in queue context + gating
-  const albumKey = album?.catalogId ?? album?.id ?? null
+  const albumKey = effAlbum?.catalogId ?? effAlbum?.id ?? null
 
   React.useEffect(() => {
-    if (!album?.catalogId) return
+    if (!effAlbum?.catalogId) return
 
     let cancelled = false
     const ac = new AbortController()
@@ -192,7 +217,7 @@ export default function FullPlayer(props: {
     }
 
     const u = new URL('/api/access/check', window.location.origin)
-    u.searchParams.set('albumId', album.catalogId)
+    u.searchParams.set('albumId', effAlbum.catalogId)
     if (st) u.searchParams.set('st', st)
 
     ;(async () => {
@@ -248,15 +273,15 @@ export default function FullPlayer(props: {
       cancelled = true
       ac.abort()
     }
-  }, [album?.catalogId])
+  }, [effAlbum?.catalogId])
 
-  const canPlay = tracks.length > 0 && access?.allowed !== false
+  const canPlay = effTracks.length > 0 && access?.allowed !== false
 
   const releaseAtMs = access?.releaseAt ? Date.parse(access.releaseAt) : NaN
   const showEmbargo = access?.embargoed && Number.isFinite(releaseAtMs)
 
   const isThisAlbumActive = Boolean(albumKey && p.queueContextId === albumKey)
-  const currentIsInBrowsedAlbum = Boolean(p.current && tracks.some((t) => t.id === p.current!.id))
+  const currentIsInBrowsedAlbum = Boolean(p.current && effTracks.some((t) => t.id === p.current!.id))
   const playingThisAlbum = playingish && (isThisAlbumActive || currentIsInBrowsedAlbum)
 
   const [playLock, setPlayLock] = React.useState(false)
@@ -295,15 +320,15 @@ export default function FullPlayer(props: {
       return
     }
 
-    const firstTrack = tracks[0]
+    const firstTrack = effTracks[0]
     if (!firstTrack) return
 
-    p.setQueue(tracks, {
+    p.setQueue(effTracks, {
       contextId: albumKey ?? undefined,
-      artworkUrl: album?.artworkUrl ?? null,
-      contextSlug: albumSlug,
-      contextTitle: album?.title ?? undefined,
-      contextArtist: album?.artist ?? undefined,
+      artworkUrl: effAlbum?.artworkUrl ?? null,
+      contextSlug: effAlbumSlug,
+      contextTitle: effAlbum?.title ?? undefined,
+      contextArtist: effAlbum?.artist ?? undefined,
     })
 
     p.play(firstTrack)
@@ -317,8 +342,8 @@ export default function FullPlayer(props: {
   }
 
   const shareCtx = deriveShareContext({
-    albumSlug,
-    album,
+    albumSlug: effAlbumSlug,
+    album: effAlbum,
     queueArtist: p.queueContextArtist,
     albumId: albumKey ?? undefined,
   })
@@ -346,7 +371,7 @@ export default function FullPlayer(props: {
     const patch: Record<string, string | null | undefined> = {
       p: 'download',
       // keep album pinned if we can
-      album: albumSlug,
+      album: effAlbumSlug,
       track: null,
       t: null,
     }
@@ -370,8 +395,8 @@ export default function FullPlayer(props: {
             height: 334,
             borderRadius: 18,
             border: '1px solid rgba(255,255,255,0.14)',
-            background: album?.artworkUrl
-              ? `url(${album.artworkUrl}) center/cover no-repeat`
+            background: effAlbum?.artworkUrl
+              ? `url(${effAlbum.artworkUrl}) center/cover no-repeat`
               : 'radial-gradient(120px 120px at 30% 20%, rgba(255,255,255,0.14), rgba(255,255,255,0.02))',
             boxShadow: '0 22px 60px rgba(0,0,0,0.35)',
             overflow: 'hidden',
@@ -414,8 +439,8 @@ export default function FullPlayer(props: {
             <button
               type="button"
               onClick={canPlay && !playLock ? onTogglePlay : undefined}
-              onMouseEnter={() => prefetchTrack(tracks[0])}
-              onFocus={() => prefetchTrack(tracks[0])}
+              onMouseEnter={() => prefetchTrack(effTracks[0])}
+              onFocus={() => prefetchTrack(effTracks[0])}
               disabled={!canPlay || playLock}
               aria-label={playingThisAlbum ? 'Pause' : 'Play'}
               title={playingThisAlbum ? 'Pause' : 'Play'}
@@ -469,7 +494,7 @@ export default function FullPlayer(props: {
 
       <div style={{marginTop: 18}}>
         <div style={{borderTop: '1px solid rgba(255,255,255,0.10)', paddingTop: 14}}>
-          {tracks.map((t, i) => {
+          {effTracks.map((t, i) => {
             const isCur = p.current?.id === t.id
             const isSelected = selectedTrackId === t.id
             const isPending = p.pendingTrackId === t.id
@@ -489,12 +514,11 @@ export default function FullPlayer(props: {
                 ? 'color-mix(in srgb, var(--accent) 70%, rgba(255,255,255,0.70))'
                 : 'rgba(255,255,255,0.70)'
 
-
             const baseBg = isSelected ? 'rgba(255,255,255,0.14)' : 'transparent'
             const restBg = isCur && !isSelected ? 'transparent' : baseBg
 
             const isFirst = i === 0
-            const isLast = i === tracks.length - 1
+            const isLast = i === effTracks.length - 1
             const rowRadius = isFirst ? '14px 14px 0 0' : isLast ? '0 0 14px 14px' : '0'
 
             return (
@@ -513,12 +537,12 @@ export default function FullPlayer(props: {
                 onFocus={() => prefetchTrack(t)}
                 onClick={() => {
                   if (!canPlay) return
-                  p.setQueue(tracks, {
+                  p.setQueue(effTracks, {
                     contextId: albumKey ?? undefined,
-                    artworkUrl: album?.artworkUrl ?? null,
-                    contextSlug: albumSlug,
-                    contextTitle: album?.title ?? undefined,
-                    contextArtist: album?.artist ?? undefined,
+                    artworkUrl: effAlbum?.artworkUrl ?? null,
+                    contextSlug: effAlbumSlug,
+                    contextTitle: effAlbum?.title ?? undefined,
+                    contextArtist: effAlbum?.artist ?? undefined,
                   })
 
                   if (isCoarsePointer) {
@@ -650,10 +674,11 @@ export default function FullPlayer(props: {
 
             <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12}}>
               {browseAlbums.map((a) => {
-                const isActive = album?.id === a.id
+                const isActive = effAlbum?.id === a.id
                 const min = a.policy?.minTierToLoad ?? null
                 const canLoadByTier = !min || tierRank(viewerTier) >= tierRank(min)
                 const disabled = !onSelectAlbum || isBrowsingAlbum || isActive || !canLoadByTier
+                const isPendingPick = isBrowsingAlbum && pendingAlbumSlug === a.slug
 
                 return (
                   <button
@@ -671,7 +696,10 @@ export default function FullPlayer(props: {
                       e.currentTarget.style.boxShadow = disabled ? 'none' : '0 14px 34px rgba(0,0,0,0.18)'
                     }}
                     onFocus={() => prefetchAlbumArt(a.coverUrl)}
-                    onClick={() => onSelectAlbum?.(a.slug)}
+                    onClick={() => {
+                      setPendingAlbumSlug(a.slug)
+                      onSelectAlbum?.(a.slug)
+                    }}
                     style={{
                       display: 'grid',
                       gridTemplateRows: 'auto auto',
@@ -690,6 +718,8 @@ export default function FullPlayer(props: {
                       transform: 'translateZ(0)',
                       transition:
                         'transform 140ms ease, border-color 140ms ease, background 140ms ease, box-shadow 140ms ease',
+                      position: 'relative',
+                      overflow: 'hidden',
                     }}
                   >
                     <div
@@ -731,8 +761,24 @@ export default function FullPlayer(props: {
                         {a.artist ?? ''}
                       </div>
 
-                      {!canLoadByTier && min ? <div style={{marginTop: 6, fontSize: 11, opacity: 0.6}}>Requires {tierLabel(min)}</div> : null}
+                      {!canLoadByTier && min ? (
+                        <div style={{marginTop: 6, fontSize: 11, opacity: 0.6}}>Requires {tierLabel(min)}</div>
+                      ) : null}
                     </div>
+
+                    {isPendingPick ? (
+                      <div
+                        aria-hidden="true"
+                        className="afShimmerBlock"
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          borderRadius: 16,
+                          pointerEvents: 'none',
+                          opacity: 0.95,
+                        }}
+                      />
+                    ) : null}
                   </button>
                 )
               })}
@@ -782,6 +828,21 @@ export default function FullPlayer(props: {
             color: rgba(255,255,255,0.92);
             background: none;
           }
+        }
+
+        .afShimmerBlock{
+          background: linear-gradient(
+            90deg,
+            rgba(255,255,255,0.06) 0%,
+            rgba(255,255,255,0.16) 45%,
+            rgba(255,255,255,0.06) 100%
+          );
+          background-size: 200% 100%;
+          animation: afShimmer 1.05s linear infinite;
+          mix-blend-mode: screen;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .afShimmerBlock { animation: none; }
         }
 
         .afEq{

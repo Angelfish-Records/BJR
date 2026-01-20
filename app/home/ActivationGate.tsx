@@ -119,7 +119,7 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
       <PatternPillBorder seed={888} opacity={0.12} />
 
       {/* Interior pattern ONLY when ON */}
-      <PatternPillUnderlay active={checked} opacity={0.28} seed={777} />
+      <PatternPillUnderlay active={checked} opacity={0.58} seed={777} />
 
       {/* specular highlight (no dark scrim) */}
       <div
