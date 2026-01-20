@@ -48,36 +48,74 @@ function looksLikeNoAccountError(err: unknown): boolean {
 }
 
 /**
- * Very subtle edge texture (NOT a second outline).
- * We intentionally do not draw a crisp stroke here — the button border is the single outline.
+ * Patterned OUTLINE ring: a wrapper that shows the visualizer snapshot only in the 1px ring.
+ * Achieved by:
+ * - wrapper has the pattern background
+ * - inner button is inset by 1px, covering the interior
  */
-function PatternPillBorder(props: {radius?: number; opacity?: number; seed?: number}) {
-  const {radius = 999, opacity = 0.14, seed = 888} = props
+function PatternRingOutline(props: {
+  radius?: number
+  ringPx?: number
+  opacity?: number
+  seed?: number
+  children: React.ReactNode
+  disabled?: boolean
+}) {
+  const {radius = 999, ringPx = 1, opacity = 0.7, seed = 888, children, disabled} = props
 
   return (
     <div
-      aria-hidden
       style={{
-        position: 'absolute',
-        inset: 0,
+        position: 'relative',
         borderRadius: radius,
+        padding: ringPx,
         overflow: 'hidden',
-        pointerEvents: 'none',
+        // the wrapper IS the outline; let it pop a bit
+        boxShadow: disabled
+          ? '0 10px 22px rgba(0,0,0,0.22)'
+          : '0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 10px 26px rgba(0,0,0,0.35)',
+        transition: 'box-shadow 180ms ease, opacity 180ms ease',
+        opacity: disabled ? 0.65 : 1,
       }}
     >
-      <VisualizerSnapshotCanvas
-        opacity={opacity}
-        fps={12}
-        sourceRect={{mode: 'random', seed, scale: 0.6}}
-        style={{filter: 'contrast(1.05) saturate(1.05)'}}
-        active
-      />
+      <div aria-hidden style={{position: 'absolute', inset: 0, pointerEvents: 'none'}}>
+        <VisualizerSnapshotCanvas
+          opacity={opacity}
+          fps={12}
+          sourceRect={{mode: 'random', seed, scale: 0.6}}
+          style={{
+            // make it “read” as a ring even at 1px
+            filter: 'contrast(1.35) saturate(1.35)',
+            mixBlendMode: 'screen',
+          }}
+          active
+        />
+        {/* tiny glow to help the ring read on dark */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background:
+              'linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.00) 55%)',
+            opacity: 0.55,
+            pointerEvents: 'none',
+          }}
+        />
+      </div>
+
+      <div style={{position: 'relative'}}>{children}</div>
     </div>
   )
 }
 
-function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => void}) {
-  const {checked, disabled, onClick} = props
+function Toggle(props: {
+  checked: boolean
+  disabled?: boolean
+  onClick?: () => void
+  mode: 'anon' | 'auth'
+}) {
+  const {checked, disabled, onClick, mode} = props
 
   const w = 56
   const h = 32
@@ -88,7 +126,7 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
   const BASE_BG_OFF = 'rgba(255,255,255,0.10)'
   const BASE_BG_ON = 'color-mix(in srgb, var(--accent) 26%, rgba(255,255,255,0.10))'
 
-  return (
+  const button = (
     <button
       type="button"
       onClick={disabled ? undefined : onClick}
@@ -99,29 +137,37 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
         width: w,
         height: h,
         borderRadius: 999,
-        border: '1px solid rgba(255,255,255,0.18)', // single outline
+        // anon mode uses the wrapper ring; auth mode keeps a simple border
+        border: mode === 'auth' ? '1px solid rgba(255,255,255,0.18)' : '0px solid transparent',
         background: checked ? BASE_BG_ON : BASE_BG_OFF,
         position: 'relative',
         padding: 0,
         outline: 'none',
         cursor: disabled ? 'default' : 'pointer',
         transition: 'background 180ms ease, box-shadow 180ms ease, border-color 180ms ease, opacity 180ms ease',
-        boxShadow: checked
-          ? '0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent), 0 10px 26px rgba(0,0,0,0.35)'
-          : '0 10px 26px rgba(0,0,0,0.28)',
+        boxShadow:
+          mode === 'anon'
+            ? 'none'
+            : checked
+              ? '0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent), 0 10px 26px rgba(0,0,0,0.35)'
+              : '0 10px 26px rgba(0,0,0,0.28)',
         opacity: disabled ? 0.65 : 1,
         overflow: 'hidden',
         display: 'grid',
         alignItems: 'center',
       }}
     >
-      {/* Subtle edge texture only (no extra stroke) */}
-      <PatternPillBorder seed={888} opacity={0.12} />
+      {/* AUTH: interior pattern lives inside the toggle (not an outline). */}
+      {mode === 'auth' && (
+        <PatternPillUnderlay
+          active
+          // stronger presence than before; off-state still readable, on-state is richer
+          opacity={checked ? 0.78 : 0.56}
+          seed={777}
+        />
+      )}
 
-      {/* Interior pattern ONLY when ON */}
-      <PatternPillUnderlay active={checked} opacity={0.58} seed={777} />
-
-      {/* specular highlight (no dark scrim) */}
+      {/* specular highlight (kept; helps the pattern read) */}
       <div
         aria-hidden
         style={{
@@ -129,10 +175,10 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
           inset: 1,
           borderRadius: 999,
           background:
-            'linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.05) 45%, rgba(255,255,255,0.00))',
+            'linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.06) 45%, rgba(255,255,255,0.00))',
           pointerEvents: 'none',
           mixBlendMode: 'normal',
-          opacity: checked ? 0.55 : 0.42,
+          opacity: checked ? 0.6 : 0.46,
           transition: 'opacity 180ms ease',
         }}
       />
@@ -157,6 +203,17 @@ function Toggle(props: {checked: boolean; disabled?: boolean; onClick?: () => vo
       />
     </button>
   )
+
+  // ANON: wrapper ring shows pattern only as the outline
+  if (mode === 'anon') {
+    return (
+      <PatternRingOutline ringPx={1} seed={888} opacity={0.72} disabled={disabled}>
+        {button}
+      </PatternRingOutline>
+    )
+  }
+
+  return button
 }
 
 function normalizeDigits(raw: string): string {
@@ -547,7 +604,12 @@ export default function ActivationGate(props: Props) {
             </div>
 
             <div style={{flex: '0 0 auto', display: 'grid', alignItems: 'center'}}>
-              <Toggle checked={toggleOn} disabled={!toggleClickable} onClick={startEmailCode} />
+              <Toggle
+                checked={toggleOn}
+                disabled={!toggleClickable}
+                onClick={startEmailCode}
+                mode={isActive ? 'auth' : 'anon'}
+              />
             </div>
           </div>
         </div>
@@ -567,7 +629,8 @@ export default function ActivationGate(props: Props) {
               maxHeight: otpOpen ? OTP_MAX_H : 0,
               opacity: otpOpen ? 1 : 0,
               marginTop: otpOpen ? 0 : -4, // helps it feel “under” the header
-              transition: 'max-height 240ms cubic-bezier(.2,.8,.2,1), opacity 160ms ease, margin-top 240ms cubic-bezier(.2,.8,.2,1)',
+              transition:
+                'max-height 240ms cubic-bezier(.2,.8,.2,1), opacity 160ms ease, margin-top 240ms cubic-bezier(.2,.8,.2,1)',
               pointerEvents: otpOpen ? 'auto' : 'none',
               willChange: 'max-height, opacity, margin-top',
             }}

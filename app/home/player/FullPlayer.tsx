@@ -668,8 +668,7 @@ export default function FullPlayer(props: {
         {browseAlbums.length ? (
           <div style={{marginTop: 18}}>
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12}}>
-              <div style={{fontSize: 12, opacity: 0.7, marginBottom: 10}}>Browse albums</div>
-              {isBrowsingAlbum ? <div style={{fontSize: 12, opacity: 0.55}}>Loading…</div> : null}
+              <div style={{fontSize: 12, opacity: 0.7, marginBottom: 10}}>More releases</div>
             </div>
 
             <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12}}>
