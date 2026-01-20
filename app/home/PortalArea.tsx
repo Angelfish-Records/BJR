@@ -196,19 +196,23 @@ function MessageBar(props: {checkout: string | null; attentionMessage: string | 
   )
 }
 
+function BodyPortal(props: {children: React.ReactNode}) {
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => setMounted(true), [])
+  if (!mounted) return null
+  if (typeof document === 'undefined') return null
+  return createPortal(props.children, document.body)
+}
+
 /**
  * Global “SpotlightAttention” veil:
- * - Blurs/obscures the *entire* app surface
- * - Blocks interaction everywhere *except* lifted elements above it (ActivationGate + MessageBar)
- * - Uses a body portal so it can’t be trapped by transforms/stacking contexts in PortalShell
+ * - Blurs/obscures the *entire* app surface (including MiniPlayer)
+ * - Blocks interaction everywhere underneath
+ * - Portaled to body so transforms/stacking contexts can’t neuter it
  */
 function SpotlightVeil(props: {active: boolean}) {
   const {active} = props
-  const [mounted, setMounted] = React.useState(false)
 
-  React.useEffect(() => setMounted(true), [])
-
-  // Optional: lock scrolling while gated
   React.useEffect(() => {
     if (!active) return
     const prev = document.documentElement.style.overflow
@@ -219,23 +223,60 @@ function SpotlightVeil(props: {active: boolean}) {
   }, [active])
 
   if (!active) return null
-  if (!mounted) return null
-  if (typeof document === 'undefined') return null
 
-  return createPortal(
-    <div
-      aria-hidden
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 1200,
-        pointerEvents: 'auto', // blocks clicks to everything underneath
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        background: 'rgba(0,0,0,0.30)',
-      }}
-    />,
-    document.body
+  return (
+    <BodyPortal>
+      <div
+        aria-hidden
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 10000,
+          pointerEvents: 'auto',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          background: 'rgba(0,0,0,0.30)',
+        }}
+      />
+    </BodyPortal>
+  )
+}
+
+/**
+ * Dock that sits ABOVE the veil and hosts the interactive spotlight UI
+ * (ActivationGate + MessageBar), unaffected by blur.
+ */
+function SpotlightDock(props: {active: boolean; gate: React.ReactNode; message: React.ReactNode}) {
+  const {active, gate, message} = props
+  if (!active) return null
+
+  return (
+    <BodyPortal>
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 11000, // > veil
+          pointerEvents: 'none',
+        }}
+      >
+        <div
+          style={{
+            padding: 12,
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'flex-start',
+          }}
+        >
+          <div style={{width: 'min(520px, 100%)', pointerEvents: 'auto'}}>
+            {gate}
+            {message}
+          </div>
+        </div>
+      </div>
+    </BodyPortal>
   )
 }
 
@@ -283,6 +324,10 @@ export default function PortalArea(props: {
   const qAlbum = sp.get('album')
   const qTrack = sp.get('track')
 
+  // Canonical: p drives surface+tab.
+  // - p=player => player surface
+  // - p=<tabId> => portal surface, tabId is p
+  // Legacy: p=portal + pt=<tabId>
   const rawP = normalizeP(sp.get('p') ?? sp.get('panel') ?? 'player')
   const legacyPt = (sp.get('pt') ?? '').trim() || null
 
@@ -290,6 +335,7 @@ export default function PortalArea(props: {
   const isPlayer = effectiveP === 'player'
   const portalTabId = isPlayer ? null : effectiveP
 
+  // autoplay (opt-in)
   const qAutoplay = getAutoplayFlag(sp)
   const qShareToken = sp.get('st') ?? sp.get('share') ?? null
 
@@ -297,6 +343,7 @@ export default function PortalArea(props: {
     replaceQuery(patch)
   }, [])
 
+  // One-time legacy migration: p=portal&pt=... -> p=<tabId>, delete pt/panel
   React.useEffect(() => {
     const curP = (sp.get('p') ?? '').trim()
     const curPt = (sp.get('pt') ?? '').trim()
@@ -306,11 +353,13 @@ export default function PortalArea(props: {
       return
     }
 
+    // If pt exists without p=player and p is empty, migrate pt -> p
     if (curPt && (!curP || curP === '')) {
       patchQuery({p: curPt, pt: null, panel: null})
       return
     }
 
+    // If pt exists while we're on player, delete it (stop pollution)
     if (curPt && curP === 'player') {
       patchQuery({pt: null})
     }
@@ -419,12 +468,14 @@ export default function PortalArea(props: {
     [patchQuery]
   )
 
+  // URL-driven album load
   React.useEffect(() => {
     if (!isPlayer) return
     if (!qAlbum) return
     if (qAlbum !== currentAlbumSlug) void onSelectAlbum(qAlbum)
   }, [isPlayer, qAlbum, currentAlbumSlug, onSelectAlbum])
 
+  // When in portal, strip player-ish params
   React.useEffect(() => {
     if (isPlayer) return
     if (qAlbum || qTrack || sp.get('t') || sp.get('autoplay')) {
@@ -432,6 +483,7 @@ export default function PortalArea(props: {
     }
   }, [isPlayer, qAlbum, qTrack, sp, patchQuery])
 
+  // Track select from URL
   React.useEffect(() => {
     if (!isPlayer) return
     if (!qTrack) return
@@ -440,6 +492,7 @@ export default function PortalArea(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlayer, qTrack])
 
+  // Autoplay one-shot (requires trusted token)
   const autoplayFiredRef = React.useRef<string | null>(null)
   React.useEffect(() => {
     if (!isPlayer) return
@@ -459,6 +512,7 @@ export default function PortalArea(props: {
     patchQuery({autoplay: null})
   }, [isPlayer, qAutoplay, qTrack, qAlbum, qShareToken, p, patchQuery])
 
+  // Persist token per album slug, restore when returning
   React.useEffect(() => {
     if (!isPlayer) return
 
@@ -477,6 +531,7 @@ export default function PortalArea(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlayer, qAlbum, currentAlbumSlug])
 
+  // MiniPlayer -> open player + optional album
   React.useEffect(() => {
     const onOpen = (ev: Event) => {
       const e = ev as CustomEvent<{albumSlug?: string | null}>
@@ -516,8 +571,24 @@ export default function PortalArea(props: {
 
   return (
     <>
-      {/* Global veil that blurs EVERYTHING underneath */}
+      {/* Blur+block EVERYTHING, including MiniPlayer */}
       <SpotlightVeil active={spotlightAttention} />
+
+      {/* Keep ActivationGate + MessageBar crisp and interactive above the veil */}
+      <SpotlightDock
+        active={spotlightAttention}
+        gate={
+          <ActivationGate
+            attentionMessage={derivedAttentionMessage}
+            canManageBilling={canManageBilling}
+            isPatron={isPatron}
+            tier={tier}
+          >
+            <div />
+          </ActivationGate>
+        }
+        message={<MessageBar checkout={checkout} attentionMessage={derivedAttentionMessage} />}
+      />
 
       <QueueBootstrapper
         albumId={hasSt ? (album?.catalogId ?? null) : (album?.catalogId ?? album?.id ?? null)}
@@ -667,39 +738,33 @@ export default function PortalArea(props: {
                   </div>
 
                   <div className="afTopBarRight">
-                    {/* Lift ABOVE the global veil */}
-                    <div
-                      className="afTopBarRightInner"
-                      style={{
-                        maxWidth: 520,
-                        minWidth: 0,
-                        position: 'relative',
-                        zIndex: 1400, // > SpotlightVeil (1200)
-                        pointerEvents: 'auto',
-                      }}
-                    >
-                      <ActivationGate
-                        attentionMessage={derivedAttentionMessage}
-                        canManageBilling={canManageBilling}
-                        isPatron={isPatron}
-                        tier={tier}
-                      >
-                        <div />
-                      </ActivationGate>
+                    <div className="afTopBarRightInner" style={{maxWidth: 520, minWidth: 0}}>
+                      {/* When spotlight is active, we render the real gate in SpotlightDock (body-portal). */}
+                      {spotlightAttention ? <div style={{height: 46}} /> : (
+                        <ActivationGate
+                          attentionMessage={derivedAttentionMessage}
+                          canManageBilling={canManageBilling}
+                          isPatron={isPatron}
+                          tier={tier}
+                        >
+                          <div />
+                        </ActivationGate>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* MessageBar also lifted above veil */}
-              <div style={{position: 'relative', zIndex: 1400, pointerEvents: 'auto'}}>
+              {/* When spotlight is active, we render the real MessageBar in SpotlightDock (body-portal). */}
+              {spotlightAttention ? null : (
                 <MessageBar checkout={checkout} attentionMessage={derivedAttentionMessage} />
-              </div>
+              )}
             </div>
           )}
         />
 
-        {/* ✅ persistent mini player (stays mounted even when portal panel is active) */}
+        {/* ✅ persistent mini player (stays mounted even when portal panel is active)
+            It is still blocked+blurred by SpotlightVeil when spotlightAttention is true. */}
         <MiniPlayerHost onExpand={() => forceSurface('player')} />
       </div>
     </>
