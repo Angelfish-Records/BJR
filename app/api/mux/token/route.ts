@@ -132,6 +132,9 @@ export async function POST(req: NextRequest) {
     (url.searchParams.get('st') ?? '').trim() ||
     (url.searchParams.get('share') ?? '').trim()
 
+// NOTE: Share tokens grant album *access*.
+// Playback is a consequence of access, not a separate capability.
+
   // ---- Capability mode via share token ----
   let tokenAllowsPlayback = false
   if (st) {
@@ -141,7 +144,7 @@ export async function POST(req: NextRequest) {
       anonId,
       resourceKind: 'album',
       resourceId: albumScopeId,
-      action: 'playback',
+      action: 'access',
     })
 
     tokenAllowsPlayback = v.ok
