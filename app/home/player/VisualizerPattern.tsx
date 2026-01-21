@@ -256,67 +256,65 @@ export function PatternRingGlow(props: {
         transform: 'translate(-50%, -50%) translateZ(0)',
         pointerEvents: 'none',
         overflow: 'visible',
-        outline:'1px solid red' 
       }}
     >
             {/* Wrapper: MUST be the thing that clips blur AND owns the blur */}
       <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: -outerPad,
-          pointerEvents: 'none',
+  aria-hidden
+  style={{
+    position: 'absolute',
+    inset: -outerPad,
+    pointerEvents: 'none',
 
-          // clip
-          overflow: 'hidden',
-          borderRadius: '50%',
-          clipPath: circleClip,
-          WebkitClipPath: circleClip,
+    // clip (prefer radius clip here)
+    overflow: 'hidden',
+    borderRadius: '50%',
+    // clipPath: circleClip,
+    // WebkitClipPath: circleClip,
 
-          // IMPORTANT: put blur here so it cannot escape the circle
-          filter: `blur(${blurPx}px) contrast(1.55) saturate(1.55) brightness(1.25)`,
-          transform: 'translateZ(0)',
-          willChange: 'filter, transform',
+    // blur/grade (still fine here)
+    filter: `blur(${blurPx}px) contrast(1.55) saturate(1.55) brightness(1.25)`,
+    transform: 'translateZ(0)',
+    willChange: 'filter, transform',
 
-          // outer fade mask
-          WebkitMaskImage: outerFade,
-          WebkitMaskRepeat: 'no-repeat',
-          WebkitMaskPosition: 'center',
-          WebkitMaskSize: '100% 100%',
+    // outer fade mask
+    WebkitMaskImage: outerFade,
+    WebkitMaskRepeat: 'no-repeat',
+    WebkitMaskPosition: 'center',
+    WebkitMaskSize: '100% 100%',
 
-          maskImage: outerFade,
-          maskRepeat: 'no-repeat',
-          maskPosition: 'center',
-          maskSize: '100% 100%',
-          outline:'1px solid yellow' 
-        }}
-      >
-        {/* XOR ring: interior removed; NO blur here anymore */}
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            pointerEvents: 'none',
+    maskImage: outerFade,
+    maskRepeat: 'no-repeat',
+    maskPosition: 'center',
+    maskSize: '100% 100%',
 
-            borderRadius: '50%',
-            clipPath: circleClip,
-            WebkitClipPath: circleClip,
+    // blend (now safely clipped)
+    mixBlendMode: 'screen',
+    isolation: 'isolate',
+  }}
+>
+  <div
+    aria-hidden
+    style={{
+      position: 'absolute',
+      inset: 0,
+      pointerEvents: 'none',
 
-            padding: outerPad,
-            boxSizing: 'border-box',
-            WebkitMaskImage:
-              'linear-gradient(#000 0 0), linear-gradient(#000 0 0)',
-            WebkitMaskClip: 'padding-box, content-box',
-            WebkitMaskComposite: 'xor',
-            WebkitMaskRepeat: 'no-repeat',
+      borderRadius: '50%',
+      clipPath: circleClip,
+      WebkitClipPath: circleClip,
 
-            mixBlendMode: 'screen',
-            transform: 'translateZ(0)',
-            willChange: 'transform',
-            outline:'1px solid magenta' 
-          }}
-        >
+      padding: outerPad,
+      boxSizing: 'border-box',
+      WebkitMaskImage: 'linear-gradient(#000 0 0), linear-gradient(#000 0 0)',
+      WebkitMaskClip: 'padding-box, content-box',
+      WebkitMaskComposite: 'xor',
+      WebkitMaskRepeat: 'no-repeat',
+
+      transform: 'translateZ(0)',
+      willChange: 'transform',
+    }}
+  >
           <VisualizerSnapshotCanvas
             opacity={opacity}
             fps={12}

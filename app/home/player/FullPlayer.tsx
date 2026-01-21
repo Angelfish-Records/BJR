@@ -435,7 +435,7 @@ export default function FullPlayer(props: {
             <PrevIcon />
           </IconCircleBtn>
 
-          <div style={{position: 'relative', width: 64, height: 64, outline:'1px solid lime'}}>
+          <div style={{position: 'relative', width: 64, height: 64}}>
             <button
               type="button"
               onClick={canPlay && !playLock ? onTogglePlay : undefined}
@@ -468,7 +468,6 @@ export default function FullPlayer(props: {
               style={{
                 position: 'absolute',
                 inset: -5,
-                outline:'1px solid cyan', 
                 borderRadius: 999,
                 zIndex: 1,
                 pointerEvents: 'none',
