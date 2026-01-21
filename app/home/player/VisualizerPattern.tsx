@@ -62,20 +62,16 @@ export function VisualizerSnapshotCanvas(props: {
   const srcRef = React.useRef<HTMLCanvasElement | null>(null)
 
   React.useEffect(() => {
-  srcRef.current = visualSurface.getCanvas()
-
-  const unsub = visualSurface.subscribe((e) => {
-    if (e.type === 'canvas') srcRef.current = e.canvas
-  })
-
-  return () => {
-    try {
-      // ensure cleanup returns void even if unsub() returns boolean
-      unsub()
-    } catch {}
-  }
-}, [])
-
+    srcRef.current = visualSurface.getCanvas()
+    const unsub = visualSurface.subscribe((e) => {
+      if (e.type === 'canvas') srcRef.current = e.canvas
+    })
+    return () => {
+      try {
+        unsub()
+      } catch {}
+    }
+  }, [])
 
   React.useEffect(() => {
     if (!active) return
@@ -111,11 +107,11 @@ export function VisualizerSnapshotCanvas(props: {
 
       const srcW = src.width || src.clientWidth || 1
       const srcH = src.height || src.clientHeight || 1
-
       const {sx, sy, sw, sh} = pickRect(srcW, srcH, sourceRect)
 
+      // Fully transparent destination each frame
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
       ctx.clearRect(0, 0, pxW, pxH)
-      ctx.globalAlpha = opacity
 
       // cover fill: keep aspect, crop if needed
       const srcAspect = sw / sh
@@ -127,21 +123,24 @@ export function VisualizerSnapshotCanvas(props: {
       let dY = 0
 
       if (dstAspect > srcAspect) {
-        // dst wider -> scale by width, crop height
         dH = Math.round(pxW / srcAspect)
         dY = Math.round((pxH - dH) / 2)
       } else {
-        // dst taller -> scale by height, crop width
         dW = Math.round(pxH * srcAspect)
         dX = Math.round((pxW - dW) / 2)
       }
+
+      // Key change: draw using SCREEN so black background in src contributes nothing
+      ctx.save()
+      ctx.globalAlpha = opacity
+      ctx.globalCompositeOperation = 'screen'
 
       try {
         ctx.drawImage(src, sx, sy, sw, sh, dX, dY, dW, dH)
       } catch {
         // ignore transient draw errors
       } finally {
-        ctx.globalAlpha = 1
+        ctx.restore()
       }
     }
 
@@ -159,6 +158,7 @@ export function VisualizerSnapshotCanvas(props: {
         height: '100%',
         display: 'block',
         pointerEvents: 'none',
+        background: 'transparent',
         ...style,
       }}
     />

@@ -61,8 +61,10 @@ function PatternRingOutline(props: {
   opacity?: number
   disabled?: boolean
   innerBg?: string
-  glowPx?: number
-  blurPx?: number
+
+  // fade controls
+  glowPx?: number // width of the fade-out region
+  blurPx?: number // blur the texture a bit so it feels like glow
 }) {
   const {
     children,
@@ -72,19 +74,24 @@ function PatternRingOutline(props: {
     opacity = 0.92,
     disabled,
     innerBg = 'rgb(10, 10, 14)',
-    glowPx = 22,
-    blurPx = 14,
+    glowPx = 18,
+    blurPx = 8,
   } = props
 
+  // We create a padded wrapper so the glow has “space” to fade out.
   const pad = ringPx + glowPx
 
-  // One simple mask: fully visible near center, fades to 0 at the outer edge.
-  // This guarantees true transparency at the boundary (no “slab”).
-  const edgeFadeMask = `radial-gradient(circle at 50% 50%,
+  // Outer mask: a rounded-rect that fades to transparent near the wrapper edge.
+  // Inner mask: a rounded-rect (the interior) that we subtract so only the ring+glow remains.
+  //
+  // We express the fade using "transparent -> black" stops; black=masked (visible) in mask space.
+  const outerFade = `radial-gradient(closest-side at 50% 50%,
     rgba(0,0,0,1) 0%,
-    rgba(0,0,0,1) 55%,
-    rgba(0,0,0,0.65) 75%,
+    rgba(0,0,0,1) calc(100% - ${glowPx}px),
     rgba(0,0,0,0) 100%)`
+
+  // The inner cutout is just a solid mask (we subtract it).
+  const innerCut = `linear-gradient(rgba(0,0,0,1), rgba(0,0,0,1))`
 
   return (
     <div
@@ -92,50 +99,48 @@ function PatternRingOutline(props: {
         position: 'relative',
         borderRadius: radius,
         padding: pad,
+        overflow: 'visible', // allow the fade to be visible (mask handles shape)
         opacity: disabled ? 0.7 : 1,
         transition: 'opacity 180ms ease',
         transform: 'translateZ(0)',
       }}
     >
-      {/* Glow field (pill geometry) */}
+      {/* SINGLE visualizer layer + pill-shaped fade mask + inner subtraction */}
       <div
         aria-hidden
         style={{
           position: 'absolute',
           inset: 0,
           borderRadius: radius,
-          overflow: 'hidden',
           pointerEvents: 'none',
+          // --- Mask composition: outerFade minus innerCut ---
+          WebkitMaskImage: `${outerFade}, ${innerCut}`,
+          WebkitMaskSize: '100% 100%, calc(100% - ' + pad * 2 + 'px) calc(100% - ' + pad * 2 + 'px)',
+          WebkitMaskPosition: 'center, center',
+          WebkitMaskRepeat: 'no-repeat, no-repeat',
+          WebkitMaskComposite: 'source-out', // Safari: subtract second mask from first
 
-          // The key: real alpha falloff at the edge.
-          WebkitMaskImage: edgeFadeMask,
-          maskImage: edgeFadeMask,
-          WebkitMaskRepeat: 'no-repeat',
-          maskRepeat: 'no-repeat',
-          WebkitMaskSize: '100% 100%',
-          maskSize: '100% 100%',
+          // Standards-ish (some browsers):
+          maskImage: `${outerFade}, ${innerCut}`,
+          maskSize: '100% 100%, calc(100% - ' + pad * 2 + 'px) calc(100% - ' + pad * 2 + 'px)',
+          maskPosition: 'center, center',
+          maskRepeat: 'no-repeat, no-repeat',
+          maskComposite: 'exclude', // subtract
+
+          filter: `blur(${blurPx}px) contrast(1.45) saturate(1.45)`,
+          mixBlendMode: 'screen',
         }}
       >
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            filter: `blur(${blurPx}px) contrast(1.45) saturate(1.45)`,
-            mixBlendMode: 'screen',
-            opacity,
-          }}
-        >
-          <VisualizerSnapshotCanvas
-            opacity={1}
-            fps={12}
-            sourceRect={{mode: 'random', seed, scale: 0.6}}
-            style={{}}
-            active
-          />
-        </div>
+        <VisualizerSnapshotCanvas
+          opacity={opacity}
+          fps={12}
+          sourceRect={{mode: 'random', seed, scale: 0.6}}
+          style={{}}
+          active
+        />
       </div>
 
-      {/* Interior block (still does the “only ring/glow outside” guarantee) */}
+      {/* Inner occluder stays: guarantees the interior never shows pattern */}
       <div
         aria-hidden
         style={{
@@ -144,18 +149,6 @@ function PatternRingOutline(props: {
           borderRadius: radius,
           background: innerBg,
           pointerEvents: 'none',
-        }}
-      />
-
-      {/* Optional crisp core ring */}
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: pad - ringPx,
-          borderRadius: radius,
-          pointerEvents: 'none',
-          boxShadow: `inset 0 0 0 ${ringPx}px rgba(255,255,255,0.14)`,
         }}
       />
 
@@ -261,7 +254,7 @@ function Toggle(props: {
   return mode === 'anon' ? (
   <PatternRingOutline ringPx={2} glowPx={26} blurPx={10} seed={888} opacity={0.92} disabled={disabled} innerBg="rgb(10, 10, 14)">
   {button}
-  </PatternRingOutline>
+</PatternRingOutline>
 
 ) : (
   button
