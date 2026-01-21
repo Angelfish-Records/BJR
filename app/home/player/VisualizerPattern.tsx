@@ -226,8 +226,16 @@ export function PatternRingGlow(props: {
 }) {
   const {size, ringPx = 2, glowPx = 22, blurPx = 8, opacity = 0.92, seed = 1337} = props
 
-  // give the blur somewhere to live
   const pad = ringPx + glowPx
+  const bleed = Math.max(2, Math.round(blurPx * 2)) // room for blur to fade out
+  const outerPad = pad + bleed
+
+  // outer fade: stay solid until the last (glow+bleed) pixels, then fade to 0
+  const outerFade = `radial-gradient(circle,
+    rgba(0,0,0,1) 0%,
+    rgba(0,0,0,1) calc(100% - ${glowPx + bleed}px),
+    rgba(0,0,0,0) 100%
+  )`
 
   return (
     <div
@@ -244,46 +252,61 @@ export function PatternRingGlow(props: {
         overflow: 'visible',
       }}
     >
-      {/* ring only (interior is truly removed) */}
+      {/* wrapper that provides space + applies outer fade mask */}
       <div
         aria-hidden
         style={{
           position: 'absolute',
-          inset: -pad,
+          inset: -outerPad,
           borderRadius: 999,
           pointerEvents: 'none',
+          overflow: 'hidden',
 
-          // ring = padding-box XOR content-box (same trick as your pill)
-          padding: pad,
-          boxSizing: 'border-box',
-          WebkitMaskImage: 'linear-gradient(#000 0 0), linear-gradient(#000 0 0)',
-          WebkitMaskClip: 'padding-box, content-box',
-          WebkitMaskComposite: 'xor',
+          WebkitMaskImage: outerFade,
           WebkitMaskRepeat: 'no-repeat',
+          WebkitMaskPosition: 'center',
+          WebkitMaskSize: '100% 100%',
 
-          // blur creates the outer fade without ever filling the center
-          filter: `blur(${blurPx}px) contrast(1.55) saturate(1.55) brightness(1.25)`,
-          mixBlendMode: 'screen',
-          transform: 'translateZ(0)',
+          maskImage: outerFade,
+          maskRepeat: 'no-repeat',
+          maskPosition: 'center',
+          maskSize: '100% 100%',
         }}
       >
-        <VisualizerSnapshotCanvas
-          opacity={opacity}
-          fps={12}
-          sourceRect={{mode: 'random', seed, scale: 0.55}}
-          active
+        {/* XOR ring: interior truly removed; blur now has room to fall off */}
+        <div
+          aria-hidden
           style={{
-            width: '100%',
-            height: '100%',
-            display: 'block',
+            position: 'absolute',
+            inset: 0,
+            borderRadius: 999,
+            pointerEvents: 'none',
+
+            padding: outerPad, // content-box becomes the original "size" hole
+            boxSizing: 'border-box',
+
+            WebkitMaskImage: 'linear-gradient(#000 0 0), linear-gradient(#000 0 0)',
+            WebkitMaskClip: 'padding-box, content-box',
+            WebkitMaskComposite: 'xor',
+            WebkitMaskRepeat: 'no-repeat',
+
+            filter: `blur(${blurPx}px) contrast(1.55) saturate(1.55) brightness(1.25)`,
+            mixBlendMode: 'screen',
+            transform: 'translateZ(0)',
           }}
-        />
+        >
+          <VisualizerSnapshotCanvas
+            opacity={opacity}
+            fps={12}
+            sourceRect={{mode: 'random', seed, scale: 0.55}}
+            active
+            style={{width: '100%', height: '100%', display: 'block'}}
+          />
+        </div>
       </div>
     </div>
   )
 }
-
-
 
 export function PatternPillUnderlay(props: {
   radius?: number
