@@ -61,9 +61,8 @@ function PatternRingOutline(props: {
   opacity?: number
   disabled?: boolean
   innerBg?: string
-
-  glowPx?: number // how far the glow extends outward
-  blurPx?: number // glow softness
+  glowPx?: number
+  blurPx?: number
 }) {
   const {
     children,
@@ -79,26 +78,42 @@ function PatternRingOutline(props: {
 
   const pad = ringPx + glowPx
 
+  // One simple mask: fully visible near center, fades to 0 at the outer edge.
+  // This guarantees true transparency at the boundary (no “slab”).
+  const edgeFadeMask = `radial-gradient(circle at 50% 50%,
+    rgba(0,0,0,1) 0%,
+    rgba(0,0,0,1) 55%,
+    rgba(0,0,0,0.65) 75%,
+    rgba(0,0,0,0) 100%)`
+
   return (
     <div
       style={{
         position: 'relative',
         borderRadius: radius,
-        padding: pad, // gives the glow room
+        padding: pad,
         opacity: disabled ? 0.7 : 1,
         transition: 'opacity 180ms ease',
         transform: 'translateZ(0)',
       }}
     >
-      {/* GLOW FIELD (pill-shaped, fades to transparent at the edges via overlay) */}
+      {/* Glow field (pill geometry) */}
       <div
         aria-hidden
         style={{
           position: 'absolute',
           inset: 0,
           borderRadius: radius,
-          overflow: 'hidden', // guarantees pill geometry (no squares)
+          overflow: 'hidden',
           pointerEvents: 'none',
+
+          // The key: real alpha falloff at the edge.
+          WebkitMaskImage: edgeFadeMask,
+          maskImage: edgeFadeMask,
+          WebkitMaskRepeat: 'no-repeat',
+          maskRepeat: 'no-repeat',
+          WebkitMaskSize: '100% 100%',
+          maskSize: '100% 100%',
         }}
       >
         <div
@@ -111,35 +126,16 @@ function PatternRingOutline(props: {
           }}
         >
           <VisualizerSnapshotCanvas
-            opacity={1} // we control opacity at the container
+            opacity={1}
             fps={12}
             sourceRect={{mode: 'random', seed, scale: 0.6}}
             style={{}}
             active
           />
         </div>
-
-        {/* EDGE KILLER: forces the outermost edge to go fully transparent */}
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            // Dark vignette that *visually* fades the glow away at the boundary
-            background: `
-              radial-gradient(circle at 50% 50%,
-                rgba(10,10,14,0) 0%,
-                rgba(10,10,14,0) 55%,
-                rgba(10,10,14,0.75) 78%,
-                rgba(10,10,14,1) 100%)
-            `,
-            pointerEvents: 'none',
-          }}
-        />
-
       </div>
 
-      {/* HARD occluder: interior is fully solid, leaving only ring+glow outside */}
+      {/* Interior block (still does the “only ring/glow outside” guarantee) */}
       <div
         aria-hidden
         style={{
@@ -151,7 +147,7 @@ function PatternRingOutline(props: {
         }}
       />
 
-      {/* OPTIONAL: crisp 2px inner ring so the “core” reads even when glow is soft */}
+      {/* Optional crisp core ring */}
       <div
         aria-hidden
         style={{
@@ -159,7 +155,7 @@ function PatternRingOutline(props: {
           inset: pad - ringPx,
           borderRadius: radius,
           pointerEvents: 'none',
-          boxShadow: `inset 0 0 0 ${ringPx}px rgba(180, 120, 255, 0.22)`,
+          boxShadow: `inset 0 0 0 ${ringPx}px rgba(255,255,255,0.14)`,
         }}
       />
 
@@ -167,7 +163,6 @@ function PatternRingOutline(props: {
     </div>
   )
 }
-
 
 function Toggle(props: {
   checked: boolean
