@@ -60,8 +60,18 @@ function PatternRingOutline(props: {
   seed?: number
   opacity?: number
   disabled?: boolean
+  // solid interior blocker color (no alpha)
+  innerBg?: string
 }) {
-  const {children, radius = 999, ringPx = 1, seed = 888, opacity = 0.9, disabled} = props
+  const {
+    children,
+    radius = 999,
+    ringPx = 2,
+    seed = 888,
+    opacity = 0.92,
+    disabled,
+    innerBg = 'rgb(10, 10, 14)',
+  } = props
 
   return (
     <div
@@ -70,7 +80,6 @@ function PatternRingOutline(props: {
         borderRadius: radius,
         padding: ringPx,
         overflow: 'hidden',
-        // keep it readable on dark backgrounds
         boxShadow: disabled
           ? '0 10px 22px rgba(0,0,0,0.22)'
           : '0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent), 0 10px 26px rgba(0,0,0,0.35)',
@@ -78,7 +87,7 @@ function PatternRingOutline(props: {
         transition: 'box-shadow 180ms ease, opacity 180ms ease',
       }}
     >
-      {/* pattern ONLY for the ring */}
+      {/* ring pattern */}
       <div aria-hidden style={{position: 'absolute', inset: 0, pointerEvents: 'none'}}>
         <VisualizerSnapshotCanvas
           opacity={opacity}
@@ -91,6 +100,18 @@ function PatternRingOutline(props: {
           active
         />
       </div>
+
+      {/* HARD occluder: kills any interior bleed, leaving ONLY the ring visible */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: ringPx,
+          borderRadius: radius,
+          background: innerBg, // must be solid (no alpha)
+          pointerEvents: 'none',
+        }}
+      />
 
       <div style={{position: 'relative'}}>{children}</div>
     </div>
@@ -112,8 +133,9 @@ function Toggle(props: {
   const travel = w - pad * 2 - knob
 
   // KEY: anon background must be opaque so the ring pattern can't show through.
-  const ANON_BG_OFF = 'rgba(0,0,0,0.72)'
-  const ANON_BG_ON = 'color-mix(in srgb, var(--accent) 24%, rgba(0,0,0,0.72))'
+  const ANON_BG_OFF = 'rgb(10, 10, 14)'
+  const ANON_BG_ON = 'color-mix(in srgb, var(--accent) 22%, rgb(10, 10, 14))'
+
 
   const AUTH_BG_OFF = 'rgba(255,255,255,0.10)'
   const AUTH_BG_ON = 'color-mix(in srgb, var(--accent) 26%, rgba(255,255,255,0.10))'
@@ -191,12 +213,12 @@ function Toggle(props: {
   )
 
   return mode === 'anon' ? (
-    <PatternRingOutline ringPx={1} seed={888} opacity={0.92} disabled={disabled}>
-      {button}
-    </PatternRingOutline>
-  ) : (
-    button
-  )
+  <PatternRingOutline ringPx={2} seed={888} opacity={0.92} disabled={disabled} innerBg={'rgb(10, 10, 14)'}>
+    {button}
+  </PatternRingOutline>
+) : (
+  button
+)
 }
 
 function normalizeDigits(raw: string): string {
