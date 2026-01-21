@@ -6,7 +6,6 @@ const THEME_OPTIONS = [
   {title: 'Gravitational Lattice', value: 'gravitational-lattice'},
   {title: 'Orbital Script', value: 'orbital-script'},
   {title: 'Phase Glass', value: 'phase-glass'},
-  {title: 'Lattice Wave', value: 'lattice-wave'},
   {title: 'Reaction Veins', value: 'reaction-veins'},
   {title: 'Pressure Glass', value: 'pressure-glass'},
   {title: 'MHD Silk', value: 'mhd-silk'},

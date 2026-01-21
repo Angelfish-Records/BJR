@@ -9,7 +9,6 @@ import {createGravitationalLatticeTheme} from './visualizer/themes/gravitational
 import {createOrbitalScriptTheme} from './visualizer/themes/orbitalScript'
 import {createPhaseGlassTheme} from './visualizer/themes/phaseGlass'
 import {createMHDSilkTheme} from './visualizer/themes/mhdSilk'
-import {createLatticeWaveTheme} from './visualizer/themes/latticeWave'
 import {createPressureGlassTheme} from './visualizer/themes/pressureGlass'
 import {createReactionVeinsTheme} from './visualizer/themes/reactionVeins'
 import {createDreamFogTheme} from './visualizer/themes/dreamFog'
@@ -51,9 +50,6 @@ function themeFromKey(key: string | undefined | null): Theme {
     case 'mhd-silk':
     case 'mhd':
       return createMHDSilkTheme()
-    case 'lattice-wave':
-    case 'lattice':
-      return createLatticeWaveTheme()
     case 'pressure-glass':
     case 'pressure':
       return createPressureGlassTheme()
