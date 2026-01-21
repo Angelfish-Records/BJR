@@ -202,79 +202,90 @@ export default function FullPlayer(props: {
   // Canonical album key used in queue context + gating
   const albumKey = effAlbum?.catalogId ?? effAlbum?.id ?? null
 
-  React.useEffect(() => {
-    if (!effAlbum?.catalogId) return
+  // ✅ stable membership test without capturing effTracks inside the effect
+const effTrackIdSet = React.useMemo(() => new Set(effTracks.map((t) => t.id)), [effTracks])
 
-    let cancelled = false
-    const ac = new AbortController()
+React.useEffect(() => {
+  if (!effAlbum?.catalogId) return
 
-    let st: string | null = null
-    try {
-      const sp = new URLSearchParams(window.location.search)
-      st = (sp.get('st') ?? sp.get('share') ?? '').trim() || null
-    } catch {
-      st = null
-    }
+  let cancelled = false
+  const ac = new AbortController()
 
-    const u = new URL('/api/access/check', window.location.origin)
-    u.searchParams.set('albumId', effAlbum.catalogId)
-    if (st) u.searchParams.set('st', st)
-
-    ;(async () => {
-      try {
-        const r = await fetch(u.toString(), {method: 'GET', signal: ac.signal})
-        const corr = r.headers.get('x-correlation-id') ?? null
-        const j = (await r.json()) as AccessPayload
-
-        if (cancelled) return
-
-        type BlockAction = 'login' | 'subscribe' | 'buy' | 'wait'
-        const asBlockAction = (v: unknown): BlockAction | undefined =>
-          v === 'login' || v === 'subscribe' || v === 'buy' || v === 'wait' ? v : undefined
-
-        const allowed = j?.allowed !== false
-        const embargoed = j?.embargoed === true
-        const releaseAt = (j?.releaseAt ?? null) as string | null
-
-        const code = typeof j?.code === 'string' && j.code.trim() ? j.code : undefined
-        const action = asBlockAction(j?.action)
-
-        const reason = typeof j?.reason === 'string' && j.reason.trim() ? j.reason : undefined
-
-        setAccess({allowed, embargoed, releaseAt, code, action: action ?? null, reason})
-
-        const player = pRef.current
-        if (!allowed) {
-  player.setBlocked(reason ?? 'Playback blocked.', {code, action, correlationId: corr})
-} else {
-  if (player.lastError || player.blockedCode || player.blockedAction || player.status === 'blocked') {
-    player.clearError()
+  let st: string | null = null
+  try {
+    const sp = new URLSearchParams(window.location.search)
+    st = (sp.get('st') ?? sp.get('share') ?? '').trim() || null
+  } catch {
+    st = null
   }
-}
-      } catch (e) {
-        if (cancelled) return
-        console.error('FullPlayer access check failed', e)
 
-        setAccess({
-          allowed: true,
-          embargoed: false,
-          releaseAt: null,
-          code: 'ACCESS_CHECK_ERROR',
-          action: null,
-          reason: 'Access check failed (client).',
-        })
+  const u = new URL('/api/access/check', window.location.origin)
+  u.searchParams.set('albumId', effAlbum.catalogId)
+  if (st) u.searchParams.set('st', st)
 
-        const player = pRef.current
-        if (player.lastError || player.blockedCode || player.blockedAction) player.clearError()
-        if (player.status === 'blocked') player.setStatusExternal('idle')
+  ;(async () => {
+    try {
+      const r = await fetch(u.toString(), {method: 'GET', signal: ac.signal})
+      const corr = r.headers.get('x-correlation-id') ?? null
+      const j = (await r.json()) as AccessPayload
+
+      if (cancelled) return
+
+      type BlockAction = 'login' | 'subscribe' | 'buy' | 'wait'
+      const asBlockAction = (v: unknown): BlockAction | undefined =>
+        v === 'login' || v === 'subscribe' || v === 'buy' || v === 'wait' ? v : undefined
+
+      const allowed = j?.allowed !== false
+      const embargoed = j?.embargoed === true
+      const releaseAt = (j?.releaseAt ?? null) as string | null
+
+      const code = typeof j?.code === 'string' && j.code.trim() ? j.code : undefined
+      const action = asBlockAction(j?.action)
+      const reason = typeof j?.reason === 'string' && j.reason.trim() ? j.reason : undefined
+
+      setAccess({allowed, embargoed, releaseAt, code, action: action ?? null, reason})
+
+      const player = pRef.current
+
+      if (!allowed) {
+        // ✅ Only hard-block if playback is (or is about to be) in THIS album.
+        const cur = player.current
+        const curInThisAlbum = Boolean(cur?.id && effTrackIdSet.has(cur.id))
+        const queueIsThisAlbum = Boolean(albumKey && player.queueContextId === albumKey)
+        const pendingInThisAlbum = Boolean(player.pendingTrackId && effTrackIdSet.has(player.pendingTrackId))
+
+        if (curInThisAlbum || queueIsThisAlbum || pendingInThisAlbum) {
+          player.setBlocked(reason ?? 'Playback blocked.', {code, action, correlationId: corr})
+        }
+      } else {
+        if (player.lastError || player.blockedCode || player.blockedAction || player.status === 'blocked') {
+          player.clearError()
+        }
       }
-    })()
+    } catch (e) {
+      if (cancelled) return
+      console.error('FullPlayer access check failed', e)
 
-    return () => {
-      cancelled = true
-      ac.abort()
+      setAccess({
+        allowed: true,
+        embargoed: false,
+        releaseAt: null,
+        code: 'ACCESS_CHECK_ERROR',
+        action: null,
+        reason: 'Access check failed (client).',
+      })
+
+      const player = pRef.current
+      if (player.lastError || player.blockedCode || player.blockedAction) player.clearError()
+      if (player.status === 'blocked') player.setStatusExternal('idle')
     }
-  }, [effAlbum?.catalogId])
+  })()
+
+  return () => {
+    cancelled = true
+    ac.abort()
+  }
+}, [effAlbum?.catalogId, albumKey, effTrackIdSet])
 
   const canPlay = effTracks.length > 0 && access?.allowed !== false
 
