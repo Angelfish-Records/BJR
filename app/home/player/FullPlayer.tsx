@@ -191,6 +191,7 @@ export default function FullPlayer(props: {
   const playingish = p.status === 'playing' || p.status === 'loading' || p.intent === 'play'
 
   const [access, setAccess] = React.useState<{
+    forCatalogId: string
     allowed: boolean
     embargoed: boolean
     releaseAt: string | null
@@ -199,98 +200,111 @@ export default function FullPlayer(props: {
     reason?: string
   } | null>(null)
 
+  // ✅ use a single scalar for deps + narrowing
+  const catalogId = effAlbum?.catalogId ?? null
+
+  // ✅ album-scoped view (prevents stale flash)
+  const accessForAlbum = catalogId && access?.forCatalogId === catalogId ? access : null
+
   // Canonical album key used in queue context + gating
   const albumKey = effAlbum?.catalogId ?? effAlbum?.id ?? null
 
   // ✅ stable membership test without capturing effTracks inside the effect
-const effTrackIdSet = React.useMemo(() => new Set(effTracks.map((t) => t.id)), [effTracks])
+  const effTrackIdSet = React.useMemo(() => new Set(effTracks.map((t) => t.id)), [effTracks])
 
-React.useEffect(() => {
-  if (!effAlbum?.catalogId) return
+  React.useEffect(() => {
+    if (!catalogId) return
 
-  let cancelled = false
-  const ac = new AbortController()
+    // ✅ kill any previous album’s access immediately (prevents 1-paint lie)
+    setAccess(null)
 
-  let st: string | null = null
-  try {
-    const sp = new URLSearchParams(window.location.search)
-    st = (sp.get('st') ?? sp.get('share') ?? '').trim() || null
-  } catch {
-    st = null
-  }
+    let cancelled = false
+    const ac = new AbortController()
 
-  const u = new URL('/api/access/check', window.location.origin)
-  u.searchParams.set('albumId', effAlbum.catalogId)
-  if (st) u.searchParams.set('st', st)
-
-  ;(async () => {
+    let st: string | null = null
     try {
-      const r = await fetch(u.toString(), {method: 'GET', signal: ac.signal})
-      const corr = r.headers.get('x-correlation-id') ?? null
-      const j = (await r.json()) as AccessPayload
-
-      if (cancelled) return
-
-      type BlockAction = 'login' | 'subscribe' | 'buy' | 'wait'
-      const asBlockAction = (v: unknown): BlockAction | undefined =>
-        v === 'login' || v === 'subscribe' || v === 'buy' || v === 'wait' ? v : undefined
-
-      const allowed = j?.allowed !== false
-      const embargoed = j?.embargoed === true
-      const releaseAt = (j?.releaseAt ?? null) as string | null
-
-      const code = typeof j?.code === 'string' && j.code.trim() ? j.code : undefined
-      const action = asBlockAction(j?.action)
-      const reason = typeof j?.reason === 'string' && j.reason.trim() ? j.reason : undefined
-
-      setAccess({allowed, embargoed, releaseAt, code, action: action ?? null, reason})
-
-      const player = pRef.current
-
-      if (!allowed) {
-        // ✅ Only hard-block if playback is (or is about to be) in THIS album.
-        const cur = player.current
-        const curInThisAlbum = Boolean(cur?.id && effTrackIdSet.has(cur.id))
-        const queueIsThisAlbum = Boolean(albumKey && player.queueContextId === albumKey)
-        const pendingInThisAlbum = Boolean(player.pendingTrackId && effTrackIdSet.has(player.pendingTrackId))
-
-        if (curInThisAlbum || queueIsThisAlbum || pendingInThisAlbum) {
-          player.setBlocked(reason ?? 'Playback blocked.', {code, action, correlationId: corr})
-        }
-      } else {
-        if (player.lastError || player.blockedCode || player.blockedAction || player.status === 'blocked') {
-          player.clearError()
-        }
-      }
-    } catch (e) {
-      if (cancelled) return
-      console.error('FullPlayer access check failed', e)
-
-      setAccess({
-        allowed: true,
-        embargoed: false,
-        releaseAt: null,
-        code: 'ACCESS_CHECK_ERROR',
-        action: null,
-        reason: 'Access check failed (client).',
-      })
-
-      const player = pRef.current
-      if (player.lastError || player.blockedCode || player.blockedAction) player.clearError()
-      if (player.status === 'blocked') player.setStatusExternal('idle')
+      const sp = new URLSearchParams(window.location.search)
+      st = (sp.get('st') ?? sp.get('share') ?? '').trim() || null
+    } catch {
+      st = null
     }
-  })()
 
-  return () => {
-    cancelled = true
-    ac.abort()
-  }
-}, [effAlbum?.catalogId, albumKey, effTrackIdSet])
+    const u = new URL('/api/access/check', window.location.origin)
+    u.searchParams.set('albumId', catalogId)
+    if (st) u.searchParams.set('st', st)
 
-  const canPlay = effTracks.length > 0 && access?.allowed !== false
+    ;(async () => {
+      try {
+        const r = await fetch(u.toString(), {method: 'GET', signal: ac.signal})
+        const corr = r.headers.get('x-correlation-id') ?? null
+        const j = (await r.json()) as AccessPayload
 
-  const releaseAtMs = access?.releaseAt ? Date.parse(access.releaseAt) : NaN
-  const showEmbargo = access?.embargoed && Number.isFinite(releaseAtMs)
+        if (cancelled) return
+
+        type BlockAction = 'login' | 'subscribe' | 'buy' | 'wait'
+        const asBlockAction = (v: unknown): BlockAction | undefined =>
+          v === 'login' || v === 'subscribe' || v === 'buy' || v === 'wait' ? v : undefined
+
+        const allowed = j?.allowed !== false
+        const embargoed = j?.embargoed === true
+        const releaseAt = (j?.releaseAt ?? null) as string | null
+
+        const code = typeof j?.code === 'string' && j.code.trim() ? j.code : undefined
+        const action = asBlockAction(j?.action)
+        const reason = typeof j?.reason === 'string' && j.reason.trim() ? j.reason : undefined
+
+        // ✅ catalogId is guaranteed string here
+        setAccess({forCatalogId: catalogId, allowed, embargoed, releaseAt, code, action: action ?? null, reason})
+
+        const player = pRef.current
+
+        if (!allowed) {
+          // ✅ Only hard-block if playback is (or is about to be) in THIS album.
+          const cur = player.current
+          const curInThisAlbum = Boolean(cur?.id && effTrackIdSet.has(cur.id))
+          const queueIsThisAlbum = Boolean(albumKey && player.queueContextId === albumKey)
+          const pendingInThisAlbum = Boolean(player.pendingTrackId && effTrackIdSet.has(player.pendingTrackId))
+
+          if (curInThisAlbum || queueIsThisAlbum || pendingInThisAlbum) {
+            player.setBlocked(reason ?? 'Playback blocked.', {code, action, correlationId: corr})
+          }
+        } else {
+          // Clear any previous gating error once access is allowed again
+          if (player.lastError || player.blockedCode || player.blockedAction || player.status === 'blocked') {
+            player.clearError()
+          }
+        }
+      } catch (e) {
+        if (cancelled) return
+        console.error('FullPlayer access check failed', e)
+
+        setAccess({
+          forCatalogId: catalogId,
+          allowed: true,
+          embargoed: false,
+          releaseAt: null,
+          code: 'ACCESS_CHECK_ERROR',
+          action: null,
+          reason: 'Access check failed (client).',
+        })
+
+        const player = pRef.current
+        if (player.lastError || player.blockedCode || player.blockedAction) player.clearError()
+        if (player.status === 'blocked') player.setStatusExternal('idle')
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      ac.abort()
+    }
+  }, [catalogId, albumKey, effTrackIdSet])
+
+  // ✅ “unknown access” disables play/glow until check resolves (prevents stale UI)
+  const canPlay = effTracks.length > 0 && accessForAlbum?.allowed !== false && accessForAlbum !== null
+
+  const releaseAtMs = accessForAlbum?.releaseAt ? Date.parse(accessForAlbum.releaseAt) : NaN
+  const showEmbargo = accessForAlbum?.embargoed && Number.isFinite(releaseAtMs)
 
   const isThisAlbumActive = Boolean(albumKey && p.queueContextId === albumKey)
   const currentIsInBrowsedAlbum = Boolean(p.current && effTracks.some((t) => t.id === p.current!.id))
@@ -476,34 +490,23 @@ React.useEffect(() => {
               <PlayPauseBig playing={playingThisAlbum} />
             </button>
 
-          {canPlay ? (
-            <div
-              style={{
-                position: 'absolute',
-                inset: -5,
-                zIndex: 1,
-                pointerEvents: 'none',
-
-                overflow: 'visible',
-                isolation: 'isolate',
-                transform: 'translateZ(0)',
-
-                // optional but nice: guarantees any child centered on the button
-                display: 'grid',
-                placeItems: 'center',
-              }}
-            >
-              <PatternRingGlow
-                size={64}
-                ringPx={1}
-                glowPx={2}
-                blurPx={4}
-                opacity={0.45}
-                seed={913}
-              />
-            </div>
-          ) : null}
-
+            {canPlay ? (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: -5,
+                  zIndex: 1,
+                  pointerEvents: 'none',
+                  overflow: 'visible',
+                  isolation: 'isolate',
+                  transform: 'translateZ(0)',
+                  display: 'grid',
+                  placeItems: 'center',
+                }}
+              >
+                <PatternRingGlow size={64} ringPx={1} glowPx={2} blurPx={4} opacity={0.45} seed={913} />
+              </div>
+            ) : null}
           </div>
 
           <IconCircleBtn
@@ -773,20 +776,19 @@ React.useEffect(() => {
                       }}
                     >
                       {isPendingPick ? (
-                      <div
-                        aria-hidden="true"
-                        className="afShimmerBlock"
-                        style={{
-                          position: 'absolute',
-                          inset: 0,
-                          borderRadius: 14,
-                          pointerEvents: 'none',
-                          opacity: 0.95,
-                        }}
-                      />
-                    ) : null}
+                        <div
+                          aria-hidden="true"
+                          className="afShimmerBlock"
+                          style={{
+                            position: 'absolute',
+                            inset: 0,
+                            borderRadius: 14,
+                            pointerEvents: 'none',
+                            opacity: 0.95,
+                          }}
+                        />
+                      ) : null}
                     </div>
-
 
                     <div style={{minWidth: 0}}>
                       <div
@@ -890,7 +892,7 @@ React.useEffect(() => {
           align-items: flex-end;
           gap: 2px;
           color: color-mix(in srgb, var(--accent) 72%, rgba(255,255,255,0.92));
-          transform: translateY(-1px);
+          transform: translateY(-2px);
         }
         .afEq i{
           display: block;
