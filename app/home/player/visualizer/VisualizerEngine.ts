@@ -1,3 +1,4 @@
+// web/app/home/player/VisualizerEngine.tsx
 'use client'
 
 import type {Theme, AudioFeatures} from './types'

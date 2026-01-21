@@ -258,51 +258,60 @@ export function PatternRingGlow(props: {
         overflow: 'visible',
       }}
     >
-      {/* Wrapper: MUST be the thing that clips blur. Force a true circle with clip-path. */}
+            {/* Wrapper: MUST be the thing that clips blur AND owns the blur */}
       <div
         aria-hidden
         style={{
           position: 'absolute',
           inset: -outerPad,
           pointerEvents: 'none',
-          overflow: 'hidden',
 
-          // force circular clipping (this is what kills the “box” for good)
+          // clip
+          overflow: 'hidden',
           borderRadius: '50%',
           clipPath: circleClip,
           WebkitClipPath: circleClip,
 
-          // circular outer fade (soft edge)
+          // IMPORTANT: put blur here so it cannot escape the circle
+          filter: `blur(${blurPx}px) contrast(1.55) saturate(1.55) brightness(1.25)`,
+          transform: 'translateZ(0)',
+          willChange: 'filter, transform',
+
+          // outer fade mask
           WebkitMaskImage: outerFade,
           WebkitMaskRepeat: 'no-repeat',
           WebkitMaskPosition: 'center',
+          WebkitMaskSize: '100% 100%',
 
           maskImage: outerFade,
           maskRepeat: 'no-repeat',
           maskPosition: 'center',
+          maskSize: '100% 100%',
         }}
       >
-        {/* XOR ring: interior truly removed; blur only affects ring pixels */}
+        {/* XOR ring: interior removed; NO blur here anymore */}
         <div
           aria-hidden
           style={{
             position: 'absolute',
             inset: 0,
             pointerEvents: 'none',
+
             borderRadius: '50%',
             clipPath: circleClip,
             WebkitClipPath: circleClip,
 
             padding: outerPad,
             boxSizing: 'border-box',
-            WebkitMaskImage: 'linear-gradient(#000 0 0), linear-gradient(#000 0 0)',
+            WebkitMaskImage:
+              'linear-gradient(#000 0 0), linear-gradient(#000 0 0)',
             WebkitMaskClip: 'padding-box, content-box',
             WebkitMaskComposite: 'xor',
             WebkitMaskRepeat: 'no-repeat',
 
-            filter: `blur(${blurPx}px) contrast(1.55) saturate(1.55) brightness(1.25)`,
             mixBlendMode: 'screen',
             transform: 'translateZ(0)',
+            willChange: 'transform',
           }}
         >
           <VisualizerSnapshotCanvas
