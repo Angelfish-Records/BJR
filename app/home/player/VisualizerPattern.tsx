@@ -234,13 +234,16 @@ export function PatternRingGlow(props: {
 
   const pad = ringPx + glowPx
 
-  // Fade mask: fully visible until near the outer edge, then fades to 0 by the extremity.
-  // Use pixel stops so it remains stable across sizes.
-  const fade = `radial-gradient(circle,
-    rgba(0,0,0,1) 0px,
-    rgba(0,0,0,1) ${pad + ringPx}px,
-    rgba(0,0,0,0) ${pad * 1.6 + ringPx}px
-  )`
+  const outerR = (size / 2) + pad          // radius of the element after inset:-pad
+const fadeStart = outerR - glowPx * 1.1  // where fade begins (bring in/out)
+const fadeEnd = outerR                  // must hit 0 alpha exactly at extremity
+
+const fade = `radial-gradient(circle,
+  rgba(0,0,0,1) 0px,
+  rgba(0,0,0,1) ${Math.max(0, Math.round(fadeStart))}px,
+  rgba(0,0,0,0) ${Math.max(1, Math.round(fadeEnd))}px
+)`
+
 
   return (
     <div
