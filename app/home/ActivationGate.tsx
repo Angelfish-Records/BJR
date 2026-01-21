@@ -86,7 +86,7 @@ function PatternRingOutline(props: {
       style={{
         position: 'relative',
         borderRadius: radius,
-        padding: pad,
+        padding: 0,
         overflow: 'visible', // allow the fade to be visible (mask handles shape)
         opacity: disabled ? 0.7 : 1,
         transition: 'opacity 180ms ease',
@@ -99,7 +99,7 @@ function PatternRingOutline(props: {
   aria-hidden
   style={{
     position: 'absolute',
-    inset: 0,
+    inset: -pad,
     borderRadius: radius,
     pointerEvents: 'none',
 
@@ -137,7 +137,7 @@ function PatternRingOutline(props: {
   aria-hidden
   style={{
     position: 'absolute',
-    inset: pad,
+    inset: 0,
     borderRadius: radius,
     background: innerBg,
     pointerEvents: 'none',
@@ -519,29 +519,46 @@ export default function ActivationGate(props: Props) {
           >
             <div style={{flex: '1 1 auto', minWidth: 0, maxWidth: EMAIL_W}}>
               {!isActive ? (
-                <input
-                  type="email"
-                  placeholder="you@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value.trim())}
-                  style={{
-                    width: '100%',
-                    minWidth: 0,
-                    padding: '11px 14px',
-                    borderRadius: 999,
-                    border: '1px solid rgba(255,255,255,0.18)',
-                    background: 'rgba(0,0,0,0.35)',
-                    color: 'rgba(255,255,255,0.92)',
-                    outline: 'none',
-                    textAlign: 'left',
-                    boxShadow: needsAttention
-                      ? `0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent),
-                         0 0 26px color-mix(in srgb, var(--accent) 40%, transparent),
-                         0 14px 30px rgba(0,0,0,0.22)`
-                      : '0 14px 30px rgba(0,0,0,0.22)',
-                    transition: 'box-shadow 220ms ease',
-                  }}
-                />
+                <PatternRingOutline
+                  ringPx={2}
+                  glowPx={18}      // smaller than toggle’s 26 so it doesn’t look “bulkier”
+                  blurPx={10}
+                  seed={888}
+                  opacity={0.92}
+                  disabled={!clerkLoaded}
+                  innerBg="rgb(10, 10, 14)"
+                >
+                  <input
+                    type="email"
+                    placeholder="you@email.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value.trim())}
+                    style={{
+                      width: '100%',
+                      minWidth: 0,
+
+                      // match toggle height
+                      height: 32,
+                      padding: '0 14px',
+
+                      borderRadius: 999,
+                      border: '0px solid transparent', // ring comes from wrapper
+                      background: 'rgb(10, 10, 14)',   // must be opaque to prevent pattern bleed
+                      color: 'rgba(255,255,255,0.92)',
+                      outline: 'none',
+                      textAlign: 'left',
+
+                      boxShadow: needsAttention
+                        ? `0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent),
+                          0 0 26px color-mix(in srgb, var(--accent) 40%, transparent),
+                          0 14px 30px rgba(0,0,0,0.22)`
+                        : '0 14px 30px rgba(0,0,0,0.22)',
+                      transition: 'box-shadow 220ms ease',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </PatternRingOutline>
+
               ) : (
                 <div
                   aria-label="Signed in identity"
