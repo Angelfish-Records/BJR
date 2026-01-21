@@ -477,9 +477,14 @@ export default function ActivationGate(props: Props) {
     <div
       style={{
         position: 'relative',
-        display: 'grid',
-        justifyItems: 'center',
-        alignContent: 'end',
+        width: '100%',
+        minWidth: 0,
+
+        // bottom-align within whatever height the parent gives us
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-end',
+        justifyContent: 'flex-end',
       }}
     >
       <div
@@ -671,53 +676,63 @@ export default function ActivationGate(props: Props) {
 
         {/* OTP TRAY (always mounted when logged out; animated open/close) */}
         {!isActive && (
-          <div
-            style={{
-              width: '100%',
-              borderRadius: 16,
-              border: '1px solid rgba(255,255,255,0.14)',
-              background: 'rgba(0,0,0,0.28)',
-              padding: 12,
-              boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
-              position: 'relative',
-              overflow: 'hidden',
-              maxHeight: otpOpen ? OTP_MAX_H : 0,
-              opacity: otpOpen ? 1 : 0,
-              marginTop: otpOpen ? 0 : -4, // helps it feel “under” the header
-              transition:
-                'max-height 240ms cubic-bezier(.2,.8,.2,1), opacity 160ms ease, margin-top 240ms cubic-bezier(.2,.8,.2,1)',
-              pointerEvents: otpOpen ? 'auto' : 'none',
-              willChange: 'max-height, opacity, margin-top',
-            }}
-          >
-            <div
-              style={{
-                opacity: otpOpen ? 1 : 0,
-                transform: otpOpen ? 'translateY(0px)' : 'translateY(-6px)',
-                transition: 'opacity 160ms ease, transform 220ms cubic-bezier(.2,.8,.2,1)',
-                display: 'grid',
-                gap: 10,
-                justifyItems: 'center',
-              }}
-            >
-              <OtpBoxes
-                maxWidth={EMAIL_W}
-                value={code}
-                onChange={(next) => setCode(normalizeDigits(next))}
-                disabled={isVerifying}
-              />
+  <div
+    style={{
+      width: '100%',
+      borderRadius: 16,
 
-              {(isSending || !flow) && <div style={{fontSize: 12, opacity: 0.7}}>Sending code…</div>}
-              {isVerifying && <div style={{fontSize: 12, opacity: 0.7}}>Verifying…</div>}
+      // IMPORTANT: when closed, remove all “chrome” so it occupies ~0px
+      border: otpOpen ? '1px solid rgba(255,255,255,0.14)' : '0px solid transparent',
+      background: otpOpen ? 'rgba(0,0,0,0.28)' : 'transparent',
+      padding: otpOpen ? 12 : 0,
+      boxShadow: otpOpen ? '0 16px 40px rgba(0,0,0,0.35)' : 'none',
 
-              {error && (
-                <div style={{fontSize: 12, opacity: 0.88, color: '#ffb4b4', textAlign: 'center'}}>
-                  {error}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+      position: 'relative',
+      overflow: 'hidden',
+
+      // collapse
+      maxHeight: otpOpen ? OTP_MAX_H : 0,
+      opacity: otpOpen ? 1 : 0,
+
+      // don’t “pull” the header upward when closed
+      marginTop: otpOpen ? 8 : 0,
+
+      transition:
+        'max-height 240ms cubic-bezier(.2,.8,.2,1), opacity 160ms ease, margin-top 240ms cubic-bezier(.2,.8,.2,1), padding 240ms cubic-bezier(.2,.8,.2,1), border-width 240ms cubic-bezier(.2,.8,.2,1), box-shadow 240ms ease, background 240ms ease',
+
+      pointerEvents: otpOpen ? 'auto' : 'none',
+      willChange: 'max-height, opacity, margin-top, padding',
+    }}
+  >
+    <div
+      style={{
+        opacity: otpOpen ? 1 : 0,
+        transform: otpOpen ? 'translateY(0px)' : 'translateY(-6px)',
+        transition: 'opacity 160ms ease, transform 220ms cubic-bezier(.2,.8,.2,1)',
+        display: 'grid',
+        gap: 10,
+        justifyItems: 'center',
+      }}
+    >
+      <OtpBoxes
+        maxWidth={EMAIL_W}
+        value={code}
+        onChange={(next) => setCode(normalizeDigits(next))}
+        disabled={isVerifying}
+      />
+
+      {(isSending || !flow) && <div style={{fontSize: 12, opacity: 0.7}}>Sending code…</div>}
+      {isVerifying && <div style={{fontSize: 12, opacity: 0.7}}>Verifying…</div>}
+
+      {error && (
+        <div style={{fontSize: 12, opacity: 0.88, color: '#ffb4b4', textAlign: 'center'}}>
+          {error}
+        </div>
+      )}
+    </div>
+  </div>
+)}
+
 
         {isActive && <>{children}</>}
       </div>
