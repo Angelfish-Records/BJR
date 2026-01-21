@@ -52,8 +52,11 @@ export type PlayerState = {
   blockedCode?: string
   blockedAction?: 'login' | 'subscribe' | 'buy' | 'wait'
   blockedCorrelationId?: string | null
+}
 
-
+type PlayerDerivedUX = {
+  shouldBlur: boolean
+  shouldShowTopbarBlockMessage: boolean
 }
 
 type PlayerActions = {
@@ -93,9 +96,10 @@ type PlayerActions = {
   ) => void
   clearError: () => void
   bumpReload: () => void
+  
 }
 
-const PlayerCtx = React.createContext<(PlayerState & PlayerActions) | null>(null)
+const PlayerCtx = React.createContext<(PlayerState & PlayerActions & PlayerDerivedUX) | null>(null)
 
 function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n))
@@ -137,6 +141,13 @@ function primeDurationById(prev: Record<string, number>, tracks: PlayerTrack[]):
   return next
 }
 
+const BLUR_BLOCK_CODES = new Set([
+  'AUTH_REQUIRED',
+  'ACTIVATION_REQUIRED',
+  'NO_ENTITLEMENT',
+  'PAYWALL',
+])
+
 export function PlayerStateProvider(props: {children: React.ReactNode}) {
   const [state, setState] = React.useState<PlayerState>({
     status: 'idle',
@@ -171,9 +182,16 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
     durationById: {},
   })
 
-  const api: PlayerState & PlayerActions = React.useMemo(() => {
+    
+  const api: PlayerState & PlayerActions & PlayerDerivedUX = React.useMemo(() => {
+    const shouldBlur =
+      state.status === 'blocked' && BLUR_BLOCK_CODES.has(state.blockedCode ?? '')
     return {
       ...state,
+      
+        // ✅ derived UX flags (do NOT treat embargo as global UX)
+        shouldBlur,
+        shouldShowTopbarBlockMessage: shouldBlur,
 
       setIntent: (i: Intent) =>
         setState((s) => ({
@@ -219,6 +237,7 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
             }
           }
 
+          
           const nextTrack = hydrateTrack(rawNext, s.durationById)
           const sameTrack = Boolean(s.current && s.current.id === nextTrack.id)
 

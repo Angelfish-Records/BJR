@@ -369,7 +369,9 @@ export default function PortalArea(props: {
     checkout === 'success' && !isSignedIn ? 'Payment confirmed – sign in to access your purchased content.' : null
 
   const derivedAttentionMessage =
-    attentionMessage ?? purchaseAttention ?? (p.status === 'blocked' ? (p.lastError ?? null) : null)
+    attentionMessage ??
+    purchaseAttention ??
+    (p.shouldShowTopbarBlockMessage ? (p.lastError ?? null) : null)
 
   const spotlightAttention = !!derivedAttentionMessage
 
