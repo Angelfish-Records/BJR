@@ -226,17 +226,25 @@ export function PatternRingGlow(props: {
 }) {
   const {size, ringPx = 2, glowPx = 22, blurPx = 8, opacity = 0.92, seed = 1337} = props
 
+  // ring thickness + outward fade region
   const pad = ringPx + glowPx
-  const bleed = Math.max(2, Math.round(blurPx * 2)) // room for blur to fade out
+
+  // extra room so the blur can fully decay before any clipping
+  const bleed = Math.max(2, Math.round(blurPx * 2))
   const outerPad = pad + bleed
 
-  // AFTER (true circular falloff: 100% == closest side, not the corners)
-const outerFade = `radial-gradient(circle closest-side,
-  rgba(0,0,0,1) 0%,
-  rgba(0,0,0,1) calc(100% - ${glowPx + bleed}px),
-  rgba(0,0,0,0) 100%
-)`
+  // Pixel-precise outer fade mask (avoids %/calc quirks in mask contexts)
+  // Wrapper box is (size + 2*outerPad), so its radius is:
+  const R = size / 2 + outerPad
+  const fadeWidth = glowPx + bleed
+  const fadeStart = Math.max(0, R - fadeWidth)
 
+  const outerFade = `radial-gradient(circle at center,
+    rgba(0,0,0,1) 0px,
+    rgba(0,0,0,1) ${Math.round(fadeStart)}px,
+    rgba(0,0,0,0) ${Math.round(R)}px,
+    rgba(0,0,0,0) 100%
+  )`
 
   return (
     <div
@@ -253,39 +261,37 @@ const outerFade = `radial-gradient(circle closest-side,
         overflow: 'visible',
       }}
     >
-      {/* wrapper that provides space + applies outer fade mask */}
+      {/* Wrapper: provides space + circular outer fade so blur never looks boxy */}
       <div
         aria-hidden
         style={{
           position: 'absolute',
           inset: -outerPad,
-          borderRadius: 999,
+          borderRadius: '50%',
           pointerEvents: 'none',
           overflow: 'hidden',
 
           WebkitMaskImage: outerFade,
           WebkitMaskRepeat: 'no-repeat',
           WebkitMaskPosition: 'center',
-          WebkitMaskSize: '100% 100%',
 
           maskImage: outerFade,
           maskRepeat: 'no-repeat',
           maskPosition: 'center',
-          maskSize: '100% 100%',
         }}
       >
-        {/* XOR ring: interior truly removed; blur now has room to fall off */}
+        {/* XOR ring: interior is truly removed; we only ever blur ring pixels */}
         <div
           aria-hidden
           style={{
             position: 'absolute',
             inset: 0,
-            borderRadius: 999,
+            borderRadius: '50%',
             pointerEvents: 'none',
 
-            padding: outerPad, // content-box becomes the original "size" hole
+            // ring = padding-box XOR content-box
+            padding: outerPad,
             boxSizing: 'border-box',
-
             WebkitMaskImage: 'linear-gradient(#000 0 0), linear-gradient(#000 0 0)',
             WebkitMaskClip: 'padding-box, content-box',
             WebkitMaskComposite: 'xor',
@@ -308,6 +314,7 @@ const outerFade = `radial-gradient(circle closest-side,
     </div>
   )
 }
+
 
 export function PatternPillUnderlay(props: {
   radius?: number

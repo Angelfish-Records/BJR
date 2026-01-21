@@ -8,6 +8,10 @@ import {createNebulaTheme} from './visualizer/themes/nebula'
 import {createGravitationalLatticeTheme} from './visualizer/themes/gravitationalLattice'
 import {createOrbitalScriptTheme} from './visualizer/themes/orbitalScript'
 import {createPhaseGlassTheme} from './visualizer/themes/phaseGlass'
+import {createMHDSilkTheme} from './visualizer/themes/mhdSilk'
+import {createLatticeWaveTheme} from './visualizer/themes/latticeWave'
+import {createPressureGlassTheme} from './visualizer/themes/pressureGlass'
+import {createReactionVeinsTheme} from './visualizer/themes/reactionVeins'
 import {audioSurface} from './audioSurface'
 import {mediaSurface, type StageVariant} from './mediaSurface'
 import type {Theme} from './visualizer/types'
@@ -24,6 +28,18 @@ function themeFromKey(key: string | undefined | null): Theme {
     case 'phase-glass':
     case 'glass':
       return createPhaseGlassTheme()
+    case 'mhd-silk':
+    case 'mhd':
+      return createMHDSilkTheme()
+    case 'lattice-wave':
+    case 'lattice':
+      return createLatticeWaveTheme()
+    case 'pressure-glass':
+    case 'pressure':
+      return createPressureGlassTheme()
+    case 'reaction-veins':
+    case 'veins':
+      return createReactionVeinsTheme()
     case 'nebula':
     default:
       return createNebulaTheme()
