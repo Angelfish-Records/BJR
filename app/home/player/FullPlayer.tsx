@@ -482,10 +482,10 @@ export default function FullPlayer(props: {
             >
               <PatternRingGlow
                 size={64}
-                ringPx={2}
-                glowPx={8}
+                ringPx={1}
+                glowPx={5}
                 blurPx={5}
-                opacity={0.92}
+                opacity={0.85}
                 seed={913}
               />
             </div>
