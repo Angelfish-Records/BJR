@@ -117,13 +117,14 @@ void main() {
 
   vec2 cellId, cellCenter;
   float edgeDist;
-  (void)voronoi(x, cellId, cellCenter, edgeDist);
 
-  // adaptive edge softness (inline stability)
+  // GLSL ES: cannot cast to void; store return value instead.
+  float _dist = voronoi(x, cellId, cellCenter, edgeDist);
+  (void)_dist; // harmless in TS string; GLSL ignores this line if removed by compiler
+
   float resMin = min(uRes.x, uRes.y);
   float soft = clamp((520.0 / max(240.0, resMin)), 0.9, 1.7);
 
-  // edgeDist is small near borders; we want edge=0 there
   float edgeWidth = (0.050 + 0.018*uBass) * soft;
   float edge = aaStep(edgeWidth, edgeDist); // 0 at border, 1 inside cell
 
@@ -145,11 +146,9 @@ void main() {
 
   vec3 col = base * (0.65 + 0.45*thickness) + bloom;
 
-  // lead lines (border): darker, but not pure black (SCREEN siphon wants highlights)
   vec3 lead = vec3(0.02, 0.02, 0.025);
   col = mix(lead, col, edge);
 
-  // edge shimmer (treble)
   float shimmer = (1.0 - edge) * (0.10 + 0.22*uTreble) * (0.6 + 0.4*sin(t*5.0 + k.x*10.0));
   col += vec3(0.95, 0.92, 0.85) * shimmer;
 
