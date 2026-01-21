@@ -49,9 +49,6 @@ function looksLikeNoAccountError(err: unknown): boolean {
 
 /**
  * Patterned OUTLINE ring: a wrapper that shows the visualizer snapshot only in the 1px ring.
- * Achieved by:
- * - wrapper has the pattern background
- * - inner button is inset by 1px, covering the interior
  */
 function PatternRingOutline(props: {
   children: React.ReactNode
@@ -61,10 +58,8 @@ function PatternRingOutline(props: {
   opacity?: number
   disabled?: boolean
   innerBg?: string
-
-  // fade controls
-  glowPx?: number // width of the fade-out region
-  blurPx?: number // blur the texture a bit so it feels like glow
+  glowPx?: number
+  blurPx?: number
 }) {
   const {
     children,
@@ -78,7 +73,6 @@ function PatternRingOutline(props: {
     blurPx = 8,
   } = props
 
-  // We create a padded wrapper so the glow has “space” to fade out.
   const pad = ringPx + glowPx
 
   return (
@@ -87,63 +81,48 @@ function PatternRingOutline(props: {
         position: 'relative',
         borderRadius: radius,
         padding: 0,
-        overflow: 'visible', // allow the fade to be visible (mask handles shape)
+        overflow: 'visible',
         opacity: disabled ? 0.7 : 1,
         transition: 'opacity 180ms ease',
         transform: 'translateZ(0)',
       }}
     >
-      {/* SINGLE visualizer layer + pill-shaped fade mask + inner subtraction */}
-    {/* visualizer texture constrained to ring only (no interior pixels to blur) */}
-<div
-  aria-hidden
-  style={{
-    position: 'absolute',
-    inset: -pad,
-    borderRadius: radius,
-    pointerEvents: 'none',
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: -pad,
+          borderRadius: radius,
+          pointerEvents: 'none',
+          padding: pad,
+          boxSizing: 'border-box',
+          WebkitMaskImage: 'linear-gradient(#000 0 0), linear-gradient(#000 0 0)',
+          WebkitMaskClip: 'padding-box, content-box',
+          WebkitMaskComposite: 'xor',
+          WebkitMaskRepeat: 'no-repeat',
+          filter: `blur(${blurPx}px) contrast(1.45) saturate(1.45)`,
+          mixBlendMode: 'screen',
+        }}
+      >
+        <VisualizerSnapshotCanvas
+          opacity={opacity}
+          fps={12}
+          sourceRect={{mode: 'random', seed, scale: 0.6}}
+          active
+          style={{width: '100%', height: '100%', display: 'block'}}
+        />
+      </div>
 
-    // This is the key: ring = padding-box XOR content-box
-    padding: pad,
-    boxSizing: 'border-box',
-
-    WebkitMaskImage:
-      'linear-gradient(#000 0 0), linear-gradient(#000 0 0)',
-    WebkitMaskClip: 'padding-box, content-box',
-    WebkitMaskComposite: 'xor',
-    WebkitMaskRepeat: 'no-repeat',
-
-    // (optional) soften the outer edge a touch
-    // If you want more fade, increase blurPx; the ring stays clean because interior is truly cut out.
-    filter: `blur(${blurPx}px) contrast(1.45) saturate(1.45)`,
-    mixBlendMode: 'screen',
-  }}
->
-  <VisualizerSnapshotCanvas
-    opacity={opacity}
-    fps={12}
-    sourceRect={{mode: 'random', seed, scale: 0.6}}
-    active
-    style={{
-      width: '100%',
-      height: '100%',
-      display: 'block',
-    }}
-  />
-</div>
-
-{/* optional interior fill (pure aesthetic, not functional) */}
-<div
-  aria-hidden
-  style={{
-    position: 'absolute',
-    inset: 0,
-    borderRadius: radius,
-    background: innerBg,
-    pointerEvents: 'none',
-  }}
-/>
-
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: 0,
+          borderRadius: radius,
+          background: innerBg,
+          pointerEvents: 'none',
+        }}
+      />
 
       <div style={{position: 'relative'}}>{children}</div>
     </div>
@@ -164,10 +143,8 @@ function Toggle(props: {
   const knob = h - pad * 2
   const travel = w - pad * 2 - knob
 
-  // KEY: anon background must be opaque so the ring pattern can't show through.
   const ANON_BG_OFF = 'rgb(10, 10, 14)'
   const ANON_BG_ON = 'color-mix(in srgb, var(--accent) 22%, rgb(10, 10, 14))'
-
 
   const AUTH_BG_OFF = 'rgba(255,255,255,0.10)'
   const AUTH_BG_ON = 'color-mix(in srgb, var(--accent) 26%, rgba(255,255,255,0.10))'
@@ -183,9 +160,15 @@ function Toggle(props: {
         width: w,
         height: h,
         borderRadius: 999,
-        // anon ring comes from wrapper; remove border to avoid double-outline and muddy edge
         border: mode === 'anon' ? '0px solid transparent' : '1px solid rgba(255,255,255,0.18)',
-        background: mode === 'anon' ? (checked ? ANON_BG_ON : ANON_BG_OFF) : checked ? AUTH_BG_ON : AUTH_BG_OFF,
+        background:
+          mode === 'anon'
+            ? checked
+              ? ANON_BG_ON
+              : ANON_BG_OFF
+            : checked
+              ? AUTH_BG_ON
+              : AUTH_BG_OFF,
         position: 'relative',
         padding: 0,
         outline: 'none',
@@ -203,12 +186,10 @@ function Toggle(props: {
         alignItems: 'center',
       }}
     >
-      {/* ONLY auth gets interior visualizer pattern */}
       {mode === 'auth' && (
         <PatternPillUnderlay active opacity={checked ? 0.78 : 0.56} seed={777} />
       )}
 
-      {/* highlight */}
       <div
         aria-hidden
         style={{
@@ -223,7 +204,6 @@ function Toggle(props: {
         }}
       />
 
-      {/* knob */}
       <div
         aria-hidden
         style={{
@@ -245,13 +225,20 @@ function Toggle(props: {
   )
 
   return mode === 'anon' ? (
-  <PatternRingOutline ringPx={2} glowPx={26} blurPx={10} seed={888} opacity={0.92} disabled={disabled} innerBg="rgb(10, 10, 14)">
-  {button}
-</PatternRingOutline>
-
-) : (
-  button
-)
+    <PatternRingOutline
+      ringPx={2}
+      glowPx={26}
+      blurPx={10}
+      seed={888}
+      opacity={0.92}
+      disabled={disabled}
+      innerBg="rgb(10, 10, 14)"
+    >
+      {button}
+    </PatternRingOutline>
+  ) : (
+    button
+  )
 }
 
 function normalizeDigits(raw: string): string {
@@ -348,9 +335,50 @@ function OtpBoxes(props: {
   )
 }
 
+function Tray(props: {
+  open: boolean
+  maxH: number
+  children: React.ReactNode
+}) {
+  const {open, maxH, children} = props
+  return (
+    <div
+      style={{
+        width: '100%',
+        borderRadius: 16,
+        border: open ? '1px solid rgba(255,255,255,0.14)' : '0px solid transparent',
+        background: open ? 'rgba(0,0,0,0.28)' : 'transparent',
+        padding: open ? 12 : 0,
+        boxShadow: open ? '0 16px 40px rgba(0,0,0,0.35)' : 'none',
+        position: 'relative',
+        overflow: 'hidden',
+        maxHeight: open ? maxH : 0,
+        opacity: open ? 1 : 0,
+        marginTop: open ? 8 : 0,
+        transition:
+          'max-height 240ms cubic-bezier(.2,.8,.2,1), opacity 160ms ease, margin-top 240ms cubic-bezier(.2,.8,.2,1), padding 240ms cubic-bezier(.2,.8,.2,1), border-width 240ms cubic-bezier(.2,.8,.2,1), box-shadow 240ms ease, background 240ms ease',
+        pointerEvents: open ? 'auto' : 'none',
+        willChange: 'max-height, opacity, margin-top, padding',
+      }}
+    >
+      <div
+        style={{
+          opacity: open ? 1 : 0,
+          transform: open ? 'translateY(0px)' : 'translateY(-6px)',
+          transition: 'opacity 160ms ease, transform 220ms cubic-bezier(.2,.8,.2,1)',
+          display: 'grid',
+          gap: 10,
+          justifyItems: 'stretch',
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  )
+}
+
 export default function ActivationGate(props: Props) {
-  const {children, attentionMessage = null, canManageBilling = false, isPatron = false, tier = null} =
-    props
+  const {children, attentionMessage = null, canManageBilling = false, isPatron = false, tier = null} = props
   const router = useRouter()
 
   const {isSignedIn} = useAuth()
@@ -367,19 +395,25 @@ export default function ActivationGate(props: Props) {
   const [isVerifying, setIsVerifying] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // NEW: billing tray
+  const [billingOpen, setBillingOpen] = useState(false)
+
   const isActive = !!isSignedIn
   const clerkLoaded = signInLoaded && signUpLoaded
 
   const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), [email])
 
   const displayEmail =
-    (user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? '') ||
-    email
+    (user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? '') || email
 
   const EMAIL_W = 360
   const needsAttention = !isActive && !!attentionMessage
 
   const toggleClickable = !isActive && phase === 'idle' && emailValid && clerkLoaded
+
+  const tierLower = (tier ?? '').toLowerCase()
+  const isPartner = tierLower.includes('partner')
+  const isFriend = !isPatron && !isPartner
 
   async function startEmailCode() {
     if (!clerkLoaded || !emailValid) return
@@ -428,10 +462,7 @@ export default function ActivationGate(props: Props) {
     try {
       if (flow === 'signin') {
         if (!signIn || !setActiveSignIn) throw new Error('Sign-in not ready')
-        const result = await signIn.attemptFirstFactor({
-          strategy: 'email_code',
-          code: submitCode,
-        })
+        const result = await signIn.attemptFirstFactor({strategy: 'email_code', code: submitCode})
         if (result.status === 'complete') {
           const sid = (result as unknown as {createdSessionId?: string}).createdSessionId
           if (sid) await setActiveSignIn({session: sid})
@@ -465,13 +496,18 @@ export default function ActivationGate(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, phase])
 
-  // Toggle tracks auth + flow state (and becomes clickable only in the idle/email-valid state).
+  // close billing tray if you sign out (or lose manage rights)
+  useEffect(() => {
+    if (!isActive || !canManageBilling) setBillingOpen(false)
+  }, [isActive, canManageBilling])
+
   const toggleOn = isActive || phase === 'code' || isSending || isVerifying
   const otpOpen = !isActive && phase === 'code'
 
-  // We keep DOM stable: the OTP tray is always mounted (when logged out),
-  // and we animate its maxHeight/opacity so the header never “teleports”.
-  const OTP_MAX_H = 170 // roomy enough for boxes + messages
+  const OTP_MAX_H = 170
+  const BILLING_MAX_H = 210
+
+  const showBillingTrigger = isActive && canManageBilling
 
   return (
     <div
@@ -479,8 +515,6 @@ export default function ActivationGate(props: Props) {
         position: 'relative',
         width: '100%',
         minWidth: 0,
-
-        // bottom-align within whatever height the parent gives us
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'flex-end',
@@ -505,7 +539,7 @@ export default function ActivationGate(props: Props) {
           style={{
             position: 'relative',
             zIndex: 42,
-            transform: otpOpen ? 'translateY(-6px)' : 'translateY(0px)', // subtle lift (no flying away)
+            transform: otpOpen ? 'translateY(-6px)' : 'translateY(0px)',
             transition: 'transform 220ms cubic-bezier(.2,.8,.2,1)',
             willChange: 'transform',
             width: '100%',
@@ -526,7 +560,7 @@ export default function ActivationGate(props: Props) {
               {!isActive ? (
                 <PatternRingOutline
                   ringPx={2}
-                  glowPx={18}      // smaller than toggle’s 26 so it doesn’t look “bulkier”
+                  glowPx={18}
                   blurPx={10}
                   seed={888}
                   opacity={0.92}
@@ -541,18 +575,14 @@ export default function ActivationGate(props: Props) {
                     style={{
                       width: '100%',
                       minWidth: 0,
-
-                      // match toggle height
                       height: 32,
                       padding: '0 14px',
-
                       borderRadius: 999,
-                      border: '0px solid transparent', // ring comes from wrapper
-                      background: 'rgb(10, 10, 14)',   // must be opaque to prevent pattern bleed
+                      border: '0px solid transparent',
+                      background: 'rgb(10, 10, 14)',
                       color: 'rgba(255,255,255,0.92)',
                       outline: 'none',
                       textAlign: 'left',
-
                       boxShadow: needsAttention
                         ? `0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent),
                           0 0 26px color-mix(in srgb, var(--accent) 40%, transparent),
@@ -563,14 +593,13 @@ export default function ActivationGate(props: Props) {
                     }}
                   />
                 </PatternRingOutline>
-
               ) : (
                 <div
                   aria-label="Signed in identity"
                   style={{
                     width: '100%',
                     minWidth: 0,
-                    height: 32, // match the toggle height
+                    height: 32,
                     display: 'grid',
                     gridTemplateRows: '1fr 1fr',
                     alignItems: 'center',
@@ -598,8 +627,7 @@ export default function ActivationGate(props: Props) {
                         display: 'grid',
                         placeItems: 'center',
                         background: 'color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.10))',
-                        boxShadow:
-                          '0 10px 18px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.18)',
+                        boxShadow: '0 10px 18px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.18)',
                         flex: '0 0 auto',
                       }}
                     >
@@ -651,12 +679,26 @@ export default function ActivationGate(props: Props) {
                       </>
                     ) : null}
 
-                    {canManageBilling ? (
-                      isPatron ? (
-                        <CancelSubscriptionButton variant="link" label="Cancel subscription" />
-                      ) : (
-                        <SubscribeButton loggedIn={true} variant="link" label="Become a Patron" />
-                      )
+                    {showBillingTrigger ? (
+                      <button
+                        type="button"
+                        onClick={() => setBillingOpen((v) => !v)}
+                        style={{
+                          appearance: 'none',
+                          border: 0,
+                          background: 'transparent',
+                          padding: 0,
+                          margin: 0,
+                          cursor: 'pointer',
+                          color: 'rgba(255,255,255,0.84)',
+                          textDecoration: 'underline',
+                          textUnderlineOffset: 3,
+                          textDecorationColor: 'rgba(255,255,255,0.28)',
+                        }}
+                        title="View membership options"
+                      >
+                        {billingOpen ? 'Close' : isFriend ? 'Membership' : 'Manage membership'}
+                      </button>
                     ) : null}
                   </div>
                 </div>
@@ -674,65 +716,78 @@ export default function ActivationGate(props: Props) {
           </div>
         </div>
 
-        {/* OTP TRAY (always mounted when logged out; animated open/close) */}
+        {/* OTP TRAY */}
         {!isActive && (
-  <div
-    style={{
-      width: '100%',
-      borderRadius: 16,
+          <Tray open={otpOpen} maxH={OTP_MAX_H}>
+            <div style={{display: 'grid', gap: 10, justifyItems: 'center'}}>
+              <OtpBoxes
+                maxWidth={EMAIL_W}
+                value={code}
+                onChange={(next) => setCode(normalizeDigits(next))}
+                disabled={isVerifying}
+              />
 
-      // IMPORTANT: when closed, remove all “chrome” so it occupies ~0px
-      border: otpOpen ? '1px solid rgba(255,255,255,0.14)' : '0px solid transparent',
-      background: otpOpen ? 'rgba(0,0,0,0.28)' : 'transparent',
-      padding: otpOpen ? 12 : 0,
-      boxShadow: otpOpen ? '0 16px 40px rgba(0,0,0,0.35)' : 'none',
+              {(isSending || !flow) && <div style={{fontSize: 12, opacity: 0.7}}>Sending code…</div>}
+              {isVerifying && <div style={{fontSize: 12, opacity: 0.7}}>Verifying…</div>}
 
-      position: 'relative',
-      overflow: 'hidden',
+              {error && (
+                <div style={{fontSize: 12, opacity: 0.88, color: '#ffb4b4', textAlign: 'center'}}>
+                  {error}
+                </div>
+              )}
+            </div>
+          </Tray>
+        )}
 
-      // collapse
-      maxHeight: otpOpen ? OTP_MAX_H : 0,
-      opacity: otpOpen ? 1 : 0,
+        {/* BILLING TRAY (signed-in, calmer than instant Stripe hop) */}
+        {isActive && canManageBilling && (
+          <Tray open={billingOpen} maxH={BILLING_MAX_H}>
+            <div style={{display: 'grid', gap: 10}}>
+              <div style={{fontSize: 12, lineHeight: '16px', opacity: 0.82}}>
+                {isFriend
+                  ? 'Support future work and access exclusive content. Secured with Stripe.'
+                  : 'Change tier, or cancel.'}
+              </div>
 
-      // don’t “pull” the header upward when closed
-      marginTop: otpOpen ? 8 : 0,
+              <div style={{display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap'}}>
+                {/* Patron option */}
+                {!isPatron && (
+                  <SubscribeButton
+                    loggedIn={true}
+                    variant="link"
+                    label="Become a Patron"
+                    tier="patron"
+                  />
+                )}
 
-      transition:
-        'max-height 240ms cubic-bezier(.2,.8,.2,1), opacity 160ms ease, margin-top 240ms cubic-bezier(.2,.8,.2,1), padding 240ms cubic-bezier(.2,.8,.2,1), border-width 240ms cubic-bezier(.2,.8,.2,1), box-shadow 240ms ease, background 240ms ease',
+                {/* Partner option (wired now; you can comment out later) */}
+                {!isPartner && (
+                  <SubscribeButton
+                    loggedIn={true}
+                    variant="link"
+                    label="Become a Partner"
+                    tier="partner"
+                  />
+                )}
 
-      pointerEvents: otpOpen ? 'auto' : 'none',
-      willChange: 'max-height, opacity, margin-top, padding',
-    }}
-  >
-    <div
-      style={{
-        opacity: otpOpen ? 1 : 0,
-        transform: otpOpen ? 'translateY(0px)' : 'translateY(-6px)',
-        transition: 'opacity 160ms ease, transform 220ms cubic-bezier(.2,.8,.2,1)',
-        display: 'grid',
-        gap: 10,
-        justifyItems: 'center',
-      }}
-    >
-      <OtpBoxes
-        maxWidth={EMAIL_W}
-        value={code}
-        onChange={(next) => setCode(normalizeDigits(next))}
-        disabled={isVerifying}
-      />
+                {/* If already at a paid tier, still show the other paid tier as an alternative */}
+                {(isPatron || isPartner) && (
+                  <span style={{opacity: 0.45, fontSize: 12}} aria-hidden>
+                    |
+                  </span>
+                )}
 
-      {(isSending || !flow) && <div style={{fontSize: 12, opacity: 0.7}}>Sending code…</div>}
-      {isVerifying && <div style={{fontSize: 12, opacity: 0.7}}>Verifying…</div>}
+                {(isPatron || isPartner) && (
+                  <CancelSubscriptionButton variant="link" label="Cancel subscription" />
+                )}
+              </div>
 
-      {error && (
-        <div style={{fontSize: 12, opacity: 0.88, color: '#ffb4b4', textAlign: 'center'}}>
-          {error}
-        </div>
-      )}
-    </div>
-  </div>
-)}
-
+              <div style={{fontSize: 11, lineHeight: '15px', opacity: 0.62}}>
+                Patron: core access + ongoing support. Partner: higher tier for backers / collaborators.
+              </div>
+            </div>
+          </Tray>
+        )}
 
         {isActive && <>{children}</>}
       </div>

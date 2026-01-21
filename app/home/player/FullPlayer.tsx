@@ -502,7 +502,7 @@ function playAlbumIndex(i: number) {
     <div style={{marginTop: 4, fontSize: 12, opacity: 0.78, lineHeight: 1.35}}>
       {effAlbum?.embargo?.note?.trim()
         ? effAlbum.embargo.note.trim()
-        : 'Playback is disabled for the public while this release is under embargo. Patrons may have early access.'}
+        : 'Playback disabled while this release is under embargo. Patrons have instant early access.'}
     </div>
   </div>
 ) : null}

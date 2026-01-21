@@ -1,104 +1,71 @@
 // web/app/home/SubscribeButton.tsx
 'use client'
 
-import {useMemo, useState} from 'react'
+import React from 'react'
 
 type Props = {
   loggedIn: boolean
-  variant?: 'button' | 'link'
+  variant?: 'link' | 'button'
   label?: string
+  // NEW: select subscription tier (defaults to patron for backward compat)
+  tier?: 'patron' | 'partner'
 }
 
-export default function SubscribeButton({loggedIn, variant = 'button', label}: Props) {
-  const [loading, setLoading] = useState(false)
-  const [email, setEmail] = useState('')
-  const [error, setError] = useState<string | null>(null)
+export default function SubscribeButton(props: Props) {
+  const {loggedIn, variant = 'button', label = 'Become a Patron', tier = 'patron'} = props
 
-  const emailOk = useMemo(() => {
-    if (loggedIn) return true
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim().toLowerCase())
-  }, [loggedIn, email])
-
-  async function startCheckout() {
-    setError(null)
-    setLoading(true)
-    try {
-      const res = await fetch('/api/stripe/create-checkout-session', {
-        method: 'POST',
-        headers: {'content-type': 'application/json'},
-        body: JSON.stringify(loggedIn ? {} : {email}),
-      })
-
-      const data = (await res.json()) as {ok: boolean; url?: string; error?: string}
-      if (!data.ok || !data.url) throw new Error(data.error ?? 'Failed to create checkout session')
-
-      window.location.assign(data.url)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Checkout failed'
-      setError(msg)
-    } finally {
-      setLoading(false)
-    }
+  async function go() {
+    // Keep it dead simple: server decides which Stripe Price/Checkout to use.
+    // You likely already have /api/stripe/create-checkout-session; we just pass tier.
+    const res = await fetch('/api/stripe/create-checkout-session', {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify({tier}),
+    })
+    const data = (await res.json()) as {url?: string}
+    if (data?.url) window.location.assign(data.url)
   }
 
-  const text = loading ? 'Redirecting…' : (label ?? (variant === 'link' ? 'Become a Patron' : 'Subscribe (test)'))
+  if (!loggedIn) return null
 
-  return (
-    <div style={{display: 'grid', gap: 10, maxWidth: 420}}>
-      {!loggedIn && (
-        <input
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="Email for your membership"
-          autoComplete="email"
-          inputMode="email"
-          style={{
-            padding: 10,
-            border: '1px solid rgba(255,255,255,0.25)',
-            borderRadius: 10,
-            background: 'rgba(0,0,0,0.2)',
-            color: 'inherit',
-          }}
-        />
-      )}
-
+  if (variant === 'link') {
+    return (
       <button
-        onClick={startCheckout}
-        disabled={loading || !emailOk}
-        style={
-          variant === 'link'
-            ? {
-                padding: 0,
-                margin: 0,
-                border: 'none',
-                background: 'transparent',
-                color: 'color-mix(in srgb, var(--accent) 78%, rgba(255,255,255,0.85))',
-                fontSize: 12,
-                lineHeight: '16px',
-                fontWeight: 600,
-                cursor: loading || !emailOk ? 'not-allowed' : 'pointer',
-                opacity: loading || !emailOk ? 0.6 : 0.95,
-                textAlign: 'left',
-                justifySelf: 'start',
-              }
-            : {
-                padding: 12,
-                borderRadius: 12,
-                border: '1px solid rgba(255,255,255,0.35)',
-                cursor: loading || !emailOk ? 'not-allowed' : 'pointer',
-                background: 'rgba(255,255,255,0.08)',
-                color: 'inherit',
-                fontWeight: 600,
-              }
-        }
-        onMouseDown={(e) => {
-          if (variant === 'link') e.preventDefault()
+        type="button"
+        onClick={go}
+        style={{
+          appearance: 'none',
+          border: 0,
+          background: 'transparent',
+          padding: 0,
+          margin: 0,
+          cursor: 'pointer',
+          color: 'rgba(255,255,255,0.84)',
+          textDecoration: 'underline',
+          textUnderlineOffset: 3,
+          textDecorationColor: 'rgba(255,255,255,0.28)',
         }}
       >
-        {text}
+        {label}
       </button>
+    )
+  }
 
-      {error && <div style={{opacity: 0.85}}>⚠️ {error}</div>}
-    </div>
+  return (
+    <button
+      type="button"
+      onClick={go}
+      style={{
+        height: 32,
+        padding: '0 14px',
+        borderRadius: 999,
+        border: '1px solid rgba(255,255,255,0.16)',
+        background: 'rgba(255,255,255,0.08)',
+        color: 'rgba(255,255,255,0.92)',
+        cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
   )
 }
