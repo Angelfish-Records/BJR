@@ -217,34 +217,22 @@ export function PatternRing(props: {
 }
 
 export function PatternRingGlow(props: {
-  /** px size of the button/inner circle the glow hugs */
   size: number
-  /** thickness of the bright band right at the button edge */
   ringPx?: number
-  /** width of the outward fade region */
   glowPx?: number
-  /** blur strength (texture softening only) */
   blurPx?: number
-  /** opacity of the sampled pattern */
   opacity?: number
-  /** deterministic crop */
   seed?: number
 }) {
   const {size, ringPx = 2, glowPx = 22, blurPx = 8, opacity = 0.92, seed = 1337} = props
 
-  // Give the glow space without affecting layout.
   const pad = ringPx + glowPx
 
-  // Radii (in px) from the center:
-  // - innerR: button edge (keep fully ON here)
-  // - solidR: end of the "strong" band
-  // - fadeR: must be fully transparent at this outer edge
   const innerR = size / 2
   const solidR = innerR + ringPx
   const fadeR = solidR + glowPx
 
-  // Parent mask: punches out the center and fades only on the OUTER edge.
-  // IMPORTANT: This mask is applied AFTER the child's blur (because blur is on the child).
+  // Mask describes “where glow exists”: hard start at button edge, fade to 0 at outer edge.
   const mask = `radial-gradient(circle,
     rgba(0,0,0,0) 0px,
     rgba(0,0,0,0) ${Math.round(innerR)}px,
@@ -268,7 +256,7 @@ export function PatternRingGlow(props: {
         transform: 'translateZ(0)',
       }}
     >
-      {/* Mask wrapper (no blur here) */}
+      {/* Mask wrapper clamps final pixels (so blur can’t leak) */}
       <div
         aria-hidden
         style={{
@@ -276,7 +264,7 @@ export function PatternRingGlow(props: {
           inset: -pad,
           borderRadius: 999,
           pointerEvents: 'none',
-          overflow: 'hidden', // critical: clamps blurred child to mask box
+          overflow: 'hidden',
 
           WebkitMaskImage: mask,
           WebkitMaskRepeat: 'no-repeat',
@@ -289,14 +277,18 @@ export function PatternRingGlow(props: {
           maskSize: '100% 100%',
         }}
       >
-        {/* Blurred texture (blur happens inside, then wrapper mask clamps it) */}
+        {/* Black-keyed texture: lift black point so “dark plate” disappears */}
         <div
           aria-hidden
           style={{
             position: 'absolute',
             inset: 0,
             pointerEvents: 'none',
-            filter: `blur(${blurPx}px) contrast(1.45) saturate(1.45)`,
+
+            // The key: crush blacks out of the sampled snapshot before we blur it.
+            // brightness raises the floor; contrast spreads the remaining colours.
+            // Then blur for glow softness.
+            filter: `brightness(1.75) contrast(2.25) saturate(1.6) blur(${blurPx}px)`,
             mixBlendMode: 'screen',
             transform: 'translateZ(0)',
           }}
@@ -306,13 +298,19 @@ export function PatternRingGlow(props: {
             fps={12}
             sourceRect={{mode: 'random', seed, scale: 0.55}}
             active
-            style={{width: '100%', height: '100%', display: 'block'}}
+            style={{
+              width: '100%',
+              height: '100%',
+              display: 'block',
+              background: 'transparent',
+            }}
           />
         </div>
       </div>
     </div>
   )
 }
+
 
 export function PatternPillUnderlay(props: {
   radius?: number

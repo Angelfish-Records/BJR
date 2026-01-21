@@ -50,7 +50,7 @@ export async function generateMetadata(): Promise<Metadata> {
   )
 
   return {
-    title: page?.title ?? 'Shadow Home',
+    title: page?.title ?? 'Brendan John Roch',
     description:
       page?.subtitle ??
       'Portal shell: panels swap; identity stays boring; access stays canonical.',
