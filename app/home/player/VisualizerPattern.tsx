@@ -230,9 +230,17 @@ export function PatternRingGlow(props: {
   /** deterministic crop */
   seed?: number
 }) {
-  const {size, ringPx = 2, glowPx = 18, blurPx = 10, opacity = 0.92, seed = 1337} = props
+  const {size, ringPx = 2, glowPx = 22, blurPx = 10, opacity = 0.92, seed = 1337} = props
 
   const pad = ringPx + glowPx
+
+  // Fade mask: fully visible until near the outer edge, then fades to 0 by the extremity.
+  // Use pixel stops so it remains stable across sizes.
+  const fade = `radial-gradient(circle,
+    rgba(0,0,0,1) 0px,
+    rgba(0,0,0,1) ${pad + ringPx}px,
+    rgba(0,0,0,0) ${pad * 2 + ringPx}px
+  )`
 
   return (
     <div
@@ -246,21 +254,23 @@ export function PatternRingGlow(props: {
         pointerEvents: 'none',
       }}
     >
-      {/* Glow layer: no layout impact, expands outward via negative inset */}
       <div
         aria-hidden
         style={{
           position: 'absolute',
-          inset: -pad, // <- key: expands outward without affecting layout
+          inset: -pad, // expands outward without layout impact
           borderRadius: 999,
           pointerEvents: 'none',
+
           padding: pad,
           boxSizing: 'border-box',
 
-          WebkitMaskImage: 'linear-gradient(#000 0 0), linear-gradient(#000 0 0)',
-          WebkitMaskClip: 'padding-box, content-box',
-          WebkitMaskComposite: 'xor',
-          WebkitMaskRepeat: 'no-repeat',
+          // Mask 1: ring-only via padding-box XOR content-box
+          WebkitMaskImage:
+            'linear-gradient(#000 0 0), linear-gradient(#000 0 0), ' + fade,
+          WebkitMaskClip: 'padding-box, content-box, border-box',
+          WebkitMaskComposite: 'xor, source-in', // (ring) then apply fade
+          WebkitMaskRepeat: 'no-repeat, no-repeat, no-repeat',
 
           filter: `blur(${blurPx}px) contrast(1.45) saturate(1.45)`,
           mixBlendMode: 'screen',
@@ -278,7 +288,6 @@ export function PatternRingGlow(props: {
     </div>
   )
 }
-
 
 export function PatternPillUnderlay(props: {
   radius?: number
