@@ -239,7 +239,7 @@ export function PatternRingGlow(props: {
   const fade = `radial-gradient(circle,
     rgba(0,0,0,1) 0px,
     rgba(0,0,0,1) ${pad + ringPx}px,
-    rgba(0,0,0,0) ${pad * 2 + ringPx}px
+    rgba(0,0,0,0) ${pad * 1.6 + ringPx}px
   )`
 
   return (
