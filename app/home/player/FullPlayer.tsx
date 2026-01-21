@@ -476,6 +476,7 @@ React.useEffect(() => {
               <PlayPauseBig playing={playingThisAlbum} />
             </button>
 
+          {canPlay ? (
             <div
               style={{
                 position: 'absolute',
@@ -497,10 +498,11 @@ React.useEffect(() => {
                 ringPx={1}
                 glowPx={2}
                 blurPx={4}
-                opacity={0.65}
+                opacity={0.45}
                 seed={913}
               />
             </div>
+          ) : null}
 
           </div>
 
@@ -888,6 +890,7 @@ React.useEffect(() => {
           align-items: flex-end;
           gap: 2px;
           color: color-mix(in srgb, var(--accent) 72%, rgba(255,255,255,0.92));
+          transform: translateY(-1px);
         }
         .afEq i{
           display: block;
