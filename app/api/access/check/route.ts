@@ -288,37 +288,60 @@ export async function GET(req: NextRequest) {
   const releaseAt = policy?.releaseAt ?? null
   const embargoed = isEmbargoed(policy)
 
-  // Embargo gate
-  if (embargoed) {
-    const override = await checkAccess(
-      memberId,
-      {kind: 'album', albumScopeId, required: [ENTITLEMENTS.ALBUM_SHARE_GRANT]},
-      {log: true, action: ACCESS_ACTIONS.ACCESS_CHECK, correlationId}
-    )
+  // ✅ Share-grant entitlement should allow playback (not just bypass embargo).
+  const shareGrant = await checkAccess(
+    memberId,
+    {kind: 'album', albumScopeId, required: [ENTITLEMENTS.ALBUM_SHARE_GRANT]},
+    {log: true, action: ACCESS_ACTIONS.ACCESS_CHECK, correlationId}
+  )
+  const shareGrantAllowed = shareGrant.allowed
 
-    if (!override.allowed) {
-      if (policy?.earlyAccessEnabled && policy.earlyAccessTiers.length > 0) {
-        const keys = await listCurrentEntitlementKeys(memberId)
-        const s = new Set(keys)
-        const allowedTierKeys = policy.earlyAccessTiers.map((t) => `tier_${t}`)
-        const ok = allowedTierKeys.some((k) => s.has(k))
-        if (!ok) {
-          return baseJson(
-            {ok: true, allowed: false, embargoed: true, releaseAt, code: 'EMBARGO', action: 'subscribe' satisfies Action, reason: 'This album is not released yet. Upgrade for early access.', correlationId, redeemed},
-            {correlationId}
-          )
-        }
-      } else {
+
+    // Embargo gate
+  if (embargoed && !shareGrantAllowed) {
+    // Only if we DON'T have a share-grant, apply early-access tier logic (or wait).
+    if (policy?.earlyAccessEnabled && policy.earlyAccessTiers.length > 0) {
+      const keys = await listCurrentEntitlementKeys(memberId)
+      const s = new Set(keys)
+      const allowedTierKeys = policy.earlyAccessTiers.map((t) => `tier_${t}`)
+      const ok = allowedTierKeys.some((k) => s.has(k))
+      if (!ok) {
         return baseJson(
-          {ok: true, allowed: false, embargoed: true, releaseAt, code: 'EMBARGO', action: 'wait' satisfies Action, reason: 'This album is not released yet.', correlationId, redeemed},
+          {
+            ok: true,
+            allowed: false,
+            embargoed: true,
+            releaseAt,
+            code: 'EMBARGO',
+            action: 'subscribe' satisfies Action,
+            reason: 'This album is not released yet. Upgrade for early access.',
+            correlationId,
+            redeemed,
+          },
           {correlationId}
         )
       }
+    } else {
+      return baseJson(
+        {
+          ok: true,
+          allowed: false,
+          embargoed: true,
+          releaseAt,
+          code: 'EMBARGO',
+          action: 'wait' satisfies Action,
+          reason: 'This album is not released yet.',
+          correlationId,
+          redeemed,
+        },
+        {correlationId}
+      )
     }
   }
 
+
   // Min-tier gate (post-release or embargo bypass)
-  if (policy?.minTierForPlayback) {
+    if (policy?.minTierForPlayback && !shareGrantAllowed) {
     const keys = await listCurrentEntitlementKeys(memberId)
     const s = new Set(keys)
     const requiredTierKeys = tierAtOrAbove(policy.minTierForPlayback)
@@ -331,22 +354,24 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Final entitlement gate
+    // Final entitlement gate (share-grant also allows)
   const decision = await checkAccess(
     memberId,
     {kind: 'album', albumScopeId, required: [ENTITLEMENTS.PLAY_ALBUM]},
     {log: true, action: ACCESS_ACTIONS.ACCESS_CHECK, correlationId}
   )
 
+  const effectiveAllowed = Boolean(decision.allowed || shareGrantAllowed)
+
   return baseJson(
     {
       ok: true,
-      allowed: decision.allowed,
-      embargoed: embargoed && !decision.allowed,
+      allowed: effectiveAllowed,
+      embargoed: embargoed && !effectiveAllowed,
       releaseAt,
-      code: decision.allowed ? null : 'NO_ENTITLEMENT',
-      action: decision.allowed ? null : ('subscribe' satisfies Action),
-      reason: decision.allowed ? null : decision.reason,
+      code: effectiveAllowed ? null : 'NO_ENTITLEMENT',
+      action: effectiveAllowed ? null : ('subscribe' satisfies Action),
+      reason: effectiveAllowed ? null : ('reason' in decision ? decision.reason : 'Access denied.'),
       correlationId,
       redeemed,
     },
