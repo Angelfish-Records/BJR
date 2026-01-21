@@ -595,22 +595,25 @@ export default function ActivationGate(props: Props) {
                 </PatternRingOutline>
               ) : (
                 <div
-                  aria-label="Signed in identity"
-                  style={{
-                    width: '100%',
-                    minWidth: 0,
-                    height: 32,
-                    display: 'grid',
-                    gridTemplateRows: '1fr 1fr',
-                    alignItems: 'center',
-                    rowGap: 0,
-                  }}
-                >
+                    aria-label="Signed in identity"
+                    style={{
+                      width: '100%',
+                      minWidth: 0,
+                      height: 32,
+                      display: 'grid',
+                      gridTemplateRows: '1fr 1fr',
+                      alignItems: 'center',
+                      justifyItems: 'end', // ✅ right-justify both rows
+                      rowGap: 0,
+                    }}
+                  >
+
                   <div
                     style={{
                       minWidth: 0,
                       display: 'flex',
                       alignItems: 'center',
+                      justifyContent: 'flex-end',
                       gap: 8,
                       color: 'rgba(255,255,255,0.82)',
                       fontSize: 12,
@@ -649,6 +652,7 @@ export default function ActivationGate(props: Props) {
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
+                        textAlign: 'right',
                       }}
                       title={displayEmail}
                     >
@@ -658,9 +662,10 @@ export default function ActivationGate(props: Props) {
 
                   <div
                     style={{
-                      justifySelf: 'start',
+                      width: '100%',
                       display: 'flex',
                       alignItems: 'center',
+                      justifyContent: 'flex-end', // ✅
                       gap: 8,
                       fontSize: 12,
                       lineHeight: '16px',
@@ -668,6 +673,7 @@ export default function ActivationGate(props: Props) {
                       opacity: 0.95,
                     }}
                   >
+
                     {tier ? (
                       <>
                         <span style={{opacity: 0.72}} title={tier}>
@@ -743,49 +749,59 @@ export default function ActivationGate(props: Props) {
         {isActive && canManageBilling && (
           <Tray open={billingOpen} maxH={BILLING_MAX_H}>
             <div style={{display: 'grid', gap: 10}}>
-              <div style={{fontSize: 12, lineHeight: '16px', opacity: 0.82}}>
-                {isFriend
-                  ? 'Support future work and access exclusive content. Secured with Stripe.'
-                  : 'Change tier, or cancel.'}
-              </div>
+  <div style={{fontSize: 12, lineHeight: '16px', opacity: 0.82}}>
+    {isFriend
+      ? 'Pick a tier. You’ll confirm on Stripe after this.'
+      : 'Switch tier, or cancel. Changes reconcile through the canonical ledger.'}
+  </div>
 
-              <div style={{display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap'}}>
-                {/* Patron option */}
-                {!isPatron && (
-                  <SubscribeButton
-                    loggedIn={true}
-                    variant="link"
-                    label="Become a Patron"
-                    tier="patron"
-                  />
-                )}
+  {/* Plan cards (always render, current tier is affirmed + disabled) */}
+<div
+  style={{
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: 10,
+    alignItems: 'stretch',
+  }}
+>
+  <SubscribeButton
+    loggedIn={true}
+    variant="card"
+    tier="patron"
+    disabled={isPatron}      // ✅ current tier: not clickable
+    current={isPatron}       // ✅ current tier: glow + badge
+    label={isPatron ? 'Current' : 'Choose Patron'}
+    card={{
+      title: 'Patron',
+      price: '$5 / mo',
+      bullets: ['Full player access', 'Downloads', 'Artist posts + updates'],
+    }}
+  />
 
-                {/* Partner option (wired now; you can comment out later) */}
-                {!isPartner && (
-                  <SubscribeButton
-                    loggedIn={true}
-                    variant="link"
-                    label="Become a Partner"
-                    tier="partner"
-                  />
-                )}
+  <SubscribeButton
+    loggedIn={true}
+    variant="card"
+    tier="partner"
+    disabled={isPartner}
+    current={isPartner}
+    label={isPartner ? 'Current' : 'Choose Partner'}
+    card={{
+      title: 'Partner',
+      price: '$20 / mo',
+      bullets: ['Everything in Patron', 'Early previews + extras', 'Priority contact'],
+    }}
+  />
+</div>
 
-                {/* If already at a paid tier, still show the other paid tier as an alternative */}
-                {(isPatron || isPartner) && (
-                  <span style={{opacity: 0.45, fontSize: 12}} aria-hidden>
-                    |
-                  </span>
-                )}
 
-                {(isPatron || isPartner) && (
-                  <CancelSubscriptionButton variant="link" label="Cancel subscription" />
-                )}
-              </div>
+  {(isPatron || isPartner) && (
+  <div style={{display: 'flex', justifyContent: 'flex-end', marginTop: 2}}>
+    <CancelSubscriptionButton variant="link" label="Cancel subscription" />
+  </div>
+)}
 
-              <div style={{fontSize: 11, lineHeight: '15px', opacity: 0.62}}>
-                Patron: core access + ongoing support. Partner: higher tier for backers / collaborators.
-              </div>
-            </div>
+</div>
+
           </Tray>
         )}
 
