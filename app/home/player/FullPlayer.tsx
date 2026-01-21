@@ -245,11 +245,12 @@ export default function FullPlayer(props: {
 
         const player = pRef.current
         if (!allowed) {
-          player.setBlocked(reason ?? 'Playback blocked.', {code, action, correlationId: corr})
-        } else {
-          if (player.lastError || player.blockedCode || player.blockedAction) player.clearError()
-          if (player.status === 'blocked') player.setStatusExternal('idle')
-        }
+  player.setBlocked(reason ?? 'Playback blocked.', {code, action, correlationId: corr})
+} else {
+  if (player.lastError || player.blockedCode || player.blockedAction || player.status === 'blocked') {
+    player.clearError()
+  }
+}
       } catch (e) {
         if (cancelled) return
         console.error('FullPlayer access check failed', e)

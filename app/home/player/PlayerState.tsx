@@ -507,13 +507,12 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
         }),
 
       setStatusExternal: (st: PlayerStatus) =>
-      setState((s) => {
-        if (s.blockedCode || s.blockedAction || s.lastError) {
-          // stay visually stable while blocked/error
-          return s
-        }
-        return s.status === st ? s : {...s, status: st}
-      }),
+  setState((s) => {
+    // Keep stable while blocked/error, BUT allow leaving blocked once the error is cleared.
+    // If we're currently blocked and still have an active error payload, ignore external status updates.
+    if (s.status === 'blocked' && (s.lastError || s.blockedCode || s.blockedAction)) return s
+    return s.status === st ? s : {...s, status: st}
+  }),
 
 
       setLoadingReasonExternal: (r?: LoadingReason) =>
@@ -594,13 +593,16 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
 
 
         clearError: () =>
-          setState((s) => ({
-            ...s,
-            lastError: undefined,
-            blockedCode: undefined,
-            blockedAction: undefined,
-            blockedCorrelationId: null,
-          })),
+  setState((s) => ({
+    ...s,
+    lastError: undefined,
+    blockedCode: undefined,
+    blockedAction: undefined,
+    blockedCorrelationId: null,
+
+    // 🔑 if we were blocked, we are no longer blocked once the error is cleared
+    status: s.status === 'blocked' ? 'idle' : s.status,
+  })),
 
       bumpReload: () =>
         setState((s) => {
