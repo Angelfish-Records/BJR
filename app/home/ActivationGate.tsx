@@ -54,14 +54,14 @@ function looksLikeNoAccountError(err: unknown): boolean {
  * - inner button is inset by 1px, covering the interior
  */
 function PatternRingOutline(props: {
+  children: React.ReactNode
   radius?: number
   ringPx?: number
-  opacity?: number
   seed?: number
-  children: React.ReactNode
+  opacity?: number
   disabled?: boolean
 }) {
-  const {radius = 999, ringPx = 1, opacity = 0.7, seed = 888, children, disabled} = props
+  const {children, radius = 999, ringPx = 1, seed = 888, opacity = 0.9, disabled} = props
 
   return (
     <div
@@ -70,37 +70,25 @@ function PatternRingOutline(props: {
         borderRadius: radius,
         padding: ringPx,
         overflow: 'hidden',
-        // the wrapper IS the outline; let it pop a bit
+        // keep it readable on dark backgrounds
         boxShadow: disabled
           ? '0 10px 22px rgba(0,0,0,0.22)'
-          : '0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 10px 26px rgba(0,0,0,0.35)',
+          : '0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent), 0 10px 26px rgba(0,0,0,0.35)',
+        opacity: disabled ? 0.7 : 1,
         transition: 'box-shadow 180ms ease, opacity 180ms ease',
-        opacity: disabled ? 0.65 : 1,
       }}
     >
+      {/* pattern ONLY for the ring */}
       <div aria-hidden style={{position: 'absolute', inset: 0, pointerEvents: 'none'}}>
         <VisualizerSnapshotCanvas
           opacity={opacity}
           fps={12}
           sourceRect={{mode: 'random', seed, scale: 0.6}}
           style={{
-            // make it “read” as a ring even at 1px
-            filter: 'contrast(1.35) saturate(1.35)',
+            filter: 'contrast(1.45) saturate(1.45)',
             mixBlendMode: 'screen',
           }}
           active
-        />
-        {/* tiny glow to help the ring read on dark */}
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background:
-              'linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.00) 55%)',
-            opacity: 0.55,
-            pointerEvents: 'none',
-          }}
         />
       </div>
 
@@ -123,8 +111,12 @@ function Toggle(props: {
   const knob = h - pad * 2
   const travel = w - pad * 2 - knob
 
-  const BASE_BG_OFF = 'rgba(255,255,255,0.10)'
-  const BASE_BG_ON = 'color-mix(in srgb, var(--accent) 26%, rgba(255,255,255,0.10))'
+  // KEY: anon background must be opaque so the ring pattern can't show through.
+  const ANON_BG_OFF = 'rgba(0,0,0,0.72)'
+  const ANON_BG_ON = 'color-mix(in srgb, var(--accent) 24%, rgba(0,0,0,0.72))'
+
+  const AUTH_BG_OFF = 'rgba(255,255,255,0.10)'
+  const AUTH_BG_ON = 'color-mix(in srgb, var(--accent) 26%, rgba(255,255,255,0.10))'
 
   const button = (
     <button
@@ -137,9 +129,9 @@ function Toggle(props: {
         width: w,
         height: h,
         borderRadius: 999,
-        // anon mode uses the wrapper ring; auth mode keeps a simple border
-        border: mode === 'auth' ? '1px solid rgba(255,255,255,0.18)' : '0px solid transparent',
-        background: checked ? BASE_BG_ON : BASE_BG_OFF,
+        // anon ring comes from wrapper; remove border to avoid double-outline and muddy edge
+        border: mode === 'anon' ? '0px solid transparent' : '1px solid rgba(255,255,255,0.18)',
+        background: mode === 'anon' ? (checked ? ANON_BG_ON : ANON_BG_OFF) : checked ? AUTH_BG_ON : AUTH_BG_OFF,
         position: 'relative',
         padding: 0,
         outline: 'none',
@@ -147,7 +139,7 @@ function Toggle(props: {
         transition: 'background 180ms ease, box-shadow 180ms ease, border-color 180ms ease, opacity 180ms ease',
         boxShadow:
           mode === 'anon'
-            ? 'none'
+            ? '0 10px 26px rgba(0,0,0,0.28)'
             : checked
               ? '0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent), 0 10px 26px rgba(0,0,0,0.35)'
               : '0 10px 26px rgba(0,0,0,0.28)',
@@ -157,17 +149,12 @@ function Toggle(props: {
         alignItems: 'center',
       }}
     >
-      {/* AUTH: interior pattern lives inside the toggle (not an outline). */}
+      {/* ONLY auth gets interior visualizer pattern */}
       {mode === 'auth' && (
-        <PatternPillUnderlay
-          active
-          // stronger presence than before; off-state still readable, on-state is richer
-          opacity={checked ? 0.78 : 0.56}
-          seed={777}
-        />
+        <PatternPillUnderlay active opacity={checked ? 0.78 : 0.56} seed={777} />
       )}
 
-      {/* specular highlight (kept; helps the pattern read) */}
+      {/* highlight */}
       <div
         aria-hidden
         style={{
@@ -177,7 +164,6 @@ function Toggle(props: {
           background:
             'linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.06) 45%, rgba(255,255,255,0.00))',
           pointerEvents: 'none',
-          mixBlendMode: 'normal',
           opacity: checked ? 0.6 : 0.46,
           transition: 'opacity 180ms ease',
         }}
@@ -204,16 +190,13 @@ function Toggle(props: {
     </button>
   )
 
-  // ANON: wrapper ring shows pattern only as the outline
-  if (mode === 'anon') {
-    return (
-      <PatternRingOutline ringPx={1} seed={888} opacity={0.72} disabled={disabled}>
-        {button}
-      </PatternRingOutline>
-    )
-  }
-
-  return button
+  return mode === 'anon' ? (
+    <PatternRingOutline ringPx={1} seed={888} opacity={0.92} disabled={disabled}>
+      {button}
+    </PatternRingOutline>
+  ) : (
+    button
+  )
 }
 
 function normalizeDigits(raw: string): string {
