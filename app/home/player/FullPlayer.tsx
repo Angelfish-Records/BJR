@@ -404,13 +404,38 @@ export default function FullPlayer(props: {
     }
   })()
 
-  // Prev/Next disabled logic: operate on PlayerState queue.
-  const curId = p.current?.id ?? ''
-  const idx = curId ? p.queue.findIndex((t) => t.id === curId) : -1
-  const atStart = idx <= 0
-  const atEnd = idx >= 0 && idx === p.queue.length - 1
-  const prevDisabled = !p.current || transportLock || atStart
-  const nextDisabled = !p.current || transportLock || atEnd
+  // --- Album-local transport (FullPlayer) ---
+// Only operate within effTracks. Never call p.prev()/p.next() here.
+
+const curId = p.current?.id ?? ''
+const albumIdx = curId ? effTracks.findIndex((t) => t.id === curId) : -1
+const albumHasCurrent = albumIdx >= 0
+
+const albumAtStart = albumHasCurrent ? albumIdx === 0 : true
+const albumAtEnd = albumHasCurrent ? albumIdx === effTracks.length - 1 : true
+
+// Disable album transport if this album isn't the active playback context.
+const prevDisabled = transportLock || !albumHasCurrent || albumAtStart
+const nextDisabled = transportLock || !albumHasCurrent || albumAtEnd
+
+function ensureAlbumQueue() {
+  // If we're already in this album context with the right queue, this is cheap + idempotent.
+  p.setQueue(effTracks, {
+    contextId: albumKey ?? undefined,
+    artworkUrl: effAlbum?.artworkUrl ?? null,
+    contextSlug: effAlbumSlug,
+    contextTitle: effAlbum?.title ?? undefined,
+    contextArtist: effAlbum?.artist ?? undefined,
+  })
+}
+
+function playAlbumIndex(i: number) {
+  const t = effTracks[i]
+  if (!t) return
+  ensureAlbumQueue()
+  p.play(t)
+  window.dispatchEvent(new Event('af:play-intent'))
+}
 
   const gotoDownload = () => {
     const patch: Record<string, string | null | undefined> = {
@@ -469,7 +494,7 @@ export default function FullPlayer(props: {
       Embargoed until{' '}
       {new Date(releaseAtMs).toLocaleDateString(undefined, {
         day: 'numeric',
-        month: 'short',
+        month: 'long',
         year: 'numeric',
       })}
     </div>
@@ -489,16 +514,17 @@ export default function FullPlayer(props: {
           </IconCircleBtn>
 
           <IconCircleBtn
-            label="Previous"
-            disabled={prevDisabled}
-            onClick={() => {
-              lockTransportFor(350)
-              window.dispatchEvent(new Event('af:play-intent'))
-              p.prev()
-            }}
-          >
-            <PrevIcon />
-          </IconCircleBtn>
+  label="Previous"
+  disabled={prevDisabled}
+  onClick={() => {
+    lockTransportFor(350)
+    if (prevDisabled) return
+    playAlbumIndex(albumIdx - 1)
+  }}
+>
+  <PrevIcon />
+</IconCircleBtn>
+
 
           <div style={{position: 'relative', width: 64, height: 64}}>
             <button
@@ -549,16 +575,17 @@ export default function FullPlayer(props: {
           </div>
 
           <IconCircleBtn
-            label="Next"
-            disabled={nextDisabled}
-            onClick={() => {
-              lockTransportFor(350)
-              window.dispatchEvent(new Event('af:play-intent'))
-              p.next()
-            }}
-          >
-            <NextIcon />
-          </IconCircleBtn>
+  label="Next"
+  disabled={nextDisabled}
+  onClick={() => {
+    lockTransportFor(350)
+    if (nextDisabled) return
+    playAlbumIndex(albumIdx + 1)
+  }}
+>
+  <NextIcon />
+</IconCircleBtn>
+
 
           <IconCircleBtn
             label="Share"
