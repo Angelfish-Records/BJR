@@ -217,40 +217,30 @@ export function PatternRing(props: {
 }
 
 export function PatternRingGlow(props: {
-  /** px size of the button/inner circle the glow hugs */
   size: number
-  /** thickness of the bright band right at the button edge */
   ringPx?: number
-  /** width of the outward fade region */
   glowPx?: number
-  /** blur strength (softens the texture, does NOT define the outer cutoff) */
   blurPx?: number
-  /** opacity of the sampled pattern */
   opacity?: number
-  /** deterministic crop */
   seed?: number
 }) {
   const {size, ringPx = 2, glowPx = 22, blurPx = 8, opacity = 0.92, seed = 1337} = props
 
-  // We expand the rendered layer outward WITHOUT affecting layout.
   const pad = ringPx + glowPx
 
-  // Radii from the center:
-  // - innerR: the button edge (where glow should be strongest)
-  // - solidR: end of the "strong" band
-  // - fadeR: where it must be fully transparent
-  const innerR = size / 2
+  // Push the inner edge out slightly so any inward blur is hidden beneath the white button.
+  const innerInsetPx = Math.max(1, Math.round(blurPx * 0.35)) // typically 2–3px
+
+  const innerR = size / 2 + innerInsetPx
   const solidR = innerR + ringPx
   const fadeR = solidR + glowPx
 
-  // Single mask: transparent inside the button,
-  // fully on at the edge band, then fades to 0 by fadeR.
   const mask = `radial-gradient(circle,
     rgba(0,0,0,0) 0px,
-    rgba(0,0,0,0) ${Math.max(0, Math.round(innerR))}px,
-    rgba(0,0,0,1) ${Math.max(0, Math.round(innerR + 0.5))}px,
-    rgba(0,0,0,1) ${Math.max(0, Math.round(solidR))}px,
-    rgba(0,0,0,0) ${Math.max(0, Math.round(fadeR))}px,
+    rgba(0,0,0,0) ${Math.round(innerR)}px,
+    rgba(0,0,0,1) ${Math.round(innerR + 0.5)}px,
+    rgba(0,0,0,1) ${Math.round(solidR)}px,
+    rgba(0,0,0,0) ${Math.round(fadeR)}px,
     rgba(0,0,0,0) 100%
   )`
 
@@ -272,7 +262,7 @@ export function PatternRingGlow(props: {
         aria-hidden
         style={{
           position: 'absolute',
-          inset: -pad, // adds space for the glow WITHOUT pushing layout
+          inset: -pad,
           borderRadius: 999,
           pointerEvents: 'none',
 
@@ -281,13 +271,14 @@ export function PatternRingGlow(props: {
           WebkitMaskPosition: 'center',
           WebkitMaskSize: '100% 100%',
 
-          // standards (harmless if ignored)
           maskImage: mask,
           maskRepeat: 'no-repeat',
           maskPosition: 'center',
           maskSize: '100% 100%',
 
-          filter: `blur(${blurPx}px) contrast(1.45) saturate(1.45)`,
+          // Kill the dark ring: lift blacks aggressively, keep colour, then blur.
+          // (Order matters: brightness/contrast before blur makes the “black plate” vanish.)
+          filter: `brightness(1.35) contrast(1.65) saturate(1.55) blur(${blurPx}px)`,
           mixBlendMode: 'screen',
         }}
       >
