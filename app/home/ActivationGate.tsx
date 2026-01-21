@@ -60,12 +60,11 @@ function PatternRingOutline(props: {
   seed?: number
   opacity?: number
   disabled?: boolean
-  innerBg?: string // solid interior blocker color (no alpha)
+  innerBg?: string // solid, no alpha
 
-  // NEW: feather controls (in px)
-  featherOuterPx?: number // how far the ring fades outward
-  featherInnerPx?: number // optional softening toward the inside edge
-  blurPx?: number // subtle blur to unify texture
+  // NEW controls
+  glowPx?: number // how far glow extends outward
+  blurPx?: number // how soft the glow is
 }) {
   const {
     children,
@@ -75,52 +74,40 @@ function PatternRingOutline(props: {
     opacity = 0.92,
     disabled,
     innerBg = 'rgb(10, 10, 14)',
-    featherOuterPx = 18,
-    featherInnerPx = 2,
-    blurPx = 6,
+    glowPx = 18,
+    blurPx = 12,
   } = props
 
-  // Build a “donut” mask with feathered edges:
-  // - fully transparent in the center (blocked by occluder anyway, but this helps unify the fade)
-  // - ramps up to 1 near the ring
-  // - stays 1 through ring thickness
-  // - fades back to 0 as it moves outward (the glow)
-  //
-  // We express stops using calc() so they track ringPx + featherOuterPx.
-  const donutMask = `
-    radial-gradient(circle at center,
-      rgba(0,0,0,0) 0,
-      rgba(0,0,0,0) calc(100% - ${ringPx + featherOuterPx + 1}px),
-      rgba(0,0,0,1) calc(100% - ${ringPx + featherOuterPx}px),
-      rgba(0,0,0,1) calc(100% - ${Math.max(1, ringPx - featherInnerPx)}px),
-      rgba(0,0,0,0) 100%)
-  `
+  // Wrapper padding gives the glow room so it doesn’t hard-clip.
+  const pad = ringPx + glowPx
+
+  // Mask that keeps the pattern confined to the wrapper’s rounded-rect area.
+  // (We then blur it, which produces the outward feather.)
+  const clipMask = `linear-gradient(#000, #000)` // opaque mask (used with borderRadius via overflow hidden)
 
   return (
     <div
       style={{
         position: 'relative',
         borderRadius: radius,
-        // IMPORTANT: padding is now ringPx + featherOuterPx so the feather has room
-        padding: ringPx + featherOuterPx,
+        padding: pad,
         overflow: 'hidden',
-        boxShadow: disabled
-          ? '0 10px 22px rgba(0,0,0,0.22)'
-          : '0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent), 0 10px 26px rgba(0,0,0,0.35)',
         opacity: disabled ? 0.7 : 1,
-        transition: 'box-shadow 180ms ease, opacity 180ms ease',
+        transition: 'opacity 180ms ease',
         transform: 'translateZ(0)',
       }}
     >
-      {/* ONE layer: visualizer snapshot masked to a feathered ring */}
+      {/* SINGLE layer: visualizer snapshot, blurred to become “glow”.
+          We will *occlude* the interior pill later so only the ring/glow remains. */}
       <div
         aria-hidden
         style={{
           position: 'absolute',
           inset: 0,
           pointerEvents: 'none',
-          WebkitMaskImage: donutMask,
-          maskImage: donutMask,
+          // keep inside wrapper shape
+          WebkitMaskImage: clipMask,
+          maskImage: clipMask,
           WebkitMaskRepeat: 'no-repeat',
           maskRepeat: 'no-repeat',
           WebkitMaskSize: '100% 100%',
@@ -138,20 +125,35 @@ function PatternRingOutline(props: {
         />
       </div>
 
-      {/* HARD occluder: interior is solid, so the pattern never bleeds inside */}
+      {/* INNER OCCLUDER: the pill’s “real body”.
+          This removes ALL interior pattern so only the exterior glow remains. */}
       <div
         aria-hidden
         style={{
           position: 'absolute',
-          // occluder sits at the “true” inner edge of the ring (ignores feather padding)
-          inset: ringPx + featherOuterPx,
+          inset: pad,
           borderRadius: radius,
           background: innerBg,
           pointerEvents: 'none',
         }}
       />
 
-      {/* content sits above */}
+      {/* CRISP RING: a 2px ring that is *part of the same element* visually,
+          because it’s just the unblurred edge of the glow + a subtle outline. */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: pad - ringPx,
+          borderRadius: radius,
+          pointerEvents: 'none',
+          boxShadow: disabled
+            ? 'inset 0 0 0 1px rgba(255,255,255,0.10)'
+            : `inset 0 0 0 ${ringPx}px rgba(255,255,255,0.00),
+               0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent)`,
+        }}
+      />
+
       <div style={{position: 'relative'}}>{children}</div>
     </div>
   )
