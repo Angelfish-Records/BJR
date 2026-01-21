@@ -483,7 +483,7 @@ export default function FullPlayer(props: {
               <PatternRingGlow
                 size={64}
                 ringPx={1}
-                glowPx={3}
+                glowPx={2}
                 blurPx={4}
                 opacity={0.75}
                 seed={913}
