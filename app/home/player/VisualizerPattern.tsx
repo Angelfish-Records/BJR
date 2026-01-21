@@ -226,15 +226,11 @@ export function PatternRingGlow(props: {
 }) {
   const {size, ringPx = 2, glowPx = 22, blurPx = 8, opacity = 0.92, seed = 1337} = props
 
-  // ring thickness + outward fade region
   const pad = ringPx + glowPx
-
-  // extra room so the blur can fully decay before any clipping
   const bleed = Math.max(2, Math.round(blurPx * 2))
   const outerPad = pad + bleed
 
-  // Pixel-precise outer fade mask (avoids %/calc quirks in mask contexts)
-  // Wrapper box is (size + 2*outerPad), so its radius is:
+  // Pixel-precise outer fade mask (avoid %/calc quirks)
   const R = size / 2 + outerPad
   const fadeWidth = glowPx + bleed
   const fadeStart = Math.max(0, R - fadeWidth)
@@ -246,6 +242,8 @@ export function PatternRingGlow(props: {
     rgba(0,0,0,0) 100%
   )`
 
+  const circleClip = 'circle(50% at 50% 50%)'
+
   return (
     <div
       aria-hidden
@@ -256,21 +254,25 @@ export function PatternRingGlow(props: {
         width: size,
         height: size,
         transform: 'translate(-50%, -50%) translateZ(0)',
-        borderRadius: '50%',
         pointerEvents: 'none',
         overflow: 'visible',
       }}
     >
-      {/* Wrapper: provides space + circular outer fade so blur never looks boxy */}
+      {/* Wrapper: MUST be the thing that clips blur. Force a true circle with clip-path. */}
       <div
         aria-hidden
         style={{
           position: 'absolute',
           inset: -outerPad,
-          borderRadius: '50%',
           pointerEvents: 'none',
           overflow: 'hidden',
 
+          // force circular clipping (this is what kills the “box” for good)
+          borderRadius: '50%',
+          clipPath: circleClip,
+          WebkitClipPath: circleClip,
+
+          // circular outer fade (soft edge)
           WebkitMaskImage: outerFade,
           WebkitMaskRepeat: 'no-repeat',
           WebkitMaskPosition: 'center',
@@ -280,16 +282,17 @@ export function PatternRingGlow(props: {
           maskPosition: 'center',
         }}
       >
-        {/* XOR ring: interior is truly removed; we only ever blur ring pixels */}
+        {/* XOR ring: interior truly removed; blur only affects ring pixels */}
         <div
           aria-hidden
           style={{
             position: 'absolute',
             inset: 0,
-            borderRadius: '50%',
             pointerEvents: 'none',
+            borderRadius: '50%',
+            clipPath: circleClip,
+            WebkitClipPath: circleClip,
 
-            // ring = padding-box XOR content-box
             padding: outerPad,
             boxSizing: 'border-box',
             WebkitMaskImage: 'linear-gradient(#000 0 0), linear-gradient(#000 0 0)',

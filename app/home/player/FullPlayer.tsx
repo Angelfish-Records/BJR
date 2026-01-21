@@ -464,15 +464,28 @@ export default function FullPlayer(props: {
               <PlayPauseBig playing={playingThisAlbum} />
             </button>
 
-            <div style={{position: 'absolute', inset: -5, borderRadius: 999, zIndex: 1, pointerEvents: 'none'}}>
-                <PatternRingGlow
-                  size={64}      // match button
-                  ringPx={2}
-                  glowPx={12}    // controls fade reach (via pad)
-                  blurPx={5}
-                  opacity={0.92}
-                  seed={913}
-                />
+            <div
+              style={{
+                position: 'absolute',
+                inset: -5,
+                borderRadius: 999,
+                zIndex: 1,
+                pointerEvents: 'none',
+
+                // add these:
+                overflow: 'visible',        // never clip children
+                isolation: 'isolate',       // stop weird blend bleed with siblings
+                transform: 'translateZ(0)', // consistent compositing
+              }}
+            >
+              <PatternRingGlow
+                size={64}
+                ringPx={2}
+                glowPx={12}
+                blurPx={5}
+                opacity={0.92}
+                seed={913}
+              />
             </div>
 
           </div>
