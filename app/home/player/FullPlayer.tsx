@@ -485,7 +485,7 @@ export default function FullPlayer(props: {
                 ringPx={1}
                 glowPx={2}
                 blurPx={4}
-                opacity={0.75}
+                opacity={0.65}
                 seed={913}
               />
             </div>
