@@ -232,28 +232,8 @@ export function PatternRingGlow(props: {
 }) {
   const {size, ringPx = 2, glowPx = 22, blurPx = 10, opacity = 0.92, seed = 1337} = props
 
-  // pad is the “structural” space the mask uses to create a ring + provide outward room for fade
+  // same invariant as the working outline: pad defines the outward “canvas” for the glow
   const pad = ringPx + glowPx
-
-  // We want: max intensity right next to the button edge (inner boundary),
-  // and fade to 0 exactly at the OUTER edge of the glow.
-  //
-  // Geometry in this component:
-  // - the visible button edge sits at radius ≈ size/2
-  // - the glow layer extends outward by pad via inset:-pad, so outer radius is size/2 + pad
-  const innerR = size / 2
-  const outerR = innerR + pad
-
-  // Fade begins just outside the inner boundary (keep it strong at the button edge),
-  // and ends at the outer extremity (fully transparent there).
-  const fadeStart = Math.round(innerR + 1)
-  const fadeEnd = Math.round(outerR)
-
-  const fade = `radial-gradient(circle,
-    rgba(0,0,0,1) 0px,
-    rgba(0,0,0,1) ${fadeStart}px,
-    rgba(0,0,0,0) ${fadeEnd}px
-  )`
 
   return (
     <div
@@ -265,28 +245,29 @@ export function PatternRingGlow(props: {
         height: size,
         borderRadius: 999,
         pointerEvents: 'none',
+        overflow: 'visible',
+        transform: 'translateZ(0)',
       }}
     >
       <div
         aria-hidden
         style={{
           position: 'absolute',
-          inset: -pad, // expands outward without layout impact
+          inset: -pad, // expands outward without affecting layout
           borderRadius: 999,
           pointerEvents: 'none',
 
+          // ring mask via padding-box XOR content-box (single composite mode, proven)
           padding: pad,
           boxSizing: 'border-box',
+          WebkitMaskImage: 'linear-gradient(#000 0 0), linear-gradient(#000 0 0)',
+          WebkitMaskClip: 'padding-box, content-box',
+          WebkitMaskComposite: 'xor',
+          WebkitMaskRepeat: 'no-repeat',
 
-          // Build ring (padding-box XOR content-box), then apply OUTER fade (source-in)
-          WebkitMaskImage: `linear-gradient(#000 0 0), linear-gradient(#000 0 0), ${fade}`,
-          WebkitMaskClip: 'padding-box, content-box, border-box',
-          WebkitMaskComposite: 'xor, source-in',
-          WebkitMaskRepeat: 'no-repeat, no-repeat, no-repeat',
-
+          // blur provides the fade-out; keep blur <= ~0.6 * glowPx for clean full fade
           filter: `blur(${blurPx}px) contrast(1.45) saturate(1.45)`,
           mixBlendMode: 'screen',
-          transform: 'translateZ(0)',
         }}
       >
         <VisualizerSnapshotCanvas
@@ -300,6 +281,7 @@ export function PatternRingGlow(props: {
     </div>
   )
 }
+
 
 export function PatternPillUnderlay(props: {
   radius?: number

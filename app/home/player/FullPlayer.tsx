@@ -465,7 +465,8 @@ export default function FullPlayer(props: {
             </button>
 
             <div style={{position: 'absolute', inset: -5, borderRadius: 999, zIndex: 1, pointerEvents: 'none'}}>
-  <PatternRingGlow size={70} ringPx={2} glowPx={11} blurPx={8} opacity={0.92} seed={913} />
+ <PatternRingGlow size={70} ringPx={2} glowPx={12} blurPx={5} opacity={0.92} seed={913} />
+
 
 
 </div>
