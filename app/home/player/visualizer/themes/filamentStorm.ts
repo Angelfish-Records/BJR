@@ -12,8 +12,7 @@ void main() {
 `
 
 // Filament Storm (hairline geometry saturation)
-// Many thin “ribbons” implied by integrating a flow field and measuring proximity to streamlines.
-// No particles; it’s continuous and dense. Treble shivers the strands, bass bundles them.
+// Inline-tuned: fwidth AA for “band boundaries”, softened highlights, less single-pixel glitter.
 const FS = `#version 300 es
 precision highp float;
 
@@ -56,7 +55,6 @@ float fbm(vec2 p) {
 }
 
 vec2 flow(vec2 p, float t) {
-  // curl-ish flow from two fbm samples; mid increases shear
   float a = fbm(p*1.2 + vec2(t*0.22, -t*0.18));
   float b = fbm(p*1.2 + vec2(-t*0.16, t*0.24));
   vec2 g = vec2(a - 0.5, b - 0.5);
@@ -66,12 +64,10 @@ vec2 flow(vec2 p, float t) {
 }
 
 float filamentField(vec2 p, float t) {
-  // Integrate a few steps; measure a ridged scalar along the streamline.
   vec2 a = p;
   float s = 0.0;
   float w = 1.0;
 
-  // bass bundles: reduces frequency, increases coherence
   float freq = mix(7.0, 4.2, uBass);
 
   for (int i = 0; i < 7; i++) {
@@ -79,7 +75,6 @@ float filamentField(vec2 p, float t) {
     a += v * 0.05;
 
     float n = fbm(a * freq + float(i) * 17.1);
-    // ridged -> filament lines everywhere
     float r = 1.0 - abs(2.0*n - 1.0);
     s += w * r;
 
@@ -87,8 +82,13 @@ float filamentField(vec2 p, float t) {
     freq *= 1.10;
   }
 
-  // normalize-ish
   return s / 2.2;
+}
+
+float aaBandLine(float x) {
+  // x is fractional distance to band center (0 at band boundary)
+  float w = fwidth(x) + 1e-5;
+  return 1.0 - smoothstep(0.0, 0.055 + w, x);
 }
 
 void main() {
@@ -98,32 +98,31 @@ void main() {
   float t = uTime * 0.10;
   float e = clamp(uEnergy, 0.0, 1.0);
 
-  // base body: smoky underlayer so “low-energy pixels” still exist
+  // SCREEN-friendly base (dark, but not dead)
   float under = fbm(p*1.6 + vec2(0.0, t*0.35));
-  vec3 base = mix(vec3(0.02, 0.02, 0.03), vec3(0.06, 0.08, 0.10), under);
+  vec3 base = mix(vec3(0.015, 0.015, 0.018), vec3(0.060, 0.080, 0.100), under);
 
-  // filaments everywhere
   float f = filamentField(p, t);
 
-  // turn scalar into thin lines by quantizing into many bands + smoothing
-  float bands = 22.0 + 22.0 * uTreble;
+  // lots of bands, but AA them so they don’t sparkle when internal res changes
+  float bands = 20.0 + 24.0 * uTreble;
   float v = f * bands;
   float frac = fract(v);
-  float d = min(frac, 1.0 - frac);
-  float line = 1.0 - smoothstep(0.00, mix(0.070, 0.038, uTreble), d);
+  float d = min(frac, 1.0 - frac); // 0 at boundary
+  float line = aaBandLine(d);
 
-  // treble shimmer: micro jitter
-  float jitter = fbm(p*10.0 + vec2(t*2.2, -t*1.9));
-  float shiver = (0.6 + 0.4*sin(t*8.0 + jitter*6.28318)) * (0.10 + 0.20*uTreble);
-  line = clamp(line + shiver * (0.35 + 0.65*line), 0.0, 1.0);
+  // treble shimmer: keep it subtle and broad (no pixel glitter)
+  float jitter = fbm(p*9.0 + vec2(t*1.9, -t*1.6));
+  float shiver = (0.55 + 0.45*sin(t*6.5 + jitter*6.28318)) * (0.06 + 0.14*uTreble);
+  line = clamp(line + shiver * (0.30 + 0.60*line), 0.0, 1.0);
 
-  // thickness modulation (bass pulls into bundles)
+  // bundle control (bass)
   float bundle = smoothstep(0.45, 0.95, fbm(p*2.8 + vec2(t*0.6, -t*0.5)));
-  float thick = mix(0.40, 0.85, uBass) * bundle;
-  float strand = pow(line, mix(1.6, 0.9, thick));
+  float thick = mix(0.35, 0.80, uBass) * bundle;
+  float strand = pow(line, mix(1.45, 0.95, thick));
 
-  // pearlescent palette (deliberately not nebula)
-  vec3 ink = vec3(0.05, 0.05, 0.06);
+  // pearlescent palette (diverse from nebula)
+  vec3 ink = vec3(0.04, 0.04, 0.05);
   vec3 pearl = vec3(0.88, 0.86, 0.82);
   vec3 rose = vec3(0.90, 0.70, 0.78);
   vec3 teal = vec3(0.60, 0.85, 0.82);
@@ -132,14 +131,13 @@ void main() {
   vec3 filamentCol = mix(pearl, mix(rose, teal, tint), 0.55);
 
   vec3 col = base;
-  col = mix(col, ink, 0.12);
-  col += filamentCol * strand * (0.18 + 0.45*e);
+  col = mix(col, ink, 0.10);
+  col += filamentCol * strand * (0.16 + 0.42*e);
 
-  // “fiber optic” highlights on peaks
-  float peak = smoothstep(0.80, 0.98, strand);
-  col += vec3(0.98, 0.98, 1.00) * peak * (0.10 + 0.20*uTreble);
+  // highlights: broaden + cap (avoid pinprick whites)
+  float peak = smoothstep(0.72, 0.98, strand);
+  col += vec3(0.98, 0.98, 1.00) * peak * (0.06 + 0.16*uTreble);
 
-  // vignette
   float r = length(p);
   float vig = smoothstep(1.35, 0.25, r);
   col *= 0.55 + 0.70 * vig;

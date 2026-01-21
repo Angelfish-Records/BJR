@@ -12,9 +12,8 @@ void main() {
 `
 
 // Perpetual Starfall Canopy (dense parallax particle rain)
-// Implementation note: “millions” is achieved via procedural, tile-based star sampling across
-// multiple depth layers. Each layer contributes many stars via cheap hash-on-grid.
-// A faint fog/base ensures no empty pixels.
+// Tuned for inline-first: derivative AA, slightly fatter stars at low internal res,
+// and fewer “single-pixel white spikes” so SCREEN siphons stay classy.
 const FS = `#version 300 es
 precision highp float;
 
@@ -29,7 +28,6 @@ uniform float uMid;
 uniform float uTreble;
 
 float hash12(vec2 p) {
-  // stable, cheap hash
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
   return fract((p3.x + p3.y) * p3.z);
@@ -62,73 +60,79 @@ float fbm(vec2 p) {
   return v;
 }
 
-float starLayer(vec2 uv, float t, float density, float speed, float twinkle, float sizePx) {
-  // uv in 0..1, but we operate in screen-ish coords for stable point sizing
-  vec2 px = uv * uRes;
-  // tile grid (smaller cell = more stars)
+float aaCircle(float dist, float radius) {
+  // derivative-based AA in distance space
+  float w = fwidth(dist) + 1e-5;
+  return 1.0 - smoothstep(radius - w, radius + w, dist);
+}
+
+float starCell(vec2 px, float density, float t, float speed, float sizePx, float layerSeed) {
+  // px in pixel space
   vec2 g = px / density;
   vec2 i = floor(g);
   vec2 f = fract(g);
 
-  // one star per cell; random offset within cell
-  vec2 r = hash22(i);
+  // one “primary” star per cell
+  vec2 r = hash22(i + layerSeed);
   vec2 pos = r;
 
-  // falling + wind shear: y increases over time, x shifts with mid
+  // fall + wind shear (mid)
   float wind = (uMid - 0.5) * 2.0;
-  pos.y = fract(pos.y + t * speed + r.x * 0.13);
-  pos.x = fract(pos.x + t * speed * 0.18 * wind + r.y * 0.07);
+  pos.y = fract(pos.y + t * speed + r.x * 0.11);
+  pos.x = fract(pos.x + t * speed * 0.16 * wind + r.y * 0.07);
 
-  // distance to star
-  vec2 d = (f - pos);
-  // account for aspect so stars aren't stretched
+  vec2 d = f - pos;
   d.x *= uRes.x / uRes.y;
-
   float dist = length(d);
 
-  // size in pixels, mapped into cell space
-  float s = (sizePx / density) * (0.9 + 0.7 * uTreble);
-  float core = smoothstep(s, 0.0, dist);
+  // size: slightly larger at low internal res (inline friendliness)
+  float resMin = min(uRes.x, uRes.y);
+  float resBoost = clamp((480.0 / max(240.0, resMin)), 0.9, 1.6);
+  float rad = (sizePx * resBoost) / density;
 
-  // flare-ish sparkle on treble
-  float sparkle = pow(hash12(i + floor(t*10.0)), 10.0);
-  sparkle = mix(0.2, 1.0, sparkle);
-  float tw = 0.75 + 0.25 * sin(t*twinkle + r.x*6.28318);
-  float intensity = core * tw * (0.6 + 0.8 * uEnergy) * mix(0.7, 1.35, sparkle * uTreble);
+  float core = aaCircle(dist, rad);
 
-  return intensity;
+  // controlled twinkle (avoid hard spikes)
+  float tw = 0.78 + 0.22 * sin(t * (7.0 + 5.0*uTreble) + r.x*6.28318);
+  float sparkle = pow(hash12(i + layerSeed + floor(t*8.0)), 4.0); // gentler than exponent 10+
+  float inten = core * tw * (0.55 + 0.85*uEnergy) * mix(0.85, 1.25, sparkle * uTreble);
+
+  // add a faint halo so stars survive downscale without flicker
+  float halo = aaCircle(dist, rad * 2.2) * 0.12 * (0.5 + 0.5*uTreble);
+  return inten + halo;
 }
 
 void main() {
   vec2 uv = vUv;
+  vec2 px = uv * uRes;
 
   float t = uTime * 0.20;
 
-  // Base “cosmic velvet” so there are no empty pixels.
+  // dark velvet base (SCREEN-friendly)
   vec2 p = (uv * uRes - 0.5 * uRes) / min(uRes.x, uRes.y);
   float haze = fbm(p * 1.6 + vec2(0.0, t*0.22));
-  haze = smoothstep(0.15, 0.95, haze);
+  haze = smoothstep(0.18, 0.95, haze);
 
-  vec3 velvet = mix(vec3(0.015, 0.012, 0.020), vec3(0.055, 0.060, 0.090), haze);
+  vec3 velvet = mix(vec3(0.010, 0.010, 0.016), vec3(0.045, 0.050, 0.080), haze);
   velvet *= 0.75 + 0.35 * (0.25*uBass + 0.35*uMid + 0.40*uTreble);
 
-  // Layered parallax star canopy (near layers have larger, brighter stars).
-  float s0 = starLayer(uv, t, 28.0, 0.55 + 0.35*uBass, 7.0, 1.1);
-  float s1 = starLayer(uv, t, 20.0, 0.75 + 0.45*uBass, 8.5, 1.6);
-  float s2 = starLayer(uv, t, 14.0, 1.05 + 0.60*uBass, 10.0, 2.1);
-  float s3 = starLayer(uv, t, 10.0, 1.40 + 0.80*uBass, 12.0, 2.8);
+  // layers (near layers larger + faster)
+  float s0 = starCell(px, 30.0, t, 0.55 + 0.30*uBass, 1.2,  3.0);
+  float s1 = starCell(px, 22.0, t, 0.80 + 0.40*uBass, 1.8, 19.0);
+  float s2 = starCell(px, 16.0, t, 1.10 + 0.55*uBass, 2.4, 41.0);
+  float s3 = starCell(px, 12.0, t, 1.40 + 0.70*uBass, 3.1, 73.0);
 
-  // Add a faint “meteor thread” texture to increase perceived density.
-  float streak = fbm(p * 5.5 + vec2(t*0.9, -t*0.6));
-  streak = smoothstep(0.70, 0.98, streak) * (0.06 + 0.10*uTreble);
+  // faint streak threads to increase perceived density without “white noise”
+  float streak = fbm(p * 5.0 + vec2(t*0.85, -t*0.55));
+  streak = smoothstep(0.74, 0.985, streak) * (0.05 + 0.09*uTreble);
 
-  // Color: starfall can be colder with occasional warm glints.
-  vec3 cold = vec3(0.80, 0.88, 1.00);
+  // color: cold canopy with occasional warm glints
+  vec3 cold = vec3(0.78, 0.86, 1.00);
   vec3 warm = vec3(1.00, 0.86, 0.70);
-
-  float stars = (0.45*s0 + 0.55*s1 + 0.80*s2 + 1.10*s3);
-  float warmMix = smoothstep(0.35, 0.95, fbm(p*2.2 + 7.1)) * (0.15 + 0.30*uMid);
+  float warmMix = smoothstep(0.35, 0.95, fbm(p*2.2 + 7.1)) * (0.12 + 0.32*uMid);
   vec3 starCol = mix(cold, warm, warmMix);
+
+  float stars = (0.45*s0 + 0.55*s1 + 0.80*s2 + 1.05*s3);
 
   vec3 col = velvet;
   col += starCol * stars;
@@ -139,7 +143,6 @@ void main() {
   float vig = smoothstep(1.35, 0.25, r);
   col *= 0.55 + 0.70 * vig;
 
-  // energy breathing
   col *= 0.90 + 0.28 * uEnergy;
 
   fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);

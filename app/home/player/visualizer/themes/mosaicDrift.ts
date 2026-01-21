@@ -12,8 +12,7 @@ void main() {
 `
 
 // Cellular Mosaic Drift (living tiled geometry)
-// Voronoi-ish tessellation with morphing cell centers + stained-glass palette.
-// Full coverage is guaranteed by the cell fill; edges ripple with treble.
+// Inline-tuned: fwidth AA on edges and slightly softer lead lines at low internal res.
 const FS = `#version 300 es
 precision highp float;
 
@@ -45,7 +44,7 @@ vec3 hash33(vec2 p) {
   return vec3(a, b, c);
 }
 
-float smoothVoronoi(vec2 x, out vec2 cellId, out vec2 cellCenter, out float edgeDist) {
+float voronoi(vec2 x, out vec2 cellId, out vec2 cellCenter, out float edgeDist) {
   vec2 n = floor(x);
   vec2 f = fract(x);
 
@@ -54,14 +53,12 @@ float smoothVoronoi(vec2 x, out vec2 cellId, out vec2 cellCenter, out float edge
   vec2 bestId = vec2(0.0);
   vec2 bestP = vec2(0.0);
 
-  // 3x3 neighborhood
   for (int j = -1; j <= 1; j++) {
     for (int i = -1; i <= 1; i++) {
       vec2 g = vec2(float(i), float(j));
       vec2 id = n + g;
       vec2 r = hash22(id);
 
-      // animate cell centers gently (mid drives drift)
       float t = uTime * 0.10;
       vec2 wob = 0.14 * vec2(sin(t + r.x*6.28318), cos(t*1.1 + r.y*6.28318));
       vec2 p = g + r + wob * (0.35 + 0.65*uMid);
@@ -81,7 +78,6 @@ float smoothVoronoi(vec2 x, out vec2 cellId, out vec2 cellCenter, out float edge
   cellId = bestId;
   cellCenter = (n + bestP);
 
-  // distance to nearest site (md) and second nearest (md2) gives edge proximity
   float dist1 = sqrt(md);
   float dist2 = sqrt(md2);
   edgeDist = dist2 - dist1; // smaller near borders
@@ -89,20 +85,22 @@ float smoothVoronoi(vec2 x, out vec2 cellId, out vec2 cellCenter, out float edge
 }
 
 vec3 stainedGlass(vec3 k) {
-  // warm, stained-glass diversity with a bit of earth + jewel.
   vec3 a = vec3(0.10, 0.06, 0.05); // lead shadow
   vec3 b = vec3(0.90, 0.35, 0.15); // amber
   vec3 c = vec3(0.15, 0.70, 0.35); // green
   vec3 d = vec3(0.10, 0.35, 0.85); // cobalt
   vec3 e = vec3(0.80, 0.70, 0.20); // gold
 
-  // pick palette based on hashed channels
   vec3 col = mix(b, c, smoothstep(0.20, 0.85, k.x));
   col = mix(col, d, smoothstep(0.35, 0.90, k.y));
   col = mix(col, e, smoothstep(0.55, 0.95, k.z));
-  // keep it slightly earthy
   col = mix(a, col, 0.92);
   return col;
+}
+
+float aaStep(float edge, float x) {
+  float w = fwidth(x) + 1e-5;
+  return smoothstep(edge - w, edge + w, x);
 }
 
 void main() {
@@ -111,22 +109,24 @@ void main() {
 
   float t = uTime * 0.10;
 
-  // global drift so the mosaic “slides”
   vec2 drift = vec2(0.10, -0.07) * sin(t*0.7) + vec2(0.08, 0.06) * cos(t*0.45);
   vec2 q = p + drift * (0.25 + 0.75*uMid);
 
-  // scale controls cell size; bass grows large-scale deformation
   float scale = mix(6.5, 4.2, uBass);
   vec2 x = q * scale + vec2(0.0, t*0.35);
 
   vec2 cellId, cellCenter;
   float edgeDist;
-  (void)smoothVoronoi(x, cellId, cellCenter, edgeDist);
+  (void)voronoi(x, cellId, cellCenter, edgeDist);
 
-  // edge thickness: treble tightens, bass thickens
-  float edge = smoothstep(0.020 + 0.020*uBass, 0.080 - 0.030*uTreble, edgeDist);
+  // adaptive edge softness (inline stability)
+  float resMin = min(uRes.x, uRes.y);
+  float soft = clamp((520.0 / max(240.0, resMin)), 0.9, 1.7);
 
-  // interior shading: subtle “glass thickness” via radial from center + energy
+  // edgeDist is small near borders; we want edge=0 there
+  float edgeWidth = (0.050 + 0.018*uBass) * soft;
+  float edge = aaStep(edgeWidth, edgeDist); // 0 at border, 1 inside cell
+
   vec2 f = fract(x);
   vec2 centerF = fract(cellCenter);
   vec2 dv = f - centerF;
@@ -136,26 +136,23 @@ void main() {
   float thickness = smoothstep(0.90, 0.05, radial);
   thickness = mix(thickness, pow(thickness, 1.6), 0.55 + 0.30*uEnergy);
 
-  // per-cell color
   vec3 k = hash33(cellId);
   vec3 base = stainedGlass(k);
 
-  // add subtle marbling inside the cell so crops remain rich
   float marble = hash12(cellId + floor(uTime*0.8));
   float swirl = sin(8.0*radial + marble*6.28318 + t*0.9);
   float bloom = 0.12 * (0.5 + 0.5*swirl) * (0.35 + 0.65*uMid);
 
   vec3 col = base * (0.65 + 0.45*thickness) + bloom;
 
-  // lead lines (borders)
-  vec3 lead = vec3(0.03, 0.03, 0.04);
+  // lead lines (border): darker, but not pure black (SCREEN siphon wants highlights)
+  vec3 lead = vec3(0.02, 0.02, 0.025);
   col = mix(lead, col, edge);
 
-  // treble shimmer along edges
+  // edge shimmer (treble)
   float shimmer = (1.0 - edge) * (0.10 + 0.22*uTreble) * (0.6 + 0.4*sin(t*5.0 + k.x*10.0));
   col += vec3(0.95, 0.92, 0.85) * shimmer;
 
-  // vignette (soft, stained-glass look likes a frame)
   float r = length(p);
   float vig = smoothstep(1.25, 0.20, r);
   col *= 0.55 + 0.70 * vig;

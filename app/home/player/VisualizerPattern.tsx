@@ -256,6 +256,7 @@ export function PatternRingGlow(props: {
         transform: 'translate(-50%, -50%) translateZ(0)',
         pointerEvents: 'none',
         overflow: 'visible',
+        outline:'1px solid red' 
       }}
     >
             {/* Wrapper: MUST be the thing that clips blur AND owns the blur */}
@@ -287,6 +288,7 @@ export function PatternRingGlow(props: {
           maskRepeat: 'no-repeat',
           maskPosition: 'center',
           maskSize: '100% 100%',
+          outline:'1px solid yellow' 
         }}
       >
         {/* XOR ring: interior removed; NO blur here anymore */}
@@ -312,6 +314,7 @@ export function PatternRingGlow(props: {
             mixBlendMode: 'screen',
             transform: 'translateZ(0)',
             willChange: 'transform',
+            outline:'1px solid magenta' 
           }}
         >
           <VisualizerSnapshotCanvas

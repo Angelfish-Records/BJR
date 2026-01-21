@@ -435,7 +435,7 @@ export default function FullPlayer(props: {
             <PrevIcon />
           </IconCircleBtn>
 
-          <div style={{position: 'relative', width: 64, height: 64}}>
+          <div style={{position: 'relative', width: 64, height: 64, outline:'1px solid lime'}}>
             <button
               type="button"
               onClick={canPlay && !playLock ? onTogglePlay : undefined}
@@ -468,6 +468,7 @@ export default function FullPlayer(props: {
               style={{
                 position: 'absolute',
                 inset: -5,
+                outline:'1px solid cyan', 
                 borderRadius: 999,
                 zIndex: 1,
                 pointerEvents: 'none',
@@ -482,7 +483,7 @@ export default function FullPlayer(props: {
                 size={64}
                 ringPx={2}
                 glowPx={12}
-                blurPx={0}
+                blurPx={5}
                 opacity={0.92}
                 seed={913}
               />
