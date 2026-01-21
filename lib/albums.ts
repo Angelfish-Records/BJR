@@ -16,6 +16,7 @@ type AlbumDoc = {
   // ⬇️ new
   publicPageVisible?: boolean
   releaseAt?: string
+  embargoNote?: string
   earlyAccessEnabled?: boolean
   earlyAccessTiers?: string[]
   minTierToLoad?: string
@@ -116,6 +117,7 @@ export async function getAlbumBySlug(
       visualTheme,
       publicPageVisible,
       releaseAt,
+      embargoNote,  
       earlyAccessEnabled,
       earlyAccessTiers,
       minTierToLoad,
@@ -140,6 +142,12 @@ export async function getAlbumBySlug(
   const albumCatalogId = normStr(doc.catalogId) ?? undefined
   const albumTheme = normTheme(doc.visualTheme)
 
+  const releaseAt = doc.releaseAt ?? null
+  const releaseAtMs = releaseAt ? Date.parse(releaseAt) : NaN
+  const isEmbargoedByDate = Boolean(releaseAt && Number.isFinite(releaseAtMs) && releaseAtMs > Date.now())
+
+  const embargoNote = normStr(doc.embargoNote) ?? null
+
   const album: AlbumInfo = {
     id: doc._id,
     catalogId: albumCatalogId,
@@ -155,6 +163,12 @@ export async function getAlbumBySlug(
       earlyAccessTiers: parseTierNameArray(doc.earlyAccessTiers),
       minTierToLoad: parseTierName(doc.minTierToLoad),
 
+    },
+    // ✅ optimistic embargo UI (still not an entitlement decision)
+      embargo: {
+      embargoed: isEmbargoedByDate,
+      releaseAt,
+      note: embargoNote,
     },
   }
 

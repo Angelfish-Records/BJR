@@ -321,8 +321,9 @@ export default function FullPlayer(props: {
   // ✅ “unknown access” disables play/glow until check resolves (prevents stale UI)
   const canPlay = effTracks.length > 0 && accessForAlbum?.allowed !== false && accessForAlbum !== null
 
-  const releaseAtMs = accessForAlbum?.releaseAt ? Date.parse(accessForAlbum.releaseAt) : NaN
-  const showEmbargo = accessForAlbum?.embargoed && Number.isFinite(releaseAtMs)
+  const emb = effAlbum?.embargo
+  const releaseAtMs = emb?.releaseAt ? Date.parse(emb.releaseAt) : NaN
+  const showEmbargo = Boolean(emb?.embargoed && Number.isFinite(releaseAtMs))
 
   const isThisAlbumActive = Boolean(albumKey && p.queueContextId === albumKey)
   const currentIsInBrowsedAlbum = Boolean(p.current && effTracks.some((t) => t.id === p.current!.id))
@@ -451,16 +452,36 @@ export default function FullPlayer(props: {
         <div style={{maxWidth: 540, fontSize: 12, opacity: 0.62, lineHeight: 1.45}}>{albumDesc}</div>
 
         {showEmbargo ? (
-          <div style={{fontSize: 12, opacity: 0.75, marginTop: 6}}>
-            Releases{' '}
-            {new Date(releaseAtMs).toLocaleDateString(undefined, {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            })}
-            . Instant early access for patrons.
-          </div>
-        ) : null}
+  <div
+    role="note"
+    style={{
+      marginTop: 10,
+      padding: '10px 12px',
+      borderRadius: 14,
+      border: '1px solid rgba(255,255,255,0.14)',
+      background: 'rgba(0,0,0,0.22)',
+      boxShadow: '0 10px 34px rgba(0,0,0,0.28)',
+      maxWidth: 560,
+      textAlign: 'center',
+    }}
+  >
+    <div style={{fontSize: 12, fontWeight: 650, letterSpacing: 0.2, opacity: 0.95}}>
+      Embargoed until{' '}
+      {new Date(releaseAtMs).toLocaleDateString(undefined, {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      })}
+    </div>
+
+    <div style={{marginTop: 4, fontSize: 12, opacity: 0.78, lineHeight: 1.35}}>
+      {effAlbum?.embargo?.note?.trim()
+        ? effAlbum.embargo.note.trim()
+        : 'Playback is disabled for the public while this release is under embargo. Patrons may have early access.'}
+    </div>
+  </div>
+) : null}
+
 
         <div style={{display: 'flex', alignItems: 'center', gap: 10, marginTop: 8}}>
           <IconCircleBtn label="Download" onClick={gotoDownload}>

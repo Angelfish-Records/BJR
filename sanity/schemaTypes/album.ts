@@ -87,6 +87,19 @@ export default defineType({
     }),
 
     defineField({
+      name: 'embargoNote',
+      title: 'Embargo note (UI)',
+      type: 'text',
+      rows: 3,
+      description:
+        'Optional message shown on embargoed albums explaining why playback is disabled (public users).',
+      hidden: ({document}) => {
+        const d = document as {releaseAt?: string} | undefined
+        return !d?.releaseAt
+      },
+    }),
+
+    defineField({
       name: 'earlyAccessEnabled',
       title: 'Enable early access during embargo',
       type: 'boolean',

@@ -3,6 +3,12 @@
 export type TierName = 'friend' | 'patron' | 'partner'
 export type Tier = 'none' | TierName
 
+export type AlbumEmbargoInfo = {
+  embargoed: boolean
+  releaseAt: string | null
+  note?: string | null
+}
+
 export type AlbumInfo = {
   id: string
   catalogId?: string
@@ -12,6 +18,7 @@ export type AlbumInfo = {
   description?: string
   artworkUrl?: string | null
   policy?: AlbumPolicy
+  embargo?: AlbumEmbargoInfo
 }
 
 export type AlbumPolicy = {
