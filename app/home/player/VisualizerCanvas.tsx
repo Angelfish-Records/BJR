@@ -12,6 +12,11 @@ import {createMHDSilkTheme} from './visualizer/themes/mhdSilk'
 import {createLatticeWaveTheme} from './visualizer/themes/latticeWave'
 import {createPressureGlassTheme} from './visualizer/themes/pressureGlass'
 import {createReactionVeinsTheme} from './visualizer/themes/reactionVeins'
+import {createDreamFogTheme} from './visualizer/themes/dreamFog'
+import {createFilamentStormTheme} from './visualizer/themes/filamentStorm'
+import {createMosaicDriftTheme} from './visualizer/themes/mosaicDrift'
+import {createOilFlowTheme} from './visualizer/themes/oilFlow'
+import {createStarfallCanopyTheme} from './visualizer/themes/starfallCanopy'
 import {audioSurface} from './audioSurface'
 import {mediaSurface, type StageVariant} from './mediaSurface'
 import type {Theme} from './visualizer/types'
@@ -22,6 +27,21 @@ function themeFromKey(key: string | undefined | null): Theme {
     case 'gravitational-lattice':
     case 'lattice':
       return createGravitationalLatticeTheme()
+    case 'dream-fog':
+    case 'fog':
+      return createDreamFogTheme()
+    case 'filament-storm':
+    case 'filament':
+      return createFilamentStormTheme()
+    case 'mosaic-drift':
+    case 'mosaic':
+      return createMosaicDriftTheme()
+    case 'oil-flow':
+    case 'oil':
+      return createOilFlowTheme()
+    case 'starfall-canopy':
+    case 'starfall':
+      return createStarfallCanopyTheme()
     case 'orbital-script':
     case 'orbital':
       return createOrbitalScriptTheme()

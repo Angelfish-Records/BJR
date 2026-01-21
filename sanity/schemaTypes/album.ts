@@ -10,6 +10,11 @@ const THEME_OPTIONS = [
   {title: 'Reaction Veins', value: 'reaction-veins'},
   {title: 'Pressure Glass', value: 'pressure-glass'},
   {title: 'MHD Silk', value: 'mhd-silk'},
+  {title: 'Dream Fog', value: 'dream-fog'},
+  {title: 'Filament Storm', value: 'filament-storm'},
+  {title: 'Mosaic Drift', value: 'mosaic-drift'},
+  {title: 'Oil Flow', value: 'oil-flow'},
+  {title: 'Starfall Canopy', value: 'starfall-canopy'},
 ]
 
 const TIER_OPTIONS = [
