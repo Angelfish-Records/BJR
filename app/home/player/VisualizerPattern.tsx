@@ -289,7 +289,7 @@ export function PatternRingGlow(props: {
     maskSize: '100% 100%',
 
     // blend (now safely clipped)
-    mixBlendMode: 'screen',
+    mixBlendMode: 'normal',
     isolation: 'isolate',
   }}
 >
