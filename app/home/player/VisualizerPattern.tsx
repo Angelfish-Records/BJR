@@ -216,6 +216,70 @@ export function PatternRing(props: {
   )
 }
 
+export function PatternRingGlow(props: {
+  /** px size of the outer box */
+  size: number
+  /** thickness of the ring itself */
+  ringPx?: number
+  /** width of glow falloff region */
+  glowPx?: number
+  /** blur strength */
+  blurPx?: number
+  /** opacity of the sampled pattern */
+  opacity?: number
+  /** deterministic crop */
+  seed?: number
+}) {
+  const {size, ringPx = 2, glowPx = 18, blurPx = 10, opacity = 0.92, seed = 1337} = props
+
+  const pad = ringPx + glowPx
+
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: 'absolute',
+        inset: 0,
+        width: size,
+        height: size,
+        borderRadius: 999,
+        pointerEvents: 'none',
+      }}
+    >
+      {/* Glow layer: no layout impact, expands outward via negative inset */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: -pad, // <- key: expands outward without affecting layout
+          borderRadius: 999,
+          pointerEvents: 'none',
+          padding: pad,
+          boxSizing: 'border-box',
+
+          WebkitMaskImage: 'linear-gradient(#000 0 0), linear-gradient(#000 0 0)',
+          WebkitMaskClip: 'padding-box, content-box',
+          WebkitMaskComposite: 'xor',
+          WebkitMaskRepeat: 'no-repeat',
+
+          filter: `blur(${blurPx}px) contrast(1.45) saturate(1.45)`,
+          mixBlendMode: 'screen',
+          transform: 'translateZ(0)',
+        }}
+      >
+        <VisualizerSnapshotCanvas
+          opacity={opacity}
+          fps={12}
+          sourceRect={{mode: 'random', seed, scale: 0.55}}
+          active
+          style={{width: '100%', height: '100%', display: 'block'}}
+        />
+      </div>
+    </div>
+  )
+}
+
+
 export function PatternPillUnderlay(props: {
   radius?: number
   opacity?: number

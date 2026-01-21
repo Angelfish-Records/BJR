@@ -5,7 +5,7 @@ import React from 'react'
 import {usePlayer} from './PlayerState'
 import type {AlbumInfo, AlbumNavItem, PlayerTrack, Tier, TierName} from '@/lib/types'
 import {deriveShareContext, shareAlbum, shareTrack} from './share'
-import {PatternRing} from './VisualizerPattern'
+import {PatternRing, PatternRingGlow} from './VisualizerPattern'
 import {replaceQuery} from '@/app/home/urlState'
 
 function fmtTime(ms: number) {
@@ -464,9 +464,13 @@ export default function FullPlayer(props: {
               <PlayPauseBig playing={playingThisAlbum} />
             </button>
 
-            <div style={{position: 'absolute', inset: -5, borderRadius: 999, zIndex: 1}}>
-              <PatternRing size={74} thickness={7} opacity={0.55} seed={913} />
-            </div>
+            <div style={{position: 'absolute', inset: -5, borderRadius: 999, zIndex: 1, pointerEvents: 'none'}}>
+  {/* Glow behind */}
+  <PatternRingGlow size={74} ringPx={2} glowPx={22} blurPx={10} opacity={0.92} seed={913} />
+  {/* Crisp ring on top */}
+  <PatternRing size={74} thickness={7} opacity={0.55} seed={913} />
+</div>
+
           </div>
 
           <IconCircleBtn
