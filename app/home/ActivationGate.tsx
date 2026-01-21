@@ -81,18 +81,6 @@ function PatternRingOutline(props: {
   // We create a padded wrapper so the glow has “space” to fade out.
   const pad = ringPx + glowPx
 
-  // Outer mask: a rounded-rect that fades to transparent near the wrapper edge.
-  // Inner mask: a rounded-rect (the interior) that we subtract so only the ring+glow remains.
-  //
-  // We express the fade using "transparent -> black" stops; black=masked (visible) in mask space.
-  const outerFade = `radial-gradient(closest-side at 50% 50%,
-    rgba(0,0,0,1) 0%,
-    rgba(0,0,0,1) calc(100% - ${glowPx}px),
-    rgba(0,0,0,0) 100%)`
-
-  // The inner cutout is just a solid mask (we subtract it).
-  const innerCut = `linear-gradient(rgba(0,0,0,1), rgba(0,0,0,1))`
-
   return (
     <div
       style={{
@@ -106,51 +94,56 @@ function PatternRingOutline(props: {
       }}
     >
       {/* SINGLE visualizer layer + pill-shaped fade mask + inner subtraction */}
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: 0,
-          borderRadius: radius,
-          pointerEvents: 'none',
-          // --- Mask composition: outerFade minus innerCut ---
-          WebkitMaskImage: `${outerFade}, ${innerCut}`,
-          WebkitMaskSize: '100% 100%, calc(100% - ' + pad * 2 + 'px) calc(100% - ' + pad * 2 + 'px)',
-          WebkitMaskPosition: 'center, center',
-          WebkitMaskRepeat: 'no-repeat, no-repeat',
-          WebkitMaskComposite: 'source-out', // Safari: subtract second mask from first
+    {/* visualizer texture constrained to ring only (no interior pixels to blur) */}
+<div
+  aria-hidden
+  style={{
+    position: 'absolute',
+    inset: 0,
+    borderRadius: radius,
+    pointerEvents: 'none',
 
-          // Standards-ish (some browsers):
-          maskImage: `${outerFade}, ${innerCut}`,
-          maskSize: '100% 100%, calc(100% - ' + pad * 2 + 'px) calc(100% - ' + pad * 2 + 'px)',
-          maskPosition: 'center, center',
-          maskRepeat: 'no-repeat, no-repeat',
-          maskComposite: 'exclude', // subtract
+    // This is the key: ring = padding-box XOR content-box
+    padding: pad,
+    boxSizing: 'border-box',
 
-          filter: `blur(${blurPx}px) contrast(1.45) saturate(1.45)`,
-          mixBlendMode: 'screen',
-        }}
-      >
-        <VisualizerSnapshotCanvas
-          opacity={opacity}
-          fps={12}
-          sourceRect={{mode: 'random', seed, scale: 0.6}}
-          style={{}}
-          active
-        />
-      </div>
+    WebkitMaskImage:
+      'linear-gradient(#000 0 0), linear-gradient(#000 0 0)',
+    WebkitMaskClip: 'padding-box, content-box',
+    WebkitMaskComposite: 'xor',
+    WebkitMaskRepeat: 'no-repeat',
 
-      {/* Inner occluder stays: guarantees the interior never shows pattern */}
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: pad,
-          borderRadius: radius,
-          background: innerBg,
-          pointerEvents: 'none',
-        }}
-      />
+    // (optional) soften the outer edge a touch
+    // If you want more fade, increase blurPx; the ring stays clean because interior is truly cut out.
+    filter: `blur(${blurPx}px) contrast(1.45) saturate(1.45)`,
+    mixBlendMode: 'screen',
+  }}
+>
+  <VisualizerSnapshotCanvas
+    opacity={opacity}
+    fps={12}
+    sourceRect={{mode: 'random', seed, scale: 0.6}}
+    active
+    style={{
+      width: '100%',
+      height: '100%',
+      display: 'block',
+    }}
+  />
+</div>
+
+{/* optional interior fill (pure aesthetic, not functional) */}
+<div
+  aria-hidden
+  style={{
+    position: 'absolute',
+    inset: pad,
+    borderRadius: radius,
+    background: innerBg,
+    pointerEvents: 'none',
+  }}
+/>
+
 
       <div style={{position: 'relative'}}>{children}</div>
     </div>
