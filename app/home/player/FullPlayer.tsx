@@ -468,14 +468,16 @@ export default function FullPlayer(props: {
               style={{
                 position: 'absolute',
                 inset: -5,
-                borderRadius: 999,
                 zIndex: 1,
                 pointerEvents: 'none',
 
-                // add these:
-                overflow: 'visible',        // never clip children
-                isolation: 'isolate',       // stop weird blend bleed with siblings
-                transform: 'translateZ(0)', // consistent compositing
+                overflow: 'visible',
+                isolation: 'isolate',
+                transform: 'translateZ(0)',
+
+                // optional but nice: guarantees any child centered on the button
+                display: 'grid',
+                placeItems: 'center',
               }}
             >
               <PatternRingGlow
