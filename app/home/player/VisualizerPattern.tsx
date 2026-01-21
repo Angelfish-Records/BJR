@@ -217,24 +217,34 @@ export function PatternRing(props: {
 }
 
 export function PatternRingGlow(props: {
+  /** px size of the button/inner circle the glow hugs */
   size: number
+  /** thickness of the bright band right at the button edge */
   ringPx?: number
+  /** width of the outward fade region */
   glowPx?: number
+  /** blur strength (texture softening only) */
   blurPx?: number
+  /** opacity of the sampled pattern */
   opacity?: number
+  /** deterministic crop */
   seed?: number
 }) {
   const {size, ringPx = 2, glowPx = 22, blurPx = 8, opacity = 0.92, seed = 1337} = props
 
+  // Give the glow space without affecting layout.
   const pad = ringPx + glowPx
 
-  // Push the inner edge out slightly so any inward blur is hidden beneath the white button.
-  const innerInsetPx = Math.max(1, Math.round(blurPx * 0.35)) // typically 2–3px
-
-  const innerR = size / 2 + innerInsetPx
+  // Radii (in px) from the center:
+  // - innerR: button edge (keep fully ON here)
+  // - solidR: end of the "strong" band
+  // - fadeR: must be fully transparent at this outer edge
+  const innerR = size / 2
   const solidR = innerR + ringPx
   const fadeR = solidR + glowPx
 
+  // Parent mask: punches out the center and fades only on the OUTER edge.
+  // IMPORTANT: This mask is applied AFTER the child's blur (because blur is on the child).
   const mask = `radial-gradient(circle,
     rgba(0,0,0,0) 0px,
     rgba(0,0,0,0) ${Math.round(innerR)}px,
@@ -258,6 +268,7 @@ export function PatternRingGlow(props: {
         transform: 'translateZ(0)',
       }}
     >
+      {/* Mask wrapper (no blur here) */}
       <div
         aria-hidden
         style={{
@@ -265,6 +276,7 @@ export function PatternRingGlow(props: {
           inset: -pad,
           borderRadius: 999,
           pointerEvents: 'none',
+          overflow: 'hidden', // critical: clamps blurred child to mask box
 
           WebkitMaskImage: mask,
           WebkitMaskRepeat: 'no-repeat',
@@ -275,20 +287,28 @@ export function PatternRingGlow(props: {
           maskRepeat: 'no-repeat',
           maskPosition: 'center',
           maskSize: '100% 100%',
-
-          // Kill the dark ring: lift blacks aggressively, keep colour, then blur.
-          // (Order matters: brightness/contrast before blur makes the “black plate” vanish.)
-          filter: `brightness(1.35) contrast(1.65) saturate(1.55) blur(${blurPx}px)`,
-          mixBlendMode: 'screen',
         }}
       >
-        <VisualizerSnapshotCanvas
-          opacity={opacity}
-          fps={12}
-          sourceRect={{mode: 'random', seed, scale: 0.55}}
-          active
-          style={{width: '100%', height: '100%', display: 'block'}}
-        />
+        {/* Blurred texture (blur happens inside, then wrapper mask clamps it) */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            filter: `blur(${blurPx}px) contrast(1.45) saturate(1.45)`,
+            mixBlendMode: 'screen',
+            transform: 'translateZ(0)',
+          }}
+        >
+          <VisualizerSnapshotCanvas
+            opacity={opacity}
+            fps={12}
+            sourceRect={{mode: 'random', seed, scale: 0.55}}
+            active
+            style={{width: '100%', height: '100%', display: 'block'}}
+          />
+        </div>
       </div>
     </div>
   )
