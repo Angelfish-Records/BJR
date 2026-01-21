@@ -230,12 +230,13 @@ export function PatternRingGlow(props: {
   const bleed = Math.max(2, Math.round(blurPx * 2)) // room for blur to fade out
   const outerPad = pad + bleed
 
-  // outer fade: stay solid until the last (glow+bleed) pixels, then fade to 0
-  const outerFade = `radial-gradient(circle,
-    rgba(0,0,0,1) 0%,
-    rgba(0,0,0,1) calc(100% - ${glowPx + bleed}px),
-    rgba(0,0,0,0) 100%
-  )`
+  // AFTER (true circular falloff: 100% == closest side, not the corners)
+const outerFade = `radial-gradient(circle closest-side,
+  rgba(0,0,0,1) 0%,
+  rgba(0,0,0,1) calc(100% - ${glowPx + bleed}px),
+  rgba(0,0,0,0) 100%
+)`
+
 
   return (
     <div
@@ -247,7 +248,7 @@ export function PatternRingGlow(props: {
         width: size,
         height: size,
         transform: 'translate(-50%, -50%) translateZ(0)',
-        borderRadius: 999,
+        borderRadius: '50%',
         pointerEvents: 'none',
         overflow: 'visible',
       }}
