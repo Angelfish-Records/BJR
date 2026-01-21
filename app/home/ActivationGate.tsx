@@ -62,6 +62,10 @@ function PatternRingOutline(props: {
   disabled?: boolean
   // solid interior blocker color (no alpha)
   innerBg?: string
+  // NEW: outer glow controls
+  glowPx?: number // how far the glow extends outward
+  glowOpacity?: number
+  glowBlurPx?: number
 }) {
   const {
     children,
@@ -71,49 +75,93 @@ function PatternRingOutline(props: {
     opacity = 0.92,
     disabled,
     innerBg = 'rgb(10, 10, 14)',
+    glowPx = 16,
+    glowOpacity = 0.55,
+    glowBlurPx = 12,
   } = props
 
+  // Radial mask: strong near the center, fades out at the edges (for “outer glow” feel).
+  const glowMask = `radial-gradient(circle at center,
+    rgba(0,0,0,1) 0%,
+    rgba(0,0,0,1) 42%,
+    rgba(0,0,0,0) 96%)`
+
   return (
-    <div
-      style={{
-        position: 'relative',
-        borderRadius: radius,
-        padding: ringPx,
-        overflow: 'hidden',
-        boxShadow: disabled
-          ? '0 10px 22px rgba(0,0,0,0.22)'
-          : '0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent), 0 10px 26px rgba(0,0,0,0.35)',
-        opacity: disabled ? 0.7 : 1,
-        transition: 'box-shadow 180ms ease, opacity 180ms ease',
-      }}
-    >
-      {/* ring pattern */}
-      <div aria-hidden style={{position: 'absolute', inset: 0, pointerEvents: 'none'}}>
+    <div style={{position: 'relative', borderRadius: radius}}>
+      {/* OUTER GLOW (masked + blurred). Lives behind the ring. */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: -glowPx,
+          borderRadius: radius,
+          overflow: 'hidden',
+          pointerEvents: 'none',
+          opacity: disabled ? glowOpacity * 0.6 : glowOpacity,
+          filter: `blur(${glowBlurPx}px)`,
+          WebkitMaskImage: glowMask,
+          maskImage: glowMask,
+          WebkitMaskRepeat: 'no-repeat',
+          maskRepeat: 'no-repeat',
+          WebkitMaskSize: '100% 100%',
+          maskSize: '100% 100%',
+          transform: 'translateZ(0)',
+        }}
+      >
         <VisualizerSnapshotCanvas
           opacity={opacity}
           fps={12}
           sourceRect={{mode: 'random', seed, scale: 0.6}}
           style={{
-            filter: 'contrast(1.45) saturate(1.45)',
+            filter: 'contrast(1.35) saturate(1.4)',
             mixBlendMode: 'screen',
           }}
           active
         />
       </div>
 
-      {/* HARD occluder: kills any interior bleed, leaving ONLY the ring visible */}
+      {/* RING (crisp). This keeps everything you just improved. */}
       <div
-        aria-hidden
         style={{
-          position: 'absolute',
-          inset: ringPx,
+          position: 'relative',
           borderRadius: radius,
-          background: innerBg, // must be solid (no alpha)
-          pointerEvents: 'none',
+          padding: ringPx,
+          overflow: 'hidden',
+          boxShadow: disabled
+            ? '0 10px 22px rgba(0,0,0,0.22)'
+            : '0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent), 0 10px 26px rgba(0,0,0,0.35)',
+          opacity: disabled ? 0.7 : 1,
+          transition: 'box-shadow 180ms ease, opacity 180ms ease',
         }}
-      />
+      >
+        {/* ring pattern */}
+        <div aria-hidden style={{position: 'absolute', inset: 0, pointerEvents: 'none'}}>
+          <VisualizerSnapshotCanvas
+            opacity={opacity}
+            fps={12}
+            sourceRect={{mode: 'random', seed, scale: 0.6}}
+            style={{
+              filter: 'contrast(1.45) saturate(1.45)',
+              mixBlendMode: 'screen',
+            }}
+            active
+          />
+        </div>
 
-      <div style={{position: 'relative'}}>{children}</div>
+        {/* HARD occluder: kills any interior bleed, leaving ONLY the ring visible */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: ringPx,
+            borderRadius: radius,
+            background: innerBg, // must be solid (no alpha)
+            pointerEvents: 'none',
+          }}
+        />
+
+        <div style={{position: 'relative'}}>{children}</div>
+      </div>
     </div>
   )
 }
@@ -213,7 +261,7 @@ function Toggle(props: {
   )
 
   return mode === 'anon' ? (
-  <PatternRingOutline ringPx={2} seed={888} opacity={0.92} disabled={disabled} innerBg={'rgb(10, 10, 14)'}>
+  <PatternRingOutline glowPx={18} glowOpacity={0.55} glowBlurPx={14}>
     {button}
   </PatternRingOutline>
 ) : (
