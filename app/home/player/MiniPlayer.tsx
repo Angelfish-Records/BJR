@@ -492,6 +492,9 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
 
   /* ---------------- Layout constants ---------------- */
 
+  const VIEWPORT_PAD = 12 // px: keeps fixed popups inside viewport on Android DPR rounding
+  const clampLeftExpr = (x: number) => `clamp(${VIEWPORT_PAD}px, ${x}px, calc(100vw - ${VIEWPORT_PAD}px))`
+
   const DOCK_H = 80
   const TOP_BORDER = 1
   const VIS_H = 3
@@ -524,7 +527,9 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
         background: 'rgba(0,0,0,0.55)',
         backdropFilter: 'blur(10px)',
         WebkitBackdropFilter: 'blur(10px)',
-        overflow: 'visible',
+        overflowX: 'clip',
+        overflowY: 'visible',
+
       }}
     >
       <div data-af-band style={{position: 'relative', width: '100%', height: '100%'}}>
@@ -658,23 +663,29 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
           ? createPortal(
               <div
                 style={{
-                  position: 'fixed',
-                  left: seekTip.x,
-                  top: seekTip.y,
-                  transform: 'translate(-50%, -28px)',
-                  padding: '4px 8px',
-                  borderRadius: 999,
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  background: 'rgba(0,0,0,0.50)',
-                  backdropFilter: 'blur(8px)',
-                  WebkitBackdropFilter: 'blur(8px)',
-                  color: 'rgba(255,255,255,0.92)',
-                  fontSize: 11,
-                  boxShadow: '0 14px 36px rgba(0,0,0,0.35)',
-                  pointerEvents: 'none',
-                  whiteSpace: 'nowrap',
-                  zIndex: 100000,
-                }}
+  position: 'fixed',
+  left: clampLeftExpr(seekTip.x),
+  top: seekTip.y,
+  transform: 'translate(-50%, -28px)',
+  padding: '4px 8px',
+  borderRadius: 999,
+  border: '1px solid rgba(255,255,255,0.12)',
+  background: 'rgba(0,0,0,0.50)',
+  backdropFilter: 'blur(8px)',
+  WebkitBackdropFilter: 'blur(8px)',
+  color: 'rgba(255,255,255,0.92)',
+  fontSize: 11,
+  boxShadow: '0 14px 36px rgba(0,0,0,0.35)',
+  pointerEvents: 'none',
+  whiteSpace: 'nowrap',
+
+  // hardening: never let the fixed box widen scrollWidth
+  maxWidth: `calc(100vw - ${VIEWPORT_PAD * 2}px)`,
+  overflowX: 'clip',
+
+  zIndex: 100000,
+}}
+
               >
                 {fmtTimeSec(seekTip.sec)}
               </div>,
@@ -850,23 +861,27 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
                       <>
                         <div
                           style={{
-                            position: 'fixed',
-                            left: volAnchor.x,
-                            top: volAnchor.y,
-                            transform: 'translate(-50%, calc(-100% - 10px))',
-                            width: 56,
-                            height: 170,
-                            borderRadius: 14,
-                            border: '1px solid rgba(255,255,255,0.12)',
-                            background: 'rgba(0,0,0,0.55)',
-                            backdropFilter: 'blur(10px)',
-                            padding: 10,
-                            boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
-                            display: 'grid',
-                            placeItems: 'center',
-                            zIndex: 99999,
-                            overflow: 'visible',
-                          }}
+  position: 'fixed',
+  left: clampLeftExpr(volAnchor.x),
+  top: volAnchor.y,
+  transform: 'translate(-50%, calc(-100% - 10px))',
+  width: 56,
+  height: 170,
+  borderRadius: 14,
+  border: '1px solid rgba(255,255,255,0.12)',
+  background: 'rgba(0,0,0,0.55)',
+  backdropFilter: 'blur(10px)',
+  padding: 10,
+  boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
+  display: 'grid',
+  placeItems: 'center',
+  zIndex: 99999,
+  overflow: 'visible',
+
+  // hardening
+  maxWidth: `calc(100vw - ${VIEWPORT_PAD * 2}px)`,
+}}
+
                         >
                           <div className="volWrap">
                             <input
