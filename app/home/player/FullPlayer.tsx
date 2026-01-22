@@ -449,20 +449,25 @@ function playAlbumIndex(i: number) {
   }
 
   return (
-    <div
-      style={{
-        minWidth: 0,
-        borderRadius: 18,
-        border: '1px solid rgba(255,255,255,0.10)',
-        background: 'rgba(255,255,255,0.04)',
-        padding: 18,
-      }}
-    >
+  <div
+    style={{
+      minWidth: 0,
+      width: '100%',
+      maxWidth: 760,          // pick your desktop “card” width
+      margin: '0 auto',       // ✅ centers it (grid/flex safe)
+      boxSizing: 'border-box',
+      borderRadius: 18,
+      border: '1px solid rgba(255,255,255,0.10)',
+      background: 'rgba(255,255,255,0.04)',
+      padding: 18,
+    }}
+  >
+
       <div style={{display: 'grid', justifyItems: 'center', textAlign: 'center', gap: 10}}>
         <div
           style={{
-            width: 334,
-            height: 334,
+            width: 'min(334px, 86vw)',
+            height: 'min(334px, 86vw)',
             borderRadius: 18,
             border: '1px solid rgba(255,255,255,0.14)',
             background: effAlbum?.artworkUrl

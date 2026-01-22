@@ -403,7 +403,7 @@ export default function ActivationGate(props: Props) {
 
   const EMAIL_W = 360
   const OTP_W = EMAIL_W // 360
-  const BILLING_W = 480 // matches .afTopBarRightInner maxWidth
+  const BILLING_W = 450 // matches .afTopBarRightInner maxWidth
   const needsAttention = !isActive && !!attentionMessage
   const toggleClickable = !isActive && phase === 'idle' && emailValid && clerkLoaded
 
@@ -773,7 +773,7 @@ export default function ActivationGate(props: Props) {
                 <div style={{display: 'grid', gap: 10}}>
                   <div style={{fontSize: 12, lineHeight: '16px', opacity: 0.82}}>
                     {isFriend
-                      ? 'Pick a tier. You’ll confirm on Stripe after this.'
+                      ? 'Support future work and access exclusives. Secured by Stripe.'
                       : 'Switch tier, or cancel.'}
                   </div>
 
@@ -794,8 +794,8 @@ export default function ActivationGate(props: Props) {
                       label={isPatron ? 'Current' : 'Choose Patron'}
                       card={{
                         title: 'Patron',
-                        price: '$5 / mo',
-                        bullets: ['Full player access', 'Downloads', 'Artist posts + updates'],
+                        price: '$5 / month',
+                        bullets: ['All downloads', 'Early access', 'Posts and Q&A'],
                       }}
                     />
 
@@ -808,8 +808,8 @@ export default function ActivationGate(props: Props) {
                       label={isPartner ? 'Current' : 'Choose Partner'}
                       card={{
                         title: 'Partner',
-                        price: '$20 / mo',
-                        bullets: ['Everything in Patron', 'Early previews + extras', 'Priority contact'],
+                        price: '$299 / year',
+                        bullets: ['Release credits', 'Creative livestreams', 'Something else'],
                       }}
                     />
                   </div>
