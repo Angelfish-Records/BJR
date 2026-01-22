@@ -456,18 +456,19 @@ function renderModule(m: PortalModule, entitlementKeys: string[]) {
           {!owned ? <div style={{fontSize: 12, opacity: 0.65}}>locked</div> : null}
         </div>
 
-        <div style={{marginTop: 12}}>
-          <DownloadOfferCard
-            albumSlug={m.albumSlug}
-            owned={owned}
-            teaserCopy={m.teaserCopy}
-            coverImage={m.coverImage}
-            productLabel={m.productLabel}
-            highlights={m.highlights}
-            techSpec={m.techSpec}
-            assets={m.assets}
-          />
-        </div>
+        <div style={{marginTop: 12}} className="portalDownloadGrid2up">
+  <DownloadOfferCard
+    albumSlug={m.albumSlug}
+    owned={owned}
+    teaserCopy={m.teaserCopy}
+    coverImage={m.coverImage}
+    productLabel={m.productLabel}
+    highlights={m.highlights}
+    techSpec={m.techSpec}
+    assets={m.assets}
+  />
+</div>
+
       </div>
     )
   }
