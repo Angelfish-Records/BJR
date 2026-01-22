@@ -12,8 +12,7 @@ const THEME_OPTIONS = [
   {title: 'Dream Fog', value: 'dream-fog'},
   {title: 'Filament Storm', value: 'filament-storm'},
   {title: 'Mosaic Drift', value: 'mosaic-drift'},
-  {title: 'Oil Flow', value: 'oil-flow'},
-  {title: 'Starfall Canopy', value: 'starfall-canopy'},
+  {title: 'MeaningLeak', value: 'meaning-leak'},
 ]
 
 const TIER_OPTIONS = [

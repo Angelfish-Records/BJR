@@ -14,8 +14,7 @@ import {createReactionVeinsTheme} from './visualizer/themes/reactionVeins'
 import {createDreamFogTheme} from './visualizer/themes/dreamFog'
 import {createFilamentStormTheme} from './visualizer/themes/filamentStorm'
 import {createMosaicDriftTheme} from './visualizer/themes/mosaicDrift'
-import {createOilFlowTheme} from './visualizer/themes/oilFlow'
-import {createStarfallCanopyTheme} from './visualizer/themes/starfallCanopy'
+import {createMeaningLeakTheme} from './visualizer/themes/meaningLeak'
 import {audioSurface} from './audioSurface'
 import {mediaSurface, type StageVariant} from './mediaSurface'
 import type {Theme} from './visualizer/types'
@@ -35,12 +34,9 @@ function themeFromKey(key: string | undefined | null): Theme {
     case 'mosaic-drift':
     case 'mosaic':
       return createMosaicDriftTheme()
-    case 'oil-flow':
-    case 'oil':
-      return createOilFlowTheme()
-    case 'starfall-canopy':
-    case 'starfall':
-      return createStarfallCanopyTheme()
+    case 'meaning-leak':
+    case 'meaning':
+      return createMeaningLeakTheme()
     case 'orbital-script':
     case 'orbital':
       return createOrbitalScriptTheme()
