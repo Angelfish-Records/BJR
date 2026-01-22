@@ -773,7 +773,7 @@ export default function ActivationGate(props: Props) {
                 <div style={{display: 'grid', gap: 10}}>
                   <div style={{fontSize: 12, lineHeight: '16px', opacity: 0.82}}>
                     {isFriend
-                      ? 'Support future work and access exclusives. Secured by Stripe.'
+                      ? 'Support future work, access exclusive content. Secured by Stripe.'
                       : 'Switch tier, or cancel.'}
                   </div>
 

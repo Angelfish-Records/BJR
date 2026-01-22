@@ -521,6 +521,10 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
         paddingTop: 0,
         paddingRight: 12,
         paddingLeft: 0,
+
+boxSizing: 'border-box',
+  maxWidth: '100vw',
+
         background: 'rgba(0,0,0,0.55)',
         backdropFilter: 'blur(10px)',
         WebkitBackdropFilter: 'blur(10px)',
@@ -725,8 +729,8 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
               gap: 12,
               paddingTop: 0,
               paddingBottom: 0,
-              paddingInline: `var(--af-mp-pad-inline, calc(var(--af-dock-h, ${DOCK_H}px) + 12px) 12px)`,
-              boxSizing: 'border-box',
+              paddingLeft: `calc(var(--af-dock-h, ${DOCK_H}px) + 12px)`,
+              paddingRight: 0,
             }}
           >
             <div data-af-transport style={{display: 'flex', alignItems: 'center', gap: 10}}>
@@ -972,97 +976,91 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
         </div>
 
         {/* Mobile compact mode + sizing vars */}
-<style>{`
-  div[data-af-miniplayer]{
-    --af-dock-h: ${DOCK_H}px;
-    --af-mp-btn: 36px;
-    --af-mp-cols: auto minmax(0, 1fr) auto;
+        <style>{`
+          div[data-af-miniplayer]{
+            --af-dock-h: ${DOCK_H}px;
+            --af-mp-btn: 36px;
+            --af-mp-cols: auto minmax(0, 1fr) auto;
+          }
 
-    /* default padding for desktop/tablet: reserve space for artwork + right gutter */
-    --af-mp-pad-inline: calc(var(--af-dock-h) + 12px) 12px;
-  }
+          @media (max-width: 520px) {
+            div[data-af-miniplayer]{
+              --af-dock-h: 64px;
+              --af-mp-btn: 40px;
+              --af-mp-cols: minmax(0, 1fr) auto;
+              padding-right: 10px;
+            }
 
-  @media (max-width: 520px) {
-    div[data-af-miniplayer]{
-      --af-dock-h: 64px;
-      --af-mp-btn: 40px;
-      --af-mp-cols: minmax(0, 1fr) auto;
+            div[data-af-miniplayer] div[data-af-actions]{
+              display: none !important;
+              visibility: hidden !important;
+            }
 
-      /* your existing tweak */
-      padding-right: 10px;
+            div[data-af-miniplayer] div[data-af-controls]{
+  column-gap: 10px;
+  grid-template-rows: 1fr !important;
+  grid-auto-flow: column !important;
+  grid-auto-rows: 1fr !important;
+  row-gap: 0 !important;
 
-      /* CRITICAL: override the inline-calculated (64+12=76) left padding */
-      --af-mp-pad-inline: 12px 12px;
-    }
+  /* symmetric: never bias the page */
+  padding-left: 12px;
+  padding-right: 12px;
 
-    div[data-af-miniplayer] div[data-af-actions]{
-      display: none !important;
-      visibility: hidden !important;
-    }
+  height: 100%;
+  box-sizing: border-box;
+}
 
-    div[data-af-miniplayer] div[data-af-controls]{
-      column-gap: 10px;
-      grid-template-rows: 1fr !important;
-      grid-auto-flow: column !important;
-      grid-auto-rows: 1fr !important;
-      row-gap: 0 !important;
 
-      height: 100%;
-      box-sizing: border-box;
-      /* NOTE: padding now comes from --af-mp-pad-inline via the inline style change */
-    }
+            div[data-af-miniplayer] div[data-af-controls] > :nth-child(1){
+              grid-column: 2;
+              grid-row: 1;
+              justify-self: end;
+              align-self: center;
+              display: flex;
+              align-items: center;
+              justify-content: flex-end;
+              gap: 8px;
+              flex-wrap: nowrap;
+              flex: 0 0 auto;
+              min-width: 0;
+            }
 
-    div[data-af-miniplayer] div[data-af-controls] > :nth-child(1){
-      grid-column: 2;
-      grid-row: 1;
-      justify-self: end;
-      align-self: center;
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      gap: 8px;
-      flex-wrap: nowrap;
-      flex: 0 0 auto;
-      min-width: 0;
-    }
+            div[data-af-miniplayer] div[data-af-controls] > :nth-child(2){
+              grid-column: 1;
+              grid-row: 1;
+              align-self: center;
+              min-width: 0;
+              overflow: hidden;
+            }
 
-    div[data-af-miniplayer] div[data-af-controls] > :nth-child(2){
-      grid-column: 1;
-      grid-row: 1;
-      align-self: center;
-      min-width: 0;
-      overflow: hidden;
-    }
+            div[data-af-miniplayer] div[data-af-controls] > :nth-child(3){
+              display: none !important;
+              visibility: hidden !important;
+            }
 
-    div[data-af-miniplayer] div[data-af-controls] > :nth-child(3){
-      display: none !important;
-      visibility: hidden !important;
-    }
+            div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) *{
+              min-width: 0;
+              max-width: 100%;
+            }
 
-    div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) *{
-      min-width: 0;
-      max-width: 100%;
-    }
+            div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) > div{
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+              max-width: 100%;
+            }
 
-    div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) > div{
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      max-width: 100%;
-    }
-
-    div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) > div:first-child{
-      font-size: 12px !important;
-      line-height: 1.15 !important;
-    }
-
-    div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) > div:nth-child(2){
-      font-size: 10px !important;
-      line-height: 1.15 !important;
-    }
-  }
-`}</style>
-
+            div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) > div:first-child{
+              font-size: 12px !important;
+              line-height: 1.15 !important;
+            }
+            div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) > div:nth-child(2){
+              font-size: 10px !important;
+              line-height: 1.15 !important;
+            }
+          }
+        `}</style>
 
         {/* Seek + shimmer */}
         <style>{`
