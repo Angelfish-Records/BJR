@@ -260,7 +260,7 @@ if (member?.id) {
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             filter: bgUrl ? 'saturate(0.9) contrast(1.05)' : undefined,
-            transform: 'scale(1.03)',
+            transform: 'none',
           }}
         />
         <div
