@@ -42,13 +42,6 @@ export const moduleDownloadGrid = defineType({
               initialValue: 'Digital Album',
             }),
             defineField({
-              name: 'teaserCopy',
-              title: 'Teaser copy',
-              type: 'text',
-              rows: 3,
-              description: 'Shown when user does not own this offer',
-            }),
-            defineField({
               name: 'highlights',
               title: 'Highlights',
               type: 'array',

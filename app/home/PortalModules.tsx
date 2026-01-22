@@ -20,7 +20,6 @@ type ModuleRichText = {
   _key: string
   _type: 'moduleRichText'
   title?: string
-  teaser?: import('@portabletext/types').PortableTextBlock[]
   full?: import('@portabletext/types').PortableTextBlock[]
   requiresEntitlement?: string
 }
@@ -46,7 +45,6 @@ type ModuleDownloads = {
   _type: 'moduleDownloads'
   title?: string
   albumSlug: string
-  teaserCopy?: string
   assets?: DownloadAssetSel[]
   coverImage?: SanityImage
   productLabel?: string
@@ -59,7 +57,6 @@ type PortalDownloadOffer = {
   albumSlug: string
   coverImage?: SanityImage
   productLabel?: string
-  teaserCopy?: string
   highlights?: string[]
   techSpec?: string
   giftBlurb?: string
@@ -220,12 +217,11 @@ function DownloadOfferCard(props: {
   owned: boolean
   coverImage?: SanityImage
   productLabel?: string
-  teaserCopy?: string
   highlights?: string[]
   techSpec?: string
   assets?: DownloadAssetSel[]
 }) {
-  const {albumSlug, owned, coverImage, productLabel, teaserCopy, highlights, techSpec, assets} = props
+  const {albumSlug, owned, coverImage, productLabel, highlights, techSpec, assets} = props
 
   const offerCfg = getAlbumOffer(albumSlug)
   const title = offerCfg?.title ?? albumSlug
@@ -314,11 +310,14 @@ function DownloadOfferCard(props: {
               <div style={{display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center'}}>
                 {assetsToRender.map(({asset, labelOverride}) => (
                   <DownloadAlbumButton
-                    key={asset.id}
-                    albumSlug={albumSlug}
-                    assetId={asset.id}
-                    label={labelOverride ?? asset.label}
-                  />
+  key={asset.id}
+  albumSlug={albumSlug}
+  assetId={asset.id}
+  label={labelOverride ?? asset.label}
+  variant="primary"
+  fullWidth
+/>
+
                 ))}
               </div>
 
@@ -337,9 +336,6 @@ function DownloadOfferCard(props: {
         </div>
       ) : (
         <div style={{marginTop: 14, display: 'grid', gap: 10}}>
-  <div style={{fontSize: 13, opacity: 0.80, lineHeight: 1.5}}>
-    {teaserCopy ?? 'Buy the digital album to unlock downloads (perpetual).'}
-  </div>
 
   <BuyAlbumButton
     albumSlug={albumSlug}
@@ -373,7 +369,7 @@ function renderModule(m: PortalModule, entitlementKeys: string[]) {
 
   if (m._type === 'moduleRichText') {
     const entitled = hasKey(entitlementKeys, m.requiresEntitlement)
-    const blocks = entitled ? m.full ?? m.teaser ?? [] : m.teaser ?? []
+    const blocks = entitled ? m.full ?? [] : m.full ?? []
     return (
       <PortalRichText key={m._key} title={m.title} blocks={blocks} locked={!!m.requiresEntitlement && !entitled} />
     )
@@ -422,7 +418,6 @@ function renderModule(m: PortalModule, entitlementKeys: string[]) {
                 key={`${m._key}:${idx}:${o.albumSlug}`}
                 albumSlug={o.albumSlug}
                 owned={owned}
-                teaserCopy={o.teaserCopy}
                 coverImage={o.coverImage}
                 productLabel={o.productLabel}
                 highlights={o.highlights}
@@ -460,7 +455,6 @@ function renderModule(m: PortalModule, entitlementKeys: string[]) {
   <DownloadOfferCard
     albumSlug={m.albumSlug}
     owned={owned}
-    teaserCopy={m.teaserCopy}
     coverImage={m.coverImage}
     productLabel={m.productLabel}
     highlights={m.highlights}

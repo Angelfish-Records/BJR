@@ -6,11 +6,10 @@ import type {PortableTextBlock} from '@portabletext/types'
 export default function PortalRichText(props: {
   title?: string
   blocks: PortableTextBlock[]
-  teaserBlocks?: PortableTextBlock[]
   locked?: boolean
 }) {
-  const {title, blocks, teaserBlocks = [], locked} = props
-  const value: PortableTextBlock[] = locked ? teaserBlocks : blocks
+  const {title, blocks = [], locked} = props
+  const value: PortableTextBlock[] = blocks
 
   return (
     <div

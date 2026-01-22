@@ -1,4 +1,3 @@
-// web/app/home/modules/DownloadAlbumButton.tsx
 'use client'
 
 import React from 'react'
@@ -10,6 +9,11 @@ type Props = {
   disabled?: boolean
   className?: string
   style?: React.CSSProperties
+
+  // NEW
+  variant?: 'default' | 'primary' | 'ghost' | 'link'
+  fullWidth?: boolean
+  buttonStyle?: React.CSSProperties
 }
 
 type DownloadResponse =
@@ -21,6 +25,10 @@ type DownloadResponse =
     }
   | {ok: false; error?: string}
 
+function mergeStyle(a: React.CSSProperties | undefined, b: React.CSSProperties | undefined) {
+  return {...(a ?? {}), ...(b ?? {})}
+}
+
 export default function DownloadAlbumButton(props: Props) {
   const {
     albumSlug,
@@ -29,6 +37,10 @@ export default function DownloadAlbumButton(props: Props) {
     disabled,
     className,
     style,
+
+    variant = 'default',
+    fullWidth = false,
+    buttonStyle,
   } = props
 
   const [busy, setBusy] = React.useState(false)
@@ -49,13 +61,11 @@ export default function DownloadAlbumButton(props: Props) {
       const data = (await res.json().catch(() => null)) as DownloadResponse | null
 
       if (!res.ok || !data || data.ok !== true || !('url' in data) || !data.url) {
-        const msg =
-          data && data.ok === false && data.error ? data.error : 'Could not start download.'
+        const msg = data && data.ok === false && data.error ? data.error : 'Could not start download.'
         setErr(msg)
         return
       }
 
-      // Use assign so it behaves like a direct download nav.
       window.location.assign(data.url)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Network error.'
@@ -65,25 +75,57 @@ export default function DownloadAlbumButton(props: Props) {
     }
   }
 
+  const base: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderRadius: 14,
+    padding: '12px 14px',
+    fontSize: 14,
+    fontWeight: 650,
+    cursor: busy || disabled ? 'not-allowed' : 'pointer',
+    opacity: busy || disabled ? 0.55 : 1,
+    width: fullWidth ? '100%' : undefined,
+  }
+
+  const variants: Record<NonNullable<Props['variant']>, React.CSSProperties> = {
+    default: {
+      borderRadius: 999,
+      border: '1px solid rgba(255,255,255,0.14)',
+      background: 'rgba(255,255,255,0.04)',
+      padding: '8px 12px',
+      fontSize: 13,
+      fontWeight: 600,
+      opacity: busy || disabled ? 0.55 : 0.9,
+    },
+    primary: {
+      border: '1px solid rgba(255,255,255,0.14)',
+      background: 'rgba(255,255,255,0.92)',
+      color: 'rgba(0,0,0,0.92)',
+      boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
+    },
+    ghost: {
+      border: '1px solid rgba(255,255,255,0.16)',
+      background: 'rgba(255,255,255,0.04)',
+      color: 'rgba(255,255,255,0.92)',
+    },
+    link: {
+      border: 'none',
+      background: 'transparent',
+      color: 'rgba(255,255,255,0.86)',
+      fontWeight: 650,
+      padding: '8px 6px',
+      textDecoration: 'underline',
+      textUnderlineOffset: 3,
+    },
+  }
+
+  const computed = mergeStyle(mergeStyle(base, variants[variant]), buttonStyle)
+
   return (
     <div className={className} style={style}>
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={busy || disabled}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 10,
-          borderRadius: 999,
-          border: '1px solid rgba(255,255,255,0.14)',
-          background: 'rgba(255,255,255,0.04)',
-          padding: '8px 12px',
-          fontSize: 13,
-          cursor: busy || disabled ? 'not-allowed' : 'pointer',
-          opacity: busy || disabled ? 0.55 : 0.9,
-        }}
-      >
+      <button type="button" onClick={onClick} disabled={busy || disabled} style={computed}>
         {busy ? 'Preparing download…' : label}
       </button>
 

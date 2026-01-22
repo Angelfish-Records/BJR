@@ -13,7 +13,6 @@ export type PortalModuleRichText = {
   _key: string
   _type: 'moduleRichText'
   title?: string
-  teaser?: PortableTextBlock[]
   full?: PortableTextBlock[]
   requiresEntitlement?: string
 }
@@ -43,7 +42,6 @@ export type PortalDownloadOffer = {
   albumSlug: string
   coverImage?: SanityImage
   productLabel?: string
-  teaserCopy?: string
   highlights?: string[]
   techSpec?: string
   giftBlurb?: string
@@ -62,7 +60,6 @@ export type PortalModuleDownloads = {
   _type: 'moduleDownloads'
   title?: string
   albumSlug: string
-  teaserCopy?: string
   assets?: Array<{assetId: string; label?: string}>
 
   // NEW
@@ -108,7 +105,6 @@ const portalPageQuery = `
       blurb,
 
       // moduleRichText
-      teaser,
       full,
       requiresEntitlement,
 
@@ -122,7 +118,6 @@ const portalPageQuery = `
 
       // moduleDownloads
       albumSlug,
-      teaserCopy,
       assets[]{assetId, label},
       coverImage,
       productLabel,
@@ -135,7 +130,6 @@ const portalPageQuery = `
         albumSlug,
         coverImage,
         productLabel,
-        teaserCopy,
         highlights,
         techSpec,
         giftBlurb,

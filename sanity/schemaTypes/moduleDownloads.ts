@@ -18,13 +18,6 @@ export const moduleDownloads = defineType({
       description: 'Must match AlbumOffer.albumSlug',
       validation: (r) => r.required(),
     }),
-    defineField({
-      name: 'teaserCopy',
-      title: 'Teaser copy',
-      type: 'text',
-      rows: 3,
-      description: 'Shown when user does not own the album',
-    }),
 
     // ---- NEW: Bandcamp-ish display metadata (Sanity-owned) ----
     defineField({

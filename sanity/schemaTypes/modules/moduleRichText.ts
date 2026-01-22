@@ -13,13 +13,6 @@ export const moduleRichText = defineType({
 
     // Keep it simple: portable text for both teaser and full.
     defineField({
-      name: 'teaser',
-      title: 'Teaser',
-      type: 'array',
-      of: [{type: 'block'}],
-      description: 'What signed-out / non-entitled users see.',
-    }),
-    defineField({
       name: 'full',
       title: 'Full',
       type: 'array',
