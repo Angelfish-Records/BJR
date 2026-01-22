@@ -343,7 +343,7 @@ function OverlayPanel(props: {open: boolean; children: React.ReactNode}) {
         transform: open ? 'translateY(0px)' : 'translateY(-6px)',
         opacity: open ? 1 : 0,
         maxHeight: open ? 520 : 0, // large enough; we clip via maxHeight when closed
-        overflow: 'hidden',
+        overflow: open ? 'visible' : 'hidden',
         transition:
           'max-height 240ms cubic-bezier(.2,.8,.2,1), opacity 160ms ease, transform 220ms cubic-bezier(.2,.8,.2,1)',
         pointerEvents: open ? 'auto' : 'none',
@@ -403,7 +403,7 @@ export default function ActivationGate(props: Props) {
 
   const EMAIL_W = 360
   const OTP_W = EMAIL_W // 360
-  const BILLING_W = 520 // matches .afTopBarRightInner maxWidth
+  const BILLING_W = 480 // matches .afTopBarRightInner maxWidth
   const needsAttention = !isActive && !!attentionMessage
   const toggleClickable = !isActive && phase === 'idle' && emailValid && clerkLoaded
 
