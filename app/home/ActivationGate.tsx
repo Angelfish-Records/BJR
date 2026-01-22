@@ -353,12 +353,19 @@ function OverlayPanel(props: {open: boolean; children: React.ReactNode}) {
         style={{
           borderRadius: 16,
           border: open ? '1px solid rgba(255,255,255,0.14)' : '0px solid transparent',
-          background: open ? 'rgba(0,0,0,0.28)' : 'transparent',
+          background: open ? 'rgba(10,10,14,0.96)' : 'transparent',
+          backdropFilter: open ? 'blur(10px)' : 'none',
           padding: open ? 12 : 0,
-          boxShadow: open ? '0 16px 40px rgba(0,0,0,0.35)' : 'none',
+          boxShadow: open
+            ? `
+              0 18px 42px rgba(0,0,0,0.55),      /* lift */
+              0 0 0 1px rgba(255,255,255,0.04),  /* subtle edge definition */
+              0 40px 120px rgba(0,0,0,0.85)      /* ambient separation */
+            `
+            : 'none',
           transition:
-            'padding 240ms cubic-bezier(.2,.8,.2,1), border-width 240ms cubic-bezier(.2,.8,.2,1), background 240ms ease, box-shadow 240ms ease',
-        }}
+              'padding 240ms cubic-bezier(.2,.8,.2,1), border-width 240ms cubic-bezier(.2,.8,.2,1), background 240ms ease, box-shadow 240ms ease',
+          }}
       >
         {children}
       </div>
@@ -395,6 +402,8 @@ export default function ActivationGate(props: Props) {
     (user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? '') || email
 
   const EMAIL_W = 360
+  const OTP_W = EMAIL_W // 360
+  const BILLING_W = 520 // matches .afTopBarRightInner maxWidth
   const needsAttention = !isActive && !!attentionMessage
   const toggleClickable = !isActive && phase === 'idle' && emailValid && clerkLoaded
 
@@ -697,7 +706,7 @@ export default function ActivationGate(props: Props) {
                         }}
                         title="View membership options"
                       >
-                        {billingOpen ? 'Close' : isFriend ? 'Membership' : 'Manage membership'}
+                        Membership
                       </button>
                     ) : null}
                   </div>
@@ -717,18 +726,24 @@ export default function ActivationGate(props: Props) {
 
           {/* OVERLAY STACK anchored to header row (true dropdown; no layout shift) */}
           <div
-            style={{
-              position: 'absolute',
-              top: 'calc(100% + 8px)', // ✅ no guessing with 32px; uses actual header height
-              right: 0,
-              width: '100%',
-              maxWidth: EMAIL_W,
-              zIndex: 60,
-              pointerEvents: otpOpen || billingOpen ? 'auto' : 'none',
-            }}
-          >
+  style={{
+    position: 'absolute',
+    top: 'calc(100% + 8px)',
+    right: 0,
+    zIndex: 60,
+    pointerEvents: otpOpen || billingOpen ? 'auto' : 'none',
+
+    // let children choose their own width; we just anchor to the right edge
+    display: 'grid',
+    justifyItems: 'end',
+    width: 'max-content',
+    maxWidth: 'min(92vw, 520px)', // safety on small screens
+  }}
+>
+
             {/* OTP dropdown */}
             {!isActive && (
+              <div style={{width: OTP_W, maxWidth: '92vw'}}>
               <OverlayPanel open={otpOpen}>
                 <div style={{display: 'grid', gap: 10, justifyItems: 'center'}}>
                   <OtpBoxes
@@ -748,10 +763,12 @@ export default function ActivationGate(props: Props) {
                   )}
                 </div>
               </OverlayPanel>
+              </div>
             )}
 
             {/* Billing dropdown */}
             {isActive && canManageBilling && (
+              <div style={{width: BILLING_W, maxWidth: '92vw'}}>
               <OverlayPanel open={billingOpen}>
                 <div style={{display: 'grid', gap: 10}}>
                   <div style={{fontSize: 12, lineHeight: '16px', opacity: 0.82}}>
@@ -804,6 +821,7 @@ export default function ActivationGate(props: Props) {
                   )}
                 </div>
               </OverlayPanel>
+              </div>
             )}
           </div>
         </div>
