@@ -1,4 +1,3 @@
-// web/app/home/modules/GiftAlbumButton.tsx
 'use client'
 
 import React from 'react'
@@ -8,6 +7,12 @@ type Props = {
   albumSlug: string
   ctaLabel?: string
   className?: string
+
+  // NEW
+  variant?: 'default' | 'primary' | 'ghost' | 'link'
+  fullWidth?: boolean
+  style?: React.CSSProperties
+  buttonStyle?: React.CSSProperties
 }
 
 type GiftCreateOk = {
@@ -23,14 +28,7 @@ type GiftCreateOk = {
   correlationId?: string
 }
 
-type GiftCreateErr = {
-  ok: false
-  error: string
-}
-
-/* -------------------------
-   Runtime type guards
--------------------------- */
+type GiftCreateErr = {ok: false; error: string}
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null
@@ -53,12 +51,22 @@ function isGiftCreateErr(v: unknown): v is GiftCreateErr {
   return v.ok === false && typeof v.error === 'string'
 }
 
-/* -------------------------
-   Component
--------------------------- */
+function mergeStyle(a: React.CSSProperties | undefined, b: React.CSSProperties | undefined) {
+  return {...(a ?? {}), ...(b ?? {})}
+}
 
 export default function GiftAlbumButton(props: Props) {
-  const {albumTitle, albumSlug, ctaLabel = 'Send as gift', className} = props
+  const {
+    albumTitle,
+    albumSlug,
+    ctaLabel = 'Send as gift',
+    className,
+
+    variant = 'default',
+    fullWidth = false,
+    style,
+    buttonStyle,
+  } = props
 
   const [open, setOpen] = React.useState(false)
   const [toEmail, setToEmail] = React.useState('')
@@ -68,10 +76,7 @@ export default function GiftAlbumButton(props: Props) {
   const [claimUrl, setClaimUrl] = React.useState<string | null>(null)
   const [mailto, setMailto] = React.useState<string | null>(null)
 
-  const canSubmit =
-    toEmail.trim().length >= 3 &&
-    toEmail.includes('@') &&
-    !busy
+  const canSubmit = toEmail.trim().length >= 3 && toEmail.includes('@') && !busy
 
   const onBackdropMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) setOpen(false)
@@ -106,14 +111,12 @@ export default function GiftAlbumButton(props: Props) {
       setClaimUrl(created.claimUrl)
       setMailto(created.mailto)
 
-      // Best-effort: open email draft (user-initiated click)
       try {
         window.location.href = created.mailto
       } catch {
-        // ignore popup blocking
+        // ignore
       }
 
-      // Canonical flow: redirect to Stripe
       window.location.href = created.checkoutUrl
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -134,8 +137,55 @@ export default function GiftAlbumButton(props: Props) {
     if (mailto) window.location.href = mailto
   }
 
+  const base: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    padding: '12px 14px',
+    fontSize: 14,
+    fontWeight: 650,
+    cursor: 'pointer',
+    width: fullWidth ? '100%' : undefined,
+  }
+
+  const variants: Record<NonNullable<Props['variant']>, React.CSSProperties> = {
+    default: {
+      borderRadius: 999,
+      border: '1px solid rgba(255,255,255,0.14)',
+      background: 'rgba(255,255,255,0.03)',
+      fontSize: 13,
+      fontWeight: 600,
+      padding: '10px 14px',
+      opacity: 0.92,
+      color: 'rgba(255,255,255,0.92)',
+    },
+    primary: {
+      border: '1px solid rgba(255,255,255,0.14)',
+      background: 'rgba(255,255,255,0.92)',
+      color: 'rgba(0,0,0,0.92)',
+      boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
+    },
+    ghost: {
+      border: '1px solid rgba(255,255,255,0.16)',
+      background: 'rgba(255,255,255,0.04)',
+      color: 'rgba(255,255,255,0.92)',
+    },
+    link: {
+      border: 'none',
+      background: 'transparent',
+      color: 'rgba(255,255,255,0.86)',
+      padding: '8px 6px',
+      textDecoration: 'underline',
+      textUnderlineOffset: 3,
+      borderRadius: 10,
+    },
+  }
+
+  const triggerStyle = mergeStyle(mergeStyle(base, variants[variant]), buttonStyle)
+
   return (
-    <div style={{display: 'inline-block'}}>
+    <div style={mergeStyle({display: 'inline-block'}, style)}>
       <button
         type="button"
         className={className}
@@ -146,15 +196,7 @@ export default function GiftAlbumButton(props: Props) {
           setClaimUrl(null)
           setMailto(null)
         }}
-        style={{
-          borderRadius: 999,
-          border: '1px solid rgba(255,255,255,0.14)',
-          background: 'rgba(255,255,255,0.03)',
-          padding: '10px 14px',
-          fontSize: 13,
-          opacity: 0.92,
-          cursor: 'pointer',
-        }}
+        style={triggerStyle}
       >
         {ctaLabel}
       </button>
@@ -173,8 +215,6 @@ export default function GiftAlbumButton(props: Props) {
             display: 'grid',
             placeItems: 'center',
             padding: 16,
-
-            // Android drift guardrails
             overflowX: 'clip',
             maxWidth: '100vw',
           }}
@@ -192,6 +232,7 @@ export default function GiftAlbumButton(props: Props) {
               overflowX: 'clip',
             }}
           >
+            {/* (modal content unchanged) */}
             <div style={{display: 'flex', justifyContent: 'space-between', gap: 12}}>
               <div style={{fontSize: 14, opacity: 0.92}}>Send as gift</div>
               <button
@@ -211,8 +252,7 @@ export default function GiftAlbumButton(props: Props) {
             </div>
 
             <div style={{marginTop: 10, fontSize: 13, opacity: 0.78}}>
-              You’ll be sent to Stripe to purchase{' '}
-              <span style={{opacity: 0.9}}>{albumTitle}</span> as a gift.
+              You’ll be sent to Stripe to purchase <span style={{opacity: 0.9}}>{albumTitle}</span> as a gift.
             </div>
 
             <div style={{marginTop: 14, display: 'grid', gap: 10}}>
@@ -277,8 +317,12 @@ export default function GiftAlbumButton(props: Props) {
             <div style={{marginTop: 14, display: 'flex', gap: 10, justifyContent: 'flex-end'}}>
               {claimUrl ? (
                 <>
-                  <button type="button" onClick={onCopyClaim}>Copy claim link</button>
-                  <button type="button" onClick={onOpenMailDraft}>Open email</button>
+                  <button type="button" onClick={onCopyClaim}>
+                    Copy claim link
+                  </button>
+                  <button type="button" onClick={onOpenMailDraft}>
+                    Open email
+                  </button>
                 </>
               ) : null}
 
@@ -286,11 +330,7 @@ export default function GiftAlbumButton(props: Props) {
                 Cancel
               </button>
 
-              <button
-                type="button"
-                disabled={!canSubmit}
-                onClick={onContinueToStripe}
-              >
+              <button type="button" disabled={!canSubmit} onClick={onContinueToStripe}>
                 {busy ? 'Opening Stripe…' : 'Continue to Stripe'}
               </button>
             </div>

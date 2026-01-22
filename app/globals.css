@@ -88,19 +88,20 @@ body { margin: 0; overflow-x: hidden; }
   }
 }
 
-/* Downloads: two-up on desktop, stacked on mobile */
-.portalDownloadGrid2up {
+/* Always 2-up on desktop, even if only one offer is present */
+.portalDownloadGrid2up{
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
-  min-width: 0;
-  grid-template-columns: 1fr;
+  align-items: start;
 }
 
-@media (min-width: 860px) {
-  .portalDownloadGrid2up {
-    grid-template-columns: 1fr 1fr;
-    align-items: start;
+/* Collapse to 1-up on mobile */
+@media (max-width: 720px){
+  .portalDownloadGrid2up{
+    grid-template-columns: 1fr;
   }
 }
+
 
 

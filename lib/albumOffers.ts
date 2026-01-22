@@ -12,6 +12,8 @@ export type AlbumOfferAsset = {
 export type AlbumOffer = {
   albumSlug: string
   title: string
+  artistName?: string
+  priceLabel?: string
   stripePriceId: string
   entitlementKey: string
   includes: string[]
@@ -22,6 +24,8 @@ export const ALBUM_OFFERS: Record<string, AlbumOffer> = {
   afterglow: {
     albumSlug: 'afterglow',
     title: 'Afterglow',
+    artistName: 'Brendan John Roch',
+    priceLabel: '$10 NZD',
     stripePriceId: 'price_1SmNcsQVwozbpzk4awZ9x12h',
     entitlementKey: ENT.downloadAlbum('afterglow'),
     includes: ['WAV', 'MP3', 'Lyrics PDF'],

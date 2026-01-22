@@ -160,6 +160,61 @@ function buildAssetsToRender(offerAssets: AlbumOfferAsset[], configured: Downloa
 // Single offer card (Bandcamp-style, self-contained)
 // --------------------
 
+function NoteRow(props: {icon: React.ReactNode; children: React.ReactNode}) {
+  const {icon, children} = props
+  return (
+    <div style={{display: 'grid', gridTemplateColumns: '22px 1fr', gap: 10, alignItems: 'start'}}>
+      <div style={{opacity: 0.75, marginTop: 1}}>{icon}</div>
+      <div style={{opacity: 0.8, lineHeight: 1.45}}>{children}</div>
+    </div>
+  )
+}
+
+const ICON_WAVE = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+    <path
+      d="M3 12c3 0 3-6 6-6s3 12 6 12 3-6 6-6"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
+const ICON_24 = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+    <path d="M7 7h10v10H7z" stroke="currentColor" strokeWidth="1.6" opacity="0.35" />
+    <path
+      d="M7.5 14.5c2.3-2.6 5.2-2.6 5.2-.8 0 1.7-3.7 1.5-5.2 3.8h5.6"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M15.6 12.2v5.3M18.7 16.1h-4.5"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
+const ICON_DOLLAR = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+    <path d="M12 3v18" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity="0.5" />
+    <path
+      d="M16.8 7.2c-1-1-2.6-1.7-4.8-1.7-2.5 0-4.5 1.1-4.5 3.1 0 4.2 9.7 1.8 9.7 6.2 0 2.1-2 3.2-4.6 3.2-2.2 0-4-.7-5.1-1.8"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
 function DownloadOfferCard(props: {
   albumSlug: string
   owned: boolean
@@ -168,18 +223,22 @@ function DownloadOfferCard(props: {
   teaserCopy?: string
   highlights?: string[]
   techSpec?: string
-  // giftBlurb intentionally not passed into GiftAlbumButton here until you add that prop support
   assets?: DownloadAssetSel[]
 }) {
   const {albumSlug, owned, coverImage, productLabel, teaserCopy, highlights, techSpec, assets} = props
 
   const offerCfg = getAlbumOffer(albumSlug)
   const title = offerCfg?.title ?? albumSlug
+  const artistName = offerCfg?.artistName
+  const priceLabel = offerCfg?.priceLabel
   const offerAssets: AlbumOfferAsset[] = offerCfg?.assets ?? []
   const configured = assets && assets.length > 0 ? assets : null
   const {assetsToRender, missingConfiguredIds} = buildAssetsToRender(offerAssets, configured)
 
   const coverUrl = coverImage ? urlFor(coverImage).width(900).height(900).fit('crop').url() : null
+
+  const includesText =
+    offerCfg?.includes?.length ? `Includes ${offerCfg.includes.join(', ')}.` : 'Includes streaming + multiple download formats.'
 
   return (
     <div
@@ -208,10 +267,16 @@ function DownloadOfferCard(props: {
       ) : null}
 
       <div style={{marginTop: coverUrl ? 12 : 0}}>
-        <div style={{fontSize: 20, opacity: 0.95, lineHeight: 1.1}}>{title}</div>
-        <div style={{marginTop: 6, fontSize: 13, opacity: 0.72}}>{productLabel ?? 'Digital Album'}</div>
+        <div style={{fontSize: 22, opacity: 0.95, lineHeight: 1.1}}>{title}</div>
+        {artistName ? <div style={{marginTop: 6, fontSize: 14, opacity: 0.72}}>by {artistName}</div> : null}
+
+        <div style={{marginTop: 8, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12}}>
+          <div style={{fontSize: 13, opacity: 0.70}}>{productLabel ?? 'Digital Album'}</div>
+          {!owned && priceLabel ? <div style={{fontSize: 18, fontWeight: 650, opacity: 0.92}}>{priceLabel}</div> : null}
+        </div>
       </div>
 
+      {/* Optional highlights you already support */}
       {highlights && highlights.length > 0 ? (
         <div style={{marginTop: 12, display: 'grid', gap: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.5}}>
           {highlights.map((h, i) => (
@@ -220,7 +285,13 @@ function DownloadOfferCard(props: {
         </div>
       ) : null}
 
-      {techSpec ? <div style={{marginTop: 12, fontSize: 13, opacity: 0.78}}>{techSpec}</div> : null}
+      {/* Bandcamp-style icon notes (hard-coded) */}
+            <div style={{marginTop: 14, display: 'grid', gap: 10, fontSize: 13}}>
+        <NoteRow icon={ICON_WAVE}>{includesText}</NoteRow>
+        <NoteRow icon={ICON_24}>{techSpec ?? 'Download available in 24-bit / 96kHz.'}</NoteRow>
+        <NoteRow icon={ICON_DOLLAR}>Your money goes directly to the artist.</NoteRow>
+      </div>
+
 
       {!offerCfg ? (
         <div style={{marginTop: 14, fontSize: 13, opacity: 0.75}}>
@@ -251,28 +322,47 @@ function DownloadOfferCard(props: {
                 ))}
               </div>
 
-              <div style={{display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center'}}>
-                <GiftAlbumButton albumTitle={title} albumSlug={albumSlug} />
-              </div>
+              {/* Keep gift available, but visually separated */}
+              <div style={{paddingTop: 2, textAlign: 'center'}}>
+  <GiftAlbumButton
+    albumTitle={title}
+    albumSlug={albumSlug}
+    ctaLabel="Send as gift"
+    variant="link"
+  />
+</div>
+
             </>
           )}
         </div>
       ) : (
         <div style={{marginTop: 14, display: 'grid', gap: 10}}>
-          <div style={{fontSize: 13, opacity: 0.80, lineHeight: 1.5}}>
-            {teaserCopy ?? 'Buy the digital album to unlock downloads (perpetual).'}
-          </div>
-          <div>
-            <BuyAlbumButton albumSlug={albumSlug} label="Buy digital album" />
-          </div>
-          <div>
-            <GiftAlbumButton albumTitle={title} albumSlug={albumSlug} ctaLabel="Send as gift" />
-          </div>
-        </div>
+  <div style={{fontSize: 13, opacity: 0.80, lineHeight: 1.5}}>
+    {teaserCopy ?? 'Buy the digital album to unlock downloads (perpetual).'}
+  </div>
+
+  <BuyAlbumButton
+    albumSlug={albumSlug}
+    label="Buy Digital Album"
+    variant="primary"
+    fullWidth
+  />
+
+  <div style={{textAlign: 'center'}}>
+    <GiftAlbumButton
+      albumTitle={title}
+      albumSlug={albumSlug}
+      ctaLabel="Send as gift"
+      variant="link"
+    />
+  </div>
+</div>
+
       )}
     </div>
   )
 }
+
 
 // --------------------
 // Module renderer (reused per tab)
