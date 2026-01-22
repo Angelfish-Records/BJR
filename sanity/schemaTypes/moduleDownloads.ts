@@ -26,6 +26,42 @@ export const moduleDownloads = defineType({
       description: 'Shown when user does not own the album',
     }),
 
+    // ---- NEW: Bandcamp-ish display metadata (Sanity-owned) ----
+    defineField({
+      name: 'coverImage',
+      title: 'Cover image',
+      type: 'image',
+      options: {hotspot: true},
+      description: 'Displayed in the downloads card (Bandcamp-style).',
+    }),
+    defineField({
+      name: 'productLabel',
+      title: 'Product label',
+      type: 'string',
+      description: 'Eg “Digital Album”.',
+      initialValue: 'Digital Album',
+    }),
+    defineField({
+      name: 'highlights',
+      title: 'Highlights',
+      type: 'array',
+      description: 'Short value props (optional).',
+      of: [{type: 'string'}],
+    }),
+    defineField({
+      name: 'techSpec',
+      title: 'Tech spec callout (optional)',
+      type: 'string',
+      description: 'Eg “Download available in 24-bit / 96kHz”.',
+    }),
+    defineField({
+      name: 'giftBlurb',
+      title: 'Gift modal blurb (optional)',
+      type: 'text',
+      rows: 2,
+      description: 'Copy shown in the “Send as gift” modal.',
+    }),
+
     // Optional: editors choose which asset buttons appear (and label overrides),
     // while code enforces that the assetId must exist in ALBUM_OFFERS[albumSlug].assets.
     defineField({

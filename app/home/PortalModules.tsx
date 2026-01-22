@@ -3,8 +3,10 @@ import React from 'react'
 import {listCurrentEntitlementKeys} from '../../lib/entitlements'
 import PortalRichText from './modules/PortalRichText'
 import {getAlbumOffer, type AlbumOfferAsset} from '../../lib/albumOffers'
+import {urlFor} from '../../sanity/lib/image'
 import BuyAlbumButton from './modules/BuyAlbumButton'
 import DownloadAlbumButton from './modules/DownloadAlbumButton'
+import GiftAlbumButton from './modules/GiftAlbumButton'
 import PortalTabs, {type PortalTabSpec} from './PortalTabs'
 import PortalArtistPosts from './modules/PortalArtistPosts'
 
@@ -30,13 +32,45 @@ type ModuleCardGrid = {
   cards: Array<{_key: string; title: string; body?: string; requiresEntitlement?: string}>
 }
 
+type SanityImage = {
+  _type: 'image'
+  asset: {_ref: string; _type: 'reference'}
+  crop?: unknown
+  hotspot?: unknown
+}
+
+type DownloadAssetSel = {assetId: string; label?: string}
+
 type ModuleDownloads = {
   _key: string
   _type: 'moduleDownloads'
   title?: string
   albumSlug: string
   teaserCopy?: string
-  assets?: Array<{assetId: string; label?: string}>
+  assets?: DownloadAssetSel[]
+  coverImage?: SanityImage
+  productLabel?: string
+  highlights?: string[]
+  techSpec?: string
+  giftBlurb?: string
+}
+
+type PortalDownloadOffer = {
+  albumSlug: string
+  coverImage?: SanityImage
+  productLabel?: string
+  teaserCopy?: string
+  highlights?: string[]
+  techSpec?: string
+  giftBlurb?: string
+  assets?: DownloadAssetSel[]
+}
+
+type ModuleDownloadGrid = {
+  _key: string
+  _type: 'moduleDownloadGrid'
+  title?: string
+  offers: PortalDownloadOffer[]
 }
 
 type ModuleArtistPosts = {
@@ -48,7 +82,13 @@ type ModuleArtistPosts = {
   minVisibility?: 'public' | 'friend' | 'patron' | 'partner'
 }
 
-type PortalModule = ModuleHeading | ModuleRichText | ModuleCardGrid | ModuleDownloads | ModuleArtistPosts
+type PortalModule =
+  | ModuleHeading
+  | ModuleRichText
+  | ModuleCardGrid
+  | ModuleDownloads
+  | ModuleDownloadGrid
+  | ModuleArtistPosts
 
 type Props = {
   modules: PortalModule[]
@@ -100,30 +140,8 @@ function PanelCard(props: {title: string; body?: string; locked?: boolean}) {
   )
 }
 
-// --------------------
-// Downloads module
-// --------------------
-
-type DownloadsModuleProps = {
-  title?: string
-  albumSlug: string
-  teaserCopy?: string
-  owned: boolean
-  assets?: Array<{assetId: string; label?: string}>
-}
-
-function DownloadsModule(props: DownloadsModuleProps) {
-  const {title, albumSlug, teaserCopy, owned, assets} = props
-  const offer = getAlbumOffer(albumSlug)
-
-  const offerAssets: AlbumOfferAsset[] = offer?.assets ?? []
-
-  const configured = assets && assets.length > 0 ? assets : null
-
-  const assetsToRender: Array<{
-    asset: AlbumOfferAsset
-    labelOverride?: string
-  }> = []
+function buildAssetsToRender(offerAssets: AlbumOfferAsset[], configured: DownloadAssetSel[] | null) {
+  const assetsToRender: Array<{asset: AlbumOfferAsset; labelOverride?: string}> = []
 
   if (configured) {
     for (const sel of configured) {
@@ -134,85 +152,121 @@ function DownloadsModule(props: DownloadsModuleProps) {
     for (const asset of offerAssets) assetsToRender.push({asset})
   }
 
-  const missingConfiguredIds =
-    configured?.filter((sel) => !offerAssets.some((a) => a.id === sel.assetId)) ?? []
+  const missingConfiguredIds = configured?.filter((sel) => !offerAssets.some((a) => a.id === sel.assetId)) ?? []
+  return {assetsToRender, missingConfiguredIds}
+}
+
+// --------------------
+// Single offer card (Bandcamp-style, self-contained)
+// --------------------
+
+function DownloadOfferCard(props: {
+  albumSlug: string
+  owned: boolean
+  coverImage?: SanityImage
+  productLabel?: string
+  teaserCopy?: string
+  highlights?: string[]
+  techSpec?: string
+  // giftBlurb intentionally not passed into GiftAlbumButton here until you add that prop support
+  assets?: DownloadAssetSel[]
+}) {
+  const {albumSlug, owned, coverImage, productLabel, teaserCopy, highlights, techSpec, assets} = props
+
+  const offerCfg = getAlbumOffer(albumSlug)
+  const title = offerCfg?.title ?? albumSlug
+  const offerAssets: AlbumOfferAsset[] = offerCfg?.assets ?? []
+  const configured = assets && assets.length > 0 ? assets : null
+  const {assetsToRender, missingConfiguredIds} = buildAssetsToRender(offerAssets, configured)
+
+  const coverUrl = coverImage ? urlFor(coverImage).width(900).height(900).fit('crop').url() : null
 
   return (
     <div
       style={{
         borderRadius: 18,
         border: '1px solid rgba(255,255,255,0.10)',
-        background: 'rgba(255,255,255,0.04)',
+        background: 'rgba(0,0,0,0.18)',
         padding: 16,
+        minWidth: 0,
       }}
     >
-      <div style={{display: 'flex', alignItems: 'baseline', gap: 10}}>
-        <div style={{fontSize: 15, opacity: 0.92}}>{title ?? 'Downloads'}</div>
-        {!owned ? <div style={{fontSize: 12, opacity: 0.65}}>locked</div> : null}
+      {coverUrl ? (
+        /* eslint-disable @next/next/no-img-element */
+        <img
+          src={coverUrl}
+          alt={title}
+          style={{
+            width: '100%',
+            aspectRatio: '1 / 1',
+            objectFit: 'cover',
+            borderRadius: 14,
+            border: '1px solid rgba(255,255,255,0.10)',
+            background: 'rgba(255,255,255,0.02)',
+          }}
+        />
+      ) : null}
+
+      <div style={{marginTop: coverUrl ? 12 : 0}}>
+        <div style={{fontSize: 20, opacity: 0.95, lineHeight: 1.1}}>{title}</div>
+        <div style={{marginTop: 6, fontSize: 13, opacity: 0.72}}>{productLabel ?? 'Digital Album'}</div>
       </div>
 
-      {!offer ? (
-        <div style={{marginTop: 10, fontSize: 13, opacity: 0.75}}>
+      {highlights && highlights.length > 0 ? (
+        <div style={{marginTop: 12, display: 'grid', gap: 8, fontSize: 13, opacity: 0.78, lineHeight: 1.5}}>
+          {highlights.map((h, i) => (
+            <div key={`${i}:${h}`}>{h}</div>
+          ))}
+        </div>
+      ) : null}
+
+      {techSpec ? <div style={{marginTop: 12, fontSize: 13, opacity: 0.78}}>{techSpec}</div> : null}
+
+      {!offerCfg ? (
+        <div style={{marginTop: 14, fontSize: 13, opacity: 0.75}}>
           Missing AlbumOffer config for <code>{albumSlug}</code>.
         </div>
       ) : owned ? (
-        <div style={{marginTop: 10, fontSize: 13, opacity: 0.82}}>
-          <div style={{opacity: 0.85}}>Owned: {offer.title}</div>
-
+        <div style={{marginTop: 14, display: 'grid', gap: 10}}>
           {offerAssets.length === 0 ? (
-            <div style={{marginTop: 10, opacity: 0.75}}>
+            <div style={{fontSize: 13, opacity: 0.75}}>
               No downloadable assets configured in <code>albumOffers.ts</code>.
             </div>
           ) : (
             <>
               {missingConfiguredIds.length > 0 ? (
-                <div style={{marginTop: 10, opacity: 0.75}}>
+                <div style={{fontSize: 13, opacity: 0.75}}>
                   Invalid assetId(s) referenced in Sanity: {missingConfiguredIds.map((x) => x.assetId).join(', ')}
                 </div>
               ) : null}
 
-              <div style={{marginTop: 10}}>
-                <div style={{display: 'flex', gap: 10, flexWrap: 'wrap'}}>
-                  {assetsToRender.map(({asset, labelOverride}) => (
-                    <DownloadAlbumButton
-                      key={asset.id}
-                      albumSlug={albumSlug}
-                      assetId={asset.id}
-                      label={labelOverride ?? asset.label}
-                    />
-                  ))}
-                  <span style={{opacity: 0.7}}>•</span>
-                  <span style={{opacity: 0.85}}>{offer.title}</span>
-                </div>
+              <div style={{display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center'}}>
+                {assetsToRender.map(({asset, labelOverride}) => (
+                  <DownloadAlbumButton
+                    key={asset.id}
+                    albumSlug={albumSlug}
+                    assetId={asset.id}
+                    label={labelOverride ?? asset.label}
+                  />
+                ))}
               </div>
 
-              <div style={{marginTop: 10, opacity: 0.75}}>
-                Planned inclusions:{' '}
-                {offer.includes.map((x) => (
-                  <span
-                    key={x}
-                    style={{
-                      display: 'inline-block',
-                      marginLeft: 8,
-                      padding: '2px 10px',
-                      borderRadius: 999,
-                      border: '1px solid rgba(255,255,255,0.12)',
-                      background: 'rgba(255,255,255,0.03)',
-                      fontSize: 12,
-                    }}
-                  >
-                    {x}
-                  </span>
-                ))}
+              <div style={{display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center'}}>
+                <GiftAlbumButton albumTitle={title} albumSlug={albumSlug} />
               </div>
             </>
           )}
         </div>
       ) : (
-        <div style={{marginTop: 10, fontSize: 13, opacity: 0.80}}>
-          <div>{teaserCopy ?? 'Buy the digital album to unlock downloads (perpetual).'}</div>
-          <div style={{marginTop: 10}}>
+        <div style={{marginTop: 14, display: 'grid', gap: 10}}>
+          <div style={{fontSize: 13, opacity: 0.80, lineHeight: 1.5}}>
+            {teaserCopy ?? 'Buy the digital album to unlock downloads (perpetual).'}
+          </div>
+          <div>
             <BuyAlbumButton albumSlug={albumSlug} label="Buy digital album" />
+          </div>
+          <div>
+            <GiftAlbumButton albumTitle={title} albumSlug={albumSlug} ctaLabel="Send as gift" />
           </div>
         </div>
       )}
@@ -225,21 +279,13 @@ function DownloadsModule(props: DownloadsModuleProps) {
 // --------------------
 
 function renderModule(m: PortalModule, entitlementKeys: string[]) {
-  if (m._type === 'moduleHeading') {
-    // headings become tabs; we don’t render them inside tab content
-    return null
-  }
+  if (m._type === 'moduleHeading') return null
 
   if (m._type === 'moduleRichText') {
     const entitled = hasKey(entitlementKeys, m.requiresEntitlement)
     const blocks = entitled ? m.full ?? m.teaser ?? [] : m.teaser ?? []
     return (
-      <PortalRichText
-        key={m._key}
-        title={m.title}
-        blocks={blocks}
-        locked={!!m.requiresEntitlement && !entitled}
-      />
+      <PortalRichText key={m._key} title={m.title} blocks={blocks} locked={!!m.requiresEntitlement && !entitled} />
     )
   }
 
@@ -260,33 +306,93 @@ function renderModule(m: PortalModule, entitlementKeys: string[]) {
     )
   }
 
+  if (m._type === 'moduleDownloadGrid') {
+    return (
+      <div
+        key={m._key}
+        style={{
+          borderRadius: 18,
+          border: '1px solid rgba(255,255,255,0.10)',
+          background: 'rgba(255,255,255,0.04)',
+          padding: 16,
+          minWidth: 0,
+        }}
+      >
+        <div style={{display: 'flex', alignItems: 'baseline', gap: 10}}>
+          <div style={{fontSize: 15, opacity: 0.92}}>{m.title ?? 'Downloads'}</div>
+        </div>
+
+        <div style={{marginTop: 12}} className="portalDownloadGrid2up">
+          {m.offers.map((o, idx) => {
+            const offerCfg = getAlbumOffer(o.albumSlug)
+            const owned = !!(offerCfg && entitlementKeys.includes(offerCfg.entitlementKey))
+
+            return (
+              <DownloadOfferCard
+                key={`${m._key}:${idx}:${o.albumSlug}`}
+                albumSlug={o.albumSlug}
+                owned={owned}
+                teaserCopy={o.teaserCopy}
+                coverImage={o.coverImage}
+                productLabel={o.productLabel}
+                highlights={o.highlights}
+                techSpec={o.techSpec}
+                assets={o.assets}
+              />
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   if (m._type === 'moduleDownloads') {
-  const offer = getAlbumOffer(m.albumSlug)
-  const owned = !!(offer && entitlementKeys.includes(offer.entitlementKey))
+    const offerCfg = getAlbumOffer(m.albumSlug)
+    const owned = !!(offerCfg && entitlementKeys.includes(offerCfg.entitlementKey))
 
-  return (
-    <DownloadsModule
-      key={m._key}
-      title={m.title}
-      albumSlug={m.albumSlug}
-      teaserCopy={m.teaserCopy}
-      owned={owned}
-      assets={m.assets}
-    />
-  )
-}
+    return (
+      <div
+        key={m._key}
+        style={{
+          borderRadius: 18,
+          border: '1px solid rgba(255,255,255,0.10)',
+          background: 'rgba(255,255,255,0.04)',
+          padding: 16,
+          minWidth: 0,
+        }}
+      >
+        <div style={{display: 'flex', alignItems: 'baseline', gap: 10}}>
+          <div style={{fontSize: 15, opacity: 0.92}}>{m.title ?? 'Downloads'}</div>
+          {!owned ? <div style={{fontSize: 12, opacity: 0.65}}>locked</div> : null}
+        </div>
 
-if (m._type === 'moduleArtistPosts') {
-  return (
-    <PortalArtistPosts
-      key={m._key}
-      title={m.title ?? 'Posts'}
-      pageSize={m.pageSize ?? 10}
-      requireAuthAfter={m.requireAuthAfter ?? 3}
-      minVisibility={m.minVisibility ?? 'public'}
-    />
-  )
-}
+        <div style={{marginTop: 12}}>
+          <DownloadOfferCard
+            albumSlug={m.albumSlug}
+            owned={owned}
+            teaserCopy={m.teaserCopy}
+            coverImage={m.coverImage}
+            productLabel={m.productLabel}
+            highlights={m.highlights}
+            techSpec={m.techSpec}
+            assets={m.assets}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  if (m._type === 'moduleArtistPosts') {
+    return (
+      <PortalArtistPosts
+        key={m._key}
+        title={m.title ?? 'Posts'}
+        pageSize={m.pageSize ?? 10}
+        requireAuthAfter={m.requireAuthAfter ?? 3}
+        minVisibility={m.minVisibility ?? 'public'}
+      />
+    )
+  }
 
   return null
 }
@@ -303,23 +409,12 @@ type BuiltTab = {
   modules: PortalModule[]
 }
 
-/**
- * Tab-level gating (convention-based, no schema change):
- * If the first non-heading module in a tab is moduleRichText with requiresEntitlement,
- * we treat the tab as "tab-locked" when not entitled.
- *
- * You can use this to make whole tabs gated by:
- * - putting teaser = small gate blurb
- * - putting full = the actual tab content (or follow-on modules that you only include when entitled)
- */
 function inferTabs(modules: PortalModule[], entitlementKeys: string[]): BuiltTab[] {
   const out: BuiltTab[] = []
-
   let current: BuiltTab | null = null
 
   const pushCurrent = () => {
     if (!current) return
-    // drop empty tabs
     if (current.modules.length === 0) return
     out.push(current)
   }
@@ -331,25 +426,12 @@ function inferTabs(modules: PortalModule[], entitlementKeys: string[]): BuiltTab
       const title = (m.title ?? '').trim() || 'Portal'
       const id = slugify(title) || m._key
 
-      current = {
-        id,
-        title,
-        locked: false,
-        lockedHint: null,
-        modules: [],
-      }
+      current = {id, title, locked: false, lockedHint: null, modules: []}
       continue
     }
 
-    // If no heading has appeared yet, create a default tab
     if (!current) {
-      current = {
-        id: 'download',
-        title: 'Download',
-        locked: false,
-        lockedHint: null,
-        modules: [],
-      }
+      current = {id: 'download', title: 'Download', locked: false, lockedHint: null, modules: []}
     }
 
     current.modules.push(m)
@@ -357,7 +439,6 @@ function inferTabs(modules: PortalModule[], entitlementKeys: string[]): BuiltTab
 
   pushCurrent()
 
-  // Compute tab-level lock using the convention
   for (const t of out) {
     const first = t.modules.find((x) => x._type !== 'moduleHeading') ?? null
     if (first && first._type === 'moduleRichText' && first.requiresEntitlement) {
@@ -365,9 +446,6 @@ function inferTabs(modules: PortalModule[], entitlementKeys: string[]): BuiltTab
       if (!entitled) {
         t.locked = true
         t.lockedHint = 'Locked'
-        // Optional stricter mode (commented): hide everything except the first module when locked.
-        // If you want “entire tab gated” in practice, uncomment this so only the gate blurb shows.
-        // t.modules = [first]
       }
     }
   }
@@ -389,7 +467,7 @@ export default async function PortalModules(props: Props) {
     id: t.id,
     title: t.title,
     locked: t.locked,
-    lockedHint: t.lockedHint,
+        lockedHint: t.lockedHint,
     content: (
       <div style={{display: 'grid', gap: 14, minWidth: 0}}>
         {t.modules.map((m) => renderModule(m, entitlementKeys))}

@@ -32,6 +32,31 @@ export type PortalModuleCardGrid = {
   cards: PortalModuleCard[]
 }
 
+export type SanityImage = {
+  _type: 'image'
+  asset: {_ref: string; _type: 'reference'}
+  crop?: unknown
+  hotspot?: unknown
+}
+
+export type PortalDownloadOffer = {
+  albumSlug: string
+  coverImage?: SanityImage
+  productLabel?: string
+  teaserCopy?: string
+  highlights?: string[]
+  techSpec?: string
+  giftBlurb?: string
+  assets?: Array<{assetId: string; label?: string}>
+}
+
+export type PortalModuleDownloadGrid = {
+  _key: string
+  _type: 'moduleDownloadGrid'
+  title?: string
+  offers: PortalDownloadOffer[]
+}
+
 export type PortalModuleDownloads = {
   _key: string
   _type: 'moduleDownloads'
@@ -39,6 +64,13 @@ export type PortalModuleDownloads = {
   albumSlug: string
   teaserCopy?: string
   assets?: Array<{assetId: string; label?: string}>
+
+  // NEW
+  coverImage?: SanityImage
+  productLabel?: string
+  highlights?: string[]
+  techSpec?: string
+  giftBlurb?: string
 }
 
 export type PortalModuleArtistPosts = {
@@ -56,6 +88,7 @@ export type PortalModule =
   | PortalModuleRichText
   | PortalModuleCardGrid
   | PortalModuleDownloads
+  | PortalModuleDownloadGrid
   | PortalModuleArtistPosts
 
 export type PortalPageDoc = {
@@ -91,6 +124,24 @@ const portalPageQuery = `
       albumSlug,
       teaserCopy,
       assets[]{assetId, label},
+      coverImage,
+      productLabel,
+      highlights,
+      techSpec,
+      giftBlurb,
+
+      // moduleDownloadGrid
+      offers[]{
+        albumSlug,
+        coverImage,
+        productLabel,
+        teaserCopy,
+        highlights,
+        techSpec,
+        giftBlurb,
+        assets[]{assetId, label}
+      },
+
 
       // moduleArtistPosts
       pageSize,
@@ -99,6 +150,7 @@ const portalPageQuery = `
     }
   }
 `
+
 
 export async function fetchPortalPage(slug: string): Promise<PortalPageDoc | null> {
   return client.fetch<PortalPageDoc | null>(

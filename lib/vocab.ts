@@ -27,6 +27,8 @@ export const EVENT_TYPES = {
   MARKETING_OPT_OUT: 'marketing_opt_out',
   ENTITLEMENT_GRANTED: 'entitlement_granted',
   ENTITLEMENT_REVOKED: 'entitlement_revoked',
+  GIFT_CREATED: 'gift_created',
+  GIFT_CLAIMED: 'gift_claimed',  
   ACCESS_ALLOWED: 'access_allowed',
   ACCESS_DENIED: 'access_denied',
   IDENTITY_LINKED: 'identity_linked',
@@ -41,6 +43,7 @@ export const EVENT_SOURCES = {
   ADMIN: 'admin',
   STRIPE: 'stripe',
   CLERK: 'clerk',
+  GIFT: 'gift',
   MUX: 'mux',
   UNKNOWN: 'unknown',
 } as const

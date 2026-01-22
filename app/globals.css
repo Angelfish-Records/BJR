@@ -88,3 +88,19 @@ body { margin: 0; overflow-x: hidden; }
   }
 }
 
+/* Downloads: two-up on desktop, stacked on mobile */
+.portalDownloadGrid2up {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 860px) {
+  .portalDownloadGrid2up {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+}
+
+
