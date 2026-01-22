@@ -307,19 +307,27 @@ function DownloadOfferCard(props: {
                 </div>
               ) : null}
 
-              <div style={{display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center'}}>
-                {assetsToRender.map(({asset, labelOverride}) => (
-                  <DownloadAlbumButton
-  key={asset.id}
-  albumSlug={albumSlug}
-  assetId={asset.id}
-  label={labelOverride ?? asset.label}
-  variant="primary"
-  fullWidth
-/>
+              <div
+  style={{
+    display: 'grid',
+    gap: 10,
+    width: '100%',
+    justifyItems: 'stretch', // 🔑 same rail behavior as Buy
+  }}
+>
+  {assetsToRender.map(({asset, labelOverride}, i) => (
+    <DownloadAlbumButton
+      key={asset.id}
+      albumSlug={albumSlug}
+      assetId={asset.id}
+      label={labelOverride ?? asset.label}
+      variant={i === 0 ? 'primary' : 'ghost'}
+      fullWidth={i === 0}
+      style={i === 0 ? {width: '100%'} : undefined}
+    />
+  ))}
+</div>
 
-                ))}
-              </div>
 
               {/* Keep gift available, but visually separated */}
               <div style={{paddingTop: 2, textAlign: 'center'}}>
