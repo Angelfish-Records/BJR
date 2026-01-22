@@ -1,3 +1,4 @@
+// web/app/home/modules/GiftAlbumButton.tsx
 'use client'
 
 import React from 'react'
@@ -9,27 +10,52 @@ type Props = {
   className?: string
 }
 
-function buildGiftMailto(args: {albumTitle: string; albumUrl: string; toEmail: string; note: string}) {
-  const subject = `A gift for you: ${args.albumTitle}`
-  const lines: string[] = [
-    `Hey — I wanted you to have this: ${args.albumTitle}`,
-    '',
-    `Link: ${args.albumUrl}`,
-    '',
-    args.note.trim() ? `Note: ${args.note.trim()}` : '',
-    '',
-    `If the page shows “Buy digital album”, you can purchase it there.`,
-  ].filter(Boolean)
-
-  const body = lines.join('\n')
-
-  const params = new URLSearchParams()
-  params.set('subject', subject)
-  params.set('body', body)
-
-  // recipient goes in the mailto target
-  return `mailto:${encodeURIComponent(args.toEmail)}?${params.toString()}`
+type GiftCreateOk = {
+  ok: true
+  albumSlug: string
+  recipientEmail: string
+  claimUrl: string
+  subject: string
+  body: string
+  mailto: string
+  checkoutUrl: string
+  stripeCheckoutSessionId?: string
+  correlationId?: string
 }
+
+type GiftCreateErr = {
+  ok: false
+  error: string
+}
+
+/* -------------------------
+   Runtime type guards
+-------------------------- */
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null
+}
+
+function isGiftCreateOk(v: unknown): v is GiftCreateOk {
+  if (!isRecord(v)) return false
+  return (
+    v.ok === true &&
+    typeof v.albumSlug === 'string' &&
+    typeof v.recipientEmail === 'string' &&
+    typeof v.claimUrl === 'string' &&
+    typeof v.mailto === 'string' &&
+    typeof v.checkoutUrl === 'string'
+  )
+}
+
+function isGiftCreateErr(v: unknown): v is GiftCreateErr {
+  if (!isRecord(v)) return false
+  return v.ok === false && typeof v.error === 'string'
+}
+
+/* -------------------------
+   Component
+-------------------------- */
 
 export default function GiftAlbumButton(props: Props) {
   const {albumTitle, albumSlug, ctaLabel = 'Send as gift', className} = props
@@ -37,28 +63,75 @@ export default function GiftAlbumButton(props: Props) {
   const [open, setOpen] = React.useState(false)
   const [toEmail, setToEmail] = React.useState('')
   const [note, setNote] = React.useState('')
+  const [busy, setBusy] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  const [claimUrl, setClaimUrl] = React.useState<string | null>(null)
+  const [mailto, setMailto] = React.useState<string | null>(null)
 
-  const albumUrl = React.useMemo(() => {
-    if (typeof window === 'undefined') return ''
-    return `${window.location.origin}/albums/${encodeURIComponent(albumSlug)}`
-  }, [albumSlug])
-
-  const canGenerate = toEmail.trim().length >= 3 && toEmail.includes('@') && albumUrl.length > 0
+  const canSubmit =
+    toEmail.trim().length >= 3 &&
+    toEmail.includes('@') &&
+    !busy
 
   const onBackdropMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) setOpen(false)
   }
 
-  const onGenerate = () => {
-    if (!canGenerate) return
-    const href = buildGiftMailto({
-      albumTitle,
-      albumUrl,
-      toEmail: toEmail.trim(),
-      note,
+  async function createGift(): Promise<GiftCreateOk> {
+    const res = await fetch('/api/gifts/create', {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify({
+        albumSlug,
+        recipientEmail: toEmail.trim(),
+        message: note,
+      }),
     })
-    window.location.href = href
-    setOpen(false)
+
+    const raw: unknown = await res.json().catch(() => null)
+
+    if (isGiftCreateOk(raw)) return raw
+    if (isGiftCreateErr(raw)) throw new Error(raw.error)
+
+    throw new Error(`HTTP_${res.status}`)
+  }
+
+  const onContinueToStripe = async () => {
+    if (!canSubmit) return
+    setBusy(true)
+    setError(null)
+
+    try {
+      const created = await createGift()
+      setClaimUrl(created.claimUrl)
+      setMailto(created.mailto)
+
+      // Best-effort: open email draft (user-initiated click)
+      try {
+        window.location.href = created.mailto
+      } catch {
+        // ignore popup blocking
+      }
+
+      // Canonical flow: redirect to Stripe
+      window.location.href = created.checkoutUrl
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setBusy(false)
+    }
+  }
+
+  const onCopyClaim = async () => {
+    if (!claimUrl) return
+    try {
+      await navigator.clipboard.writeText(claimUrl)
+    } catch {
+      window.prompt('Copy gift claim link:', claimUrl)
+    }
+  }
+
+  const onOpenMailDraft = () => {
+    if (mailto) window.location.href = mailto
   }
 
   return (
@@ -66,7 +139,13 @@ export default function GiftAlbumButton(props: Props) {
       <button
         type="button"
         className={className}
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setOpen(true)
+          setError(null)
+          setBusy(false)
+          setClaimUrl(null)
+          setMailto(null)
+        }}
         style={{
           borderRadius: 999,
           border: '1px solid rgba(255,255,255,0.14)',
@@ -94,6 +173,10 @@ export default function GiftAlbumButton(props: Props) {
             display: 'grid',
             placeItems: 'center',
             padding: 16,
+
+            // Android drift guardrails
+            overflowX: 'clip',
+            maxWidth: '100vw',
           }}
         >
           <div
@@ -105,9 +188,11 @@ export default function GiftAlbumButton(props: Props) {
               boxShadow: '0 18px 60px rgba(0,0,0,0.55)',
               padding: 16,
               minWidth: 0,
+              maxWidth: '100%',
+              overflowX: 'clip',
             }}
           >
-            <div style={{display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12}}>
+            <div style={{display: 'flex', justifyContent: 'space-between', gap: 12}}>
               <div style={{fontSize: 14, opacity: 0.92}}>Send as gift</div>
               <button
                 type="button"
@@ -118,7 +203,6 @@ export default function GiftAlbumButton(props: Props) {
                   background: 'rgba(255,255,255,0.02)',
                   padding: '6px 10px',
                   fontSize: 12,
-                  opacity: 0.8,
                   cursor: 'pointer',
                 }}
               >
@@ -126,13 +210,13 @@ export default function GiftAlbumButton(props: Props) {
               </button>
             </div>
 
-            <div style={{marginTop: 10, fontSize: 13, opacity: 0.78, lineHeight: 1.5}}>
-              This generates an email in your mail app with a link to <span style={{opacity: 0.9}}>{albumTitle}</span>.
-              (Phase 2 will make this a real paid “gift purchase + redeem”.)
+            <div style={{marginTop: 10, fontSize: 13, opacity: 0.78}}>
+              You’ll be sent to Stripe to purchase{' '}
+              <span style={{opacity: 0.9}}>{albumTitle}</span> as a gift.
             </div>
 
             <div style={{marginTop: 14, display: 'grid', gap: 10}}>
-              <label style={{display: 'grid', gap: 6}}>
+              <label>
                 <div style={{fontSize: 12, opacity: 0.7}}>Recipient email</div>
                 <input
                   value={toEmail}
@@ -146,18 +230,17 @@ export default function GiftAlbumButton(props: Props) {
                     background: 'rgba(255,255,255,0.03)',
                     padding: '10px 12px',
                     color: 'white',
-                    outline: 'none',
                   }}
                 />
               </label>
 
-              <label style={{display: 'grid', gap: 6}}>
+              <label>
                 <div style={{fontSize: 12, opacity: 0.7}}>Note (optional)</div>
                 <textarea
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  placeholder="A short message…"
                   rows={4}
+                  placeholder="A short message…"
                   style={{
                     width: '100%',
                     borderRadius: 12,
@@ -165,45 +248,50 @@ export default function GiftAlbumButton(props: Props) {
                     background: 'rgba(255,255,255,0.03)',
                     padding: '10px 12px',
                     color: 'white',
-                    outline: 'none',
                     resize: 'vertical',
                   }}
                 />
               </label>
+
+              {error ? (
+                <div
+                  style={{
+                    borderRadius: 12,
+                    border: '1px solid rgba(255,80,80,0.22)',
+                    background: 'rgba(255,80,80,0.08)',
+                    padding: '10px 12px',
+                    fontSize: 12,
+                  }}
+                >
+                  Gift error: {error}
+                </div>
+              ) : null}
+
+              {claimUrl ? (
+                <div style={{fontSize: 12, opacity: 0.9, wordBreak: 'break-word'}}>
+                  Claim link (backup): {claimUrl}
+                </div>
+              ) : null}
             </div>
 
-            <div style={{marginTop: 14, display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap'}}>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                style={{
-                  borderRadius: 999,
-                  border: '1px solid rgba(255,255,255,0.10)',
-                  background: 'rgba(255,255,255,0.02)',
-                  padding: '10px 14px',
-                  fontSize: 13,
-                  opacity: 0.85,
-                  cursor: 'pointer',
-                }}
-              >
+            <div style={{marginTop: 14, display: 'flex', gap: 10, justifyContent: 'flex-end'}}>
+              {claimUrl ? (
+                <>
+                  <button type="button" onClick={onCopyClaim}>Copy claim link</button>
+                  <button type="button" onClick={onOpenMailDraft}>Open email</button>
+                </>
+              ) : null}
+
+              <button type="button" onClick={() => setOpen(false)} disabled={busy}>
                 Cancel
               </button>
 
               <button
                 type="button"
-                disabled={!canGenerate}
-                onClick={onGenerate}
-                style={{
-                  borderRadius: 999,
-                  border: '1px solid rgba(255,255,255,0.14)',
-                  background: canGenerate ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)',
-                  padding: '10px 14px',
-                  fontSize: 13,
-                  opacity: canGenerate ? 0.95 : 0.5,
-                  cursor: canGenerate ? 'pointer' : 'not-allowed',
-                }}
+                disabled={!canSubmit}
+                onClick={onContinueToStripe}
               >
-                Generate email
+                {busy ? 'Opening Stripe…' : 'Continue to Stripe'}
               </button>
             </div>
           </div>
