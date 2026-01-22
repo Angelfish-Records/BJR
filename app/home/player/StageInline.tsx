@@ -137,7 +137,7 @@ export default function StageInline(props: {
             style={{
               position: 'fixed',
               inset: 0,
-              width: '100vw',
+              width: '100%',
               height: '100dvh',
               zIndex: 200000,
               background: 'rgba(0,0,0,0.80)',
