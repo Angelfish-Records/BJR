@@ -983,7 +983,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
             div[data-af-miniplayer]{
               --af-dock-h: 64px;
               --af-mp-btn: 40px;
-              --af-mp-cols: minmax(0, 1fr) max-content;
+              --af-mp-cols: minmax(0, 1fr) auto;
               padding-right: 10px;
             }
 
@@ -1014,7 +1014,7 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
               gap: 8px;
               flex-wrap: nowrap;
               flex: 0 0 auto;
-              min-width: max-content;
+              min-width: 0;
             }
 
             div[data-af-miniplayer] div[data-af-controls] > :nth-child(2){
