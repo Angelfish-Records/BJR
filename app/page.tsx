@@ -1,3 +1,4 @@
+// web/app/page.tsx
 import {client} from '../sanity/lib/client'
 import {urlFor} from '../sanity/lib/image'
 import EarlyAccessForm from './EarlyAccessForm'

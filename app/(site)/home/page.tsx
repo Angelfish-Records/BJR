@@ -243,6 +243,11 @@ if (member?.id) {
             padding-left: 14px !important;
             padding-right: 14px !important;
           }
+            
+            @media (max-width: 1060px) {
+  .shadowHomeSidebar { position: static !important; }
+}
+
         }
       `}</style>
 
