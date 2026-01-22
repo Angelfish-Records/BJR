@@ -444,10 +444,7 @@ function renderModule(m: PortalModule, entitlementKeys: string[]) {
           minWidth: 0,
         }}
       >
-        <div style={{display: 'flex', alignItems: 'baseline', gap: 10}}>
-          <div style={{fontSize: 15, opacity: 0.92}}>{m.title ?? 'Downloads'}</div>
-          {!owned ? <div style={{fontSize: 12, opacity: 0.65}}>locked</div> : null}
-        </div>
+        
 
         <div style={{marginTop: 12}} className="portalDownloadGrid2up">
   <DownloadOfferCard
