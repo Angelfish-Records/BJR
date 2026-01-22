@@ -993,15 +993,20 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
             }
 
             div[data-af-miniplayer] div[data-af-controls]{
-              column-gap: 10px;
-              grid-template-rows: 1fr !important;
-              grid-auto-flow: column !important;
-              grid-auto-rows: 1fr !important;
-              row-gap: 0 !important;
-              padding-left: calc(var(--af-dock-h, ${DOCK_H}px) + 12px);
-              padding-right: 12px;
-              height: 100%;
-            }
+  column-gap: 10px;
+  grid-template-rows: 1fr !important;
+  grid-auto-flow: column !important;
+  grid-auto-rows: 1fr !important;
+  row-gap: 0 !important;
+
+  /* symmetric: never bias the page */
+  padding-left: 12px;
+  padding-right: 12px;
+
+  height: 100%;
+  box-sizing: border-box;
+}
+
 
             div[data-af-miniplayer] div[data-af-controls] > :nth-child(1){
               grid-column: 2;
