@@ -9,22 +9,19 @@ import LyricsOverlay, {type LyricCue} from './LyricsOverlay'
 function useScrollLock(locked: boolean) {
   React.useEffect(() => {
     if (!locked) return
-    const y = window.scrollY
-    const prevOverflow = document.body.style.overflow
-    const prevPosition = document.body.style.position
-    const prevTop = document.body.style.top
-    const prevWidth = document.body.style.width
 
-    document.body.style.overflow = 'hidden'
-    document.body.style.position = 'fixed'
-    document.body.style.top = `-${y}px`
-    document.body.style.width = '100%'
+    const y = window.scrollY
+    const body = document.body
+
+    const prevOverflow = body.style.overflow
+    const prevTransform = body.style.transform
+
+    body.style.overflow = 'hidden'
+    body.style.transform = `translateY(-${y}px)`
 
     return () => {
-      document.body.style.overflow = prevOverflow
-      document.body.style.position = prevPosition
-      document.body.style.top = prevTop
-      document.body.style.width = prevWidth
+      body.style.overflow = prevOverflow
+      body.style.transform = prevTransform
       window.scrollTo(0, y)
     }
   }, [locked])
