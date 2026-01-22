@@ -1,8 +1,22 @@
-// web/app/home/player/ShareMenu.tsx
 'use client'
 
 import React from 'react'
 import {createPortal} from 'react-dom'
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n))
+}
+
+function getViewport() {
+  // Use visualViewport when available (Android address bar / DPR quirks),
+  // but keep numbers in the same coordinate space as getBoundingClientRect().
+  const vv = typeof window !== 'undefined' ? window.visualViewport : null
+  const width = vv?.width ?? window.innerWidth
+  const height = vv?.height ?? window.innerHeight
+  const offsetLeft = vv?.offsetLeft ?? 0
+  const offsetTop = vv?.offsetTop ?? 0
+  return {width, height, offsetLeft, offsetTop}
+}
 
 function useAnchorPosition(open: boolean, anchorRef: React.RefObject<HTMLElement>) {
   const [pos, setPos] = React.useState<{x: number; y: number} | null>(null)
@@ -23,9 +37,17 @@ function useAnchorPosition(open: boolean, anchorRef: React.RefObject<HTMLElement
     compute()
     window.addEventListener('scroll', compute, true)
     window.addEventListener('resize', compute)
+
+    // visualViewport changes on mobile when bars expand/collapse
+    const vv = window.visualViewport
+    vv?.addEventListener('resize', compute)
+    vv?.addEventListener('scroll', compute)
+
     return () => {
       window.removeEventListener('scroll', compute, true)
       window.removeEventListener('resize', compute)
+      vv?.removeEventListener('resize', compute)
+      vv?.removeEventListener('scroll', compute)
     }
   }, [open, anchorRef])
 
@@ -52,6 +74,16 @@ export function ShareMenu(props: {
 
   if (!open || !pos) return null
 
+  const PAD = 12
+  const MENU_W = 220
+
+  const {width: vw, offsetLeft} = getViewport()
+
+  // Clamp the *center point* so the menu cannot exceed viewport bounds even with translateX(-50%).
+  const minCenter = offsetLeft + PAD + MENU_W / 2
+  const maxCenter = offsetLeft + vw - PAD - MENU_W / 2
+  const clampedX = clamp(pos.x, minCenter, maxCenter)
+
   return createPortal(
     <>
       {/* click-catcher */}
@@ -60,16 +92,24 @@ export function ShareMenu(props: {
           e.preventDefault()
           onClose()
         }}
-        style={{position: 'fixed', inset: 0, zIndex: 100000}}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 100000,
+          // guardrail: never widen document
+          overflowX: 'clip',
+        }}
       />
+
       <div
         role="menu"
         style={{
           position: 'fixed',
-          left: pos.x,
+          left: clampedX,
           top: pos.y,
           transform: 'translateX(-50%)',
-          width: 220,
+          width: MENU_W,
+          maxWidth: `calc(100vw - ${PAD * 2}px)`,
           borderRadius: 14,
           border: '1px solid rgba(255,255,255,0.12)',
           background: 'rgba(0,0,0,0.70)',
@@ -78,6 +118,9 @@ export function ShareMenu(props: {
           boxShadow: '0 18px 55px rgba(0,0,0,0.45)',
           padding: 6,
           zIndex: 100001,
+          // guardrail: prevent text/content from forcing wider boxes
+          overflowX: 'clip',
+          boxSizing: 'border-box',
         }}
       >
         {items.map((it) => (
@@ -102,6 +145,10 @@ export function ShareMenu(props: {
               cursor: it.disabled ? 'default' : 'pointer',
               opacity: it.disabled ? 0.45 : 0.92,
               fontSize: 12,
+              // if labels ever get long, do not widen the menu
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
             }}
             onMouseEnter={(e) => {
               ;(e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.07)'
