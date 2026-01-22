@@ -168,6 +168,10 @@ export default function SubscribeButton(props: Props) {
 
           opacity: disabled && !current ? 0.75 : 1,
           overflow: 'visible',
+          alignSelf: 'stretch',
+          display: 'grid',
+          gridTemplateRows: 'auto 1fr',
+          alignItems: 'start',
         }}
       >
         {/* Current-tier glow ring */}
@@ -197,39 +201,35 @@ export default function SubscribeButton(props: Props) {
           </div>
         )}
 
-        <div style={{display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10}}>
-          <div style={{fontSize: 14, fontWeight: 600, letterSpacing: '0.01em'}}>
-            {spec.title}
-          </div>
-          <div style={{fontSize: 12, opacity: 0.78}}>{spec.price}</div>
-        </div>
+        <div style={{display: 'grid', gap: 8, alignContent: 'start'}}>
+  <div style={{display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10}}>
+    <div style={{fontSize: 14, fontWeight: 600, letterSpacing: '0.01em'}}>
+      {spec.title}
+    </div>
+    <div style={{fontSize: 12, opacity: 0.78}}>{spec.price}</div>
+  </div>
 
-        <div style={{marginTop: 8, display: 'grid', gap: 6}}>
-          {spec.bullets.slice(0, 3).map((b, i) => (
-            <div
-              key={i}
-              style={{
-                display: 'flex',
-                gap: 8,
-                fontSize: 12,
-                lineHeight: '16px',
-                opacity: 0.82,
-              }}
-            >
-              <span aria-hidden style={{opacity: 0.55}}>
-                •
-              </span>
-              <span style={{minWidth: 0}}>{b}</span>
-            </div>
-          ))}
-        </div>
+  <div style={{display: 'grid', gap: 6}}>
+    {spec.bullets.slice(0, 3).map((b, i) => (
+      <div
+        key={i}
+        style={{
+          display: 'flex',
+          gap: 8,
+          fontSize: 12,
+          lineHeight: '16px',
+          opacity: 0.82,
+        }}
+      >
+        <span aria-hidden style={{opacity: 0.55}}>
+          •
+        </span>
+        <span style={{minWidth: 0}}>{b}</span>
+      </div>
+    ))}
+  </div>
+</div>
 
-        {/* Subtle footer hint (only when clickable, avoids redundancy for Current) */}
-        {!current && (
-          <div style={{marginTop: 10, fontSize: 11, opacity: 0.58}}>
-            {disabled ? 'Unavailable' : 'Continue to Stripe'}
-          </div>
-        )}
       </button>
     )
   }
