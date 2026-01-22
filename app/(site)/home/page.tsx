@@ -196,7 +196,7 @@ if (member?.id) {
         .shadowHomeGrid {
           display: grid;
           grid-template-columns: minmax(0, 1fr) clamp(300px, 34vw, 380px);
-          gap: 8px 18px;   // ⬅️ CSS shorthand: row-gap column-gap
+          gap: 8px 18px;  /* row-gap column-gap */
           align-items: start;
         }
 
@@ -245,11 +245,8 @@ if (member?.id) {
           }
 
           @media (max-width: 1060px) {
-  .shadowHomeSidebar {
-    display: none !important;
-  }
-}
-
+            .shadowHomeSidebar { position: static !important; }
+          }
 
         }
       `}</style>
