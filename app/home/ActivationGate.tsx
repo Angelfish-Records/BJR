@@ -50,6 +50,11 @@ function looksLikeNoAccountError(err: unknown): boolean {
 /**
  * Patterned OUTLINE ring: a wrapper that shows the visualizer snapshot only in the ring.
  */
+/**
+ * Patterned OUTLINE ring: shows the visualizer snapshot only in the ring.
+ * Android-safe: the negative-inset glow lives inside a clipped + paint-contained wrapper
+ * so it cannot poison horizontal layout/centering.
+ */
 function PatternRingOutline(props: {
   children: React.ReactNode
   radius?: number
@@ -81,40 +86,59 @@ function PatternRingOutline(props: {
         position: 'relative',
         borderRadius: radius,
         padding: 0,
+        // keep visible for general composition, but do NOT let the glow layer escape
         overflow: 'visible',
         opacity: disabled ? 0.7 : 1,
         transition: 'opacity 180ms ease',
         transform: 'translateZ(0)',
       }}
     >
+      {/* NEW: hard clip + paint containment wrapper.
+          This prevents negative inset + filter/mix-blend from affecting viewport math on Android. */}
       <div
         aria-hidden
         style={{
           position: 'absolute',
-          inset: -pad,
+          inset: 0,
           borderRadius: radius,
           pointerEvents: 'none',
-
-          padding: pad,
-          boxSizing: 'border-box',
-          WebkitMaskImage: 'linear-gradient(#000 0 0), linear-gradient(#000 0 0)',
-          WebkitMaskClip: 'padding-box, content-box',
-          WebkitMaskComposite: 'xor',
-          WebkitMaskRepeat: 'no-repeat',
-
-          filter: `blur(${blurPx}px) contrast(1.45) saturate(1.45)`,
-          mixBlendMode: 'screen',
+          overflow: 'clip',
+          contain: 'paint',
+          // isolate helps keep blend modes from interacting with outside stacking contexts
+          isolation: 'isolate',
         }}
       >
-        <VisualizerSnapshotCanvas
-          opacity={opacity}
-          fps={12}
-          sourceRect={{mode: 'random', seed, scale: 0.6}}
-          active
-          style={{width: '100%', height: '100%', display: 'block'}}
-        />
+        {/* Ring/glow layer (unchanged visuals, but now safely contained) */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: -pad,
+            borderRadius: radius,
+            pointerEvents: 'none',
+
+            padding: pad,
+            boxSizing: 'border-box',
+            WebkitMaskImage: 'linear-gradient(#000 0 0), linear-gradient(#000 0 0)',
+            WebkitMaskClip: 'padding-box, content-box',
+            WebkitMaskComposite: 'xor',
+            WebkitMaskRepeat: 'no-repeat',
+
+            filter: `blur(${blurPx}px) contrast(1.45) saturate(1.45)`,
+            mixBlendMode: 'screen',
+          }}
+        >
+          <VisualizerSnapshotCanvas
+            opacity={opacity}
+            fps={12}
+            sourceRect={{mode: 'random', seed, scale: 0.6}}
+            active
+            style={{width: '100%', height: '100%', display: 'block'}}
+          />
+        </div>
       </div>
 
+      {/* Inner fill plate */}
       <div
         aria-hidden
         style={{
@@ -130,6 +154,7 @@ function PatternRingOutline(props: {
     </div>
   )
 }
+
 
 function Toggle(props: {
   checked: boolean
