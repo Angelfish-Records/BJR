@@ -161,19 +161,27 @@ export default function PortalShell(props: Props) {
       {headerNode ? (headerPortalEl ? createPortal(headerNode, headerPortalEl) : headerNode) : null}
 
       {/* CRITICAL: render ONLY the active panel so inactive UI can't mutate query params */}
-      <div style={{display: 'grid', minWidth: 0, maxWidth: '100%'}}>
+      <div
+  style={{
+    display: 'grid',
+    minWidth: 0,
+    justifyItems: 'center',   // 🔑 establish symmetric rail
+  }}
+>
   {activePanel ? (
     <div
       style={{
+        width: '100%',
+        maxWidth: 'min(100%, 720px)', // or whatever your intended portal width is
         minWidth: 0,
-        maxWidth: '100%',
-        overflowX: 'clip',   // key: contain any horizontal poison inside the panel
+        overflowX: 'clip',
       }}
     >
       {activePanel.content}
     </div>
   ) : null}
 </div>
+
 
     </div>
   )
