@@ -391,38 +391,7 @@ export default function LyricsOverlay(props: {
           })}
         </div>
 
-        {/* Edge fades: keep them, but don’t let them read like a “box”. */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: 0,
-            height: topFadeH,
-            background: isInline
-              ? 'linear-gradient(rgba(0,0,0,0.52), rgba(0,0,0,0.00))'
-              : 'linear-gradient(rgba(0,0,0,0.62), rgba(0,0,0,0.00))',
-            pointerEvents: 'none',
-            zIndex: 2,
-          }}
-        />
 
-        <div
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: botFadeH,
-            background: isInline
-              ? 'linear-gradient(rgba(0,0,0,0.00), rgba(0,0,0,0.56))'
-              : 'linear-gradient(rgba(0,0,0,0.00), rgba(0,0,0,0.66))',
-            pointerEvents: 'none',
-            zIndex: 2,
-          }}
-        />
 
         <style>{`
           /* Hide scrollbar (WebKit) reliably */
