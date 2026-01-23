@@ -487,7 +487,15 @@ function playAlbumIndex(i: number) {
           }}
         />
 
-        <div style={{fontSize: 22, fontWeight: 650, letterSpacing: 0.2, opacity: 0.96}}>{albumTitle}</div>
+        <div style={{
+          fontSize: 'clamp(36px, 5vw, 48px)',
+          fontWeight: 800,
+          lineHeight: 1.05,
+          letterSpacing: '-0.3px',
+          color: '#fff',
+          marginBottom: 10,
+        }}
+        >{albumTitle}</div>
         <div style={{maxWidth: 540, fontSize: 12, opacity: 0.62, lineHeight: 1.45}}>{albumDesc}</div>
 
         {showEmbargo ? (
@@ -788,7 +796,15 @@ function playAlbumIndex(i: number) {
         {browseAlbums.length ? (
           <div style={{marginTop: 18}}>
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12}}>
-              <div style={{fontSize: 12, opacity: 0.7, marginBottom: 10}}>More releases</div>
+              <div style={{
+                fontSize: 'clamp(36px, 5vw, 48px)',
+                fontWeight: 800,
+                lineHeight: 1.05,
+                letterSpacing: '-0.3px',
+                color: '#fff',
+                marginBottom: 10,
+              }}
+              >More releases</div>
             </div>
 
             <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12}}>

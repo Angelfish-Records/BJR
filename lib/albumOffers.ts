@@ -23,12 +23,12 @@ export type AlbumOffer = {
 export const ALBUM_OFFERS: Record<string, AlbumOffer> = {
   afterglow: {
     albumSlug: 'afterglow',
-    title: 'Afterglow',
-    artistName: 'Brendan John Roch',
+    title: 'Afterglow [Test]',
+    artistName: 'Brendan Jolly Roger',
     priceLabel: '$10 NZD',
     stripePriceId: 'price_1SmNcsQVwozbpzk4awZ9x12h',
     entitlementKey: ENT.downloadAlbum('afterglow'),
-    includes: ['WAV', 'MP3', 'Lyrics PDF'],
+    includes: ['FLAC', 'WAV', 'MP3', 'Lyrics PDF'],
     assets: [
       {
         id: 'bundle_zip',
