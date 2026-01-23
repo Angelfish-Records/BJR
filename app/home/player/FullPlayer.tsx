@@ -448,29 +448,6 @@ function playAlbumIndex(i: number) {
     replaceQuery(patch)
   }
 
-if (process.env.NODE_ENV !== 'production') {
-  // eslint-disable-next-line no-console
-  console.log('[FullPlayer]', {
-    propAlbumSlug: albumSlug,
-    effAlbumSlug,
-    effAlbumId: effAlbum?.id,
-    effCatalogId: effAlbum?.catalogId ?? null,
-    albumKey,
-    queueContextId: p.queueContextId ?? null,
-    status: p.status,
-    intent: p.intent ?? null,
-    currentId: p.current?.id ?? null,
-    albumHasCurrent,
-    albumIdx,
-    prevDisabled,
-    nextDisabled,
-    playingThisAlbum,
-    showCached,
-    stableSlug: stableView?.albumSlug ?? null,
-  })
-}
-
-
   return (
   <div
       style={{

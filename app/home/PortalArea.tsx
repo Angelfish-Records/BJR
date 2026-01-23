@@ -22,58 +22,6 @@ function normalizeP(raw: string | null | undefined): string {
   return v || 'player'
 }
 
-function QueueBootstrapper(props: {albumId: string | null; tracks: PlayerTrack[]}) {
-  const p = usePlayer()
-
-  // pull only what we need so the effect doesn't depend on the whole `p` object
-  const setQueue = p.setQueue
-  const selectTrack = p.selectTrack
-  const setPendingTrackId = p.setPendingTrackId
-
-  const queue = p.queue
-  const queueContextId = p.queueContextId
-  const currentId = p.current?.id ?? null
-  const status = p.status
-
-  React.useEffect(() => {
-    if (!props.tracks.length) return
-
-    // optional: don't stomp queue mid-play
-    // if (status === 'playing') return
-
-    const nextIds = props.tracks.map((t) => t.id).join('|')
-    const curIds = queue.map((t) => t.id).join('|')
-    const sameTrackset = nextIds === curIds
-
-    const nextCtx = props.albumId ?? undefined
-    const sameCtx = (queueContextId ?? undefined) === nextCtx
-
-    if (sameTrackset && sameCtx) return
-
-    const stillExists = currentId ? props.tracks.some((t) => t.id === currentId) : false
-
-    setQueue(props.tracks, {contextId: nextCtx})
-
-    if (stillExists && currentId) {
-      selectTrack(currentId)
-      setPendingTrackId(undefined)
-    }
-  }, [
-    props.albumId,
-    props.tracks,
-    queue,
-    queueContextId,
-    currentId,
-    status,
-    setQueue,
-    selectTrack,
-    setPendingTrackId,
-  ])
-
-  return null
-}
-
-
 function MiniPlayerHost(props: {onExpand: () => void}) {
   const {onExpand} = props
   const p = usePlayer()
@@ -458,6 +406,7 @@ export default function PortalArea(props: {
   } = props
 
   const p = usePlayer()
+  const {setQueue, play, selectTrack, setPendingTrackId} = p
   useGlobalTransportKeys(p, {enabled: true})
   const sp = useClientSearchParams()
   const hasSt = ((sp.get('st') ?? sp.get('share') ?? '').trim().length > 0)
@@ -576,15 +525,18 @@ export default function PortalArea(props: {
       const saved = getSavedSt(slug)
 
       patchQuery({
-        p: 'player',
-        panel: null,
-        pt: null,
-        post: null,
-        album: slug,
-        track: null,
-        st: saved || null,
-        share: null,
-      })
+  p: 'player',
+  panel: null,
+  pt: null,
+  post: null,
+  album: slug,
+  track: null,   // ✅ correct param name
+  t: null,       // optional: if you use t elsewhere
+  autoplay: null,
+  st: saved || null,
+  share: null,
+})
+
 
       setIsBrowsingAlbum(true)
       setCurrentAlbumSlug(slug)
@@ -628,29 +580,60 @@ export default function PortalArea(props: {
   React.useEffect(() => {
     if (!isPlayer) return
     if (!qTrack) return
-    p.selectTrack(qTrack)
-    p.setPendingTrackId(undefined)
+    selectTrack(qTrack)
+    setPendingTrackId(undefined)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlayer, qTrack])
 
   const autoplayFiredRef = React.useRef<string | null>(null)
-  React.useEffect(() => {
-    if (!isPlayer) return
-    if (!qAutoplay) return
-    if (!qTrack) return
 
-    if (!qShareToken) {
-      patchQuery({autoplay: null})
-      return
-    }
+React.useEffect(() => {
+  if (!isPlayer) return
+  if (!qAutoplay) return
+  if (!qTrack) return
 
-    const key = `${qAlbum ?? ''}:${qTrack}:${qShareToken}`
-    if (autoplayFiredRef.current === key) return
-    autoplayFiredRef.current = key
-
-    p.play()
+  // autoplay is only meaningful for share links (your current rule)
+  if (!qShareToken) {
     patchQuery({autoplay: null})
-  }, [isPlayer, qAutoplay, qTrack, qAlbum, qShareToken, p, patchQuery])
+    return
+  }
+
+  // Wait until album+tracks are loaded so setQueue/play is deterministic.
+  if (!album || tracks.length === 0) return
+
+  const key = `${qAlbum ?? ''}:${qTrack}:${qShareToken}`
+  if (autoplayFiredRef.current === key) return
+  autoplayFiredRef.current = key
+
+  const ctxId = hasSt ? (album.catalogId ?? undefined) : ((album.catalogId ?? album.id) ?? undefined)
+  const ctxSlug = qAlbum ?? currentAlbumSlug
+
+  // Establish queue + context first (so downstream access/token logic has the right scope).
+  setQueue(tracks, {
+    contextId: ctxId,
+    contextSlug: ctxSlug,
+    contextTitle: album.title ?? undefined,
+    contextArtist: album.artist ?? undefined,
+    artworkUrl: album.artworkUrl ?? null,
+  })
+
+  const t = tracks.find((x) => x.id === qTrack)
+  play(t) // if t is undefined, play() falls back to current/queue[0]
+  patchQuery({autoplay: null})
+}, [
+  isPlayer,
+  qAutoplay,
+  qTrack,
+  qAlbum,
+  qShareToken,
+  album,
+  tracks,
+  hasSt,
+  currentAlbumSlug,
+  play,
+  setQueue,
+  patchQuery,
+])
 
   React.useEffect(() => {
     if (!isPlayer) return
@@ -736,11 +719,6 @@ export default function PortalArea(props: {
           {msgNode}
         </div>
       </SpotlightClone>
-
-      <QueueBootstrapper
-        albumId={hasSt ? (album?.catalogId ?? null) : (album?.catalogId ?? album?.id ?? null)}
-        tracks={tracks}
-      />
 
       <div style={{height: '100%', minHeight: 0, minWidth: 0, display: 'grid'}}>
         <PortalShell
