@@ -4,6 +4,7 @@
 import React from 'react'
 import {createPortal} from 'react-dom'
 import {usePlayer} from '../PlayerState'
+import {mediaSurface} from '../mediaSurface'
 import LyricsOverlay, {type LyricCue} from './LyricsOverlay'
 
 function useScrollLock(locked: boolean) {
@@ -39,6 +40,12 @@ export default function StageOverlay(props: {
 
   React.useEffect(() => setMounted(true), [])
   useScrollLock(open)
+
+    React.useEffect(() => {
+    if (!open) return
+    return mediaSurface.registerStage('fullscreen')
+  }, [open])
+
 
   React.useEffect(() => {
     if (!open) return

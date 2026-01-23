@@ -75,47 +75,47 @@ export default function VisualizerCanvas(props: {variant: StageVariant}) {
     })
   }, [])
 
-  // Engine mount once
-React.useEffect(() => {
-  const canvas = canvasRef.current
-  if (!canvas) return
 
-  const prefersReduced =
-    window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false
+  
+  // Engine lifecycle: (re)mount per variant/canvas instance, fully disposed on unmount.
+  React.useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
 
-  const getAudio = () => {
-    if (prefersReduced) {
+    const prefersReduced =
+      window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false
+
+    const getAudio = () => {
       const a = audioSurface.get()
-      return {...a, energy: 0.12}
+      return prefersReduced ? {...a, energy: 0.12} : a
     }
-    return audioSurface.get()
-  }
 
-  const engine = new VisualizerEngine({
-    canvas,
-    getAudio,
-    theme: themeFromKey(p.current?.visualTheme),
-  })
+    const engine = new VisualizerEngine({
+      canvas,
+      getAudio,
+      theme: themeFromKey(themeKeyRef.current),
+    })
 
-  engineRef.current = engine
+    engineRef.current = engine
 
-  // register canvas for UI sampling (fullscreen wins)
-  const unreg = visualSurface.registerCanvas(variant, canvas)
+    // register canvas for UI sampling (fullscreen wins)
+    const unreg = visualSurface.registerCanvas(variant, canvas)
 
-  if (activeStage === variant) engine.start()
+    // start only if this stage currently has authority
+    if (activeStageRef.current === variant) engine.start()
 
-  return () => {
-    try {
-      engine.stop()
-      engine.dispose()
-    } finally {
-      engineRef.current = null
-      unreg()
+    return () => {
+      try {
+        engine.stop()
+        engine.dispose()
+      } finally {
+        engineRef.current = null
+        try {
+          unreg()
+        } catch {}
+      }
     }
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [])
-
+  }, [variant])
 
   // Start/stop based on stage authority
   React.useEffect(() => {
@@ -125,13 +125,17 @@ React.useEffect(() => {
     else engine.stop()
   }, [activeStage, variant])
 
-  // Theme changes only when track theme key changes
-  const themeKey = p.current?.visualTheme ?? null
+    const activeStageRef = React.useRef<StageVariant | null>(activeStage)
   React.useEffect(() => {
-    const engine = engineRef.current
-    if (!engine) return
-    engine.setTheme(themeFromKey(themeKey))
+    activeStageRef.current = activeStage
+  }, [activeStage])
+
+  const themeKey = p.current?.visualTheme ?? null
+  const themeKeyRef = React.useRef<string | null>(themeKey)
+  React.useEffect(() => {
+    themeKeyRef.current = themeKey
   }, [themeKey])
+
 
   return (
     <canvas

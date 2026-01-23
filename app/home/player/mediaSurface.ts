@@ -1,3 +1,4 @@
+// web/app/home/player/mediaSurface.ts
 'use client'
 
 export type MediaStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'blocked'
