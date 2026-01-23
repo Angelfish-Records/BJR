@@ -100,29 +100,44 @@ export default function PortalTabs(props: {
   const [rail, setRail] = React.useState<{x: number; w: number} | null>(null)
 
   const measure = React.useCallback(() => {
-    const row = rowRef.current
-    if (!row || tabs.length === 0) return
+  const row = rowRef.current
+  if (!row || tabs.length === 0) return
 
-    const btns = tabs
-      .map((t) => btnRefs.current.get(t.id))
-      .filter(Boolean) as HTMLButtonElement[]
+  const rowRect = row.getBoundingClientRect()
 
-    if (!btns.length) return
+  const btns = tabs
+    .map((t) => btnRefs.current.get(t.id))
+    .filter(Boolean) as HTMLButtonElement[]
 
-    const first = btns[0]
-    const last = btns[btns.length - 1]
+  if (!btns.length) return
 
-    const railX = first.offsetLeft
-    const railW = last.offsetLeft + last.offsetWidth - railX
-    setRail({x: railX, w: railW})
+  const first = btns[0]
+  const last = btns[btns.length - 1]
 
-    const id = active?.id
-    if (!id) return
-    const btn = btnRefs.current.get(id) ?? null
-    if (!btn) return
+  const firstRect = first.getBoundingClientRect()
+  const lastRect = last.getBoundingClientRect()
 
-    setIndicator({x: btn.offsetLeft, w: btn.offsetWidth})
-  }, [active?.id, tabs])
+  // Convert viewport coords -> row content coords
+  const railX = firstRect.left - rowRect.left + row.scrollLeft
+  const railW = lastRect.right - firstRect.left
+
+  // Round to device pixels to avoid subpixel “1px off” shimmer
+  const r = (n: number) => Math.round(n * (window.devicePixelRatio || 1)) / (window.devicePixelRatio || 1)
+
+  setRail({x: r(railX), w: r(railW)})
+
+  const id = active?.id
+  if (!id) return
+  const btn = btnRefs.current.get(id) ?? null
+  if (!btn) return
+
+  const b = btn.getBoundingClientRect()
+  const x = b.left - rowRect.left + row.scrollLeft
+  const w = b.width
+
+  setIndicator({x: r(x), w: r(w)})
+}, [active?.id, tabs])
+
 
   React.useLayoutEffect(() => {
     measure()
