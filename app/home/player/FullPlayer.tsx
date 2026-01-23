@@ -455,20 +455,24 @@ function playAlbumIndex(i: number) {
 
   return (
   <div
-    style={{
-      minWidth: 0,
-      width: '100%',
-      maxWidth: 760,          // pick your desktop “card” width
-      margin: '0 auto',       // ✅ centers it (grid/flex safe)
-      boxSizing: 'border-box',
-      borderRadius: 18,
-      border: '1px solid rgba(255,255,255,0.10)',
-      background: 'rgba(255,255,255,0.04)',
-      padding: 18,
-    }}
-  >
+      style={{
+        minWidth: 0,
+        width: '100%',
+        maxWidth: 760,
+        margin: '0 auto',
+        boxSizing: 'border-box',
+      }}
+    >
+      <div
+        style={{
+          display: 'grid',
+          justifyItems: 'center',
+          textAlign: 'center',
+          gap: 10,
+          padding: 18, // was on the removed parent card
+        }}
+      >
 
-      <div style={{display: 'grid', justifyItems: 'center', textAlign: 'center', gap: 10}}>
         <div
           style={{
             width: 'min(334px, 86vw)',
@@ -608,7 +612,7 @@ function playAlbumIndex(i: number) {
         </div>
       </div>
 
-      <div style={{marginTop: 18}}>
+      <div style={{marginTop: 18, padding: '0 18px 18px'}}>
         <div style={{borderTop: '1px solid rgba(255,255,255,0.10)', paddingTop: 14}}>
           {effTracks.map((t, i) => {
             const isCur = p.current?.id === t.id
