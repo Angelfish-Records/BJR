@@ -21,9 +21,15 @@ export default function PortalTabs(props: {
   const sp = useClientSearchParams()
 
   const firstId = tabs[0]?.id ?? null
+
+  // legacy support: pt used to control tabs
   const legacyPt = (sp.get('pt') ?? '').trim() || null
+
   const desiredRaw = (sp.get(queryParam) ?? '').trim()
   const desired = desiredRaw || null
+
+  // IMPORTANT: when queryParam is 'p', 'player' is reserved for the player surface
+  // and should NOT be interpreted as a portal tab.
   const isReservedSurface = queryParam === 'p' && desired === 'player'
 
   const validDesired =
@@ -40,32 +46,43 @@ export default function PortalTabs(props: {
 
   const [activeId, setActiveId] = React.useState<string | null>(initial)
 
+  // Keep local state aligned with URL
   React.useEffect(() => {
     if (!initial) return
     if (activeId !== initial) setActiveId(initial)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial])
 
+  // On mount: migrate legacy pt -> p, and ensure URL is canonical when we are in portal context.
   React.useEffect(() => {
     if (!initial) return
 
     const curP = (sp.get(queryParam) ?? '').trim()
     const curPt = (sp.get('pt') ?? '').trim()
 
+    // If we see legacy pt, migrate it (and delete pt).
+    // Only do this if p is either missing/invalid or clearly portal-ish (not player).
     if (curPt) {
       const ptCandidate = tabs.some((t) => t.id === curPt) ? curPt : ''
       if (ptCandidate) {
+        // Don't stomp p=player; that's the player surface.
         if (!(queryParam === 'p' && curP === 'player')) {
           replaceQuery({[queryParam]: ptCandidate, pt: null, panel: null})
           return
         }
+        // If we are on player, just delete pt to stop pollution.
         replaceQuery({pt: null})
         return
       }
+
+      // pt exists but isn't valid; just delete it.
       replaceQuery({pt: null})
+      // keep going; we may still want to ensure p
     }
 
+    // Ensure p has a valid tab id *unless* p=player (reserved).
     if (queryParam === 'p' && curP === 'player') return
+
     if (curP === initial) return
     replaceQuery({[queryParam]: initial, pt: null, panel: null})
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -75,26 +92,41 @@ export default function PortalTabs(props: {
 
   const wrap: React.CSSProperties = {display: 'grid', gap: 12, minWidth: 0}
 
-  // ✅ refs to measure active tab + position indicator
+  // ✅ refs to measure active tab + rail span
   const rowRef = React.useRef<HTMLDivElement | null>(null)
   const btnRefs = React.useRef<Map<string, HTMLButtonElement>>(new Map())
 
   const [indicator, setIndicator] = React.useState<{x: number; w: number} | null>(null)
+  const [rail, setRail] = React.useState<{x: number; w: number} | null>(null)
 
   const measure = React.useCallback(() => {
     const row = rowRef.current
+    if (!row || tabs.length === 0) return
+
+    const btns = tabs
+      .map((t) => btnRefs.current.get(t.id))
+      .filter(Boolean) as HTMLButtonElement[]
+
+    if (!btns.length) return
+
+    const first = btns[0]
+    const last = btns[btns.length - 1]
+
+    const railX = first.offsetLeft
+    const railW = last.offsetLeft + last.offsetWidth - railX
+    setRail({x: railX, w: railW})
+
     const id = active?.id
-    if (!row || !id) return
+    if (!id) return
     const btn = btnRefs.current.get(id) ?? null
     if (!btn) return
 
-    // offsetLeft/offsetWidth are perfect here because the indicator lives in the same scrolling box.
     setIndicator({x: btn.offsetLeft, w: btn.offsetWidth})
-  }, [active?.id])
+  }, [active?.id, tabs])
 
   React.useLayoutEffect(() => {
     measure()
-  }, [measure, tabs.length])
+  }, [measure])
 
   React.useEffect(() => {
     const onResize = () => measure()
@@ -110,7 +142,7 @@ export default function PortalTabs(props: {
     flexWrap: 'nowrap',
     overflowX: 'auto',
     WebkitOverflowScrolling: 'touch',
-    padding: '2px 2px 10px', // 👈 room for the rail/indicator
+    padding: '2px 2px 12px', // room for rail + indicator
     scrollbarWidth: 'none',
     minWidth: 0,
   }
@@ -142,23 +174,21 @@ export default function PortalTabs(props: {
         ref={rowRef}
         className="afPortalTabRow"
         style={tabRow}
-        onScroll={() => {
-          // If a user scrolls the tab row, indicator remains aligned (same scroll context),
-          // but this keeps it robust if fonts/layout shift during scroll.
-          measure()
-        }}
+        onScroll={() => measure()}
       >
-        {/* ✅ Rail (continuous line under the tab row) */}
+        {/* ✅ Rail (scoped to rendered tabs) */}
         <div
           aria-hidden
           style={{
             position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: 2,
+            bottom: 3, // 👈 sits slightly above indicator for "pressed" feel
+            left: rail?.x ?? 0,
+            width: rail?.w ?? 0,
             height: 1,
-            background: 'rgba(255,255,255,0.16)',
+            background: 'rgba(255,255,255,0.18)',
             pointerEvents: 'none',
+            opacity: rail ? 1 : 0,
+            transition: 'left 220ms ease, width 220ms ease, opacity 120ms ease',
           }}
         />
 
@@ -167,14 +197,14 @@ export default function PortalTabs(props: {
           aria-hidden
           style={{
             position: 'absolute',
-            bottom: 2,
+            bottom: 1,
             height: 2,
             borderRadius: 999,
             background: 'rgba(255,255,255,0.90)',
             pointerEvents: 'none',
             transform: `translateX(${indicator?.x ?? 0}px)`,
             width: indicator?.w ?? 0,
-            transition: 'transform 220ms ease, width 220ms ease',
+            transition: 'transform 220ms ease, width 220ms ease, opacity 120ms ease',
             opacity: indicator ? 1 : 0,
           }}
         />
@@ -199,7 +229,11 @@ export default function PortalTabs(props: {
               title={t.locked ? (t.lockedHint ?? 'Locked') : t.title}
             >
               {t.title}
-              {t.locked ? <span aria-hidden style={{marginLeft: 6, opacity: 0.65}}>🔒</span> : null}
+              {t.locked ? (
+                <span aria-hidden style={{marginLeft: 6, opacity: 0.65}}>
+                  🔒
+                </span>
+              ) : null}
             </button>
           )
         })}
