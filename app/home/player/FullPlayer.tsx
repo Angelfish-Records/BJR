@@ -488,12 +488,12 @@ function playAlbumIndex(i: number) {
         />
 
         <div style={{
-          fontSize: 'clamp(36px, 5vw, 48px)',
+          fontSize: 'clamp(28px, 4vw, 40px)',
           fontWeight: 800,
           lineHeight: 1.05,
           letterSpacing: '-0.3px',
           color: '#fff',
-          marginBottom: 10,
+          marginBottom: 2,
         }}
         >{albumTitle}</div>
         <div style={{maxWidth: 540, fontSize: 12, opacity: 0.62, lineHeight: 1.45}}>{albumDesc}</div>
@@ -797,7 +797,7 @@ function playAlbumIndex(i: number) {
           <div style={{marginTop: 18}}>
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12}}>
               <div style={{
-                fontSize: 'clamp(36px, 5vw, 48px)',
+                fontSize: 'clamp(20px, 3vw, 28px)',
                 fontWeight: 800,
                 lineHeight: 1.05,
                 letterSpacing: '-0.3px',
