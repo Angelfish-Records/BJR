@@ -50,6 +50,10 @@ export default function LyricsOverlay(props: {
   // When user scrolls manually, pause auto-follow briefly.
   const userScrollUntilRef = React.useRef<number>(0)
 
+  // Prevent auto-follow from disabling itself: smooth scroll triggers onScroll too.
+  const isAutoScrollingRef = React.useRef(false)
+  const autoScrollClearRef = React.useRef<number | null>(null)
+
   React.useEffect(() => {
     activeIdxRef.current = activeIdx
   }, [activeIdx])
@@ -60,9 +64,13 @@ export default function LyricsOverlay(props: {
     activeIdxRef.current = -1
     userScrollUntilRef.current = 0
     lastFocusCenterRef.current = -1
+    isAutoScrollingRef.current = false
+
+    if (autoScrollClearRef.current) window.clearTimeout(autoScrollClearRef.current)
+    autoScrollClearRef.current = null
+
     const sc = scrollerRef.current
     if (sc) sc.scrollTop = 0
-    // Clear any existing focus vars (so it doesn't “stick” between cue sets)
     if (sc) {
       const nodes = sc.querySelectorAll<HTMLElement>('[data-lyric-idx]')
       nodes.forEach((el) => el.style.removeProperty('--af-focus'))
@@ -92,6 +100,43 @@ export default function LyricsOverlay(props: {
     }
   }, [cues, offsetMs])
 
+  // Auto-follow: scroll active line into a nice reading position, unless user recently scrolled.
+  React.useLayoutEffect(() => {
+    if (!cues || cues.length === 0) return
+    if (activeIdx < 0) return
+
+    const now = Date.now()
+    if (now < userScrollUntilRef.current) return
+
+    const sc = scrollerRef.current
+    const viewport = viewportRef.current
+    if (!sc || !viewport) return
+
+    const activeEl = sc.querySelector<HTMLElement>(`[data-lyric-idx="${activeIdx}"]`)
+    if (!activeEl) return
+
+    const vh = viewport.clientHeight
+    if (!vh || vh < 10) return
+
+    // Keep the reading line slightly above center so upcoming lines “arrive” into the hotspot.
+    const targetY = activeEl.offsetTop + activeEl.offsetHeight / 2 - vh * 0.44
+    const nextTop = clamp(Math.round(targetY), 0, Math.max(0, sc.scrollHeight - sc.clientHeight))
+
+    // Mark this as programmatic scroll so onScroll doesn't pause auto-follow.
+    isAutoScrollingRef.current = true
+    sc.scrollTo({top: nextTop, behavior: 'smooth'})
+
+    if (autoScrollClearRef.current) window.clearTimeout(autoScrollClearRef.current)
+    autoScrollClearRef.current = window.setTimeout(() => {
+      isAutoScrollingRef.current = false
+    }, 220)
+
+    return () => {
+      if (autoScrollClearRef.current) window.clearTimeout(autoScrollClearRef.current)
+      autoScrollClearRef.current = null
+    }
+  }, [cues, activeIdx])
+
   // DOM focus compute: uses scrollTop/offsetTop (no getBoundingClientRect spam).
   const scheduleFocusCompute = React.useCallback(() => {
     if (focusRafRef.current != null) return
@@ -103,7 +148,6 @@ export default function LyricsOverlay(props: {
       const center = sc.scrollTop + sc.clientHeight * 0.46
       const falloff = Math.max(80, sc.clientHeight * (isInline ? 0.32 : 0.38))
 
-      // Skip microscopic movement (reduces fullscreen “shimmer”)
       if (Math.abs(center - lastFocusCenterRef.current) < 0.5) return
       lastFocusCenterRef.current = center
 
@@ -199,7 +243,7 @@ export default function LyricsOverlay(props: {
             pointerEvents: 'none',
             zIndex: 0,
             background: `radial-gradient(${spotlightW}% ${spotlightH}% at 50% ${spotlightCenterY}%, rgba(0,0,0,${
-              isInline ? 0.40 : 0.52
+              isInline ? 0.4 : 0.52
             }) 0%, rgba(0,0,0,0.20) 35%, rgba(0,0,0,0.00) 72%)`,
             WebkitMaskImage: `radial-gradient(${spotlightW}% ${spotlightH}% at 50% ${spotlightCenterY}%, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 85%)`,
             maskImage: `radial-gradient(${spotlightW}% ${spotlightH}% at 50% ${spotlightCenterY}%, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 85%)`,
@@ -211,7 +255,10 @@ export default function LyricsOverlay(props: {
           ref={scrollerRef}
           className="af-lyrics-scroll"
           onScroll={() => {
-            userScrollUntilRef.current = Date.now() + 1400
+            // Only manual scroll should pause auto-follow.
+            if (!isAutoScrollingRef.current) {
+              userScrollUntilRef.current = Date.now() + 1400
+            }
             scheduleFocusCompute()
           }}
           style={{
@@ -240,11 +287,7 @@ export default function LyricsOverlay(props: {
 
             const lh = isInline ? 1.25 : 1.22
 
-            // Stage: per-line blur scrim is expensive. Inline: keep the “follow” glow.
-            // - inline: allow scrim to follow focus via CSS var threshold
-            // - stage: scrim only on active line; for non-active lines rely on the global spotlight + opacity.
             const scrimInset = isInline ? '-6px -10px' : '-10px -16px'
-            const scrimBgInline = 'rgba(0,0,0,0.22)'
             const scrimBgStage = 'rgba(0,0,0,0.18)'
 
             return (
@@ -278,14 +321,14 @@ export default function LyricsOverlay(props: {
                   letterSpacing: 0.2,
                   textAlign: 'center',
 
-                  // DOM-driven focus (0..1), applied by scheduleFocusCompute via CSS var.
-                  // If activeIdx is unknown, keep a sane baseline.
                   opacity:
                     activeIdx < 0
                       ? isInline
                         ? 0.6
                         : 0.5
-                      : (isActive ? 1 : 'calc(0.18 + var(--af-focus, 0) * 0.82)'),
+                      : isActive
+                        ? 1
+                        : 'calc(0.18 + var(--af-focus, 0) * 0.82)',
 
                   fontWeight: isActive ? 780 : 'calc(650 + var(--af-focus, 0) * 70)',
 
@@ -313,8 +356,6 @@ export default function LyricsOverlay(props: {
                   }}
                 >
                   {/* Local per-line scrim */}
-                  {/* inline: follows focus (no React state) */}
-                  {/* stage: active only (avoid multiple backdrop-filters while scrolling fullscreen) */}
                   {isInline ? (
                     <span
                       aria-hidden
@@ -323,20 +364,13 @@ export default function LyricsOverlay(props: {
                         inset: scrimInset,
                         borderRadius: 999,
                         pointerEvents: 'none',
-
-                        // inline: scale alpha with focus
                         background: `rgba(0,0,0, calc(0.08 + var(--af-focus, 0) * 0.26))`,
-
-                        // inline: blur behind the current-ish line (okay at small scale)
                         backdropFilter: 'blur(10px)',
                         WebkitBackdropFilter: 'blur(10px)',
-
                         WebkitMaskImage:
                           'radial-gradient(closest-side at 50% 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 100%)',
                         maskImage:
                           'radial-gradient(closest-side at 50% 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 100%)',
-
-                        // hide when far from focus (still cheap)
                         opacity: 'calc(var(--af-focus, 0) * 0.98)',
                       }}
                     />
@@ -348,18 +382,13 @@ export default function LyricsOverlay(props: {
                         inset: scrimInset,
                         borderRadius: 999,
                         pointerEvents: 'none',
-
                         background: scrimBgStage,
-
-                        // stage: NO backdrop-filter (this is the main fullscreen jank reducer)
                         backdropFilter: 'none',
                         WebkitBackdropFilter: 'none',
-
                         WebkitMaskImage:
                           'radial-gradient(closest-side at 50% 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 100%)',
                         maskImage:
                           'radial-gradient(closest-side at 50% 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 100%)',
-
                         opacity: 0.95,
                       }}
                     />
@@ -370,8 +399,6 @@ export default function LyricsOverlay(props: {
                       position: 'relative',
                       zIndex: 1,
                       textShadow,
-                      // Slightly soften far-away lines without making them ugly/illegible.
-                      // (DOM-driven; 0..1 focus)
                       filter: 'blur(calc((1 - var(--af-focus, 0)) * 0.15px))',
                     }}
                   >
