@@ -27,28 +27,52 @@ function useAnchorPosition(open: boolean, anchorRef: React.RefObject<HTMLElement
       setPos(null)
       return
     }
+
     const el = anchorRef.current
     if (!el) return
 
-    const compute = () => {
+    let raf: number | null = null
+
+    const computeNow = () => {
+      if (typeof document !== 'undefined' && document.hidden) return
       const r = el.getBoundingClientRect()
       setPos({x: r.left + r.width / 2, y: r.bottom + 8})
     }
 
-    compute()
-    window.addEventListener('scroll', compute, true)
-    window.addEventListener('resize', compute)
+    const schedule = () => {
+      if (raf != null) return
+      raf = window.requestAnimationFrame(() => {
+        raf = null
+        computeNow()
+      })
+    }
 
-    // visualViewport changes on mobile when bars expand/collapse
+    // prime
+    schedule()
+
+    const onScroll = () => schedule()
+    const onResize = () => schedule()
+
+    window.addEventListener('scroll', onScroll, {capture: true, passive: true})
+    window.addEventListener('resize', onResize, {passive: true})
+
     const vv = window.visualViewport
-    vv?.addEventListener('resize', compute)
-    vv?.addEventListener('scroll', compute)
+    vv?.addEventListener('resize', onResize, {passive: true})
+    vv?.addEventListener('scroll', onScroll, {passive: true})
+
+    const onVis = () => {
+      if (typeof document !== 'undefined' && !document.hidden) schedule()
+    }
+    document.addEventListener('visibilitychange', onVis, {passive: true})
 
     return () => {
-      window.removeEventListener('scroll', compute, true)
-      window.removeEventListener('resize', compute)
-      vv?.removeEventListener('resize', compute)
-      vv?.removeEventListener('scroll', compute)
+      if (raf != null) window.cancelAnimationFrame(raf)
+      raf = null
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('resize', onResize)
+      vv?.removeEventListener('resize', onResize as EventListener)
+      vv?.removeEventListener('scroll', onScroll as EventListener)
+      document.removeEventListener('visibilitychange', onVis)
     }
   }, [open, anchorRef])
 

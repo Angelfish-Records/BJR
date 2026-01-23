@@ -283,25 +283,53 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
   React.useEffect(() => setMounted(true), [])
 
     React.useEffect(() => {
-    if (!mounted) return
-    const el = document.getElementById('af-mini-player')
-    if (!el) return
+  if (!mounted) return
+  if (typeof document === 'undefined') return
 
-    const set = () => {
-      const h = Math.ceil(el.getBoundingClientRect().height || 0)
-      document.documentElement.style.setProperty('--af-mini-player-h', `${h}px`)
-    }
+  const el = document.getElementById('af-mini-player')
+  if (!el) return
 
-    set()
-    const ro = new ResizeObserver(() => set())
-    ro.observe(el)
-    window.addEventListener('resize', set)
+  let raf: number | null = null
+  let ro: ResizeObserver | null = null
 
-    return () => {
-      ro.disconnect()
-      window.removeEventListener('resize', set)
-    }
-  }, [mounted])
+  const applyNow = () => {
+    // don’t force layout reads while backgrounded
+    if (document.hidden) return
+    const h = Math.ceil(el.getBoundingClientRect().height || 0)
+    document.documentElement.style.setProperty('--af-mini-player-h', `${h}px`)
+  }
+
+  const schedule = () => {
+    if (raf != null) return
+    raf = window.requestAnimationFrame(() => {
+      raf = null
+      applyNow()
+    })
+  }
+
+  // prime once
+  schedule()
+
+  ro = new ResizeObserver(() => schedule())
+  ro.observe(el)
+
+  const onResize = () => schedule()
+  window.addEventListener('resize', onResize, {passive: true})
+
+  const onVis = () => {
+    if (!document.hidden) schedule()
+  }
+  document.addEventListener('visibilitychange', onVis, {passive: true})
+
+  return () => {
+    if (raf != null) window.cancelAnimationFrame(raf)
+    raf = null
+    ro?.disconnect()
+    ro = null
+    window.removeEventListener('resize', onResize)
+    document.removeEventListener('visibilitychange', onVis)
+  }
+}, [mounted])
 
   const playingish = p.status === 'playing' || p.status === 'loading' || p.intent === 'play'
 
@@ -398,47 +426,55 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
   const vol = p.volume
   const muted = p.muted || p.volume <= 0.001
 
-  const [volToast, setVolToast] = React.useState<{pct: number} | null>(null)
-  const toastTimer = React.useRef<number | null>(null)
-  React.useEffect(() => {
-    return () => {
-      if (toastTimer.current) window.clearTimeout(toastTimer.current)
-    }
-  }, [])
-
-  const showVolToast = (nextVol: number) => {
-    const pct = Math.round(clamp(nextVol, 0, 1) * 100)
-    setVolToast({pct})
-    if (toastTimer.current) window.clearTimeout(toastTimer.current)
-    toastTimer.current = window.setTimeout(() => setVolToast(null), 600)
-  }
-
   const volBtnRef = React.useRef<HTMLButtonElement | null>(null)
   const [volAnchor, setVolAnchor] = React.useState<{x: number; y: number} | null>(null)
 
   React.useLayoutEffect(() => {
-    if (!volOpen) {
-      setVolAnchor(null)
-      return
-    }
+  if (!volOpen) {
+    setVolAnchor(null)
+    return
+  }
 
-    const el = volBtnRef.current
-    if (!el) return
+  const el = volBtnRef.current
+  if (!el) return
 
-    const compute = () => {
-      const r = el.getBoundingClientRect()
-      setVolAnchor({x: r.left + r.width / 2, y: r.top})
-    }
+  let raf: number | null = null
 
-    compute()
-    window.addEventListener('scroll', compute, true)
-    window.addEventListener('resize', compute)
+  const computeNow = () => {
+    if (typeof document !== 'undefined' && document.hidden) return
+    const r = el.getBoundingClientRect()
+    setVolAnchor({x: r.left + r.width / 2, y: r.top})
+  }
 
-    return () => {
-      window.removeEventListener('scroll', compute, true)
-      window.removeEventListener('resize', compute)
-    }
-  }, [volOpen])
+  const schedule = () => {
+    if (raf != null) return
+    raf = window.requestAnimationFrame(() => {
+      raf = null
+      computeNow()
+    })
+  }
+
+  // prime
+  schedule()
+
+  const onScroll = () => schedule()
+  const onResize = () => schedule()
+  window.addEventListener('scroll', onScroll, {capture: true, passive: true})
+  window.addEventListener('resize', onResize, {passive: true})
+
+  const onVis = () => {
+    if (typeof document !== 'undefined' && !document.hidden) schedule()
+  }
+  document.addEventListener('visibilitychange', onVis, {passive: true})
+
+  return () => {
+    if (raf != null) window.cancelAnimationFrame(raf)
+    raf = null
+    window.removeEventListener('scroll', onScroll, true)
+    window.removeEventListener('resize', onResize)
+    document.removeEventListener('visibilitychange', onVis)
+  }
+}, [volOpen])
 
   /* ---------------- Copy ---------------- */
 
@@ -833,29 +869,6 @@ boxSizing: 'border-box',
                   <VolumeIcon muted={muted} />
                 </IconBtn>
 
-                {volToast ? (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: -26,
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      fontSize: 11,
-                      padding: '4px 8px',
-                      borderRadius: 999,
-                      border: '1px solid rgba(255,255,255,0.12)',
-                      background: 'rgba(0,0,0,0.45)',
-                      backdropFilter: 'blur(8px)',
-                      color: 'rgba(255,255,255,0.9)',
-                      boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
-                      pointerEvents: 'none',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {volToast.pct}%
-                  </div>
-                ) : null}
-
                 {volOpen && volAnchor
                   ? createPortal(
                       <>
@@ -891,7 +904,6 @@ boxSizing: 'border-box',
                               onChange={(e) => {
                                 const next = Number(e.target.value)
                                 p.setVolume(next)
-                                showVolToast(next)
                               }}
                             />
                           </div>

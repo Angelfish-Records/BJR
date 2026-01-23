@@ -251,18 +251,39 @@ function BodyPortal(props: {children: React.ReactNode}) {
 function useAnchorRect(ref: React.RefObject<HTMLElement | null>, enabled: boolean) {
   const [rect, setRect] = React.useState<DOMRect | null>(null)
 
+  const rafRef = React.useRef<number | null>(null)
+  const roRef = React.useRef<ResizeObserver | null>(null)
+  const elRef = React.useRef<HTMLElement | null>(null)
+  const enabledRef = React.useRef<boolean>(enabled)
+
+  React.useEffect(() => {
+    enabledRef.current = enabled
+  }, [enabled])
+
   React.useEffect(() => {
     if (!enabled) {
+      // hard stop, hard clear
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+      roRef.current?.disconnect()
+      roRef.current = null
+      elRef.current = null
       setRect(null)
       return
     }
 
     const el = ref.current
     if (!el) return
+    elRef.current = el
 
-    const update = () => {
-      const r = el.getBoundingClientRect()
-      // DOMRect is live-ish in some browsers; copy primitives.
+    const measureNow = () => {
+      const cur = elRef.current
+      if (!cur) return
+      // If the page is backgrounded, skip layout reads.
+      if (typeof document !== 'undefined' && document.hidden) return
+
+      const r = cur.getBoundingClientRect()
+      // DOMRect can be "live-ish"; copy primitives and quantize a little for stability.
       setRect(
         new DOMRect(
           Math.round(r.x),
@@ -273,25 +294,54 @@ function useAnchorRect(ref: React.RefObject<HTMLElement | null>, enabled: boolea
       )
     }
 
-    update()
+    const scheduleMeasure = () => {
+      if (!enabledRef.current) return
+      if (rafRef.current != null) return
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null
+        measureNow()
+      })
+    }
 
-    const ro = new ResizeObserver(() => update())
+    // Prime once.
+    scheduleMeasure()
+
+    // ResizeObserver: coalesce into rAF.
+    const ro = new ResizeObserver(() => scheduleMeasure())
     ro.observe(el)
+    roRef.current = ro
 
-    const onScroll = () => update()
-    const onResize = () => update()
-    window.addEventListener('scroll', onScroll, true)
-    window.addEventListener('resize', onResize)
+    // Global events: coalesce into rAF. Keep them passive.
+    const onScroll = () => scheduleMeasure()
+    const onResize = () => scheduleMeasure()
+
+    window.addEventListener('scroll', onScroll, {capture: true, passive: true})
+    window.addEventListener('resize', onResize, {passive: true})
+
+    // Hidden-state gating: don’t measure while hidden; do one catch-up on visible.
+    const onVis = () => {
+      if (!enabledRef.current) return
+      if (typeof document !== 'undefined' && !document.hidden) scheduleMeasure()
+    }
+    document.addEventListener('visibilitychange', onVis, {passive: true})
 
     return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+
       ro.disconnect()
+      roRef.current = null
+      elRef.current = null
+
       window.removeEventListener('scroll', onScroll, true)
       window.removeEventListener('resize', onResize)
+      document.removeEventListener('visibilitychange', onVis)
     }
   }, [ref, enabled])
 
   return rect
 }
+
 
 /**
  * Full-screen blur + interaction blocker.
