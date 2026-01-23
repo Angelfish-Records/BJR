@@ -7,6 +7,7 @@ import {useAuth} from '@clerk/nextjs'
 import PortalShell, {PortalPanelSpec} from './PortalShell'
 import {useClientSearchParams, replaceQuery, getAutoplayFlag} from './urlState'
 import {usePlayer} from '@/app/home/player/PlayerState'
+import {useGlobalTransportKeys} from './player/useGlobalTransportKeys'
 import type {PlayerTrack, AlbumInfo, AlbumNavItem, Tier} from '@/lib/types'
 import PlayerController from './player/PlayerController'
 import MiniPlayer from './player/MiniPlayer'
@@ -457,6 +458,7 @@ export default function PortalArea(props: {
   } = props
 
   const p = usePlayer()
+  useGlobalTransportKeys(p, {enabled: true})
   const sp = useClientSearchParams()
   const hasSt = ((sp.get('st') ?? sp.get('share') ?? '').trim().length > 0)
   const {isSignedIn} = useAuth()

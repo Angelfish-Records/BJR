@@ -143,7 +143,7 @@ export default function PortalShell(props: Props) {
 
   const headerPortalEl = mounted && headerPortalId ? document.getElementById(headerPortalId) : null
 
-  const DOCK_H = 84
+  // const DOCK_H = 84
 
   const activePanel = panels.find((p) => p.id === active) ?? panels[0] ?? null
 
@@ -155,7 +155,7 @@ export default function PortalShell(props: Props) {
         gap: 14,
         minWidth: 0,
         alignContent: 'start',
-        paddingBottom: `calc(${DOCK_H}px + env(safe-area-inset-bottom, 0px))`,
+        // paddingBottom: `calc(${DOCK_H}px + env(safe-area-inset-bottom, 0px))`,
       }}
     >
       {headerNode ? (headerPortalEl ? createPortal(headerNode, headerPortalEl) : headerNode) : null}

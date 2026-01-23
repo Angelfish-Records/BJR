@@ -4,7 +4,6 @@
 import React from 'react'
 import {createPortal} from 'react-dom'
 import {usePlayer} from './PlayerState'
-import {useGlobalTransportKeys} from './useGlobalTransportKeys'
 import type {PlayerTrack} from '@/lib/types'
 import {buildShareTarget, performShare, type ShareTarget} from '@/lib/share'
 import {PatternPillUnderlay} from './VisualizerPattern'
@@ -267,8 +266,6 @@ function findTrackById(queue: PlayerTrack[], id?: string | null): PlayerTrack | 
 export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: string | null}) {
   const {onExpand, artworkUrl = null} = props
   const p = usePlayer()
-
-  useGlobalTransportKeys(p)
 
   const openPlayerToNowPlaying = () => {
     const patch: Record<string, string | null | undefined> = {p: 'player'}

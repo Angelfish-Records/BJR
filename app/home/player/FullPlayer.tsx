@@ -3,7 +3,6 @@
 
 import React from 'react'
 import {usePlayer} from './PlayerState'
-import {useGlobalTransportKeys} from './useGlobalTransportKeys'
 import type {AlbumInfo, AlbumNavItem, PlayerTrack, Tier, TierName} from '@/lib/types'
 import {deriveShareContext, shareAlbum, shareTrack} from './share'
 import {PatternRingGlow} from './VisualizerPattern'
@@ -160,9 +159,6 @@ export default function FullPlayer(props: {
 }) {
   const p = usePlayer()
 
-useGlobalTransportKeys(p)
-
-
   const pRef = React.useRef(p)
   React.useEffect(() => {
     pRef.current = p
@@ -193,7 +189,7 @@ useGlobalTransportKeys(p)
   const albumDesc = effAlbum?.description ?? 'This is placeholder copy. Soon: pull album description from Sanity.'
   const browseAlbums = albums.filter((a) => a.id !== effAlbum?.id)
 
-  const playingish = p.status === 'playing' || p.status === 'loading' || p.intent === 'play'
+  const playingish = p.status === 'playing' || p.status === 'loading'
 
   const [access, setAccess] = React.useState<{
     forCatalogId: string
@@ -331,8 +327,7 @@ useGlobalTransportKeys(p)
   const showEmbargo = Boolean(emb?.embargoed && Number.isFinite(releaseAtMs))
 
   const isThisAlbumActive = Boolean(albumKey && p.queueContextId === albumKey)
-  const currentIsInBrowsedAlbum = Boolean(p.current && effTracks.some((t) => t.id === p.current!.id))
-  const playingThisAlbum = playingish && (isThisAlbumActive || currentIsInBrowsedAlbum)
+  const playingThisAlbum = playingish && isThisAlbumActive
 
   const [playLock, setPlayLock] = React.useState(false)
   const lockPlayFor = (ms: number) => {
