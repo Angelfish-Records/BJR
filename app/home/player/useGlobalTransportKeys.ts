@@ -28,19 +28,42 @@ export function useGlobalTransportKeys(p: GlobalTransportPlayer, opts?: {enabled
     pRef.current = p
   }, [p])
 
-  React.useEffect(() => {
+    React.useEffect(() => {
     if (!enabled) return
 
+    const shouldIgnore = (e: KeyboardEvent) => {
+      if (e.code !== 'Space') return true
+      if (isTypingTarget(e.target)) return true
+      return false
+    }
+
+    const blurInteractiveFocus = () => {
+      const ae = document.activeElement as HTMLElement | null
+      if (!ae) return
+      // don’t blur typing targets (OTP/input etc.)
+      if (isTypingTarget(ae)) return
+
+      // If focus is on a control, spacebar will “press” it unless we blur.
+      const interactive =
+        ae.tagName === 'BUTTON' ||
+        ae.tagName === 'A' ||
+        ae.getAttribute('role') === 'button' ||
+        ae.tabIndex >= 0
+
+      if (interactive) ae.blur()
+    }
+
     const onKeyDown = (e: KeyboardEvent) => {
-      // Space toggles play/pause
-      if (e.code !== 'Space') return
+      if (shouldIgnore(e)) return
+
+      // prevent scroll + prevent “button press” behaviour
+      e.preventDefault()
+      e.stopPropagation()
+
+      // optional: avoid repeats if key held down
       if (e.repeat) return
 
-      // Don't hijack typing / OTP / inputs
-      if (isTypingTarget(e.target)) return
-
-      // Prevent scroll
-      e.preventDefault()
+      blurInteractiveFocus()
 
       const ps = pRef.current
       const playingish = ps.status === 'playing' || ps.status === 'loading' || ps.intent === 'play'
@@ -57,7 +80,18 @@ export function useGlobalTransportKeys(p: GlobalTransportPlayer, opts?: {enabled
       ps.play(t)
     }
 
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    const onKeyUp = (e: KeyboardEvent) => {
+      // keyup is where browsers often fire the “click” for spacebar on focused buttons
+      if (shouldIgnore(e)) return
+      e.preventDefault()
+      e.stopPropagation()
+    }
+
+    window.addEventListener('keydown', onKeyDown, {capture: true})
+    window.addEventListener('keyup', onKeyUp, {capture: true})
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+      window.removeEventListener('keyup', onKeyUp, true)
+    }
   }, [enabled])
 }
