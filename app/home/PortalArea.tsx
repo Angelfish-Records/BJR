@@ -24,18 +24,63 @@ function normalizeP(raw: string | null | undefined): string {
 function QueueBootstrapper(props: {albumId: string | null; tracks: PlayerTrack[]}) {
   const p = usePlayer()
 
+  // pull only what we need so the effect doesn't depend on the whole `p` object
+  const setQueue = p.setQueue
+  const selectTrack = p.selectTrack
+  const setPendingTrackId = p.setPendingTrackId
+
+  const queue = p.queue
+  const queueContextId = p.queueContextId
+  const currentId = p.current?.id ?? null
+  const status = p.status
+
   React.useEffect(() => {
-    if (p.queue.length > 0) return
     if (!props.tracks.length) return
-    p.setQueue(props.tracks, {contextId: props.albumId ?? undefined})
-  }, [p, p.queue.length, props.albumId, props.tracks])
+
+    // optional: don't stomp queue mid-play
+    // if (status === 'playing') return
+
+    const nextIds = props.tracks.map((t) => t.id).join('|')
+    const curIds = queue.map((t) => t.id).join('|')
+    const sameTrackset = nextIds === curIds
+
+    const nextCtx = props.albumId ?? undefined
+    const sameCtx = (queueContextId ?? undefined) === nextCtx
+
+    if (sameTrackset && sameCtx) return
+
+    const stillExists = currentId ? props.tracks.some((t) => t.id === currentId) : false
+
+    setQueue(props.tracks, {contextId: nextCtx})
+
+    if (stillExists && currentId) {
+      selectTrack(currentId)
+      setPendingTrackId(undefined)
+    }
+  }, [
+    props.albumId,
+    props.tracks,
+    queue,
+    queueContextId,
+    currentId,
+    status,
+    setQueue,
+    selectTrack,
+    setPendingTrackId,
+  ])
 
   return null
 }
 
+
 function MiniPlayerHost(props: {onExpand: () => void}) {
   const {onExpand} = props
   const p = usePlayer()
+
+  const intent = p.intent
+  const status = p.status
+  const current = p.current
+  const queueLen = p.queue.length
 
   const [miniActive, setMiniActive] = React.useState(() => {
     if (typeof window === 'undefined') return false
@@ -44,11 +89,11 @@ function MiniPlayerHost(props: {onExpand: () => void}) {
 
   React.useEffect(() => {
     const shouldActivate =
-      p.intent === 'play' ||
-      p.status === 'playing' ||
-      p.status === 'paused' ||
-      Boolean(p.current) ||
-      p.queue.length > 0
+      intent === 'play' ||
+      status === 'playing' ||
+      status === 'paused' ||
+      Boolean(current) ||
+      queueLen > 0
 
     if (!miniActive && shouldActivate) {
       setMiniActive(true)
@@ -56,12 +101,12 @@ function MiniPlayerHost(props: {onExpand: () => void}) {
         window.sessionStorage.setItem('af:miniActive', '1')
       } catch {}
     }
-  }, [miniActive, p])
+  }, [miniActive, intent, status, current, queueLen])
 
   if (!miniActive) return null
-
   return <MiniPlayer onExpand={onExpand} artworkUrl={p.queueContextArtworkUrl ?? null} />
 }
+
 
 type AlbumPayload = {album: AlbumInfo | null; tracks: PlayerTrack[]}
 
@@ -254,6 +299,7 @@ function useAnchorRect(ref: React.RefObject<HTMLElement | null>, enabled: boolea
  */
 function SpotlightVeil(props: {active: boolean}) {
   const {active} = props
+  const debugbarStyleRef = React.useRef<string | null>(null)
 
   React.useEffect(() => {
     if (!active) return
@@ -265,26 +311,26 @@ function SpotlightVeil(props: {active: boolean}) {
   }, [active])
 
   React.useEffect(() => {
-    // “escape hatch” — keep debug bar clickable above veil
     const el = typeof document !== 'undefined' ? document.getElementById('af-admin-debugbar') : null
     if (!el) return
 
-    const prev = el.getAttribute('style') ?? ''
+    if (debugbarStyleRef.current == null) {
+      debugbarStyleRef.current = el.getAttribute('style') ?? ''
+    }
+
     if (active) {
-      // make it win against stacking contexts
       el.setAttribute(
         'style',
-        `${prev}; position: relative; z-index: 50000; pointer-events: auto;`
+        `${debugbarStyleRef.current}; position: relative; z-index: 50000; pointer-events: auto;`
       )
     } else {
-      // restore exact previous inline style (or remove if empty)
-      if (prev.trim()) el.setAttribute('style', prev)
+      const orig = debugbarStyleRef.current ?? ''
+      if (orig.trim()) el.setAttribute('style', orig)
       else el.removeAttribute('style')
     }
   }, [active])
 
   if (!active) return null
-
   return (
     <BodyPortal>
       <div
@@ -293,7 +339,7 @@ function SpotlightVeil(props: {active: boolean}) {
           position: 'fixed',
           inset: 0,
           zIndex: 20000,
-          pointerEvents: 'auto', // blocks everything underneath
+          pointerEvents: 'auto',
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
           background: 'rgba(0,0,0,0.30)',

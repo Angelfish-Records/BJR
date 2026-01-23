@@ -24,7 +24,7 @@ function tierAtLeast(actual: string, required: string) {
   const order = ['none', 'friend', 'patron', 'partner']
   const ai = order.indexOf(actual)
   const ri = order.indexOf(required)
-  if (ri < 0) return true // unknown required -> fail open
+  if (ri < 0) return false
   return ai >= ri
 }
 
