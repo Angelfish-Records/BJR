@@ -131,6 +131,14 @@ function ActionBtn(props: {onClick: () => void; children: React.ReactNode; label
     <button
       type="button"
       onClick={props.onClick}
+      onMouseEnter={(e) => {
+    e.currentTarget.style.opacity = '1'
+    e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
+  }}
+  onMouseLeave={(e) => {
+    e.currentTarget.style.opacity = '0.85'
+    e.currentTarget.style.background = 'transparent'
+  }}
       aria-label={props.label}
       title={props.label}
       style={{
@@ -146,6 +154,7 @@ function ActionBtn(props: {onClick: () => void; children: React.ReactNode; label
         fontSize: 12,
         lineHeight: 1,
         opacity: 0.92,
+        transition: 'opacity 120ms ease, background 120ms ease',
       }}
     >
       {props.children}
