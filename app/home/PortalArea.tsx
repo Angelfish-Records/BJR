@@ -587,6 +587,50 @@ export default function PortalArea(props: {
 
   const autoplayFiredRef = React.useRef<string | null>(null)
 
+  // Prime the player on first load: queue + select first track (no autoplay).
+const primedRef = React.useRef(false)
+
+React.useEffect(() => {
+  if (!isPlayer) return
+  if (primedRef.current) return
+
+  // Wait until we actually have something to prime with.
+  if (!album || tracks.length === 0) return
+
+  // Don’t stomp if the user already has a queue/current.
+  if (p.current || p.queue.length > 0) {
+    primedRef.current = true
+    return
+  }
+
+  // Don’t override explicit deep-links.
+  if (qTrack) {
+    primedRef.current = true
+    return
+  }
+
+  const first = tracks[0]
+  if (!first?.id) return
+
+  const ctxId = hasSt ? (album.catalogId ?? undefined) : ((album.catalogId ?? album.id) ?? undefined)
+  const ctxSlug = qAlbum ?? currentAlbumSlug
+
+  p.setQueue(tracks, {
+    contextId: ctxId,
+    contextSlug: ctxSlug,
+    contextTitle: album.title ?? undefined,
+    contextArtist: album.artist ?? undefined,
+    artworkUrl: album.artworkUrl ?? null,
+  })
+
+  // Preselect so UI shows “ready to go”.
+  p.selectTrack(first.id)
+  p.setPendingTrackId(undefined)
+
+  primedRef.current = true
+}, [isPlayer, album, tracks, hasSt, qAlbum, currentAlbumSlug, qTrack, p])
+
+
 React.useEffect(() => {
   if (!isPlayer) return
   if (!qAutoplay) return
