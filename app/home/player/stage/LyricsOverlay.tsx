@@ -38,7 +38,12 @@ export default function LyricsOverlay(props: {
 
   const viewportRef = React.useRef<HTMLDivElement | null>(null)
   const scrollerRef = React.useRef<HTMLDivElement | null>(null)
-  const rafRef = React.useRef<number | null>(null)
+  const rafTimeRef = React.useRef<number | null>(null)
+
+  // Center-focus map (idx -> 0..1). Stored in ref to avoid re-render storms.
+  const focusRafRef = React.useRef<number | null>(null)
+  const [focusMap, setFocusMap] = React.useState<Record<number, number>>({})
+
 
   const [activeIdx, setActiveIdx] = React.useState(-1)
   const activeIdxRef = React.useRef(-1)
@@ -72,13 +77,13 @@ export default function LyricsOverlay(props: {
         setActiveIdx(idx)
       }
 
-      rafRef.current = window.requestAnimationFrame(step)
+      rafTimeRef.current = window.requestAnimationFrame(step)
     }
 
-    rafRef.current = window.requestAnimationFrame(step)
+    rafTimeRef.current = window.requestAnimationFrame(step)
     return () => {
-      if (rafRef.current) window.cancelAnimationFrame(rafRef.current)
-      rafRef.current = null
+      if (rafTimeRef.current) window.cancelAnimationFrame(rafTimeRef.current)
+      rafTimeRef.current = null
     }
   }, [cues, offsetMs])
 
@@ -100,10 +105,55 @@ export default function LyricsOverlay(props: {
     const vh = viewport.clientHeight
     if (!vh || vh < 10) return
 
-    const targetY = activeEl.offsetTop + activeEl.offsetHeight / 2 - vh * 0.4
+    // Keep the reading line slightly above center so upcoming lines “arrive” into the hotspot.
+    const targetY = activeEl.offsetTop + activeEl.offsetHeight / 2 - vh * 0.44
     const nextTop = clamp(Math.round(targetY), 0, Math.max(0, sc.scrollHeight - sc.clientHeight))
     sc.scrollTo({top: nextTop, behavior: 'smooth'})
   }, [cues, activeIdx])
+
+  // Compute “focus” (readability) based on distance to viewport center.
+  const scheduleFocusCompute = React.useCallback(() => {
+  if (focusRafRef.current != null) return
+  focusRafRef.current = window.requestAnimationFrame(() => {
+    focusRafRef.current = null
+    const viewport = viewportRef.current
+    const sc = scrollerRef.current
+    if (!viewport || !sc) return
+
+    const vr = viewport.getBoundingClientRect()
+    const centerY = vr.top + vr.height * 0.46
+    const falloff = Math.max(80, vr.height * (isInline ? 0.32 : 0.38))
+
+    const next: Record<number, number> = {}
+    const nodes = sc.querySelectorAll<HTMLElement>('[data-lyric-idx]')
+    nodes.forEach((el) => {
+      const idxStr = el.getAttribute('data-lyric-idx')
+      const idx = idxStr ? parseInt(idxStr, 10) : NaN
+      if (!Number.isFinite(idx)) return
+      const r = el.getBoundingClientRect()
+      const y = r.top + r.height / 2
+      const dist = Math.abs(y - centerY)
+      const raw = 1 - dist / falloff
+      next[idx] = clamp(raw, 0, 1)
+    })
+
+    setFocusMap(next)
+  })
+}, [isInline])
+
+
+  // Recompute focus on mount + resize + active changes (auto-follow moves).
+  React.useLayoutEffect(() => {
+    scheduleFocusCompute()
+
+    const onResize = () => scheduleFocusCompute()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [scheduleFocusCompute])
+
+  React.useLayoutEffect(() => {
+    scheduleFocusCompute()
+  }, [activeIdx, scheduleFocusCompute])
 
   if (!cues || cues.length === 0) {
     return (
@@ -129,14 +179,19 @@ export default function LyricsOverlay(props: {
     )
   }
 
-  // Typography (inline genuinely smaller)
+  // Typography
   const lineFontSize = isInline ? 'clamp(12px, 1.15vw, 14px)' : 'clamp(18px, 2.2vw, 26px)'
 
-  // Inline needs tighter padding/fades or it eats the whole panel.
-  const padTop = isInline ? 44 : 140
-  const padBottom = isInline ? 66 : 180
-  const topFadeH = isInline ? 44 : 130
-  const botFadeH = isInline ? 54 : 160
+  // Padding/fades: keep some top/bottom breathing room so lines “emerge” into focus.
+  const padTop = isInline ? 36 : 120
+  const padBottom = isInline ? 52 : 160
+  const topFadeH = isInline ? 36 : 110
+  const botFadeH = isInline ? 44 : 130
+
+  // Spotlight geometry: centered around the reading zone, not the full panel.
+  const spotlightCenterY = isInline ? 46 : 46 // percent
+  const spotlightW = isInline ? 78 : 74 // percent
+  const spotlightH = isInline ? 40 : 44 // percent
 
   return (
     <div
@@ -146,10 +201,11 @@ export default function LyricsOverlay(props: {
         display: 'grid',
         alignItems: 'stretch',
         justifyItems: 'stretch',
-        padding: isInline ? 10 : 18,
+        padding: isInline ? 8 : 14,
         pointerEvents: 'auto',
       }}
     >
+      {/* No “container” look: this is just a transparent viewport boundary */}
       <div
         ref={viewportRef}
         style={{
@@ -157,24 +213,30 @@ export default function LyricsOverlay(props: {
           width: '100%',
           height: '100%',
           overflow: 'hidden',
-          borderRadius: 18,
-          border: '1px solid rgba(255,255,255,0.10)',
           background: 'transparent',
-          backdropFilter: 'none',
-          WebkitBackdropFilter: 'none',
-          boxShadow: isInline ? 'none' : '0 18px 60px rgba(0,0,0,0.25)',
+          borderRadius: 0,
+          border: 0,
+          boxShadow: 'none',
         }}
       >
+        {/* Center spotlight scrim: dark in the reading zone, gone at edges (no box). */}
         <div
           aria-hidden="true"
           style={{
             position: 'absolute',
             inset: 0,
-            background: isInline
-              ? 'transparent'
-              : 'radial-gradient(60% 40% at 50% 40%, rgba(255,255,255,0.06), rgba(0,0,0,0.00) 60%)',
             pointerEvents: 'none',
             zIndex: 0,
+
+            // Core dark-at-center spotlight.
+            background: `radial-gradient(${spotlightW}% ${spotlightH}% at 50% ${spotlightCenterY}%, rgba(0,0,0,${
+              isInline ? 0.40 : 0.52
+            }) 0%, rgba(0,0,0,0.20) 35%, rgba(0,0,0,0.00) 72%)`,
+
+            // Optional “shape sharpening” so the hotspot feels localized (helps reduce overall occlusion).
+            WebkitMaskImage: `radial-gradient(${spotlightW}% ${spotlightH}% at 50% ${spotlightCenterY}%, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 85%)`,
+            maskImage: `radial-gradient(${spotlightW}% ${spotlightH}% at 50% ${spotlightCenterY}%, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 85%)`,
+            opacity: 0.95,
           }}
         />
 
@@ -183,6 +245,7 @@ export default function LyricsOverlay(props: {
           className="af-lyrics-scroll"
           onScroll={() => {
             userScrollUntilRef.current = Date.now() + 1400
+            scheduleFocusCompute()
           }}
           style={{
             position: 'absolute',
@@ -202,29 +265,38 @@ export default function LyricsOverlay(props: {
           }}
         >
           {cues.map((cue, idx) => {
-                        const isActive = idx === activeIdx
+            const isActive = idx === activeIdx
 
-            // When activeIdx is unknown, bias visibility to top so it doesn't look "dead".
-            const dist = activeIdx >= 0 ? Math.abs(idx - activeIdx) : idx
-            const opacity =
+            // Center focus (0..1) based on distance from viewport center.
+            const f = focusMap[idx] ?? 0
+
+            // Active line always wins; nearby-center lines get most of the readability.
+            const emphasis = clamp(Math.max(isActive ? 1 : 0, f), 0, 1)
+
+            // Keep far lines visible but deliberately “less certain”.
+            const base =
               activeIdx < 0
                 ? isInline
-                  ? 0.62
-                  : 0.52
-                : isActive
-                  ? 1
-                  : dist <= 1
-                    ? 0.72
-                    : dist <= 3
-                      ? 0.44
-                      : 0.26
+                  ? 0.60
+                  : 0.50
+                : 0.18 + emphasis * 0.82
+
+            const opacity = clamp(base, 0.12, 1)
 
             const textShadow = isInline
               ? '0 1px 14px rgba(0,0,0,0.70), 0 0 24px rgba(0,0,0,0.35)'
               : '0 2px 22px rgba(0,0,0,0.78), 0 0 34px rgba(0,0,0,0.35)'
 
-            // Unitless line-height: wraps correctly across responsive font sizes.
             const lh = isInline ? 1.25 : 1.22
+
+            // A tiny “pull” into the reading plane.
+            const scale = 1 + emphasis * (isInline ? 0.012 : 0.02)
+            const y = (1 - emphasis) * (isInline ? 0.25 : 0.55)
+
+            // Local per-line scrim (only for lines that matter).
+            const showScrim = emphasis > 0.55
+            const scrimAlpha = (isInline ? 0.18 : 0.14) + emphasis * (isInline ? 0.18 : 0.26)
+            const scrimBlur = isInline ? 8 + emphasis * 4 : 10 + emphasis * 6
 
             return (
               <button
@@ -238,102 +310,88 @@ export default function LyricsOverlay(props: {
                 }}
                 title={isInline ? cue.text : undefined}
                 style={{
-                  // Reset
                   border: 0,
                   background: 'transparent',
                   padding: 0,
 
-                  // Layout
                   width: '100%',
                   minWidth: 0,
                   display: 'grid',
                   justifyItems: 'center',
                   alignItems: 'center',
 
-                  // Give each row breathing room without forcing single-line math.
                   paddingTop: isInline ? 2 : 4,
                   paddingBottom: isInline ? 2 : 4,
 
-                  // Typography
                   color: 'rgba(255,255,255,0.94)',
                   fontSize: lineFontSize,
                   lineHeight: lh,
-                  fontWeight: isActive ? 780 : 650,
+                  fontWeight: isActive ? 780 : emphasis > 0.66 ? 720 : 650,
                   letterSpacing: 0.2,
                   textAlign: 'center',
 
-                  // Visibility/motion
                   opacity,
-                  transition: 'opacity 140ms ease, transform 140ms ease',
-                  transform: isActive ? 'translateZ(0) scale(1.02)' : 'translateZ(0) scale(1)',
+                  transition:
+                    'opacity 140ms ease, transform 160ms ease, filter 160ms ease, font-weight 160ms ease',
+                  transform: `translateZ(0) translateY(${y}px) scale(${scale})`,
 
-                  // Interaction
                   cursor: onSeek ? 'pointer' : 'default',
                   userSelect: 'none',
                 }}
               >
-                {/* Active line: soft blur scrim that fades out at edges (no hard border) */}
-<span
-  style={{
-    position: 'relative',
-    display: 'inline-block',
-    maxWidth: '100%',
-    minWidth: 0,
+                <span
+                  style={{
+                    position: 'relative',
+                    display: 'inline-block',
+                    maxWidth: '100%',
+                    minWidth: 0,
 
-    // Wrapping rules (keep what you already fixed)
-    whiteSpace: 'normal',
-    overflowWrap: 'anywhere',
-    wordBreak: 'break-word',
-  }}
->
-  {isActive ? (
-    <span
-      aria-hidden
-      style={{
-        position: 'absolute',
+                    whiteSpace: 'normal',
+                    overflowWrap: 'anywhere',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {showScrim ? (
+                    <span
+                      aria-hidden
+                      style={{
+                        position: 'absolute',
+                        inset: isInline ? '-6px -10px' : '-10px -16px',
+                        borderRadius: 999,
+                        pointerEvents: 'none',
 
-        // This is your “padding” but applied to the scrim itself
-        inset: isInline ? '-6px -10px' : '-10px -16px',
+                        background: `rgba(0,0,0,${clamp(scrimAlpha, 0, 0.55)})`,
+                        backdropFilter: `blur(${Math.round(scrimBlur)}px)`,
+                        WebkitBackdropFilter: `blur(${Math.round(scrimBlur)}px)`,
 
-        borderRadius: 999,
-        pointerEvents: 'none',
+                        WebkitMaskImage:
+                          'radial-gradient(closest-side at 50% 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 100%)',
+                        maskImage:
+                          'radial-gradient(closest-side at 50% 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 100%)',
 
-        // Needs some alpha to make backdrop-filter visible
-        background: isInline ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.14)',
+                        opacity: 0.95,
+                      }}
+                    />
+                  ) : null}
 
-        // The blur that affects ONLY what’s behind this line
-        backdropFilter: isInline ? 'blur(8px)' : 'blur(10px)',
-        WebkitBackdropFilter: isInline ? 'blur(8px)' : 'blur(10px)',
-
-        // The key: fade the scrim out at the edges
-        WebkitMaskImage:
-          'radial-gradient(closest-side at 50% 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 100%)',
-        maskImage:
-          'radial-gradient(closest-side at 50% 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 100%)',
-
-        // Optional: makes the fade feel less “flat”
-        opacity: 0.95,
-      }}
-    />
-  ) : null}
-
-  <span
-    style={{
-      position: 'relative',
-      zIndex: 1,
-      textShadow, // keep your textShadow variable
-    }}
-  >
-    {cue.text}
-  </span>
-</span>
-
+                  <span
+                    style={{
+                      position: 'relative',
+                      zIndex: 1,
+                      textShadow,
+                      // Slightly soften far-away lines without making them ugly/illegible.
+                      filter: emphasis < 0.25 ? 'blur(0.15px)' : 'none',
+                    }}
+                  >
+                    {cue.text}
+                  </span>
+                </span>
               </button>
             )
-
           })}
         </div>
 
+        {/* Edge fades: keep them, but don’t let them read like a “box”. */}
         <div
           aria-hidden="true"
           style={{
@@ -342,7 +400,9 @@ export default function LyricsOverlay(props: {
             right: 0,
             top: 0,
             height: topFadeH,
-            background: 'linear-gradient(rgba(0,0,0,0.78), rgba(0,0,0,0.00))',
+            background: isInline
+              ? 'linear-gradient(rgba(0,0,0,0.52), rgba(0,0,0,0.00))'
+              : 'linear-gradient(rgba(0,0,0,0.62), rgba(0,0,0,0.00))',
             pointerEvents: 'none',
             zIndex: 2,
           }}
@@ -356,7 +416,9 @@ export default function LyricsOverlay(props: {
             right: 0,
             bottom: 0,
             height: botFadeH,
-            background: 'linear-gradient(rgba(0,0,0,0.00), rgba(0,0,0,0.82))',
+            background: isInline
+              ? 'linear-gradient(rgba(0,0,0,0.00), rgba(0,0,0,0.56))'
+              : 'linear-gradient(rgba(0,0,0,0.00), rgba(0,0,0,0.66))',
             pointerEvents: 'none',
             zIndex: 2,
           }}
