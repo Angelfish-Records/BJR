@@ -4,57 +4,121 @@
 import React from 'react'
 import {usePlayer} from './PlayerState'
 import {VisualizerEngine} from './visualizer/VisualizerEngine'
-import {createNebulaTheme} from './visualizer/themes/nebula'
-import {createGravitationalLatticeTheme} from './visualizer/themes/gravitationalLattice'
-import {createOrbitalScriptTheme} from './visualizer/themes/orbitalScript'
-import {createPhaseGlassTheme} from './visualizer/themes/phaseGlass'
-import {createMHDSilkTheme} from './visualizer/themes/mhdSilk'
-import {createPressureGlassTheme} from './visualizer/themes/pressureGlass'
-import {createReactionVeinsTheme} from './visualizer/themes/reactionVeins'
-import {createDreamFogTheme} from './visualizer/themes/dreamFog'
-import {createFilamentStormTheme} from './visualizer/themes/filamentStorm'
-import {createMosaicDriftTheme} from './visualizer/themes/mosaicDrift'
-import {createMeaningLeakTheme} from './visualizer/themes/meaningLeak'
 import {audioSurface} from './audioSurface'
 import {mediaSurface, type StageVariant} from './mediaSurface'
 import type {Theme} from './visualizer/types'
 import {visualSurface} from './visualSurface'
 
-function themeFromKey(key: string | undefined | null): Theme {
-  switch ((key ?? '').toLowerCase()) {
+type ThemeFactory = () => Theme
+
+// Typed module shapes (no any)
+type NebulaMod = typeof import('./visualizer/themes/nebula')
+type LatticeMod = typeof import('./visualizer/themes/gravitationalLattice')
+type OrbitalMod = typeof import('./visualizer/themes/orbitalScript')
+type PhaseMod = typeof import('./visualizer/themes/phaseGlass')
+type MhdMod = typeof import('./visualizer/themes/mhdSilk')
+type PressureMod = typeof import('./visualizer/themes/pressureGlass')
+type VeinsMod = typeof import('./visualizer/themes/reactionVeins')
+type FogMod = typeof import('./visualizer/themes/dreamFog')
+type FilamentMod = typeof import('./visualizer/themes/filamentStorm')
+type MosaicMod = typeof import('./visualizer/themes/mosaicDrift')
+type MeaningMod = typeof import('./visualizer/themes/meaningLeak')
+
+type ThemeName =
+  | 'nebula'
+  | 'gravitational-lattice'
+  | 'dream-fog'
+  | 'filament-storm'
+  | 'mosaic-drift'
+  | 'meaning-leak'
+  | 'orbital-script'
+  | 'phase-glass'
+  | 'mhd-silk'
+  | 'pressure-glass'
+  | 'reaction-veins'
+
+const themeCache = new Map<ThemeName, ThemeFactory>()
+
+function normThemeKey(key: string | undefined | null): string {
+  return (key ?? '').trim().toLowerCase()
+}
+
+function canonicalThemeName(raw: string | undefined | null): ThemeName {
+  const k = normThemeKey(raw)
+  switch (k) {
     case 'gravitational-lattice':
     case 'lattice':
-      return createGravitationalLatticeTheme()
+      return 'gravitational-lattice'
     case 'dream-fog':
     case 'fog':
-      return createDreamFogTheme()
+      return 'dream-fog'
     case 'filament-storm':
     case 'filament':
-      return createFilamentStormTheme()
+      return 'filament-storm'
     case 'mosaic-drift':
     case 'mosaic':
-      return createMosaicDriftTheme()
+      return 'mosaic-drift'
     case 'meaning-leak':
     case 'meaning':
-      return createMeaningLeakTheme()
+      return 'meaning-leak'
     case 'orbital-script':
     case 'orbital':
-      return createOrbitalScriptTheme()
+      return 'orbital-script'
     case 'phase-glass':
     case 'glass':
-      return createPhaseGlassTheme()
+      return 'phase-glass'
     case 'mhd-silk':
     case 'mhd':
-      return createMHDSilkTheme()
+      return 'mhd-silk'
     case 'pressure-glass':
     case 'pressure':
-      return createPressureGlassTheme()
+      return 'pressure-glass'
     case 'reaction-veins':
     case 'veins':
-      return createReactionVeinsTheme()
+      return 'reaction-veins'
     case 'nebula':
     default:
-      return createNebulaTheme()
+      return 'nebula'
+  }
+}
+
+const THEME_LOADERS: Record<ThemeName, () => Promise<ThemeFactory>> = {
+  nebula: async () => (await import('./visualizer/themes/nebula') as NebulaMod).createNebulaTheme,
+  'gravitational-lattice': async () =>
+    (await import('./visualizer/themes/gravitationalLattice') as LatticeMod)
+      .createGravitationalLatticeTheme,
+  'dream-fog': async () => (await import('./visualizer/themes/dreamFog') as FogMod).createDreamFogTheme,
+  'filament-storm': async () =>
+    (await import('./visualizer/themes/filamentStorm') as FilamentMod).createFilamentStormTheme,
+  'mosaic-drift': async () =>
+    (await import('./visualizer/themes/mosaicDrift') as MosaicMod).createMosaicDriftTheme,
+  'meaning-leak': async () =>
+    (await import('./visualizer/themes/meaningLeak') as MeaningMod).createMeaningLeakTheme,
+  'orbital-script': async () =>
+    (await import('./visualizer/themes/orbitalScript') as OrbitalMod).createOrbitalScriptTheme,
+  'phase-glass': async () => (await import('./visualizer/themes/phaseGlass') as PhaseMod).createPhaseGlassTheme,
+  'mhd-silk': async () => (await import('./visualizer/themes/mhdSilk') as MhdMod).createMHDSilkTheme,
+  'pressure-glass': async () =>
+    (await import('./visualizer/themes/pressureGlass') as PressureMod).createPressureGlassTheme,
+  'reaction-veins': async () =>
+    (await import('./visualizer/themes/reactionVeins') as VeinsMod).createReactionVeinsTheme,
+}
+
+async function loadThemeFactory(themeName: ThemeName): Promise<ThemeFactory> {
+  const cached = themeCache.get(themeName)
+  if (cached) return cached
+
+  const factory = await THEME_LOADERS[themeName]()
+  themeCache.set(themeName, factory)
+  return factory
+}
+
+function createBlankTheme(): Theme {
+  return {
+    name: 'blank',
+    init() {},
+    render() {},
+    dispose() {},
   }
 }
 
@@ -75,9 +139,18 @@ export default function VisualizerCanvas(props: {variant: StageVariant}) {
     })
   }, [])
 
+  const activeStageRef = React.useRef<StageVariant | null>(activeStage)
+  React.useEffect(() => {
+    activeStageRef.current = activeStage
+  }, [activeStage])
 
-  
-  // Engine lifecycle: (re)mount per variant/canvas instance, fully disposed on unmount.
+  const themeName: ThemeName = canonicalThemeName(p.current?.visualTheme)
+  const themeNameRef = React.useRef<ThemeName>(themeName)
+  React.useEffect(() => {
+    themeNameRef.current = themeName
+  }, [themeName])
+
+  // Engine lifecycle: mount per canvas instance, fully disposed on unmount.
   React.useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -93,18 +166,28 @@ export default function VisualizerCanvas(props: {variant: StageVariant}) {
     const engine = new VisualizerEngine({
       canvas,
       getAudio,
-      theme: themeFromKey(themeKeyRef.current),
+      theme: createBlankTheme(),
     })
 
     engineRef.current = engine
 
-    // register canvas for UI sampling (fullscreen wins)
     const unreg = visualSurface.registerCanvas(variant, canvas)
 
-    // start only if this stage currently has authority
     if (activeStageRef.current === variant) engine.start()
 
+    let cancelled = false
+
+    ;(async () => {
+      const name = themeNameRef.current
+      const factory = await loadThemeFactory(name)
+      if (cancelled) return
+      engine.setTheme(factory())
+    })().catch(() => {
+      // keep portal alive even if a theme chunk fails; you can log if you want
+    })
+
     return () => {
+      cancelled = true
       try {
         engine.stop()
         engine.dispose()
@@ -125,17 +208,22 @@ export default function VisualizerCanvas(props: {variant: StageVariant}) {
     else engine.stop()
   }, [activeStage, variant])
 
-    const activeStageRef = React.useRef<StageVariant | null>(activeStage)
+  // Swap themes lazily when the key changes
   React.useEffect(() => {
-    activeStageRef.current = activeStage
-  }, [activeStage])
+    const engine = engineRef.current
+    if (!engine) return
 
-  const themeKey = p.current?.visualTheme ?? null
-  const themeKeyRef = React.useRef<string | null>(themeKey)
-  React.useEffect(() => {
-    themeKeyRef.current = themeKey
-  }, [themeKey])
+    let cancelled = false
+    ;(async () => {
+      const factory = await loadThemeFactory(themeName)
+      if (cancelled) return
+      engine.setTheme(factory())
+    })().catch(() => {})
 
+    return () => {
+      cancelled = true
+    }
+  }, [themeName])
 
   return (
     <canvas

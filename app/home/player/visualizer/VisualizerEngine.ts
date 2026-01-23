@@ -52,6 +52,7 @@ export class VisualizerEngine {
 
   /** Swap theme without recreating canvas/GL/RAF. */
   setTheme(next: Theme) {
+    if (!next || typeof next.init !== 'function' || typeof next.render !== 'function') return
     if (next === this.theme) return
     try {
       this.theme.dispose(this.gl)
