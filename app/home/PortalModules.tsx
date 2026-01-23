@@ -367,7 +367,6 @@ function DownloadOfferCard(props: {
   )
 }
 
-
 // --------------------
 // Module renderer (reused per tab)
 // --------------------
@@ -424,8 +423,24 @@ function renderModule(m: PortalModule, entitlementKeys: string[]) {
     )
   }
 
+  if (m._type === 'moduleDownloads') {
+    const offerCfg = getAlbumOffer(m.albumSlug)
+    const owned = !!(offerCfg && entitlementKeys.includes(offerCfg.entitlementKey))
 
-
+    return (
+      <div key={m._key} className="portalDownloadGrid2up" style={{minWidth: 0}}>
+        <DownloadOfferCard
+          albumSlug={m.albumSlug}
+          owned={owned}
+          coverImage={m.coverImage}
+          productLabel={m.productLabel}
+          highlights={m.highlights}
+          techSpec={m.techSpec}
+          assets={m.assets}
+        />
+      </div>
+    )
+  }
 
   if (m._type === 'moduleArtistPosts') {
     return (
