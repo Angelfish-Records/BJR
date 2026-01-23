@@ -3,6 +3,7 @@
 
 import React from 'react'
 import {usePlayer} from './PlayerState'
+import {useGlobalTransportKeys} from './useGlobalTransportKeys'
 import type {AlbumInfo, AlbumNavItem, PlayerTrack, Tier, TierName} from '@/lib/types'
 import {deriveShareContext, shareAlbum, shareTrack} from './share'
 import {PatternRingGlow} from './VisualizerPattern'
@@ -158,6 +159,10 @@ export default function FullPlayer(props: {
   viewerTier?: Tier
 }) {
   const p = usePlayer()
+
+useGlobalTransportKeys(p)
+
+
   const pRef = React.useRef(p)
   React.useEffect(() => {
     pRef.current = p
