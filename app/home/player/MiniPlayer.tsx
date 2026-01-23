@@ -309,6 +309,11 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
   const pendingTrack = findTrackById(p.queue, p.pendingTrackId) ?? null
   const displayTrack = pendingTrack ?? p.current ?? null
 
+  const resolvedArtworkUrl =
+  artworkUrl ??
+  p.queueContextArtworkUrl ??
+  null
+
   /* ---------------- Small anti-doubletap locks ---------------- */
 
   const [transportLock, setTransportLock] = React.useState(false)
@@ -709,7 +714,9 @@ boxSizing: 'border-box',
               top: 0,
               bottom: 0,
               width: `var(--af-dock-h, ${DOCK_H}px)`,
-              background: artworkUrl ? `url(${artworkUrl}) center/cover no-repeat` : 'rgba(255,255,255,0.06)',
+              background: resolvedArtworkUrl
+                ? `url(${resolvedArtworkUrl}) center/cover no-repeat`
+                : 'rgba(255,255,255,0.06)',
               borderRadius: 0,
               borderRight: '1px solid rgba(255,255,255,0.10)',
               zIndex: 0,

@@ -24,6 +24,8 @@ export default function AudioEngine() {
   const tokenAbortRef = React.useRef<AbortController | null>(null)
   const loadSeq = React.useRef(0)
 
+  const srcNodeRef = React.useRef<MediaElementAudioSourceNode | null>(null)
+
   // ---- Audio analysis ----
   const audioCtxRef = React.useRef<AudioContext | null>(null)
   const analyserRef = React.useRef<AnalyserNode | null>(null)
@@ -41,6 +43,7 @@ export default function AudioEngine() {
   const blockedNonceRef = React.useRef(new Map<string, number>()) // playbackId -> reloadNonce at time of block
 
   const pRef = React.useRef(p)
+
   React.useEffect(() => {
     pRef.current = p
   }, [p])
@@ -79,6 +82,86 @@ export default function AudioEngine() {
     } catch {}
   }, [])
 
+  // ---- Final unmount cleanup (tab-lifetime leaks: AudioContext + WebAudio graph + HLS) ----
+React.useEffect(() => {
+  // Snapshot ref values NOW so cleanup doesn’t read mutable .current later.
+  const a = audioRef.current
+  const hls = hlsRef.current
+  const analyser = analyserRef.current
+  const srcNode = srcNodeRef.current
+  const ctx = audioCtxRef.current
+
+  const tokenCache = tokenCacheRef.current
+  const blockedNonce = blockedNonceRef.current
+  const playthroughSent = playthroughSentRef.current
+
+  const tokenAbort = tokenAbortRef.current
+
+  return () => {
+    // stop any in-flight token request
+    try {
+      tokenAbort?.abort()
+    } catch {}
+    tokenAbortRef.current = null
+
+    // teardown HLS instance
+    if (hls) {
+      try {
+        hls.destroy()
+      } catch {}
+    }
+    hlsRef.current = null
+
+    // hard-stop media element
+    if (a) {
+      try {
+        a.pause()
+      } catch {}
+      try {
+        a.removeAttribute('src')
+      } catch {}
+      try {
+        a.load()
+      } catch {}
+    }
+
+    // disconnect WebAudio graph
+    try {
+      analyser?.disconnect()
+    } catch {}
+    analyserRef.current = null
+
+    try {
+      srcNode?.disconnect()
+    } catch {}
+    srcNodeRef.current = null
+
+    // release typed arrays
+    freqDataRef.current = null
+    timeDataRef.current = null
+
+    // close AudioContext
+    audioCtxRef.current = null
+    if (ctx) {
+      ctx.close().catch(() => {})
+    }
+
+    // clear caches (use snapshots)
+    tokenCache.clear()
+    blockedNonce.clear()
+    playthroughSent.clear()
+
+    // neutralize surfaces (optional)
+    try {
+      audioSurface.set({rms: 0, bass: 0, mid: 0, treble: 0, centroid: 0, energy: 0})
+    } catch {}
+    try {
+      mediaSurface.setStatus('idle')
+    } catch {}
+  }
+}, [])
+
+
   /* ---------------- NEW: global "blocked means SILENCE" invariant ---------------- */
   React.useEffect(() => {
     // If UI is blocked for ANY reason (token gate, access-check, etc),
@@ -107,6 +190,7 @@ export default function AudioEngine() {
       audioCtxRef.current = ctx
 
       src = ctx.createMediaElementSource(a)
+      srcNodeRef.current = src
       analyser = ctx.createAnalyser()
 
       analyser.fftSize = 2048
@@ -137,72 +221,94 @@ export default function AudioEngine() {
   /* ---------------- Audio feature pump ---------------- */
 
   React.useEffect(() => {
-    let raf: number | null = null
+  let raf: number | null = null
+  let to: number | null = null
 
-    const step = () => {
-      const analyser = analyserRef.current
-      const freq = freqDataRef.current
-      const time = timeDataRef.current
+  const tick = () => {
+    const analyser = analyserRef.current
+    const freq = freqDataRef.current
+    const time = timeDataRef.current
 
-      if (!analyser || !freq || !time) {
-        raf = requestAnimationFrame(step)
-        return
-      }
+    const st = pRef.current.status
+    const active = st === 'playing' || st === 'loading'
 
-      analyser.getByteFrequencyData(freqDataRef.current!)
-      analyser.getByteTimeDomainData(timeDataRef.current!)
+    // If we have no analyser yet, poll slowly until user gesture creates it.
+    if (!analyser || !freq || !time) {
+      to = window.setTimeout(tick, 250)
+      return
+    }
 
+    // If not active, don’t burn RAF. Keep visuals softly alive at low rate.
+    if (!active) {
+      analyser.getByteTimeDomainData(time)
       let sum = 0
       for (let i = 0; i < time.length; i++) {
         const v = (time[i]! - 128) / 128
         sum += v * v
       }
       const rms = Math.sqrt(sum / time.length)
-
-      const n = freq.length
-      const bassEnd = Math.floor(n * 0.08)
-      const midEnd = Math.floor(n * 0.35)
-
-      let bass = 0
-      let mid = 0
-      let treble = 0
-      for (let i = 0; i < n; i++) {
-        const v = freq[i]! / 255
-        if (i < bassEnd) bass += v
-        else if (i < midEnd) mid += v
-        else treble += v
-      }
-
-      bass /= bassEnd || 1
-      mid /= midEnd - bassEnd || 1
-      treble /= n - midEnd || 1
-
-      let weighted = 0
-      let total = 0
-      for (let i = 0; i < n; i++) {
-        const v = freq[i]! / 255
-        weighted += i * v
-        total += v
-      }
-      const centroid = total > 0 ? weighted / total / n : 0
-
       audioSurface.set({
         rms,
-        bass,
-        mid,
-        treble,
-        centroid,
-        energy: Math.min(1, rms * 2),
+        bass: 0,
+        mid: 0,
+        treble: 0,
+        centroid: 0,
+        energy: Math.min(1, rms * 1.2),
       })
-
-      raf = requestAnimationFrame(step)
+      to = window.setTimeout(tick, 180) // ~5.5 fps
+      return
     }
 
-    raf = requestAnimationFrame(step)
-    return () => {
-      if (raf) cancelAnimationFrame(raf)
+    // Active: full-rate RAF
+    analyser.getByteFrequencyData(freq)
+    analyser.getByteTimeDomainData(time)
+
+    let sum = 0
+    for (let i = 0; i < time.length; i++) {
+      const v = (time[i]! - 128) / 128
+      sum += v * v
     }
-  }, [])
+    const rms = Math.sqrt(sum / time.length)
+
+    const n = freq.length
+    const bassEnd = Math.floor(n * 0.08)
+    const midEnd = Math.floor(n * 0.35)
+
+    let bass = 0, mid = 0, treble = 0
+    for (let i = 0; i < n; i++) {
+      const v = freq[i]! / 255
+      if (i < bassEnd) bass += v
+      else if (i < midEnd) mid += v
+      else treble += v
+    }
+
+    bass /= bassEnd || 1
+    mid /= (midEnd - bassEnd) || 1
+    treble /= (n - midEnd) || 1
+
+    let weighted = 0, total = 0
+    for (let i = 0; i < n; i++) {
+      const v = freq[i]! / 255
+      weighted += i * v
+      total += v
+    }
+    const centroid = total > 0 ? weighted / total / n : 0
+
+    audioSurface.set({
+      rms, bass, mid, treble, centroid,
+      energy: Math.min(1, rms * 2),
+    })
+
+    raf = window.requestAnimationFrame(tick)
+  }
+
+  raf = window.requestAnimationFrame(tick)
+  return () => {
+    if (raf) window.cancelAnimationFrame(raf)
+    if (to) window.clearTimeout(to)
+  }
+}, [])
+
 
   /* ---------------- Volume / mute ---------------- */
 
@@ -540,6 +646,8 @@ export default function AudioEngine() {
     }
   }, [hardStopAndDetach])
 
+  
+
   /* ---------------- Seek: PlayerState -> media element ---------------- */
 
   React.useEffect(() => {
@@ -611,4 +719,6 @@ export default function AudioEngine() {
   }, [])
 
   return <audio ref={audioRef} crossOrigin="anonymous" preload="metadata" playsInline style={{display: 'none'}} />
+  
 }
+

@@ -133,9 +133,19 @@ export class VisualizerEngine {
   }
 
   dispose() {
-    this.stop()
+  this.stop()
+
+  try {
     this.theme.dispose(this.gl)
-  }
+  } catch {}
+
+  // Strong hint to actually release GPU resources in long-lived tabs.
+  try {
+    const lose = this.gl.getExtension('WEBGL_lose_context') as {loseContext?: () => void} | null
+    lose?.loseContext?.()
+  } catch {}
+}
+
 
   private applyCanvasSize() {
     const dpr = this.baseDpr * this.dprScale
