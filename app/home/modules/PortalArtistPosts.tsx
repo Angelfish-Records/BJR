@@ -173,7 +173,6 @@ export default function PortalArtistPosts(props: {
   authorInitials?: string
 }) {
   const {
-    title = 'Posts',
     pageSize,
     requireAuthAfter,
     minVisibility,
@@ -463,8 +462,6 @@ export default function PortalArtistPosts(props: {
     <div style={{minWidth: 0}}>
       {/* Header */}
       <div style={{display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10}}>
-        <div style={{fontSize: 14, opacity: 0.86, letterSpacing: 0.2}}>{title}</div>
-
         {cursor ? (
           <button
             type="button"
@@ -485,8 +482,6 @@ export default function PortalArtistPosts(props: {
           </button>
         ) : null}
       </div>
-
-      <div style={{height: 1, background: 'rgba(255,255,255,0.07)', marginTop: 10}} />
 
       {requiresAuth ? (
         <div style={{marginTop: 12, fontSize: 13, opacity: 0.85, lineHeight: 1.55}}>

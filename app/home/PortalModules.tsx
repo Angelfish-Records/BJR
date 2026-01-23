@@ -400,75 +400,32 @@ function renderModule(m: PortalModule, entitlementKeys: string[]) {
     )
   }
 
-  if (m._type === 'moduleDownloadGrid') {
+    if (m._type === 'moduleDownloadGrid') {
     return (
-      <div
-        key={m._key}
-        style={{
-          borderRadius: 18,
-          border: '1px solid rgba(255,255,255,0.10)',
-          background: 'rgba(255,255,255,0.04)',
-          padding: 16,
-          minWidth: 0,
-        }}
-      >
-        
+      <div key={m._key} className="portalDownloadGrid2up" style={{minWidth: 0}}>
+        {m.offers.map((o, idx) => {
+          const offerCfg = getAlbumOffer(o.albumSlug)
+          const owned = !!(offerCfg && entitlementKeys.includes(offerCfg.entitlementKey))
 
-        <div style={{marginTop: 12}} className="portalDownloadGrid2up">
-          {m.offers.map((o, idx) => {
-            const offerCfg = getAlbumOffer(o.albumSlug)
-            const owned = !!(offerCfg && entitlementKeys.includes(offerCfg.entitlementKey))
-
-            return (
-              <DownloadOfferCard
-                key={`${m._key}:${idx}:${o.albumSlug}`}
-                albumSlug={o.albumSlug}
-                owned={owned}
-                coverImage={o.coverImage}
-                productLabel={o.productLabel}
-                highlights={o.highlights}
-                techSpec={o.techSpec}
-                assets={o.assets}
-              />
-            )
-          })}
-        </div>
+          return (
+            <DownloadOfferCard
+              key={`${m._key}:${idx}:${o.albumSlug}`}
+              albumSlug={o.albumSlug}
+              owned={owned}
+              coverImage={o.coverImage}
+              productLabel={o.productLabel}
+              highlights={o.highlights}
+              techSpec={o.techSpec}
+              assets={o.assets}
+            />
+          )
+        })}
       </div>
     )
   }
 
-  if (m._type === 'moduleDownloads') {
-    const offerCfg = getAlbumOffer(m.albumSlug)
-    const owned = !!(offerCfg && entitlementKeys.includes(offerCfg.entitlementKey))
 
-    return (
-      <div
-        key={m._key}
-        style={{
-          borderRadius: 18,
-          border: '1px solid rgba(255,255,255,0.10)',
-          background: 'rgba(255,255,255,0.04)',
-          padding: 16,
-          minWidth: 0,
-        }}
-      >
-        
 
-        <div style={{marginTop: 12}} className="portalDownloadGrid2up">
-  <DownloadOfferCard
-    albumSlug={m.albumSlug}
-    owned={owned}
-    coverImage={m.coverImage}
-    productLabel={m.productLabel}
-    highlights={m.highlights}
-    techSpec={m.techSpec}
-    assets={m.assets}
-  />
-</div>
-
-      </div>
-    )
-  }
 
   if (m._type === 'moduleArtistPosts') {
     return (

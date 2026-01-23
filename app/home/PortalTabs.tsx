@@ -119,12 +119,6 @@ export default function PortalTabs(props: {
     textUnderlineOffset: 6,
   })
 
-  const divider: React.CSSProperties = {
-    height: 1,
-    background: 'rgba(255,255,255,0.06)',
-    marginTop: 2,
-  }
-
   if (!tabs.length) return null
 
   return (
@@ -155,8 +149,6 @@ export default function PortalTabs(props: {
           )
         })}
       </div>
-
-      <div style={divider} />
 
       <div style={{minWidth: 0}}>{active?.content}</div>
     </div>
