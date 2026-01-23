@@ -65,19 +65,30 @@ export function useGlobalTransportKeys(p: GlobalTransportPlayer, opts?: {enabled
 
       blurInteractiveFocus()
 
-      const ps = pRef.current
-      const playingish = ps.status === 'playing' || ps.status === 'loading' || ps.intent === 'play'
+            const ps = pRef.current
 
-      if (playingish) {
+      // IMPORTANT: don't use `intent` here, it can stay 'play' after pausing.
+      const isPlayingOrLoading = ps.status === 'playing' || ps.status === 'loading'
+
+      if (isPlayingOrLoading) {
         window.dispatchEvent(new Event('af:pause-intent'))
         ps.pause()
         return
       }
 
-      const t = ps.current ?? ps.queue[0]
-      if (!t) return
+      // Resume if we have a current track (paused case).
+      if (ps.current) {
+        window.dispatchEvent(new Event('af:play-intent'))
+        ps.play() // <-- resume
+        return
+      }
+
+      // Otherwise start playback from the queue.
+      const first = ps.queue[0]
+      if (!first) return
       window.dispatchEvent(new Event('af:play-intent'))
-      ps.play(t)
+      ps.play(first)
+
     }
 
     const onKeyUp = (e: KeyboardEvent) => {
