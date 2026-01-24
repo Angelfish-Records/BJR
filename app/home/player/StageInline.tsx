@@ -6,7 +6,6 @@ import {createPortal} from 'react-dom'
 import {usePlayer} from './PlayerState'
 import StageCore from './StageCore'
 import type {LyricCue} from './stage/LyricsOverlay'
-import StageTransportBar from './StageTransportBar'
 
 function lockBodyScroll(lock: boolean) {
   if (typeof document === 'undefined') return
@@ -58,12 +57,7 @@ function IconClose(props: {size?: number}) {
   const {size = 18} = props
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M6 6l12 12M18 6L6 18"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
+      <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   )
 }
@@ -111,9 +105,6 @@ export default function StageInline(props: {
   const p = usePlayer()
 
   const isMobile = useIsMobile(640)
-
-  // Mobile-only: make it ~half height so it’s easier to scroll past.
-  // Keep a floor so it doesn’t become comically short if someone passes a small height.
   const inlineHeight = isMobile ? Math.max(140, Math.round(height * 0.5)) : height
 
   const [mounted, setMounted] = React.useState(false)
@@ -131,10 +122,8 @@ export default function StageInline(props: {
     const el = document.getElementById('af-stage-overlay')
     if (!el) return
     if (!('requestFullscreen' in el)) return
-
     const requestFullscreen = (el as Element).requestFullscreen
     if (typeof requestFullscreen !== 'function') return
-
     try {
       await requestFullscreen.call(el)
     } catch {
@@ -169,14 +158,7 @@ export default function StageInline(props: {
             }}
           >
             <div style={{position: 'relative', width: '100%', height: '100%', minHeight: 0}}>
-              <StageCore
-                variant="fullscreen"
-                cuesByTrackId={cuesByTrackId}
-                offsetByTrackId={offsetByTrackId}
-              />
-
-              {/* Bottom transport */}
-              <StageTransportBar />
+              <StageCore variant="fullscreen" cuesByTrackId={cuesByTrackId} offsetByTrackId={offsetByTrackId} />
 
               <div
                 aria-hidden
@@ -203,11 +185,7 @@ export default function StageInline(props: {
                   pointerEvents: 'auto',
                 }}
               >
-                <RoundIconButton
-                  label="Fullscreen"
-                  title="Request fullscreen"
-                  onClick={() => void tryRequestFullscreen()}
-                >
+                <RoundIconButton label="Fullscreen" title="Request fullscreen" onClick={() => void tryRequestFullscreen()}>
                   <IconFullscreen />
                 </RoundIconButton>
 
@@ -245,8 +223,7 @@ export default function StageInline(props: {
             right: 0,
             top: 0,
             height: 56,
-            background:
-              'linear-gradient(180deg, rgba(0,0,0,0.45), rgba(0,0,0,0.18) 55%, rgba(0,0,0,0.00))',
+            background: 'linear-gradient(180deg, rgba(0,0,0,0.45), rgba(0,0,0,0.18) 55%, rgba(0,0,0,0.00))',
             pointerEvents: 'none',
           }}
         />

@@ -8,7 +8,6 @@ import {mediaSurface} from '../mediaSurface'
 import LyricsOverlay, {type LyricCue} from './LyricsOverlay'
 import StageTransportBar, {STAGE_TRANSPORT_FOOTER_PX} from '../StageTransportBar'
 
-
 function useScrollLock(locked: boolean) {
   React.useEffect(() => {
     if (!locked) return
@@ -30,12 +29,7 @@ function useScrollLock(locked: boolean) {
   }, [locked])
 }
 
-export default function StageOverlay(props: {
-  open: boolean
-  onClose: () => void
-  cues?: LyricCue[] | null
-  offsetMs?: number
-}) {
+export default function StageOverlay(props: {open: boolean; onClose: () => void; cues?: LyricCue[] | null; offsetMs?: number}) {
   const {open, onClose, cues = null, offsetMs = 0} = props
   const p = usePlayer()
   const [mounted, setMounted] = React.useState(false)
@@ -43,11 +37,10 @@ export default function StageOverlay(props: {
   React.useEffect(() => setMounted(true), [])
   useScrollLock(open)
 
-    React.useEffect(() => {
+  React.useEffect(() => {
     if (!open) return
     return mediaSurface.registerStage('fullscreen')
   }, [open])
-
 
   React.useEffect(() => {
     if (!open) return
@@ -62,10 +55,6 @@ export default function StageOverlay(props: {
 
   const title = p.current?.title ?? p.current?.id ?? '—'
   const artist = p.current?.artist ?? p.queueContextArtist ?? ''
-
-  const footerH = `calc(${STAGE_TRANSPORT_FOOTER_PX}px + env(safe-area-inset-bottom, 0px))`
-  const FADE_TOP_PX = 56
-  const FADE_BOTTOM_PX = 96
 
   const node = (
     <div
@@ -181,52 +170,19 @@ export default function StageOverlay(props: {
         </div>
       </div>
 
-
-<div
-  style={{
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: footerH,
-    zIndex: 2,
-    minHeight: 0,
-    overflow: 'hidden',
-
-    WebkitMaskImage: `linear-gradient(
-      to bottom,
-      rgba(0,0,0,0) 0px,
-      rgba(0,0,0,1) ${FADE_TOP_PX}px,
-      rgba(0,0,0,1) calc(100% - ${FADE_BOTTOM_PX}px),
-      rgba(0,0,0,0) 100%
-    )`,
-    maskImage: `linear-gradient(
-      to bottom,
-      rgba(0,0,0,0) 0px,
-      rgba(0,0,0,1) ${FADE_TOP_PX}px,
-      rgba(0,0,0,1) calc(100% - ${FADE_BOTTOM_PX}px),
-      rgba(0,0,0,0) 100%
-    )`,
-    WebkitMaskRepeat: 'no-repeat',
-    maskRepeat: 'no-repeat',
-    WebkitMaskSize: '100% 100%',
-    maskSize: '100% 100%',
-  }}
->
-  <LyricsOverlay
-    cues={cues}
-    offsetMs={offsetMs}
-    variant="stage"
-    onSeek={(tMs) => {
-      window.dispatchEvent(new Event('af:play-intent'))
-      p.seek(tMs)
-    }}
-  />
-</div>
-
+      {/* Lyrics layer (fade + reserved footer handled inside LyricsOverlay) */}
+      <LyricsOverlay
+        cues={cues}
+        offsetMs={offsetMs}
+        variant="stage"
+        reservedBottomPx={STAGE_TRANSPORT_FOOTER_PX}
+        onSeek={(tMs) => {
+          window.dispatchEvent(new Event('af:play-intent'))
+          p.seek(tMs)
+        }}
+      />
 
       <StageTransportBar />
-
     </div>
   )
 

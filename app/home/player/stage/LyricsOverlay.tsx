@@ -32,8 +32,10 @@ export default function LyricsOverlay(props: {
   offsetMs?: number
   onSeek?: (tMs: number) => void
   variant?: 'inline' | 'stage'
+  /** Reserve a footer zone (e.g. StageTransportBar height, excluding safe-area inset). */
+  reservedBottomPx?: number
 }) {
-  const {cues, offsetMs = 0, onSeek, variant = 'stage'} = props
+  const {cues, offsetMs = 0, onSeek, variant = 'stage', reservedBottomPx = 0} = props
   const isInline = variant === 'inline'
 
   const viewportRef = React.useRef<HTMLDivElement | null>(null)
@@ -122,7 +124,6 @@ export default function LyricsOverlay(props: {
     const targetY = activeEl.offsetTop + activeEl.offsetHeight / 2 - vh * 0.44
     const nextTop = clamp(Math.round(targetY), 0, Math.max(0, sc.scrollHeight - sc.clientHeight))
 
-    // Mark this as programmatic scroll so onScroll doesn't pause auto-follow.
     isAutoScrollingRef.current = true
     sc.scrollTo({top: nextTop, behavior: 'smooth'})
 
@@ -202,12 +203,47 @@ export default function LyricsOverlay(props: {
 
   // Padding: keep breathing room so lines “emerge” into focus.
   const padTop = isInline ? 36 : 120
-  const padBottom = isInline ? 52 : 160
+  const padBottomBase = isInline ? 52 : 160
+
+  // Mask geometry: soften the fade "knee" to avoid horizon lines on Android.
+  const fadeTopPx = isInline ? 22 : 56
+  const fadeBottomPx = isInline ? 26 : 96
+  const kneePx = isInline ? 10 : 22
 
   // Spotlight geometry: centered around the reading zone, not the full panel.
   const spotlightCenterY = 46 // %
   const spotlightW = isInline ? 78 : 74 // %
   const spotlightH = isInline ? 40 : 44 // %
+
+// Reserve footer zone (StageTransportBar) + safe-area inset.
+// We implement this in padding and ALSO in the mask so content fades out before the controls.
+const styleVars: React.CSSProperties & Record<`--af-lyrics-${string}`, string> = {
+  '--af-lyrics-reserved-bottom': `${Math.max(0, Math.floor(reservedBottomPx))}px`,
+  '--af-lyrics-fade-top': `${fadeTopPx}px`,
+  '--af-lyrics-fade-bottom': `${fadeBottomPx}px`,
+  '--af-lyrics-knee': `${kneePx}px`,
+}
+  const padBottom = `calc(${padBottomBase}px + var(--af-lyrics-reserved-bottom) + env(safe-area-inset-bottom, 0px))`
+
+  // The point where the mask should be fully transparent at the bottom (above the transport zone).
+  // Everything below this is masked out.
+  const bottomClip = `calc(100% - (var(--af-lyrics-reserved-bottom) + env(safe-area-inset-bottom, 0px)))`
+
+  // A "soft knee" mask: no sudden slope change = no visible line.
+  const mask = isInline
+    ? undefined
+    : `linear-gradient(
+        to bottom,
+        rgba(0,0,0,0) 0px,
+        rgba(0,0,0,0.60) calc(var(--af-lyrics-fade-top) - var(--af-lyrics-knee)),
+        rgba(0,0,0,0.92) calc(var(--af-lyrics-fade-top) - 8px),
+        rgba(0,0,0,1) var(--af-lyrics-fade-top),
+
+        rgba(0,0,0,1) calc(${bottomClip} - var(--af-lyrics-fade-bottom)),
+        rgba(0,0,0,0.92) calc(${bottomClip} - calc(var(--af-lyrics-fade-bottom) - 8px)),
+        rgba(0,0,0,0.60) calc(${bottomClip} - calc(var(--af-lyrics-fade-bottom) - var(--af-lyrics-knee))),
+        rgba(0,0,0,0) ${bottomClip}
+      )`
 
   return (
     <div
@@ -219,6 +255,7 @@ export default function LyricsOverlay(props: {
         justifyItems: 'stretch',
         padding: isInline ? 8 : 14,
         pointerEvents: 'auto',
+        ...styleVars,
       }}
     >
       <div
@@ -255,10 +292,7 @@ export default function LyricsOverlay(props: {
           ref={scrollerRef}
           className="af-lyrics-scroll"
           onScroll={() => {
-            // Only manual scroll should pause auto-follow.
-            if (!isAutoScrollingRef.current) {
-              userScrollUntilRef.current = Date.now() + 1400
-            }
+            if (!isAutoScrollingRef.current) userScrollUntilRef.current = Date.now() + 1400
             scheduleFocusCompute()
           }}
           style={{
@@ -267,15 +301,26 @@ export default function LyricsOverlay(props: {
             overflowY: 'auto',
             overflowX: 'hidden',
             WebkitOverflowScrolling: 'touch',
-            padding: `${padTop}px 14px ${padBottom}px 14px`,
+            padding: `${padTop}px 14px ${padBottom} 14px`,
             display: 'grid',
             gap: isInline ? 5 : 9,
             zIndex: 1,
 
-            // Firefox
+            // Hide scrollbars (FF/old Edge)
             scrollbarWidth: 'none',
-            // IE/old Edge
             msOverflowStyle: 'none',
+
+            // Apply the edge fade here (not in Stage wrappers)
+            WebkitMaskImage: mask,
+            maskImage: mask,
+            WebkitMaskRepeat: 'no-repeat',
+            maskRepeat: 'no-repeat',
+            WebkitMaskSize: '100% 100%',
+            maskSize: '100% 100%',
+
+            // Encourage compositing to reduce banding/lines on Android
+            transform: 'translateZ(0)',
+            willChange: isInline ? 'transform' : 'transform, -webkit-mask-image, mask-image',
           }}
         >
           {cues.map((cue, idx) => {
@@ -286,7 +331,6 @@ export default function LyricsOverlay(props: {
               : '0 2px 22px rgba(0,0,0,0.78), 0 0 34px rgba(0,0,0,0.35)'
 
             const lh = isInline ? 1.25 : 1.22
-
             const scrimInset = isInline ? '-6px -10px' : '-10px -16px'
             const scrimBgStage = 'rgba(0,0,0,0.18)'
 
@@ -383,8 +427,6 @@ export default function LyricsOverlay(props: {
                         borderRadius: 999,
                         pointerEvents: 'none',
                         background: scrimBgStage,
-                        backdropFilter: 'none',
-                        WebkitBackdropFilter: 'none',
                         WebkitMaskImage:
                           'radial-gradient(closest-side at 50% 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 100%)',
                         maskImage:
@@ -411,7 +453,6 @@ export default function LyricsOverlay(props: {
         </div>
 
         <style>{`
-          /* Hide scrollbar (WebKit) reliably */
           .af-lyrics-scroll::-webkit-scrollbar { width: 0px; height: 0px; }
           .af-lyrics-scroll::-webkit-scrollbar-thumb { background: transparent; }
         `}</style>

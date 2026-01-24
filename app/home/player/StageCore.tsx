@@ -11,10 +11,7 @@ import {mediaSurface} from './mediaSurface'
 type CuesByTrackId = Record<string, LyricCue[]>
 type OffsetByTrackId = Record<string, number>
 
-function pickKeyWithCues(
-  cuesByTrackId: CuesByTrackId | undefined,
-  keys: Array<string | null | undefined>
-) {
+function pickKeyWithCues(cuesByTrackId: CuesByTrackId | undefined, keys: Array<string | null | undefined>) {
   if (!cuesByTrackId) return (keys.find(Boolean) as string | null) ?? null
   for (const k of keys) {
     if (!k) continue
@@ -86,9 +83,7 @@ export default function StageCore(props: {
   )
 
   const lyricsVariant = variant === 'inline' ? 'inline' : 'stage'
-  const footerH = `calc(${STAGE_TRANSPORT_FOOTER_PX}px + env(safe-area-inset-bottom, 0px))`
-  const FADE_TOP_PX = 56
-  const FADE_BOTTOM_PX = 96
+  const reservedBottomPx = variant === 'inline' ? 0 : STAGE_TRANSPORT_FOOTER_PX
 
   return (
     <div
@@ -119,50 +114,17 @@ export default function StageCore(props: {
         }}
       />
 
-<div
-  style={{
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: variant === 'inline' ? 0 : footerH,
-    zIndex: 2,
-    minHeight: 0,
-    overflow: 'hidden',
-
-    // Fade the lyrics/content without drawing a black bar
-    WebkitMaskImage:
-      variant === 'inline'
-        ? undefined
-        : `linear-gradient(
-            to bottom,
-            rgba(0,0,0,0) 0px,
-            rgba(0,0,0,1) ${FADE_TOP_PX}px,
-            rgba(0,0,0,1) calc(100% - ${FADE_BOTTOM_PX}px),
-            rgba(0,0,0,0) 100%
-          )`,
-    maskImage:
-      variant === 'inline'
-        ? undefined
-        : `linear-gradient(
-            to bottom,
-            rgba(0,0,0,0) 0px,
-            rgba(0,0,0,1) ${FADE_TOP_PX}px,
-            rgba(0,0,0,1) calc(100% - ${FADE_BOTTOM_PX}px),
-            rgba(0,0,0,0) 100%
-          )`,
-    WebkitMaskRepeat: 'no-repeat',
-    maskRepeat: 'no-repeat',
-    WebkitMaskSize: '100% 100%',
-    maskSize: '100% 100%',
-  }}
->
-  <LyricsOverlay cues={cues} offsetMs={effectiveOffsetMs} onSeek={onSeek} variant={lyricsVariant} />
-</div>
-
+      <div style={{position: 'absolute', inset: 0, zIndex: 2}}>
+        <LyricsOverlay
+          cues={cues}
+          offsetMs={effectiveOffsetMs}
+          onSeek={onSeek}
+          variant={lyricsVariant}
+          reservedBottomPx={reservedBottomPx}
+        />
+      </div>
 
       {variant === 'fullscreen' ? <StageTransportBar /> : null}
-
     </div>
   )
 }

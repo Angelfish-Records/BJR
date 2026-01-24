@@ -5,6 +5,7 @@ import React from 'react'
 import {PortableText, type PortableTextComponents} from '@portabletext/react'
 import type {PortableTextBlock} from '@portabletext/types'
 import {useClientSearchParams, replaceQuery} from '@/app/home/urlState'
+import {useShareAction, useShareBuilders} from '@/app/home/player/ShareAction'
 
 type Visibility = 'public' | 'friend' | 'patron' | 'partner'
 
@@ -132,13 +133,13 @@ function ActionBtn(props: {onClick: () => void; children: React.ReactNode; label
       type="button"
       onClick={props.onClick}
       onMouseEnter={(e) => {
-    e.currentTarget.style.opacity = '1'
-    e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
-  }}
-  onMouseLeave={(e) => {
-    e.currentTarget.style.opacity = '0.85'
-    e.currentTarget.style.background = 'transparent'
-  }}
+        e.currentTarget.style.opacity = '1'
+        e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.opacity = '0.85'
+        e.currentTarget.style.background = 'transparent'
+      }}
       aria-label={props.label}
       title={props.label}
       style={{
@@ -182,6 +183,9 @@ export default function PortalArtistPosts(props: {
 
   const sp = useClientSearchParams()
   const deepSlug = (sp.get('post') ?? '').trim() || null
+
+  const {openIntentSheet, intentSheet, fallbackModal} = useShareAction()
+  const shareBuilders = useShareBuilders()
 
   const [posts, setPosts] = React.useState<Post[]>([])
   const [cursor, setCursor] = React.useState<string | null>(null)
@@ -285,25 +289,20 @@ export default function PortalArtistPosts(props: {
     return () => io.disconnect()
   }, [posts, markSeen])
 
-  const onShare = React.useCallback(async (slug: string) => {
-    const url = shareUrlFor(slug)
+  const onShare = React.useCallback(
+  (post: {slug: string; title?: string}) => {
+    const url = shareUrlFor(post.slug)
 
-    // Prefer native share if available (mobile), fall back to clipboard.
-    try {
-      if (navigator.share) {
-        await navigator.share({url})
-      } else if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url)
-      }
-    } catch {
-      try {
-        if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(url)
-      } catch {}
-    }
+    const target = shareBuilders.post(
+      {slug: post.slug, title: post.title?.trim() || 'Post'},
+      authorName
+    )
+
+    openIntentSheet({...target, url})
 
     replaceQuery({
       p: 'posts',
-      post: slug,
+      post: post.slug,
       pt: null,
       panel: null,
       album: null,
@@ -311,7 +310,10 @@ export default function PortalArtistPosts(props: {
       t: null,
       autoplay: null,
     })
-  }, [])
+  },
+  [openIntentSheet, shareBuilders, authorName]
+)
+
 
   const components: PortableTextComponents = React.useMemo(
     () => ({
@@ -543,10 +545,11 @@ export default function PortalArtistPosts(props: {
 
                 {/* Actions row (left-justified, graphical) */}
                 <div style={{marginTop: 10, display: 'flex', justifyContent: 'flex-start'}}>
-                  <ActionBtn onClick={() => void onShare(p.slug)} label="Share post">
-                    {ICON_SHARE}
-                    <span>Share</span>
-                  </ActionBtn>
+                  <ActionBtn onClick={() => onShare({slug: p.slug, title: p.title})} label="Share post">
+  {ICON_SHARE}
+  <span>Share</span>
+</ActionBtn>
+
                 </div>
 
                 {/* subtle tail divider inside the post */}
@@ -562,6 +565,10 @@ export default function PortalArtistPosts(props: {
           <div style={{fontSize: 13, opacity: 0.75, padding: '12px 0'}}>No posts yet.</div>
         ) : null}
       </div>
+       {/* Share overlays (must be rendered) */}
+      {intentSheet}
+      {fallbackModal}
     </div>
+    
   )
 }
