@@ -117,6 +117,40 @@ export default function StageInline(props: {
     return () => lockBodyScroll(false)
   }, [open])
 
+    React.useEffect(() => {
+    if (!open) return
+    if (typeof document === 'undefined') return
+
+    const exitFsIfNeeded = async () => {
+      try {
+        if (document.fullscreenElement && typeof document.exitFullscreen === 'function') {
+          await document.exitFullscreen()
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      void exitFsIfNeeded().finally(() => setOpen(false))
+    }
+
+    const onFsChange = () => {
+      // If the user hits ESC to exit true fullscreen, also close the overlay entirely.
+      if (!document.fullscreenElement) setOpen(false)
+    }
+
+    window.addEventListener('keydown', onKey)
+    document.addEventListener('fullscreenchange', onFsChange)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.removeEventListener('fullscreenchange', onFsChange)
+    }
+  }, [open])
+
+
   const tryRequestFullscreen = React.useCallback(async () => {
     if (typeof document === 'undefined') return
     const el = document.getElementById('af-stage-overlay')

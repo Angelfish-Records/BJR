@@ -42,14 +42,39 @@ export default function StageOverlay(props: {open: boolean; onClose: () => void;
     return mediaSurface.registerStage('fullscreen')
   }, [open])
 
-  React.useEffect(() => {
+    React.useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+    if (typeof document === 'undefined') return
+
+    const exitFsIfNeeded = async () => {
+      try {
+        if (document.fullscreenElement && typeof document.exitFullscreen === 'function') {
+          await document.exitFullscreen()
+        }
+      } catch {
+        // ignore
+      }
     }
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      void exitFsIfNeeded().finally(() => onClose())
+    }
+
+    const onFsChange = () => {
+      // If fullscreen ends (often via ESC), close the overlay fully.
+      if (!document.fullscreenElement) onClose()
+    }
+
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    document.addEventListener('fullscreenchange', onFsChange)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.removeEventListener('fullscreenchange', onFsChange)
+    }
   }, [open, onClose])
+
 
   if (!mounted || !open) return null
 
