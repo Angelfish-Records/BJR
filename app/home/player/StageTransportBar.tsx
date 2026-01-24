@@ -8,7 +8,7 @@ import {usePlayer} from './PlayerState'
  * Keep this in sync with the paddingBottom we apply to the LyricsOverlay wrapper.
  * This is the “claimed footer zone” height (excluding safe-area inset).
  */
-export const STAGE_TRANSPORT_FOOTER_PX = 140
+export const STAGE_TRANSPORT_FOOTER_PX = 120
 
 const BTN = 72 // ~2x the old 44px
 const ICON = 28
