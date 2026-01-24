@@ -206,8 +206,8 @@ export default function LyricsOverlay(props: {
   const padBottomBase = isInline ? 52 : 160
 
   // Mask geometry: soften the fade "knee" to avoid horizon lines on Android.
-  const fadeTopPx = isInline ? 22 : 56
-  const fadeBottomPx = isInline ? 26 : 96
+  const fadeTopPx = isInline ? 22 : 72
+  const fadeBottomPx = isInline ? 26 : 86
   const kneePx = isInline ? 10 : 22
 
   // Spotlight geometry: centered around the reading zone, not the full panel.
