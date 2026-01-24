@@ -64,6 +64,8 @@ export default function StageOverlay(props: {
   const artist = p.current?.artist ?? p.queueContextArtist ?? ''
 
   const footerH = `calc(${STAGE_TRANSPORT_FOOTER_PX}px + env(safe-area-inset-bottom, 0px))`
+  const FADE_TOP_PX = 56
+  const FADE_BOTTOM_PX = 96
 
   const node = (
     <div
@@ -190,8 +192,25 @@ export default function StageOverlay(props: {
     zIndex: 2,
     minHeight: 0,
     overflow: 'hidden',
-    paddingBottom: 12,
-    boxSizing: 'border-box',
+
+    WebkitMaskImage: `linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,1) ${FADE_TOP_PX}px,
+      rgba(0,0,0,1) calc(100% - ${FADE_BOTTOM_PX}px),
+      rgba(0,0,0,0) 100%
+    )`,
+    maskImage: `linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,1) ${FADE_TOP_PX}px,
+      rgba(0,0,0,1) calc(100% - ${FADE_BOTTOM_PX}px),
+      rgba(0,0,0,0) 100%
+    )`,
+    WebkitMaskRepeat: 'no-repeat',
+    maskRepeat: 'no-repeat',
+    WebkitMaskSize: '100% 100%',
+    maskSize: '100% 100%',
   }}
 >
   <LyricsOverlay
@@ -201,20 +220,6 @@ export default function StageOverlay(props: {
     onSeek={(tMs) => {
       window.dispatchEvent(new Event('af:play-intent'))
       p.seek(tMs)
-    }}
-  />
-
-  <div
-    aria-hidden
-    style={{
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      bottom: 0,
-      height: 88,
-      pointerEvents: 'none',
-      background:
-        'linear-gradient(180deg, rgba(0,0,0,0.00), rgba(0,0,0,0.40) 45%, rgba(0,0,0,0.85))',
     }}
   />
 </div>
