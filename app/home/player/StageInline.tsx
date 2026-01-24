@@ -25,6 +25,20 @@ function lockBodyScroll(lock: boolean) {
 type CuesByTrackId = Record<string, LyricCue[]>
 type OffsetByTrackId = Record<string, number>
 
+function useIsMobile(breakpointPx = 640) {
+  const [isMobile, setIsMobile] = React.useState(false)
+
+  React.useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpointPx}px)`)
+    const apply = () => setIsMobile(mq.matches)
+    apply()
+    mq.addEventListener?.('change', apply)
+    return () => mq.removeEventListener?.('change', apply)
+  }, [breakpointPx])
+
+  return isMobile
+}
+
 function IconFullscreen(props: {size?: number}) {
   const {size = 18} = props
   return (
@@ -95,6 +109,12 @@ export default function StageInline(props: {
   const {height = 300, cuesByTrackId, offsetByTrackId} = props
   const p = usePlayer()
 
+  const isMobile = useIsMobile(640)
+
+  // Mobile-only: make it ~half height so it’s easier to scroll past.
+  // Keep a floor so it doesn’t become comically short if someone passes a small height.
+  const inlineHeight = isMobile ? Math.max(140, Math.round(height * 0.5)) : height
+
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
 
@@ -148,14 +168,12 @@ export default function StageInline(props: {
             }}
           >
             <div style={{position: 'relative', width: '100%', height: '100%', minHeight: 0}}>
-              {/* Stage fills the overlay */}
               <StageCore
                 variant="fullscreen"
                 cuesByTrackId={cuesByTrackId}
                 offsetByTrackId={offsetByTrackId}
               />
 
-              {/* Top HUD (gives a “space” for controls above lyrics) */}
               <div
                 aria-hidden
                 style={{
@@ -170,7 +188,6 @@ export default function StageInline(props: {
                 }}
               />
 
-              {/* Controls */}
               <div
                 style={{
                   position: 'absolute',
@@ -208,16 +225,14 @@ export default function StageInline(props: {
           border: '1px solid rgba(255,255,255,0.12)',
           background: 'rgba(255,255,255,0.05)',
           overflow: 'hidden',
-          height,
+          height: inlineHeight,
           position: 'relative',
         }}
       >
-        {/* Stage fills the entire card */}
         <div style={{position: 'absolute', inset: 0}}>
           <StageCore variant="inline" cuesByTrackId={cuesByTrackId} offsetByTrackId={offsetByTrackId} />
         </div>
 
-        {/* Top HUD (creates a tidy zone for the icon inside the render) */}
         <div
           aria-hidden
           style={{
@@ -232,7 +247,6 @@ export default function StageInline(props: {
           }}
         />
 
-        {/* Fullscreen icon (replaces Open button) */}
         <div style={{position: 'absolute', top: 10, right: 10, pointerEvents: 'auto'}}>
           <RoundIconButton
             label="Open stage fullscreen"
