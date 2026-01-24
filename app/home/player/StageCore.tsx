@@ -119,14 +119,16 @@ export default function StageCore(props: {
       <div
   style={{
     position: 'absolute',
-    inset: 0,
-    zIndex: 2,
-    // Claim space at the bottom so lyrics have equal “breathing room” and never hide under controls.
-    paddingBottom:
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom:
       variant === 'inline'
         ? 0
         : `calc(${STAGE_TRANSPORT_FOOTER_PX}px + env(safe-area-inset-bottom, 0px))`,
-    boxSizing: 'border-box',
+    zIndex: 2,
+    minHeight: 0,
+    overflow: 'hidden',
   }}
 >
         <LyricsOverlay cues={cues} offsetMs={effectiveOffsetMs} onSeek={onSeek} variant={lyricsVariant} />

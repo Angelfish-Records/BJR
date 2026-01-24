@@ -178,14 +178,18 @@ export default function StageOverlay(props: {
       </div>
 
             <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          paddingBottom: `calc(${STAGE_TRANSPORT_FOOTER_PX}px + env(safe-area-inset-bottom, 0px))`,
-          boxSizing: 'border-box',
-          zIndex: 2,
-        }}
-      >
+  style={{
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    // Hard-reserve the footer zone so lyrics can never extend under buttons
+    bottom: `calc(${STAGE_TRANSPORT_FOOTER_PX}px + env(safe-area-inset-bottom, 0px))`,
+    zIndex: 2,
+    minHeight: 0,
+    overflow: 'hidden',
+  }}
+>
         <LyricsOverlay
           cues={cues}
           offsetMs={offsetMs}
