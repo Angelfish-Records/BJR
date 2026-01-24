@@ -63,6 +63,8 @@ export default function StageOverlay(props: {
   const title = p.current?.title ?? p.current?.id ?? '—'
   const artist = p.current?.artist ?? p.queueContextArtist ?? ''
 
+  const footerH = `calc(${STAGE_TRANSPORT_FOOTER_PX}px + env(safe-area-inset-bottom, 0px))`
+
   const node = (
     <div
       role="dialog"
@@ -177,29 +179,46 @@ export default function StageOverlay(props: {
         </div>
       </div>
 
-            <div
+
+<div
   style={{
     position: 'absolute',
     left: 0,
     right: 0,
     top: 0,
-    // Hard-reserve the footer zone so lyrics can never extend under buttons
-    bottom: `calc(${STAGE_TRANSPORT_FOOTER_PX}px + env(safe-area-inset-bottom, 0px))`,
+    bottom: footerH,
     zIndex: 2,
     minHeight: 0,
     overflow: 'hidden',
+    paddingBottom: 12,
+    boxSizing: 'border-box',
   }}
 >
-        <LyricsOverlay
-          cues={cues}
-          offsetMs={offsetMs}
-          variant="stage"
-          onSeek={(tMs) => {
-            window.dispatchEvent(new Event('af:play-intent'))
-            p.seek(tMs)
-          }}
-        />
-      </div>
+  <LyricsOverlay
+    cues={cues}
+    offsetMs={offsetMs}
+    variant="stage"
+    onSeek={(tMs) => {
+      window.dispatchEvent(new Event('af:play-intent'))
+      p.seek(tMs)
+    }}
+  />
+
+  <div
+    aria-hidden
+    style={{
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: 88,
+      pointerEvents: 'none',
+      background:
+        'linear-gradient(180deg, rgba(0,0,0,0.00), rgba(0,0,0,0.40) 45%, rgba(0,0,0,0.85))',
+    }}
+  />
+</div>
+
 
       <StageTransportBar />
 

@@ -86,6 +86,7 @@ export default function StageCore(props: {
   )
 
   const lyricsVariant = variant === 'inline' ? 'inline' : 'stage'
+  const footerH = `calc(${STAGE_TRANSPORT_FOOTER_PX}px + env(safe-area-inset-bottom, 0px))`
 
   return (
     <div
@@ -116,23 +117,41 @@ export default function StageCore(props: {
         }}
       />
 
-      <div
+<div
   style={{
     position: 'absolute',
     left: 0,
     right: 0,
     top: 0,
-    bottom:
-      variant === 'inline'
-        ? 0
-        : `calc(${STAGE_TRANSPORT_FOOTER_PX}px + env(safe-area-inset-bottom, 0px))`,
+    bottom: variant === 'inline' ? 0 : footerH,
     zIndex: 2,
     minHeight: 0,
     overflow: 'hidden',
+    // keep a little air so the fade reads nicely
+    paddingBottom: variant === 'inline' ? 0 : 12,
+    boxSizing: 'border-box',
   }}
 >
-        <LyricsOverlay cues={cues} offsetMs={effectiveOffsetMs} onSeek={onSeek} variant={lyricsVariant} />
-      </div>
+  <LyricsOverlay cues={cues} offsetMs={effectiveOffsetMs} onSeek={onSeek} variant={lyricsVariant} />
+
+  {/* bottom fade (visual only) */}
+  {variant !== 'inline' ? (
+    <div
+      aria-hidden
+      style={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: 88,
+        pointerEvents: 'none',
+        background:
+          'linear-gradient(180deg, rgba(0,0,0,0.00), rgba(0,0,0,0.40) 45%, rgba(0,0,0,0.80))',
+      }}
+    />
+  ) : null}
+</div>
+
 
       {variant === 'fullscreen' ? <StageTransportBar /> : null}
 
