@@ -6,6 +6,7 @@ import {createPortal} from 'react-dom'
 import {usePlayer} from './PlayerState'
 import StageCore from './StageCore'
 import type {LyricCue} from './stage/LyricsOverlay'
+import StageTransportBar from './StageTransportBar'
 
 function lockBodyScroll(lock: boolean) {
   if (typeof document === 'undefined') return
@@ -173,6 +174,9 @@ export default function StageInline(props: {
                 cuesByTrackId={cuesByTrackId}
                 offsetByTrackId={offsetByTrackId}
               />
+
+              {/* Bottom transport */}
+              <StageTransportBar />
 
               <div
                 aria-hidden

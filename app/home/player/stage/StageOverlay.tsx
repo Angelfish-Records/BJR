@@ -6,6 +6,7 @@ import {createPortal} from 'react-dom'
 import {usePlayer} from '../PlayerState'
 import {mediaSurface} from '../mediaSurface'
 import LyricsOverlay, {type LyricCue} from './LyricsOverlay'
+import StageTransportBar from '../StageTransportBar'
 
 function useScrollLock(locked: boolean) {
   React.useEffect(() => {
@@ -185,6 +186,7 @@ export default function StageOverlay(props: {
           p.seek(tMs)
         }}
       />
+      <StageTransportBar />
     </div>
   )
 
