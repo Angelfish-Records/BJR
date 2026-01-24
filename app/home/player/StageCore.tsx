@@ -5,6 +5,7 @@ import React from 'react'
 import {usePlayer} from './PlayerState'
 import VisualizerCanvas from './VisualizerCanvas'
 import LyricsOverlay, {type LyricCue} from './stage/LyricsOverlay'
+import StageTransportBar, {STAGE_TRANSPORT_FOOTER_PX} from './StageTransportBar'
 import {mediaSurface} from './mediaSurface'
 
 type CuesByTrackId = Record<string, LyricCue[]>
@@ -115,9 +116,24 @@ export default function StageCore(props: {
         }}
       />
 
-      <div style={{position: 'absolute', inset: 0, zIndex: 2}}>
+      <div
+  style={{
+    position: 'absolute',
+    inset: 0,
+    zIndex: 2,
+    // Claim space at the bottom so lyrics have equal “breathing room” and never hide under controls.
+    paddingBottom:
+      variant === 'inline'
+        ? 0
+        : `calc(${STAGE_TRANSPORT_FOOTER_PX}px + env(safe-area-inset-bottom, 0px))`,
+    boxSizing: 'border-box',
+  }}
+>
         <LyricsOverlay cues={cues} offsetMs={effectiveOffsetMs} onSeek={onSeek} variant={lyricsVariant} />
       </div>
+
+      {variant === 'fullscreen' ? <StageTransportBar /> : null}
+
     </div>
   )
 }

@@ -6,7 +6,8 @@ import {createPortal} from 'react-dom'
 import {usePlayer} from '../PlayerState'
 import {mediaSurface} from '../mediaSurface'
 import LyricsOverlay, {type LyricCue} from './LyricsOverlay'
-import StageTransportBar from '../StageTransportBar'
+import StageTransportBar, {STAGE_TRANSPORT_FOOTER_PX} from '../StageTransportBar'
+
 
 function useScrollLock(locked: boolean) {
   React.useEffect(() => {
@@ -176,17 +177,28 @@ export default function StageOverlay(props: {
         </div>
       </div>
 
-      {/* Lyrics layer */}
-      <LyricsOverlay
-        cues={cues}
-        offsetMs={offsetMs}
-        variant="stage"
-        onSeek={(tMs) => {
-          window.dispatchEvent(new Event('af:play-intent'))
-          p.seek(tMs)
+            <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          paddingBottom: `calc(${STAGE_TRANSPORT_FOOTER_PX}px + env(safe-area-inset-bottom, 0px))`,
+          boxSizing: 'border-box',
+          zIndex: 2,
         }}
-      />
+      >
+        <LyricsOverlay
+          cues={cues}
+          offsetMs={offsetMs}
+          variant="stage"
+          onSeek={(tMs) => {
+            window.dispatchEvent(new Event('af:play-intent'))
+            p.seek(tMs)
+          }}
+        />
+      </div>
+
       <StageTransportBar />
+
     </div>
   )
 
