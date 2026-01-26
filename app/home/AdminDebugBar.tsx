@@ -311,6 +311,32 @@ export default function AdminDebugBar(props: {isAdmin: boolean}) {
           <button style={btn} onClick={() => p.clearBlocked()}>
             Clear (UI)
           </button>
+
+          <button
+            style={btn}
+            onClick={() => {
+              try {
+                window.sessionStorage.setItem('af:dbgSpotlight', '1')
+              } catch {}
+              window.location.reload()
+            }}
+          >
+            Spotlight ON (debug)
+          </button>
+
+          <button
+            style={btn}
+            onClick={() => {
+              try {
+                window.sessionStorage.removeItem('af:dbgSpotlight')
+              } catch {}
+              window.location.reload()
+            }}
+          >
+            Spotlight OFF (debug)
+          </button>
+
+
         </div>
       </div>
 

@@ -425,11 +425,17 @@ export default function PortalArea(props: {
   p.blockedCode === 'ANON_CAP_REACHED' ||
   p.blockedCode === 'CAP_REACHED'
 
+  // Debug-only override: allow forcing spotlight while signed in (admin testing)
+  const dbgForceSpotlight =
+    process.env.NEXT_PUBLIC_ADMIN_DEBUG === '1' &&
+    typeof window !== 'undefined' &&
+    window.sessionStorage.getItem('af:dbgSpotlight') === '1'
+
   const spotlightAttention =
-    !isSignedIn &&
     !!derivedAttentionMessage &&
     p.blockUiMode === 'global' &&
-    spotlightEligibleCode
+    spotlightEligibleCode &&
+    (!isSignedIn || dbgForceSpotlight)
 
   const qAlbum = sp.get('album')
   const qTrack = sp.get('track')
