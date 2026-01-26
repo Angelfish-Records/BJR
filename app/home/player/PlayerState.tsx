@@ -1,4 +1,3 @@
-// web/app/home/player/PlayerState.tsx
 'use client'
 
 import React from 'react'
@@ -8,6 +7,19 @@ type PlayerStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'blocked'
 type RepeatMode = 'off' | 'one' | 'all'
 type Intent = 'play' | 'pause' | null
 type LoadingReason = 'token' | 'attach' | 'buffering' | undefined
+
+export type BlockUiMode = 'none' | 'inline' | 'global'
+export type BlockAction = 'login' | 'subscribe' | 'buy' | 'wait'
+
+export type BlockCode =
+  | 'AUTH_REQUIRED'
+  | 'ANON_CAP_REACHED'
+  | 'ENTITLEMENT_REQUIRED'
+  | 'EMBARGO'
+  | 'TIER_REQUIRED'
+  | 'INVALID_REQUEST'
+  | 'PROVISIONING'
+  | 'CAP_REACHED'
 
 export type QueueContext = {
   contextId?: string
@@ -48,13 +60,15 @@ export type PlayerState = {
   repeat: RepeatMode
 
   durationById: Record<string, number>
-  
+
   blockedCode?: string
-  blockedAction?: 'login' | 'subscribe' | 'buy' | 'wait'
+  blockedAction?: BlockAction
   blockedCorrelationId?: string | null
 }
 
 type PlayerDerivedUX = {
+  // NEW: expose derived UI mode so PortalArea can reason about spotlight cleanly
+  blockUiMode: BlockUiMode
   shouldBlur: boolean
   shouldShowTopbarBlockMessage: boolean
 }
@@ -92,11 +106,12 @@ type PlayerActions = {
 
   setBlocked: (
     reason?: string,
-    meta?: {code?: string; action?: 'login' | 'subscribe' | 'buy' | 'wait'; correlationId?: string | null}
+    meta?: {code?: string; action?: BlockAction; correlationId?: string | null}
   ) => void
+
+  clearBlocked: () => void
   clearError: () => void
   bumpReload: () => void
-  
 }
 
 const PlayerCtx = React.createContext<(PlayerState & PlayerActions & PlayerDerivedUX) | null>(null)
@@ -141,12 +156,34 @@ function primeDurationById(prev: Record<string, number>, tracks: PlayerTrack[]):
   return next
 }
 
-const BLUR_BLOCK_CODES = new Set([
-  'AUTH_REQUIRED',
-  'ACTIVATION_REQUIRED',
-  'NO_ENTITLEMENT',
-  'PAYWALL',
-])
+function normalizeBlockCode(raw: string | null | undefined): BlockCode | null {
+  const c = (raw ?? '').trim()
+  if (!c) return null
+  switch (c) {
+    case 'AUTH_REQUIRED':
+    case 'ANON_CAP_REACHED':
+    case 'ENTITLEMENT_REQUIRED':
+    case 'EMBARGO':
+    case 'TIER_REQUIRED':
+    case 'INVALID_REQUEST':
+    case 'PROVISIONING':
+    case 'CAP_REACHED':
+      return c
+    default:
+      return null
+  }
+}
+
+function uiModeForBlockedCode(code: BlockCode | null): BlockUiMode {
+  // Policy:
+  // - EMBARGO: inline only
+  // - TIER_REQUIRED: inline only (never full-page)
+  if (code === 'EMBARGO' || code === 'TIER_REQUIRED') return 'inline'
+
+  // All other blocked codes are allowed to be "global" candidates.
+  // PortalArea will still restrict spotlight to signed-out + allowlist.
+  return 'global'
+}
 
 export function PlayerStateProvider(props: {children: React.ReactNode}) {
   const [state, setState] = React.useState<PlayerState>({
@@ -180,18 +217,27 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
     repeat: 'off',
 
     durationById: {},
+
+    blockedCode: undefined,
+    blockedAction: undefined,
+    blockedCorrelationId: null,
   })
 
-    
   const api: PlayerState & PlayerActions & PlayerDerivedUX = React.useMemo(() => {
-    const shouldBlur =
-      state.status === 'blocked' && BLUR_BLOCK_CODES.has(state.blockedCode ?? '')
+    // ✅ keep normalization AND use it
+    const code = normalizeBlockCode(state.blockedCode ?? null)
+    const blockUiMode: BlockUiMode = state.status === 'blocked' ? uiModeForBlockedCode(code) : 'none'
+
+    const shouldBlur = state.status === 'blocked' && blockUiMode === 'global'
+    const shouldShowTopbarBlockMessage = state.status === 'blocked' && blockUiMode !== 'none'
+
     return {
       ...state,
-      
-        // ✅ derived UX flags (do NOT treat embargo as global UX)
-        shouldBlur,
-        shouldShowTopbarBlockMessage: shouldBlur,
+
+      // derived UX
+      blockUiMode,
+      shouldBlur,
+      shouldShowTopbarBlockMessage,
 
       setIntent: (i: Intent) =>
         setState((s) => ({
@@ -237,7 +283,6 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
             }
           }
 
-          
           const nextTrack = hydrateTrack(rawNext, s.durationById)
           const sameTrack = Boolean(s.current && s.current.id === nextTrack.id)
 
@@ -463,32 +508,17 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
       clearQueue: () =>
         setState((s) => ({
           ...s,
-
-          // ✅ clear playback + queue
           queue: [],
           current: undefined,
           selectedTrackId: undefined,
           pendingTrackId: undefined,
 
-          // ✅ hard-reset playback telemetry
           positionMs: 0,
           pendingSeekMs: undefined,
           seeking: false,
           seekNonce: s.seekNonce + 1,
           loadingReason: undefined,
-
-          // ✅ do NOT clear album-ish context
-          // queueContextId: keep
-          // queueContextSlug: keep
-          // queueContextTitle: keep
-          // queueContextArtist: keep
-          // queueContextArtworkUrl: keep
-
-          // ✅ also do NOT force status/intent here.
-          // AudioEngine will call setBlocked(reason) after this when gating hits,
-          // and that becomes the UI truth.
         })),
-
 
       setPositionMs: (ms: number) =>
         setState((s) => ({
@@ -526,13 +556,10 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
         }),
 
       setStatusExternal: (st: PlayerStatus) =>
-  setState((s) => {
-    // Keep stable while blocked/error, BUT allow leaving blocked once the error is cleared.
-    // If we're currently blocked and still have an active error payload, ignore external status updates.
-    if (s.status === 'blocked' && (s.lastError || s.blockedCode || s.blockedAction)) return s
-    return s.status === st ? s : {...s, status: st}
-  }),
-
+        setState((s) => {
+          if (s.status === 'blocked' && (s.lastError || s.blockedCode || s.blockedAction)) return s
+          return s.status === st ? s : {...s, status: st}
+        }),
 
       setLoadingReasonExternal: (r?: LoadingReason) =>
         setState((s) => (s.loadingReason === r ? s : {...s, loadingReason: r})),
@@ -594,34 +621,42 @@ export function PlayerStateProvider(props: {children: React.ReactNode}) {
         })
       },
 
-        setBlocked: (
-          reason?: string,
-          meta?: {code?: string; action?: 'login' | 'subscribe' | 'buy' | 'wait'; correlationId?: string | null}
-        ) =>
-          setState((s) => ({
-            ...s,
-            status: 'blocked',
-            lastError: reason ?? 'Playback blocked.',
-            loadingReason: undefined,
-            intent: null,
-            intentAtMs: undefined,
-            blockedCode: meta?.code,
-            blockedAction: meta?.action,
-            blockedCorrelationId: meta?.correlationId ?? s.blockedCorrelationId ?? null,
-          })),
+      setBlocked: (
+        reason?: string,
+        meta?: {code?: string; action?: BlockAction; correlationId?: string | null}
+      ) =>
+        setState((s) => ({
+          ...s,
+          status: 'blocked',
+          lastError: reason ?? 'Playback blocked.',
+          loadingReason: undefined,
+          intent: null,
+          intentAtMs: undefined,
 
+          blockedCode: meta?.code,
+          blockedAction: meta?.action,
+          blockedCorrelationId: meta?.correlationId ?? s.blockedCorrelationId ?? null,
+        })),
 
-        clearError: () =>
-  setState((s) => ({
-    ...s,
-    lastError: undefined,
-    blockedCode: undefined,
-    blockedAction: undefined,
-    blockedCorrelationId: null,
+      clearBlocked: () =>
+        setState((s) => ({
+          ...s,
+          lastError: undefined,
+          blockedCode: undefined,
+          blockedAction: undefined,
+          blockedCorrelationId: null,
+          status: s.status === 'blocked' ? 'idle' : s.status,
+        })),
 
-    // 🔑 if we were blocked, we are no longer blocked once the error is cleared
-    status: s.status === 'blocked' ? 'idle' : s.status,
-  })),
+      clearError: () =>
+        setState((s) => ({
+          ...s,
+          lastError: undefined,
+          blockedCode: undefined,
+          blockedAction: undefined,
+          blockedCorrelationId: null,
+          status: s.status === 'blocked' ? 'idle' : s.status,
+        })),
 
       bumpReload: () =>
         setState((s) => {

@@ -420,7 +420,16 @@ export default function PortalArea(props: {
     purchaseAttention ??
     (p.shouldShowTopbarBlockMessage ? (p.lastError ?? null) : null)
 
-  const spotlightAttention = !!derivedAttentionMessage
+  const spotlightEligibleCode =
+  p.blockedCode === 'AUTH_REQUIRED' ||
+  p.blockedCode === 'ANON_CAP_REACHED' ||
+  p.blockedCode === 'CAP_REACHED'
+
+  const spotlightAttention =
+    !isSignedIn &&
+    !!derivedAttentionMessage &&
+    p.blockUiMode === 'global' &&
+    spotlightEligibleCode
 
   const qAlbum = sp.get('album')
   const qTrack = sp.get('track')

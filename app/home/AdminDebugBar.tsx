@@ -1,8 +1,8 @@
-// web/app/home/AdminDebugBar.tsx
 'use client'
 
 import React from 'react'
 import {createPortal} from 'react-dom'
+import {usePlayer} from '@/app/home/player/PlayerState'
 
 const ENABLED = process.env.NEXT_PUBLIC_ADMIN_DEBUG === '1'
 
@@ -26,12 +26,25 @@ const FORCE_OPTS: ForceOpt[] = [
   {id: 'none', label: 'None'},
   {id: 'AUTH_REQUIRED', label: 'AUTH_REQUIRED'},
   {id: 'ENTITLEMENT_REQUIRED', label: 'ENTITLEMENT_REQUIRED'},
-  {id: 'ANON_CAP_REACHED', label: 'ANON_CAP'},
-  {id: 'EMBARGOED', label: 'EMBARGOED'},
+  {id: 'ANON_CAP_REACHED', label: 'ANON_CAP_REACHED'},
+  {id: 'CAP_REACHED', label: 'CAP_REACHED'},
+  {id: 'EMBARGO', label: 'EMBARGO'},
+  {id: 'TIER_REQUIRED', label: 'TIER_REQUIRED'},
+  {id: 'PROVISIONING', label: 'PROVISIONING'},
 ]
+
+type BlockAction = 'login' | 'subscribe' | 'buy' | 'wait'
+
+function actionForCode(code: string): BlockAction | undefined {
+  if (code === 'AUTH_REQUIRED' || code === 'ANON_CAP_REACHED' || code === 'CAP_REACHED') return 'login'
+  if (code === 'PROVISIONING') return 'wait'
+  return undefined
+}
 
 export default function AdminDebugBar(props: {isAdmin: boolean}) {
   // Hooks must always run, even if we return null later.
+  const p = usePlayer()
+
   const [force, setForce] = React.useState<string>('none')
   const [tokensOpen, setTokensOpen] = React.useState(false)
   const [mounted, setMounted] = React.useState(false)
@@ -148,7 +161,6 @@ export default function AdminDebugBar(props: {isAdmin: boolean}) {
 
               <iframe
                 title="Share tokens admin"
-                // optional: you can later add ?embed=1 and simplify the server page chrome for iframe mode
                 src="/admin/access?embed=1"
                 style={{
                   width: '100%',
@@ -166,7 +178,7 @@ export default function AdminDebugBar(props: {isAdmin: boolean}) {
   return (
     <>
       <div
-      id="af-admin-debugbar" 
+        id="af-admin-debugbar"
         style={{
           position: 'sticky',
           top: 0,
@@ -185,7 +197,6 @@ export default function AdminDebugBar(props: {isAdmin: boolean}) {
           boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
         }}
       >
-        {/* Left: label */}
         <div
           style={{
             fontSize: 12,
@@ -198,7 +209,6 @@ export default function AdminDebugBar(props: {isAdmin: boolean}) {
           Admin debug
         </div>
 
-        {/* Right: controls */}
         <div
           style={{
             display: 'flex',
@@ -212,7 +222,6 @@ export default function AdminDebugBar(props: {isAdmin: boolean}) {
             Access dashboard
           </button>
 
-
           <span
             aria-hidden
             style={{
@@ -223,7 +232,6 @@ export default function AdminDebugBar(props: {isAdmin: boolean}) {
             }}
           />
 
-          {/* Force state dropdown (collapsed) */}
           <div style={{position: 'relative', display: 'grid'}}>
             <select
               aria-label="Force state"
@@ -254,21 +262,54 @@ export default function AdminDebugBar(props: {isAdmin: boolean}) {
             </div>
           </div>
 
+          {/* Cookie-based forcing (server-side behaviours) */}
           <button
             style={btn}
             onClick={() => {
               void setDebug({force})
             }}
           >
-            Apply
+            Apply (cookie)
           </button>
 
           <button style={btn} onClick={() => void setDebug({force: 'none'})}>
-            Clear force
+            Clear force (cookie)
           </button>
 
           <button style={btn} onClick={clearDebug}>
-            Reset
+            Reset (cookie)
+          </button>
+
+          <span
+            aria-hidden
+            style={{
+              width: 1,
+              height: 18,
+              background: 'rgba(255,255,255,0.18)',
+              margin: '0 4px',
+            }}
+          />
+
+          {/* NEW: immediate client-side forcing (tests spotlight/veil path) */}
+          <button
+            style={btn}
+            onClick={() => {
+              if (force === 'none') {
+                p.clearBlocked()
+                return
+              }
+              p.setBlocked(`DEBUG: forced ${force}`, {
+                code: force,
+                action: actionForCode(force),
+                correlationId: 'debug',
+              })
+            }}
+          >
+            Apply (UI)
+          </button>
+
+          <button style={btn} onClick={() => p.clearBlocked()}>
+            Clear (UI)
           </button>
         </div>
       </div>
