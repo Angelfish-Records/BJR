@@ -2,7 +2,7 @@ import {defineField, defineType} from 'sanity'
 
 export const shadowHomePage = defineType({
   name: 'shadowHomePage',
-  title: 'Shadow Home Page',
+  title: 'Brendan John Roch',
   type: 'document',
   fields: [
     defineField({

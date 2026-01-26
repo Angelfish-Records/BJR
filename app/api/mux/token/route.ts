@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
         req,
         correlationId,
         'ANON_CAP_REACHED',
-        'Anonymous listening limit reached. Please log in to continue.',
+        'Please enter an email address to continue listening for free.',
         'login',
         403
       )

@@ -413,7 +413,7 @@ export default function PortalArea(props: {
   const {isSignedIn} = useAuth()
 
   const purchaseAttention =
-    checkout === 'success' && !isSignedIn ? 'Payment confirmed – sign in to access your purchased content.' : null
+    checkout === 'success' && !isSignedIn ? 'Thank you for your purchase. Confirm your email address to access your content.' : null
 
   const derivedAttentionMessage =
     attentionMessage ??

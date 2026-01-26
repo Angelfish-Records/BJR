@@ -191,7 +191,7 @@ export async function GET(req: NextRequest) {
           releaseAt,
           code: 'ANON_CAP_REACHED',
           action: 'login' as const,
-          reason: 'Anonymous listening limit reached. Please log in to continue.',
+          reason: 'Please enter an email address to continue listening for free.',
           correlationId,
           redeemed: null,
           cap: {used: distinctCompleted, max: ANON_DISTINCT_TRACK_CAP, windowDays: ANON_WINDOW_DAYS},
