@@ -14,12 +14,11 @@ import MiniPlayer from './player/MiniPlayer'
 import ActivationGate from '@/app/home/ActivationGate'
 import Image from 'next/image'
 
-const LEGACY_PORTAL_P = 'portal'
-const DEFAULT_PORTAL_TAB = 'download'
+const DEFAULT_PORTAL_TAB = 'portal' // you only have two panels: player + portal
 
-function normalizeP(raw: string | null | undefined): string {
+function normalizePanel(raw: string | null | undefined): 'player' | 'portal' {
   const v = (raw ?? '').trim()
-  return v || 'player'
+  return v === 'portal' ? 'portal' : 'player'
 }
 
 function MiniPlayerHost(props: {onExpand: () => void}) {
@@ -56,7 +55,6 @@ function MiniPlayerHost(props: {onExpand: () => void}) {
   return <MiniPlayer onExpand={onExpand} artworkUrl={p.queueContextArtworkUrl ?? null} />
 }
 
-
 type AlbumPayload = {album: AlbumInfo | null; tracks: PlayerTrack[]}
 
 function getSavedSt(slug: string): string {
@@ -70,22 +68,6 @@ function getSavedSt(slug: string): string {
 function setSavedSt(slug: string, st: string) {
   try {
     sessionStorage.setItem(`af_st:${slug}`, st)
-  } catch {
-    // ignore
-  }
-}
-
-function getLastPortalTab(): string | null {
-  try {
-    return (sessionStorage.getItem('af:lastPortalTab') ?? '').trim() || null
-  } catch {
-    return null
-  }
-}
-
-function setLastPortalTab(id: string) {
-  try {
-    sessionStorage.setItem('af:lastPortalTab', id)
   } catch {}
 }
 
@@ -110,11 +92,17 @@ function MessageBar(props: {checkout: string | null; attentionMessage: string | 
   const {checkout, attentionMessage, gift} = props
 
   const showGift =
-    gift === 'ready' || gift === 'not_paid' || gift === 'wrong_account' || gift === 'missing'
+    gift === 'ready' ||
+    gift === 'not_paid' ||
+    gift === 'wrong_account' ||
+    gift === 'missing' ||
+    gift === 'claim_code_missing' ||
+    gift === 'invalid_claim' ||
+    gift === 'already_claimed'
+
   const showCheckout = checkout === 'success' || checkout === 'cancel'
   const showAttention = !!attentionMessage
   if (!showGift && !showCheckout && !showAttention) return null
-
 
   const checkoutIsSuccess = checkout === 'success'
 
@@ -126,15 +114,27 @@ function MessageBar(props: {checkout: string | null; attentionMessage: string | 
     if (gift === 'ready') {
       tone = 'success'
       leftIcon = <span aria-hidden>🎁</span>
-      text = <>Your gift is ready. Head to Downloads in the Portal.</>
+      text = <>Gift activated. Your content is now available.</>
     } else if (gift === 'not_paid') {
       tone = 'neutral'
       leftIcon = <span aria-hidden>⏳</span>
-      text = <>This gift hasn&apos;t completed payment yet. If you just paid, try a refresh in a moment.</>
+      text = <>This gift hasn&apos;t completed payment yet. If you just paid, refresh in a moment.</>
     } else if (gift === 'wrong_account') {
       tone = 'warn'
       leftIcon = <span aria-hidden>⚠️</span>
       text = <>This gift was sent to a different email. Sign in with the recipient account.</>
+    } else if (gift === 'claim_code_missing') {
+      tone = 'warn'
+      leftIcon = <span aria-hidden>⚠️</span>
+      text = <>That link is missing its claim code. Open the exact link from the email.</>
+    } else if (gift === 'invalid_claim') {
+      tone = 'warn'
+      leftIcon = <span aria-hidden>⚠️</span>
+      text = <>That claim code doesn&apos;t match this gift. Open the exact link from the email.</>
+    } else if (gift === 'already_claimed') {
+      tone = 'warn'
+      leftIcon = <span aria-hidden>⚠️</span>
+      text = <>This gift has already been claimed.</>
     } else {
       tone = 'warn'
       leftIcon = <span aria-hidden>⚠️</span>
@@ -148,7 +148,7 @@ function MessageBar(props: {checkout: string | null; attentionMessage: string | 
     tone = checkoutIsSuccess ? 'success' : 'neutral'
     leftIcon = <span aria-hidden>{checkoutIsSuccess ? '✅' : '⤺'}</span>
     text = checkoutIsSuccess ? (
-      <>Checkout completed. If entitlements haven&apos;t appeared yet, refresh once (webhooks can be a beat behind).</>
+      <>Checkout completed. If your access hasn&apos;t appeared yet, refresh once (webhooks can be a beat behind).</>
     ) : (
       <>Checkout cancelled.</>
     )
@@ -232,7 +232,6 @@ function useAnchorRect(ref: React.RefObject<HTMLElement | null>, enabled: boolea
 
   React.useEffect(() => {
     if (!enabled) {
-      // hard stop, hard clear
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
       rafRef.current = null
       roRef.current?.disconnect()
@@ -249,19 +248,10 @@ function useAnchorRect(ref: React.RefObject<HTMLElement | null>, enabled: boolea
     const measureNow = () => {
       const cur = elRef.current
       if (!cur) return
-      // If the page is backgrounded, skip layout reads.
       if (typeof document !== 'undefined' && document.hidden) return
 
       const r = cur.getBoundingClientRect()
-      // DOMRect can be "live-ish"; copy primitives and quantize a little for stability.
-      setRect(
-        new DOMRect(
-          Math.round(r.x),
-          Math.round(r.y),
-          Math.round(r.width),
-          Math.round(r.height)
-        )
-      )
+      setRect(new DOMRect(Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)))
     }
 
     const scheduleMeasure = () => {
@@ -273,22 +263,18 @@ function useAnchorRect(ref: React.RefObject<HTMLElement | null>, enabled: boolea
       })
     }
 
-    // Prime once.
     scheduleMeasure()
 
-    // ResizeObserver: coalesce into rAF.
     const ro = new ResizeObserver(() => scheduleMeasure())
     ro.observe(el)
     roRef.current = ro
 
-    // Global events: coalesce into rAF. Keep them passive.
     const onScroll = () => scheduleMeasure()
     const onResize = () => scheduleMeasure()
 
     window.addEventListener('scroll', onScroll, {capture: true, passive: true})
     window.addEventListener('resize', onResize, {passive: true})
 
-    // Hidden-state gating: don’t measure while hidden; do one catch-up on visible.
     const onVis = () => {
       if (!enabledRef.current) return
       if (typeof document !== 'undefined' && !document.hidden) scheduleMeasure()
@@ -312,11 +298,6 @@ function useAnchorRect(ref: React.RefObject<HTMLElement | null>, enabled: boolea
   return rect
 }
 
-
-/**
- * Full-screen blur + interaction blocker.
- * Also lifts #af-admin-debugbar above the veil so you can always toggle spotlight off.
- */
 function SpotlightVeil(props: {active: boolean}) {
   const {active} = props
   const debugbarStyleRef = React.useRef<string | null>(null)
@@ -369,10 +350,6 @@ function SpotlightVeil(props: {active: boolean}) {
   )
 }
 
-/**
- * Render a clone “above” the veil at the *exact same* screen position as the anchor.
- * The in-place version stays in the DOM (visibility:hidden) to preserve layout perfectly.
- */
 function SpotlightClone(props: {active: boolean; anchorRect: DOMRect | null; children: React.ReactNode}) {
   const {active, anchorRect, children} = props
   if (!active) return null
@@ -387,7 +364,7 @@ function SpotlightClone(props: {active: boolean; anchorRect: DOMRect | null; chi
           left: anchorRect.left,
           width: anchorRect.width,
           height: anchorRect.height,
-          zIndex: 30000, // above veil
+          zIndex: 30000,
           pointerEvents: 'auto',
           display: 'block',
         }}
@@ -406,7 +383,6 @@ export default function PortalArea(props: {
   album: AlbumInfo | null
   tracks: PlayerTrack[]
   albums: AlbumNavItem[]
-  checkout?: string | null
   attentionMessage?: string | null
   tier?: string | null
   isPatron?: boolean
@@ -419,7 +395,6 @@ export default function PortalArea(props: {
     album: initialAlbum,
     tracks: initialTracks,
     albums,
-    checkout = null,
     attentionMessage = null,
     tier = null,
     isPatron = false,
@@ -430,23 +405,23 @@ export default function PortalArea(props: {
   const {setQueue, play, selectTrack, setPendingTrackId} = p
   useGlobalTransportKeys(p, {enabled: true})
   const sp = useClientSearchParams()
-  const hasSt = ((sp.get('st') ?? sp.get('share') ?? '').trim().length > 0)
   const {isSignedIn} = useAuth()
 
+  // URL-driven state (this was the missing link)
+  const gift = (sp.get('gift') ?? '').trim() || null
+  const checkout = (sp.get('checkout') ?? '').trim() || null
+
   const purchaseAttention =
-    checkout === 'success' && !isSignedIn ? 'Thank you for your purchase. Confirm your email address to access your content.' : null
+    checkout === 'success' && !isSignedIn
+      ? 'Thank you for your purchase. Confirm your email address to access your content.'
+      : null
 
   const derivedAttentionMessage =
-    attentionMessage ??
-    purchaseAttention ??
-    (p.shouldShowTopbarBlockMessage ? (p.lastError ?? null) : null)
+    attentionMessage ?? purchaseAttention ?? (p.shouldShowTopbarBlockMessage ? (p.lastError ?? null) : null)
 
   const spotlightEligibleCode =
-  p.blockedCode === 'AUTH_REQUIRED' ||
-  p.blockedCode === 'ANON_CAP_REACHED' ||
-  p.blockedCode === 'CAP_REACHED'
+    p.blockedCode === 'AUTH_REQUIRED' || p.blockedCode === 'ANON_CAP_REACHED' || p.blockedCode === 'CAP_REACHED'
 
-  // Debug-only override: allow forcing spotlight while signed in (admin testing)
   const dbgForceSpotlight =
     process.env.NEXT_PUBLIC_ADMIN_DEBUG === '1' &&
     typeof window !== 'undefined' &&
@@ -461,79 +436,43 @@ export default function PortalArea(props: {
   const qAlbum = sp.get('album')
   const qTrack = sp.get('track')
 
-  const rawP = normalizeP(sp.get('p') ?? sp.get('panel') ?? 'player')
-  const legacyPt = (sp.get('pt') ?? '').trim() || null
-
-  const effectiveP = rawP === LEGACY_PORTAL_P ? (legacyPt ?? DEFAULT_PORTAL_TAB) : rawP
-  const isPlayer = effectiveP === 'player'
-  const portalTabId = isPlayer ? null : effectiveP
-
+  const isPlayer = normalizePanel(sp.get('p') ?? DEFAULT_PORTAL_TAB) === 'player'
   const qAutoplay = getAutoplayFlag(sp)
   const qShareToken = sp.get('st') ?? sp.get('share') ?? null
+  const hasSt = ((sp.get('st') ?? sp.get('share') ?? '').trim().length > 0)
 
   const patchQuery = React.useCallback((patch: Record<string, string | null | undefined>) => {
     replaceQuery(patch)
   }, [])
 
-  React.useEffect(() => {
-    const curP = (sp.get('p') ?? '').trim()
-    const curPt = (sp.get('pt') ?? '').trim()
-
-    if (curP === LEGACY_PORTAL_P) {
-      patchQuery({p: curPt || DEFAULT_PORTAL_TAB, pt: null, panel: null})
-      return
-    }
-
-    if (curPt && (!curP || curP === '')) {
-      patchQuery({p: curPt, pt: null, panel: null})
-      return
-    }
-
-    if (curPt && curP === 'player') {
-      patchQuery({pt: null})
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  React.useEffect(() => {
-    if (isPlayer) return
-    if (portalTabId) setLastPortalTab(portalTabId)
-  }, [isPlayer, portalTabId])
-
   const forceSurface = React.useCallback(
-    (surface: 'player' | 'portal', tabId?: string | null) => {
-      const desiredP =
-        surface === 'player'
-          ? 'player'
-          : tabId ?? getLastPortalTab() ?? portalTabId ?? legacyPt ?? DEFAULT_PORTAL_TAB
-
-      const curP = normalizeP(sp.get('p') ?? sp.get('panel') ?? 'player')
-      const curEffective = curP === LEGACY_PORTAL_P ? (legacyPt ?? DEFAULT_PORTAL_TAB) : curP
-      if (curEffective === desiredP) return
-
-      if (surface === 'player') {
-        patchQuery({
-          p: 'player',
-          panel: null,
-          pt: null,
-          post: null,
-          autoplay: null,
-        })
-        return
-      }
-
-      patchQuery({
-        p: desiredP,
-        panel: null,
-        pt: null,
-        album: null,
-        track: null,
-        t: null,
-        autoplay: null,
-      })
+    (surface: 'player' | 'portal') => {
+      const desired = surface === 'portal' ? 'portal' : 'player'
+      const cur = normalizePanel(sp.get('p') ?? 'player')
+      if (cur === desired) return
+      patchQuery({p: desired})
     },
-    [patchQuery, sp, portalTabId, legacyPt]
+    [patchQuery, sp]
   )
+
+  // Show-once cleanup (prevents “sticky” banners)
+  const giftShownRef = React.useRef(false)
+  React.useEffect(() => {
+    const g = (sp.get('gift') ?? '').trim()
+    if (!g) return
+    if (giftShownRef.current) return
+    giftShownRef.current = true
+    patchQuery({gift: null})
+  }, [sp, patchQuery])
+
+  const checkoutShownRef = React.useRef(false)
+  React.useEffect(() => {
+    const c = (sp.get('checkout') ?? '').trim()
+    if (!c) return
+    if (checkoutShownRef.current) return
+    checkoutShownRef.current = true
+    patchQuery({checkout: null})
+  }, [sp, patchQuery])
 
   const [currentAlbumSlug, setCurrentAlbumSlug] = React.useState<string>(albumSlug)
   const [album, setAlbum] = React.useState<AlbumInfo | null>(initialAlbum)
@@ -561,18 +500,14 @@ export default function PortalArea(props: {
       const saved = getSavedSt(slug)
 
       patchQuery({
-  p: 'player',
-  panel: null,
-  pt: null,
-  post: null,
-  album: slug,
-  track: null,   // ✅ correct param name
-  t: null,       // optional: if you use t elsewhere
-  autoplay: null,
-  st: saved || null,
-  share: null,
-})
-
+        p: 'player',
+        album: slug,
+        track: null,
+        t: null,
+        autoplay: null,
+        st: saved || null,
+        share: null,
+      })
 
       setIsBrowsingAlbum(true)
       setCurrentAlbumSlug(slug)
@@ -607,13 +542,6 @@ export default function PortalArea(props: {
   }, [isPlayer, qAlbum, currentAlbumSlug, onSelectAlbum])
 
   React.useEffect(() => {
-    if (isPlayer) return
-    if (qAlbum || qTrack || sp.get('t') || sp.get('autoplay')) {
-      patchQuery({album: null, track: null, t: null, autoplay: null})
-    }
-  }, [isPlayer, qAlbum, qTrack, sp, patchQuery])
-
-  React.useEffect(() => {
     if (!isPlayer) return
     if (!qTrack) return
     selectTrack(qTrack)
@@ -621,99 +549,88 @@ export default function PortalArea(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlayer, qTrack])
 
-  const autoplayFiredRef = React.useRef<string | null>(null)
-
   // Prime the player on first load: queue + select first track (no autoplay).
-const primedRef = React.useRef(false)
+  const primedRef = React.useRef(false)
+  React.useEffect(() => {
+    if (!isPlayer) return
+    if (primedRef.current) return
+    if (!album || tracks.length === 0) return
 
-React.useEffect(() => {
-  if (!isPlayer) return
-  if (primedRef.current) return
+    if (p.current || p.queue.length > 0) {
+      primedRef.current = true
+      return
+    }
 
-  // Wait until we actually have something to prime with.
-  if (!album || tracks.length === 0) return
+    if (qTrack) {
+      primedRef.current = true
+      return
+    }
 
-  // Don’t stomp if the user already has a queue/current.
-  if (p.current || p.queue.length > 0) {
+    const first = tracks[0]
+    if (!first?.id) return
+
+    const ctxId = hasSt ? (album.catalogId ?? undefined) : ((album.catalogId ?? album.id) ?? undefined)
+    const ctxSlug = qAlbum ?? currentAlbumSlug
+
+    p.setQueue(tracks, {
+      contextId: ctxId,
+      contextSlug: ctxSlug,
+      contextTitle: album.title ?? undefined,
+      contextArtist: album.artist ?? undefined,
+      artworkUrl: album.artworkUrl ?? null,
+    })
+
+    p.selectTrack(first.id)
+    p.setPendingTrackId(undefined)
+
     primedRef.current = true
-    return
-  }
+  }, [isPlayer, album, tracks, hasSt, qAlbum, currentAlbumSlug, qTrack, p])
 
-  // Don’t override explicit deep-links.
-  if (qTrack) {
-    primedRef.current = true
-    return
-  }
+  const autoplayFiredRef = React.useRef<string | null>(null)
+  React.useEffect(() => {
+    if (!isPlayer) return
+    if (!qAutoplay) return
+    if (!qTrack) return
 
-  const first = tracks[0]
-  if (!first?.id) return
+    if (!qShareToken) {
+      patchQuery({autoplay: null})
+      return
+    }
 
-  const ctxId = hasSt ? (album.catalogId ?? undefined) : ((album.catalogId ?? album.id) ?? undefined)
-  const ctxSlug = qAlbum ?? currentAlbumSlug
+    if (!album || tracks.length === 0) return
 
-  p.setQueue(tracks, {
-    contextId: ctxId,
-    contextSlug: ctxSlug,
-    contextTitle: album.title ?? undefined,
-    contextArtist: album.artist ?? undefined,
-    artworkUrl: album.artworkUrl ?? null,
-  })
+    const key = `${qAlbum ?? ''}:${qTrack}:${qShareToken}`
+    if (autoplayFiredRef.current === key) return
+    autoplayFiredRef.current = key
 
-  // Preselect so UI shows “ready to go”.
-  p.selectTrack(first.id)
-  p.setPendingTrackId(undefined)
+    const ctxId = hasSt ? (album.catalogId ?? undefined) : ((album.catalogId ?? album.id) ?? undefined)
+    const ctxSlug = qAlbum ?? currentAlbumSlug
 
-  primedRef.current = true
-}, [isPlayer, album, tracks, hasSt, qAlbum, currentAlbumSlug, qTrack, p])
+    setQueue(tracks, {
+      contextId: ctxId,
+      contextSlug: ctxSlug,
+      contextTitle: album.title ?? undefined,
+      contextArtist: album.artist ?? undefined,
+      artworkUrl: album.artworkUrl ?? null,
+    })
 
-
-React.useEffect(() => {
-  if (!isPlayer) return
-  if (!qAutoplay) return
-  if (!qTrack) return
-
-  // autoplay is only meaningful for share links (your current rule)
-  if (!qShareToken) {
+    const t = tracks.find((x) => x.id === qTrack)
+    play(t)
     patchQuery({autoplay: null})
-    return
-  }
-
-  // Wait until album+tracks are loaded so setQueue/play is deterministic.
-  if (!album || tracks.length === 0) return
-
-  const key = `${qAlbum ?? ''}:${qTrack}:${qShareToken}`
-  if (autoplayFiredRef.current === key) return
-  autoplayFiredRef.current = key
-
-  const ctxId = hasSt ? (album.catalogId ?? undefined) : ((album.catalogId ?? album.id) ?? undefined)
-  const ctxSlug = qAlbum ?? currentAlbumSlug
-
-  // Establish queue + context first (so downstream access/token logic has the right scope).
-  setQueue(tracks, {
-    contextId: ctxId,
-    contextSlug: ctxSlug,
-    contextTitle: album.title ?? undefined,
-    contextArtist: album.artist ?? undefined,
-    artworkUrl: album.artworkUrl ?? null,
-  })
-
-  const t = tracks.find((x) => x.id === qTrack)
-  play(t) // if t is undefined, play() falls back to current/queue[0]
-  patchQuery({autoplay: null})
-}, [
-  isPlayer,
-  qAutoplay,
-  qTrack,
-  qAlbum,
-  qShareToken,
-  album,
-  tracks,
-  hasSt,
-  currentAlbumSlug,
-  play,
-  setQueue,
-  patchQuery,
-])
+  }, [
+    isPlayer,
+    qAutoplay,
+    qTrack,
+    qAlbum,
+    qShareToken,
+    album,
+    tracks,
+    hasSt,
+    currentAlbumSlug,
+    play,
+    setQueue,
+    patchQuery,
+  ])
 
   React.useEffect(() => {
     if (!isPlayer) return
@@ -770,7 +687,6 @@ React.useEffect(() => {
     [portalPanel, currentAlbumSlug, album, tracks, albums, forceSurface, isBrowsingAlbum, onSelectAlbum, viewerTier]
   )
 
-  // Anchor that defines the *exact* place the user expects the spotlight UI to live.
   const spotlightAnchorRef = React.useRef<HTMLDivElement | null>(null)
   const spotlightRect = useAnchorRect(spotlightAnchorRef, spotlightAttention)
 
@@ -784,25 +700,13 @@ React.useEffect(() => {
       <div />
     </ActivationGate>
   )
-  const gift = (sp.get('gift') ?? '').trim() || null
 
   const msgNode = <MessageBar checkout={checkout} attentionMessage={derivedAttentionMessage} gift={gift} />
 
-    const giftShownRef = React.useRef(false)
-  React.useEffect(() => {
-    const g = (sp.get('gift') ?? '').trim()
-    if (!g) return
-    if (giftShownRef.current) return
-    giftShownRef.current = true
-    patchQuery({gift: null})
-  }, [sp, patchQuery])
-
   return (
     <>
-      {/* Blur+block EVERYTHING else (including MiniPlayer). */}
       <SpotlightVeil active={spotlightAttention} />
 
-      {/* Clone the spotlight UI ABOVE the veil, but at the exact same on-screen position. */}
       <SpotlightClone active={spotlightAttention} anchorRect={spotlightRect}>
         <div style={{pointerEvents: 'auto'}}>
           {gateNode}
@@ -954,14 +858,10 @@ React.useEffect(() => {
 
                   <div className="afTopBarRight">
                     <div className="afTopBarRightInner" style={{maxWidth: 520, minWidth: 0}}>
-                      {/* Anchor defines the exact visual location; when spotlight is active we hide in-place UI
-                          but keep layout identical, and render the interactive clone above the veil. */}
                       <div
                         ref={spotlightAnchorRef}
                         style={{
-                          // Keep it in the normal flow always.
                           position: 'relative',
-                          // While spotlighting, keep layout but hide visuals + block clicks.
                           visibility: spotlightAttention ? 'hidden' : 'visible',
                           pointerEvents: spotlightAttention ? 'none' : 'auto',
                         }}
@@ -977,7 +877,6 @@ React.useEffect(() => {
           )}
         />
 
-        {/* Persistent mini player stays mounted, but is blurred+blocked by SpotlightVeil when spotlightAttention is true. */}
         <MiniPlayerHost onExpand={() => forceSurface('player')} />
       </div>
     </>
