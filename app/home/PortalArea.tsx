@@ -454,6 +454,8 @@ export default function PortalArea(props: {
     replaceQuery(patch)
   }, [])
 
+  const giftClaimRanRef = React.useRef(false)
+
   React.useEffect(() => {
     const curP = (sp.get('p') ?? '').trim()
     const curPt = (sp.get('pt') ?? '').trim()
@@ -513,6 +515,46 @@ export default function PortalArea(props: {
     },
     [patchQuery, sp, portalTabId, legacyPt]
   )
+
+    // --- Gift claim-on-arrival (Pattern B) ---
+  React.useEffect(() => {
+    if (giftClaimRanRef.current) return
+
+    const flag = (sp.get('giftClaim') ?? '').trim()
+    if (flag !== '1') return
+
+    const giftId = (sp.get('g') ?? '').trim()
+    const claimCode = (sp.get('c') ?? '').trim()
+    if (!giftId || !claimCode) {
+      // Strip the trigger so we don't keep re-evaluating on refresh.
+      patchQuery({giftClaim: null, g: null, c: null})
+      giftClaimRanRef.current = true
+      return
+    }
+
+    giftClaimRanRef.current = true
+
+        ;(async () => {
+      try {
+        const res = await fetch('/api/gifts/claim', {
+          method: 'POST',
+          headers: {'content-type': 'application/json'},
+          body: JSON.stringify({giftId, claimCode}),
+        })
+
+        // If unauthenticated, KEEP params so once the user signs in,
+        // the effect can run again on the same URL.
+        if (res.status === 401) return
+
+        // For any non-401 response (success or invalid), strip to prevent loops.
+        patchQuery({giftClaim: null, g: null, c: null})
+      } catch {
+        // network fail: strip to avoid loops (your call; could also keep)
+        patchQuery({giftClaim: null, g: null, c: null})
+      }
+    })()
+  }, [sp, patchQuery])
+
 
   const [currentAlbumSlug, setCurrentAlbumSlug] = React.useState<string>(albumSlug)
   const [album, setAlbum] = React.useState<AlbumInfo | null>(initialAlbum)

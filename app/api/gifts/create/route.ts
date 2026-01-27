@@ -1,7 +1,6 @@
 // web/app/api/gifts/create/route.ts
 import 'server-only'
 import {NextRequest, NextResponse} from 'next/server'
-import crypto from 'crypto'
 import Stripe from 'stripe'
 import {sql} from '@vercel/postgres'
 import {auth, currentUser} from '@clerk/nextjs/server'
@@ -21,18 +20,6 @@ type Req = {
 function must(v: string, name: string) {
   if (!v) throw new Error(`Missing ${name}`)
   return v
-}
-
-function sha256Hex(s: string): string {
-  return crypto.createHash('sha256').update(s).digest('hex')
-}
-
-function makeToken(): string {
-  return crypto.randomBytes(32).toString('base64url')
-}
-
-function encMailto(s: string): string {
-  return encodeURIComponent(s).replace(/%20/g, '+')
 }
 
 function safeOrigin(req: NextRequest): string {
@@ -85,17 +72,9 @@ export async function POST(req: NextRequest) {
     senderMemberId = (senderRes.rows[0]?.id as string | undefined) ?? null
   }
 
-  const origin = safeOrigin(req)
-
-  // Mint token + store only hash
-  const token = makeToken()
-  const tokenHash = sha256Hex(token)
-  const claimUrl = `${origin}/gift/${token}`
-
-  // Insert the gift row as pending payment (no entitlements granted here)
-  await sql`
+  // Create gift row BEFORE Stripe so we can anchor everything on giftId (Pattern B)
+  const ins = await sql`
     insert into gifts (
-      token_hash,
       album_slug,
       entitlement_key,
       recipient_email,
@@ -106,7 +85,6 @@ export async function POST(req: NextRequest) {
       sender_email
     )
     values (
-      ${tokenHash},
       ${albumSlug},
       ${offer.entitlementKey},
       ${recipientEmail},
@@ -116,12 +94,17 @@ export async function POST(req: NextRequest) {
       'pending_payment'::gift_status,
       ${senderEmail}
     )
+    returning id
   `
+  const giftId = (ins.rows[0]?.id as string | undefined) ?? null
+  if (!giftId) {
+    return NextResponse.json({ok: false, error: 'GIFT_CREATE_FAILED'}, {status: 500})
+  }
 
-  // Create Stripe Checkout Session for the gift purchase
   const STRIPE_SECRET_KEY = must(process.env.STRIPE_SECRET_KEY ?? '', 'STRIPE_SECRET_KEY')
   const stripe = new Stripe(STRIPE_SECRET_KEY)
 
+  const origin = safeOrigin(req)
   const success_url = `${origin}/home?gift=success&panel=portal`
   const cancel_url = `${origin}/home?gift=cancel&panel=portal`
 
@@ -138,43 +121,29 @@ export async function POST(req: NextRequest) {
 
     metadata: {
       kind: 'gift',
+      giftId, // primary anchor now
       albumSlug,
       entitlementKey: offer.entitlementKey,
-      giftTokenHash: tokenHash,
       recipientEmail,
       senderMemberId: senderMemberId ?? '',
       correlationId,
     },
   })
 
-  // Persist Stripe session id (unique indexed)
   await sql`
     update gifts
     set stripe_checkout_session_id = ${session.id}
-    where token_hash = ${tokenHash}
+    where id = ${giftId}::uuid
   `
-
-  // Mailto content (still useful even if you later swap to Resend)
-  const subject = `You’ve been gifted: ${offer.title}`
-  const bodyText =
-    `Someone bought you a copy of "${offer.title}".\n\n` +
-    `Claim it here:\n${claimUrl}\n\n` +
-    (message ? `Message:\n${message}\n\n` : '') +
-    `When you sign in, use this email address: ${recipientEmail}\n\n` +
-    `Note: the gift activates after payment completes.`
-
-  const mailto = `mailto:${encMailto(recipientEmail)}?subject=${encMailto(subject)}&body=${encMailto(bodyText)}`
 
   return NextResponse.json({
     ok: true,
+    giftId,
     albumSlug,
     recipientEmail,
-    claimUrl,
-    subject,
-    body: bodyText,
-    mailto,
     checkoutUrl: session.url,
     stripeCheckoutSessionId: session.id,
     correlationId,
+    note: 'Gift claim email will be sent after payment completes.',
   })
 }
