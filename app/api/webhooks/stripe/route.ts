@@ -166,38 +166,60 @@ async function sendGiftCreatedEmail(args: {
 }
 
 async function finalizeGiftPurchase(session: Stripe.Checkout.Session): Promise<void> {
+  // Only finalize when Stripe considers it paid.
+  // (Prevents async methods from marking paid too early.)
+  const paymentStatus = (session.payment_status ?? '').toString()
+  if (paymentStatus && paymentStatus !== 'paid') return
+
   const md = (session.metadata ?? {}) as Record<string, string>
 
-  const giftId = (md.giftId ?? '').trim()
-  const tokenHash = (md.giftTokenHash ?? '').trim() // legacy support
+  // Prefer metadata anchors (legacy + current)
+  const giftIdFromMd = (md.giftId ?? '').trim()
+  const tokenHashFromMd = (md.giftTokenHash ?? '').trim() // legacy support
 
-  const recipientEmail = normalizeEmail((md.recipientEmail ?? '').trim())
-  const entitlementKey = (md.entitlementKey ?? '').trim()
-  const albumSlug = (md.albumSlug ?? '').trim()
+  // Fallback: resolve by checkout session id (most reliable anchor you already store)
+  let resolvedGiftId: string | null = null
 
-  if ((!giftId && !tokenHash) || !recipientEmail || !entitlementKey) return
+  if (giftIdFromMd) {
+    const r = await sql`
+      select id
+      from gifts
+      where id = ${giftIdFromMd}::uuid
+      limit 1
+    `
+    resolvedGiftId = (r.rows[0]?.id as string | undefined) ?? null
+  } else if (tokenHashFromMd) {
+    const r = await sql`
+      select id
+      from gifts
+      where token_hash = ${tokenHashFromMd}
+      limit 1
+    `
+    resolvedGiftId = (r.rows[0]?.id as string | undefined) ?? null
+  } else {
+    const r = await sql`
+      select id
+      from gifts
+      where stripe_checkout_session_id = ${session.id}
+      limit 1
+    `
+    resolvedGiftId = (r.rows[0]?.id as string | undefined) ?? null
+  }
 
-  // Resolve gift row
-  const giftRes = giftId
-    ? await sql`
-        select id, status, gift_email_dedupe_hash
-        from gifts
-        where id = ${giftId}::uuid
-        limit 1
-      `
-    : await sql`
-        select id, status, gift_email_dedupe_hash
-        from gifts
-        where token_hash = ${tokenHash}
-        limit 1
-      `
-
-  const resolvedGiftId = (giftRes.rows[0]?.id as string | undefined) ?? null
   if (!resolvedGiftId) return
 
-  // Pull gift message/sender (for email polish)
+  // Pull canonical gift fields (use these as truth; metadata is best-effort)
   const giftRowRes = await sql`
-    select id, album_slug, recipient_email, message, sender_email
+    select
+      id,
+      status,
+      album_slug,
+      entitlement_key,
+      recipient_email,
+      recipient_member_id,
+      message,
+      sender_email,
+      gift_email_dedupe_hash
     from gifts
     where id = ${resolvedGiftId}::uuid
     limit 1
@@ -205,12 +227,28 @@ async function finalizeGiftPurchase(session: Stripe.Checkout.Session): Promise<v
   const giftRow = giftRowRes.rows[0] as
     | {
         id: string
+        status: string
         album_slug: string
+        entitlement_key: string
         recipient_email: string
+        recipient_member_id: string | null
         message: string | null
         sender_email: string | null
+        gift_email_dedupe_hash: string | null
       }
     | undefined
+
+  if (!giftRow) return
+
+  // Determine working values (prefer DB row; fall back to metadata if needed)
+  const recipientEmail =
+    normalizeEmail((giftRow.recipient_email ?? '').trim()) ||
+    normalizeEmail((md.recipientEmail ?? '').trim())
+
+  const entitlementKey = (giftRow.entitlement_key ?? '').trim() || (md.entitlementKey ?? '').trim()
+  const albumSlug = (giftRow.album_slug ?? '').trim() || (md.albumSlug ?? '').trim()
+
+  if (!recipientEmail || !entitlementKey) return
 
   const paymentIntentId =
     typeof session.payment_intent === 'string'
@@ -275,7 +313,7 @@ async function finalizeGiftPurchase(session: Stripe.Checkout.Session): Promise<v
   `
   if (gate.rowCount === 0) return
 
-  // Suppression check (block hard bounces/complaints even for transactional)
+  // Suppression check
   const sup = await sql`
     select 1
     from email_suppressions
@@ -286,23 +324,23 @@ async function finalizeGiftPurchase(session: Stripe.Checkout.Session): Promise<v
 
   const giftUrl = `${appOrigin()}/gift/${encodeURIComponent(resolvedGiftId)}`
 
-  let albumTitle = albumSlug || giftRow?.album_slug || 'a release'
+  let albumTitle = albumSlug || 'a release'
   let albumArtist: string | undefined
   let albumCoverUrl: string | undefined
 
   try {
-    const meta = await getAlbumEmailMetaBySlug(albumSlug || giftRow?.album_slug || '')
+    const meta = await getAlbumEmailMetaBySlug(albumSlug)
     if (meta) {
       albumTitle = meta.title
       albumArtist = meta.artist ?? undefined
       albumCoverUrl = meta.artworkUrl ?? undefined
     }
   } catch {
-    // Keep fallbacks; never fail the webhook for email cosmetics.
+    // cosmetic only
   }
 
-  const personalNote = giftRow?.message ?? null
-  const senderName = guessSenderName(giftRow?.sender_email ?? null)
+  const personalNote = giftRow.message ?? null
+  const senderName = guessSenderName(giftRow.sender_email ?? null)
 
   await sendGiftCreatedEmail({
     giftId: resolvedGiftId,
@@ -315,6 +353,7 @@ async function finalizeGiftPurchase(session: Stripe.Checkout.Session): Promise<v
     senderName,
   })
 }
+
 
 export async function POST(req: Request) {
   const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY ?? ''
