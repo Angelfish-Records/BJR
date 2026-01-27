@@ -12,17 +12,10 @@ export default function GiftClaimRedirectPage(props: {
   searchParams?: Record<string, string | string[] | undefined>
 }) {
   const gRaw = props.searchParams?.g
-  const cRaw = props.searchParams?.c
-
   const giftId = safeStr(Array.isArray(gRaw) ? gRaw[0] : gRaw)
-  const claimCode = safeStr(Array.isArray(cRaw) ? cRaw[0] : cRaw)
 
-  // Always land them in the main site/feed; params ride along.
-  // Your home shell will attempt claim if both params exist.
-  const qs =
-    giftId && claimCode
-      ? `?giftClaim=1&g=${encodeURIComponent(giftId)}&c=${encodeURIComponent(claimCode)}`
-      : `?giftClaim=missing`
+  // Old emails still carry g=...; we ignore c=... entirely now.
+  if (giftId) redirect(`/gift/${encodeURIComponent(giftId)}`)
 
-  redirect(`/home${qs}`)
+  redirect('/home?gift=missing')
 }

@@ -9,6 +9,8 @@ import {ensureMemberByEmail, normalizeEmail} from '../../../../lib/members'
 import {grantEntitlement} from '../../../../lib/entitlementOps'
 import {reconcileStripeSubscription} from '../../../../lib/stripeSubscriptions'
 import {Resend} from 'resend'
+import {GiftCreatedEmail} from '@/emails'
+import {getAlbumEmailMetaBySlug} from '@/lib/albums'
 
 export const runtime = 'nodejs'
 
@@ -34,12 +36,21 @@ function sha256Hex(s: string): string {
   return crypto.createHash('sha256').update(s).digest('hex')
 }
 
-function makeClaimCode(): string {
-  return crypto.randomBytes(32).toString('base64url')
-}
-
 function appOrigin(): string {
   return must(process.env.NEXT_PUBLIC_APP_URL, 'NEXT_PUBLIC_APP_URL').replace(/\/$/, '')
+}
+
+function guessSenderName(senderEmail: string | null): string | null {
+  if (!senderEmail) return null
+  const local = senderEmail.split('@')[0] ?? ''
+  const cleaned = local.replace(/[._-]+/g, ' ').trim()
+  if (!cleaned) return null
+  // Title-case-ish, but keep it simple.
+  return cleaned
+    .split(' ')
+    .filter(Boolean)
+    .map((w) => w.slice(0, 1).toUpperCase() + w.slice(1))
+    .join(' ')
 }
 
 async function getMemberIdByClerkUserId(clerkUserId: string): Promise<string | null> {
@@ -110,44 +121,55 @@ async function resolveMemberIdFromSession(session: Stripe.Checkout.Session): Pro
   return {memberId: null, customerId}
 }
 
-async function sendGiftClaimEmail(args: {
+async function sendGiftCreatedEmail(args: {
+  giftId: string
   to: string
-  claimUrl: string
-  albumSlug: string
-  recipientEmail: string
+  giftUrl: string
+  albumTitle: string
+  albumArtist?: string
+  albumCoverUrl?: string
+  personalNote?: string | null
+  senderName?: string | null
 }) {
   const resend = new Resend(process.env.RESEND_API_KEY ?? 're_dummy')
   const from = must(process.env.RESEND_FROM_GIFTS, 'RESEND_FROM_GIFTS')
 
-  const subject = `You’ve been gifted: ${args.albumSlug || 'a release'}`
-  const text =
-    `Someone bought you a copy.\n\n` +
-    `Claim it here:\n${args.claimUrl}\n\n` +
-    `If prompted, sign in with: ${args.recipientEmail}\n`
+  const subject = `🎁 You’ve been gifted ${args.albumTitle || 'a release'}`
 
-  const html =
-    `<p>Someone bought you a copy.</p>` +
-    `<p><a href="${args.claimUrl}">Claim your gift</a></p>` +
-    `<p>If prompted, sign in with: <b>${args.recipientEmail}</b></p>`
-
-  await resend.emails.send({
+  const {data, error} = await resend.emails.send({
     from,
     to: [args.to],
     subject,
-    text,
-    html,
+    // route.ts is not TSX: avoid JSX.
+    react: GiftCreatedEmail({
+      appName: 'BJR',
+      toEmail: args.to,
+      albumTitle: args.albumTitle || 'a release',
+      albumArtist: args.albumArtist,
+      albumCoverUrl: args.albumCoverUrl,
+      personalNote: args.personalNote ?? null,
+      senderName: args.senderName ?? null,
+      giftUrl: args.giftUrl,
+      supportEmail: 'gifts@post.brendanjohnroch.com',
+    }),
     tags: [{name: 'kind', value: 'gift'}],
   })
+
+  if (error) throw new Error(error.message)
+
+  await sql`
+    update gifts
+    set gift_email_sent_at = coalesce(gift_email_sent_at, now()),
+        gift_email_resend_id = coalesce(gift_email_resend_id, ${data?.id ?? null})
+    where id = ${args.giftId}::uuid
+  `
 }
 
 async function finalizeGiftPurchase(session: Stripe.Checkout.Session): Promise<void> {
   const md = (session.metadata ?? {}) as Record<string, string>
 
-  // Pattern B: giftId is primary.
   const giftId = (md.giftId ?? '').trim()
-
-  // Legacy support: if you have older sessions still carrying tokenHash.
-  const tokenHash = (md.giftTokenHash ?? '').trim()
+  const tokenHash = (md.giftTokenHash ?? '').trim() // legacy support
 
   const recipientEmail = normalizeEmail((md.recipientEmail ?? '').trim())
   const entitlementKey = (md.entitlementKey ?? '').trim()
@@ -158,13 +180,13 @@ async function finalizeGiftPurchase(session: Stripe.Checkout.Session): Promise<v
   // Resolve gift row
   const giftRes = giftId
     ? await sql`
-        select id, status, claim_code_hash
+        select id, status, gift_email_dedupe_hash
         from gifts
         where id = ${giftId}::uuid
         limit 1
       `
     : await sql`
-        select id, status, claim_code_hash
+        select id, status, gift_email_dedupe_hash
         from gifts
         where token_hash = ${tokenHash}
         limit 1
@@ -172,6 +194,23 @@ async function finalizeGiftPurchase(session: Stripe.Checkout.Session): Promise<v
 
   const resolvedGiftId = (giftRes.rows[0]?.id as string | undefined) ?? null
   if (!resolvedGiftId) return
+
+  // Pull gift message/sender (for email polish)
+  const giftRowRes = await sql`
+    select id, album_slug, recipient_email, message, sender_email
+    from gifts
+    where id = ${resolvedGiftId}::uuid
+    limit 1
+  `
+  const giftRow = giftRowRes.rows[0] as
+    | {
+        id: string
+        album_slug: string
+        recipient_email: string
+        message: string | null
+        sender_email: string | null
+      }
+    | undefined
 
   const paymentIntentId =
     typeof session.payment_intent === 'string'
@@ -209,7 +248,7 @@ async function finalizeGiftPurchase(session: Stripe.Checkout.Session): Promise<v
       and recipient_member_id is null
   `
 
-  // Grant entitlement to recipient (canonical; idempotency should be handled in entitlementOps layer)
+  // Canonical entitlement grant (idempotent in entitlementOps)
   await grantEntitlement({
     memberId: ensured.id,
     entitlementKey,
@@ -222,19 +261,19 @@ async function finalizeGiftPurchase(session: Stripe.Checkout.Session): Promise<v
     eventSource: 'server',
   })
 
-  // Mint claim code ONCE (hash only). This gates sending so we never email twice.
-  const claimCode = makeClaimCode()
-  const claimHash = sha256Hex(claimCode)
+  // Dedupe gate: mint ONCE so we never send twice.
+  const dedupeCode = crypto.randomBytes(32).toString('base64url')
+  const dedupeHash = sha256Hex(dedupeCode)
 
-  const claimUpd = await sql`
+  const gate = await sql`
     update gifts
-    set claim_code_hash = ${claimHash},
-        claim_created_at = coalesce(claim_created_at, now())
+    set gift_email_dedupe_hash = ${dedupeHash},
+        gift_email_created_at = coalesce(gift_email_created_at, now())
     where id = ${resolvedGiftId}::uuid
-      and claim_code_hash is null
+      and gift_email_dedupe_hash is null
     returning id
   `
-  if (claimUpd.rowCount === 0) return // already minted => do not resend
+  if (gate.rowCount === 0) return
 
   // Suppression check (block hard bounces/complaints even for transactional)
   const sup = await sql`
@@ -245,15 +284,35 @@ async function finalizeGiftPurchase(session: Stripe.Checkout.Session): Promise<v
   `
   if ((sup.rowCount ?? 0) > 0) return
 
-  const claimUrl =
-    `${appOrigin()}/gift/claim?g=` +
-    `${encodeURIComponent(resolvedGiftId)}&c=${encodeURIComponent(claimCode)}`
+  const giftUrl = `${appOrigin()}/gift/${encodeURIComponent(resolvedGiftId)}`
 
-  await sendGiftClaimEmail({
+  let albumTitle = albumSlug || giftRow?.album_slug || 'a release'
+  let albumArtist: string | undefined
+  let albumCoverUrl: string | undefined
+
+  try {
+    const meta = await getAlbumEmailMetaBySlug(albumSlug || giftRow?.album_slug || '')
+    if (meta) {
+      albumTitle = meta.title
+      albumArtist = meta.artist ?? undefined
+      albumCoverUrl = meta.artworkUrl ?? undefined
+    }
+  } catch {
+    // Keep fallbacks; never fail the webhook for email cosmetics.
+  }
+
+  const personalNote = giftRow?.message ?? null
+  const senderName = guessSenderName(giftRow?.sender_email ?? null)
+
+  await sendGiftCreatedEmail({
+    giftId: resolvedGiftId,
     to: recipientEmail,
-    claimUrl,
-    albumSlug,
-    recipientEmail,
+    giftUrl,
+    albumTitle,
+    albumArtist,
+    albumCoverUrl,
+    personalNote,
+    senderName,
   })
 }
 
@@ -281,7 +340,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ok: false, error: msg}, {status: 400})
   }
 
-  // --- Idempotency: dedupe webhook deliveries by Stripe event.id ---
+  // Idempotency: dedupe webhook deliveries by Stripe event.id
   const dedupe = await sql`
     insert into stripe_webhook_events (event_id, type)
     values (${event.id}, ${event.type})
@@ -293,7 +352,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    // ---- Subscription lifecycle ----
+    // Subscription lifecycle
     if (
       event.type === 'customer.subscription.created' ||
       event.type === 'customer.subscription.updated' ||
@@ -304,14 +363,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ok: true})
     }
 
-    // ---- Checkout session completed ----
+    // Checkout session completed
     if (event.type !== 'checkout.session.completed') {
       return NextResponse.json({ok: true})
     }
 
     const session = event.data.object as Stripe.Checkout.Session
 
-    // Gift purchases: finalize + grant to recipient + send post-payment claim email.
+    // Gift purchases
     const md = (session.metadata ?? {}) as Record<string, string>
     if ((md.kind ?? '') === 'gift' || (md.giftId ?? '').trim() || (md.giftTokenHash ?? '').trim()) {
       await finalizeGiftPurchase(session)
@@ -368,6 +427,7 @@ export async function POST(req: Request) {
       type: event.type,
       message: safeErrMessage(err),
     })
+    // Returning ok avoids Stripe retry storms while you inspect logs.
     return NextResponse.json({ok: true})
   }
 }

@@ -106,12 +106,15 @@ function IconPortal() {
   )
 }
 
-function MessageBar(props: {checkout: string | null; attentionMessage: string | null}) {
-  const {checkout, attentionMessage} = props
+function MessageBar(props: {checkout: string | null; attentionMessage: string | null; gift: string | null}) {
+  const {checkout, attentionMessage, gift} = props
 
+  const showGift =
+    gift === 'ready' || gift === 'not_paid' || gift === 'wrong_account' || gift === 'missing'
   const showCheckout = checkout === 'success' || checkout === 'cancel'
   const showAttention = !!attentionMessage
-  if (!showCheckout && !showAttention) return null
+  if (!showGift && !showCheckout && !showAttention) return null
+
 
   const checkoutIsSuccess = checkout === 'success'
 
@@ -119,7 +122,25 @@ function MessageBar(props: {checkout: string | null; attentionMessage: string | 
   let text: React.ReactNode = null
   let tone: 'success' | 'neutral' | 'warn' = 'neutral'
 
-  if (showAttention) {
+  if (showGift) {
+    if (gift === 'ready') {
+      tone = 'success'
+      leftIcon = <span aria-hidden>🎁</span>
+      text = <>Your gift is ready. Head to Downloads in the Portal.</>
+    } else if (gift === 'not_paid') {
+      tone = 'neutral'
+      leftIcon = <span aria-hidden>⏳</span>
+      text = <>This gift hasn&apos;t completed payment yet. If you just paid, try a refresh in a moment.</>
+    } else if (gift === 'wrong_account') {
+      tone = 'warn'
+      leftIcon = <span aria-hidden>⚠️</span>
+      text = <>This gift was sent to a different email. Sign in with the recipient account.</>
+    } else {
+      tone = 'warn'
+      leftIcon = <span aria-hidden>⚠️</span>
+      text = <>That gift link looks invalid.</>
+    }
+  } else if (showAttention) {
     tone = 'warn'
     leftIcon = <span aria-hidden>⚠️</span>
     text = <>{attentionMessage}</>
@@ -454,8 +475,6 @@ export default function PortalArea(props: {
     replaceQuery(patch)
   }, [])
 
-  const giftClaimRanRef = React.useRef(false)
-
   React.useEffect(() => {
     const curP = (sp.get('p') ?? '').trim()
     const curPt = (sp.get('pt') ?? '').trim()
@@ -515,46 +534,6 @@ export default function PortalArea(props: {
     },
     [patchQuery, sp, portalTabId, legacyPt]
   )
-
-    // --- Gift claim-on-arrival (Pattern B) ---
-  React.useEffect(() => {
-    if (giftClaimRanRef.current) return
-
-    const flag = (sp.get('giftClaim') ?? '').trim()
-    if (flag !== '1') return
-
-    const giftId = (sp.get('g') ?? '').trim()
-    const claimCode = (sp.get('c') ?? '').trim()
-    if (!giftId || !claimCode) {
-      // Strip the trigger so we don't keep re-evaluating on refresh.
-      patchQuery({giftClaim: null, g: null, c: null})
-      giftClaimRanRef.current = true
-      return
-    }
-
-    giftClaimRanRef.current = true
-
-        ;(async () => {
-      try {
-        const res = await fetch('/api/gifts/claim', {
-          method: 'POST',
-          headers: {'content-type': 'application/json'},
-          body: JSON.stringify({giftId, claimCode}),
-        })
-
-        // If unauthenticated, KEEP params so once the user signs in,
-        // the effect can run again on the same URL.
-        if (res.status === 401) return
-
-        // For any non-401 response (success or invalid), strip to prevent loops.
-        patchQuery({giftClaim: null, g: null, c: null})
-      } catch {
-        // network fail: strip to avoid loops (your call; could also keep)
-        patchQuery({giftClaim: null, g: null, c: null})
-      }
-    })()
-  }, [sp, patchQuery])
-
 
   const [currentAlbumSlug, setCurrentAlbumSlug] = React.useState<string>(albumSlug)
   const [album, setAlbum] = React.useState<AlbumInfo | null>(initialAlbum)
@@ -805,8 +784,18 @@ React.useEffect(() => {
       <div />
     </ActivationGate>
   )
+  const gift = (sp.get('gift') ?? '').trim() || null
 
-  const msgNode = <MessageBar checkout={checkout} attentionMessage={derivedAttentionMessage} />
+  const msgNode = <MessageBar checkout={checkout} attentionMessage={derivedAttentionMessage} gift={gift} />
+
+    const giftShownRef = React.useRef(false)
+  React.useEffect(() => {
+    const g = (sp.get('gift') ?? '').trim()
+    if (!g) return
+    if (giftShownRef.current) return
+    giftShownRef.current = true
+    patchQuery({gift: null})
+  }, [sp, patchQuery])
 
   return (
     <>

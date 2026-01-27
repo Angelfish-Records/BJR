@@ -252,3 +252,37 @@ export async function listAlbumsForBrowse(): Promise<AlbumBrowseItem[]> {
   },
   }))
 }
+
+// web/lib/albums.ts
+
+export type AlbumEmailMeta = {
+  slug: string
+  title: string
+  artist?: string
+  artworkUrl?: string | null
+}
+
+export async function getAlbumEmailMetaBySlug(slug: string): Promise<AlbumEmailMeta | null> {
+  const s = (slug ?? '').trim().toLowerCase()
+  if (!s) return null
+
+  const q = `
+    *[_type == "album" && slug.current == $slug][0]{
+      "slug": slug.current,
+      title,
+      artist,
+      artwork
+    }
+  `
+
+  const doc = await client.fetch<{slug?: string; title?: string; artist?: string; artwork?: unknown} | null>(q, {slug: s})
+  if (!doc?.slug) return null
+
+  return {
+    slug: doc.slug,
+    title: doc.title ?? 'Untitled',
+    artist: normStr(doc.artist),
+    artworkUrl: doc.artwork ? urlFor(doc.artwork).width(900).height(900).quality(85).url() : null,
+  }
+}
+
