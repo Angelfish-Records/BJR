@@ -45,7 +45,6 @@ function guessSenderName(senderEmail: string | null): string | null {
   const local = senderEmail.split('@')[0] ?? ''
   const cleaned = local.replace(/[._-]+/g, ' ').trim()
   if (!cleaned) return null
-  // Title-case-ish, but keep it simple.
   return cleaned
     .split(' ')
     .filter(Boolean)
@@ -92,20 +91,17 @@ async function resolveMemberIdFromSession(session: Stripe.Checkout.Session): Pro
   const customerId =
     (typeof session.customer === 'string' ? session.customer : session.customer?.id) ?? ''
 
-  // 1) Best: already linked by customer id
   if (customerId) {
     const byCustomer = await getMemberIdByStripeCustomerId(customerId)
     if (byCustomer) return {memberId: byCustomer, customerId}
   }
 
-  // 2) Next: Clerk user id in client_reference_id
   const clerkUserId = (session.client_reference_id ?? '').toString().trim()
   if (clerkUserId) {
     const byClerk = await getMemberIdByClerkUserId(clerkUserId)
     if (byClerk) return {memberId: byClerk, customerId}
   }
 
-  // 3) Last: email
   const emailRaw = (session.customer_details?.email ?? session.customer_email ?? '').toString().trim()
   const email = normalizeEmail(emailRaw)
   if (email) {
@@ -140,7 +136,6 @@ async function sendGiftCreatedEmail(args: {
     from,
     to: [args.to],
     subject,
-    // route.ts is not TSX: avoid JSX.
     react: GiftCreatedEmail({
       appName: 'BJR',
       toEmail: args.to,
@@ -165,50 +160,61 @@ async function sendGiftCreatedEmail(args: {
   `
 }
 
-async function finalizeGiftPurchase(session: Stripe.Checkout.Session): Promise<void> {
-  // Only finalize when Stripe considers it paid.
-  // (Prevents async methods from marking paid too early.)
-  const paymentStatus = (session.payment_status ?? '').toString()
-  if (paymentStatus && paymentStatus !== 'paid') return
+function sessionIsPaid(session: Stripe.Checkout.Session): boolean {
+  const ps = (session.payment_status ?? '').toString()
+  if (ps === 'paid') return true
 
-  const md = (session.metadata ?? {}) as Record<string, string>
-
-  // Prefer metadata anchors (legacy + current)
-  const giftIdFromMd = (md.giftId ?? '').trim()
-  const tokenHashFromMd = (md.giftTokenHash ?? '').trim() // legacy support
-
-  // Fallback: resolve by checkout session id (most reliable anchor you already store)
-  let resolvedGiftId: string | null = null
-
-  if (giftIdFromMd) {
-    const r = await sql`
-      select id
-      from gifts
-      where id = ${giftIdFromMd}::uuid
-      limit 1
-    `
-    resolvedGiftId = (r.rows[0]?.id as string | undefined) ?? null
-  } else if (tokenHashFromMd) {
-    const r = await sql`
-      select id
-      from gifts
-      where token_hash = ${tokenHashFromMd}
-      limit 1
-    `
-    resolvedGiftId = (r.rows[0]?.id as string | undefined) ?? null
-  } else {
-    const r = await sql`
-      select id
-      from gifts
-      where stripe_checkout_session_id = ${session.id}
-      limit 1
-    `
-    resolvedGiftId = (r.rows[0]?.id as string | undefined) ?? null
+  // If we expanded payment_intent, it may be an object with a status.
+  const pi = session.payment_intent
+  if (pi && typeof pi === 'object') {
+    // Stripe’s TS type for Checkout.Session.payment_intent can be string | PaymentIntent | null,
+    // but depending on sdk/version it may not be strongly typed here, so we narrow via a safe field check.
+    const maybe = pi as {status?: unknown}
+    const st = typeof maybe.status === 'string' ? maybe.status : ''
+    if (st === 'succeeded') return true
   }
 
+  return false
+}
+
+async function resolveGiftIdForSession(sessionId: string, md: Record<string, string>): Promise<string | null> {
+  const giftIdFromMd = (md.giftId ?? '').trim()
+  const tokenHashFromMd = (md.giftTokenHash ?? '').trim()
+
+  if (giftIdFromMd) {
+    const r = await sql`select id from gifts where id = ${giftIdFromMd}::uuid limit 1`
+    return (r.rows[0]?.id as string | undefined) ?? null
+  }
+
+  if (tokenHashFromMd) {
+    const r = await sql`select id from gifts where token_hash = ${tokenHashFromMd} limit 1`
+    return (r.rows[0]?.id as string | undefined) ?? null
+  }
+
+  const r = await sql`
+    select id
+    from gifts
+    where stripe_checkout_session_id = ${sessionId}
+    limit 1
+  `
+  return (r.rows[0]?.id as string | undefined) ?? null
+}
+
+async function finalizeGiftPurchase(stripe: Stripe, sessionId: string, mdHint: Record<string, string>) {
+  // Always re-fetch the session to avoid stale webhook snapshots.
+  const session = await stripe.checkout.sessions.retrieve(sessionId, {
+    expand: ['payment_intent'],
+  })
+
+  const md = ((session.metadata ?? {}) as Record<string, string>) ?? {}
+  const mergedMd: Record<string, string> = {...mdHint, ...md} // hint is best-effort; real session wins
+
+  // Only finalize when actually paid.
+  if (!sessionIsPaid(session)) return
+
+  const resolvedGiftId = await resolveGiftIdForSession(session.id, mergedMd)
   if (!resolvedGiftId) return
 
-  // Pull canonical gift fields (use these as truth; metadata is best-effort)
   const giftRowRes = await sql`
     select
       id,
@@ -237,28 +243,26 @@ async function finalizeGiftPurchase(session: Stripe.Checkout.Session): Promise<v
         gift_email_dedupe_hash: string | null
       }
     | undefined
-
   if (!giftRow) return
 
-  // Determine working values (prefer DB row; fall back to metadata if needed)
   const recipientEmail =
     normalizeEmail((giftRow.recipient_email ?? '').trim()) ||
-    normalizeEmail((md.recipientEmail ?? '').trim())
+    normalizeEmail((mergedMd.recipientEmail ?? '').trim())
 
-  const entitlementKey = (giftRow.entitlement_key ?? '').trim() || (md.entitlementKey ?? '').trim()
-  const albumSlug = (giftRow.album_slug ?? '').trim() || (md.albumSlug ?? '').trim()
+  const entitlementKey = (giftRow.entitlement_key ?? '').trim() || (mergedMd.entitlementKey ?? '').trim()
+  const albumSlug = (giftRow.album_slug ?? '').trim() || (mergedMd.albumSlug ?? '').trim()
 
   if (!recipientEmail || !entitlementKey) return
 
   const paymentIntentId =
     typeof session.payment_intent === 'string'
       ? session.payment_intent
-      : session.payment_intent?.id ?? null
+      : (session.payment_intent as Stripe.PaymentIntent | null)?.id ?? null
 
   const amountTotal = typeof session.amount_total === 'number' ? session.amount_total : null
   const currency = (session.currency ?? '').toString() || null
 
-  // Transition to paid only from draft/pending_payment (idempotent)
+  // IMPORTANT: even if status is already 'paid', coalesce protects idempotency.
   await sql`
     update gifts
     set status = 'paid'::gift_status,
@@ -268,10 +272,9 @@ async function finalizeGiftPurchase(session: Stripe.Checkout.Session): Promise<v
         amount_total_cents = coalesce(amount_total_cents, ${amountTotal}),
         currency = coalesce(currency, ${currency})
     where id = ${resolvedGiftId}::uuid
-      and status in ('draft'::gift_status, 'pending_payment'::gift_status)
+      and status in ('draft'::gift_status, 'pending_payment'::gift_status, 'paid'::gift_status)
   `
 
-  // Ensure recipient member and attach to gift row
   const ensured = await ensureMemberByEmail({
     email: recipientEmail,
     source: 'gift_paid',
@@ -286,7 +289,6 @@ async function finalizeGiftPurchase(session: Stripe.Checkout.Session): Promise<v
       and recipient_member_id is null
   `
 
-  // Canonical entitlement grant (idempotent in entitlementOps)
   await grantEntitlement({
     memberId: ensured.id,
     entitlementKey,
@@ -299,7 +301,7 @@ async function finalizeGiftPurchase(session: Stripe.Checkout.Session): Promise<v
     eventSource: 'server',
   })
 
-  // Dedupe gate: mint ONCE so we never send twice.
+  // Dedupe gate for email send
   const dedupeCode = crypto.randomBytes(32).toString('base64url')
   const dedupeHash = sha256Hex(dedupeCode)
 
@@ -313,7 +315,6 @@ async function finalizeGiftPurchase(session: Stripe.Checkout.Session): Promise<v
   `
   if (gate.rowCount === 0) return
 
-  // Suppression check
   const sup = await sql`
     select 1
     from email_suppressions
@@ -335,9 +336,7 @@ async function finalizeGiftPurchase(session: Stripe.Checkout.Session): Promise<v
       albumArtist = meta.artist ?? undefined
       albumCoverUrl = meta.artworkUrl ?? undefined
     }
-  } catch {
-    // cosmetic only
-  }
+  } catch {}
 
   const personalNote = giftRow.message ?? null
   const senderName = guessSenderName(giftRow.sender_email ?? null)
@@ -353,7 +352,6 @@ async function finalizeGiftPurchase(session: Stripe.Checkout.Session): Promise<v
     senderName,
   })
 }
-
 
 export async function POST(req: Request) {
   const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY ?? ''
@@ -402,21 +400,32 @@ export async function POST(req: Request) {
       return NextResponse.json({ok: true})
     }
 
-    // Checkout session completed
+    // --- Gifts: finalize on BOTH immediate and async success ---
+    if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
+      const s = event.data.object as Stripe.Checkout.Session
+      const md = (s.metadata ?? {}) as Record<string, string>
+      const looksGift =
+        (md.kind ?? '') === 'gift' || (md.giftId ?? '').trim() || (md.giftTokenHash ?? '').trim()
+
+      if (looksGift) {
+        await finalizeGiftPurchase(stripe, s.id, md)
+        return NextResponse.json({ok: true})
+      }
+      // else fall through to normal checkout logic
+    }
+
+    // Ignore async failure (optional: you might mark gift as failed later)
+    if (event.type === 'checkout.session.async_payment_failed') {
+      return NextResponse.json({ok: true})
+    }
+
+    // Non-gift checkout: only on completed
     if (event.type !== 'checkout.session.completed') {
       return NextResponse.json({ok: true})
     }
 
     const session = event.data.object as Stripe.Checkout.Session
 
-    // Gift purchases
-    const md = (session.metadata ?? {}) as Record<string, string>
-    if ((md.kind ?? '') === 'gift' || (md.giftId ?? '').trim() || (md.giftTokenHash ?? '').trim()) {
-      await finalizeGiftPurchase(session)
-      return NextResponse.json({ok: true})
-    }
-
-    // Non-gift checkout continues as before
     const {memberId, customerId} = await resolveMemberIdFromSession(session)
     if (!memberId) return NextResponse.json({ok: true})
 
@@ -466,7 +475,6 @@ export async function POST(req: Request) {
       type: event.type,
       message: safeErrMessage(err),
     })
-    // Returning ok avoids Stripe retry storms while you inspect logs.
     return NextResponse.json({ok: true})
   }
 }
