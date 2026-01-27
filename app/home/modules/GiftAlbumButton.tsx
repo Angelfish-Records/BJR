@@ -1,3 +1,4 @@
+// web/app/home/modules/GiftAlbumButton.tsx
 'use client'
 
 import React from 'react'
@@ -17,15 +18,13 @@ type Props = {
 
 type GiftCreateOk = {
   ok: true
+  giftId: string
   albumSlug: string
   recipientEmail: string
-  claimUrl: string
-  subject: string
-  body: string
-  mailto: string
   checkoutUrl: string
   stripeCheckoutSessionId?: string
   correlationId?: string
+  note?: string
 }
 
 type GiftCreateErr = {ok: false; error: string}
@@ -38,10 +37,9 @@ function isGiftCreateOk(v: unknown): v is GiftCreateOk {
   if (!isRecord(v)) return false
   return (
     v.ok === true &&
+    typeof v.giftId === 'string' &&
     typeof v.albumSlug === 'string' &&
     typeof v.recipientEmail === 'string' &&
-    typeof v.claimUrl === 'string' &&
-    typeof v.mailto === 'string' &&
     typeof v.checkoutUrl === 'string'
   )
 }
@@ -73,8 +71,6 @@ export default function GiftAlbumButton(props: Props) {
   const [note, setNote] = React.useState('')
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
-  const [claimUrl, setClaimUrl] = React.useState<string | null>(null)
-  const [mailto, setMailto] = React.useState<string | null>(null)
 
   const canSubmit = toEmail.trim().length >= 3 && toEmail.includes('@') && !busy
 
@@ -93,48 +89,28 @@ export default function GiftAlbumButton(props: Props) {
       }),
     })
 
-    const raw: unknown = await res.json().catch(() => null)
+    const rawText = await res.text()
+    const raw: unknown = (() => { try { return JSON.parse(rawText) } catch { return null } })()
 
     if (isGiftCreateOk(raw)) return raw
     if (isGiftCreateErr(raw)) throw new Error(raw.error)
 
-    throw new Error(`HTTP_${res.status}`)
+    throw new Error(rawText ? `HTTP_${res.status}: ${rawText}` : `HTTP_${res.status}`)
   }
 
-  const onContinueToStripe = async () => {
+    const onContinueToStripe = async () => {
     if (!canSubmit) return
     setBusy(true)
     setError(null)
 
     try {
       const created = await createGift()
-      setClaimUrl(created.claimUrl)
-      setMailto(created.mailto)
-
-      try {
-        window.location.href = created.mailto
-      } catch {
-        // ignore
-      }
-
+      setOpen(false)
       window.location.href = created.checkoutUrl
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
       setBusy(false)
     }
-  }
-
-  const onCopyClaim = async () => {
-    if (!claimUrl) return
-    try {
-      await navigator.clipboard.writeText(claimUrl)
-    } catch {
-      window.prompt('Copy gift claim link:', claimUrl)
-    }
-  }
-
-  const onOpenMailDraft = () => {
-    if (mailto) window.location.href = mailto
   }
 
   const base: React.CSSProperties = {
@@ -193,8 +169,6 @@ export default function GiftAlbumButton(props: Props) {
           setOpen(true)
           setError(null)
           setBusy(false)
-          setClaimUrl(null)
-          setMailto(null)
         }}
         style={triggerStyle}
       >
@@ -306,26 +280,9 @@ export default function GiftAlbumButton(props: Props) {
                   Gift error: {error}
                 </div>
               ) : null}
-
-              {claimUrl ? (
-                <div style={{fontSize: 12, opacity: 0.9, wordBreak: 'break-word'}}>
-                  Claim link (backup): {claimUrl}
-                </div>
-              ) : null}
             </div>
 
             <div style={{marginTop: 14, display: 'flex', gap: 10, justifyContent: 'flex-end'}}>
-              {claimUrl ? (
-                <>
-                  <button type="button" onClick={onCopyClaim}>
-                    Copy claim link
-                  </button>
-                  <button type="button" onClick={onOpenMailDraft}>
-                    Open email
-                  </button>
-                </>
-              ) : null}
-
               <button type="button" onClick={() => setOpen(false)} disabled={busy}>
                 Cancel
               </button>
