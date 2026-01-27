@@ -14,6 +14,14 @@ function sha256Hex(s: string): string {
 
 type Req = {giftId: string; claimCode: string}
 
+type GiftRow = {
+  id: string
+  status: string
+  entitlement_key: string
+  recipient_member_id: string | null
+  gift_claim_code_hash: string | null
+}
+
 export async function POST(req: NextRequest) {
   const {userId} = await auth()
   if (!userId) return NextResponse.json({ok: false, error: 'UNAUTHENTICATED'}, {status: 401})
@@ -37,42 +45,59 @@ export async function POST(req: NextRequest) {
   const memberId = (m.rows[0]?.id as string | undefined) ?? null
   if (!memberId) return NextResponse.json({ok: false, error: 'MEMBER_NOT_FOUND'}, {status: 400})
 
-  // Lock + validate gift
+  // Lock gift row so claim is single-winner
   const g = await sql`
-    select id, status, entitlement_key, recipient_member_id, claim_code_hash
+    select id, status, entitlement_key, recipient_member_id, gift_claim_code_hash
     from gifts
     where id = ${giftId}::uuid
     for update
   `
-  const row = g.rows[0] as
-    | {
-        id: string
-        status: string
-        entitlement_key: string
-        recipient_member_id: string | null
-        claim_code_hash: string | null
-      }
-    | undefined
+  const row = g.rows[0] as GiftRow | undefined
   if (!row) return NextResponse.json({ok: false, error: 'GIFT_NOT_FOUND'}, {status: 404})
 
-  if (row.status !== 'paid') {
+  // Must be paid before it can be claimed
+  if (row.status !== 'paid' && row.status !== 'claimed') {
     return NextResponse.json({ok: false, error: 'GIFT_NOT_PAID'}, {status: 400})
   }
-  if (!row.claim_code_hash || row.claim_code_hash !== claimHash) {
+
+  // If already claimed by THIS member, succeed idempotently
+  if (row.status === 'claimed' && row.recipient_member_id === memberId) {
+    // Ensure entitlement exists (idempotent grant)
+    await grantEntitlement({
+      memberId,
+      entitlementKey: row.entitlement_key,
+      grantedBy: 'system',
+      grantReason: 'gift_claimed',
+      grantSource: 'gift_claim',
+      grantSourceRef: giftId,
+      expiresAt: null,
+      correlationId: giftId,
+      eventSource: 'server',
+    })
+    return NextResponse.json({ok: true, already: 'claimed'})
+  }
+
+  // If claimed by someone else, hard fail
+  if (row.status === 'claimed' && row.recipient_member_id && row.recipient_member_id !== memberId) {
+    return NextResponse.json({ok: false, error: 'ALREADY_CLAIMED'}, {status: 409})
+  }
+
+  // Validate claim code
+  if (!row.gift_claim_code_hash || row.gift_claim_code_hash !== claimHash) {
     return NextResponse.json({ok: false, error: 'INVALID_CLAIM'}, {status: 400})
   }
 
-  // Attach gift to claimant if not already
+  // Atomically claim: bind to this member, mark claimed, clear claim hash
   await sql`
     update gifts
     set recipient_member_id = coalesce(recipient_member_id, ${memberId}::uuid),
         status = 'claimed'::gift_status,
         claimed_at = coalesce(claimed_at, now()),
-        claim_code_hash = null
+        gift_claim_code_hash = null
     where id = ${giftId}::uuid
   `
 
-  // Safety: ensure entitlement exists (idempotent on your grantEntitlement path)
+  // Ensure entitlement exists (idempotent in your entitlement layer)
   await grantEntitlement({
     memberId,
     entitlementKey: row.entitlement_key,

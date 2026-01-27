@@ -164,11 +164,8 @@ function sessionIsPaid(session: Stripe.Checkout.Session): boolean {
   const ps = (session.payment_status ?? '').toString()
   if (ps === 'paid') return true
 
-  // If we expanded payment_intent, it may be an object with a status.
   const pi = session.payment_intent
   if (pi && typeof pi === 'object') {
-    // Stripe’s TS type for Checkout.Session.payment_intent can be string | PaymentIntent | null,
-    // but depending on sdk/version it may not be strongly typed here, so we narrow via a safe field check.
     const maybe = pi as {status?: unknown}
     const st = typeof maybe.status === 'string' ? maybe.status : ''
     if (st === 'succeeded') return true
@@ -201,20 +198,18 @@ async function resolveGiftIdForSession(sessionId: string, md: Record<string, str
 }
 
 async function finalizeGiftPurchase(stripe: Stripe, sessionId: string, mdHint: Record<string, string>) {
-  // Always re-fetch the session to avoid stale webhook snapshots.
-  const session = await stripe.checkout.sessions.retrieve(sessionId, {
-    expand: ['payment_intent'],
-  })
+  // Always re-fetch (and expand PI) so we don't rely on a stale webhook snapshot.
+  const session = await stripe.checkout.sessions.retrieve(sessionId, {expand: ['payment_intent']})
 
   const md = ((session.metadata ?? {}) as Record<string, string>) ?? {}
-  const mergedMd: Record<string, string> = {...mdHint, ...md} // hint is best-effort; real session wins
+  const mergedMd: Record<string, string> = {...mdHint, ...md} // real session wins
 
-  // Only finalize when actually paid.
   if (!sessionIsPaid(session)) return
 
   const resolvedGiftId = await resolveGiftIdForSession(session.id, mergedMd)
   if (!resolvedGiftId) return
 
+  // Pull canonical gift fields from DB (metadata is best-effort).
   const giftRowRes = await sql`
     select
       id,
@@ -225,6 +220,7 @@ async function finalizeGiftPurchase(stripe: Stripe, sessionId: string, mdHint: R
       recipient_member_id,
       message,
       sender_email,
+      gift_claim_code_hash,
       gift_email_dedupe_hash
     from gifts
     where id = ${resolvedGiftId}::uuid
@@ -240,6 +236,7 @@ async function finalizeGiftPurchase(stripe: Stripe, sessionId: string, mdHint: R
         recipient_member_id: string | null
         message: string | null
         sender_email: string | null
+        gift_claim_code_hash: string | null
         gift_email_dedupe_hash: string | null
       }
     | undefined
@@ -262,7 +259,7 @@ async function finalizeGiftPurchase(stripe: Stripe, sessionId: string, mdHint: R
   const amountTotal = typeof session.amount_total === 'number' ? session.amount_total : null
   const currency = (session.currency ?? '').toString() || null
 
-  // IMPORTANT: even if status is already 'paid', coalesce protects idempotency.
+  // Mark paid (idempotent)
   await sql`
     update gifts
     set status = 'paid'::gift_status,
@@ -275,6 +272,7 @@ async function finalizeGiftPurchase(stripe: Stripe, sessionId: string, mdHint: R
       and status in ('draft'::gift_status, 'pending_payment'::gift_status, 'paid'::gift_status)
   `
 
+  // Ensure recipient member and attach.
   const ensured = await ensureMemberByEmail({
     email: recipientEmail,
     source: 'gift_paid',
@@ -289,6 +287,7 @@ async function finalizeGiftPurchase(stripe: Stripe, sessionId: string, mdHint: R
       and recipient_member_id is null
   `
 
+  // Grant entitlement (idempotent in your layer)
   await grantEntitlement({
     memberId: ensured.id,
     entitlementKey,
@@ -301,7 +300,46 @@ async function finalizeGiftPurchase(stripe: Stripe, sessionId: string, mdHint: R
     eventSource: 'server',
   })
 
-  // Dedupe gate for email send
+  // --- Claim code: mint once, store hash only. Email must include raw code. ---
+  // If claim hash already exists, we cannot reconstitute the raw code.
+  // So: only proceed to email if we win the claim gate OR the email already sent.
+  let claimCode: string | null = null
+
+  if (!giftRow.gift_claim_code_hash) {
+    const c = crypto.randomBytes(32).toString('base64url')
+    const h = sha256Hex(c)
+
+    const claimGate = await sql`
+      update gifts
+      set gift_claim_code_hash = ${h}
+      where id = ${resolvedGiftId}::uuid
+        and gift_claim_code_hash is null
+      returning id
+    `
+    if (claimGate.rowCount === 0) {
+      // Race: someone else wrote it. Without raw code, we can't safely email.
+      // If the email is already sent (dedupe exists), we're fine; otherwise bail.
+      const reread = await sql`
+        select gift_email_dedupe_hash
+        from gifts
+        where id = ${resolvedGiftId}::uuid
+        limit 1
+      `
+      const alreadySent = Boolean((reread.rows[0]?.gift_email_dedupe_hash as string | undefined) ?? null)
+      if (!alreadySent) return
+    } else {
+      claimCode = c
+    }
+  }
+
+  // If we didn't just mint a claim code, don't attempt a new email send.
+  // (Email dedupe gate below will also protect you.)
+  if (!claimCode) {
+    // If you want to allow re-sends in future, you’ll need to store an encrypted claimCode.
+    return
+  }
+
+  // Email dedupe gate (send once)
   const dedupeCode = crypto.randomBytes(32).toString('base64url')
   const dedupeHash = sha256Hex(dedupeCode)
 
@@ -315,6 +353,7 @@ async function finalizeGiftPurchase(stripe: Stripe, sessionId: string, mdHint: R
   `
   if (gate.rowCount === 0) return
 
+  // Suppression check
   const sup = await sql`
     select 1
     from email_suppressions
@@ -323,7 +362,9 @@ async function finalizeGiftPurchase(stripe: Stripe, sessionId: string, mdHint: R
   `
   if ((sup.rowCount ?? 0) > 0) return
 
-  const giftUrl = `${appOrigin()}/gift/${encodeURIComponent(resolvedGiftId)}`
+  // Gift URL includes claim code
+  const giftUrl =
+    `${appOrigin()}/gift/${encodeURIComponent(resolvedGiftId)}` + `?c=${encodeURIComponent(claimCode)}`
 
   let albumTitle = albumSlug || 'a release'
   let albumArtist: string | undefined
@@ -336,7 +377,9 @@ async function finalizeGiftPurchase(stripe: Stripe, sessionId: string, mdHint: R
       albumArtist = meta.artist ?? undefined
       albumCoverUrl = meta.artworkUrl ?? undefined
     }
-  } catch {}
+  } catch {
+    // cosmetic only
+  }
 
   const personalNote = giftRow.message ?? null
   const senderName = guessSenderName(giftRow.sender_email ?? null)
@@ -377,7 +420,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ok: false, error: msg}, {status: 400})
   }
 
-  // Idempotency: dedupe webhook deliveries by Stripe event.id
+  // Idempotency: dedupe by event.id
   const dedupe = await sql`
     insert into stripe_webhook_events (event_id, type)
     values (${event.id}, ${event.type})
@@ -400,7 +443,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ok: true})
     }
 
-    // --- Gifts: finalize on BOTH immediate and async success ---
+    // Gifts: finalize on both immediate and async success events
     if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
       const s = event.data.object as Stripe.Checkout.Session
       const md = (s.metadata ?? {}) as Record<string, string>
@@ -411,15 +454,14 @@ export async function POST(req: Request) {
         await finalizeGiftPurchase(stripe, s.id, md)
         return NextResponse.json({ok: true})
       }
-      // else fall through to normal checkout logic
+      // else fall through to normal checkout logic (completed only)
     }
 
-    // Ignore async failure (optional: you might mark gift as failed later)
     if (event.type === 'checkout.session.async_payment_failed') {
       return NextResponse.json({ok: true})
     }
 
-    // Non-gift checkout: only on completed
+    // Non-gift: only act on checkout.session.completed
     if (event.type !== 'checkout.session.completed') {
       return NextResponse.json({ok: true})
     }
@@ -475,6 +517,7 @@ export async function POST(req: Request) {
       type: event.type,
       message: safeErrMessage(err),
     })
+    // Avoid Stripe retry storms while you inspect logs.
     return NextResponse.json({ok: true})
   }
 }
