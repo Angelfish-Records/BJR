@@ -14,9 +14,25 @@ import MiniPlayer from './player/MiniPlayer'
 import ActivationGate from '@/app/home/ActivationGate'
 import Image from 'next/image'
 
-function normalizePanel(raw: string | null | undefined): 'player' | 'portal' {
+const DEFAULT_PORTAL_TAB = 'download'
+
+function normalizeP(raw: string | null | undefined): string {
   const v = (raw ?? '').trim()
-  return v === 'portal' ? 'portal' : 'player'
+  return v || 'player'
+}
+
+function getLastPortalTab(): string | null {
+  try {
+    return (sessionStorage.getItem('af:lastPortalTab') ?? '').trim() || null
+  } catch {
+    return null
+  }
+}
+
+function setLastPortalTab(id: string) {
+  try {
+    sessionStorage.setItem('af:lastPortalTab', id)
+  } catch {}
 }
 
 function MiniPlayerHost(props: {onExpand: () => void}) {
@@ -86,10 +102,7 @@ function IconPortal() {
   )
 }
 
-/**
- * Small, top-right bar (kept for auth-ish messaging only).
- * In your current design this lives under ActivationGate and is spotlight-clonable.
- */
+/** Top-right (spotlight-clonable) bar: ONLY for auth/blocking attention. */
 function MiniMessageBar(props: {attentionMessage: string | null}) {
   const {attentionMessage} = props
   if (!attentionMessage) return null
@@ -156,10 +169,7 @@ function bannerStyle(tone: BannerTone) {
   return {border, bg}
 }
 
-/**
- * Full-width banner UNDER the topbar.
- * Used for non-auth flow messages (checkout/gift/etc).
- */
+/** Full-width banner under topbar: non-auth flow messages. */
 function FullWidthBanner(props: {
   kind: 'gift' | 'checkout' | null
   code: string | null
@@ -181,9 +191,7 @@ function FullWidthBanner(props: {
       tone = 'neutral'
       icon = <span aria-hidden>⤺</span>
       text = <>Checkout cancelled.</>
-    } else {
-      return null
-    }
+    } else return null
   }
 
   if (kind === 'gift') {
@@ -211,9 +219,7 @@ function FullWidthBanner(props: {
       tone = 'warn'
       icon = <span aria-hidden>⚠️</span>
       text = <>That gift link looks invalid.</>
-    } else {
-      return null
-    }
+    } else return null
   }
 
   const {border, bg} = bannerStyle(tone)
@@ -326,7 +332,6 @@ function useAnchorRect(ref: React.RefObject<HTMLElement | null>, enabled: boolea
       const cur = elRef.current
       if (!cur) return
       if (typeof document !== 'undefined' && document.hidden) return
-
       const r = cur.getBoundingClientRect()
       setRect(new DOMRect(Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)))
     }
@@ -361,11 +366,9 @@ function useAnchorRect(ref: React.RefObject<HTMLElement | null>, enabled: boolea
     return () => {
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
       rafRef.current = null
-
       ro.disconnect()
       roRef.current = null
       elRef.current = null
-
       window.removeEventListener('scroll', onScroll, true)
       window.removeEventListener('resize', onResize)
       document.removeEventListener('visibilitychange', onVis)
@@ -484,23 +487,51 @@ export default function PortalArea(props: {
   const sp = useClientSearchParams()
   const {isSignedIn} = useAuth()
 
+  // ✅ p is either 'player' or a portal tab id like 'download'
+  const rawP = normalizeP(sp.get('p') ?? 'player')
+  const isPlayer = rawP === 'player'
+  const portalTabId = isPlayer ? null : rawP
+
+  React.useEffect(() => {
+    if (!isPlayer && portalTabId) setLastPortalTab(portalTabId)
+  }, [isPlayer, portalTabId])
+
+  const patchQuery = React.useCallback((patch: Record<string, string | null | undefined>) => {
+    replaceQuery(patch)
+  }, [])
+
+  const forceSurface = React.useCallback(
+    (surface: 'player' | 'portal', tabId?: string | null) => {
+      if (surface === 'player') {
+        if (rawP === 'player') return
+        patchQuery({p: 'player', post: null, autoplay: null})
+        return
+      }
+
+      const desired =
+        (tabId ?? getLastPortalTab() ?? portalTabId ?? DEFAULT_PORTAL_TAB).trim() || DEFAULT_PORTAL_TAB
+      if (rawP === desired) return
+
+      // When going to portal, clear player deep-links.
+      patchQuery({p: desired, album: null, track: null, t: null, autoplay: null})
+    },
+    [patchQuery, rawP, portalTabId]
+  )
+
   // URL-driven codes
   const gift = (sp.get('gift') ?? '').trim() || null
   const checkout = (sp.get('checkout') ?? '').trim() || null
 
-  // Non-auth messages belong in the FULL-WIDTH banner.
-  // Track a "dismissed" flag keyed by the current message identity.
+  // Full-width banner dismissal
   const bannerKey = React.useMemo(() => {
     if (gift) return `gift:${gift}`
     if (checkout) return `checkout:${checkout}`
     return ''
   }, [gift, checkout])
 
-  const dismissedKeyRef = React.useRef<string>('') // remember what the user dismissed
-
+  const dismissedKeyRef = React.useRef<string>('')
   const [bannerDismissed, setBannerDismissed] = React.useState(false)
 
-  // When banner identity changes, reset dismissal.
   React.useEffect(() => {
     if (!bannerKey) {
       setBannerDismissed(false)
@@ -514,23 +545,22 @@ export default function PortalArea(props: {
     if (!bannerKey) return
     dismissedKeyRef.current = bannerKey
     setBannerDismissed(true)
-    // Also clear query param so it doesn't come back on refresh.
     if (gift) replaceQuery({gift: null})
     if (checkout) replaceQuery({checkout: null})
   }, [bannerKey, gift, checkout])
 
-  // Auto-dismiss when user switches panels (player <-> portal)
-  const currentPanel = normalizePanel(sp.get('p') ?? 'player')
-  const lastPanelRef = React.useRef<'player' | 'portal'>(currentPanel)
+  // ✅ auto-dismiss when user navigates to another portal panel (i.e. p changes),
+  // including player↔portal and portalTab↔portalTab.
+  const lastPRawRef = React.useRef<string>(rawP)
   React.useEffect(() => {
-    const prev = lastPanelRef.current
-    if (prev !== currentPanel) {
-      lastPanelRef.current = currentPanel
+    const prev = lastPRawRef.current
+    if (prev !== rawP) {
+      lastPRawRef.current = rawP
       if (!bannerDismissed && bannerKey) dismissBanner()
     }
-  }, [currentPanel, bannerDismissed, bannerKey, dismissBanner])
+  }, [rawP, bannerDismissed, bannerKey, dismissBanner])
 
-  // Auth-ish messaging stays in the small bar (and spotlight uses it).
+  // Auth-ish messaging stays top-right
   const derivedAttentionMessage =
     attentionMessage ?? (p.shouldShowTopbarBlockMessage ? (p.lastError ?? null) : null)
 
@@ -550,24 +580,9 @@ export default function PortalArea(props: {
 
   const qAlbum = sp.get('album')
   const qTrack = sp.get('track')
-
-  const isPlayer = currentPanel === 'player'
   const qAutoplay = getAutoplayFlag(sp)
   const qShareToken = sp.get('st') ?? sp.get('share') ?? null
   const hasSt = ((sp.get('st') ?? sp.get('share') ?? '').trim().length > 0)
-
-  const patchQuery = React.useCallback((patch: Record<string, string | null | undefined>) => {
-    replaceQuery(patch)
-  }, [])
-
-  const forceSurface = React.useCallback(
-    (surface: 'player' | 'portal') => {
-      const desired = surface === 'portal' ? 'portal' : 'player'
-      if (currentPanel === desired) return
-      patchQuery({p: desired})
-    },
-    [patchQuery, currentPanel]
-  )
 
   const [currentAlbumSlug, setCurrentAlbumSlug] = React.useState<string>(albumSlug)
   const [album, setAlbum] = React.useState<AlbumInfo | null>(initialAlbum)
@@ -799,7 +814,6 @@ export default function PortalArea(props: {
 
   const bannerKind: 'gift' | 'checkout' | null = gift ? 'gift' : checkout ? 'checkout' : null
   const bannerCode = gift ?? checkout ?? null
-
   const bannerNode =
     !bannerDismissed && bannerKind && bannerCode ? (
       <FullWidthBanner kind={bannerKind} code={bannerCode} onDismiss={dismissBanner} />
@@ -976,7 +990,7 @@ export default function PortalArea(props: {
                 </div>
               </div>
 
-              {/* ✅ Full-width banner lives directly under the topbar */}
+              {/* ✅ Full-width banner directly under topbar */}
               {bannerNode}
             </div>
           )}
