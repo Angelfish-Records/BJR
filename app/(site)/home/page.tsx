@@ -314,7 +314,6 @@ if (member?.id) {
                 album={albumData.album}
                 tracks={albumData.tracks}
                 albums={browseAlbums}
-                checkout={checkout}
                 attentionMessage={attentionMessage}
                 tier={tier}
                 isPatron={isPatron}
