@@ -14,8 +14,6 @@ import MiniPlayer from './player/MiniPlayer'
 import ActivationGate from '@/app/home/ActivationGate'
 import Image from 'next/image'
 
-const DEFAULT_PORTAL_TAB = 'portal' // you only have two panels: player + portal
-
 function normalizePanel(raw: string | null | undefined): 'player' | 'portal' {
   const v = (raw ?? '').trim()
   return v === 'portal' ? 'portal' : 'player'
@@ -88,93 +86,21 @@ function IconPortal() {
   )
 }
 
-function MessageBar(props: {checkout: string | null; attentionMessage: string | null; gift: string | null}) {
-  const {checkout, attentionMessage, gift} = props
-
-  const showGift =
-    gift === 'ready' ||
-    gift === 'not_paid' ||
-    gift === 'wrong_account' ||
-    gift === 'missing' ||
-    gift === 'claim_code_missing' ||
-    gift === 'invalid_claim' ||
-    gift === 'already_claimed'
-
-  const showCheckout = checkout === 'success' || checkout === 'cancel'
-  const showAttention = !!attentionMessage
-  if (!showGift && !showCheckout && !showAttention) return null
-
-  const checkoutIsSuccess = checkout === 'success'
-
-  let leftIcon: React.ReactNode = null
-  let text: React.ReactNode = null
-  let tone: 'success' | 'neutral' | 'warn' = 'neutral'
-
-  if (showGift) {
-    if (gift === 'ready') {
-      tone = 'success'
-      leftIcon = <span aria-hidden>🎁</span>
-      text = <>Gift activated. Your content is now available.</>
-    } else if (gift === 'not_paid') {
-      tone = 'neutral'
-      leftIcon = <span aria-hidden>⏳</span>
-      text = <>This gift hasn&apos;t completed payment yet. If you just paid, refresh in a moment.</>
-    } else if (gift === 'wrong_account') {
-      tone = 'warn'
-      leftIcon = <span aria-hidden>⚠️</span>
-      text = <>This gift was sent to a different email. Sign in with the recipient account.</>
-    } else if (gift === 'claim_code_missing') {
-      tone = 'warn'
-      leftIcon = <span aria-hidden>⚠️</span>
-      text = <>That link is missing its claim code. Open the exact link from the email.</>
-    } else if (gift === 'invalid_claim') {
-      tone = 'warn'
-      leftIcon = <span aria-hidden>⚠️</span>
-      text = <>That claim code doesn&apos;t match this gift. Open the exact link from the email.</>
-    } else if (gift === 'already_claimed') {
-      tone = 'warn'
-      leftIcon = <span aria-hidden>⚠️</span>
-      text = <>This gift has already been claimed.</>
-    } else {
-      tone = 'warn'
-      leftIcon = <span aria-hidden>⚠️</span>
-      text = <>That gift link looks invalid.</>
-    }
-  } else if (showAttention) {
-    tone = 'warn'
-    leftIcon = <span aria-hidden>⚠️</span>
-    text = <>{attentionMessage}</>
-  } else if (showCheckout) {
-    tone = checkoutIsSuccess ? 'success' : 'neutral'
-    leftIcon = <span aria-hidden>{checkoutIsSuccess ? '✅' : '⤺'}</span>
-    text = checkoutIsSuccess ? (
-      <>Checkout completed. If your access hasn&apos;t appeared yet, refresh once (webhooks can be a beat behind).</>
-    ) : (
-      <>Checkout cancelled.</>
-    )
-  }
-
-  const border =
-    tone === 'success'
-      ? 'color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.14))'
-      : tone === 'warn'
-        ? 'rgba(255,255,255,0.18)'
-        : 'rgba(255,255,255,0.14)'
-
-  const bg =
-    tone === 'success'
-      ? 'color-mix(in srgb, var(--accent) 10%, rgba(0,0,0,0.22))'
-      : tone === 'warn'
-        ? 'rgba(0,0,0,0.28)'
-        : 'rgba(0,0,0,0.22)'
+/**
+ * Small, top-right bar (kept for auth-ish messaging only).
+ * In your current design this lives under ActivationGate and is spotlight-clonable.
+ */
+function MiniMessageBar(props: {attentionMessage: string | null}) {
+  const {attentionMessage} = props
+  if (!attentionMessage) return null
 
   return (
     <div
       style={{
         marginTop: 10,
         borderRadius: 14,
-        border: `1px solid ${border}`,
-        background: bg,
+        border: '1px solid rgba(255,255,255,0.18)',
+        background: 'rgba(0,0,0,0.28)',
         padding: '10px 12px',
         fontSize: 12,
         opacity: 0.92,
@@ -202,10 +128,161 @@ function MessageBar(props: {checkout: string | null; attentionMessage: string | 
           flex: '0 0 auto',
         }}
       >
-        {leftIcon}
+        <span aria-hidden>⚠️</span>
       </div>
 
-      <div style={{minWidth: 0}}>{text}</div>
+      <div style={{minWidth: 0}}>{attentionMessage}</div>
+    </div>
+  )
+}
+
+type BannerTone = 'success' | 'neutral' | 'warn'
+
+function bannerStyle(tone: BannerTone) {
+  const border =
+    tone === 'success'
+      ? 'color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.14))'
+      : tone === 'warn'
+        ? 'rgba(255,255,255,0.18)'
+        : 'rgba(255,255,255,0.14)'
+
+  const bg =
+    tone === 'success'
+      ? 'color-mix(in srgb, var(--accent) 10%, rgba(0,0,0,0.22))'
+      : tone === 'warn'
+        ? 'rgba(0,0,0,0.28)'
+        : 'rgba(0,0,0,0.22)'
+
+  return {border, bg}
+}
+
+/**
+ * Full-width banner UNDER the topbar.
+ * Used for non-auth flow messages (checkout/gift/etc).
+ */
+function FullWidthBanner(props: {
+  kind: 'gift' | 'checkout' | null
+  code: string | null
+  onDismiss: () => void
+}) {
+  const {kind, code, onDismiss} = props
+  if (!kind || !code) return null
+
+  let tone: BannerTone = 'neutral'
+  let icon: React.ReactNode = null
+  let text: React.ReactNode = null
+
+  if (kind === 'checkout') {
+    if (code === 'success') {
+      tone = 'success'
+      icon = <span aria-hidden>✅</span>
+      text = <>Checkout completed. If your access hasn&apos;t appeared yet, refresh once (webhooks can be a beat behind).</>
+    } else if (code === 'cancel') {
+      tone = 'neutral'
+      icon = <span aria-hidden>⤺</span>
+      text = <>Checkout cancelled.</>
+    } else {
+      return null
+    }
+  }
+
+  if (kind === 'gift') {
+    if (code === 'ready') {
+      tone = 'success'
+      icon = <span aria-hidden>🎁</span>
+      text = <>Gift activated. Your content is now available.</>
+    } else if (code === 'not_paid') {
+      tone = 'neutral'
+      icon = <span aria-hidden>⏳</span>
+      text = <>This gift hasn&apos;t completed payment yet. If you just paid, refresh in a moment.</>
+    } else if (code === 'wrong_account') {
+      tone = 'warn'
+      icon = <span aria-hidden>⚠️</span>
+      text = <>This gift was sent to a different email. Sign in with the recipient account.</>
+    } else if (code === 'claim_code_missing') {
+      tone = 'warn'
+      icon = <span aria-hidden>⚠️</span>
+      text = <>That link is missing its claim code. Open the exact link from the email.</>
+    } else if (code === 'invalid_claim') {
+      tone = 'warn'
+      icon = <span aria-hidden>⚠️</span>
+      text = <>That claim code doesn&apos;t match this gift. Open the exact link from the email.</>
+    } else if (code === 'missing') {
+      tone = 'warn'
+      icon = <span aria-hidden>⚠️</span>
+      text = <>That gift link looks invalid.</>
+    } else {
+      return null
+    }
+  }
+
+  const {border, bg} = bannerStyle(tone)
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      style={{
+        marginTop: 10,
+        borderRadius: 16,
+        border: `1px solid ${border}`,
+        background: bg,
+        padding: '12px 14px',
+        fontSize: 13,
+        opacity: 0.96,
+        lineHeight: 1.45,
+        textAlign: 'left',
+        width: '100%',
+        display: 'flex',
+        gap: 10,
+        alignItems: 'flex-start',
+        boxShadow: '0 18px 44px rgba(0,0,0,0.22)',
+        position: 'relative',
+      }}
+    >
+      <div
+        aria-hidden
+        style={{
+          width: 20,
+          height: 20,
+          borderRadius: 999,
+          display: 'grid',
+          placeItems: 'center',
+          marginTop: 1,
+          background: 'rgba(255,255,255,0.08)',
+          border: '1px solid rgba(255,255,255,0.14)',
+          flex: '0 0 auto',
+        }}
+      >
+        {icon}
+      </div>
+
+      <div style={{minWidth: 0, paddingRight: 26}}>{text}</div>
+
+      <button
+        type="button"
+        aria-label="Dismiss message"
+        onClick={onDismiss}
+        style={{
+          position: 'absolute',
+          top: 8,
+          right: 8,
+          width: 28,
+          height: 28,
+          borderRadius: 999,
+          border: '1px solid rgba(255,255,255,0.14)',
+          background: 'rgba(255,255,255,0.06)',
+          color: 'rgba(255,255,255,0.88)',
+          cursor: 'pointer',
+          display: 'grid',
+          placeItems: 'center',
+          lineHeight: 1,
+          fontSize: 16,
+          userSelect: 'none',
+        }}
+      >
+        ×
+      </button>
     </div>
   )
 }
@@ -407,17 +484,55 @@ export default function PortalArea(props: {
   const sp = useClientSearchParams()
   const {isSignedIn} = useAuth()
 
-  // URL-driven state (this was the missing link)
+  // URL-driven codes
   const gift = (sp.get('gift') ?? '').trim() || null
   const checkout = (sp.get('checkout') ?? '').trim() || null
 
-  const purchaseAttention =
-    checkout === 'success' && !isSignedIn
-      ? 'Thank you for your purchase. Confirm your email address to access your content.'
-      : null
+  // Non-auth messages belong in the FULL-WIDTH banner.
+  // Track a "dismissed" flag keyed by the current message identity.
+  const bannerKey = React.useMemo(() => {
+    if (gift) return `gift:${gift}`
+    if (checkout) return `checkout:${checkout}`
+    return ''
+  }, [gift, checkout])
 
+  const dismissedKeyRef = React.useRef<string>('') // remember what the user dismissed
+
+  const [bannerDismissed, setBannerDismissed] = React.useState(false)
+
+  // When banner identity changes, reset dismissal.
+  React.useEffect(() => {
+    if (!bannerKey) {
+      setBannerDismissed(false)
+      dismissedKeyRef.current = ''
+      return
+    }
+    if (dismissedKeyRef.current !== bannerKey) setBannerDismissed(false)
+  }, [bannerKey])
+
+  const dismissBanner = React.useCallback(() => {
+    if (!bannerKey) return
+    dismissedKeyRef.current = bannerKey
+    setBannerDismissed(true)
+    // Also clear query param so it doesn't come back on refresh.
+    if (gift) replaceQuery({gift: null})
+    if (checkout) replaceQuery({checkout: null})
+  }, [bannerKey, gift, checkout])
+
+  // Auto-dismiss when user switches panels (player <-> portal)
+  const currentPanel = normalizePanel(sp.get('p') ?? 'player')
+  const lastPanelRef = React.useRef<'player' | 'portal'>(currentPanel)
+  React.useEffect(() => {
+    const prev = lastPanelRef.current
+    if (prev !== currentPanel) {
+      lastPanelRef.current = currentPanel
+      if (!bannerDismissed && bannerKey) dismissBanner()
+    }
+  }, [currentPanel, bannerDismissed, bannerKey, dismissBanner])
+
+  // Auth-ish messaging stays in the small bar (and spotlight uses it).
   const derivedAttentionMessage =
-    attentionMessage ?? purchaseAttention ?? (p.shouldShowTopbarBlockMessage ? (p.lastError ?? null) : null)
+    attentionMessage ?? (p.shouldShowTopbarBlockMessage ? (p.lastError ?? null) : null)
 
   const spotlightEligibleCode =
     p.blockedCode === 'AUTH_REQUIRED' || p.blockedCode === 'ANON_CAP_REACHED' || p.blockedCode === 'CAP_REACHED'
@@ -436,7 +551,7 @@ export default function PortalArea(props: {
   const qAlbum = sp.get('album')
   const qTrack = sp.get('track')
 
-  const isPlayer = normalizePanel(sp.get('p') ?? DEFAULT_PORTAL_TAB) === 'player'
+  const isPlayer = currentPanel === 'player'
   const qAutoplay = getAutoplayFlag(sp)
   const qShareToken = sp.get('st') ?? sp.get('share') ?? null
   const hasSt = ((sp.get('st') ?? sp.get('share') ?? '').trim().length > 0)
@@ -448,31 +563,11 @@ export default function PortalArea(props: {
   const forceSurface = React.useCallback(
     (surface: 'player' | 'portal') => {
       const desired = surface === 'portal' ? 'portal' : 'player'
-      const cur = normalizePanel(sp.get('p') ?? 'player')
-      if (cur === desired) return
+      if (currentPanel === desired) return
       patchQuery({p: desired})
     },
-    [patchQuery, sp]
+    [patchQuery, currentPanel]
   )
-
-  // Show-once cleanup (prevents “sticky” banners)
-  const giftShownRef = React.useRef(false)
-  React.useEffect(() => {
-    const g = (sp.get('gift') ?? '').trim()
-    if (!g) return
-    if (giftShownRef.current) return
-    giftShownRef.current = true
-    patchQuery({gift: null})
-  }, [sp, patchQuery])
-
-  const checkoutShownRef = React.useRef(false)
-  React.useEffect(() => {
-    const c = (sp.get('checkout') ?? '').trim()
-    if (!c) return
-    if (checkoutShownRef.current) return
-    checkoutShownRef.current = true
-    patchQuery({checkout: null})
-  }, [sp, patchQuery])
 
   const [currentAlbumSlug, setCurrentAlbumSlug] = React.useState<string>(albumSlug)
   const [album, setAlbum] = React.useState<AlbumInfo | null>(initialAlbum)
@@ -549,7 +644,6 @@ export default function PortalArea(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlayer, qTrack])
 
-  // Prime the player on first load: queue + select first track (no autoplay).
   const primedRef = React.useRef(false)
   React.useEffect(() => {
     if (!isPlayer) return
@@ -701,7 +795,15 @@ export default function PortalArea(props: {
     </ActivationGate>
   )
 
-  const msgNode = <MessageBar checkout={checkout} attentionMessage={derivedAttentionMessage} gift={gift} />
+  const miniMsgNode = <MiniMessageBar attentionMessage={derivedAttentionMessage} />
+
+  const bannerKind: 'gift' | 'checkout' | null = gift ? 'gift' : checkout ? 'checkout' : null
+  const bannerCode = gift ?? checkout ?? null
+
+  const bannerNode =
+    !bannerDismissed && bannerKind && bannerCode ? (
+      <FullWidthBanner kind={bannerKind} code={bannerCode} onDismiss={dismissBanner} />
+    ) : null
 
   return (
     <>
@@ -710,7 +812,7 @@ export default function PortalArea(props: {
       <SpotlightClone active={spotlightAttention} anchorRect={spotlightRect}>
         <div style={{pointerEvents: 'auto'}}>
           {gateNode}
-          {msgNode}
+          {miniMsgNode}
         </div>
       </SpotlightClone>
 
@@ -867,12 +969,15 @@ export default function PortalArea(props: {
                         }}
                       >
                         {gateNode}
-                        {msgNode}
+                        {miniMsgNode}
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
+
+              {/* ✅ Full-width banner lives directly under the topbar */}
+              {bannerNode}
             </div>
           )}
         />
