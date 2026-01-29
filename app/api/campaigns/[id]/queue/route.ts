@@ -1,111 +1,66 @@
-// web/app/api/campaigns/[id]/route.ts
+// web/app/api/campaigns/[id]/queue/route.ts
 import {NextRequest, NextResponse} from 'next/server'
 import {sql} from '@vercel/postgres'
 
 export const runtime = 'nodejs'
 
-type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | {[key: string]: Json}
-  | Json[]
-
-type CampaignRow = {
-  id: string
-  created_by_member_id: string | null
-  audience_key: string
-  sender_key: string
-  from_email: string
-  reply_to: string | null
-  name: string
-  subject_template: string
-  body_template: string
-  filters: Json
-  status: string
-  locked_at: string | null
-  locked_by: string | null
-  cancel_requested_at: string | null
-  created_at: string
-  updated_at: string
+function requireActor() {
+  return {actorLabel: 'admin'}
 }
 
 type RouteContext = {
   params: Promise<{id: string}>
 }
 
-// NOTE: keep this placeholder actor model for now (you can swap to your real admin auth later)
-function requireActor() {
-  return {memberId: process.env.BJR_ADMIN_MEMBER_ID ?? null, actorLabel: 'admin'}
-}
-
-export async function GET(_req: NextRequest, context: RouteContext) {
+export async function POST(_req: NextRequest, context: RouteContext) {
   const {id} = await context.params
+  requireActor()
 
-  const rows = await sql<CampaignRow>`
-    select *
-    from campaigns
-    where id = ${id}::uuid
-    limit 1
-  `
-  if ((rows.rowCount ?? 0) === 0) {
-    return NextResponse.json({error: 'Not found'}, {status: 404})
-  }
-  return NextResponse.json({campaign: rows.rows[0]})
-}
+  // Ensure campaign exists and is locked (soft rule; you can relax later)
+  const c = await sql`select locked_at from campaigns where id = ${id}::uuid limit 1`
+  if (c.rowCount === 0) return NextResponse.json({error: 'Not found'}, {status: 404})
 
-export async function PUT(req: NextRequest, context: RouteContext) {
-  const {id} = await context.params
-  const actor = requireActor()
-  if (!actor.memberId) return NextResponse.json({error: 'Missing admin actor'}, {status: 401})
-
-  const body = (await req.json().catch(() => null)) as
-    | {
-        name?: string
-        subject_template?: string
-        body_template?: string
-        reply_to?: string | null
-        status?: string
-      }
-    | null
-
-  if (!body) return NextResponse.json({error: 'Invalid JSON'}, {status: 400})
-
-  // Enforce single sender for BJR marketing campaigns
-  const fromEmail = process.env.RESEND_FROM_MARKETING
-  if (!fromEmail) return NextResponse.json({error: 'RESEND_FROM_MARKETING not set'}, {status: 500})
-
-  // sender_key still exists in schema, but we keep it constant (you said strip UI/mechanics)
-  const senderKey = 'marketing'
-
-  const updated = await sql<CampaignRow>`
-    update campaigns
-      set
-        name = coalesce(${body.name ?? null}, name),
-        subject_template = coalesce(${body.subject_template ?? null}, subject_template),
-        body_template = coalesce(${body.body_template ?? null}, body_template),
-        reply_to = ${body.reply_to ?? null},
-        status = coalesce(${body.status ?? null}, status),
-        from_email = ${fromEmail},
-        sender_key = ${senderKey},
-        updated_at = now()
-    where id = ${id}::uuid
-    returning *
-  `
-  if ((updated.rowCount ?? 0) === 0) return NextResponse.json({error: 'Not found'}, {status: 404})
-
-  // If status transitioned to locked, set locked_at/locked_by (best-effort)
-  const row = updated.rows[0]
-  if (body.status === 'locked' && !row.locked_at) {
-    const locked = await sql<CampaignRow>`
-      update campaigns
-        set locked_at = now(), locked_by = ${actor.actorLabel}, updated_at = now()
-      where id = ${id}::uuid and locked_at is null
-      returning *
-    `
-    return NextResponse.json({campaign: locked.rows[0]})
+  const lockedAt = c.rows[0]?.locked_at as string | null | undefined
+  if (!lockedAt) {
+    return NextResponse.json({error: 'Campaign must be locked before queueing'}, {status: 400})
   }
 
-  return NextResponse.json({campaign: row})
+  // Insert one row per sendable member.
+  // Idempotency strategy: avoid duplicate per (campaign_id,to_email).
+  const inserted = await sql`
+    insert into campaign_sends (campaign_id, member_id, to_email, merge_vars, status, provider, attempt_count)
+    select
+      ${id}::uuid as campaign_id,
+      m.id as member_id,
+      lower(m.email::text) as to_email,
+      jsonb_build_object(
+        'member_id', m.id::text,
+        'email', lower(m.email::text)
+      ) as merge_vars,
+      'queued'::text as status,
+      'resend'::text as provider,
+      0::int as attempt_count
+    from members_sendable_marketing m
+    where
+      m.email is not null
+      and m.email::text <> ''
+      and not exists (
+        select 1 from campaign_sends s
+        where s.campaign_id = ${id}::uuid
+          and lower(s.to_email) = lower(m.email::text)
+      )
+    returning 1
+  `
+
+  const queued = inserted.rowCount ?? 0
+
+  // Skipped = total sendable - queued
+  const total = await sql`select count(*)::int as count from members_sendable_marketing`
+  const totalCount = (total.rows[0]?.count as number | null) ?? 0
+  const skipped = Math.max(0, totalCount - queued)
+
+  // Optional: mark campaign as "queued"
+  await sql`update campaigns set status = 'queued'::text, updated_at = now() where id = ${id}::uuid`
+
+  return NextResponse.json({queued, skipped})
 }
