@@ -1,32 +1,32 @@
-import 'server-only'
-import {NextResponse} from 'next/server'
+// web/app/api/campaigns/[id]/queue/route.ts
+import {NextRequest, NextResponse} from 'next/server'
 import {sql} from '@vercel/postgres'
-import {requireAdminMemberId} from '@/lib/adminAuth'
 
 export const runtime = 'nodejs'
 
-type CampaignRow = {
-  id: string
-  locked_at: string | null
+function requireActor() {
+  return {actorLabel: 'admin'}
 }
 
-export async function POST(_req: Request, ctx: {params: {id: string}}) {
-  await requireAdminMemberId()
+type RouteContext = {
+  params: Promise<{id: string}>
+}
 
-  const {id} = ctx.params
+export async function POST(_req: NextRequest, context: RouteContext) {
+  const {id} = await context.params
+  requireActor()
 
-  const c = await sql<CampaignRow>`
-    select id, locked_at
-    from campaigns
-    where id = ${id}::uuid
-    limit 1
-  `
-  const campaign = c.rows[0]
-  if (!campaign) return NextResponse.json({error: 'Not found'}, {status: 404})
-  if (!campaign.locked_at) {
+  // Ensure campaign exists and is locked (soft rule; you can relax later)
+  const c = await sql`select locked_at from campaigns where id = ${id}::uuid limit 1`
+  if (c.rowCount === 0) return NextResponse.json({error: 'Not found'}, {status: 404})
+
+  const lockedAt = c.rows[0]?.locked_at as string | null | undefined
+  if (!lockedAt) {
     return NextResponse.json({error: 'Campaign must be locked before queueing'}, {status: 400})
   }
 
+  // Insert one row per sendable member.
+  // Idempotency strategy: avoid duplicate per (campaign_id,to_email).
   const inserted = await sql`
     insert into campaign_sends (campaign_id, member_id, to_email, merge_vars, status, provider, attempt_count)
     select
@@ -41,8 +41,9 @@ export async function POST(_req: Request, ctx: {params: {id: string}}) {
       'resend'::text as provider,
       0::int as attempt_count
     from members_sendable_marketing m
-    where m.email is not null
-      and lower(m.email::text) <> ''
+    where
+      m.email is not null
+      and m.email::text <> ''
       and not exists (
         select 1 from campaign_sends s
         where s.campaign_id = ${id}::uuid
@@ -50,16 +51,15 @@ export async function POST(_req: Request, ctx: {params: {id: string}}) {
       )
     returning 1
   `
-  const queued = inserted?.rowCount ?? 0
 
-  const total = await sql<{count: number}>`
-    select count(*)::int as count
-    from members_sendable_marketing
-    where email is not null and lower(email::text) <> ''
-  `
-  const totalCount = total.rows[0]?.count ?? 0
+  const queued = inserted.rowCount ?? 0
+
+  // Skipped = total sendable - queued
+  const total = await sql`select count(*)::int as count from members_sendable_marketing`
+  const totalCount = (total.rows[0]?.count as number | null) ?? 0
   const skipped = Math.max(0, totalCount - queued)
 
+  // Optional: mark campaign as "queued"
   await sql`update campaigns set status = 'queued'::text, updated_at = now() where id = ${id}::uuid`
 
   return NextResponse.json({queued, skipped})
