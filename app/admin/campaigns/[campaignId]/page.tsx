@@ -2,9 +2,7 @@ import 'server-only'
 import {requireAdminMemberId} from '@/lib/adminAuth'
 import CampaignComposerClient from './CampaignComposerClient'
 
-export const runtime = 'nodejs'
-
-export default async function AdminCampaignPage({
+export default async function AdminCampaignComposerPage({
   params,
 }: {
   params: {campaignId: string}
