@@ -786,7 +786,7 @@ export default function CampaignComposerClient() {
             style={{display: 'inline-flex', alignItems: 'center'}}
           >
             <img
-              src="https://www.brendanjohnroch.com/gfx/neon_logo.png"
+              src="https://www.brendanjohnroch.com/gfx/neon_logo.png" 
               alt="Neon"
               style={{height: 30, opacity: 0.9}}
             />
