@@ -1,94 +1,102 @@
-import {defineField, defineType} from 'sanity'
+import { defineField, defineType } from "sanity";
 
 export const moduleDownloadGrid = defineType({
-  name: 'moduleDownloadGrid',
-  title: 'Module: Download Grid',
-  type: 'object',
+  name: "moduleDownloadGrid",
+  title: "Module: Download Grid",
+  type: "object",
   fields: [
     defineField({
-      name: 'title',
-      title: 'Title',
-      type: 'string',
-      initialValue: 'Downloads',
+      name: "title",
+      title: "Title",
+      type: "string",
+      initialValue: "Downloads",
     }),
     defineField({
-      name: 'offers',
-      title: 'Offers',
-      type: 'array',
+      name: "offers",
+      title: "Offers",
+      type: "array",
       validation: (r) => r.min(1).required(),
       of: [
         {
-          type: 'object',
-          name: 'downloadOffer',
-          title: 'Download offer',
+          type: "object",
+          name: "downloadOffer",
+          title: "Download offer",
           fields: [
             defineField({
-              name: 'albumSlug',
-              title: 'Album slug',
-              type: 'string',
-              description: 'Must match AlbumOffer.albumSlug',
+              name: "albumSlug",
+              title: "Album slug",
+              type: "string",
+              description: "Must match AlbumOffer.albumSlug",
               validation: (r) => r.required(),
             }),
             defineField({
-              name: 'coverImage',
-              title: 'Cover image',
-              type: 'image',
-              options: {hotspot: true},
+              name: "coverImage",
+              title: "Cover image",
+              type: "image",
+              options: { hotspot: true },
             }),
             defineField({
-              name: 'productLabel',
-              title: 'Product label',
-              type: 'string',
-              initialValue: 'Digital Album',
+              name: "productLabel",
+              title: "Product label",
+              type: "string",
+              initialValue: "Digital Album",
             }),
             defineField({
-              name: 'highlights',
-              title: 'Highlights',
-              type: 'array',
-              of: [{type: 'string'}],
+              name: "highlights",
+              title: "Highlights",
+              type: "array",
+              of: [{ type: "string" }],
             }),
             defineField({
-              name: 'techSpec',
-              title: 'Tech spec callout (optional)',
-              type: 'string',
-              description: 'Eg “Download available in 24-bit / 96kHz”.',
+              name: "techSpec",
+              title: "Tech spec callout (optional)",
+              type: "string",
+              description: "Eg “Download available in 24-bit / 96kHz”.",
             }),
             defineField({
-              name: 'giftBlurb',
-              title: 'Gift modal blurb (optional)',
-              type: 'text',
+              name: "giftBlurb",
+              title: "Gift modal blurb (optional)",
+              type: "text",
               rows: 2,
             }),
             defineField({
-              name: 'assets',
-              title: 'Assets to show (optional)',
-              type: 'array',
+              name: "assets",
+              title: "Assets to show (optional)",
+              type: "array",
               description:
-                'If empty, the portal will show all assets defined in code for this album offer. If set, only these buttons will appear (in this order).',
+                "If empty, the portal will show all assets defined in code for this album offer. If set, only these buttons will appear (in this order).",
               of: [
                 {
-                  type: 'object',
-                  name: 'downloadAssetSelector',
+                  type: "object",
+                  name: "downloadAssetSelector",
                   fields: [
                     defineField({
-                      name: 'assetId',
-                      title: 'Asset ID',
-                      type: 'string',
+                      name: "assetId",
+                      title: "Asset ID",
+                      type: "string",
                       validation: (r) => r.required(),
                     }),
                     defineField({
-                      name: 'label',
-                      title: 'Button label override (optional)',
-                      type: 'string',
+                      name: "label",
+                      title: "Button label override (optional)",
+                      type: "string",
                     }),
                   ],
                   preview: {
-                    select: {assetId: 'assetId', label: 'label'},
-                    prepare({assetId, label}: {assetId?: string; label?: string}) {
+                    select: { assetId: "assetId", label: "label" },
+                    prepare({
+                      assetId,
+                      label,
+                    }: {
+                      assetId?: string;
+                      label?: string;
+                    }) {
                       return {
-                        title: label ? `${label}` : `${assetId ?? ''}`,
-                        subtitle: assetId ? `assetId: ${assetId}` : 'download asset',
-                      }
+                        title: label ? `${label}` : `${assetId ?? ""}`,
+                        subtitle: assetId
+                          ? `assetId: ${assetId}`
+                          : "download asset",
+                      };
                     },
                   },
                 },
@@ -96,9 +104,18 @@ export const moduleDownloadGrid = defineType({
             }),
           ],
           preview: {
-            select: {albumSlug: 'albumSlug', productLabel: 'productLabel'},
-            prepare({albumSlug, productLabel}: {albumSlug?: string; productLabel?: string}) {
-              return {title: albumSlug ?? 'Offer', subtitle: productLabel ?? 'Digital Album'}
+            select: { albumSlug: "albumSlug", productLabel: "productLabel" },
+            prepare({
+              albumSlug,
+              productLabel,
+            }: {
+              albumSlug?: string;
+              productLabel?: string;
+            }) {
+              return {
+                title: albumSlug ?? "Offer",
+                subtitle: productLabel ?? "Digital Album",
+              };
             },
           },
         },
@@ -106,12 +123,12 @@ export const moduleDownloadGrid = defineType({
     }),
   ],
   preview: {
-    select: {title: 'title', offers: 'offers'},
-    prepare({title, offers}: {title?: string; offers?: unknown[]}) {
+    select: { title: "title", offers: "offers" },
+    prepare({ title, offers }: { title?: string; offers?: unknown[] }) {
       return {
-        title: title ?? 'Download Grid',
+        title: title ?? "Download Grid",
         subtitle: `${Array.isArray(offers) ? offers.length : 0} offer(s)`,
-      }
+      };
     },
   },
-})
+});

@@ -1,5 +1,5 @@
-import type {Theme} from '../types'
-import {createProgram, makeFullscreenTriangle} from '../gl'
+import type { Theme } from "../types";
+import { createProgram, makeFullscreenTriangle } from "../gl";
 
 const VS = `#version 300 es
 layout(location=0) in vec2 aPos;
@@ -8,7 +8,7 @@ void main() {
   vUv = aPos * 0.5 + 0.5;
   gl_Position = vec4(aPos, 0.0, 1.0);
 }
-`
+`;
 
 // Light-field update: diffuse/decay + inject gentle noise gradients.
 const FS_FIELD = `#version 300 es
@@ -80,7 +80,7 @@ void main(){
   field = clamp(field, 0.0, 1.0);
   outColor = vec4(field, 1.0);
 }
-`
+`;
 
 // Glass render: refract the light-field through a few drifting planes, add Fresnel.
 const FS_GLASS = `#version 300 es
@@ -174,200 +174,235 @@ void main(){
 
   fragColor = vec4(col, 1.0);
 }
-`
+`;
 
 function createTex(gl: WebGL2RenderingContext, w: number, h: number) {
-  const tex = gl.createTexture()
-  if (!tex) throw new Error('Failed to create texture')
-  gl.bindTexture(gl.TEXTURE_2D, tex)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT)
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
-  gl.bindTexture(gl.TEXTURE_2D, null)
-  return tex
+  const tex = gl.createTexture();
+  if (!tex) throw new Error("Failed to create texture");
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+  gl.texImage2D(
+    gl.TEXTURE_2D,
+    0,
+    gl.RGBA8,
+    w,
+    h,
+    0,
+    gl.RGBA,
+    gl.UNSIGNED_BYTE,
+    null,
+  );
+  gl.bindTexture(gl.TEXTURE_2D, null);
+  return tex;
 }
 
 function createFbo(gl: WebGL2RenderingContext, tex: WebGLTexture) {
-  const fbo = gl.createFramebuffer()
-  if (!fbo) throw new Error('Failed to create framebuffer')
-  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo)
-  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0)
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-  return fbo
+  const fbo = gl.createFramebuffer();
+  if (!fbo) throw new Error("Failed to create framebuffer");
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(
+    gl.FRAMEBUFFER,
+    gl.COLOR_ATTACHMENT0,
+    gl.TEXTURE_2D,
+    tex,
+    0,
+  );
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return fbo;
 }
 
-function clearTex(gl: WebGL2RenderingContext, tex: WebGLTexture, w: number, h: number) {
-  const data = new Uint8Array(w * h * 4)
+function clearTex(
+  gl: WebGL2RenderingContext,
+  tex: WebGLTexture,
+  w: number,
+  h: number,
+) {
+  const data = new Uint8Array(w * h * 4);
   for (let i = 0; i < w * h; i++) {
-    const o = i * 4
-    const v = Math.random() < 0.002 ? 10 + Math.random() * 18 : 0
-    data[o + 0] = v
-    data[o + 1] = v
-    data[o + 2] = v
-    data[o + 3] = 255
+    const o = i * 4;
+    const v = Math.random() < 0.002 ? 10 + Math.random() * 18 : 0;
+    data[o + 0] = v;
+    data[o + 1] = v;
+    data[o + 2] = v;
+    data[o + 3] = 255;
   }
-  gl.bindTexture(gl.TEXTURE_2D, tex)
-  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, data)
-  gl.bindTexture(gl.TEXTURE_2D, null)
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texSubImage2D(
+    gl.TEXTURE_2D,
+    0,
+    0,
+    0,
+    w,
+    h,
+    gl.RGBA,
+    gl.UNSIGNED_BYTE,
+    data,
+  );
+  gl.bindTexture(gl.TEXTURE_2D, null);
 }
 
 export function createPhaseGlassTheme(): Theme {
-  let tri: {vao: WebGLVertexArrayObject | null; buf: WebGLBuffer | null} | null = null
-  let progField: WebGLProgram | null = null
-  let progGlass: WebGLProgram | null = null
+  let tri: {
+    vao: WebGLVertexArrayObject | null;
+    buf: WebGLBuffer | null;
+  } | null = null;
+  let progField: WebGLProgram | null = null;
+  let progGlass: WebGLProgram | null = null;
 
-  let texA: WebGLTexture | null = null
-  let texB: WebGLTexture | null = null
-  let fboA: WebGLFramebuffer | null = null
-  let fboB: WebGLFramebuffer | null = null
-  let ping = true
+  let texA: WebGLTexture | null = null;
+  let texB: WebGLTexture | null = null;
+  let fboA: WebGLFramebuffer | null = null;
+  let fboB: WebGLFramebuffer | null = null;
+  let ping = true;
 
-  let simW = 0
-  let simH = 0
+  let simW = 0;
+  let simH = 0;
 
   // field uniforms
-  let uPrevF: WebGLUniformLocation | null = null
-  let uResF: WebGLUniformLocation | null = null
-  let uTimeF: WebGLUniformLocation | null = null
-  let uEnergyF: WebGLUniformLocation | null = null
-  let uBassF: WebGLUniformLocation | null = null
-  let uCentroidF: WebGLUniformLocation | null = null
+  let uPrevF: WebGLUniformLocation | null = null;
+  let uResF: WebGLUniformLocation | null = null;
+  let uTimeF: WebGLUniformLocation | null = null;
+  let uEnergyF: WebGLUniformLocation | null = null;
+  let uBassF: WebGLUniformLocation | null = null;
+  let uCentroidF: WebGLUniformLocation | null = null;
 
   // glass uniforms
-  let uFieldG: WebGLUniformLocation | null = null
-  let uResG: WebGLUniformLocation | null = null
-  let uTimeG: WebGLUniformLocation | null = null
-  let uEnergyG: WebGLUniformLocation | null = null
-  let uBassG: WebGLUniformLocation | null = null
-  let uMidG: WebGLUniformLocation | null = null
-  let uTrebleG: WebGLUniformLocation | null = null
-  let uCentroidG: WebGLUniformLocation | null = null
+  let uFieldG: WebGLUniformLocation | null = null;
+  let uResG: WebGLUniformLocation | null = null;
+  let uTimeG: WebGLUniformLocation | null = null;
+  let uEnergyG: WebGLUniformLocation | null = null;
+  let uBassG: WebGLUniformLocation | null = null;
+  let uMidG: WebGLUniformLocation | null = null;
+  let uTrebleG: WebGLUniformLocation | null = null;
+  let uCentroidG: WebGLUniformLocation | null = null;
 
   function ensureSim(gl: WebGL2RenderingContext, w: number, h: number) {
-    const targetW = Math.min(760, Math.max(320, Math.floor(w * 0.68)))
-    const targetH = Math.min(760, Math.max(320, Math.floor(h * 0.68)))
-    if (targetW === simW && targetH === simH && texA && texB && fboA && fboB) return
+    const targetW = Math.min(760, Math.max(320, Math.floor(w * 0.68)));
+    const targetH = Math.min(760, Math.max(320, Math.floor(h * 0.68)));
+    if (targetW === simW && targetH === simH && texA && texB && fboA && fboB)
+      return;
 
-    if (fboA) gl.deleteFramebuffer(fboA)
-    if (fboB) gl.deleteFramebuffer(fboB)
-    if (texA) gl.deleteTexture(texA)
-    if (texB) gl.deleteTexture(texB)
+    if (fboA) gl.deleteFramebuffer(fboA);
+    if (fboB) gl.deleteFramebuffer(fboB);
+    if (texA) gl.deleteTexture(texA);
+    if (texB) gl.deleteTexture(texB);
 
-    simW = targetW
-    simH = targetH
+    simW = targetW;
+    simH = targetH;
 
-    texA = createTex(gl, simW, simH)
-    texB = createTex(gl, simW, simH)
-    fboA = createFbo(gl, texA)
-    fboB = createFbo(gl, texB)
+    texA = createTex(gl, simW, simH);
+    texB = createTex(gl, simW, simH);
+    fboA = createFbo(gl, texA);
+    fboB = createFbo(gl, texB);
 
-    clearTex(gl, texA, simW, simH)
-    clearTex(gl, texB, simW, simH)
-    ping = true
+    clearTex(gl, texA, simW, simH);
+    clearTex(gl, texB, simW, simH);
+    ping = true;
   }
 
   return {
-    name: 'phase-glass',
+    name: "phase-glass",
     init(gl) {
-      tri = makeFullscreenTriangle(gl)
-      progField = createProgram(gl, VS, FS_FIELD)
-      progGlass = createProgram(gl, VS, FS_GLASS)
+      tri = makeFullscreenTriangle(gl);
+      progField = createProgram(gl, VS, FS_FIELD);
+      progGlass = createProgram(gl, VS, FS_GLASS);
 
-      uPrevF = gl.getUniformLocation(progField, 'uPrev')
-      uResF = gl.getUniformLocation(progField, 'uRes')
-      uTimeF = gl.getUniformLocation(progField, 'uTime')
-      uEnergyF = gl.getUniformLocation(progField, 'uEnergy')
-      uBassF = gl.getUniformLocation(progField, 'uBass')
-      uCentroidF = gl.getUniformLocation(progField, 'uCentroid')
+      uPrevF = gl.getUniformLocation(progField, "uPrev");
+      uResF = gl.getUniformLocation(progField, "uRes");
+      uTimeF = gl.getUniformLocation(progField, "uTime");
+      uEnergyF = gl.getUniformLocation(progField, "uEnergy");
+      uBassF = gl.getUniformLocation(progField, "uBass");
+      uCentroidF = gl.getUniformLocation(progField, "uCentroid");
 
-      uFieldG = gl.getUniformLocation(progGlass, 'uField')
-      uResG = gl.getUniformLocation(progGlass, 'uRes')
-      uTimeG = gl.getUniformLocation(progGlass, 'uTime')
-      uEnergyG = gl.getUniformLocation(progGlass, 'uEnergy')
-      uBassG = gl.getUniformLocation(progGlass, 'uBass')
-      uMidG = gl.getUniformLocation(progGlass, 'uMid')
-      uTrebleG = gl.getUniformLocation(progGlass, 'uTreble')
-      uCentroidG = gl.getUniformLocation(progGlass, 'uCentroid')
+      uFieldG = gl.getUniformLocation(progGlass, "uField");
+      uResG = gl.getUniformLocation(progGlass, "uRes");
+      uTimeG = gl.getUniformLocation(progGlass, "uTime");
+      uEnergyG = gl.getUniformLocation(progGlass, "uEnergy");
+      uBassG = gl.getUniformLocation(progGlass, "uBass");
+      uMidG = gl.getUniformLocation(progGlass, "uMid");
+      uTrebleG = gl.getUniformLocation(progGlass, "uTreble");
+      uCentroidG = gl.getUniformLocation(progGlass, "uCentroid");
     },
     render(gl, opts) {
-      if (!tri || !progField || !progGlass) return
-      ensureSim(gl, opts.width, opts.height)
-      if (!texA || !texB || !fboA || !fboB) return
+      if (!tri || !progField || !progGlass) return;
+      ensureSim(gl, opts.width, opts.height);
+      if (!texA || !texB || !fboA || !fboB) return;
 
-      const a = opts.audio
-      const energy = a.energy ?? 0
-      const bass = a.bass ?? 0
-      const mid = a.mid ?? 0
-      const treble = a.treble ?? 0
-      const centroid = a.centroid ?? 0
+      const a = opts.audio;
+      const energy = a.energy ?? 0;
+      const bass = a.bass ?? 0;
+      const mid = a.mid ?? 0;
+      const treble = a.treble ?? 0;
+      const centroid = a.centroid ?? 0;
 
-      const src = ping ? texA : texB
-      const dstFbo = ping ? fboB : fboA
+      const src = ping ? texA : texB;
+      const dstFbo = ping ? fboB : fboA;
 
       // Field update
-      gl.bindFramebuffer(gl.FRAMEBUFFER, dstFbo)
-      gl.viewport(0, 0, simW, simH)
-      gl.useProgram(progField)
-      gl.bindVertexArray(tri.vao)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, dstFbo);
+      gl.viewport(0, 0, simW, simH);
+      gl.useProgram(progField);
+      gl.bindVertexArray(tri.vao);
 
-      gl.activeTexture(gl.TEXTURE0)
-      gl.bindTexture(gl.TEXTURE_2D, src)
-      gl.uniform1i(uPrevF, 0)
-      gl.uniform2f(uResF, simW, simH)
-      gl.uniform1f(uTimeF, opts.time)
-      gl.uniform1f(uEnergyF, energy)
-      gl.uniform1f(uBassF, bass)
-      gl.uniform1f(uCentroidF, centroid)
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, src);
+      gl.uniform1i(uPrevF, 0);
+      gl.uniform2f(uResF, simW, simH);
+      gl.uniform1f(uTimeF, opts.time);
+      gl.uniform1f(uEnergyF, energy);
+      gl.uniform1f(uBassF, bass);
+      gl.uniform1f(uCentroidF, centroid);
 
-      gl.drawArrays(gl.TRIANGLES, 0, 3)
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
 
       // Glass render to screen
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-      gl.viewport(0, 0, opts.width, opts.height)
-      gl.useProgram(progGlass)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, opts.width, opts.height);
+      gl.useProgram(progGlass);
 
-      gl.activeTexture(gl.TEXTURE0)
-      gl.bindTexture(gl.TEXTURE_2D, ping ? texB : texA)
-      gl.uniform1i(uFieldG, 0)
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, ping ? texB : texA);
+      gl.uniform1i(uFieldG, 0);
 
-      gl.uniform2f(uResG, opts.width, opts.height)
-      gl.uniform1f(uTimeG, opts.time)
-      gl.uniform1f(uEnergyG, energy)
-      gl.uniform1f(uBassG, bass)
-      gl.uniform1f(uMidG, mid)
-      gl.uniform1f(uTrebleG, treble)
-      gl.uniform1f(uCentroidG, centroid)
+      gl.uniform2f(uResG, opts.width, opts.height);
+      gl.uniform1f(uTimeG, opts.time);
+      gl.uniform1f(uEnergyG, energy);
+      gl.uniform1f(uBassG, bass);
+      gl.uniform1f(uMidG, mid);
+      gl.uniform1f(uTrebleG, treble);
+      gl.uniform1f(uCentroidG, centroid);
 
-      gl.drawArrays(gl.TRIANGLES, 0, 3)
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-      gl.bindTexture(gl.TEXTURE_2D, null)
-      gl.bindVertexArray(null)
-      gl.useProgram(null)
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      gl.bindVertexArray(null);
+      gl.useProgram(null);
 
-      ping = !ping
+      ping = !ping;
     },
     dispose(gl) {
-      if (tri?.buf) gl.deleteBuffer(tri.buf)
-      if (tri?.vao) gl.deleteVertexArray(tri.vao)
-      tri = null
+      if (tri?.buf) gl.deleteBuffer(tri.buf);
+      if (tri?.vao) gl.deleteVertexArray(tri.vao);
+      tri = null;
 
-      if (fboA) gl.deleteFramebuffer(fboA)
-      if (fboB) gl.deleteFramebuffer(fboB)
-      if (texA) gl.deleteTexture(texA)
-      if (texB) gl.deleteTexture(texB)
-      fboA = null
-      fboB = null
-      texA = null
-      texB = null
-      simW = 0
-      simH = 0
+      if (fboA) gl.deleteFramebuffer(fboA);
+      if (fboB) gl.deleteFramebuffer(fboB);
+      if (texA) gl.deleteTexture(texA);
+      if (texB) gl.deleteTexture(texB);
+      fboA = null;
+      fboB = null;
+      texA = null;
+      texB = null;
+      simW = 0;
+      simH = 0;
 
-      if (progField) gl.deleteProgram(progField)
-      if (progGlass) gl.deleteProgram(progGlass)
-      progField = null
-      progGlass = null
+      if (progField) gl.deleteProgram(progField);
+      if (progGlass) gl.deleteProgram(progGlass);
+      progField = null;
+      progGlass = null;
     },
-  }
+  };
 }

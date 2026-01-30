@@ -1,36 +1,36 @@
 // web/app/api/admin/campaigns/audience-options/route.ts
-import 'server-only'
-import {NextResponse} from 'next/server'
-import {sql} from '@vercel/postgres'
-import {requireAdminMemberId} from '@/lib/adminAuth'
+import "server-only";
+import { NextResponse } from "next/server";
+import { sql } from "@vercel/postgres";
+import { requireAdminMemberId } from "@/lib/adminAuth";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 type AudienceOptionsOk = {
-  ok: true
-  sources: string[]
-  entitlementKeys: string[]
-  engagedEventTypes: string[]
+  ok: true;
+  sources: string[];
+  entitlementKeys: string[];
+  engagedEventTypes: string[];
   meta: {
-    sourcesLimit: number
-    entitlementKeysLimit: number
-    engagedEventTypesLimit: number
-  }
-}
+    sourcesLimit: number;
+    entitlementKeysLimit: number;
+    engagedEventTypesLimit: number;
+  };
+};
 
-type AudienceOptionsErr = {ok?: false; error: string; message?: string}
+type AudienceOptionsErr = { ok?: false; error: string; message?: string };
 
 export async function GET() {
-  await requireAdminMemberId()
+  await requireAdminMemberId();
 
   // Keep these conservative; you can bump later.
-  const SOURCES_LIMIT = 200
-  const ENTITLEMENTS_LIMIT = 400
-  const EVENT_TYPES_LIMIT = 200
+  const SOURCES_LIMIT = 200;
+  const ENTITLEMENTS_LIMIT = 400;
+  const EVENT_TYPES_LIMIT = 200;
 
   try {
     const [sourcesQ, entKeysQ, eventTypesQ] = await Promise.all([
-      sql<{v: string}>`
+      sql<{ v: string }>`
         select distinct m.source as v
         from members_sendable_marketing m
         where
@@ -42,7 +42,7 @@ export async function GET() {
         order by v asc
         limit ${SOURCES_LIMIT}
       `,
-      sql<{v: string}>`
+      sql<{ v: string }>`
         select distinct g.entitlement_key as v
         from entitlement_grants g
         where
@@ -53,7 +53,7 @@ export async function GET() {
         order by v asc
         limit ${ENTITLEMENTS_LIMIT}
       `,
-      sql<{v: string}>`
+      sql<{ v: string }>`
         select distinct e.event_type as v
         from member_events e
         where
@@ -62,11 +62,11 @@ export async function GET() {
         order by v asc
         limit ${EVENT_TYPES_LIMIT}
       `,
-    ])
+    ]);
 
-    const sources = sourcesQ.rows.map((r) => r.v).filter(Boolean)
-    const entitlementKeys = entKeysQ.rows.map((r) => r.v).filter(Boolean)
-    const engagedEventTypes = eventTypesQ.rows.map((r) => r.v).filter(Boolean)
+    const sources = sourcesQ.rows.map((r) => r.v).filter(Boolean);
+    const entitlementKeys = entKeysQ.rows.map((r) => r.v).filter(Boolean);
+    const engagedEventTypes = eventTypesQ.rows.map((r) => r.v).filter(Boolean);
 
     const out: AudienceOptionsOk = {
       ok: true,
@@ -78,16 +78,19 @@ export async function GET() {
         entitlementKeysLimit: ENTITLEMENTS_LIMIT,
         engagedEventTypesLimit: EVENT_TYPES_LIMIT,
       },
-    }
+    };
 
     return NextResponse.json(out, {
       headers: {
-        'cache-control': 'no-store',
+        "cache-control": "no-store",
       },
-    })
+    });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    const out: AudienceOptionsErr = {error: 'Failed to load audience options', message: msg}
-    return NextResponse.json(out, {status: 500})
+    const msg = e instanceof Error ? e.message : String(e);
+    const out: AudienceOptionsErr = {
+      error: "Failed to load audience options",
+      message: msg,
+    };
+    return NextResponse.json(out, { status: 500 });
   }
 }

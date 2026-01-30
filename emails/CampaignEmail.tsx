@@ -1,22 +1,36 @@
 // emails/CampaignEmail.tsx
-import * as React from 'react'
-import {Html, Head, Preview, Body, Container, Section, Img, Text} from '@react-email/components'
-import {Markdown} from '@react-email/markdown'
+import * as React from "react";
+import {
+  Html,
+  Head,
+  Preview,
+  Body,
+  Container,
+  Section,
+  Img,
+  Text,
+} from "@react-email/components";
+import { Markdown } from "@react-email/markdown";
 
 export type FanMailoutProps = {
-  previewText?: string
-  brandName?: string
-  logoUrl?: string
-  heroUrl?: string
-  bodyMarkdown: string
-  unsubscribeUrl?: string
-}
+  previewText?: string;
+  brandName?: string;
+  logoUrl?: string;
+  heroUrl?: string;
+  bodyMarkdown: string;
+  unsubscribeUrl?: string;
+};
 
-const BOX_BG = '#af78c4'
-const PAGE_BG = '#0b0b0b'
-const TEXT = '#14110b'
-const MUTED = 'rgba(20,17,11,0.72)'
-const FOOTER_TONE = 'rgba(175, 120, 196, 1)'
+// Dark + regal purple palette (lean, email-safe)
+const PAGE_BG = "#07060B"; // near-black with purple bias
+const BOX_BG = "#121022"; // deep aubergine card
+const BOX_INNER = "#161332"; // slightly lifted for subtle depth
+const BORDER = "rgba(186, 134, 255, 0.14)"; // faint amethyst edge
+const TEXT = "rgba(246, 243, 255, 0.92)"; // soft off-white
+const MUTED = "rgba(246, 243, 255, 0.70)";
+const ACCENT = "#B58CFF"; // amethyst link/accent
+const FOOTER_TONE = "rgba(181, 140, 255, 0.92)";
+const SUBTLE = "rgba(246, 243, 255, 0.14)";
 
 const styles = {
   body: {
@@ -26,93 +40,124 @@ const styles = {
   },
   outer: {
     maxWidth: 720,
-    margin: '0 auto',
-    padding: '36px 18px',
+    margin: "0 auto",
+    padding: "38px 18px",
   },
   topLogoWrap: {
-    textAlign: 'center' as const,
+    textAlign: "center" as const,
     paddingBottom: 18,
   },
   logoImg: {
-    display: 'inline-block',
+    display: "inline-block",
     height: 34,
-    width: 'auto',
+    width: "auto",
   } as const,
   logoPlaceholder: {
-    display: 'inline-block',
+    display: "inline-block",
     width: 140,
     height: 34,
-    lineHeight: '34px',
-    borderRadius: 10,
-    border: `1px dashed rgba(221,193,143,0.75)`,
-    color: `rgba(221,193,143,0.95)`,
-    fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
+    lineHeight: "34px",
+    borderRadius: 12,
+    border: `1px dashed ${BORDER}`,
+    color: MUTED,
+    fontFamily:
+      "Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial",
     fontSize: 12,
-    letterSpacing: '0.2px',
+    letterSpacing: "0.3px",
   } as const,
 
   card: {
     backgroundColor: BOX_BG,
     borderRadius: 22,
-    overflow: 'hidden' as const,
-    border: '1px solid rgba(255,255,255,0.10)',
+    overflow: "hidden" as const,
+    border: `1px solid ${BORDER}`,
   },
-  hero: {
-    width: '100%',
-    display: 'block',
-  } as const,
+  // Optional subtle inner panel to make text area feel lux without extra markup bloat
   content: {
-    padding: '22px 22px 24px',
-  },
+    padding: "22px 22px 24px",
+    backgroundColor: BOX_INNER,
+  } as const,
+
+  hero: {
+    width: "100%",
+    display: "block",
+  } as const,
 
   proseWrap: {
     fontSize: 14,
-    lineHeight: '1.65',
+    lineHeight: "1.68",
     color: TEXT,
-    fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
-    letterSpacing: '0px',
+    fontFamily:
+      "Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial",
+    letterSpacing: "0px",
   } as const,
 
   footerOutside: {
-    textAlign: 'center' as const,
+    textAlign: "center" as const,
     marginTop: 16,
-    fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
+    fontFamily:
+      "Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial",
     fontSize: 12,
-    lineHeight: '1.4',
+    lineHeight: "1.4",
     color: FOOTER_TONE,
+    letterSpacing: "0.2px",
   } as const,
 
-  // Unsubscribe line: same tone as footer, smaller
   unsubscribeOutside: {
-    textAlign: 'center' as const,
+    textAlign: "center" as const,
     marginTop: 8,
-    fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
+    fontFamily:
+      "Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial",
     fontSize: 10,
-    lineHeight: '1.35',
-    color: 'rgba(221,193,143,0.85)',
+    lineHeight: "1.35",
+    color: MUTED,
   } as const,
-} as const
+} as const;
 
-type MarkdownCustomStyles = React.ComponentProps<typeof Markdown>['markdownCustomStyles']
+type MarkdownCustomStyles = React.ComponentProps<
+  typeof Markdown
+>["markdownCustomStyles"];
 
 const mdStyles: Record<string, React.CSSProperties> = {
-  p: {margin: '0 0 12px'},
-  a: {color: TEXT, textDecoration: 'underline', textUnderlineOffset: '3px'},
-  hr: {border: 0, borderTop: '1px solid rgba(20,17,11,0.16)', margin: '16px 0'},
-  h1: {fontSize: '18px', lineHeight: '1.25', margin: '0 0 12px'},
-  h2: {fontSize: '15px', lineHeight: '1.3', margin: '14px 0 8px', color: TEXT},
-  li: {margin: '0 0 6px'},
-  strong: {color: TEXT},
-  em: {color: MUTED},
-}
+  p: { margin: "0 0 12px" },
+  a: {
+    color: ACCENT,
+    textDecoration: "underline",
+    textUnderlineOffset: "3px",
+    textDecorationColor: "rgba(181, 140, 255, 0.55)",
+  },
+  hr: {
+    border: 0,
+    borderTop: `1px solid ${SUBTLE}`,
+    margin: "16px 0",
+  },
+  h1: { fontSize: "18px", lineHeight: "1.25", margin: "0 0 12px", color: TEXT },
+  h2: {
+    fontSize: "15px",
+    lineHeight: "1.3",
+    margin: "14px 0 8px",
+    color: TEXT,
+  },
+  li: { margin: "0 0 6px" },
+  strong: { color: TEXT },
+  em: { color: MUTED },
+};
 
 export default function FanMailout(props: FanMailoutProps) {
-  const {previewText, brandName = 'Angelfish Records', logoUrl, heroUrl, bodyMarkdown, unsubscribeUrl} = props
-  const preview = previewText ?? brandName
+  const {
+    previewText,
+    brandName = "Angelfish Records",
+    logoUrl,
+    heroUrl,
+    bodyMarkdown,
+    unsubscribeUrl,
+  } = props;
+  const preview = previewText ?? brandName;
 
   return (
     <Html>
       <Head>
+        {/* Keep light-only to avoid clients "helpfully" inverting and wrecking contrast */}
         <meta name="color-scheme" content="light only" />
         <meta name="supported-color-schemes" content="light only" />
         <style>{`
@@ -120,11 +165,11 @@ export default function FanMailout(props: FanMailoutProps) {
           body { -webkit-text-size-adjust: 100%; }
           img { filter: none !important; -webkit-filter: none !important; }
 
-          @media (prefers-color-scheme: dark) {
-            body, .bg-page { background: ${PAGE_BG} !important; }
-            .card { background: ${BOX_BG} !important; }
-            .prose, .prose * { color: ${TEXT} !important; }
-          }
+          /* Client hardening: keep background + text stable */
+          .bg-page { background: ${PAGE_BG} !important; }
+          .card { background: ${BOX_BG} !important; }
+          .prose, .prose * { color: ${TEXT} !important; }
+          .prose a { color: ${ACCENT} !important; }
         `}</style>
       </Head>
 
@@ -133,11 +178,17 @@ export default function FanMailout(props: FanMailoutProps) {
       <Body style={styles.body} className="bg-page">
         <Container style={styles.outer}>
           <Section style={styles.topLogoWrap}>
-            {logoUrl ? <Img src={logoUrl} alt={brandName} style={styles.logoImg} /> : <Text style={styles.logoPlaceholder}>LOGO</Text>}
+            {logoUrl ? (
+              <Img src={logoUrl} alt={brandName} style={styles.logoImg} />
+            ) : (
+              <Text style={styles.logoPlaceholder}>LOGO</Text>
+            )}
           </Section>
 
           <Section style={styles.card} className="card">
-            {heroUrl ? <Img src={heroUrl} alt="" width={720} style={styles.hero} /> : null}
+            {heroUrl ? (
+              <Img src={heroUrl} alt="" width={720} style={styles.hero} />
+            ) : null}
 
             <Section style={styles.content}>
               <Section style={styles.proseWrap} className="prose">
@@ -148,7 +199,9 @@ export default function FanMailout(props: FanMailoutProps) {
                     lineHeight: styles.proseWrap.lineHeight,
                     color: styles.proseWrap.color,
                   }}
-                  markdownCustomStyles={mdStyles as unknown as MarkdownCustomStyles}
+                  markdownCustomStyles={
+                    mdStyles as unknown as MarkdownCustomStyles
+                  }
                 >
                   {bodyMarkdown}
                 </Markdown>
@@ -160,18 +213,23 @@ export default function FanMailout(props: FanMailoutProps) {
 
           {unsubscribeUrl ? (
             <Text style={styles.unsubscribeOutside}>
-              Don’t want to hear from us again?{' '}
+              Don’t want to hear from us again?{" "}
               <a
                 href={unsubscribeUrl}
-                style={{color: FOOTER_TONE, textDecoration: 'underline', textUnderlineOffset: '2px'}}
+                style={{
+                  color: ACCENT,
+                  textDecoration: "underline",
+                  textUnderlineOffset: "2px",
+                  textDecorationColor: "rgba(181, 140, 255, 0.55)",
+                }}
               >
                 Click here
-              </a>{' '}
+              </a>{" "}
               to opt out of future communications.
             </Text>
           ) : null}
         </Container>
       </Body>
     </Html>
-  )
+  );
 }

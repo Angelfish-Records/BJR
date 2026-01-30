@@ -1,30 +1,38 @@
 // web/app/home/player/PlayerController.tsx
-'use client'
+"use client";
 
-import React from 'react'
-import FullPlayer from './FullPlayer'
-import type {AlbumInfo, AlbumNavItem, PlayerTrack, Tier} from '@/lib/types'
-import StageOverlay from './stage/StageOverlay'
-import type {LyricCue} from './stage/LyricsOverlay'
+import React from "react";
+import FullPlayer from "./FullPlayer";
+import type { AlbumInfo, AlbumNavItem, PlayerTrack, Tier } from "@/lib/types";
+import StageOverlay from "./stage/StageOverlay";
+import type { LyricCue } from "./stage/LyricsOverlay";
 
 export default function PlayerController(props: {
-  albumSlug: string
-  openPlayerPanel: () => void
-  album: AlbumInfo | null
-  tracks: PlayerTrack[]
-  albums: AlbumNavItem[]
-  onSelectAlbum: (slug: string) => void
-  isBrowsingAlbum: boolean
-  viewerTier?: Tier
+  albumSlug: string;
+  openPlayerPanel: () => void;
+  album: AlbumInfo | null;
+  tracks: PlayerTrack[];
+  albums: AlbumNavItem[];
+  onSelectAlbum: (slug: string) => void;
+  isBrowsingAlbum: boolean;
+  viewerTier?: Tier;
 }) {
-  const {albumSlug, album, tracks, albums, onSelectAlbum, isBrowsingAlbum, viewerTier = 'none'} = props
+  const {
+    albumSlug,
+    album,
+    tracks,
+    albums,
+    onSelectAlbum,
+    isBrowsingAlbum,
+    viewerTier = "none",
+  } = props;
 
-  const [stageOpen, setStageOpen] = React.useState(false)
-  const openStage = React.useCallback(() => setStageOpen(true), [])
-  const closeStage = React.useCallback(() => setStageOpen(false), [])
+  const [stageOpen, setStageOpen] = React.useState(false);
+  const openStage = React.useCallback(() => setStageOpen(true), []);
+  const closeStage = React.useCallback(() => setStageOpen(false), []);
 
-  const cues: LyricCue[] | null = null
-  const offsetMs = 0
+  const cues: LyricCue[] | null = null;
+  const offsetMs = 0;
 
   return (
     <>
@@ -41,7 +49,12 @@ export default function PlayerController(props: {
         onOpenStage={openStage}
       />
 
-      <StageOverlay open={stageOpen} onClose={closeStage} cues={cues} offsetMs={offsetMs} />
+      <StageOverlay
+        open={stageOpen}
+        onClose={closeStage}
+        cues={cues}
+        offsetMs={offsetMs}
+      />
     </>
-  )
+  );
 }

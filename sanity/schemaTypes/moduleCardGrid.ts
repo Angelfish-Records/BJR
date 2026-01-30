@@ -1,49 +1,49 @@
 // sanity/schemaTypes/moduleCardGrid.ts
-import {defineField, defineType} from 'sanity'
+import { defineField, defineType } from "sanity";
 
 export const moduleCardGrid = defineType({
-  name: 'moduleCardGrid',
-  title: 'Module: Card Grid',
-  type: 'object',
+  name: "moduleCardGrid",
+  title: "Module: Card Grid",
+  type: "object",
   fields: [
     defineField({
-      name: 'title',
-      title: 'Title',
-      type: 'string',
+      name: "title",
+      title: "Title",
+      type: "string",
     }),
     defineField({
-      name: 'cards',
-      title: 'Cards',
-      type: 'array',
+      name: "cards",
+      title: "Cards",
+      type: "array",
       of: [
         defineField({
-          name: 'card',
-          title: 'Card',
-          type: 'object',
+          name: "card",
+          title: "Card",
+          type: "object",
           fields: [
             defineField({
-              name: 'title',
-              title: 'Title',
-              type: 'string',
+              name: "title",
+              title: "Title",
+              type: "string",
               validation: (r) => r.required(),
             }),
             defineField({
-              name: 'body',
-              title: 'Body',
-              type: 'text',
+              name: "body",
+              title: "Body",
+              type: "text",
               rows: 3,
             }),
             defineField({
-              name: 'requiresEntitlement',
-              title: 'Requires entitlement key',
-              type: 'string',
-              description: 'Optional entitlement required to reveal this card',
+              name: "requiresEntitlement",
+              title: "Requires entitlement key",
+              type: "string",
+              description: "Optional entitlement required to reveal this card",
             }),
           ],
           preview: {
-            select: {title: 'title'},
-            prepare({title}) {
-              return {title: title ?? 'Card'}
+            select: { title: "title" },
+            prepare({ title }) {
+              return { title: title ?? "Card" };
             },
           },
         }),
@@ -52,13 +52,13 @@ export const moduleCardGrid = defineType({
     }),
   ],
   preview: {
-    select: {title: 'title', cards: 'cards'},
-    prepare({title, cards}) {
-      const count = Array.isArray(cards) ? cards.length : 0
+    select: { title: "title", cards: "cards" },
+    prepare({ title, cards }) {
+      const count = Array.isArray(cards) ? cards.length : 0;
       return {
-        title: title ?? 'Card grid',
-        subtitle: `${count} card${count === 1 ? '' : 's'}`,
-      }
+        title: title ?? "Card grid",
+        subtitle: `${count} card${count === 1 ? "" : "s"}`,
+      };
     },
   },
-})
+});

@@ -1,6 +1,6 @@
 // web/app/home/player/visualizer/themes/filamentStorm.ts
-import type {Theme} from '../types'
-import {createProgram, makeFullscreenTriangle} from '../gl'
+import type { Theme } from "../types";
+import { createProgram, makeFullscreenTriangle } from "../gl";
 
 const VS = `#version 300 es
 layout(location=0) in vec2 aPos;
@@ -9,7 +9,7 @@ void main() {
   vUv = aPos * 0.5 + 0.5;
   gl_Position = vec4(aPos, 0.0, 1.0);
 }
-`
+`;
 
 // Filament Storm (hairline geometry saturation)
 // Inline-tuned: fwidth AA for “band boundaries”, softened highlights, less single-pixel glitter.
@@ -146,57 +146,60 @@ void main() {
 
   fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }
-`
+`;
 
 export function createFilamentStormTheme(): Theme {
-  let program: WebGLProgram | null = null
-  let tri: {vao: WebGLVertexArrayObject | null; buf: WebGLBuffer | null} | null = null
-  let uRes: WebGLUniformLocation | null = null
-  let uTime: WebGLUniformLocation | null = null
-  let uEnergy: WebGLUniformLocation | null = null
-  let uBass: WebGLUniformLocation | null = null
-  let uMid: WebGLUniformLocation | null = null
-  let uTreble: WebGLUniformLocation | null = null
+  let program: WebGLProgram | null = null;
+  let tri: {
+    vao: WebGLVertexArrayObject | null;
+    buf: WebGLBuffer | null;
+  } | null = null;
+  let uRes: WebGLUniformLocation | null = null;
+  let uTime: WebGLUniformLocation | null = null;
+  let uEnergy: WebGLUniformLocation | null = null;
+  let uBass: WebGLUniformLocation | null = null;
+  let uMid: WebGLUniformLocation | null = null;
+  let uTreble: WebGLUniformLocation | null = null;
 
   return {
-    name: 'filament-storm',
+    name: "filament-storm",
     init(gl) {
-      program = createProgram(gl, VS, FS)
-      tri = makeFullscreenTriangle(gl)
-      uRes = gl.getUniformLocation(program, 'uRes')
-      uTime = gl.getUniformLocation(program, 'uTime')
-      uEnergy = gl.getUniformLocation(program, 'uEnergy')
-      uBass = gl.getUniformLocation(program, 'uBass')
-      uMid = gl.getUniformLocation(program, 'uMid')
-      uTreble = gl.getUniformLocation(program, 'uTreble')
+      program = createProgram(gl, VS, FS);
+      tri = makeFullscreenTriangle(gl);
+      uRes = gl.getUniformLocation(program, "uRes");
+      uTime = gl.getUniformLocation(program, "uTime");
+      uEnergy = gl.getUniformLocation(program, "uEnergy");
+      uBass = gl.getUniformLocation(program, "uBass");
+      uMid = gl.getUniformLocation(program, "uMid");
+      uTreble = gl.getUniformLocation(program, "uTreble");
     },
     render(gl, opts) {
-      if (!program || !tri) return
-      const bass = opts.audio.bass ?? opts.audio.energy
-      const mid = opts.audio.mid ?? opts.audio.energy
-      const treble = opts.audio.treble ?? opts.audio.energy
+      if (!program || !tri) return;
+      const bass = opts.audio.bass ?? opts.audio.energy;
+      const mid = opts.audio.mid ?? opts.audio.energy;
+      const treble = opts.audio.treble ?? opts.audio.energy;
 
-      gl.useProgram(program)
-      gl.bindVertexArray(tri.vao)
+      gl.useProgram(program);
+      gl.bindVertexArray(tri.vao);
 
-      gl.uniform2f(uRes, opts.width, opts.height)
-      gl.uniform1f(uTime, opts.time)
-      gl.uniform1f(uEnergy, opts.audio.energy)
-      gl.uniform1f(uBass, bass)
-      gl.uniform1f(uMid, mid)
-      gl.uniform1f(uTreble, treble)
+      gl.uniform2f(uRes, opts.width, opts.height);
+      gl.uniform1f(uTime, opts.time);
+      gl.uniform1f(uEnergy, opts.audio.energy);
+      gl.uniform1f(uBass, bass);
+      gl.uniform1f(uMid, mid);
+      gl.uniform1f(uTreble, treble);
 
-      gl.drawArrays(gl.TRIANGLES, 0, 3)
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-      gl.bindVertexArray(null)
-      gl.useProgram(null)
+      gl.bindVertexArray(null);
+      gl.useProgram(null);
     },
     dispose(gl) {
-      if (tri?.buf) gl.deleteBuffer(tri.buf)
-      if (tri?.vao) gl.deleteVertexArray(tri.vao)
-      tri = null
-      if (program) gl.deleteProgram(program)
-      program = null
+      if (tri?.buf) gl.deleteBuffer(tri.buf);
+      if (tri?.vao) gl.deleteVertexArray(tri.vao);
+      tri = null;
+      if (program) gl.deleteProgram(program);
+      program = null;
     },
-  }
+  };
 }

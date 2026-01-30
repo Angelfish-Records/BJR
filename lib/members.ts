@@ -1,63 +1,67 @@
 // web/lib/members.ts
-import 'server-only'
-import {sql} from '@vercel/postgres'
-import {grantEntitlement} from '@/lib/entitlementOps'
-import {ENTITLEMENTS, EVENT_SOURCES} from '@/lib/vocab'
-import {newCorrelationId} from '@/lib/events'
+import "server-only";
+import { sql } from "@vercel/postgres";
+import { grantEntitlement } from "@/lib/entitlementOps";
+import { ENTITLEMENTS, EVENT_SOURCES } from "@/lib/vocab";
+import { newCorrelationId } from "@/lib/events";
 
 export function normalizeEmail(input: string): string {
-  return (input ?? '').toString().trim().toLowerCase()
+  return (input ?? "").toString().trim().toLowerCase();
 }
 
 export function assertLooksLikeEmail(email: string): void {
-  const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-  if (!ok) throw new Error('Invalid email')
+  const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  if (!ok) throw new Error("Invalid email");
 }
 
 const uuidOk = (v: string) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v)
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    v,
+  );
 
 async function ensureBaselineEntitlements(memberId: string, reason: string) {
-  if (!uuidOk(memberId)) return
+  if (!uuidOk(memberId)) return;
 
   // Idempotent: grantEntitlement won't create duplicates for an active, non-expiring grant.
-  const correlationId = newCorrelationId()
+  const correlationId = newCorrelationId();
 
   await grantEntitlement({
     memberId,
     entitlementKey: ENTITLEMENTS.TIER_FRIEND,
-    grantedBy: 'system',
+    grantedBy: "system",
     grantReason: reason,
-    grantSource: 'clerk',
+    grantSource: "clerk",
     correlationId,
     eventSource: EVENT_SOURCES.CLERK,
-  })
+  });
 
   // ✅ NEW: catalog-wide play permission (this is what checkAccess is looking for via fallback)
   await grantEntitlement({
     memberId,
     entitlementKey: ENTITLEMENTS.PLAY_ALBUM,
-    scopeId: 'catalog',
-    scopeMeta: {implied_by: ENTITLEMENTS.TIER_FRIEND},
-    grantedBy: 'system',
+    scopeId: "catalog",
+    scopeMeta: { implied_by: ENTITLEMENTS.TIER_FRIEND },
+    grantedBy: "system",
     grantReason: reason,
-    grantSource: 'clerk',
+    grantSource: "clerk",
     correlationId,
     eventSource: EVENT_SOURCES.CLERK,
-  })
+  });
 }
 
-export async function getMemberIdByEmail(email: string): Promise<string | null> {
-  const e = normalizeEmail(email)
-  assertLooksLikeEmail(e)
+export async function getMemberIdByEmail(
+  email: string,
+): Promise<string | null> {
+  const e = normalizeEmail(email);
+  assertLooksLikeEmail(e);
 
   const res = await sql`
     select id
     from members
     where email = ${e}
     limit 1
-  `
-  return (res.rows[0]?.id as string | undefined) ?? null
+  `;
+  return (res.rows[0]?.id as string | undefined) ?? null;
 }
 
 /**
@@ -75,21 +79,21 @@ export async function getMemberIdByEmail(email: string): Promise<string | null> 
  * Returns {id, created} where created=true only for fresh inserts.
  */
 export async function ensureMemberByClerk(params: {
-  clerkUserId: string
-  email: string
-  source?: string
-  sourceDetail?: Record<string, unknown>
-  marketingOptIn?: boolean
-}): Promise<{id: string; created: boolean}> {
-  const clerkUserId = (params.clerkUserId ?? '').toString().trim()
-  if (!clerkUserId) throw new Error('Missing clerkUserId')
+  clerkUserId: string;
+  email: string;
+  source?: string;
+  sourceDetail?: Record<string, unknown>;
+  marketingOptIn?: boolean;
+}): Promise<{ id: string; created: boolean }> {
+  const clerkUserId = (params.clerkUserId ?? "").toString().trim();
+  if (!clerkUserId) throw new Error("Missing clerkUserId");
 
-  const email = normalizeEmail(params.email)
-  assertLooksLikeEmail(email)
+  const email = normalizeEmail(params.email);
+  assertLooksLikeEmail(email);
 
-  const source = params.source ?? 'clerk'
-  const sourceDetail = params.sourceDetail ?? {}
-  const marketingOptIn = params.marketingOptIn ?? true
+  const source = params.source ?? "clerk";
+  const sourceDetail = params.sourceDetail ?? {};
+  const marketingOptIn = params.marketingOptIn ?? true;
 
   // 1) Prefer canonical lookup by clerk_user_id
   const byClerk = await sql`
@@ -97,9 +101,9 @@ export async function ensureMemberByClerk(params: {
     from members
     where clerk_user_id = ${clerkUserId}
     limit 1
-  `
+  `;
   if (byClerk.rows[0]?.id) {
-    const id = byClerk.rows[0].id as string
+    const id = byClerk.rows[0].id as string;
     await sql`
       update members
       set email = ${email},
@@ -107,9 +111,9 @@ export async function ensureMemberByClerk(params: {
           marketing_opt_in = ${marketingOptIn},
           source_detail = members.source_detail || ${JSON.stringify(sourceDetail)}::jsonb
       where id = ${id}
-    `
-    await ensureBaselineEntitlements(id, 'clerk login (existing member)')
-    return {id, created: false}
+    `;
+    await ensureBaselineEntitlements(id, "clerk login (existing member)");
+    return { id, created: false };
   }
 
   // 2) Claim by email if unclaimed
@@ -122,11 +126,11 @@ export async function ensureMemberByClerk(params: {
     where email = ${email}
       and clerk_user_id is null
     returning id
-  `
+  `;
   if (claimed.rows[0]?.id) {
-    const id = claimed.rows[0].id as string
-    await ensureBaselineEntitlements(id, 'clerk login (email claim)')
-    return {id, created: false}
+    const id = claimed.rows[0].id as string;
+    await ensureBaselineEntitlements(id, "clerk login (email claim)");
+    return { id, created: false };
   }
 
   // 3) If email exists but is claimed by someone else, fail loud
@@ -135,9 +139,9 @@ export async function ensureMemberByClerk(params: {
     from members
     where email = ${email}
     limit 1
-  `
+  `;
   if (emailRow.rows[0]?.id) {
-    throw new Error('Email already claimed by a different Clerk user')
+    throw new Error("Email already claimed by a different Clerk user");
   }
 
   // 4) Insert new canonical row
@@ -163,14 +167,14 @@ export async function ensureMemberByClerk(params: {
       ${marketingOptIn}
     )
     returning id, (xmax = 0) as created
-  `
+  `;
 
-  const id = inserted.rows[0].id as string
-  const created = inserted.rows[0].created as boolean
+  const id = inserted.rows[0].id as string;
+  const created = inserted.rows[0].created as boolean;
 
-  await ensureBaselineEntitlements(id, 'clerk signup (new member)')
+  await ensureBaselineEntitlements(id, "clerk signup (new member)");
 
-  return {id, created}
+  return { id, created };
 }
 
 /**
@@ -182,17 +186,17 @@ export async function ensureMemberByClerk(params: {
  * enforced by a constraint, expression index, or is temporarily absent.
  */
 export async function ensureMemberByEmail(params: {
-  email: string
-  source?: string
-  sourceDetail?: Record<string, unknown>
-  marketingOptIn?: boolean
-}): Promise<{id: string; created: boolean}> {
-  const email = normalizeEmail(params.email)
-  assertLooksLikeEmail(email)
+  email: string;
+  source?: string;
+  sourceDetail?: Record<string, unknown>;
+  marketingOptIn?: boolean;
+}): Promise<{ id: string; created: boolean }> {
+  const email = normalizeEmail(params.email);
+  assertLooksLikeEmail(email);
 
-  const source = params.source ?? 'unknown'
-  const sourceDetail = params.sourceDetail ?? {}
-  const marketingOptIn = params.marketingOptIn ?? true
+  const source = params.source ?? "unknown";
+  const sourceDetail = params.sourceDetail ?? {};
+  const marketingOptIn = params.marketingOptIn ?? true;
 
   try {
     const ins = await sql`
@@ -215,13 +219,13 @@ export async function ensureMemberByEmail(params: {
         ${marketingOptIn}
       )
       returning id
-    `
-    return {id: ins.rows[0].id as string, created: true}
+    `;
+    return { id: ins.rows[0].id as string, created: true };
   } catch (err: unknown) {
-    const e = err as {code?: string; message?: string}
+    const e = err as { code?: string; message?: string };
 
     // Duplicate (unique/index) violation — treat as upsert
-    if (e?.code === '23505') {
+    if (e?.code === "23505") {
       const upd = await sql`
         update members
         set consent_latest_at = now(),
@@ -229,10 +233,10 @@ export async function ensureMemberByEmail(params: {
             source_detail = members.source_detail || ${JSON.stringify(sourceDetail)}::jsonb
         where email = ${email}
         returning id
-      `
+      `;
 
       if (upd.rows[0]?.id) {
-        return {id: upd.rows[0].id as string, created: false}
+        return { id: upd.rows[0].id as string, created: false };
       }
 
       // Extremely rare: duplicate was raised on a uniqueness rule not matching `where email = ...`
@@ -242,13 +246,16 @@ export async function ensureMemberByEmail(params: {
         from members
         where email = ${email}
         limit 1
-      `
-      if (sel.rows[0]?.id) return {id: sel.rows[0].id as string, created: false}
+      `;
+      if (sel.rows[0]?.id)
+        return { id: sel.rows[0].id as string, created: false };
 
-      throw new Error(`ensureMemberByEmail: duplicate detected but member not found for ${email}`)
+      throw new Error(
+        `ensureMemberByEmail: duplicate detected but member not found for ${email}`,
+      );
     }
 
     // Bubble anything else
-    throw err
+    throw err;
   }
 }

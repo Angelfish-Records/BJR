@@ -1,87 +1,93 @@
 // web/lib/shareTokens.ts
-import 'server-only'
-import crypto from 'crypto'
-import {sql} from '@vercel/postgres'
+import "server-only";
+import crypto from "crypto";
+import { sql } from "@vercel/postgres";
 
 export type TokenGrant = {
-  key: string
-  scopeId?: string | null
-  scopeMeta?: Record<string, unknown>
-  expiresAt?: string | null
-}
+  key: string;
+  scopeId?: string | null;
+  scopeMeta?: Record<string, unknown>;
+  expiresAt?: string | null;
+};
 
 export type ShareTokenOutcome =
-  | 'allowed'
-  | 'expired'
-  | 'revoked'
-  | 'quota_exceeded'
-  | 'scope_mismatch'
-  | 'invalid'
-  | 'error'
+  | "allowed"
+  | "expired"
+  | "revoked"
+  | "quota_exceeded"
+  | "scope_mismatch"
+  | "invalid"
+  | "error";
 
 type ShareTokenRow = {
-  id: string
-  created_at: string
-  kind: string
-  scope_id: string | null
-  grants: unknown
-  expires_at: string | null
-  revoked_at: string | null
-  max_redemptions: number | null
-}
+  id: string;
+  created_at: string;
+  kind: string;
+  scope_id: string | null;
+  grants: unknown;
+  expires_at: string | null;
+  revoked_at: string | null;
+  max_redemptions: number | null;
+};
 
 function b64url(bytes: Buffer) {
-  return bytes.toString('base64url')
+  return bytes.toString("base64url");
 }
 
 export function newShareTokenString(): string {
-  return `st_${b64url(crypto.randomBytes(24))}`
+  return `st_${b64url(crypto.randomBytes(24))}`;
 }
 
 export function hashShareToken(token: string): string {
-  return crypto.createHash('sha256').update(token).digest('hex')
+  return crypto.createHash("sha256").update(token).digest("hex");
 }
 
 function isPlainObject(x: unknown): x is Record<string, unknown> {
-  return !!x && typeof x === 'object' && !Array.isArray(x)
+  return !!x && typeof x === "object" && !Array.isArray(x);
 }
 
 function normalizeScopeId(input: string | null | undefined): string | null {
-  let s = (input ?? '').trim()
-  if (!s) return null
-  while (s.startsWith('alb:')) s = s.slice(4)
-  s = s.trim()
-  return s ? `alb:${s}` : null
+  let s = (input ?? "").trim();
+  if (!s) return null;
+  while (s.startsWith("alb:")) s = s.slice(4);
+  s = s.trim();
+  return s ? `alb:${s}` : null;
 }
 
 function coerceTokenGrants(input: unknown): TokenGrant[] {
-  if (!Array.isArray(input)) return []
-  const out: TokenGrant[] = []
+  if (!Array.isArray(input)) return [];
+  const out: TokenGrant[] = [];
   for (const item of input) {
-    if (!isPlainObject(item)) continue
-    const key = typeof item.key === 'string' ? item.key.trim() : ''
-    if (!key) continue
+    if (!isPlainObject(item)) continue;
+    const key = typeof item.key === "string" ? item.key.trim() : "";
+    if (!key) continue;
 
     const scopeId =
-      item.scopeId == null ? null : typeof item.scopeId === 'string' ? item.scopeId.trim() || null : null
+      item.scopeId == null
+        ? null
+        : typeof item.scopeId === "string"
+          ? item.scopeId.trim() || null
+          : null;
 
-    const scopeMeta = isPlainObject(item.scopeMeta) ? item.scopeMeta : undefined
+    const scopeMeta = isPlainObject(item.scopeMeta)
+      ? item.scopeMeta
+      : undefined;
 
     const expiresAt =
       item.expiresAt == null
         ? null
-        : typeof item.expiresAt === 'string'
+        : typeof item.expiresAt === "string"
           ? item.expiresAt.trim() || null
-          : null
+          : null;
 
-    out.push({key, scopeId, scopeMeta, expiresAt})
+    out.push({ key, scopeId, scopeMeta, expiresAt });
   }
-  return out
+  return out;
 }
 
 function normalizeAction(input: unknown, fallback: string) {
-  const s = typeof input === 'string' ? input.trim() : ''
-  return s || fallback
+  const s = typeof input === "string" ? input.trim() : "";
+  return s || fallback;
 }
 
 async function loadTokenRow(tokenHash: string): Promise<ShareTokenRow | null> {
@@ -90,22 +96,25 @@ async function loadTokenRow(tokenHash: string): Promise<ShareTokenRow | null> {
     from share_tokens
     where token_hash = ${tokenHash}
     limit 1
-  `
-  return rowR.rows?.[0] ?? null
+  `;
+  return rowR.rows?.[0] ?? null;
 }
 
 function isExpired(expiresAt: string | null) {
-  if (!expiresAt) return false
-  const exp = Date.parse(expiresAt)
-  return Number.isFinite(exp) && Date.now() > exp
+  if (!expiresAt) return false;
+  const exp = Date.parse(expiresAt);
+  return Number.isFinite(exp) && Date.now() > exp;
 }
 
-function consumerKeyFor(params: {memberId?: string | null; anonId?: string | null}): string | null {
-  const m = (params.memberId ?? '').trim()
-  if (m) return `member:${m}`
-  const a = (params.anonId ?? '').trim()
-  if (a) return `anon:${a}`
-  return null
+function consumerKeyFor(params: {
+  memberId?: string | null;
+  anonId?: string | null;
+}): string | null {
+  const m = (params.memberId ?? "").trim();
+  if (m) return `member:${m}`;
+  const a = (params.anonId ?? "").trim();
+  if (a) return `anon:${a}`;
+  return null;
 }
 
 /**
@@ -119,23 +128,23 @@ function consumerKeyFor(params: {memberId?: string | null; anonId?: string | nul
  * - otherwise, cap is per-action.
  */
 async function enforceDistinctConsumerCap(params: {
-  tokenId: string
-  max: number
-  action: string
-  capBucket?: string // default '*'
-  consumerKey: string
-}): Promise<{ok: true} | {ok: false; outcome: 'quota_exceeded'}> {
-  const capBucket = (params.capBucket ?? '*').trim() || '*'
+  tokenId: string;
+  max: number;
+  action: string;
+  capBucket?: string; // default '*'
+  consumerKey: string;
+}): Promise<{ ok: true } | { ok: false; outcome: "quota_exceeded" }> {
+  const capBucket = (params.capBucket ?? "*").trim() || "*";
 
   // ✅ If cap is cross-action, canonicalize action to '*'
-  const bucketAction = capBucket === '*' ? '*' : params.action
+  const bucketAction = capBucket === "*" ? "*" : params.action;
 
   // Serialize per token+bucketAction
-  const lockKey = `${params.tokenId}:${bucketAction}`
+  const lockKey = `${params.tokenId}:${bucketAction}`;
 
   const r = await sql<{
-    already: boolean
-    inserted: number
+    already: boolean;
+    inserted: number;
   }>`
     with
       _lock as (
@@ -169,25 +178,25 @@ async function enforceDistinctConsumerCap(params: {
     select
       exists(select 1 from existing) as already,
       (select count(*)::int from ins) as inserted
-  `
+  `;
 
-  const row = r.rows?.[0]
-  const already = row?.already ?? false
-  const inserted = (row?.inserted ?? 0) > 0
+  const row = r.rows?.[0];
+  const already = row?.already ?? false;
+  const inserted = (row?.inserted ?? 0) > 0;
 
-  if (already || inserted) return {ok: true}
-  return {ok: false, outcome: 'quota_exceeded'}
+  if (already || inserted) return { ok: true };
+  return { ok: false, outcome: "quota_exceeded" };
 }
 
 async function logPlay(params: {
-  tokenId: string
-  memberId?: string | null
-  anonId?: string | null
-  resourceKind: string
-  resourceId: string | null
-  action: string
-  outcome: ShareTokenOutcome
-  metadata?: Record<string, unknown>
+  tokenId: string;
+  memberId?: string | null;
+  anonId?: string | null;
+  resourceKind: string;
+  resourceId: string | null;
+  action: string;
+  outcome: ShareTokenOutcome;
+  metadata?: Record<string, unknown>;
 }) {
   try {
     await sql`
@@ -213,48 +222,56 @@ async function logPlay(params: {
         ${JSON.stringify(params.metadata ?? {})}::jsonb,
         now()
       )
-    `
+    `;
   } catch (err) {
-    console.error('share_token_plays insert failed', {tokenId: params.tokenId, outcome: params.outcome, err})
+    console.error("share_token_plays insert failed", {
+      tokenId: params.tokenId,
+      outcome: params.outcome,
+      err,
+    });
   }
 }
 
 export async function createShareToken(params: {
-  kind?: string
-  scopeId?: string | null
-  grants: TokenGrant[]
-  expiresAt?: string | null
-  maxRedemptions?: number | null
-  createdByMemberId?: string | null
+  kind?: string;
+  scopeId?: string | null;
+  grants: TokenGrant[];
+  expiresAt?: string | null;
+  maxRedemptions?: number | null;
+  createdByMemberId?: string | null;
 }): Promise<{
-  token: string
-  tokenId: string
-  kind: string
-  scopeId: string | null
-  expiresAt: string | null
-  maxRedemptions: number | null
-  createdAt: string
+  token: string;
+  tokenId: string;
+  kind: string;
+  scopeId: string | null;
+  expiresAt: string | null;
+  maxRedemptions: number | null;
+  createdAt: string;
 }> {
-  const token = newShareTokenString()
-  const tokenHash = hashShareToken(token)
+  const token = newShareTokenString();
+  const tokenHash = hashShareToken(token);
 
-  const kind = (params.kind ?? 'album_press').trim() || 'album_press'
-  const scopeId = (params.scopeId ?? null) ? String(params.scopeId) : null
-  const grants = Array.isArray(params.grants) ? params.grants : []
+  const kind = (params.kind ?? "album_press").trim() || "album_press";
+  const scopeId = (params.scopeId ?? null) ? String(params.scopeId) : null;
+  const grants = Array.isArray(params.grants) ? params.grants : [];
 
-  const expiresAt = params.expiresAt ? new Date(params.expiresAt).toISOString() : null
+  const expiresAt = params.expiresAt
+    ? new Date(params.expiresAt).toISOString()
+    : null;
   const maxRedemptions =
-    typeof params.maxRedemptions === 'number' && Number.isFinite(params.maxRedemptions) && params.maxRedemptions > 0
+    typeof params.maxRedemptions === "number" &&
+    Number.isFinite(params.maxRedemptions) &&
+    params.maxRedemptions > 0
       ? Math.floor(params.maxRedemptions)
-      : null
+      : null;
 
   const r = await sql<{
-    id: string
-    created_at: string
-    kind: string
-    scope_id: string | null
-    expires_at: string | null
-    max_redemptions: number | null
+    id: string;
+    created_at: string;
+    kind: string;
+    scope_id: string | null;
+    expires_at: string | null;
+    max_redemptions: number | null;
   }>`
     insert into share_tokens (
       created_by_member_id,
@@ -275,10 +292,10 @@ export async function createShareToken(params: {
       ${maxRedemptions}
     )
     returning id, created_at, kind, scope_id, expires_at, max_redemptions
-  `
+  `;
 
-  const row = r.rows?.[0]
-  if (!row?.id) throw new Error('Failed to create share token')
+  const row = r.rows?.[0];
+  if (!row?.id) throw new Error("Failed to create share token");
 
   return {
     token,
@@ -288,43 +305,73 @@ export async function createShareToken(params: {
     expiresAt: row.expires_at,
     maxRedemptions: row.max_redemptions,
     createdAt: row.created_at,
-  }
+  };
 }
 
 export async function redeemShareTokenForMember(params: {
-  token: string
-  memberId: string
-  expectedScopeId?: string | null
-  resourceKind?: string
-  resourceId?: string | null
-  action?: string // default: 'redeem'
+  token: string;
+  memberId: string;
+  expectedScopeId?: string | null;
+  resourceKind?: string;
+  resourceId?: string | null;
+  action?: string; // default: 'redeem'
 }): Promise<
-  | {ok: true; tokenId: string; scopeId: string | null; kind: string; grants: TokenGrant[]}
-  | {ok: false; code: 'INVALID' | 'EXPIRED' | 'REVOKED' | 'SCOPE_MISMATCH' | 'CAP_REACHED'}
+  | {
+      ok: true;
+      tokenId: string;
+      scopeId: string | null;
+      kind: string;
+      grants: TokenGrant[];
+    }
+  | {
+      ok: false;
+      code:
+        | "INVALID"
+        | "EXPIRED"
+        | "REVOKED"
+        | "SCOPE_MISMATCH"
+        | "CAP_REACHED";
+    }
 > {
-  const action = normalizeAction(params.action, 'redeem')
-  const tokenHash = hashShareToken((params.token ?? '').trim())
+  const action = normalizeAction(params.action, "redeem");
+  const tokenHash = hashShareToken((params.token ?? "").trim());
 
-  if (!tokenHash) return {ok: false, code: 'INVALID'}
+  if (!tokenHash) return { ok: false, code: "INVALID" };
 
-  const row = await loadTokenRow(tokenHash)
-  if (!row) return {ok: false, code: 'INVALID'}
+  const row = await loadTokenRow(tokenHash);
+  if (!row) return { ok: false, code: "INVALID" };
 
-  const expected = normalizeScopeId(params.expectedScopeId ?? null)
-  const found = normalizeScopeId(row.scope_id)
+  const expected = normalizeScopeId(params.expectedScopeId ?? null);
+  const found = normalizeScopeId(row.scope_id);
 
   // Precompute logging fields
-  const resourceKind = params.resourceKind ?? 'album'
-  const resourceId = params.resourceId ?? row.scope_id ?? null
+  const resourceKind = params.resourceKind ?? "album";
+  const resourceId = params.resourceId ?? row.scope_id ?? null;
 
   // Validate
   if (row.revoked_at) {
-    await logPlay({tokenId: row.id, memberId: params.memberId, anonId: null, resourceKind, resourceId, action, outcome: 'revoked'})
-    return {ok: false, code: 'REVOKED'}
+    await logPlay({
+      tokenId: row.id,
+      memberId: params.memberId,
+      anonId: null,
+      resourceKind,
+      resourceId,
+      action,
+      outcome: "revoked",
+    });
+    return { ok: false, code: "REVOKED" };
   }
   if (isExpired(row.expires_at)) {
-    await logPlay({tokenId: row.id, memberId: params.memberId, anonId: null, resourceKind, resourceId, action, outcome: 'expired'})
-    return {ok: false, code: 'EXPIRED'}
+    await logPlay({
+      tokenId: row.id,
+      memberId: params.memberId,
+      anonId: null,
+      resourceKind,
+      resourceId,
+      action,
+      outcome: "expired",
+    });
+    return { ok: false, code: "EXPIRED" };
   }
   if (expected && found && found !== expected) {
     await logPlay({
@@ -334,28 +381,36 @@ export async function redeemShareTokenForMember(params: {
       resourceKind,
       resourceId,
       action,
-      outcome: 'scope_mismatch',
-      metadata: {expected, found},
-    })
-    return {ok: false, code: 'SCOPE_MISMATCH'}
+      outcome: "scope_mismatch",
+      metadata: { expected, found },
+    });
+    return { ok: false, code: "SCOPE_MISMATCH" };
   }
 
   // Strict cap (distinct consumers)
-  if (typeof row.max_redemptions === 'number' && row.max_redemptions > 0) {
-    const ck = consumerKeyFor({memberId: params.memberId})
+  if (typeof row.max_redemptions === "number" && row.max_redemptions > 0) {
+    const ck = consumerKeyFor({ memberId: params.memberId });
     if (!ck) {
-      await logPlay({tokenId: row.id, memberId: params.memberId, anonId: null, resourceKind, resourceId, action, outcome: 'invalid'})
-      return {ok: false, code: 'INVALID'}
+      await logPlay({
+        tokenId: row.id,
+        memberId: params.memberId,
+        anonId: null,
+        resourceKind,
+        resourceId,
+        action,
+        outcome: "invalid",
+      });
+      return { ok: false, code: "INVALID" };
     }
 
-    const capBucket = '*' // you explicitly want cross-action caps by default
+    const capBucket = "*"; // you explicitly want cross-action caps by default
     const cap = await enforceDistinctConsumerCap({
       tokenId: row.id,
       max: row.max_redemptions,
       action,
       capBucket,
       consumerKey: ck,
-    })
+    });
     if (!cap.ok) {
       await logPlay({
         tokenId: row.id,
@@ -364,14 +419,14 @@ export async function redeemShareTokenForMember(params: {
         resourceKind,
         resourceId,
         action,
-        outcome: 'quota_exceeded',
-        metadata: {cap_bucket: capBucket, max: row.max_redemptions},
-      })
-      return {ok: false, code: 'CAP_REACHED'}
+        outcome: "quota_exceeded",
+        metadata: { cap_bucket: capBucket, max: row.max_redemptions },
+      });
+      return { ok: false, code: "CAP_REACHED" };
     }
   }
 
-  const grants = coerceTokenGrants(row.grants)
+  const grants = coerceTokenGrants(row.grants);
 
   await logPlay({
     tokenId: row.id,
@@ -380,18 +435,19 @@ export async function redeemShareTokenForMember(params: {
     resourceKind,
     resourceId,
     action,
-    outcome: 'allowed',
-    metadata: {cap_bucket: '*'},
-  })
+    outcome: "allowed",
+    metadata: { cap_bucket: "*" },
+  });
 
   // Apply grants (idempotent-ish)
   for (const g of grants) {
-    const key = (g?.key ?? '').toString().trim()
-    if (!key) continue
+    const key = (g?.key ?? "").toString().trim();
+    if (!key) continue;
 
-    const scopeId = (g?.scopeId ?? null) ? String(g.scopeId) : null
-    const scopeMeta = g?.scopeMeta && typeof g.scopeMeta === 'object' ? g.scopeMeta : {}
-    const expiresAt = g?.expiresAt ? new Date(g.expiresAt).toISOString() : null
+    const scopeId = (g?.scopeId ?? null) ? String(g.scopeId) : null;
+    const scopeMeta =
+      g?.scopeMeta && typeof g.scopeMeta === "object" ? g.scopeMeta : {};
+    const expiresAt = g?.expiresAt ? new Date(g.expiresAt).toISOString() : null;
 
     await sql`
       insert into entitlement_grants (
@@ -418,48 +474,84 @@ export async function redeemShareTokenForMember(params: {
         from entitlement_grants eg
         where eg.member_id = ${params.memberId}::uuid
           and eg.entitlement_key = ${key}
-          and coalesce(eg.scope_id,'') = coalesce(${scopeId ?? ''},'')
+          and coalesce(eg.scope_id,'') = coalesce(${scopeId ?? ""},'')
           and eg.revoked_at is null
           and (eg.expires_at is null or eg.expires_at > now())
       )
-    `
+    `;
   }
 
-  return {ok: true, tokenId: row.id, scopeId: row.scope_id, kind: row.kind, grants}
+  return {
+    ok: true,
+    tokenId: row.id,
+    scopeId: row.scope_id,
+    kind: row.kind,
+    grants,
+  };
 }
 
 export async function validateShareToken(params: {
-  token: string
-  expectedScopeId?: string | null
-  anonId?: string | null
-  resourceKind?: string
-  resourceId?: string | null
-  action?: string // default: 'access'
+  token: string;
+  expectedScopeId?: string | null;
+  anonId?: string | null;
+  resourceKind?: string;
+  resourceId?: string | null;
+  action?: string; // default: 'access'
 }): Promise<
-  | {ok: true; tokenId: string; scopeId: string | null; kind: string; grants: TokenGrant[]}
-  | {ok: false; code: 'INVALID' | 'EXPIRED' | 'REVOKED' | 'SCOPE_MISMATCH' | 'CAP_REACHED'}
+  | {
+      ok: true;
+      tokenId: string;
+      scopeId: string | null;
+      kind: string;
+      grants: TokenGrant[];
+    }
+  | {
+      ok: false;
+      code:
+        | "INVALID"
+        | "EXPIRED"
+        | "REVOKED"
+        | "SCOPE_MISMATCH"
+        | "CAP_REACHED";
+    }
 > {
-  const action = normalizeAction(params.action, 'access')
-  const tokenHash = hashShareToken((params.token ?? '').trim())
+  const action = normalizeAction(params.action, "access");
+  const tokenHash = hashShareToken((params.token ?? "").trim());
 
-  if (!tokenHash) return {ok: false, code: 'INVALID'}
+  if (!tokenHash) return { ok: false, code: "INVALID" };
 
-  const row = await loadTokenRow(tokenHash)
-  if (!row) return {ok: false, code: 'INVALID'}
+  const row = await loadTokenRow(tokenHash);
+  if (!row) return { ok: false, code: "INVALID" };
 
-  const expected = normalizeScopeId(params.expectedScopeId ?? null)
-  const found = normalizeScopeId(row.scope_id)
+  const expected = normalizeScopeId(params.expectedScopeId ?? null);
+  const found = normalizeScopeId(row.scope_id);
 
-  const resourceKind = params.resourceKind ?? 'album'
-  const resourceId = params.resourceId ?? row.scope_id ?? null
+  const resourceKind = params.resourceKind ?? "album";
+  const resourceId = params.resourceId ?? row.scope_id ?? null;
 
   if (row.revoked_at) {
-    await logPlay({tokenId: row.id, memberId: null, anonId: params.anonId ?? null, resourceKind, resourceId, action, outcome: 'revoked'})
-    return {ok: false, code: 'REVOKED'}
+    await logPlay({
+      tokenId: row.id,
+      memberId: null,
+      anonId: params.anonId ?? null,
+      resourceKind,
+      resourceId,
+      action,
+      outcome: "revoked",
+    });
+    return { ok: false, code: "REVOKED" };
   }
   if (isExpired(row.expires_at)) {
-    await logPlay({tokenId: row.id, memberId: null, anonId: params.anonId ?? null, resourceKind, resourceId, action, outcome: 'expired'})
-    return {ok: false, code: 'EXPIRED'}
+    await logPlay({
+      tokenId: row.id,
+      memberId: null,
+      anonId: params.anonId ?? null,
+      resourceKind,
+      resourceId,
+      action,
+      outcome: "expired",
+    });
+    return { ok: false, code: "EXPIRED" };
   }
   if (expected && found && found !== expected) {
     await logPlay({
@@ -469,28 +561,36 @@ export async function validateShareToken(params: {
       resourceKind,
       resourceId,
       action,
-      outcome: 'scope_mismatch',
-      metadata: {expected, found},
-    })
-    return {ok: false, code: 'SCOPE_MISMATCH'}
+      outcome: "scope_mismatch",
+      metadata: { expected, found },
+    });
+    return { ok: false, code: "SCOPE_MISMATCH" };
   }
 
   // Strict cap enforcement for anon access/usage
-  if (typeof row.max_redemptions === 'number' && row.max_redemptions > 0) {
-    const ck = consumerKeyFor({anonId: params.anonId ?? null})
+  if (typeof row.max_redemptions === "number" && row.max_redemptions > 0) {
+    const ck = consumerKeyFor({ anonId: params.anonId ?? null });
     if (!ck) {
-      await logPlay({tokenId: row.id, memberId: null, anonId: params.anonId ?? null, resourceKind, resourceId, action, outcome: 'invalid'})
-      return {ok: false, code: 'INVALID'}
+      await logPlay({
+        tokenId: row.id,
+        memberId: null,
+        anonId: params.anonId ?? null,
+        resourceKind,
+        resourceId,
+        action,
+        outcome: "invalid",
+      });
+      return { ok: false, code: "INVALID" };
     }
 
-    const capBucket = '*' // cross-action cap by default
+    const capBucket = "*"; // cross-action cap by default
     const cap = await enforceDistinctConsumerCap({
       tokenId: row.id,
       max: row.max_redemptions,
       action,
       capBucket,
       consumerKey: ck,
-    })
+    });
     if (!cap.ok) {
       await logPlay({
         tokenId: row.id,
@@ -499,14 +599,14 @@ export async function validateShareToken(params: {
         resourceKind,
         resourceId,
         action,
-        outcome: 'quota_exceeded',
-        metadata: {cap_bucket: capBucket, max: row.max_redemptions},
-      })
-      return {ok: false, code: 'CAP_REACHED'}
+        outcome: "quota_exceeded",
+        metadata: { cap_bucket: capBucket, max: row.max_redemptions },
+      });
+      return { ok: false, code: "CAP_REACHED" };
     }
   }
 
-  const grants = coerceTokenGrants(row.grants)
+  const grants = coerceTokenGrants(row.grants);
 
   await logPlay({
     tokenId: row.id,
@@ -515,9 +615,15 @@ export async function validateShareToken(params: {
     resourceKind,
     resourceId,
     action,
-    outcome: 'allowed',
-    metadata: {cap_bucket: '*'},
-  })
+    outcome: "allowed",
+    metadata: { cap_bucket: "*" },
+  });
 
-  return {ok: true, tokenId: row.id, scopeId: row.scope_id, kind: row.kind, grants}
+  return {
+    ok: true,
+    tokenId: row.id,
+    scopeId: row.scope_id,
+    kind: row.kind,
+    grants,
+  };
 }

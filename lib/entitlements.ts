@@ -1,32 +1,34 @@
 // web/lib/entitlements.ts
-import 'server-only'
-import {sql} from '@vercel/postgres'
+import "server-only";
+import { sql } from "@vercel/postgres";
 
-export type EntitlementScopeId = string
-export type EntitlementKey = string
+export type EntitlementScopeId = string;
+export type EntitlementKey = string;
 
 export type EntitlementMatch = {
-  entitlementKey: string
-  scopeId: string | null
-  grantedAt: string
-  expiresAt: string | null
-}
+  entitlementKey: string;
+  scopeId: string | null;
+  grantedAt: string;
+  expiresAt: string | null;
+};
 
 export type HasEntitlementOptions = {
-  allowGlobalFallback?: boolean
-  allowCatalogFallback?: boolean
-  catalogScopeId?: string // default 'catalog'
-}
+  allowGlobalFallback?: boolean;
+  allowCatalogFallback?: boolean;
+  catalogScopeId?: string; // default 'catalog'
+};
 
 const uuidOk = (v: string) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v)
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    v,
+  );
 
 function normCatalog(opts: HasEntitlementOptions) {
   return {
     allowGlobalFallback: opts.allowGlobalFallback ?? true,
     allowCatalogFallback: opts.allowCatalogFallback ?? true,
-    catalogScopeId: (opts.catalogScopeId ?? 'catalog').trim() || 'catalog',
-  }
+    catalogScopeId: (opts.catalogScopeId ?? "catalog").trim() || "catalog",
+  };
 }
 
 /**
@@ -37,10 +39,11 @@ export async function findEntitlement(
   memberId: string,
   entitlementKey: EntitlementKey,
   scopeId?: EntitlementScopeId | null,
-  opts: HasEntitlementOptions = {}
+  opts: HasEntitlementOptions = {},
 ): Promise<EntitlementMatch | null> {
-  if (!uuidOk(memberId)) return null
-  const {allowGlobalFallback, allowCatalogFallback, catalogScopeId} = normCatalog(opts)
+  if (!uuidOk(memberId)) return null;
+  const { allowGlobalFallback, allowCatalogFallback, catalogScopeId } =
+    normCatalog(opts);
 
   const res = await sql`
     select entitlement_key, scope_id, granted_at, expires_at
@@ -64,30 +67,31 @@ export async function findEntitlement(
       end,
       granted_at desc
     limit 1
-  `
+  `;
 
-  const row = res.rows[0]
-  if (!row) return null
+  const row = res.rows[0];
+  if (!row) return null;
 
   return {
     entitlementKey: row.entitlement_key as string,
     scopeId: (row.scope_id as string | null) ?? null,
     grantedAt: row.granted_at as string,
     expiresAt: (row.expires_at as string | null) ?? null,
-  }
+  };
 }
 
 export async function findAnyEntitlement(
   memberId: string,
   entitlementKeys: EntitlementKey[],
   scopeId?: EntitlementScopeId | null,
-  opts: HasEntitlementOptions = {}
+  opts: HasEntitlementOptions = {},
 ): Promise<EntitlementMatch | null> {
-  if (!uuidOk(memberId)) return null
-  if (entitlementKeys.length === 0) return null
-  const {allowGlobalFallback, allowCatalogFallback, catalogScopeId} = normCatalog(opts)
+  if (!uuidOk(memberId)) return null;
+  if (entitlementKeys.length === 0) return null;
+  const { allowGlobalFallback, allowCatalogFallback, catalogScopeId } =
+    normCatalog(opts);
 
-  const keysJson = JSON.stringify(entitlementKeys)
+  const keysJson = JSON.stringify(entitlementKeys);
 
   const res = await sql`
     with keys as (
@@ -114,17 +118,17 @@ export async function findAnyEntitlement(
       end,
       mec.granted_at desc
     limit 1
-  `
+  `;
 
-  const row = res.rows[0]
-  if (!row) return null
+  const row = res.rows[0];
+  if (!row) return null;
 
   return {
     entitlementKey: row.entitlement_key as string,
     scopeId: (row.scope_id as string | null) ?? null,
     grantedAt: row.granted_at as string,
     expiresAt: (row.expires_at as string | null) ?? null,
-  }
+  };
 }
 
 // (rest of file unchanged)
@@ -132,37 +136,46 @@ export async function hasEntitlement(
   memberId: string,
   entitlementKey: EntitlementKey,
   scopeId?: EntitlementScopeId | null,
-  opts: HasEntitlementOptions = {}
+  opts: HasEntitlementOptions = {},
 ): Promise<boolean> {
-  return (await findEntitlement(memberId, entitlementKey, scopeId, opts)) !== null
+  return (
+    (await findEntitlement(memberId, entitlementKey, scopeId, opts)) !== null
+  );
 }
 
 export async function hasAnyEntitlement(
   memberId: string,
   entitlementKeys: EntitlementKey[],
   scopeId?: EntitlementScopeId | null,
-  opts: HasEntitlementOptions = {}
+  opts: HasEntitlementOptions = {},
 ): Promise<boolean> {
-  return (await findAnyEntitlement(memberId, entitlementKeys, scopeId, opts)) !== null
+  return (
+    (await findAnyEntitlement(memberId, entitlementKeys, scopeId, opts)) !==
+    null
+  );
 }
 
-export async function listCurrentEntitlements(memberId: string): Promise<EntitlementMatch[]> {
-  if (!uuidOk(memberId)) return []
+export async function listCurrentEntitlements(
+  memberId: string,
+): Promise<EntitlementMatch[]> {
+  if (!uuidOk(memberId)) return [];
   const res = await sql`
     select entitlement_key, scope_id, granted_at, expires_at
     from member_entitlements_current
     where member_id = ${memberId}::uuid
     order by entitlement_key asc, scope_id asc nulls first
-  `
+  `;
   return res.rows.map((r) => ({
     entitlementKey: r.entitlement_key as string,
     scopeId: (r.scope_id as string | null) ?? null,
     grantedAt: r.granted_at as string,
     expiresAt: (r.expires_at as string | null) ?? null,
-  }))
+  }));
 }
 
-export async function listCurrentEntitlementKeys(memberId: string): Promise<EntitlementKey[]> {
-  const matches = await listCurrentEntitlements(memberId)
-  return matches.map((m) => m.entitlementKey)
+export async function listCurrentEntitlementKeys(
+  memberId: string,
+): Promise<EntitlementKey[]> {
+  const matches = await listCurrentEntitlements(memberId);
+  return matches.map((m) => m.entitlementKey);
 }

@@ -1,5 +1,5 @@
 // web/lib/sanityClient.ts
-import {createClient} from '@sanity/client'
+import { createClient } from "@sanity/client";
 
 export const sanity = createClient({
   projectId: process.env.SANITY_PROJECT_ID!,
@@ -7,4 +7,4 @@ export const sanity = createClient({
   apiVersion: process.env.SANITY_API_VERSION!,
   useCdn: false, // IMPORTANT: avoid stale audio metadata
   token: process.env.SANITY_API_READ_TOKEN,
-})
+});

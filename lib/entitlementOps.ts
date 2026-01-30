@@ -1,34 +1,39 @@
 // web/lib/entitlementOps.ts
-import 'server-only'
-import {sql} from '@vercel/postgres'
-import {EVENT_SOURCES, type EventSource} from './vocab'
-import {logEntitlementGranted, logEntitlementRevoked} from './events'
+import "server-only";
+import { sql } from "@vercel/postgres";
+import { EVENT_SOURCES, type EventSource } from "./vocab";
+import { logEntitlementGranted, logEntitlementRevoked } from "./events";
 
 const uuidOk = (v: string) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v)
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    v,
+  );
 
 type GrantParams = {
-  memberId: string
-  entitlementKey: string
-  scopeId?: string | null
-  scopeMeta?: Record<string, unknown>
-  grantedBy?: string
-  grantReason?: string
-  grantSource?: string
-  grantSourceRef?: string | null
-  expiresAt?: Date | null
-  correlationId?: string | null
-  eventSource?: EventSource | string
-}
+  memberId: string;
+  entitlementKey: string;
+  scopeId?: string | null;
+  scopeMeta?: Record<string, unknown>;
+  grantedBy?: string;
+  grantReason?: string;
+  grantSource?: string;
+  grantSourceRef?: string | null;
+  expiresAt?: Date | null;
+  correlationId?: string | null;
+  eventSource?: EventSource | string;
+};
 
-async function ensureEntitlementType(entitlementKey: string, scopeId: string | null) {
-  const key = entitlementKey?.trim()
-  if (!key) return
+async function ensureEntitlementType(
+  entitlementKey: string,
+  scopeId: string | null,
+) {
+  const key = entitlementKey?.trim();
+  if (!key) return;
 
   // Contract:
   // - scope_id NULL => "global" entitlements (this includes catalog-wide rights)
   // - scope_id NOT NULL => "scoped" entitlements (album-scoped, etc)
-  const scope = scopeId ? 'scoped' : 'global'
+  const scope = scopeId ? "scoped" : "global";
 
   await sql`
     insert into entitlement_types (key, description, scope)
@@ -36,27 +41,27 @@ async function ensureEntitlementType(entitlementKey: string, scopeId: string | n
     where not exists (
       select 1 from entitlement_types et where et.key = ${key}
     )
-  `
+  `;
 }
 
 export async function grantEntitlement(params: GrantParams): Promise<void> {
-  if (!uuidOk(params.memberId)) throw new Error('Invalid memberId')
+  if (!uuidOk(params.memberId)) throw new Error("Invalid memberId");
 
   const {
     memberId,
     entitlementKey,
     scopeId = null,
     scopeMeta = {},
-    grantedBy = 'system',
+    grantedBy = "system",
     grantReason = null,
-    grantSource = 'unknown',
+    grantSource = "unknown",
     grantSourceRef = null,
     expiresAt = null,
     correlationId = null,
     eventSource = EVENT_SOURCES.SERVER,
-  } = params
+  } = params;
 
-  await ensureEntitlementType(entitlementKey, scopeId)
+  await ensureEntitlementType(entitlementKey, scopeId);
 
   const inserted = await sql`
     insert into entitlement_grants (
@@ -85,14 +90,14 @@ export async function grantEntitlement(params: GrantParams): Promise<void> {
       from entitlement_grants eg
       where eg.member_id = ${memberId}::uuid
         and eg.entitlement_key = ${entitlementKey}
-        and coalesce(eg.scope_id,'') = coalesce(${scopeId ?? ''},'')
+        and coalesce(eg.scope_id,'') = coalesce(${scopeId ?? ""},'')
         and eg.revoked_at is null
         and (eg.expires_at is null or eg.expires_at > now())
     )
     returning 1
-  `
+  `;
 
-  if (!inserted.rowCount) return
+  if (!inserted.rowCount) return;
 
   await logEntitlementGranted({
     memberId,
@@ -107,29 +112,29 @@ export async function grantEntitlement(params: GrantParams): Promise<void> {
       grant_source_ref: grantSourceRef,
       expires_at: expiresAt ? expiresAt.toISOString() : null,
     },
-  })
+  });
 }
 
 export async function revokeEntitlement(params: {
-  memberId: string
-  entitlementKey: string
-  scopeId?: string | null
-  revokedBy?: string
-  revokeReason?: string | null
-  correlationId?: string | null
-  eventSource?: EventSource | string
+  memberId: string;
+  entitlementKey: string;
+  scopeId?: string | null;
+  revokedBy?: string;
+  revokeReason?: string | null;
+  correlationId?: string | null;
+  eventSource?: EventSource | string;
 }): Promise<void> {
-  if (!uuidOk(params.memberId)) throw new Error('Invalid memberId')
+  if (!uuidOk(params.memberId)) throw new Error("Invalid memberId");
 
   const {
     memberId,
     entitlementKey,
     scopeId = null,
-    revokedBy = 'system',
+    revokedBy = "system",
     revokeReason = null,
     correlationId = null,
     eventSource = EVENT_SOURCES.SERVER,
-  } = params
+  } = params;
 
   await sql`
     update entitlement_grants
@@ -138,10 +143,10 @@ export async function revokeEntitlement(params: {
         revoke_reason = ${revokeReason}
     where member_id = ${memberId}::uuid
       and entitlement_key = ${entitlementKey}
-      and coalesce(scope_id,'') = coalesce(${scopeId ?? ''},'')
+      and coalesce(scope_id,'') = coalesce(${scopeId ?? ""},'')
       and revoked_at is null
       and (expires_at is null or expires_at > now())
-  `
+  `;
 
   await logEntitlementRevoked({
     memberId,
@@ -149,6 +154,6 @@ export async function revokeEntitlement(params: {
     scopeId,
     source: eventSource,
     correlationId,
-    payload: {revoked_by: revokedBy, revoke_reason: revokeReason},
-  })
+    payload: { revoked_by: revokedBy, revoke_reason: revokeReason },
+  });
 }

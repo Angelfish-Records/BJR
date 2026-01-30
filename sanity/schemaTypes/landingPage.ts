@@ -1,37 +1,37 @@
-import {defineField, defineType} from 'sanity'
+import { defineField, defineType } from "sanity";
 
 export const landingPage = defineType({
-  name: 'landingPage',
-  title: 'Landing Page',
-  type: 'document',
+  name: "landingPage",
+  title: "Landing Page",
+  type: "document",
   fields: [
     defineField({
-      name: 'title',
-      title: 'Title',
-      type: 'string',
+      name: "title",
+      title: "Title",
+      type: "string",
       validation: (Rule) => Rule.required(),
     }),
     defineField({
-      name: 'backgroundImage',
-      title: 'Background Image',
-      type: 'image',
-      options: {hotspot: true},
+      name: "backgroundImage",
+      title: "Background Image",
+      type: "image",
+      options: { hotspot: true },
     }),
     defineField({
-      name: 'subtitle',
-      title: 'Subtitle',
-      type: 'text',
+      name: "subtitle",
+      title: "Subtitle",
+      type: "text",
       rows: 3,
     }),
     defineField({
-      name: 'ctaText',
-      title: 'CTA Text',
-      type: 'string',
+      name: "ctaText",
+      title: "CTA Text",
+      type: "string",
     }),
     defineField({
-      name: 'ctaHref',
-      title: 'CTA Link',
-      type: 'url',
+      name: "ctaHref",
+      title: "CTA Link",
+      type: "url",
     }),
   ],
-})
+});

@@ -1,6 +1,6 @@
 // web/app/home/player/visualizer/themes/nebula.ts
-import type {Theme} from '../types'
-import {createProgram, makeFullscreenTriangle} from '../gl'
+import type { Theme } from "../types";
+import { createProgram, makeFullscreenTriangle } from "../gl";
 
 const VS = `#version 300 es
 layout(location=0) in vec2 aPos;
@@ -9,7 +9,7 @@ void main() {
   vUv = aPos * 0.5 + 0.5;
   gl_Position = vec4(aPos, 0.0, 1.0);
 }
-`
+`;
 
 const FS = `#version 300 es
 precision highp float;
@@ -89,44 +89,47 @@ void main() {
 
   fragColor = vec4(neb, 1.0);
 }
-`
+`;
 
 export function createNebulaTheme(): Theme {
-  let program: WebGLProgram | null = null
-  let tri: {vao: WebGLVertexArrayObject | null; buf: WebGLBuffer | null} | null = null
-  let uRes: WebGLUniformLocation | null = null
-  let uTime: WebGLUniformLocation | null = null
-  let uEnergy: WebGLUniformLocation | null = null
+  let program: WebGLProgram | null = null;
+  let tri: {
+    vao: WebGLVertexArrayObject | null;
+    buf: WebGLBuffer | null;
+  } | null = null;
+  let uRes: WebGLUniformLocation | null = null;
+  let uTime: WebGLUniformLocation | null = null;
+  let uEnergy: WebGLUniformLocation | null = null;
 
   return {
-    name: 'nebula',
+    name: "nebula",
     init(gl) {
-      program = createProgram(gl, VS, FS)
-      tri = makeFullscreenTriangle(gl)
-      uRes = gl.getUniformLocation(program, 'uRes')
-      uTime = gl.getUniformLocation(program, 'uTime')
-      uEnergy = gl.getUniformLocation(program, 'uEnergy')
+      program = createProgram(gl, VS, FS);
+      tri = makeFullscreenTriangle(gl);
+      uRes = gl.getUniformLocation(program, "uRes");
+      uTime = gl.getUniformLocation(program, "uTime");
+      uEnergy = gl.getUniformLocation(program, "uEnergy");
     },
     render(gl, opts) {
-      if (!program || !tri) return
-      gl.useProgram(program)
-      gl.bindVertexArray(tri.vao)
+      if (!program || !tri) return;
+      gl.useProgram(program);
+      gl.bindVertexArray(tri.vao);
 
-      gl.uniform2f(uRes, opts.width, opts.height)
-      gl.uniform1f(uTime, opts.time)
-      gl.uniform1f(uEnergy, opts.audio.energy)
+      gl.uniform2f(uRes, opts.width, opts.height);
+      gl.uniform1f(uTime, opts.time);
+      gl.uniform1f(uEnergy, opts.audio.energy);
 
-      gl.drawArrays(gl.TRIANGLES, 0, 3)
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-      gl.bindVertexArray(null)
-      gl.useProgram(null)
+      gl.bindVertexArray(null);
+      gl.useProgram(null);
     },
     dispose(gl) {
-      if (tri?.buf) gl.deleteBuffer(tri.buf)
-      if (tri?.vao) gl.deleteVertexArray(tri.vao)
-      tri = null
-      if (program) gl.deleteProgram(program)
-      program = null
+      if (tri?.buf) gl.deleteBuffer(tri.buf);
+      if (tri?.vao) gl.deleteVertexArray(tri.vao);
+      tri = null;
+      if (program) gl.deleteProgram(program);
+      program = null;
     },
-  }
+  };
 }

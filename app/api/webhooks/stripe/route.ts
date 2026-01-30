@@ -1,149 +1,174 @@
 // web/app/api/webhooks/stripe/route.ts
-import 'server-only'
-import React from 'react'
-import {NextResponse} from 'next/server'
-import {sql} from '@vercel/postgres'
-import Stripe from 'stripe'
-import crypto from 'crypto'
+import "server-only";
+import React from "react";
+import { NextResponse } from "next/server";
+import { sql } from "@vercel/postgres";
+import Stripe from "stripe";
+import crypto from "crypto";
 
-import {ensureMemberByEmail, normalizeEmail} from '../../../../lib/members'
-import {grantEntitlement} from '../../../../lib/entitlementOps'
-import {reconcileStripeSubscription} from '../../../../lib/stripeSubscriptions'
-import {Resend} from 'resend'
-import {GiftCreatedEmail} from '@/emails'
-import {getAlbumEmailMetaBySlug} from '@/lib/albums'
+import { ensureMemberByEmail, normalizeEmail } from "../../../../lib/members";
+import { grantEntitlement } from "../../../../lib/entitlementOps";
+import { reconcileStripeSubscription } from "../../../../lib/stripeSubscriptions";
+import { Resend } from "resend";
+import { GiftCreatedEmail } from "@/emails";
+import { getAlbumEmailMetaBySlug } from "@/lib/albums";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 type PriceEntitlementRow = {
-  price_id: string
-  entitlement_key: string
-  scope_id: string | null
-  scope_meta: unknown
-}
+  price_id: string;
+  entitlement_key: string;
+  scope_id: string | null;
+  scope_meta: unknown;
+};
 
 function safeErrMessage(err: unknown): string {
-  if (err instanceof Error) return err.message
-  return String(err)
+  if (err instanceof Error) return err.message;
+  return String(err);
 }
 
 function must(v: string | undefined, name: string) {
-  const s = (v ?? '').trim()
-  if (!s) throw new Error(`Missing ${name}`)
-  return s
+  const s = (v ?? "").trim();
+  if (!s) throw new Error(`Missing ${name}`);
+  return s;
 }
 
 function sha256Hex(s: string): string {
-  return crypto.createHash('sha256').update(s).digest('hex')
+  return crypto.createHash("sha256").update(s).digest("hex");
 }
 
 function appOrigin(): string {
-  return must(process.env.NEXT_PUBLIC_APP_URL, 'NEXT_PUBLIC_APP_URL').replace(/\/$/, '')
+  return must(process.env.NEXT_PUBLIC_APP_URL, "NEXT_PUBLIC_APP_URL").replace(
+    /\/$/,
+    "",
+  );
 }
 
 function guessSenderName(senderEmail: string | null): string | null {
-  if (!senderEmail) return null
-  const local = senderEmail.split('@')[0] ?? ''
-  const cleaned = local.replace(/[._-]+/g, ' ').trim()
-  if (!cleaned) return null
+  if (!senderEmail) return null;
+  const local = senderEmail.split("@")[0] ?? "";
+  const cleaned = local.replace(/[._-]+/g, " ").trim();
+  if (!cleaned) return null;
   return cleaned
-    .split(' ')
+    .split(" ")
     .filter(Boolean)
     .map((w) => w.slice(0, 1).toUpperCase() + w.slice(1))
-    .join(' ')
+    .join(" ");
 }
 
-async function getMemberIdByClerkUserId(clerkUserId: string): Promise<string | null> {
-  if (!clerkUserId) return null
+async function getMemberIdByClerkUserId(
+  clerkUserId: string,
+): Promise<string | null> {
+  if (!clerkUserId) return null;
   const res = await sql`
     select id
     from members
     where clerk_user_id = ${clerkUserId}
     limit 1
-  `
-  return (res.rows[0]?.id as string | undefined) ?? null
+  `;
+  return (res.rows[0]?.id as string | undefined) ?? null;
 }
 
-async function getMemberIdByStripeCustomerId(customerId: string): Promise<string | null> {
-  if (!customerId) return null
+async function getMemberIdByStripeCustomerId(
+  customerId: string,
+): Promise<string | null> {
+  if (!customerId) return null;
   const res = await sql`
     select id
     from members
     where stripe_customer_id = ${customerId}
     limit 1
-  `
-  return (res.rows[0]?.id as string | undefined) ?? null
+  `;
+  return (res.rows[0]?.id as string | undefined) ?? null;
 }
 
-async function attachStripeCustomerId(memberId: string, customerId: string): Promise<void> {
-  if (!memberId || !customerId) return
+async function attachStripeCustomerId(
+  memberId: string,
+  customerId: string,
+): Promise<void> {
+  if (!memberId || !customerId) return;
   await sql`
     update members
     set stripe_customer_id = ${customerId}
     where id = ${memberId}::uuid
       and (stripe_customer_id is null or stripe_customer_id = ${customerId})
-  `
+  `;
 }
 
-async function resolveMemberIdFromSession(session: Stripe.Checkout.Session): Promise<{
-  memberId: string | null
-  customerId: string
+async function resolveMemberIdFromSession(
+  session: Stripe.Checkout.Session,
+): Promise<{
+  memberId: string | null;
+  customerId: string;
 }> {
   const customerId =
-    (typeof session.customer === 'string' ? session.customer : session.customer?.id) ?? ''
+    (typeof session.customer === "string"
+      ? session.customer
+      : session.customer?.id) ?? "";
 
   if (customerId) {
-    const byCustomer = await getMemberIdByStripeCustomerId(customerId)
-    if (byCustomer) return {memberId: byCustomer, customerId}
+    const byCustomer = await getMemberIdByStripeCustomerId(customerId);
+    if (byCustomer) return { memberId: byCustomer, customerId };
   }
 
-  const clerkUserId = (session.client_reference_id ?? '').toString().trim()
+  const clerkUserId = (session.client_reference_id ?? "").toString().trim();
   if (clerkUserId) {
-    const byClerk = await getMemberIdByClerkUserId(clerkUserId)
-    if (byClerk) return {memberId: byClerk, customerId}
+    const byClerk = await getMemberIdByClerkUserId(clerkUserId);
+    if (byClerk) return { memberId: byClerk, customerId };
   }
 
-  const emailRaw = (session.customer_details?.email ?? session.customer_email ?? '').toString().trim()
-  const email = normalizeEmail(emailRaw)
+  const emailRaw = (
+    session.customer_details?.email ??
+    session.customer_email ??
+    ""
+  )
+    .toString()
+    .trim();
+  const email = normalizeEmail(emailRaw);
   if (email) {
     const ensured = await ensureMemberByEmail({
       email,
-      source: 'stripe',
-      sourceDetail: {checkout_session_id: session.id},
+      source: "stripe",
+      sourceDetail: { checkout_session_id: session.id },
       marketingOptIn: true,
-    })
-    return {memberId: ensured.id, customerId}
+    });
+    return { memberId: ensured.id, customerId };
   }
 
-  return {memberId: null, customerId}
+  return { memberId: null, customerId };
 }
 
 function sessionIsPaid(session: Stripe.Checkout.Session): boolean {
-  const ps = (session.payment_status ?? '').toString()
-  if (ps === 'paid') return true
+  const ps = (session.payment_status ?? "").toString();
+  if (ps === "paid") return true;
 
-  const pi = session.payment_intent
-  if (pi && typeof pi === 'object') {
-    const maybe = pi as {status?: unknown}
-    const st = typeof maybe.status === 'string' ? maybe.status : ''
-    if (st === 'succeeded') return true
+  const pi = session.payment_intent;
+  if (pi && typeof pi === "object") {
+    const maybe = pi as { status?: unknown };
+    const st = typeof maybe.status === "string" ? maybe.status : "";
+    if (st === "succeeded") return true;
   }
 
-  return false
+  return false;
 }
 
-async function resolveGiftIdForSession(sessionId: string, md: Record<string, string>): Promise<string | null> {
-  const giftIdFromMd = (md.giftId ?? '').trim()
-  const tokenHashFromMd = (md.giftTokenHash ?? '').trim()
+async function resolveGiftIdForSession(
+  sessionId: string,
+  md: Record<string, string>,
+): Promise<string | null> {
+  const giftIdFromMd = (md.giftId ?? "").trim();
+  const tokenHashFromMd = (md.giftTokenHash ?? "").trim();
 
   if (giftIdFromMd) {
-    const r = await sql`select id from gifts where id = ${giftIdFromMd}::uuid limit 1`
-    return (r.rows[0]?.id as string | undefined) ?? null
+    const r =
+      await sql`select id from gifts where id = ${giftIdFromMd}::uuid limit 1`;
+    return (r.rows[0]?.id as string | undefined) ?? null;
   }
 
   if (tokenHashFromMd) {
-    const r = await sql`select id from gifts where token_hash = ${tokenHashFromMd} limit 1`
-    return (r.rows[0]?.id as string | undefined) ?? null
+    const r =
+      await sql`select id from gifts where token_hash = ${tokenHashFromMd} limit 1`;
+    return (r.rows[0]?.id as string | undefined) ?? null;
   }
 
   const r = await sql`
@@ -151,65 +176,71 @@ async function resolveGiftIdForSession(sessionId: string, md: Record<string, str
     from gifts
     where stripe_checkout_session_id = ${sessionId}
     limit 1
-  `
-  return (r.rows[0]?.id as string | undefined) ?? null
+  `;
+  return (r.rows[0]?.id as string | undefined) ?? null;
 }
 
 async function sendGiftCreatedEmail(args: {
-  giftId: string
-  to: string
-  giftUrl: string
-  albumTitle: string
-  albumArtist?: string
-  albumCoverUrl?: string
-  personalNote?: string | null
-  senderName?: string | null
+  giftId: string;
+  to: string;
+  giftUrl: string;
+  albumTitle: string;
+  albumArtist?: string;
+  albumCoverUrl?: string;
+  personalNote?: string | null;
+  senderName?: string | null;
 }) {
-  const resend = new Resend(process.env.RESEND_API_KEY ?? 're_dummy')
-  const from = must(process.env.RESEND_FROM_GIFTS, 'RESEND_FROM_GIFTS')
-  const subject = `🎁 You’ve been gifted ${args.albumTitle || 'a release'}`
+  const resend = new Resend(process.env.RESEND_API_KEY ?? "re_dummy");
+  const from = must(process.env.RESEND_FROM_GIFTS, "RESEND_FROM_GIFTS");
+  const subject = `🎁 You’ve been gifted ${args.albumTitle || "a release"}`;
 
   const emailElement = React.createElement(GiftCreatedEmail, {
-    appName: 'BJR',
+    appName: "BJR",
     toEmail: args.to,
-    albumTitle: args.albumTitle || 'a release',
+    albumTitle: args.albumTitle || "a release",
     albumArtist: args.albumArtist,
     albumCoverUrl: args.albumCoverUrl,
     personalNote: args.personalNote ?? null,
     senderName: args.senderName ?? null,
     giftUrl: args.giftUrl,
-    supportEmail: 'gifts@post.brendanjohnroch.com',
-  })
+    supportEmail: "gifts@post.brendanjohnroch.com",
+  });
 
-  const {data, error} = await resend.emails.send({
+  const { data, error } = await resend.emails.send({
     from,
     to: [args.to],
     subject,
     react: emailElement,
-    tags: [{name: 'kind', value: 'gift'}],
-  })
+    tags: [{ name: "kind", value: "gift" }],
+  });
 
-  if (error) throw new Error(error.message)
+  if (error) throw new Error(error.message);
 
   await sql`
     update gifts
     set gift_email_sent_at = coalesce(gift_email_sent_at, now()),
         gift_email_resend_id = coalesce(gift_email_resend_id, ${data?.id ?? null})
     where id = ${args.giftId}::uuid
-  `
+  `;
 }
 
-async function finalizeGiftPurchase(stripe: Stripe, sessionId: string, mdHint: Record<string, string>) {
+async function finalizeGiftPurchase(
+  stripe: Stripe,
+  sessionId: string,
+  mdHint: Record<string, string>,
+) {
   // Re-fetch session (expand PI) to avoid stale webhook snapshots.
-  const session = await stripe.checkout.sessions.retrieve(sessionId, {expand: ['payment_intent']})
+  const session = await stripe.checkout.sessions.retrieve(sessionId, {
+    expand: ["payment_intent"],
+  });
 
-  const md = ((session.metadata ?? {}) as Record<string, string>) ?? {}
-  const mergedMd: Record<string, string> = {...mdHint, ...md} // real session wins
+  const md = ((session.metadata ?? {}) as Record<string, string>) ?? {};
+  const mergedMd: Record<string, string> = { ...mdHint, ...md }; // real session wins
 
-  if (!sessionIsPaid(session)) return
+  if (!sessionIsPaid(session)) return;
 
-  const resolvedGiftId = await resolveGiftIdForSession(session.id, mergedMd)
-  if (!resolvedGiftId) return
+  const resolvedGiftId = await resolveGiftIdForSession(session.id, mergedMd);
+  if (!resolvedGiftId) return;
 
   // Canonical gift fields from DB
   const giftRowRes = await sql`
@@ -226,38 +257,42 @@ async function finalizeGiftPurchase(stripe: Stripe, sessionId: string, mdHint: R
     from gifts
     where id = ${resolvedGiftId}::uuid
     limit 1
-  `
+  `;
   const giftRow = giftRowRes.rows[0] as
     | {
-        id: string
-        status: string
-        album_slug: string
-        entitlement_key: string
-        recipient_email: string
-        recipient_member_id: string | null
-        message: string | null
-        sender_email: string | null
-        gift_email_dedupe_hash: string | null
+        id: string;
+        status: string;
+        album_slug: string;
+        entitlement_key: string;
+        recipient_email: string;
+        recipient_member_id: string | null;
+        message: string | null;
+        sender_email: string | null;
+        gift_email_dedupe_hash: string | null;
       }
-    | undefined
-  if (!giftRow) return
+    | undefined;
+  if (!giftRow) return;
 
   const recipientEmail =
-    normalizeEmail((giftRow.recipient_email ?? '').trim()) ||
-    normalizeEmail((mergedMd.recipientEmail ?? '').trim())
+    normalizeEmail((giftRow.recipient_email ?? "").trim()) ||
+    normalizeEmail((mergedMd.recipientEmail ?? "").trim());
 
-  const entitlementKey = (giftRow.entitlement_key ?? '').trim() || (mergedMd.entitlementKey ?? '').trim()
-  const albumSlug = (giftRow.album_slug ?? '').trim() || (mergedMd.albumSlug ?? '').trim()
+  const entitlementKey =
+    (giftRow.entitlement_key ?? "").trim() ||
+    (mergedMd.entitlementKey ?? "").trim();
+  const albumSlug =
+    (giftRow.album_slug ?? "").trim() || (mergedMd.albumSlug ?? "").trim();
 
-  if (!recipientEmail || !entitlementKey) return
+  if (!recipientEmail || !entitlementKey) return;
 
   const paymentIntentId =
-    typeof session.payment_intent === 'string'
+    typeof session.payment_intent === "string"
       ? session.payment_intent
-      : (session.payment_intent as Stripe.PaymentIntent | null)?.id ?? null
+      : ((session.payment_intent as Stripe.PaymentIntent | null)?.id ?? null);
 
-  const amountTotal = typeof session.amount_total === 'number' ? session.amount_total : null
-  const currency = (session.currency ?? '').toString() || null
+  const amountTotal =
+    typeof session.amount_total === "number" ? session.amount_total : null;
+  const currency = (session.currency ?? "").toString() || null;
 
   // Mark paid (idempotent)
   await sql`
@@ -270,39 +305,39 @@ async function finalizeGiftPurchase(stripe: Stripe, sessionId: string, mdHint: R
         currency = coalesce(currency, ${currency})
     where id = ${resolvedGiftId}::uuid
       and status in ('draft'::gift_status, 'pending_payment'::gift_status, 'paid'::gift_status)
-  `
+  `;
 
   // Ensure recipient member and attach.
   const ensured = await ensureMemberByEmail({
     email: recipientEmail,
-    source: 'gift_paid',
-    sourceDetail: {album_slug: albumSlug, stripe_session_id: session.id},
+    source: "gift_paid",
+    sourceDetail: { album_slug: albumSlug, stripe_session_id: session.id },
     marketingOptIn: true,
-  })
+  });
 
   await sql`
     update gifts
     set recipient_member_id = ${ensured.id}::uuid
     where id = ${resolvedGiftId}::uuid
       and recipient_member_id is null
-  `
+  `;
 
   // Grant entitlement (idempotent in your layer)
   await grantEntitlement({
     memberId: ensured.id,
     entitlementKey,
-    grantedBy: 'system',
-    grantReason: `gift_paid:${albumSlug || 'unknown'}`,
-    grantSource: 'stripe_gift',
+    grantedBy: "system",
+    grantReason: `gift_paid:${albumSlug || "unknown"}`,
+    grantSource: "stripe_gift",
     grantSourceRef: session.id,
     expiresAt: null,
     correlationId: session.id,
-    eventSource: 'server',
-  })
+    eventSource: "server",
+  });
 
   // Email dedupe gate: send once
-  const dedupeCode = crypto.randomBytes(32).toString('base64url')
-  const dedupeHash = sha256Hex(dedupeCode)
+  const dedupeCode = crypto.randomBytes(32).toString("base64url");
+  const dedupeHash = sha256Hex(dedupeCode);
 
   const gate = await sql`
     update gifts
@@ -311,8 +346,8 @@ async function finalizeGiftPurchase(stripe: Stripe, sessionId: string, mdHint: R
     where id = ${resolvedGiftId}::uuid
       and gift_email_dedupe_hash is null
     returning id
-  `
-  if (gate.rowCount === 0) return
+  `;
+  if (gate.rowCount === 0) return;
 
   // Suppression check
   const sup = await sql`
@@ -320,28 +355,28 @@ async function finalizeGiftPurchase(stripe: Stripe, sessionId: string, mdHint: R
     from email_suppressions
     where email::citext = ${recipientEmail}::citext
     limit 1
-  `
-  if ((sup.rowCount ?? 0) > 0) return
+  `;
+  if ((sup.rowCount ?? 0) > 0) return;
 
-  const giftUrl = `${appOrigin()}/gift/${encodeURIComponent(resolvedGiftId)}`
+  const giftUrl = `${appOrigin()}/gift/${encodeURIComponent(resolvedGiftId)}`;
 
-  let albumTitle = albumSlug || 'a release'
-  let albumArtist: string | undefined
-  let albumCoverUrl: string | undefined
+  let albumTitle = albumSlug || "a release";
+  let albumArtist: string | undefined;
+  let albumCoverUrl: string | undefined;
 
   try {
-    const meta = await getAlbumEmailMetaBySlug(albumSlug)
+    const meta = await getAlbumEmailMetaBySlug(albumSlug);
     if (meta) {
-      albumTitle = meta.title
-      albumArtist = meta.artist ?? undefined
-      albumCoverUrl = meta.artworkUrl ?? undefined
+      albumTitle = meta.title;
+      albumArtist = meta.artist ?? undefined;
+      albumCoverUrl = meta.artworkUrl ?? undefined;
     }
   } catch {
     // cosmetic only
   }
 
-  const personalNote = giftRow.message ?? null
-  const senderName = guessSenderName(giftRow.sender_email ?? null)
+  const personalNote = giftRow.message ?? null;
+  const senderName = guessSenderName(giftRow.sender_email ?? null);
 
   await sendGiftCreatedEmail({
     giftId: resolvedGiftId,
@@ -352,31 +387,37 @@ async function finalizeGiftPurchase(stripe: Stripe, sessionId: string, mdHint: R
     albumCoverUrl,
     personalNote,
     senderName,
-  })
+  });
 }
 
 export async function POST(req: Request) {
-  const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY ?? ''
-  const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? ''
+  const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY ?? "";
+  const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 
   if (!STRIPE_SECRET_KEY || !STRIPE_WEBHOOK_SECRET) {
-    return NextResponse.json({ok: false, error: 'Missing Stripe env vars'}, {status: 500})
+    return NextResponse.json(
+      { ok: false, error: "Missing Stripe env vars" },
+      { status: 500 },
+    );
   }
 
-  const sig = req.headers.get('stripe-signature')
+  const sig = req.headers.get("stripe-signature");
   if (!sig) {
-    return NextResponse.json({ok: false, error: 'Missing stripe-signature'}, {status: 400})
+    return NextResponse.json(
+      { ok: false, error: "Missing stripe-signature" },
+      { status: 400 },
+    );
   }
 
-  const body = await req.text()
-  const stripe = new Stripe(STRIPE_SECRET_KEY)
+  const body = await req.text();
+  const stripe = new Stripe(STRIPE_SECRET_KEY);
 
-  let event: Stripe.Event
+  let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(body, sig, STRIPE_WEBHOOK_SECRET)
+    event = stripe.webhooks.constructEvent(body, sig, STRIPE_WEBHOOK_SECRET);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Invalid signature'
-    return NextResponse.json({ok: false, error: msg}, {status: 400})
+    const msg = e instanceof Error ? e.message : "Invalid signature";
+    return NextResponse.json({ ok: false, error: msg }, { status: 400 });
   }
 
   // Idempotency: dedupe by event.id
@@ -385,64 +426,73 @@ export async function POST(req: Request) {
     values (${event.id}, ${event.type})
     on conflict (event_id) do nothing
     returning event_id
-  `
+  `;
   if (dedupe.rowCount === 0) {
-    return NextResponse.json({ok: true, deduped: true})
+    return NextResponse.json({ ok: true, deduped: true });
   }
 
   try {
     // Subscription lifecycle
     if (
-      event.type === 'customer.subscription.created' ||
-      event.type === 'customer.subscription.updated' ||
-      event.type === 'customer.subscription.deleted'
+      event.type === "customer.subscription.created" ||
+      event.type === "customer.subscription.updated" ||
+      event.type === "customer.subscription.deleted"
     ) {
-      const sub = event.data.object as Stripe.Subscription
-      await reconcileStripeSubscription({stripe, subscription: sub})
-      return NextResponse.json({ok: true})
+      const sub = event.data.object as Stripe.Subscription;
+      await reconcileStripeSubscription({ stripe, subscription: sub });
+      return NextResponse.json({ ok: true });
     }
 
     // Gifts: finalize on both immediate + async success
-    if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
-      const s = event.data.object as Stripe.Checkout.Session
-      const md = (s.metadata ?? {}) as Record<string, string>
+    if (
+      event.type === "checkout.session.completed" ||
+      event.type === "checkout.session.async_payment_succeeded"
+    ) {
+      const s = event.data.object as Stripe.Checkout.Session;
+      const md = (s.metadata ?? {}) as Record<string, string>;
       const looksGift =
-        (md.kind ?? '') === 'gift' || (md.giftId ?? '').trim() || (md.giftTokenHash ?? '').trim()
+        (md.kind ?? "") === "gift" ||
+        (md.giftId ?? "").trim() ||
+        (md.giftTokenHash ?? "").trim();
 
       if (looksGift) {
-        await finalizeGiftPurchase(stripe, s.id, md)
-        return NextResponse.json({ok: true})
+        await finalizeGiftPurchase(stripe, s.id, md);
+        return NextResponse.json({ ok: true });
       }
       // fall through to normal checkout logic (completed only)
     }
 
-    if (event.type === 'checkout.session.async_payment_failed') {
-      return NextResponse.json({ok: true})
+    if (event.type === "checkout.session.async_payment_failed") {
+      return NextResponse.json({ ok: true });
     }
 
     // Non-gift: only act on checkout.session.completed
-    if (event.type !== 'checkout.session.completed') {
-      return NextResponse.json({ok: true})
+    if (event.type !== "checkout.session.completed") {
+      return NextResponse.json({ ok: true });
     }
 
-    const session = event.data.object as Stripe.Checkout.Session
+    const session = event.data.object as Stripe.Checkout.Session;
 
-    const {memberId, customerId} = await resolveMemberIdFromSession(session)
-    if (!memberId) return NextResponse.json({ok: true})
+    const { memberId, customerId } = await resolveMemberIdFromSession(session);
+    if (!memberId) return NextResponse.json({ ok: true });
 
-    if (customerId) await attachStripeCustomerId(memberId, customerId)
+    if (customerId) await attachStripeCustomerId(memberId, customerId);
 
-    if (session.mode === 'subscription') {
-      if (typeof session.subscription === 'string' && session.subscription) {
-        const sub = await stripe.subscriptions.retrieve(session.subscription)
-        await reconcileStripeSubscription({stripe, subscription: sub})
+    if (session.mode === "subscription") {
+      if (typeof session.subscription === "string" && session.subscription) {
+        const sub = await stripe.subscriptions.retrieve(session.subscription);
+        await reconcileStripeSubscription({ stripe, subscription: sub });
       }
-      return NextResponse.json({ok: true})
+      return NextResponse.json({ ok: true });
     }
 
-    const lineItems = await stripe.checkout.sessions.listLineItems(session.id, {limit: 100})
-    const priceIds = lineItems.data.map((li) => li.price?.id).filter((v): v is string => !!v)
-    if (priceIds.length === 0) return NextResponse.json({ok: true})
+    const lineItems = await stripe.checkout.sessions.listLineItems(session.id, {
+      limit: 100,
+    });
+    const priceIds = lineItems.data
+      .map((li) => li.price?.id)
+      .filter((v): v is string => !!v);
+    if (priceIds.length === 0) return NextResponse.json({ ok: true });
 
     const mapped = await sql`
       select price_id, entitlement_key, scope_id, scope_meta
@@ -450,8 +500,8 @@ export async function POST(req: Request) {
       where price_id in (
         select jsonb_array_elements_text(${JSON.stringify(priceIds)}::jsonb)
       )
-    `
-    const rows = mapped.rows as PriceEntitlementRow[]
+    `;
+    const rows = mapped.rows as PriceEntitlementRow[];
 
     for (const r of rows) {
       await grantEntitlement({
@@ -459,24 +509,24 @@ export async function POST(req: Request) {
         entitlementKey: r.entitlement_key,
         scopeId: r.scope_id,
         scopeMeta: (r.scope_meta ?? {}) as Record<string, unknown>,
-        grantedBy: 'system',
-        grantReason: 'stripe_checkout_completed',
-        grantSource: 'stripe',
+        grantedBy: "system",
+        grantReason: "stripe_checkout_completed",
+        grantSource: "stripe",
         grantSourceRef: session.id,
         expiresAt: null,
         correlationId: session.id,
-        eventSource: 'server',
-      })
+        eventSource: "server",
+      });
     }
 
-    return NextResponse.json({ok: true})
+    return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error('stripe webhook handler error', {
+    console.error("stripe webhook handler error", {
       eventId: event.id,
       type: event.type,
       message: safeErrMessage(err),
-    })
+    });
     // Avoid Stripe retry storms while you inspect logs.
-    return NextResponse.json({ok: true})
+    return NextResponse.json({ ok: true });
   }
 }

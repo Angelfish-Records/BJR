@@ -1,95 +1,95 @@
 // sanity/schemaTypes/moduleDownloads.ts
-import {defineField, defineType} from 'sanity'
+import { defineField, defineType } from "sanity";
 
 export const moduleDownloads = defineType({
-  name: 'moduleDownloads',
-  title: 'Module: Downloads',
-  type: 'object',
+  name: "moduleDownloads",
+  title: "Module: Downloads",
+  type: "object",
   fields: [
     defineField({
-      name: 'title',
-      title: 'Title',
-      type: 'string',
+      name: "title",
+      title: "Title",
+      type: "string",
     }),
     defineField({
-      name: 'albumSlug',
-      title: 'Album slug',
-      type: 'string',
-      description: 'Must match AlbumOffer.albumSlug',
+      name: "albumSlug",
+      title: "Album slug",
+      type: "string",
+      description: "Must match AlbumOffer.albumSlug",
       validation: (r) => r.required(),
     }),
 
     // ---- NEW: Bandcamp-ish display metadata (Sanity-owned) ----
     defineField({
-      name: 'coverImage',
-      title: 'Cover image',
-      type: 'image',
-      options: {hotspot: true},
-      description: 'Displayed in the downloads card (Bandcamp-style).',
+      name: "coverImage",
+      title: "Cover image",
+      type: "image",
+      options: { hotspot: true },
+      description: "Displayed in the downloads card (Bandcamp-style).",
     }),
     defineField({
-      name: 'productLabel',
-      title: 'Product label',
-      type: 'string',
-      description: 'Eg “Digital Album”.',
-      initialValue: 'Digital Album',
+      name: "productLabel",
+      title: "Product label",
+      type: "string",
+      description: "Eg “Digital Album”.",
+      initialValue: "Digital Album",
     }),
     defineField({
-      name: 'highlights',
-      title: 'Highlights',
-      type: 'array',
-      description: 'Short value props (optional).',
-      of: [{type: 'string'}],
+      name: "highlights",
+      title: "Highlights",
+      type: "array",
+      description: "Short value props (optional).",
+      of: [{ type: "string" }],
     }),
     defineField({
-      name: 'techSpec',
-      title: 'Tech spec callout (optional)',
-      type: 'string',
-      description: 'Eg “Download available in 24-bit / 96kHz”.',
+      name: "techSpec",
+      title: "Tech spec callout (optional)",
+      type: "string",
+      description: "Eg “Download available in 24-bit / 96kHz”.",
     }),
     defineField({
-      name: 'giftBlurb',
-      title: 'Gift modal blurb (optional)',
-      type: 'text',
+      name: "giftBlurb",
+      title: "Gift modal blurb (optional)",
+      type: "text",
       rows: 2,
-      description: 'Copy shown in the “Send as gift” modal.',
+      description: "Copy shown in the “Send as gift” modal.",
     }),
 
     // Optional: editors choose which asset buttons appear (and label overrides),
     // while code enforces that the assetId must exist in ALBUM_OFFERS[albumSlug].assets.
     defineField({
-      name: 'assets',
-      title: 'Assets to show (optional)',
-      type: 'array',
+      name: "assets",
+      title: "Assets to show (optional)",
+      type: "array",
       description:
-        'If empty, the portal will show all assets defined in code for this album offer. If set, only these asset buttons will appear (in this order).',
+        "If empty, the portal will show all assets defined in code for this album offer. If set, only these asset buttons will appear (in this order).",
       of: [
         {
-          type: 'object',
-          name: 'downloadAssetSelector',
+          type: "object",
+          name: "downloadAssetSelector",
           fields: [
             defineField({
-              name: 'assetId',
-              title: 'Asset ID',
-              type: 'string',
+              name: "assetId",
+              title: "Asset ID",
+              type: "string",
               description:
                 'Must match an asset.id in web/lib/albumOffers.ts for this album (e.g. "bundle_zip").',
               validation: (r) => r.required(),
             }),
             defineField({
-              name: 'label',
-              title: 'Button label override (optional)',
-              type: 'string',
-              description: 'If empty, uses the label from code.',
+              name: "label",
+              title: "Button label override (optional)",
+              type: "string",
+              description: "If empty, uses the label from code.",
             }),
           ],
           preview: {
-            select: {assetId: 'assetId', label: 'label'},
-            prepare({assetId, label}) {
+            select: { assetId: "assetId", label: "label" },
+            prepare({ assetId, label }) {
               return {
                 title: label ? `${label}` : `${assetId}`,
-                subtitle: label ? `assetId: ${assetId}` : 'download asset',
-              }
+                subtitle: label ? `assetId: ${assetId}` : "download asset",
+              };
             },
           },
         },
@@ -97,12 +97,12 @@ export const moduleDownloads = defineType({
     }),
   ],
   preview: {
-    select: {title: 'title', albumSlug: 'albumSlug'},
-    prepare({title, albumSlug}) {
+    select: { title: "title", albumSlug: "albumSlug" },
+    prepare({ title, albumSlug }) {
       return {
         title: title ?? `Downloads: ${albumSlug}`,
-        subtitle: 'Album downloads (entitlement-gated)',
-      }
+        subtitle: "Album downloads (entitlement-gated)",
+      };
     },
   },
-})
+});

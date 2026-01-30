@@ -1,36 +1,36 @@
 // web/app/home/player/MiniPlayer.tsx
-'use client'
+"use client";
 
-import React from 'react'
-import {createPortal} from 'react-dom'
-import {usePlayer} from './PlayerState'
-import type {PlayerTrack} from '@/lib/types'
-import {buildShareTarget, performShare, type ShareTarget} from '@/lib/share'
-import {PatternPillUnderlay} from './VisualizerPattern'
-import {replaceQuery} from '@/app/home/urlState'
+import React from "react";
+import { createPortal } from "react-dom";
+import { usePlayer } from "./PlayerState";
+import type { PlayerTrack } from "@/lib/types";
+import { buildShareTarget, performShare, type ShareTarget } from "@/lib/share";
+import { PatternPillUnderlay } from "./VisualizerPattern";
+import { replaceQuery } from "@/app/home/urlState";
 
 function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n))
+  return Math.max(min, Math.min(max, n));
 }
 
 function fmtTimeSec(sec: number) {
-  const s = Math.max(0, Math.floor(sec))
-  const m = Math.floor(s / 60)
-  const r = s % 60
-  return `${m}:${String(r).padStart(2, '0')}`
+  const s = Math.max(0, Math.floor(sec));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, "0")}`;
 }
 
 const IconBtn = React.forwardRef<
   HTMLButtonElement,
   {
-    label: string
-    title?: string
-    onClick?: () => void
-    disabled?: boolean
-    children: React.ReactNode
+    label: string;
+    title?: string;
+    onClick?: () => void;
+    disabled?: boolean;
+    children: React.ReactNode;
   }
 >(function IconBtn(props, ref) {
-  const {label, title, onClick, disabled, children} = props
+  const { label, title, onClick, disabled, children } = props;
   return (
     <button
       ref={ref}
@@ -41,27 +41,27 @@ const IconBtn = React.forwardRef<
       disabled={disabled}
       className="afMpIconBtn"
       style={{
-        width: 'var(--af-mp-btn, 36px)',
-        height: 'var(--af-mp-btn, 36px)',
+        width: "var(--af-mp-btn, 36px)",
+        height: "var(--af-mp-btn, 36px)",
         borderRadius: 999,
-        border: '1px solid rgba(255,255,255,0.14)',
-        background: 'rgba(255,255,255,0.05)',
-        color: 'rgba(255,255,255,0.92)',
-        display: 'grid',
-        placeItems: 'center',
-        cursor: disabled ? 'default' : 'pointer',
+        border: "1px solid rgba(255,255,255,0.14)",
+        background: "rgba(255,255,255,0.05)",
+        color: "rgba(255,255,255,0.92)",
+        display: "grid",
+        placeItems: "center",
+        cursor: disabled ? "default" : "pointer",
         opacity: disabled ? 0.45 : 0.9,
-        userSelect: 'none',
-        transform: 'translateZ(0)',
-        flex: '0 0 auto',
+        userSelect: "none",
+        transform: "translateZ(0)",
+        flex: "0 0 auto",
       }}
     >
       {children}
     </button>
-  )
-})
+  );
+});
 
-function PlayPauseIcon({playing}: {playing: boolean}) {
+function PlayPauseIcon({ playing }: { playing: boolean }) {
   return playing ? (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
       <rect x="6" y="5" width="4" height="14" rx="1.2" />
@@ -71,7 +71,7 @@ function PlayPauseIcon({playing}: {playing: boolean}) {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
       <polygon points="9,7 19,12 9,17" />
     </svg>
-  )
+  );
 }
 
 function PrevIcon() {
@@ -80,7 +80,7 @@ function PrevIcon() {
       <rect x="6" y="6" width="2" height="12" />
       <polygon points="18,7 10,12 18,17" />
     </svg>
-  )
+  );
 }
 
 function NextIcon() {
@@ -89,104 +89,170 @@ function NextIcon() {
       <rect x="16" y="6" width="2" height="12" />
       <polygon points="6,7 14,12 6,17" />
     </svg>
-  )
+  );
 }
 
-function VolumeIcon({muted}: {muted: boolean}) {
+function VolumeIcon({ muted }: { muted: boolean }) {
   return muted ? (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M11 7 8.5 9H6v6h2.5L11 17V7Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <path
+        d="M11 7 8.5 9H6v6h2.5L11 17V7Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
       <path d="M16 9l5 5M21 9l-5 5" stroke="currentColor" strokeWidth="2" />
     </svg>
   ) : (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M11 7 8.5 9H6v6h2.5L11 17V7Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-      <path d="M14.5 9.5c.9.9.9 4.1 0 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M17 7c2 2 2 8 0 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.75" />
+      <path
+        d="M11 7 8.5 9H6v6h2.5L11 17V7Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M14.5 9.5c.9.9.9 4.1 0 5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M17 7c2 2 2 8 0 10"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        opacity="0.75"
+      />
     </svg>
-  )
+  );
 }
 
 function ShareIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M16 8a3 3 0 1 0-2.9-3.7A3 3 0 0 0 16 8Z" stroke="currentColor" strokeWidth="2" />
-      <path d="M6 14a3 3 0 1 0-2.9-3.7A3 3 0 0 0 6 14Z" stroke="currentColor" strokeWidth="2" />
-      <path d="M16 22a3 3 0 1 0-2.9-3.7A3 3 0 0 0 16 22Z" stroke="currentColor" strokeWidth="2" />
-      <path d="M8.7 11.2l5-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M8.7 12.8l5 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path
+        d="M16 8a3 3 0 1 0-2.9-3.7A3 3 0 0 0 16 8Z"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
+      <path
+        d="M6 14a3 3 0 1 0-2.9-3.7A3 3 0 0 0 6 14Z"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
+      <path
+        d="M16 22a3 3 0 1 0-2.9-3.7A3 3 0 0 0 16 22Z"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
+      <path
+        d="M8.7 11.2l5-3"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M8.7 12.8l5 3"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
     </svg>
-  )
+  );
 }
 
 function RetryIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M20 12a8 8 0 1 1-2.35-5.65" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M20 4v6h-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M20 12a8 8 0 1 1-2.35-5.65"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M20 4v6h-6"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
-  )
+  );
 }
 
 /** Local share UX */
 function useShareUX() {
-  const [fallback, setFallback] = React.useState<{url: string; title?: string} | null>(null)
-  const close = React.useCallback(() => setFallback(null), [])
+  const [fallback, setFallback] = React.useState<{
+    url: string;
+    title?: string;
+  } | null>(null);
+  const close = React.useCallback(() => setFallback(null), []);
 
   const shareTarget = React.useCallback(async (target: ShareTarget) => {
-    const res = await performShare(target)
-    if (!res.ok) setFallback({url: res.url, title: target.title})
-    return res
-  }, [])
+    const res = await performShare(target);
+    if (!res.ok) setFallback({ url: res.url, title: target.title });
+    return res;
+  }, []);
 
   const fallbackModal =
-    fallback && typeof document !== 'undefined'
+    fallback && typeof document !== "undefined"
       ? createPortal(
           <div
             role="dialog"
             aria-modal="true"
             aria-label="Share link"
             onMouseDown={(e) => {
-              if (e.target === e.currentTarget) close()
+              if (e.target === e.currentTarget) close();
             }}
             style={{
-              position: 'fixed',
+              position: "fixed",
               inset: 0,
-              background: 'rgba(0,0,0,0.55)',
-              backdropFilter: 'blur(8px)',
-              WebkitBackdropFilter: 'blur(8px)',
-              display: 'grid',
-              placeItems: 'center',
+              background: "rgba(0,0,0,0.55)",
+              backdropFilter: "blur(8px)",
+              WebkitBackdropFilter: "blur(8px)",
+              display: "grid",
+              placeItems: "center",
               zIndex: 100000,
               padding: 16,
             }}
           >
             <div
               style={{
-                width: 'min(520px, 100%)',
+                width: "min(520px, 100%)",
                 borderRadius: 16,
-                border: '1px solid rgba(255,255,255,0.14)',
-                background: 'rgba(10,10,10,0.85)',
-                boxShadow: '0 18px 60px rgba(0,0,0,0.45)',
+                border: "1px solid rgba(255,255,255,0.14)",
+                background: "rgba(10,10,10,0.85)",
+                boxShadow: "0 18px 60px rgba(0,0,0,0.45)",
                 padding: 14,
-                color: 'rgba(255,255,255,0.92)',
+                color: "rgba(255,255,255,0.92)",
               }}
             >
-              <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10}}>
-                <div style={{minWidth: 0}}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
                   <div
                     style={{
                       fontSize: 13,
                       fontWeight: 650,
                       opacity: 0.95,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
                     }}
                   >
-                    {fallback.title ?? 'Share link'}
+                    {fallback.title ?? "Share link"}
                   </div>
-                  <div style={{fontSize: 12, opacity: 0.7}}>Copy this URL</div>
+                  <div style={{ fontSize: 12, opacity: 0.7 }}>
+                    Copy this URL
+                  </div>
                 </div>
 
                 <button
@@ -197,52 +263,61 @@ function useShareUX() {
                     width: 34,
                     height: 34,
                     borderRadius: 999,
-                    border: '1px solid rgba(255,255,255,0.14)',
-                    background: 'rgba(255,255,255,0.06)',
-                    color: 'rgba(255,255,255,0.9)',
-                    cursor: 'pointer',
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    background: "rgba(255,255,255,0.06)",
+                    color: "rgba(255,255,255,0.9)",
+                    cursor: "pointer",
                   }}
                 >
                   ×
                 </button>
               </div>
 
-              <div style={{marginTop: 12, display: 'grid', gap: 10}}>
+              <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                 <input
                   readOnly
                   value={fallback.url}
                   onFocus={(e) => e.currentTarget.select()}
                   style={{
-                    width: '100%',
+                    width: "100%",
                     borderRadius: 12,
-                    border: '1px solid rgba(255,255,255,0.14)',
-                    background: 'rgba(255,255,255,0.06)',
-                    padding: '10px 12px',
-                    color: 'rgba(255,255,255,0.92)',
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    background: "rgba(255,255,255,0.06)",
+                    padding: "10px 12px",
+                    color: "rgba(255,255,255,0.92)",
                     fontSize: 12,
-                    outline: 'none',
+                    outline: "none",
                   }}
                 />
 
-                <div style={{display: 'flex', justifyContent: 'flex-end', gap: 10}}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    gap: 10,
+                  }}
+                >
                   <button
                     type="button"
                     onClick={async () => {
                       try {
-                        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-                          await navigator.clipboard.writeText(fallback.url)
+                        if (
+                          typeof navigator !== "undefined" &&
+                          navigator.clipboard?.writeText
+                        ) {
+                          await navigator.clipboard.writeText(fallback.url);
                         }
                       } catch {}
                     }}
                     style={{
                       borderRadius: 12,
-                      border: '1px solid rgba(255,255,255,0.14)',
-                      background: 'rgba(245,245,245,0.92)',
-                      color: 'rgba(0,0,0,0.9)',
-                      padding: '10px 12px',
+                      border: "1px solid rgba(255,255,255,0.14)",
+                      background: "rgba(245,245,245,0.92)",
+                      color: "rgba(0,0,0,0.9)",
+                      padding: "10px 12px",
                       fontSize: 12,
                       fontWeight: 650,
-                      cursor: 'pointer',
+                      cursor: "pointer",
                     }}
                   >
                     Copy
@@ -251,256 +326,282 @@ function useShareUX() {
               </div>
             </div>
           </div>,
-          document.body
+          document.body,
         )
-      : null
+      : null;
 
-  return {shareTarget, fallbackModal}
+  return { shareTarget, fallbackModal };
 }
 
-function findTrackById(queue: PlayerTrack[], id?: string | null): PlayerTrack | null {
-  if (!id) return null
-  return queue.find((t) => t.id === id) ?? null
+function findTrackById(
+  queue: PlayerTrack[],
+  id?: string | null,
+): PlayerTrack | null {
+  if (!id) return null;
+  return queue.find((t) => t.id === id) ?? null;
 }
 
-export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: string | null}) {
-  const {onExpand, artworkUrl = null} = props
-  const p = usePlayer()
+export default function MiniPlayer(props: {
+  onExpand?: () => void;
+  artworkUrl?: string | null;
+}) {
+  const { onExpand, artworkUrl = null } = props;
+  const p = usePlayer();
 
   const openPlayerToNowPlaying = () => {
-    const patch: Record<string, string | null | undefined> = {p: 'player'}
-    if (p.queueContextSlug) patch.album = p.queueContextSlug
-    if (p.current?.id) patch.track = p.current.id
-    patch.panel = null
-    patch.t = null
-    replaceQuery(patch)
-    onExpand?.()
-  }
+    const patch: Record<string, string | null | undefined> = { p: "player" };
+    if (p.queueContextSlug) patch.album = p.queueContextSlug;
+    if (p.current?.id) patch.track = p.current.id;
+    patch.panel = null;
+    patch.t = null;
+    replaceQuery(patch);
+    onExpand?.();
+  };
 
-  const {shareTarget, fallbackModal} = useShareUX()
+  const { shareTarget, fallbackModal } = useShareUX();
 
-  const [mounted, setMounted] = React.useState(false)
-  React.useEffect(() => setMounted(true), [])
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
 
-    React.useEffect(() => {
-  if (!mounted) return
-  if (typeof document === 'undefined') return
+  React.useEffect(() => {
+    if (!mounted) return;
+    if (typeof document === "undefined") return;
 
-  const el = document.getElementById('af-mini-player')
-  if (!el) return
+    const el = document.getElementById("af-mini-player");
+    if (!el) return;
 
-  let raf: number | null = null
-  let ro: ResizeObserver | null = null
+    let raf: number | null = null;
+    let ro: ResizeObserver | null = null;
 
-  const applyNow = () => {
-    // don’t force layout reads while backgrounded
-    if (document.hidden) return
-    const h = Math.ceil(el.getBoundingClientRect().height || 0)
-    document.documentElement.style.setProperty('--af-mini-player-h', `${h}px`)
-  }
+    const applyNow = () => {
+      // don’t force layout reads while backgrounded
+      if (document.hidden) return;
+      const h = Math.ceil(el.getBoundingClientRect().height || 0);
+      document.documentElement.style.setProperty(
+        "--af-mini-player-h",
+        `${h}px`,
+      );
+    };
 
-  const schedule = () => {
-    if (raf != null) return
-    raf = window.requestAnimationFrame(() => {
-      raf = null
-      applyNow()
-    })
-  }
+    const schedule = () => {
+      if (raf != null) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = null;
+        applyNow();
+      });
+    };
 
-  // prime once
-  schedule()
+    // prime once
+    schedule();
 
-  ro = new ResizeObserver(() => schedule())
-  ro.observe(el)
+    ro = new ResizeObserver(() => schedule());
+    ro.observe(el);
 
-  const onResize = () => schedule()
-  window.addEventListener('resize', onResize, {passive: true})
+    const onResize = () => schedule();
+    window.addEventListener("resize", onResize, { passive: true });
 
-  const onVis = () => {
-    if (!document.hidden) schedule()
-  }
-  document.addEventListener('visibilitychange', onVis, {passive: true})
+    const onVis = () => {
+      if (!document.hidden) schedule();
+    };
+    document.addEventListener("visibilitychange", onVis, { passive: true });
 
-  return () => {
-    if (raf != null) window.cancelAnimationFrame(raf)
-    raf = null
-    ro?.disconnect()
-    ro = null
-    window.removeEventListener('resize', onResize)
-    document.removeEventListener('visibilitychange', onVis)
-  }
-}, [mounted])
+    return () => {
+      if (raf != null) window.cancelAnimationFrame(raf);
+      raf = null;
+      ro?.disconnect();
+      ro = null;
+      window.removeEventListener("resize", onResize);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [mounted]);
 
-  const playingish = p.status === 'playing' || p.status === 'loading' || p.intent === 'play'
+  const playingish =
+    p.status === "playing" || p.status === "loading" || p.intent === "play";
 
   // Pending-first display (truthy UI during transitions)
-  const pendingTrack = findTrackById(p.queue, p.pendingTrackId) ?? null
-  const displayTrack = pendingTrack ?? p.current ?? null
+  const pendingTrack = findTrackById(p.queue, p.pendingTrackId) ?? null;
+  const displayTrack = pendingTrack ?? p.current ?? null;
 
-  const resolvedArtworkUrl =
-  artworkUrl ??
-  p.queueContextArtworkUrl ??
-  null
+  const resolvedArtworkUrl = artworkUrl ?? p.queueContextArtworkUrl ?? null;
 
   /* ---------------- Small anti-doubletap locks ---------------- */
 
-  const [transportLock, setTransportLock] = React.useState(false)
+  const [transportLock, setTransportLock] = React.useState(false);
   const lockFor = (ms: number) => {
-    setTransportLock(true)
-    window.setTimeout(() => setTransportLock(false), ms)
-  }
+    setTransportLock(true);
+    window.setTimeout(() => setTransportLock(false), ms);
+  };
 
-  const [playLock, setPlayLock] = React.useState(false)
+  const [playLock, setPlayLock] = React.useState(false);
   const lockPlayFor = (ms: number) => {
-    setPlayLock(true)
-    window.setTimeout(() => setPlayLock(false), ms)
-  }
+    setPlayLock(true);
+    window.setTimeout(() => setPlayLock(false), ms);
+  };
 
   /* ---------------- Seek (based on current track, not pending) ---------------- */
 
-  const curId = p.current?.id ?? ''
-  const durMs = Number((p.durationById?.[curId] ?? p.current?.durationMs ?? 0) || 0)
-  const durKnown = durMs > 0
-  const durSec = Math.max(1, Math.round(durMs / 1000))
+  const curId = p.current?.id ?? "";
+  const durMs = Number(
+    (p.durationById?.[curId] ?? p.current?.durationMs ?? 0) || 0,
+  );
+  const durKnown = durMs > 0;
+  const durSec = Math.max(1, Math.round(durMs / 1000));
 
-  const idx = curId ? p.queue.findIndex((t) => t.id === curId) : -1
-  const atStart = idx <= 0
-  const atEnd = idx >= 0 && idx === p.queue.length - 1
+  const idx = curId ? p.queue.findIndex((t) => t.id === curId) : -1;
+  const atStart = idx <= 0;
+  const atEnd = idx >= 0 && idx === p.queue.length - 1;
 
-  const prevDisabled = !p.current || transportLock || atStart
-  const nextDisabled = !p.current || transportLock || atEnd
+  const prevDisabled = !p.current || transportLock || atStart;
+  const nextDisabled = !p.current || transportLock || atEnd;
 
-  const posSecReal = (p.positionMs ?? 0) / 1000
-  const safePosReal = durKnown ? clamp(posSecReal, 0, durSec) : 0
+  const posSecReal = (p.positionMs ?? 0) / 1000;
+  const safePosReal = durKnown ? clamp(posSecReal, 0, durSec) : 0;
 
-  const pendingSec = p.pendingSeekMs != null ? p.pendingSeekMs / 1000 : null
-  const safePending = pendingSec != null && durKnown ? clamp(pendingSec, 0, durSec) : pendingSec ?? undefined
+  const pendingSec = p.pendingSeekMs != null ? p.pendingSeekMs / 1000 : null;
+  const safePending =
+    pendingSec != null && durKnown
+      ? clamp(pendingSec, 0, durSec)
+      : (pendingSec ?? undefined);
 
-  const [scrubbing, setScrubbing] = React.useState(false)
-  const [scrubSec, setScrubSec] = React.useState(0)
+  const [scrubbing, setScrubbing] = React.useState(false);
+  const [scrubSec, setScrubSec] = React.useState(0);
 
   React.useEffect(() => {
-    setScrubbing(false)
-    setScrubSec(0)
-  }, [p.current?.id])
+    setScrubbing(false);
+    setScrubSec(0);
+  }, [p.current?.id]);
 
   React.useEffect(() => {
-    if (!scrubbing) setScrubSec(safePosReal)
-  }, [safePosReal, scrubbing])
+    if (!scrubbing) setScrubSec(safePosReal);
+  }, [safePosReal, scrubbing]);
 
-  const sliderValue = scrubbing ? scrubSec : safePending ?? safePosReal
+  const sliderValue = scrubbing ? scrubSec : (safePending ?? safePosReal);
 
   /* ---------------- Seek tooltip ---------------- */
 
-  const seekWrapRef = React.useRef<HTMLDivElement | null>(null)
-  const [seekTip, setSeekTip] = React.useState<{open: boolean; sec: number; x: number; y: number}>({
+  const seekWrapRef = React.useRef<HTMLDivElement | null>(null);
+  const [seekTip, setSeekTip] = React.useState<{
+    open: boolean;
+    sec: number;
+    x: number;
+    y: number;
+  }>({
     open: false,
     sec: 0,
     x: 0,
     y: 0,
-  })
+  });
 
   const computeSeekTipFromClientX = React.useCallback(
     (clientX: number, forceOpen: boolean) => {
-      if (!durKnown) return
-      const wrap = seekWrapRef.current
-      if (!wrap) return
-      const r = wrap.getBoundingClientRect()
-      const pct = clamp((clientX - r.left) / Math.max(1, r.width), 0, 1)
-      const sec = clamp(Math.round(pct * durSec), 0, durSec)
-      const x = r.left + pct * r.width
-      const y = r.top
-      setSeekTip({open: forceOpen, sec, x, y})
-      if (scrubbing) setScrubSec(sec)
+      if (!durKnown) return;
+      const wrap = seekWrapRef.current;
+      if (!wrap) return;
+      const r = wrap.getBoundingClientRect();
+      const pct = clamp((clientX - r.left) / Math.max(1, r.width), 0, 1);
+      const sec = clamp(Math.round(pct * durSec), 0, durSec);
+      const x = r.left + pct * r.width;
+      const y = r.top;
+      setSeekTip({ open: forceOpen, sec, x, y });
+      if (scrubbing) setScrubSec(sec);
     },
-    [durKnown, durSec, scrubbing]
-  )
+    [durKnown, durSec, scrubbing],
+  );
 
   const closeSeekTip = React.useCallback(() => {
-    setSeekTip((s) => (s.open ? {...s, open: false} : s))
-  }, [])
+    setSeekTip((s) => (s.open ? { ...s, open: false } : s));
+  }, []);
 
   /* ---------------- Volume popup ---------------- */
 
-  const [volOpen, setVolOpen] = React.useState(false)
-  const vol = p.volume
-  const muted = p.muted || p.volume <= 0.001
+  const [volOpen, setVolOpen] = React.useState(false);
+  const vol = p.volume;
+  const muted = p.muted || p.volume <= 0.001;
 
-  const volBtnRef = React.useRef<HTMLButtonElement | null>(null)
-  const [volAnchor, setVolAnchor] = React.useState<{x: number; y: number} | null>(null)
+  const volBtnRef = React.useRef<HTMLButtonElement | null>(null);
+  const [volAnchor, setVolAnchor] = React.useState<{
+    x: number;
+    y: number;
+  } | null>(null);
 
   React.useLayoutEffect(() => {
-  if (!volOpen) {
-    setVolAnchor(null)
-    return
-  }
+    if (!volOpen) {
+      setVolAnchor(null);
+      return;
+    }
 
-  const el = volBtnRef.current
-  if (!el) return
+    const el = volBtnRef.current;
+    if (!el) return;
 
-  let raf: number | null = null
+    let raf: number | null = null;
 
-  const computeNow = () => {
-    if (typeof document !== 'undefined' && document.hidden) return
-    const r = el.getBoundingClientRect()
-    setVolAnchor({x: r.left + r.width / 2, y: r.top})
-  }
+    const computeNow = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      const r = el.getBoundingClientRect();
+      setVolAnchor({ x: r.left + r.width / 2, y: r.top });
+    };
 
-  const schedule = () => {
-    if (raf != null) return
-    raf = window.requestAnimationFrame(() => {
-      raf = null
-      computeNow()
-    })
-  }
+    const schedule = () => {
+      if (raf != null) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = null;
+        computeNow();
+      });
+    };
 
-  // prime
-  schedule()
+    // prime
+    schedule();
 
-  const onScroll = () => schedule()
-  const onResize = () => schedule()
-  window.addEventListener('scroll', onScroll, {capture: true, passive: true})
-  window.addEventListener('resize', onResize, {passive: true})
+    const onScroll = () => schedule();
+    const onResize = () => schedule();
+    window.addEventListener("scroll", onScroll, {
+      capture: true,
+      passive: true,
+    });
+    window.addEventListener("resize", onResize, { passive: true });
 
-  const onVis = () => {
-    if (typeof document !== 'undefined' && !document.hidden) schedule()
-  }
-  document.addEventListener('visibilitychange', onVis, {passive: true})
+    const onVis = () => {
+      if (typeof document !== "undefined" && !document.hidden) schedule();
+    };
+    document.addEventListener("visibilitychange", onVis, { passive: true });
 
-  return () => {
-    if (raf != null) window.cancelAnimationFrame(raf)
-    raf = null
-    window.removeEventListener('scroll', onScroll, true)
-    window.removeEventListener('resize', onResize)
-    document.removeEventListener('visibilitychange', onVis)
-  }
-}, [volOpen])
+    return () => {
+      if (raf != null) window.cancelAnimationFrame(raf);
+      raf = null;
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [volOpen]);
 
   /* ---------------- Copy ---------------- */
 
-  const title = displayTrack?.title ?? displayTrack?.id ?? 'Nothing queued'
+  const title = displayTrack?.title ?? displayTrack?.id ?? "Nothing queued";
 
   const statusLine = (() => {
-    if (p.status === 'blocked') return 'Playback error'
-    return displayTrack?.artist ?? ''
-  })()
+    if (p.status === "blocked") return "Playback error";
+    return displayTrack?.artist ?? "";
+  })();
 
   /* ---------------- Share ---------------- */
 
   const onShare = async () => {
-    const albumSlug = p.queueContextSlug
-    if (!albumSlug) return
-    if (typeof window === 'undefined') return
+    const albumSlug = p.queueContextSlug;
+    if (!albumSlug) return;
+    if (typeof window === "undefined") return;
 
-    const origin = window.location.origin
-    const albumTitle = (p.queueContextTitle ?? albumSlug).toString().trim() || albumSlug
-    const artistName = p.queueContextArtist ?? ((displayTrack?.artist ?? '').toString().trim() || undefined)
+    const origin = window.location.origin;
+    const albumTitle =
+      (p.queueContextTitle ?? albumSlug).toString().trim() || albumSlug;
+    const artistName =
+      p.queueContextArtist ??
+      ((displayTrack?.artist ?? "").toString().trim() || undefined);
 
-    const cur = displayTrack
+    const cur = displayTrack;
     if (cur?.id) {
       const target = buildShareTarget({
-        type: 'track',
-        methodHint: 'sheet',
+        type: "track",
+        methodHint: "sheet",
         origin,
         album: {
           slug: albumSlug,
@@ -512,14 +613,14 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
           id: cur.id,
           title: (cur.title ?? cur.id).toString().trim() || cur.id,
         },
-      })
-      await shareTarget(target)
-      return
+      });
+      await shareTarget(target);
+      return;
     }
 
     const target = buildShareTarget({
-      type: 'album',
-      methodHint: 'sheet',
+      type: "album",
+      methodHint: "sheet",
       origin,
       album: {
         slug: albumSlug,
@@ -527,75 +628,87 @@ export default function MiniPlayer(props: {onExpand?: () => void; artworkUrl?: s
         title: albumTitle,
         artistName,
       },
-    })
-    await shareTarget(target)
-  }
+    });
+    await shareTarget(target);
+  };
 
   /* ---------------- Layout constants ---------------- */
 
-  const DOCK_H = 80
-  const TOP_BORDER = 1
-  const VIS_H = 3
-  const SEEK_H = 18
-  const SAFE_INSET = 'env(safe-area-inset-bottom, 0px)'
-  const SEEK_TOP = -((SEEK_H - VIS_H) / 2)
+  const DOCK_H = 80;
+  const TOP_BORDER = 1;
+  const VIS_H = 3;
+  const SEEK_H = 18;
+  const SAFE_INSET = "env(safe-area-inset-bottom, 0px)";
+  const SEEK_TOP = -((SEEK_H - VIS_H) / 2);
 
-  const progressPct = durKnown ? (sliderValue / durSec) * 100 : 0
+  const progressPct = durKnown ? (sliderValue / durSec) * 100 : 0;
 
   const shimmerMeta =
     // shimmer while loading (pending or current)
-    (Boolean(p.pendingTrackId) && p.status === 'loading') || (p.status === 'loading' && Boolean(p.current))
+    (Boolean(p.pendingTrackId) && p.status === "loading") ||
+    (p.status === "loading" && Boolean(p.current));
 
   const dock = (
     <div
-    id="af-mini-player"
+      id="af-mini-player"
       data-af-miniplayer
       style={{
-        position: 'fixed',
+        position: "fixed",
         left: 0,
         right: 0,
         bottom: 0,
         zIndex: 9999,
-        display: 'grid',
+        display: "grid",
         gridTemplateRows: `var(--af-dock-h, ${DOCK_H}px) ${SAFE_INSET}`,
         height: `calc(var(--af-dock-h, ${DOCK_H}px) + ${SAFE_INSET})`,
         paddingTop: 0,
         paddingRight: 12,
         paddingLeft: 0,
 
-boxSizing: 'border-box',
-  maxWidth: '100vw',
+        boxSizing: "border-box",
+        maxWidth: "100vw",
 
-        background: 'rgba(0,0,0,0.55)',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
-        overflow: 'visible',
+        background: "rgba(0,0,0,0.55)",
+        backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
+        overflow: "visible",
       }}
     >
-      <div data-af-band style={{position: 'relative', width: '100%', height: '100%'}}>
+      <div
+        data-af-band
+        style={{ position: "relative", width: "100%", height: "100%" }}
+      >
         {/* top textured rail */}
         <div
           aria-hidden="true"
           style={{
-            position: 'absolute',
+            position: "absolute",
             left: 0,
             right: 0,
             top: 0,
             height: VIS_H,
             zIndex: 3,
-            pointerEvents: 'none',
-            overflow: 'hidden',
+            pointerEvents: "none",
+            overflow: "hidden",
           }}
         >
-          <div aria-hidden="true" style={{position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.10)'}} />
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "rgba(255,255,255,0.10)",
+            }}
+          />
           <PatternPillUnderlay active opacity={0.28} seed={1337} />
           <div
             aria-hidden="true"
             style={{
-              position: 'absolute',
+              position: "absolute",
               inset: 0,
-              background: 'linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.04))',
-              mixBlendMode: 'screen',
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.04))",
+              mixBlendMode: "screen",
               opacity: 0.55,
             }}
           />
@@ -605,22 +718,23 @@ boxSizing: 'border-box',
         <div
           aria-hidden="true"
           style={{
-            position: 'absolute',
+            position: "absolute",
             left: 0,
             top: 0,
             height: VIS_H,
             width: `${progressPct}%`,
             zIndex: 4,
-            pointerEvents: 'none',
-            overflow: 'hidden',
+            pointerEvents: "none",
+            overflow: "hidden",
           }}
         >
           <div
             aria-hidden="true"
             style={{
-              position: 'absolute',
+              position: "absolute",
               inset: 0,
-              background: 'color-mix(in srgb, var(--accent) 45%, rgba(255,255,255,0.30))',
+              background:
+                "color-mix(in srgb, var(--accent) 45%, rgba(255,255,255,0.30))",
               opacity: 0.9,
             }}
           />
@@ -628,12 +742,12 @@ boxSizing: 'border-box',
           <div
             aria-hidden="true"
             style={{
-              position: 'absolute',
+              position: "absolute",
               left: 0,
               right: 0,
               top: 0,
               height: 1,
-              background: 'rgba(255,255,255,0.30)',
+              background: "rgba(255,255,255,0.30)",
               opacity: 0.9,
             }}
           />
@@ -643,7 +757,7 @@ boxSizing: 'border-box',
         <div
           ref={seekWrapRef}
           style={{
-            position: 'absolute',
+            position: "absolute",
             left: 0,
             right: 0,
             top: SEEK_TOP,
@@ -651,7 +765,7 @@ boxSizing: 'border-box',
             zIndex: 5,
           }}
           onMouseLeave={() => {
-            if (!scrubbing) closeSeekTip()
+            if (!scrubbing) closeSeekTip();
           }}
         >
           <input
@@ -663,36 +777,36 @@ boxSizing: 'border-box',
             disabled={!durKnown}
             value={sliderValue}
             onPointerDown={(e) => {
-              setScrubbing(true)
-              computeSeekTipFromClientX(e.clientX, true)
+              setScrubbing(true);
+              computeSeekTipFromClientX(e.clientX, true);
             }}
             onPointerMove={(e) => {
-              if (!durKnown) return
-              computeSeekTipFromClientX(e.clientX, true)
+              if (!durKnown) return;
+              computeSeekTipFromClientX(e.clientX, true);
             }}
             onPointerUp={() => {
-              setScrubbing(false)
-              if (durKnown) p.seek(scrubSec * 1000)
-              closeSeekTip()
+              setScrubbing(false);
+              if (durKnown) p.seek(scrubSec * 1000);
+              closeSeekTip();
             }}
             onPointerCancel={() => {
-              setScrubbing(false)
-              closeSeekTip()
+              setScrubbing(false);
+              closeSeekTip();
             }}
             onMouseMove={(e) => {
-              if (!durKnown) return
-              if (!scrubbing) computeSeekTipFromClientX(e.clientX, true)
+              if (!durKnown) return;
+              if (!scrubbing) computeSeekTipFromClientX(e.clientX, true);
             }}
             onChange={(e) => setScrubSec(Number(e.target.value))}
             style={{
-              width: '100%',
+              width: "100%",
               height: SEEK_H,
               margin: 0,
               padding: 0,
-              background: 'transparent',
-              WebkitAppearance: 'none',
-              appearance: 'none',
-              cursor: durKnown ? 'pointer' : 'default',
+              background: "transparent",
+              WebkitAppearance: "none",
+              appearance: "none",
+              cursor: durKnown ? "pointer" : "default",
               opacity: durKnown ? 1 : 0.5,
             }}
           />
@@ -703,27 +817,27 @@ boxSizing: 'border-box',
           ? createPortal(
               <div
                 style={{
-                  position: 'fixed',
+                  position: "fixed",
                   left: seekTip.x,
                   top: seekTip.y,
-                  transform: 'translate(-50%, -28px)',
-                  padding: '4px 8px',
+                  transform: "translate(-50%, -28px)",
+                  padding: "4px 8px",
                   borderRadius: 999,
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  background: 'rgba(0,0,0,0.50)',
-                  backdropFilter: 'blur(8px)',
-                  WebkitBackdropFilter: 'blur(8px)',
-                  color: 'rgba(255,255,255,0.92)',
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(0,0,0,0.50)",
+                  backdropFilter: "blur(8px)",
+                  WebkitBackdropFilter: "blur(8px)",
+                  color: "rgba(255,255,255,0.92)",
                   fontSize: 11,
-                  boxShadow: '0 14px 36px rgba(0,0,0,0.35)',
-                  pointerEvents: 'none',
-                  whiteSpace: 'nowrap',
+                  boxShadow: "0 14px 36px rgba(0,0,0,0.35)",
+                  pointerEvents: "none",
+                  whiteSpace: "nowrap",
                   zIndex: 100000,
                 }}
               >
                 {fmtTimeSec(seekTip.sec)}
               </div>,
-              document.body
+              document.body,
             )
           : null}
 
@@ -731,12 +845,12 @@ boxSizing: 'border-box',
         <div
           data-af-clipband
           style={{
-            position: 'absolute',
+            position: "absolute",
             left: 0,
             right: 0,
             top: TOP_BORDER,
             bottom: 0,
-            overflow: 'hidden',
+            overflow: "hidden",
             zIndex: 1,
           }}
         >
@@ -745,16 +859,16 @@ boxSizing: 'border-box',
             data-af-artwork
             aria-hidden="true"
             style={{
-              position: 'absolute',
+              position: "absolute",
               left: 0,
               top: 0,
               bottom: 0,
               width: `var(--af-dock-h, ${DOCK_H}px)`,
               background: resolvedArtworkUrl
                 ? `url(${resolvedArtworkUrl}) center/cover no-repeat`
-                : 'rgba(255,255,255,0.06)',
+                : "rgba(255,255,255,0.06)",
               borderRadius: 0,
-              borderRight: '1px solid rgba(255,255,255,0.10)',
+              borderRight: "1px solid rgba(255,255,255,0.10)",
               zIndex: 0,
             }}
           />
@@ -763,12 +877,13 @@ boxSizing: 'border-box',
           <div
             data-af-controls
             style={{
-              position: 'relative',
+              position: "relative",
               zIndex: 1,
-              height: '100%',
-              display: 'grid',
-              gridTemplateColumns: 'var(--af-mp-cols, auto minmax(0, 1fr) auto)',
-              alignItems: 'center',
+              height: "100%",
+              display: "grid",
+              gridTemplateColumns:
+                "var(--af-mp-cols, auto minmax(0, 1fr) auto)",
+              alignItems: "center",
               gap: 12,
               paddingTop: 0,
               paddingBottom: 0,
@@ -776,13 +891,16 @@ boxSizing: 'border-box',
               paddingRight: 0,
             }}
           >
-            <div data-af-transport style={{display: 'flex', alignItems: 'center', gap: 10}}>
+            <div
+              data-af-transport
+              style={{ display: "flex", alignItems: "center", gap: 10 }}
+            >
               <IconBtn
                 label="Previous"
                 onClick={() => {
-                  lockFor(350)
-                  window.dispatchEvent(new Event('af:play-intent'))
-                  p.prev()
+                  lockFor(350);
+                  window.dispatchEvent(new Event("af:play-intent"));
+                  p.prev();
                 }}
                 disabled={prevDisabled}
               >
@@ -790,17 +908,17 @@ boxSizing: 'border-box',
               </IconBtn>
 
               <IconBtn
-                label={playingish ? 'Pause' : 'Play'}
+                label={playingish ? "Pause" : "Play"}
                 onClick={() => {
-                  lockPlayFor(120)
+                  lockPlayFor(120);
                   if (playingish) {
-                    window.dispatchEvent(new Event('af:pause-intent'))
-                    p.pause()
+                    window.dispatchEvent(new Event("af:pause-intent"));
+                    p.pause();
                   } else {
-                    const t = p.current ?? p.queue[0]
-                    if (!t) return
-                    p.play(t)
-                    window.dispatchEvent(new Event('af:play-intent'))
+                    const t = p.current ?? p.queue[0];
+                    if (!t) return;
+                    p.play(t);
+                    window.dispatchEvent(new Event("af:play-intent"));
                   }
                 }}
                 disabled={(!p.current && p.queue.length === 0) || playLock}
@@ -811,9 +929,9 @@ boxSizing: 'border-box',
               <IconBtn
                 label="Next"
                 onClick={() => {
-                  lockFor(350)
-                  window.dispatchEvent(new Event('af:play-intent'))
-                  p.next()
+                  lockFor(350);
+                  window.dispatchEvent(new Event("af:play-intent"));
+                  p.next();
                 }}
                 disabled={nextDisabled}
               >
@@ -821,30 +939,30 @@ boxSizing: 'border-box',
               </IconBtn>
             </div>
 
-            <div data-af-meta style={{minWidth: 0}}>
+            <div data-af-meta style={{ minWidth: 0 }}>
               <div
                 onClick={onExpand ? openPlayerToNowPlaying : undefined}
                 onKeyDown={(e) => {
-                  if (!onExpand) return
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    openPlayerToNowPlaying()
+                  if (!onExpand) return;
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    openPlayerToNowPlaying();
                   }
                 }}
-                role={onExpand ? 'button' : undefined}
+                role={onExpand ? "button" : undefined}
                 tabIndex={onExpand ? 0 : undefined}
-                aria-label={onExpand ? 'Open player' : undefined}
-                className={shimmerMeta ? 'afShimmerText' : undefined}
-                data-reason={p.loadingReason ?? ''}
+                aria-label={onExpand ? "Open player" : undefined}
+                className={shimmerMeta ? "afShimmerText" : undefined}
+                data-reason={p.loadingReason ?? ""}
                 style={{
                   fontSize: 13,
                   opacity: 0.92,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
                   lineHeight: 1.25,
-                  transition: 'opacity 160ms ease',
-                  cursor: onExpand ? 'pointer' : 'default',
+                  transition: "opacity 160ms ease",
+                  cursor: onExpand ? "pointer" : "default",
                 }}
               >
                 {title}
@@ -854,18 +972,37 @@ boxSizing: 'border-box',
                 style={{
                   fontSize: 12,
                   opacity: 0.65,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
                 }}
               >
                 {statusLine}
               </div>
             </div>
 
-            <div data-af-actions style={{display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end'}}>
-              <div style={{display: 'grid', justifyItems: 'center', position: 'relative'}}>
-                <IconBtn ref={volBtnRef} label="Volume" onClick={() => setVolOpen((v) => !v)} title="Volume">
+            <div
+              data-af-actions
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                justifySelf: "end",
+              }}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  justifyItems: "center",
+                  position: "relative",
+                }}
+              >
+                <IconBtn
+                  ref={volBtnRef}
+                  label="Volume"
+                  onClick={() => setVolOpen((v) => !v)}
+                  title="Volume"
+                >
                   <VolumeIcon muted={muted} />
                 </IconBtn>
 
@@ -874,22 +1011,22 @@ boxSizing: 'border-box',
                       <>
                         <div
                           style={{
-                            position: 'fixed',
+                            position: "fixed",
                             left: volAnchor.x,
                             top: volAnchor.y,
-                            transform: 'translate(-50%, calc(-100% - 10px))',
+                            transform: "translate(-50%, calc(-100% - 10px))",
                             width: 56,
                             height: 170,
                             borderRadius: 14,
-                            border: '1px solid rgba(255,255,255,0.12)',
-                            background: 'rgba(0,0,0,0.55)',
-                            backdropFilter: 'blur(10px)',
+                            border: "1px solid rgba(255,255,255,0.12)",
+                            background: "rgba(0,0,0,0.55)",
+                            backdropFilter: "blur(10px)",
                             padding: 10,
-                            boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
-                            display: 'grid',
-                            placeItems: 'center',
+                            boxShadow: "0 16px 40px rgba(0,0,0,0.35)",
+                            display: "grid",
+                            placeItems: "center",
                             zIndex: 99999,
-                            overflow: 'visible',
+                            overflow: "visible",
                           }}
                         >
                           <div className="volWrap">
@@ -902,8 +1039,8 @@ boxSizing: 'border-box',
                               step={0.01}
                               value={vol}
                               onChange={(e) => {
-                                const next = Number(e.target.value)
-                                p.setVolume(next)
+                                const next = Number(e.target.value);
+                                p.setVolume(next);
                               }}
                             />
                           </div>
@@ -969,22 +1106,27 @@ boxSizing: 'border-box',
                           }
                         `}</style>
                       </>,
-                      document.body
+                      document.body,
                     )
                   : null}
               </div>
 
-              <IconBtn label="Share" title="Share" onClick={onShare} disabled={!p.queueContextSlug}>
+              <IconBtn
+                label="Share"
+                title="Share"
+                onClick={onShare}
+                disabled={!p.queueContextSlug}
+              >
                 <ShareIcon />
               </IconBtn>
 
-              {p.status === 'blocked' || p.lastError ? (
+              {p.status === "blocked" || p.lastError ? (
                 <IconBtn
                   label="Retry"
                   title="Retry"
                   onClick={() => {
-                    window.dispatchEvent(new Event('af:play-intent'))
-                    p.bumpReload()
+                    window.dispatchEvent(new Event("af:play-intent"));
+                    p.bumpReload();
                   }}
                 >
                   <RetryIcon />
@@ -1148,15 +1290,15 @@ boxSizing: 'border-box',
         `}</style>
       </div>
 
-      <div aria-hidden="true" style={{height: SAFE_INSET}} />
+      <div aria-hidden="true" style={{ height: SAFE_INSET }} />
     </div>
-  )
+  );
 
-  if (!mounted) return null
+  if (!mounted) return null;
   return (
     <>
       {createPortal(dock, document.body)}
       {fallbackModal}
     </>
-  )
+  );
 }

@@ -25,14 +25,28 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-*, *::before, *::after { box-sizing: border-box; }
-html, body { height: 100%; width: 100%;
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+  width: 100%;
   max-width: 100%;
-  overflow-x: clip;}
-body { margin: 0; overflow-x: hidden; }
+  overflow-x: clip;
+}
+body {
+  margin: 0;
+  overflow-x: hidden;
+}
 
 @supports not (overflow-x: clip) {
-  html, body { overflow-x: hidden; }
+  html,
+  body {
+    overflow-x: hidden;
+  }
 }
 
 /* --- Shadow Home layout helpers (desktop-first, mobile stacks with sidebar first) --- */
@@ -89,7 +103,7 @@ body { margin: 0; overflow-x: hidden; }
 }
 
 /* Always 2-up on desktop, even if only one offer is present */
-.portalDownloadGrid2up{
+.portalDownloadGrid2up {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
@@ -97,11 +111,8 @@ body { margin: 0; overflow-x: hidden; }
 }
 
 /* Collapse to 1-up on mobile */
-@media (max-width: 720px){
-  .portalDownloadGrid2up{
+@media (max-width: 720px) {
+  .portalDownloadGrid2up {
     grid-template-columns: 1fr;
   }
 }
-
-
-

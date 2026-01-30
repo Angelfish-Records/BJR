@@ -1,33 +1,37 @@
 // web/app/api/early-access/route.ts
-import {NextResponse} from 'next/server'
-import {sql} from '@vercel/postgres'
-import {ensureMemberByEmail, normalizeEmail, assertLooksLikeEmail} from '@/lib/members'
-import {grantEntitlement} from '@/lib/entitlementOps'
-import {logMemberCreated, newCorrelationId} from '@/lib/events'
-import {ENTITLEMENTS, EVENT_SOURCES} from '@/lib/vocab'
+import { NextResponse } from "next/server";
+import { sql } from "@vercel/postgres";
+import {
+  ensureMemberByEmail,
+  normalizeEmail,
+  assertLooksLikeEmail,
+} from "@/lib/members";
+import { grantEntitlement } from "@/lib/entitlementOps";
+import { logMemberCreated, newCorrelationId } from "@/lib/events";
+import { ENTITLEMENTS, EVENT_SOURCES } from "@/lib/vocab";
 
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => null)
+  const body = await req.json().catch(() => null);
 
-  const email = normalizeEmail((body?.email ?? '').toString())
-  const honey = (body?.company ?? '').toString().trim()
+  const email = normalizeEmail((body?.email ?? "").toString());
+  const honey = (body?.company ?? "").toString().trim();
 
-  if (honey) return NextResponse.json({ok: true})
+  if (honey) return NextResponse.json({ ok: true });
 
   try {
-    assertLooksLikeEmail(email)
+    assertLooksLikeEmail(email);
   } catch {
-    return NextResponse.json({ok: false}, {status: 400})
+    return NextResponse.json({ ok: false }, { status: 400 });
   }
 
-  const correlationId = newCorrelationId()
+  const correlationId = newCorrelationId();
 
-  const {id: memberId, created} = await ensureMemberByEmail({
+  const { id: memberId, created } = await ensureMemberByEmail({
     email,
-    source: 'landing_form',
-    sourceDetail: {path: '/'},
+    source: "landing_form",
+    sourceDetail: { path: "/" },
     marketingOptIn: true,
-  })
+  });
 
   // Append-only marketing opt-in fact (idempotent, to avoid noise on repeat submissions)
   await sql`
@@ -53,19 +57,19 @@ export async function POST(req: Request) {
         and mc.consent_version = 'landing_list_v1'
         and mc.source = 'landing_form'
     )
-  `
+  `;
 
   // Baseline entitlement (TIER_FRIEND). Side-effects (home page view, theme default)
   // should be handled inside grantEntitlement now.
   await grantEntitlement({
     memberId,
     entitlementKey: ENTITLEMENTS.TIER_FRIEND,
-    grantedBy: 'system',
-    grantReason: 'initial signup',
-    grantSource: 'landing_form',
+    grantedBy: "system",
+    grantReason: "initial signup",
+    grantSource: "landing_form",
     correlationId,
     eventSource: EVENT_SOURCES.LANDING_FORM,
-  })
+  });
 
   // Log member_created once (DB index enforces at-most-one)
   if (created) {
@@ -73,9 +77,9 @@ export async function POST(req: Request) {
       memberId,
       source: EVENT_SOURCES.LANDING_FORM,
       correlationId,
-      payload: {via: 'early_access'},
-    })
+      payload: { via: "early_access" },
+    });
   }
 
-  return NextResponse.json({ok: true})
+  return NextResponse.json({ ok: true });
 }
