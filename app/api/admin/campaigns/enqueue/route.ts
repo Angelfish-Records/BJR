@@ -1,3 +1,4 @@
+// web/app/api/admin/campaigns/enqueue/route.ts
 import 'server-only'
 import {NextRequest, NextResponse} from 'next/server'
 import {sql} from '@vercel/postgres'
@@ -15,8 +16,7 @@ type EnqueueBody = null | {
   subjectTemplate?: string
   bodyTemplate?: string
   replyTo?: string | null
-  // optional v1 filters:
-  source?: string
+  source?: string | null
 }
 
 export async function POST(req: NextRequest) {
@@ -30,23 +30,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({error: 'Missing subjectTemplate/bodyTemplate'}, {status: 400})
   }
 
-  const name = (body?.campaignName ?? subjectTemplate.slice(0, 120)).trim()
+  const name = (body?.campaignName ?? subjectTemplate.slice(0, 120)).trim() || 'Campaign'
   const replyTo = (body?.replyTo ?? null) ? String(body?.replyTo).trim() : null
 
-  // Single-sender (hard rule for this project)
+  // Single-sender (hard rule)
   const fromEmail = must(process.env.RESEND_FROM_MARKETING, 'RESEND_FROM_MARKETING')
-
-  // Keep sender_key column populated (schema still has it); constant value for now.
   const senderKey = 'marketing'
-
-  // Audience is members-only sendable view
   const audienceKey = 'members_sendable_marketing'
 
-  const filters = {
-    source: (body?.source ?? '').trim() || null,
-  }
+  const source = (body?.source ?? null) ? String(body?.source).trim() : null
+  const filters = {source}
 
-  // Create campaign
+  // 1) Create campaign
   const created = await sql<{id: string}>`
     insert into campaigns (
       created_by_member_id,
@@ -75,16 +70,36 @@ export async function POST(req: NextRequest) {
   const campaignId = created.rows[0]?.id
   if (!campaignId) throw new Error('Failed to create campaign')
 
-  // Insert sends from members_sendable_marketing, minus suppressions.
-  // Optional filter: source (handled without “sql fragment”)
-  const source = filters.source
+  // 2) Compute audience size (respect optional filter + suppressions)
+  const audienceCountQ = await sql<{n: number}>`
+    with audience as (
+      select
+        lower(m.email::text) as email
+      from members_sendable_marketing m
+      where
+        m.marketing_opt_in is true
+        and m.email is not null
+        and (${source}::text is null or m.source = ${source})
+    ),
+    eligible as (
+      select a.email
+      from audience a
+      left join email_suppressions s
+        on lower(s.email) = a.email
+      where s.email is null
+        and a.email <> ''
+        and a.email is not null
+    )
+    select count(*)::int as n from eligible
+  `
+  const audienceCount = audienceCountQ.rows[0]?.n ?? 0
 
+  // 3) Insert sends (queued)
   const inserted = await sql<{n: number}>`
     with audience as (
       select
         m.id as member_id,
-        lower(m.email::text) as email,
-        m.source as source
+        lower(m.email::text) as email
       from members_sendable_marketing m
       where
         m.marketing_opt_in is true
@@ -120,8 +135,8 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    audienceKey,
     campaignId,
     enqueued: inserted.rows[0]?.n ?? 0,
+    audienceCount,
   })
 }

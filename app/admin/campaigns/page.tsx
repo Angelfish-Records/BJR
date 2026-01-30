@@ -1,8 +1,9 @@
+// web/app/admin/campaigns/page.tsx
 import 'server-only'
-import {redirect} from 'next/navigation'
 import {requireAdminMemberId} from '@/lib/adminAuth'
+import CampaignComposerClient from './CampaignComposerClient'
 
-export default async function AdminCampaignsIndexPage() {
+export default async function AdminCampaignsPage() {
   await requireAdminMemberId()
-  redirect('/admin/campaigns/new')
+  return <CampaignComposerClient />
 }

@@ -1,3 +1,4 @@
+// web/app/api/admin/campaigns/drain/route.ts
 import 'server-only'
 import * as React from 'react'
 import crypto from 'crypto'
@@ -56,8 +57,8 @@ export async function POST(req: NextRequest) {
   const runId = crypto.randomUUID()
 
   const body: DrainBody = await req.json().catch(() => null)
-
   const campaignId = asString(body?.campaignId).trim()
+
   if (!campaignId) return NextResponse.json({error: 'Missing campaignId'}, {status: 400})
 
   const limit = clampInt(typeof body?.limit === 'number' ? body.limit : 50, 1, 100)
@@ -256,7 +257,6 @@ export async function POST(req: NextRequest) {
   } catch (e: unknown) {
     const msg = errorMessage(e, 'Drain send failed')
 
-    // Persist failure for the claimed batch
     await Promise.all(
       emails.map((em) =>
         sql`
@@ -275,16 +275,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({error: 'Drain send failed', message: msg, runId}, {status: 502})
   }
 
-  // Persist success (no array interpolation)
+  // Persist success
   await Promise.all(
     emails.map((em, i) => {
-      const providerMessageId = providerIds[i]
+      const providerMessageId = providerIds[i] ?? null
       return sql`
         update campaign_sends
         set
           status = 'sent',
           sent_at = now(),
-          provider_message_id = ${providerMessageId}::uuid,
+          provider_message_id = ${providerMessageId},
           idempotency_key = ${em.idempotencyKey}
         where id = ${em.sendId}::uuid
       `
