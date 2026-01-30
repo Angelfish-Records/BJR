@@ -35,7 +35,7 @@ export async function generateMetadata(props: {
   const album = albumData.album as AlbumInfo
   const tracks = albumData.tracks as PlayerTrack[]
 
-  const origin = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, '') || ''
+  const origin = process.env.NEXT_NEXT_PUBLIC_APP_URL?.replace(/\/+$/, '') || ''
   const canonicalPath = t ? `/albums/${slug}?t=${encodeURIComponent(t)}` : `/albums/${slug}`
   const canonical = origin ? `${origin}${canonicalPath}` : canonicalPath
 

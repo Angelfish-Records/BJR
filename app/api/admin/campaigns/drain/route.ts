@@ -10,6 +10,7 @@ import {requireAdminMemberId} from '@/lib/adminAuth'
 import CampaignEmail from '@/emails/CampaignEmail'
 import {mergeTemplate} from '@/lib/campaigns/template'
 import {sha256Hex} from '@/lib/campaigns/idempotency'
+import {issueUnsubscribeToken} from '@/lib/unsubscribe'
 
 export const runtime = 'nodejs'
 
@@ -58,14 +59,12 @@ function extractResendBatchIds(resp: unknown): string[] {
   if (!isObject(resp)) return []
   const data = (resp as {data?: unknown}).data
 
-  // expected: { data: [{ id: "..." }, ...] }
   if (Array.isArray(data)) {
     return data
       .map((x) => (isObject(x) && typeof x.id === 'string' ? x.id : ''))
       .filter((id) => id.length > 0)
   }
 
-  // sometimes: { data: { id: "..." } }
   if (isObject(data) && typeof data.id === 'string' && data.id.length > 0) return [data.id]
 
   return []
@@ -84,7 +83,6 @@ type DrainOk = {
   nextPollMs: number
   runId: string
   providerIdsCaptured: number
-  reclaimedStaleSending: number
 }
 
 type ApiErr = {
@@ -108,19 +106,15 @@ async function unlockCampaign(campaignId: string) {
   `
 }
 
-async function heartbeat(campaignId: string, runId: string) {
-  await sql`
-    update campaigns
-    set locked_at = now(), locked_by = ${runId}, updated_at = now()
-    where id = ${campaignId}::uuid
-  `
+function buildUnsubscribeUrl(siteUrl: string, token: string): string {
+  const base = siteUrl.replace(/\/+$/, '')
+  return `${base}/unsubscribe?t=${encodeURIComponent(token)}`
 }
 
 export async function POST(req: NextRequest) {
   await requireAdminMemberId()
   const runId = crypto.randomUUID()
 
-  // Parse request
   const body: DrainBody = await req.json().catch(() => null)
   const campaignId = asString(body?.campaignId).trim()
   if (!campaignId) return apiErr(400, {error: 'Missing campaignId', runId, step: 'parse'})
@@ -128,8 +122,7 @@ export async function POST(req: NextRequest) {
   const limit = clampInt(typeof body?.limit === 'number' ? body.limit : 50, 1, 100)
   const force = body?.force === true
 
-  // Lock (TTL-based)
-  const lockTtlSeconds = 300 // was 45; render+batch can exceed 45s in practice
+  const lockTtlSeconds = 45
   let lockedOk = false
 
   try {
@@ -155,36 +148,15 @@ export async function POST(req: NextRequest) {
   }
 
   if (!lockedOk) {
-    return apiErr(409, {error: 'Campaign locked (another drain likely running).', code: 'CAMPAIGN_LOCKED', runId, step: 'lock'})
+    return apiErr(409, {
+      error: 'Campaign locked (another drain likely running).',
+      code: 'CAMPAIGN_LOCKED',
+      runId,
+      step: 'lock',
+    })
   }
 
-  // From here on: unlock on any error path.
   try {
-    // 0) Reclaim stale "sending" rows so crashes don't wedge the campaign
-    const MAX_ATTEMPTS = 5
-    const STALE_MINUTES = 10
-
-    const reclaimed = await sql<{n: number}>`
-      with moved as (
-        update campaign_sends
-        set
-          status = 'queued',
-          last_error = coalesce(last_error, '') || case when last_error is null or last_error = '' then '' else ' | ' end ||
-            ${`reclaimed_stale_sending_${STALE_MINUTES}m`},
-          updated_at = now()
-        where
-          campaign_id = ${campaignId}::uuid
-          and status = 'sending'
-          and last_attempt_at is not null
-          and last_attempt_at < now() - (${STALE_MINUTES}::text || ' minutes')::interval
-          and attempt_count < ${MAX_ATTEMPTS}
-        returning 1
-      )
-      select count(*)::int as n from moved
-    `
-    const reclaimedStaleSending = reclaimed.rows[0]?.n ?? 0
-
-    // 1) Load campaign
     const camp = await sql<{
       subject_template: string
       body_template: string
@@ -199,23 +171,23 @@ export async function POST(req: NextRequest) {
       where id = ${campaignId}::uuid
       limit 1
     `
+
     const c = camp.rows[0]
     if (!c) {
       await unlockCampaign(campaignId)
       return apiErr(404, {error: 'Campaign not found', runId, step: 'load_campaign'})
     }
 
-    // Heartbeat after DB work
-    await heartbeat(campaignId, runId)
-
-    // 2) Claim queued sends
-    const claimed = await sql<{id: string; to_email: string; merge_vars: Json}>`
+    const claimed = await sql<{
+      id: string
+      to_email: string
+      merge_vars: Json
+    }>`
       with picked as (
         select id
         from campaign_sends
         where campaign_id = ${campaignId}::uuid
           and status = 'queued'
-          and attempt_count < ${MAX_ATTEMPTS}
         order by created_at asc
         limit ${limit}
         for update skip locked
@@ -224,20 +196,17 @@ export async function POST(req: NextRequest) {
       set
         status = 'sending',
         attempt_count = attempt_count + 1,
-        last_attempt_at = now(),
-        updated_at = now()
+        last_attempt_at = now()
       where s.id in (select id from picked)
       returning s.id, s.to_email, s.merge_vars
     `
 
-    // No work: unlock + maybe mark complete
     if ((claimed.rowCount ?? 0) === 0) {
       const remaining = await sql<{n: number}>`
         select count(*)::int as n
         from campaign_sends
         where campaign_id = ${campaignId}::uuid
           and status = 'queued'
-          and attempt_count < ${MAX_ATTEMPTS}
       `
       const remainingQueued = remaining.rows[0]?.n ?? 0
 
@@ -258,24 +227,37 @@ export async function POST(req: NextRequest) {
         nextPollMs: clampInt(computeNextPollMs(0, remainingQueued, limit), 0, 5000),
         runId,
         providerIdsCaptured: 0,
-        reclaimedStaleSending,
       } satisfies DrainOk)
     }
 
-    // 3) Build payloads (and persist idempotency keys immediately, so a crash still leaves deterministic state)
-    const siteUrl = (process.env.PUBLIC_SITE_URL ?? '').replace(/\/+$/, '')
+    const siteUrl = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/+$/, '')
     const logoUrl = siteUrl ? `${siteUrl}/android-chrome-192x192.png` : undefined
 
     const emails = await Promise.all(
       claimed.rows.map(async (row) => {
         const to = asString(row.to_email).trim().toLowerCase()
+
         const mv = (row.merge_vars && typeof row.merge_vars === 'object' ? row.merge_vars : {}) as Record<string, unknown>
+
+        const memberId = typeof mv.member_id === 'string' ? mv.member_id : ''
+        const unsubscribeToken =
+          siteUrl && to
+            ? issueUnsubscribeToken({
+                email: to,
+                memberId: memberId || null,
+                campaignId,
+                sendId: row.id,
+                ttlSeconds: 60 * 60 * 24 * 30, // 30 days
+              })
+            : ''
+
+        const unsubscribeUrl = unsubscribeToken ? buildUnsubscribeUrl(siteUrl, unsubscribeToken) : ''
 
         const vars: Record<string, string> = {
           email: to,
-          member_id: typeof mv.member_id === 'string' ? mv.member_id : '',
+          member_id: memberId,
           campaign_name: c.name,
-          unsubscribe_url: '',
+          unsubscribe_url: unsubscribeUrl,
         }
 
         const subject = mergeTemplate(c.subject_template, vars).trim() || '(no subject)'
@@ -287,7 +269,7 @@ export async function POST(req: NextRequest) {
             brandName: 'Brendan John Roch',
             logoUrl,
             bodyMarkdown: mergedBody,
-            unsubscribeUrl: undefined,
+            unsubscribeUrl: unsubscribeUrl || undefined,
           }),
           {pretty: true}
         )
@@ -295,22 +277,17 @@ export async function POST(req: NextRequest) {
         const keyRaw = `camp:${campaignId}:to:${to}:sub:${subject}:body:${mergedBody}`
         const idempotencyKey = `bjr:${campaignId}:${sha256Hex(keyRaw).slice(0, 48)}`
 
-        return {sendId: row.id, to, subject, text, html, idempotencyKey}
+        return {
+          sendId: row.id,
+          to,
+          subject,
+          text,
+          html,
+          idempotencyKey,
+        }
       })
     )
 
-    await Promise.all(
-      emails.map((em) => sql`
-        update campaign_sends
-        set idempotency_key = ${em.idempotencyKey}, updated_at = now()
-        where id = ${em.sendId}::uuid
-      `)
-    )
-
-    // Heartbeat after render (render can be slow)
-    await heartbeat(campaignId, runId)
-
-    // 4) Send via Resend (batch)
     const batchKey = `bjr_batch:${campaignId}:${emails.map((e) => e.sendId).join(',')}`
     const batchIdem = `bjr:${campaignId}:${sha256Hex(batchKey).slice(0, 48)}`
 
@@ -341,15 +318,12 @@ export async function POST(req: NextRequest) {
           typeof maybeErr === 'string'
             ? maybeErr
             : isObject(maybeErr) && typeof maybeErr.message === 'string'
-              ? maybeErr.message
-              : 'Resend batch error'
+            ? maybeErr.message
+            : 'Resend batch error'
         throw new Error(msg)
       }
 
       providerIds = extractResendBatchIds(sendResponseRaw)
-
-      // If provider ids are missing/mismatched, do NOT fail the whole drain.
-      // We still mark as sent; provider_message_id becomes null.
       if (providerIds.length !== emails.length) providerIds = []
     } catch (e: unknown) {
       const msg = errMsg(e, 'Drain send failed')
@@ -361,7 +335,7 @@ export async function POST(req: NextRequest) {
             set
               status = 'failed',
               last_error = ${msg},
-              updated_at = now()
+              idempotency_key = ${em.idempotencyKey}
             where id = ${em.sendId}::uuid
           `
         )
@@ -389,7 +363,6 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // 5) Persist success
     await Promise.all(
       emails.map((em, i) => {
         const providerMessageId = providerIds[i] ? providerIds[i] : null
@@ -399,8 +372,8 @@ export async function POST(req: NextRequest) {
             status = 'sent',
             sent_at = now(),
             provider_message_id = ${providerMessageId},
-            last_error = null,
-            updated_at = now()
+            idempotency_key = ${em.idempotencyKey},
+            last_error = null
           where id = ${em.sendId}::uuid
         `
       })
@@ -408,13 +381,11 @@ export async function POST(req: NextRequest) {
 
     const sentCount = emails.length
 
-    // 6) Remaining + unlock + complete
     const remaining = await sql<{n: number}>`
       select count(*)::int as n
       from campaign_sends
       where campaign_id = ${campaignId}::uuid
         and status = 'queued'
-        and attempt_count < ${MAX_ATTEMPTS}
     `
     const remainingQueued = remaining.rows[0]?.n ?? 0
 
@@ -435,7 +406,6 @@ export async function POST(req: NextRequest) {
       nextPollMs: clampInt(computeNextPollMs(sentCount, remainingQueued, limit), 0, 5000),
       runId,
       providerIdsCaptured: providerIds.length,
-      reclaimedStaleSending,
     } satisfies DrainOk)
   } catch (e: unknown) {
     const msg = errMsg(e, 'Unexpected drain failure')
