@@ -1,4 +1,3 @@
-//api/admin/campaigns/drain/preview.ts
 import 'server-only'
 import * as React from 'react'
 import {NextRequest, NextResponse} from 'next/server'
@@ -12,31 +11,42 @@ function asString(v: unknown): string {
   return typeof v === 'string' ? v : ''
 }
 
+function clampString(s: string, max: number): string {
+  if (s.length <= max) return s
+  return s.slice(0, max)
+}
+
 export async function POST(req: NextRequest) {
   await requireAdminMemberId()
 
   const body = (await req.json().catch(() => null)) as null | {
-    brandName?: string
-    logoUrl?: string
-    subject?: string
-    bodyText?: string
-    unsubscribeUrl?: string
+    brandName?: unknown
+    logoUrl?: unknown
+    subject?: unknown
+    bodyText?: unknown
+    unsubscribeUrl?: unknown
   }
 
-  const brandName = asString(body?.brandName).trim() || 'Brendan John Roch'
-  const logoUrl = asString(body?.logoUrl).trim()
-  const subject = asString(body?.subject).trim()
-  const bodyText = asString(body?.bodyText)
+  const brandName = clampString(asString(body?.brandName).trim() || 'Brendan John Roch', 120)
+  const logoUrl = clampString(asString(body?.logoUrl).trim(), 2048)
+  const subject = clampString(asString(body?.subject).trim(), 200)
+  const bodyText = clampString(asString(body?.bodyText), 60_000) // generous but bounded
+  const unsubscribeUrl = clampString(asString(body?.unsubscribeUrl).trim(), 2048)
 
-  const html = await renderEmail(
-    React.createElement(CampaignEmail, {
-      brandName,
-      logoUrl: logoUrl || undefined,
-      bodyMarkdown: bodyText,
-      unsubscribeUrl: asString(body?.unsubscribeUrl).trim() || undefined,
-    }),
-    {pretty: true}
-  )
+  try {
+    const html = await renderEmail(
+      React.createElement(CampaignEmail, {
+        brandName,
+        logoUrl: logoUrl || undefined,
+        bodyMarkdown: bodyText,
+        unsubscribeUrl: unsubscribeUrl || undefined,
+      }),
+      {pretty: true}
+    )
 
-  return NextResponse.json({ok: true, subject, html})
+    return NextResponse.json({ok: true, subject, html})
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Render failed'
+    return NextResponse.json({ok: false, error: 'PREVIEW_RENDER_FAILED', message: msg}, {status: 500})
+  }
 }

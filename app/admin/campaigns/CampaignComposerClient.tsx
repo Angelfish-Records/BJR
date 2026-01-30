@@ -1,4 +1,3 @@
-// web/app/admin/campaigns/CampaignComposerClient.tsx
 'use client'
 
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react'
@@ -25,6 +24,12 @@ type ApiErr = {
   runId?: string
   code?: string
 }
+
+type EnqueueResponse = EnqueueOk | ApiErr
+type DrainResponse = DrainOk | ApiErr
+
+type PreviewOk = {ok: true; subject: string; html: string}
+type PreviewResponse = PreviewOk | ApiErr
 
 const DRAFT_KEY = 'bjr_campaign_draft_v1'
 
@@ -73,12 +78,7 @@ function isApiErr(x: unknown): x is ApiErr {
 
 function isEnqueueOk(x: unknown): x is EnqueueOk {
   if (!isObject(x)) return false
-  return (
-    x.ok === true &&
-    typeof x.campaignId === 'string' &&
-    typeof x.enqueued === 'number' &&
-    typeof x.audienceCount === 'number'
-  )
+  return x.ok === true && typeof x.campaignId === 'string' && typeof x.enqueued === 'number' && typeof x.audienceCount === 'number'
 }
 
 function isDrainOk(x: unknown): x is DrainOk {
@@ -92,6 +92,11 @@ function isDrainOk(x: unknown): x is DrainOk {
   )
 }
 
+function isPreviewOk(x: unknown): x is PreviewOk {
+  if (!isObject(x)) return false
+  return x.ok === true && typeof x.subject === 'string' && typeof x.html === 'string'
+}
+
 async function readJson(res: Response): Promise<unknown> {
   const text = await res.text().catch(() => '')
   if (!text) return null
@@ -102,26 +107,20 @@ async function readJson(res: Response): Promise<unknown> {
   }
 }
 
-function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms))
-}
-
+// --- toolbar helpers (browser-only, but safe in client comp) ---
 function handleUndoRedoKeydown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform)
   const key = e.key.toLowerCase()
 
   const isUndo = (isMac ? e.metaKey : e.ctrlKey) && !e.shiftKey && key === 'z'
-  const isRedo =
-    ((isMac ? e.metaKey : e.ctrlKey) && e.shiftKey && key === 'z') ||
-    (!isMac && e.ctrlKey && !e.shiftKey && key === 'y')
-
+  const isRedo = ((isMac ? e.metaKey : e.ctrlKey) && e.shiftKey && key === 'z') || (!isMac && e.ctrlKey && !e.shiftKey && key === 'y')
   if (!isUndo && !isRedo) return
-  e.preventDefault()
 
+  e.preventDefault()
   try {
     document.execCommand(isUndo ? 'undo' : 'redo')
   } catch {
-    // no-op
+    // ignore
   }
 }
 
@@ -142,16 +141,10 @@ function IconBold(props: {size?: number}) {
   const s = props.size ?? 14
   return (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M8 4h6a4 4 0 0 1 0 8H8V4Zm0 8h7a4 4 0 1 1 0 8H8v-8Z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
+      <path d="M8 4h6a4 4 0 0 1 0 8H8V4Zm0 8h7a4 4 0 1 1 0 8H8v-8Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
     </svg>
   )
 }
-
 function IconItalic(props: {size?: number}) {
   const s = props.size ?? 14
   return (
@@ -160,72 +153,43 @@ function IconItalic(props: {size?: number}) {
     </svg>
   )
 }
-
 function IconLink(props: {size?: number}) {
   const s = props.size ?? 14
   return (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M10 13a5 5 0 0 1 0-7l1-1a5 5 0 0 1 7 7l-1 1"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M14 11a5 5 0 0 1 0 7l-1 1a5 5 0 1 1-7-7l1-1"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
+      <path d="M10 13a5 5 0 0 1 0-7l1-1a5 5 0 0 1 7 7l-1 1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M14 11a5 5 0 0 1 0 7l-1 1a5 5 0 1 1-7-7l1-1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   )
 }
-
 function IconImage(props: {size?: number}) {
   const s = props.size ?? 14
   return (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Z"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
+      <path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Z" stroke="currentColor" strokeWidth="2" />
       <path d="M8 10a1.5 1.5 0 1 0 0.001 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       <path d="M4 17l5-5 4 4 3-3 4 4" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
     </svg>
   )
 }
-
 function IconDivider(props: {size?: number}) {
   const s = props.size ?? 14
   return (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M4 12h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path
-        d="M8 6v1M12 6v1M16 6v1M8 17v1M12 17v1M16 17v1"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
+      <path d="M8 6v1M12 6v1M16 6v1M8 17v1M12 17v1M16 17v1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   )
 }
-
 function IconH2(props: {size?: number}) {
   const s = props.size ?? 14
   return (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M4 6v12M12 6v12M4 12h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path
-        d="M16 11a2 2 0 1 1 4 0c0 1-1 1.5-2 2.2-1 .7-2 1.2-2 2.8h4"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
+      <path d="M16 11a2 2 0 1 1 4 0c0 1-1 1.5-2 2.2-1 .7-2 1.2-2 2.8h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   )
 }
-
 function IconBullets(props: {size?: number}) {
   const s = props.size ?? 14
   return (
@@ -237,104 +201,32 @@ function IconBullets(props: {size?: number}) {
 }
 
 export default function CampaignComposerClient() {
-  // --- styling helpers (match the reference layout but using this app’s Tailwind base) ---
-  const surfaceBg = 'rgba(255,255,255,0.06)'
-  const surfaceBorder = 'rgba(255,255,255,0.14)'
-
-  const inputStyle: React.CSSProperties = useMemo(
-    () => ({
-      width: '100%',
-      padding: 10,
-      borderRadius: 10,
-      border: `1px solid ${surfaceBorder}`,
-      background: surfaceBg,
-      color: 'inherit',
-    }),
-    [surfaceBg, surfaceBorder]
-  )
-
-  const labelTitleStyleLeft: React.CSSProperties = {fontSize: 10, opacity: 0.7, marginBottom: 6}
-  const labelTitleStyleRight: React.CSSProperties = {fontSize: 12, opacity: 0.7, marginBottom: 6}
-
-  const hazardStripe = useCallback(
-    (angleDeg: number) =>
-      `repeating-linear-gradient(${angleDeg}deg,
-        rgba(255, 205, 0, 0.95) 0px,
-        rgba(255, 205, 0, 0.95) 10px,
-        rgba(0, 0, 0, 0.95) 10px,
-        rgba(0, 0, 0, 0.95) 20px
-      )`,
-    []
-  )
-
- const hazardCardStyle = useMemo<React.CSSProperties>(() => {
-  return {
-    marginTop: 14,
-    borderRadius: 14,
-    border: `1px solid rgba(255,205,0,0.35)`,
-    background: 'rgba(255,255,255,0.035)',
-    boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
-    overflow: 'hidden',
-  }
-}, [])
-
-const hazardEdgeStyle = useMemo<React.CSSProperties>(() => {
-  return {
-    height: 10,
-    opacity: 0.55,
-    filter: 'saturate(1.05)',
-  }
-}, [])
-
-
-  // responsive breakpoint like the reference
-  const [isNarrow, setIsNarrow] = useState(false)
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 860px)')
-    const onChange = () => setIsNarrow(mq.matches)
-    onChange()
-    if (typeof mq.addEventListener === 'function') mq.addEventListener('change', onChange)
-    else mq.addListener(onChange)
-    return () => {
-      if (typeof mq.removeEventListener === 'function') mq.removeEventListener('change', onChange)
-      else mq.removeListener(onChange)
-    }
-  }, [])
-
   // Draft fields (local + sessionStorage)
   const [draft, setDraft] = useState<Draft>(DEFAULT_DRAFT)
-  const dirtyRef = useRef(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Enqueue state
-  const [loading, setLoading] = useState(false)
+  const [enqueueing, setEnqueueing] = useState(false)
   const [enqueueError, setEnqueueError] = useState<string | null>(null)
-  const [campaignId, setCampaignId] = useState<string>('')
+  const [campaignId, setCampaignId] = useState<string | null>(null)
   const [enqueuedCount, setEnqueuedCount] = useState<number | null>(null)
-
-  // IMPORTANT: we want an audience count visible *before* enqueueing
   const [audienceCount, setAudienceCount] = useState<number | null>(null)
-  const [audienceLoading, setAudienceLoading] = useState(false)
-  const [audienceError, setAudienceError] = useState<string | null>(null)
 
   // Drain state
+  const [draining, setDraining] = useState(false)
   const [drainError, setDrainError] = useState<string | null>(null)
   const [drainResult, setDrainResult] = useState<{sent: number; remainingQueued: number; runId: string} | null>(null)
 
-  // Auto-drain state (mimics the old tool)
-  const [sendStatus, setSendStatus] = useState<
-    | {state: 'idle'}
-    | {state: 'sending'; totalSent: number; lastSent: number; remainingQueued: number; loops: number; startedAtMs: number; runId?: string}
-    | {state: 'done'; totalSent: number; endedAtMs: number}
-    | {state: 'error'; message: string}
-    | {state: 'locked'; message: string}
-    | {state: 'cancelled'; totalSent: number}
-  >({state: 'idle'})
-  const [cancelToken, setCancelToken] = useState(0)
+  // Preview state (server-rendered via React Email)
+  const [previewHtml, setPreviewHtml] = useState<string>('')
+  const [previewErr, setPreviewErr] = useState<string>('')
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const previewReqIdRef = useRef(0)
 
-  const cancelSending = useCallback(() => {
-  setCancelToken((x) => x + 1)
-}, [])
+  // Optional: tune these defaults as you like
+  const previewBrandName = 'Brendan John Roch'
+  const previewLogoUrl = '' // put a real URL if you want a logo in preview
+  const previewUnsubscribeUrl = '' // optional: keep blank unless you want it shown
 
   // Hydrate draft from sessionStorage
   useEffect(() => {
@@ -361,12 +253,10 @@ const hazardEdgeStyle = useMemo<React.CSSProperties>(() => {
 
   const markDirtyAndDebouncePersist = useCallback(
     (next: Draft) => {
-      dirtyRef.current = true
       setDraft(next)
       if (saveTimer.current) clearTimeout(saveTimer.current)
       saveTimer.current = setTimeout(() => {
         persistDraftNow(next)
-        dirtyRef.current = false
       }, 350)
     },
     [persistDraftNow]
@@ -378,57 +268,128 @@ const hazardEdgeStyle = useMemo<React.CSSProperties>(() => {
     }
   }, [])
 
-  // Audience count: best-effort preflight using existing endpoint.
-  // Note: /api/campaigns/[id]/audience currently ignores filters and just counts members_sendable_marketing,
-  // so we display it as "≈" and we use the same count regardless of source filter.
-  const refreshAudience = useCallback(async () => {
-    setAudienceLoading(true)
-    setAudienceError(null)
-    try {
-      // We need an id for this endpoint; to avoid creating campaigns just for counting,
-      // we hit a simple count endpoint if you have one. If not, we fallback:
-      //
-      // CURRENTLY in your pasted server routes you have:
-      //   /api/campaigns/[id]/audience  (needs id)  AND it doesn't support source filter.
-      //
-      // So instead we do a “safe” preflight by calling enqueue with dryRun? (doesn't exist),
-      // therefore we must call the public count route only if it exists.
-      //
-      // Pragmatic approach: call a small new endpoint would be ideal, but you asked for *no other files*.
-      // So we display a count only *after* enqueue via response.audienceCount, AND we also try a best-effort
-      // guess by calling the same underlying view through an existing endpoint if present.
-      //
-      // We'll attempt: GET /api/campaigns/_audience (if you later add it) else noop.
-      const res = await fetch('/api/campaigns/_audience', {cache: 'no-store'})
-      if (!res.ok) throw new Error(`Audience failed (${res.status})`)
-      const raw = await readJson(res)
-      if (!isObject(raw) || typeof raw.count !== 'number') throw new Error('Audience response had unexpected shape')
-      setAudienceCount(raw.count)
-    } catch (e: unknown) {
-      // Not fatal; we still show audience count after enqueue.
-      setAudienceError(errorMessage(e))
-    } finally {
-      setAudienceLoading(false)
+  const canEnqueue = useMemo(() => draft.subjectTemplate.trim().length > 0 && draft.bodyTemplate.trim().length > 0, [draft.bodyTemplate, draft.subjectTemplate])
+
+  // --- styling helpers (match your prior "hazard zone" look) ---
+  const surfaceBg = 'rgba(255,255,255,0.06)'
+  const surfaceBorder = 'rgba(255,255,255,0.14)'
+  const inputStyle: React.CSSProperties = useMemo(
+    () => ({
+      width: '100%',
+      padding: 10,
+      borderRadius: 10,
+      border: `1px solid ${surfaceBorder}`,
+      background: surfaceBg,
+      color: 'inherit',
+    }),
+    [surfaceBorder, surfaceBg]
+  )
+
+  const hazardStripe = useCallback(
+    (angleDeg: number) =>
+      `repeating-linear-gradient(${angleDeg}deg,
+        rgba(255, 205, 0, 0.95) 0px,
+        rgba(255, 205, 0, 0.95) 10px,
+        rgba(0, 0, 0, 0.95) 10px,
+        rgba(0, 0, 0, 0.95) 20px
+      )`,
+    []
+  )
+
+  const hazardCardStyle = useMemo<React.CSSProperties>(
+    () => ({
+      marginTop: 14,
+      borderRadius: 14,
+      border: `1px solid rgba(255,205,0,0.35)`,
+      background: 'rgba(255,255,255,0.035)',
+      boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
+      overflow: 'hidden',
+    }),
+    []
+  )
+
+  const hazardEdgeStyle = useMemo<React.CSSProperties>(
+    () => ({
+      height: 10,
+      opacity: 0.55,
+      filter: 'saturate(1.05)',
+    }),
+    []
+  )
+
+  const [isNarrow, setIsNarrow] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 860px)')
+    const onChange = () => setIsNarrow(mq.matches)
+    onChange()
+    if (typeof mq.addEventListener === 'function') mq.addEventListener('change', onChange)
+    else mq.addListener(onChange)
+    return () => {
+      if (typeof mq.removeEventListener === 'function') mq.removeEventListener('change', onChange)
+      else mq.removeListener(onChange)
     }
   }, [])
 
-  useEffect(() => {
-    // auto-load audience once; if the endpoint doesn't exist, it will just show an error line (non-blocking)
-    void refreshAudience()
-  }, [refreshAudience])
+  const refreshPreviewHtml = useCallback(async () => {
+    const reqId = ++previewReqIdRef.current
+    setPreviewLoading(true)
+    setPreviewErr('')
 
-  const canEnqueue = useMemo(() => {
-    return draft.subjectTemplate.trim().length > 0 && draft.bodyTemplate.trim().length > 0
-  }, [draft.bodyTemplate, draft.subjectTemplate])
+    try {
+      const res = await fetch('/api/admin/campaigns/preview', {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify({
+          brandName: previewBrandName,
+          logoUrl: previewLogoUrl || undefined,
+          subject: draft.subjectTemplate,
+          bodyText: draft.bodyTemplate,
+          unsubscribeUrl: previewUnsubscribeUrl || undefined,
+        }),
+      })
+
+      const raw = await readJson(res)
+      const data: PreviewResponse | null = raw as PreviewResponse | null
+      if (reqId !== previewReqIdRef.current) return
+
+      if (!res.ok) {
+        if (isApiErr(data)) throw new Error(`${data.error}${data.message ? `: ${data.message}` : ''}`)
+        throw new Error(`Preview failed (${res.status})`)
+      }
+
+      if (isApiErr(data)) throw new Error(`${data.error}${data.message ? `: ${data.message}` : ''}`)
+      if (!isPreviewOk(data)) throw new Error('Preview response had unexpected shape')
+
+      setPreviewHtml(data.html)
+    } catch (e) {
+      if (reqId !== previewReqIdRef.current) return
+      setPreviewErr(errorMessage(e))
+      setPreviewHtml('')
+    } finally {
+      if (reqId !== previewReqIdRef.current) return
+      setPreviewLoading(false)
+    }
+  }, [draft.bodyTemplate, draft.subjectTemplate, previewBrandName, previewLogoUrl, previewUnsubscribeUrl])
+
+  // Debounce preview refresh on subject/body changes
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      void refreshPreviewHtml()
+    }, 250)
+    return () => window.clearTimeout(t)
+  }, [refreshPreviewHtml])
+
+  const iframeSrcDoc = useMemo(() => {
+    if (!previewHtml) return ''
+    return `<!doctype html><html><head><meta charset="utf-8" /></head><body style="margin:0;padding:0;">${previewHtml}</body></html>`
+  }, [previewHtml])
 
   const enqueue = useCallback(async () => {
-    setLoading(true)
+    setEnqueueing(true)
     setEnqueueError(null)
     setDrainError(null)
     setDrainResult(null)
-    setSendStatus({state: 'idle'})
 
-    // flush draft to sessionStorage
     persistDraftNow(draft)
 
     try {
@@ -445,29 +406,30 @@ const hazardEdgeStyle = useMemo<React.CSSProperties>(() => {
       })
 
       const raw = await readJson(res)
+      const data: EnqueueResponse | null = raw as EnqueueResponse | null
 
       if (!res.ok) {
-        if (isApiErr(raw)) throw new Error(`${raw.error}${raw.message ? `: ${raw.message}` : ''}`)
+        if (isApiErr(data)) throw new Error(`${data.error}${data.message ? `: ${data.message}` : ''}`)
         throw new Error(`Enqueue failed (${res.status})`)
       }
 
-      if (isApiErr(raw)) throw new Error(`${raw.error}${raw.message ? `: ${raw.message}` : ''}`)
-      if (!isEnqueueOk(raw)) throw new Error('Enqueue response had unexpected shape')
+      if (isApiErr(data)) throw new Error(`${data.error}${data.message ? `: ${data.message}` : ''}`)
+      if (!isEnqueueOk(data)) throw new Error('Enqueue response had unexpected shape')
 
-      setCampaignId(raw.campaignId)
-      setEnqueuedCount(raw.enqueued)
-      setAudienceCount(raw.audienceCount)
+      setCampaignId(data.campaignId)
+      setEnqueuedCount(data.enqueued)
+      setAudienceCount(data.audienceCount)
     } catch (e: unknown) {
       setEnqueueError(errorMessage(e))
     } finally {
-      setLoading(false)
+      setEnqueueing(false)
     }
   }, [draft, persistDraftNow])
 
   const drainOnce = useCallback(
     async (limit: number) => {
       if (!campaignId) return
-      setLoading(true)
+      setDraining(true)
       setDrainError(null)
 
       try {
@@ -478,46 +440,54 @@ const hazardEdgeStyle = useMemo<React.CSSProperties>(() => {
         })
 
         const raw = await readJson(res)
+        const data: DrainResponse | null = raw as DrainResponse | null
 
         if (!res.ok) {
-          if (isApiErr(raw)) throw new Error(`${raw.error}${raw.message ? `: ${raw.message}` : ''}`)
+          if (isApiErr(data)) throw new Error(`${data.error}${data.message ? `: ${data.message}` : ''}`)
           throw new Error(`Drain failed (${res.status})`)
         }
 
-        if (isApiErr(raw)) throw new Error(`${raw.error}${raw.message ? `: ${raw.message}` : ''}`)
-        if (!isDrainOk(raw)) throw new Error('Drain response had unexpected shape')
+        if (isApiErr(data)) throw new Error(`${data.error}${data.message ? `: ${data.message}` : ''}`)
+        if (!isDrainOk(data)) throw new Error('Drain response had unexpected shape')
 
-        setDrainResult({sent: raw.sent, remainingQueued: raw.remainingQueued, runId: raw.runId})
-        return raw
+        setDrainResult({sent: data.sent, remainingQueued: data.remainingQueued, runId: data.runId})
       } catch (e: unknown) {
         setDrainError(errorMessage(e))
-        return null
       } finally {
-        setLoading(false)
+        setDraining(false)
       }
     },
     [campaignId]
   )
 
+  // Auto-drain loop (optional but mirrors your hazard UI)
+  const [sendStatus, setSendStatus] = useState<
+    | {state: 'idle'}
+    | {state: 'sending'; campaignId: string; totalSent: number; lastSent: number; remainingQueued: number; loops: number; startedAtMs: number; runId?: string}
+    | {state: 'done'; campaignId: string; totalSent: number; endedAtMs: number}
+    | {state: 'cancelled'; campaignId: string; totalSent: number}
+    | {state: 'locked'; message: string}
+    | {state: 'error'; message: string}
+  >({state: 'idle'})
+  const [cancelToken, setCancelToken] = useState(0)
+
+  const cancelSending = useCallback(() => {
+    setCancelToken((x) => x + 1)
+  }, [])
+
+  const sleep = useCallback((ms: number) => new Promise((r) => setTimeout(r, ms)), [])
+
   const sendAutoDrain = useCallback(
     async (opts?: {limit?: number; maxLoops?: number}) => {
       if (!campaignId) return
+
       const limit = Math.max(1, Math.min(100, Math.floor(opts?.limit ?? 50)))
       const maxLoops = Math.max(1, Math.min(50, Math.floor(opts?.maxLoops ?? 50)))
-
       const startedAtMs = Date.now()
       const myCancelToken = cancelToken
 
-      setSendStatus({
-        state: 'sending',
-        totalSent: 0,
-        lastSent: 0,
-        remainingQueued: Number.NaN,
-        loops: 0,
-        startedAtMs,
-      })
+      setSendStatus({state: 'sending', campaignId, totalSent: 0, lastSent: 0, remainingQueued: Number.NaN, loops: 0, startedAtMs})
 
-      setLoading(true)
       try {
         let totalSent = 0
         let loops = 0
@@ -526,22 +496,49 @@ const hazardEdgeStyle = useMemo<React.CSSProperties>(() => {
 
         while (loops < maxLoops && remainingQueued > 0) {
           if (cancelToken !== myCancelToken) {
-            setSendStatus({state: 'cancelled', totalSent})
+            setSendStatus({state: 'cancelled', campaignId, totalSent})
             return
           }
 
           loops++
-          const r = await drainOnce(limit)
-          if (!r) throw new Error('Drain failed')
 
-          const sentThis = r.sent
-          remainingQueued = r.remainingQueued
-          lastRunId = r.runId ?? lastRunId
+          const res = await fetch('/api/admin/campaigns/drain', {
+            method: 'POST',
+            headers: {'content-type': 'application/json'},
+            body: JSON.stringify({campaignId, limit}),
+          })
+
+          const raw = await readJson(res)
+
+          if (!res.ok) {
+            const code = isObject(raw) ? (raw as {code?: unknown}).code : undefined
+            const err = isObject(raw) ? (raw as {error?: unknown; message?: unknown}).error : undefined
+            const msg =
+              (typeof err === 'string' && err) ||
+              (isObject(raw) && typeof (raw as {message?: unknown}).message === 'string' ? (raw as {message: string}).message : '') ||
+              'Drain failed'
+
+            if (res.status === 409 || code === 'CAMPAIGN_LOCKED') {
+              setSendStatus({state: 'locked', message: msg})
+              return
+            }
+
+            throw new Error(msg)
+          }
+
+          const data: DrainResponse | null = raw as DrainResponse | null
+          if (isApiErr(data)) throw new Error(`${data.error}${data.message ? `: ${data.message}` : ''}`)
+          if (!isDrainOk(data)) throw new Error('Drain response had unexpected shape')
+
+          const sentThis = data.sent
+          remainingQueued = data.remainingQueued
+          lastRunId = data.runId
 
           totalSent += sentThis
 
           setSendStatus({
             state: 'sending',
+            campaignId,
             totalSent,
             lastSent: sentThis,
             remainingQueued: Number.isFinite(remainingQueued) ? remainingQueued : 0,
@@ -552,39 +549,26 @@ const hazardEdgeStyle = useMemo<React.CSSProperties>(() => {
 
           if (remainingQueued <= 0) break
 
-          const nextPollMs =
-            typeof r.nextPollMs === 'number' && Number.isFinite(r.nextPollMs)
-              ? Math.max(0, Math.min(5000, Math.floor(r.nextPollMs)))
-              : 900
-
+          const nextPollMs = Math.max(0, Math.min(5000, Math.floor(data.nextPollMs ?? 900)))
           if (cancelToken !== myCancelToken) {
-            setSendStatus({state: 'cancelled', totalSent})
+            setSendStatus({state: 'cancelled', campaignId, totalSent})
             return
           }
-
           await sleep(nextPollMs)
         }
 
-        setSendStatus({state: 'done', totalSent, endedAtMs: Date.now()})
+        setSendStatus({state: 'done', campaignId, totalSent, endedAtMs: Date.now()})
       } catch (e: unknown) {
-        const msg = errorMessage(e)
-        // if the API returned a “locked” response, it’ll be in drainError; mirror old behavior
-        if (drainError && drainError.toLowerCase().includes('locked')) {
-          setSendStatus({state: 'locked', message: drainError})
-        } else {
-          setSendStatus({state: 'error', message: msg})
-        }
-      } finally {
-        setLoading(false)
+        setSendStatus({state: 'error', message: errorMessage(e)})
       }
     },
-    [campaignId, cancelToken, drainOnce, drainError]
+    [campaignId, cancelToken, sleep]
   )
 
   const reset = useCallback(() => {
-    setCampaignId('')
+    setCampaignId(null)
     setEnqueuedCount(null)
-    // draft remains
+    setAudienceCount(null)
     setDrainResult(null)
     setEnqueueError(null)
     setDrainError(null)
@@ -595,96 +579,60 @@ const hazardEdgeStyle = useMemo<React.CSSProperties>(() => {
     return (
       <div style={hazardCardStyle}>
         <div style={{...hazardEdgeStyle, backgroundImage: hazardStripe(45)}} />
+
         <div style={{padding: 12}}>
           <div style={{display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap'}}>
             <div style={{fontSize: 12, fontWeight: 700, letterSpacing: 0.6, opacity: 0.92}}>
-              SEND CONTROLS
-              <span style={{marginLeft: 10, fontWeight: 500, opacity: 0.7}}>Triggers real email activity.</span>
+              SEND CONTROLS <span style={{marginLeft: 10, fontWeight: 500, opacity: 0.7}}>Triggers real email activity.</span>
             </div>
-            <div style={{fontSize: 11, opacity: 0.75}}>Double-check copy / filters / links</div>
+            <div style={{fontSize: 11, opacity: 0.75}}>Double-check count / copy / links</div>
           </div>
 
           <div style={{height: 10}} />
 
           <div style={{display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap'}}>
-            <button
-              onClick={() => void enqueue()}
-              disabled={loading || sendStatus.state === 'sending' || !canEnqueue}
-              style={{padding: '10px 14px', borderRadius: 10}}
-              type="button"
-            >
-              Enqueue campaign
+            <button onClick={() => void enqueue()} disabled={enqueueing || draining || sendStatus.state === 'sending' || !canEnqueue} style={{padding: '10px 14px', borderRadius: 10}}>
+              {enqueueing ? 'Enqueueing…' : 'Enqueue campaign'}
             </button>
 
             <div style={{fontSize: 12, opacity: 0.85}}>
               Campaign ID:{' '}
-              <code
-                style={{
-                  background: surfaceBg,
-                  border: `1px solid ${surfaceBorder}`,
-                  padding: '2px 6px',
-                  borderRadius: 6,
-                }}
-              >
+              <code style={{background: surfaceBg, border: `1px solid ${surfaceBorder}`, padding: '2px 6px', borderRadius: 6}}>
                 {campaignId || '—'}
               </code>
+            </div>
+
+            <div style={{fontSize: 12, opacity: 0.85}}>
+              Mailable:{' '}
+              <b style={{marginLeft: 6}}>{audienceCount ?? '—'}</b>
             </div>
           </div>
 
           <div style={{marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center'}}>
             <button
               onClick={() => void sendAutoDrain({limit: 50, maxLoops: 50})}
-              disabled={loading || !campaignId || sendStatus.state === 'sending'}
+              disabled={!campaignId || enqueueing || draining || sendStatus.state === 'sending'}
               style={{padding: '10px 14px', borderRadius: 10}}
-              type="button"
             >
               Send campaign (auto-drain)
             </button>
 
-            <button
-              onClick={cancelSending}
-              disabled={sendStatus.state !== 'sending'}
-              style={{padding: '10px 14px', borderRadius: 10}}
-              type="button"
-            >
+            <button onClick={cancelSending} disabled={sendStatus.state !== 'sending'} style={{padding: '10px 14px', borderRadius: 10}}>
               Cancel
             </button>
 
-            <button
-              onClick={() => void drainOnce(25)}
-              disabled={loading || !campaignId}
-              style={{padding: '8px 10px', borderRadius: 10, fontSize: 10}}
-              type="button"
-            >
+            <button onClick={() => void drainOnce(25)} disabled={!campaignId || enqueueing || draining} style={{padding: '8px 10px', borderRadius: 10, fontSize: 10}}>
               Drain 25
             </button>
-            <button
-              onClick={() => void drainOnce(50)}
-              disabled={loading || !campaignId}
-              style={{padding: '8px 10px', borderRadius: 10, fontSize: 10}}
-              type="button"
-            >
+            <button onClick={() => void drainOnce(50)} disabled={!campaignId || enqueueing || draining} style={{padding: '8px 10px', borderRadius: 10, fontSize: 10}}>
               Drain 50
             </button>
-            <button
-              onClick={() => void drainOnce(100)}
-              disabled={loading || !campaignId}
-              style={{padding: '8px 10px', borderRadius: 10, fontSize: 10}}
-              type="button"
-            >
+            <button onClick={() => void drainOnce(100)} disabled={!campaignId || enqueueing || draining} style={{padding: '8px 10px', borderRadius: 10, fontSize: 10}}>
               Drain 100
             </button>
           </div>
 
-          <div
-            style={{
-              marginTop: 10,
-              padding: 10,
-              borderRadius: 12,
-              border: `1px solid ${surfaceBorder}`,
-              background: surfaceBg,
-            }}
-          >
+          <div style={{marginTop: 10, padding: 10, borderRadius: 12, border: `1px solid ${surfaceBorder}`, background: surfaceBg}}>
             {sendStatus.state === 'idle' && <div style={{fontSize: 12, opacity: 0.8}}>Ready.</div>}
 
             {sendStatus.state === 'sending' && (
@@ -696,14 +644,7 @@ const hazardEdgeStyle = useMemo<React.CSSProperties>(() => {
                 {sendStatus.runId ? (
                   <div style={{marginTop: 6, fontSize: 11, opacity: 0.7}}>
                     runId:{' '}
-                    <code
-                      style={{
-                        background: 'transparent',
-                        border: `1px solid ${surfaceBorder}`,
-                        padding: '1px 6px',
-                        borderRadius: 6,
-                      }}
-                    >
+                    <code style={{background: 'transparent', border: `1px solid ${surfaceBorder}`, padding: '1px 6px', borderRadius: 6}}>
                       {sendStatus.runId}
                     </code>
                   </div>
@@ -731,78 +672,69 @@ const hazardEdgeStyle = useMemo<React.CSSProperties>(() => {
             )}
 
             {sendStatus.state === 'error' && (
-              <div style={{fontSize: 12, color: '#b00020'}}>
+              <div style={{fontSize: 12, color: '#ffb3c0'}}>
                 <b>Error:</b> {sendStatus.message}
               </div>
             )}
+
+            {enqueueError ? <div style={{marginTop: 8, fontSize: 12, color: '#ffb3c0'}}><b>Enqueue error:</b> {enqueueError}</div> : null}
+            {drainError ? <div style={{marginTop: 8, fontSize: 12, color: '#ffb3c0'}}><b>Drain error:</b> {drainError}</div> : null}
+            {drainResult ? (
+              <div style={{marginTop: 8, fontSize: 11, opacity: 0.8}}>
+                Last drain: sent {drainResult.sent} • remaining {drainResult.remainingQueued} • runId <code>{drainResult.runId}</code>
+              </div>
+            ) : null}
           </div>
-
-          {enqueueError ? (
-            <div style={{marginTop: 10, fontSize: 12, color: '#ffb3c0'}}>
-              <b>Enqueue error:</b> {enqueueError}
-            </div>
-          ) : null}
-
-          {drainError ? (
-            <div style={{marginTop: 10, fontSize: 12, color: '#ffb3c0'}}>
-              <b>Drain error:</b> {drainError}
-            </div>
-          ) : null}
-
-          {drainResult ? (
-            <div style={{marginTop: 10, fontSize: 12, opacity: 0.85}}>
-              Last drain: sent <b>{drainResult.sent}</b> • remaining queued <b>{drainResult.remainingQueued}</b> • runId{' '}
-              <code
-                style={{
-                  background: 'transparent',
-                  border: `1px solid ${surfaceBorder}`,
-                  padding: '1px 6px',
-                  borderRadius: 6,
-                }}
-              >
-                {drainResult.runId}
-              </code>
-            </div>
-          ) : null}
         </div>
+
         <div style={{...hazardEdgeStyle, backgroundImage: hazardStripe(-45)}} />
       </div>
     )
   }, [
-    canEnqueue,
-    campaignId,
-    cancelSending,
-    drainError,
-    drainOnce,
-    drainResult,
-    enqueue,
-    enqueueError,
-    hazardStripe,
-    loading,
-    sendAutoDrain,
-    sendStatus,
-    surfaceBg,
-    surfaceBorder,
     hazardCardStyle,
     hazardEdgeStyle,
+    hazardStripe,
+    enqueue,
+    enqueueing,
+    draining,
+    sendStatus,
+    canEnqueue,
+    campaignId,
+    audienceCount,
+    cancelSending,
+    drainOnce,
+    sendAutoDrain,
+    surfaceBg,
+    surfaceBorder,
+    enqueueError,
+    drainError,
+    drainResult,
   ])
 
   return (
-    <div
-      style={{
-        maxWidth: 1100,
-        margin: '24px auto',
-        padding: 16,
-        fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
-      }}
-    >
+    <div style={{maxWidth: 1100, margin: '24px auto', padding: 16, fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial'}}>
       <div style={{display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap'}}>
         <div>
-          <div style={{fontSize: 24, fontWeight: 800, letterSpacing: -0.2}}>BJR Campaign Composer</div>
-          <div style={{fontSize: 12, opacity: 0.7, marginTop: 2}}>Compose → preview → enqueue → drain (Resend + Neon)</div>
+          <div style={{fontSize: 12, opacity: 0.7}}>Campaigns</div>
+          <h1 style={{margin: 0}}>Composer</h1>
+          <div style={{fontSize: 12, opacity: 0.7, marginTop: 6}}>
+            Draft stays local until you enqueue. Preview is server-rendered from your React Email template.
+          </div>
         </div>
 
-        <div style={{display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap'}}>
+        <div style={{display: 'flex', gap: 10, alignItems: 'center'}}>
+          <button onClick={reset} disabled={enqueueing || draining || sendStatus.state === 'sending'} style={{padding: '10px 14px', borderRadius: 10}}>
+            Reset session
+          </button>
+
+          <button onClick={() => void refreshPreviewHtml()} disabled={previewLoading} style={{padding: '10px 14px', borderRadius: 10}}>
+            {previewLoading ? 'Refreshing…' : 'Refresh preview'}
+          </button>
+        </div>
+      </div>
+
+      <div style={{padding: 12, borderRadius: 12, marginTop: 10, marginBottom: 16}}>
+        <div style={{display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap'}}>
           <div
             style={{
               padding: '10px 14px',
@@ -813,49 +745,12 @@ const hazardEdgeStyle = useMemo<React.CSSProperties>(() => {
               fontSize: 13,
               fontWeight: 500,
             }}
-            title="Best-effort count of members_sendable_marketing; may differ from 'source' filter unless you add an endpoint that supports it."
           >
-            Mailable members&nbsp;<b style={{marginLeft: 6}}>{audienceCount ?? '—'}</b>
+            Mailable Contacts <b style={{marginLeft: 6}}>{audienceCount ?? '—'}</b>
           </div>
 
-          {campaignId ? (
-  <div
-    style={{
-      padding: '10px 14px',
-      borderRadius: 10,
-      background: 'rgba(255,255,255,0.06)',
-      border: '1px solid rgba(255,255,255,0.14)',
-      color: 'rgba(255,255,255,0.9)',
-      fontSize: 13,
-      fontWeight: 500,
-    }}
-    title="Counts returned by enqueue"
-  >
-    Enqueued&nbsp;<b style={{marginLeft: 6}}>{enqueuedCount ?? '—'}</b>
-  </div>
-) : null}
-
-
-          <button onClick={() => void refreshAudience()} disabled={audienceLoading} style={{padding: '10px 14px', borderRadius: 10}} type="button">
-            {audienceLoading ? 'Refreshing…' : 'Refresh audience'}
-          </button>
-
-          <button onClick={reset} disabled={loading || sendStatus.state === 'sending'} style={{padding: '10px 14px', borderRadius: 10}} type="button">
-            Reset session
-          </button>
-        </div>
-      </div>
-
-      {audienceError ? (
-        <div style={{marginTop: 10, fontSize: 12, opacity: 0.8}}>
-          Audience count preflight unavailable (optional): <span style={{color: '#ffb3c0'}}>{audienceError}</span>
-        </div>
-      ) : null}
-
-      <div style={{padding: 12, borderRadius: 12, marginTop: 10, marginBottom: 16}}>
-        <div style={{display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap'}}>
-          <div style={{fontSize: 12, opacity: 0.7}}>
-            Source filter (optional): <code style={{opacity: 0.9}}>{draft.source.trim() || '—'}</code>
+          <div style={{fontSize: 12, opacity: 0.75}}>
+            Enqueued <b>{enqueuedCount ?? 0}</b> (this session)
           </div>
         </div>
       </div>
@@ -870,76 +765,39 @@ const hazardEdgeStyle = useMemo<React.CSSProperties>(() => {
       >
         {/* LEFT */}
         <div style={{padding: 12, borderRadius: 12, fontSize: 14}}>
-          <h2 style={{marginTop: 0, marginBottom: 5, fontSize: 18}}>Compose</h2>
+          <h2 style={{marginTop: 0, marginBottom: 8, fontSize: 18}}>Compose</h2>
 
           <label style={{display: 'block', marginBottom: 10}}>
-            <div style={labelTitleStyleLeft}>Campaign name</div>
-            <input
-              value={draft.campaignName}
-              onChange={(e) => markDirtyAndDebouncePersist({...draft, campaignName: e.target.value})}
-              style={inputStyle}
-            />
+            <div style={{fontSize: 10, opacity: 0.7, marginBottom: 6}}>Campaign name</div>
+            <input value={draft.campaignName} onChange={(e) => markDirtyAndDebouncePersist({...draft, campaignName: e.target.value})} style={inputStyle} />
           </label>
 
           <label style={{display: 'block', marginBottom: 10}}>
-            <div style={labelTitleStyleLeft}>Reply-To (optional)</div>
-            <input
-              value={draft.replyTo}
-              onChange={(e) => markDirtyAndDebouncePersist({...draft, replyTo: e.target.value})}
-              style={inputStyle}
-              placeholder="admin@brendanjohnroch.com"
-            />
+            <div style={{fontSize: 10, opacity: 0.7, marginBottom: 6}}>Reply-To (optional)</div>
+            <input value={draft.replyTo} onChange={(e) => markDirtyAndDebouncePersist({...draft, replyTo: e.target.value})} style={inputStyle} placeholder="admin@brendanjohnroch.com" />
           </label>
 
           <label style={{display: 'block', marginBottom: 10}}>
-            <div style={labelTitleStyleLeft}>Source filter (optional)</div>
-            <input
-              value={draft.source}
-              onChange={(e) => markDirtyAndDebouncePersist({...draft, source: e.target.value})}
-              style={inputStyle}
-              placeholder="e.g. early_access_form"
-            />
+            <div style={{fontSize: 10, opacity: 0.7, marginBottom: 6}}>Source filter (optional)</div>
+            <input value={draft.source} onChange={(e) => markDirtyAndDebouncePersist({...draft, source: e.target.value})} style={inputStyle} placeholder="e.g. early_access_form" />
           </label>
 
           <label style={{display: 'block', marginBottom: 10}}>
-            <div style={labelTitleStyleLeft}>Subject template</div>
-            <input
-              value={draft.subjectTemplate}
-              onChange={(e) => markDirtyAndDebouncePersist({...draft, subjectTemplate: e.target.value})}
-              style={inputStyle}
-              placeholder="A note from Brendan"
-            />
+            <div style={{fontSize: 10, opacity: 0.7, marginBottom: 6}}>Subject</div>
+            <input value={draft.subjectTemplate} onChange={(e) => markDirtyAndDebouncePersist({...draft, subjectTemplate: e.target.value})} style={inputStyle} />
           </label>
 
           <label style={{display: 'block', marginBottom: 10}}>
-            <div style={labelTitleStyleLeft}>Body template</div>
+            <div style={{fontSize: 10, opacity: 0.7, marginBottom: 6}}>Body (Markdown)</div>
 
-            {/* Joined control: toolbar + textarea */}
-            <div
-              style={{
-                border: `1px solid ${surfaceBorder}`,
-                borderRadius: 12,
-                overflow: 'hidden',
-                background: surfaceBg,
-              }}
-            >
-              {/* Toolbar */}
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 6,
-                  padding: 8,
-                  borderBottom: `1px solid ${surfaceBorder}`,
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                }}
-              >
+            <div style={{border: `1px solid ${surfaceBorder}`, borderRadius: 12, overflow: 'hidden', background: surfaceBg}}>
+              <div style={{display: 'flex', gap: 6, padding: 8, borderBottom: `1px solid ${surfaceBorder}`, alignItems: 'center', flexWrap: 'wrap'}}>
                 {[
                   {
                     title: 'Bold',
                     icon: <IconBold />,
                     run: () => {
-                      const el = document.getElementById('bjr-body-template') as HTMLTextAreaElement | null
+                      const el = document.getElementById('body-template') as HTMLTextAreaElement | null
                       if (!el) return
                       insertAtCursor(el, '**bold text**', [2, 11])
                       markDirtyAndDebouncePersist({...draft, bodyTemplate: el.value})
@@ -949,7 +807,7 @@ const hazardEdgeStyle = useMemo<React.CSSProperties>(() => {
                     title: 'Italic',
                     icon: <IconItalic />,
                     run: () => {
-                      const el = document.getElementById('bjr-body-template') as HTMLTextAreaElement | null
+                      const el = document.getElementById('body-template') as HTMLTextAreaElement | null
                       if (!el) return
                       insertAtCursor(el, '*italic text*', [1, 12])
                       markDirtyAndDebouncePersist({...draft, bodyTemplate: el.value})
@@ -959,7 +817,7 @@ const hazardEdgeStyle = useMemo<React.CSSProperties>(() => {
                     title: 'Link',
                     icon: <IconLink />,
                     run: () => {
-                      const el = document.getElementById('bjr-body-template') as HTMLTextAreaElement | null
+                      const el = document.getElementById('body-template') as HTMLTextAreaElement | null
                       if (!el) return
                       insertAtCursor(el, '[link text](https://)', [1, 10])
                       markDirtyAndDebouncePersist({...draft, bodyTemplate: el.value})
@@ -969,7 +827,7 @@ const hazardEdgeStyle = useMemo<React.CSSProperties>(() => {
                     title: 'Image',
                     icon: <IconImage />,
                     run: () => {
-                      const el = document.getElementById('bjr-body-template') as HTMLTextAreaElement | null
+                      const el = document.getElementById('body-template') as HTMLTextAreaElement | null
                       if (!el) return
                       insertAtCursor(el, '![alt text](https://image-url)', [2, 10])
                       markDirtyAndDebouncePersist({...draft, bodyTemplate: el.value})
@@ -979,7 +837,7 @@ const hazardEdgeStyle = useMemo<React.CSSProperties>(() => {
                     title: 'Divider',
                     icon: <IconDivider />,
                     run: () => {
-                      const el = document.getElementById('bjr-body-template') as HTMLTextAreaElement | null
+                      const el = document.getElementById('body-template') as HTMLTextAreaElement | null
                       if (!el) return
                       insertAtCursor(el, '\n\n---\n\n')
                       markDirtyAndDebouncePersist({...draft, bodyTemplate: el.value})
@@ -989,7 +847,7 @@ const hazardEdgeStyle = useMemo<React.CSSProperties>(() => {
                     title: 'Heading',
                     icon: <IconH2 />,
                     run: () => {
-                      const el = document.getElementById('bjr-body-template') as HTMLTextAreaElement | null
+                      const el = document.getElementById('body-template') as HTMLTextAreaElement | null
                       if (!el) return
                       insertAtCursor(el, '\n\n## Heading text\n\n', [4, 16])
                       markDirtyAndDebouncePersist({...draft, bodyTemplate: el.value})
@@ -999,7 +857,7 @@ const hazardEdgeStyle = useMemo<React.CSSProperties>(() => {
                     title: 'Bullets',
                     icon: <IconBullets />,
                     run: () => {
-                      const el = document.getElementById('bjr-body-template') as HTMLTextAreaElement | null
+                      const el = document.getElementById('body-template') as HTMLTextAreaElement | null
                       if (!el) return
                       insertAtCursor(el, '\n\n- Bullet one\n- Bullet two\n- Bullet three\n\n', [4, 14])
                       markDirtyAndDebouncePersist({...draft, bodyTemplate: el.value})
@@ -1031,9 +889,8 @@ const hazardEdgeStyle = useMemo<React.CSSProperties>(() => {
                 ))}
               </div>
 
-              {/* Textarea */}
               <textarea
-                id="bjr-body-template"
+                id="body-template"
                 value={draft.bodyTemplate}
                 onChange={(e) => markDirtyAndDebouncePersist({...draft, bodyTemplate: e.target.value})}
                 onKeyDown={(e) => handleUndoRedoKeydown(e)}
@@ -1048,68 +905,40 @@ const hazardEdgeStyle = useMemo<React.CSSProperties>(() => {
                   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
                   resize: 'vertical',
                 }}
-                placeholder="Write the email…"
               />
             </div>
-          </label>
 
-          <div style={{marginTop: 12, fontSize: 11, opacity: 0.7}}>
-            Tokens supported: <code>{'{{email}} {{member_id}}'}</code>
-          </div>
+            <div style={{marginTop: 10, fontSize: 11, opacity: 0.7}}>
+              Merge vars supported:{' '}
+              <code>{'{{email}} {{member_id}}'}</code>
+            </div>
+          </label>
 
           {!isNarrow && hazardZone}
         </div>
 
         {/* RIGHT */}
         <div style={{padding: 12, borderRadius: 12}}>
-          <h2 style={{marginTop: 0, marginBottom: 5, fontSize: 18}}>Preview</h2>
+          <h2 style={{marginTop: 0, marginBottom: 8, fontSize: 18}}>Preview (React Email)</h2>
 
-          <div style={{marginBottom: 10}}>
-            <div style={labelTitleStyleRight}>Rendered subject (plain)</div>
-            <div
-              style={{
-                padding: 10,
-                borderRadius: 10,
-                background: surfaceBg,
-                border: `1px solid ${surfaceBorder}`,
-              }}
-            >
-              {draft.subjectTemplate.trim() || '(no subject)'}
+          {previewErr ? (
+            <div style={{padding: 10, borderRadius: 10, background: 'rgba(176,0,32,0.12)', border: '1px solid rgba(176,0,32,0.35)', color: '#ffb3c0'}}>
+              <b>Preview error:</b> {previewErr}
             </div>
-          </div>
+          ) : (
+            <iframe
+              title="email-preview"
+              srcDoc={iframeSrcDoc}
+              style={{width: '100%', height: 520, border: `1px solid ${surfaceBorder}`, borderRadius: 10, background: surfaceBg}}
+              sandbox="allow-same-origin"
+            />
+          )}
 
-          <div style={{marginBottom: 10}}>
-            <div style={labelTitleStyleRight}>Rendered plaintext</div>
-            <pre
-              style={{
-                whiteSpace: 'pre-wrap',
-                padding: 10,
-                borderRadius: 10,
-                background: surfaceBg,
-                border: `1px solid ${surfaceBorder}`,
-                margin: 0,
-                maxHeight: 520,
-                overflow: 'auto',
-              }}
-            >
-              {draft.bodyTemplate || '(no body)'}
+          <div style={{marginTop: 12}}>
+            <div style={{fontSize: 12, opacity: 0.7, marginBottom: 6}}>Rendered plaintext (stored in campaign body)</div>
+            <pre style={{whiteSpace: 'pre-wrap', padding: 10, borderRadius: 10, background: surfaceBg, border: `1px solid ${surfaceBorder}`, margin: 0, maxHeight: 260, overflow: 'auto'}}>
+              {draft.bodyTemplate}
             </pre>
-          </div>
-
-          <div style={{fontSize: 12, opacity: 0.7}}>
-            From: <code>(RESEND_FROM_MARKETING)</code>
-            {draft.replyTo.trim() ? (
-              <>
-                {' '}
-                • Reply-To: <code>{draft.replyTo.trim()}</code>
-              </>
-            ) : null}
-          </div>
-
-          <div style={{marginTop: 10, fontSize: 11, opacity: 0.65}}>
-            To get a *perfect* “about to email” count with the <code>source</code> filter applied, we’d add one small count endpoint
-            that accepts <code>source</code>. Right now you’ll see: (a) best-effort global count, and (b) the exact count returned by
-            enqueue after you click it.
           </div>
         </div>
 

@@ -1,4 +1,4 @@
-// emails/PressPitchEmail.tsx
+// emails/CampaignEmail.tsx
 import * as React from 'react'
 import {Html, Head, Preview, Body, Container, Section, Img, Text} from '@react-email/components'
 import {Markdown} from '@react-email/markdown'
