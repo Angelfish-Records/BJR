@@ -194,6 +194,39 @@ function insertAtCursor(
   );
 }
 
+function IconUpload(props: { size?: number }) {
+  const s = props.size ?? 14;
+  return (
+    <svg
+      width={s}
+      height={s}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M12 16V4"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M8 8l4-4 4 4"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M4 20h16"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function IconBold(props: { size?: number }) {
   const s = props.size ?? 14;
   return (
@@ -765,6 +798,83 @@ export default function CampaignComposerClient() {
       padding: 0,
     };
   }
+
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageUploadErr, setImageUploadErr] = useState<string | null>(null);
+  const [lastImageUrl, setLastImageUrl] = useState<string | null>(null);
+
+  type UploadImageOk = { ok: true; key: string; url: string };
+  type UploadImageErr = { ok?: false; error: string; message?: string };
+
+  function isUploadImageOk(x: unknown): x is UploadImageOk {
+    return (
+      typeof x === "object" &&
+      x !== null &&
+      (x as { ok?: unknown }).ok === true &&
+      typeof (x as { key?: unknown }).key === "string" &&
+      typeof (x as { url?: unknown }).url === "string"
+    );
+  }
+
+  function isUploadImageErr(x: unknown): x is UploadImageErr {
+    return (
+      typeof x === "object" &&
+      x !== null &&
+      typeof (x as { error?: unknown }).error === "string"
+    );
+  }
+
+  const uploadImageFile = useCallback(
+    async (file: File) => {
+      setImageUploading(true);
+      setImageUploadErr(null);
+
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+
+        const res = await fetch("/api/admin/campaigns/images/upload", {
+          method: "POST",
+          body: fd,
+        });
+
+        const raw = await readJson(res);
+
+        if (!res.ok) {
+          if (isUploadImageErr(raw)) {
+            throw new Error(
+              `${raw.error}${raw.message ? `: ${raw.message}` : ""}`,
+            );
+          }
+          throw new Error(`Upload failed (${res.status})`);
+        }
+
+        if (!isUploadImageOk(raw)) {
+          throw new Error("Upload response had unexpected shape");
+        }
+
+        const url = raw.url;
+        setLastImageUrl(url);
+
+        const el = document.getElementById(
+          "body-template",
+        ) as HTMLTextAreaElement | null;
+        if (!el) return;
+
+        const base = (file.name || "image").replace(/\.[^.]+$/, "");
+        const alt = base.trim() ? base : "image";
+
+        insertAtCursor(el, `![${alt}](${url})`, [2, 2 + alt.length]);
+        markDirtyAndDebouncePersist({ ...draft, bodyTemplate: el.value });
+      } catch (e) {
+        setImageUploadErr(errorMessage(e));
+      } finally {
+        setImageUploading(false);
+      }
+    },
+    [draft, markDirtyAndDebouncePersist],
+  );
 
   const hazardStripe = useCallback(
     (angleDeg: number) =>
@@ -1884,24 +1994,14 @@ export default function CampaignComposerClient() {
                     },
                   },
                   {
-                    title: "Image",
-                    icon: <IconImage />,
+                    title: imageUploading ? "Uploading…" : "Upload image",
+                    icon: <IconUpload />,
                     run: () => {
-                      const el = document.getElementById(
-                        "body-template",
-                      ) as HTMLTextAreaElement | null;
-                      if (!el) return;
-                      insertAtCursor(
-                        el,
-                        "![alt text](https://image-url)",
-                        [2, 10],
-                      );
-                      markDirtyAndDebouncePersist({
-                        ...draft,
-                        bodyTemplate: el.value,
-                      });
+                      if (imageUploading) return;
+                      imageInputRef.current?.click();
                     },
                   },
+
                   {
                     title: "Divider",
                     icon: <IconDivider />,
@@ -1964,6 +2064,20 @@ export default function CampaignComposerClient() {
                   </button>
                 ))}
               </div>
+
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  // allow re-selecting same file
+                  e.currentTarget.value = "";
+                  if (!f) return;
+                  void uploadImageFile(f);
+                }}
+              />
 
               <textarea
                 id="body-template"
