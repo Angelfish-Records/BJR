@@ -1,11 +1,12 @@
+// web/app/api/admin/campaigns/images/upload/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { requireAdminMemberId } from "@/lib/adminAuth";
 
 function must(v: string | undefined, name: string): string {
-  if (!v) throw new Error(`Missing env: ${name}`);
-  return v;
+  if (!v || !v.trim()) throw new Error(`Missing env: ${name}`);
+  return v.trim();
 }
 
 function safeName(name: string): string {
@@ -26,26 +27,64 @@ function extFromType(contentType: string): string {
 }
 
 type UploadOk = { ok: true; key: string; url: string };
-type UploadErr = { ok?: false; error: string; message?: string };
+type UploadErr = { ok?: false; error: string; message?: string; code?: string };
+
+// Narrow AWS / R2 error shape without `any`
+function asAwsError(
+  e: unknown,
+): {
+  message?: string;
+  code?: string;
+  httpStatusCode?: number;
+  requestId?: string;
+  cfId?: string;
+} {
+  if (typeof e !== "object" || e === null) return {};
+
+  const rec = e as Record<string, unknown>;
+  const meta =
+    typeof rec.$metadata === "object" && rec.$metadata !== null
+      ? (rec.$metadata as Record<string, unknown>)
+      : {};
+
+  return {
+    message: typeof rec.message === "string" ? rec.message : undefined,
+    code:
+      typeof rec.Code === "string"
+        ? rec.Code
+        : typeof rec.code === "string"
+          ? rec.code
+          : undefined,
+    httpStatusCode:
+      typeof meta.httpStatusCode === "number"
+        ? meta.httpStatusCode
+        : undefined,
+    requestId:
+      typeof meta.requestId === "string" ? meta.requestId : undefined,
+    cfId: typeof meta.cfId === "string" ? meta.cfId : undefined,
+  };
+}
 
 export async function POST(req: NextRequest) {
   try {
-    // ✅ real admin gate (throws Unauthorized/Forbidden)
     await requireAdminMemberId();
 
-    const accountId = must(process.env.R2_ACCOUNT_ID, "R2_ACCOUNT_ID");
-    const accessKeyId = must(process.env.R2_ACCESS_KEY_ID, "R2_ACCESS_KEY_ID");
+    const accessKeyId = must(
+      process.env.R2_UPLOAD_ACCESS_KEY_ID,
+      "R2_UPLOAD_ACCESS_KEY_ID",
+    );
     const secretAccessKey = must(
-      process.env.R2_SECRET_ACCESS_KEY,
-      "R2_SECRET_ACCESS_KEY",
+      process.env.R2_UPLOAD_SECRET_ACCESS_KEY,
+      "R2_UPLOAD_SECRET_ACCESS_KEY",
     );
-    const bucket = must(process.env.R2_BUCKET, "R2_BUCKET");
+    const bucket = must(process.env.R2_UPLOAD_BUCKET, "R2_UPLOAD_BUCKET");
+    const endpoint = must(process.env.R2_UPLOAD_ENDPOINT, "R2_UPLOAD_ENDPOINT");
+    const region = (process.env.R2_UPLOAD_REGION || "auto").trim() || "auto";
 
-    // ✅ use your existing env var
     const publicBase = must(
-      process.env.NEXT_PUBLIC_APP_URL,
-      "NEXT_PUBLIC_APP_URL",
-    );
+      process.env.R2_UPLOAD_PUBLIC_BASE_URL,
+      "R2_UPLOAD_PUBLIC_BASE_URL",
+    ).replace(/\/$/, "");
 
     const form = await req.formData();
     const file = form.get("file");
@@ -75,7 +114,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(body, { status: 415 });
     }
 
-    const maxBytes = 6 * 1024 * 1024; // 6MB
+    const maxBytes = 6 * 1024 * 1024;
     if (file.size > maxBytes) {
       const body: UploadErr = {
         ok: false,
@@ -95,13 +134,10 @@ export async function POST(req: NextRequest) {
       crypto.randomUUID?.() ??
       `${Date.now().toString(36)}_${crypto.randomBytes(6).toString("hex")}`;
 
-    // Keep under /gfx so it matches your site convention
     const key = `gfx/campaigns/${yyyy}/${mm}/${id}_${base}.${ext}`;
 
-    const endpoint = `https://${accountId}.r2.cloudflarestorage.com`;
-
     const s3 = new S3Client({
-      region: "auto",
+      region,
       endpoint,
       credentials: { accessKeyId, secretAccessKey },
       forcePathStyle: true,
@@ -119,19 +155,32 @@ export async function POST(req: NextRequest) {
       }),
     );
 
-    // If /gfx is publicly served from your app domain, this is correct.
-    const url = `${publicBase.replace(/\/$/, "")}/${key}`;
-
+    const url = `${publicBase}/${key}`;
     const body: UploadOk = { ok: true, key, url };
     return NextResponse.json(body);
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const aws = asAwsError(e);
 
-    // Map auth errors to sane HTTP codes
-    const status =
-      msg === "Unauthorized" ? 401 : msg === "Forbidden" ? 403 : 500;
+    console.error("R2 upload error", {
+      message: aws.message,
+      code: aws.code,
+      status: aws.httpStatusCode,
+      requestId: aws.requestId,
+      cfId: aws.cfId,
+    });
 
-    const body: UploadErr = { ok: false, error: "UploadFailed", message: msg };
+    const msg =
+      aws.message ??
+      (e instanceof Error ? e.message : "Unknown upload error");
+
+    const status = msg === "Unauthorized" ? 401 : msg === "Forbidden" ? 403 : 500;
+
+    const body: UploadErr = {
+      ok: false,
+      error: "UploadFailed",
+      message: msg,
+      code: aws.code,
+    };
     return NextResponse.json(body, { status });
   }
 }
