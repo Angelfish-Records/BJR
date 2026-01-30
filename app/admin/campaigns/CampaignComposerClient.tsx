@@ -39,7 +39,6 @@ type PreviewOk = { ok: true; subject: string; html: string };
 type PreviewResponse = PreviewOk | ApiErr;
 
 const AUDIENCE_FILTERS_KEY = "bjr_campaign_audience_filters_v1";
-
 const DRAFT_KEY = "bjr_campaign_draft_v1";
 
 type Draft = {
@@ -73,36 +72,6 @@ function errorMessage(err: unknown): string {
   } catch {
     return String(err);
   }
-}
-
-function isAudienceFilterKind(x: unknown): x is AudienceFilterKind {
-  return (
-    x === "source" ||
-    x === "entitlementKey" ||
-    x === "entitlementExpiresWithinDays" ||
-    x === "joinedWithinDays" ||
-    x === "consentVersionMax" ||
-    x === "hasPurchased" ||
-    x === "purchasedWithinDays" ||
-    x === "engagedEventType" ||
-    x === "engagedWithinDays"
-  );
-}
-
-function parseAudienceFilter(x: unknown): AudienceFilter | null {
-  if (!isObject(x)) return null;
-
-  const idRaw = x.id;
-  const kindRaw = x.kind;
-  const valueRaw = x.value;
-
-  if (!isAudienceFilterKind(kindRaw)) return null;
-
-  return {
-    id: typeof idRaw === "string" && idRaw ? idRaw : newId(),
-    kind: kindRaw,
-    value: typeof valueRaw === "string" ? valueRaw : "",
-  };
 }
 
 function isObject(x: unknown): x is Record<string, unknown> {
@@ -290,36 +259,6 @@ function IconLink(props: { size?: number }) {
     </svg>
   );
 }
-function IconImage(props: { size?: number }) {
-  const s = props.size ?? 14;
-  return (
-    <svg
-      width={s}
-      height={s}
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Z"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-      <path
-        d="M8 10a1.5 1.5 0 1 0 0.001 0"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M4 17l5-5 4 4 3-3 4 4"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
 function IconDivider(props: { size?: number }) {
   const s = props.size ?? 14;
   return (
@@ -472,8 +411,37 @@ const FILTER_KIND_LABEL: Record<AudienceFilterKind, string> = {
 };
 
 function newId(): string {
-  // good enough for UI rows
   return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function isAudienceFilterKind(x: unknown): x is AudienceFilterKind {
+  return (
+    x === "source" ||
+    x === "entitlementKey" ||
+    x === "entitlementExpiresWithinDays" ||
+    x === "joinedWithinDays" ||
+    x === "consentVersionMax" ||
+    x === "hasPurchased" ||
+    x === "purchasedWithinDays" ||
+    x === "engagedEventType" ||
+    x === "engagedWithinDays"
+  );
+}
+
+function parseAudienceFilter(x: unknown): AudienceFilter | null {
+  if (!isObject(x)) return null;
+
+  const idRaw = x.id;
+  const kindRaw = x.kind;
+  const valueRaw = x.value;
+
+  if (!isAudienceFilterKind(kindRaw)) return null;
+
+  return {
+    id: typeof idRaw === "string" && idRaw ? idRaw : newId(),
+    kind: kindRaw,
+    value: typeof valueRaw === "string" ? valueRaw : "",
+  };
 }
 
 function parseIntOrNull(s: string): number | null {
@@ -489,8 +457,6 @@ function toBoolOrNull(s: string): boolean | null {
 }
 
 function buildEnqueueAudiencePayload(filters: AudienceFilter[]) {
-  // Backend expects one value per filter type (not arrays).
-  // If UI ever allows duplicates per kind, last one wins.
   const out: Record<string, unknown> = {};
 
   for (const f of filters) {
@@ -523,6 +489,28 @@ function buildEnqueueAudiencePayload(filters: AudienceFilter[]) {
   return out;
 }
 
+// ---------- Upload response types + guards (hoisted; fixes hook deps warning) ----------
+type UploadImageOk = { ok: true; key: string; url: string };
+type UploadImageErr = { ok?: false; error: string; message?: string };
+
+function isUploadImageOk(x: unknown): x is UploadImageOk {
+  return (
+    typeof x === "object" &&
+    x !== null &&
+    (x as { ok?: unknown }).ok === true &&
+    typeof (x as { key?: unknown }).key === "string" &&
+    typeof (x as { url?: unknown }).url === "string"
+  );
+}
+
+function isUploadImageErr(x: unknown): x is UploadImageErr {
+  return (
+    typeof x === "object" &&
+    x !== null &&
+    typeof (x as { error?: unknown }).error === "string"
+  );
+}
+
 export default function CampaignComposerClient() {
   // Draft fields (local + sessionStorage)
   const [draft, setDraft] = useState<Draft>(DEFAULT_DRAFT);
@@ -538,6 +526,7 @@ export default function CampaignComposerClient() {
   // Audience filters (stackable)
   const [audienceFilters, setAudienceFilters] = useState<AudienceFilter[]>([]);
   const filtersSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Audience options (DB-backed)
   const [audienceOptions, setAudienceOptions] = useState<{
     sources: string[];
@@ -592,7 +581,6 @@ export default function CampaignComposerClient() {
       });
     } catch (e) {
       setAudienceOptionsErr(errorMessage(e));
-      // keep existing options; don't blank them on transient error
     } finally {
       setAudienceOptionsLoading(false);
     }
@@ -620,8 +608,8 @@ export default function CampaignComposerClient() {
 
   // Optional: tune these defaults as you like
   const previewBrandName = "Brendan John Roch";
-  const previewLogoUrl = ""; // put a real URL if you want a logo in preview
-  const previewUnsubscribeUrl = ""; // optional: keep blank unless you want it shown
+  const previewLogoUrl = "";
+  const previewUnsubscribeUrl = "";
 
   // Hydrate draft from sessionStorage
   useEffect(() => {
@@ -720,9 +708,6 @@ export default function CampaignComposerClient() {
     [draft.bodyTemplate, draft.subjectTemplate],
   );
 
-  // --- styling helpers (match your prior "hazard zone" look) ---
-  const surfaceBg = "rgba(255,255,255,0.06)";
-  const surfaceBorder = "rgba(255,255,255,0.14)";
   // --- UI scale + surfaces (single source of truth) ---
   const UI = {
     maxWidth: 1100,
@@ -803,27 +788,6 @@ export default function CampaignComposerClient() {
   const [imageUploading, setImageUploading] = useState(false);
   const [imageUploadErr, setImageUploadErr] = useState<string | null>(null);
   const [lastImageUrl, setLastImageUrl] = useState<string | null>(null);
-
-  type UploadImageOk = { ok: true; key: string; url: string };
-  type UploadImageErr = { ok?: false; error: string; message?: string };
-
-  function isUploadImageOk(x: unknown): x is UploadImageOk {
-    return (
-      typeof x === "object" &&
-      x !== null &&
-      (x as { ok?: unknown }).ok === true &&
-      typeof (x as { key?: unknown }).key === "string" &&
-      typeof (x as { url?: unknown }).url === "string"
-    );
-  }
-
-  function isUploadImageErr(x: unknown): x is UploadImageErr {
-    return (
-      typeof x === "object" &&
-      x !== null &&
-      typeof (x as { error?: unknown }).error === "string"
-    );
-  }
 
   const uploadImageFile = useCallback(
     async (file: File) => {
@@ -924,7 +888,6 @@ export default function CampaignComposerClient() {
   }, []);
 
   const refreshPreviewHtml = useCallback(async () => {
-    // Abort any in-flight preview request (cuts server load)
     if (previewAbortRef.current) previewAbortRef.current.abort();
     const ac = new AbortController();
     previewAbortRef.current = ac;
@@ -966,12 +929,10 @@ export default function CampaignComposerClient() {
 
       setPreviewHtml(data.html);
     } catch (e) {
-      // ignore aborts (user typed / refreshed quickly)
       if (e instanceof DOMException && e.name === "AbortError") return;
       setPreviewErr(errorMessage(e));
       setPreviewHtml("");
     } finally {
-      // Only clear if we're still the current controller
       if (previewAbortRef.current === ac) {
         previewAbortRef.current = null;
         setPreviewLoading(false);
@@ -985,7 +946,6 @@ export default function CampaignComposerClient() {
     previewUnsubscribeUrl,
   ]);
 
-  // Debounce preview refresh on subject/body changes
   useEffect(() => {
     const t = window.setTimeout(() => {
       void refreshPreviewHtml();
@@ -1015,8 +975,6 @@ export default function CampaignComposerClient() {
           subjectTemplate: draft.subjectTemplate,
           bodyTemplate: draft.bodyTemplate,
           replyTo: draft.replyTo.trim() ? draft.replyTo.trim() : null,
-
-          // New audience filters (stacked UI -> single payload fields)
           ...buildEnqueueAudiencePayload(audienceFilters),
         }),
       });
@@ -1096,7 +1054,6 @@ export default function CampaignComposerClient() {
     [campaignId, draining],
   );
 
-  // Auto-drain loop status
   const [sendStatus, setSendStatus] = useState<
     | { state: "idle" }
     | {
@@ -1144,7 +1101,6 @@ export default function CampaignComposerClient() {
       if (!campaignId) return;
       if (draining) return;
 
-      // Abort any prior run
       if (drainAbortRef.current) drainAbortRef.current.abort();
 
       const ac = new AbortController();
@@ -1154,6 +1110,9 @@ export default function CampaignComposerClient() {
       const limit = clampInt(opts?.limit ?? 50, 1, 100);
       const maxLoops = clampInt(opts?.maxLoops ?? 50, 1, 50);
       const startedAtMs = Date.now();
+
+      // hoist so abort/cancel can report accurately
+      let totalSent = 0;
 
       setDraining(true);
       setDrainError(null);
@@ -1168,7 +1127,6 @@ export default function CampaignComposerClient() {
       });
 
       try {
-        let totalSent = 0;
         let loops = 0;
         let remainingQueued = Infinity;
         let lastRunId: string | undefined;
@@ -1256,7 +1214,7 @@ export default function CampaignComposerClient() {
         });
       } catch (e: unknown) {
         if (e instanceof DOMException && e.name === "AbortError") {
-          setSendStatus({ state: "cancelled", campaignId, totalSent: 0 });
+          setSendStatus({ state: "cancelled", campaignId, totalSent });
           return;
         }
         setSendStatus({ state: "error", message: errorMessage(e) });
@@ -1333,8 +1291,8 @@ export default function CampaignComposerClient() {
             Campaign ID:{" "}
             <code
               style={{
-                background: surfaceBg,
-                border: `1px solid ${surfaceBorder}`,
+                background: UI.surfaceBg,
+                border: `1px solid ${UI.surfaceBorder}`,
                 padding: "2px 6px",
                 borderRadius: 6,
               }}
@@ -1373,9 +1331,7 @@ export default function CampaignComposerClient() {
             disabled={!draining}
             style={{
               ...softButtonStyle(),
-              background: draining
-                ? "rgba(176,0,32,0.10)"
-                : softButtonStyle().background,
+              background: draining ? "rgba(176,0,32,0.10)" : undefined,
               border: draining
                 ? "1px solid rgba(176,0,32,0.25)"
                 : `1px solid ${UI.surfaceBorder}`,
@@ -1412,8 +1368,8 @@ export default function CampaignComposerClient() {
             marginTop: 10,
             padding: 10,
             borderRadius: 12,
-            border: `1px solid ${surfaceBorder}`,
-            background: surfaceBg,
+            border: `1px solid ${UI.surfaceBorder}`,
+            background: UI.surfaceBg,
           }}
         >
           {sendStatus.state === "idle" && (
@@ -1438,7 +1394,7 @@ export default function CampaignComposerClient() {
                   <code
                     style={{
                       background: "transparent",
-                      border: `1px solid ${surfaceBorder}`,
+                      border: `1px solid ${UI.surfaceBorder}`,
                       padding: "1px 6px",
                       borderRadius: 6,
                     }}
@@ -2001,7 +1957,6 @@ export default function CampaignComposerClient() {
                       imageInputRef.current?.click();
                     },
                   },
-
                   {
                     title: "Divider",
                     icon: <IconDivider />,
@@ -2063,6 +2018,80 @@ export default function CampaignComposerClient() {
                     {b.icon}
                   </button>
                 ))}
+
+                {/* Upload status row: uses imageUploadErr + lastImageUrl (fixes unused vars) */}
+                <div style={{ flex: 1 }} />
+
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    flexWrap: "wrap",
+                    fontSize: 11,
+                    opacity: 0.85,
+                  }}
+                >
+                  {imageUploading ? (
+                    <span style={{ opacity: 0.85 }}>Uploading…</span>
+                  ) : null}
+
+                  {imageUploadErr ? (
+                    <span style={{ color: "#ffb3c0" }}>{imageUploadErr}</span>
+                  ) : null}
+
+                  {lastImageUrl ? (
+                    <>
+                      <a
+                        href={lastImageUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          color: "inherit",
+                          textDecoration: "underline",
+                        }}
+                        title="Open last uploaded image"
+                      >
+                        Open
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const text = lastImageUrl;
+                          if (!text) return;
+                          if (navigator.clipboard?.writeText) {
+                            void navigator.clipboard.writeText(text);
+                          } else {
+                            // fallback
+                            const ta = document.createElement("textarea");
+                            ta.value = text;
+                            ta.style.position = "fixed";
+                            ta.style.left = "-9999px";
+                            document.body.appendChild(ta);
+                            ta.focus();
+                            ta.select();
+                            try {
+                              document.execCommand("copy");
+                            } catch {
+                              // ignore
+                            }
+                            document.body.removeChild(ta);
+                          }
+                        }}
+                        style={{
+                          ...iconButtonStyle(),
+                          width: "auto",
+                          padding: "0 10px",
+                          fontSize: 11,
+                        }}
+                        title="Copy last URL"
+                        aria-label="Copy last URL"
+                      >
+                        Copy URL
+                      </button>
+                    </>
+                  ) : null}
+                </div>
               </div>
 
               <input
@@ -2072,7 +2101,6 @@ export default function CampaignComposerClient() {
                 style={{ display: "none" }}
                 onChange={(e) => {
                   const f = e.target.files?.[0];
-                  // allow re-selecting same file
                   e.currentTarget.value = "";
                   if (!f) return;
                   void uploadImageFile(f);
@@ -2099,7 +2127,7 @@ export default function CampaignComposerClient() {
                   color: "inherit",
                   fontFamily: UI.mono,
                   resize: "vertical",
-                  fontSize: 13, // key: keeps body “important” but not huge
+                  fontSize: 13,
                   lineHeight: 1.45,
                 }}
               />
