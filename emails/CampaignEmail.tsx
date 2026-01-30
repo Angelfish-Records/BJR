@@ -213,7 +213,7 @@ export default function FanMailout(props: FanMailoutProps) {
 
           {unsubscribeUrl ? (
             <Text style={styles.unsubscribeOutside}>
-              Don’t want to hear from us again?{" "}
+              Don’t want to hear from me again?{" "}
               <a
                 href={unsubscribeUrl}
                 style={{

@@ -1471,10 +1471,12 @@ export default function CampaignComposerClient() {
           style={{
             display: "flex",
             gap: 12,
-            alignItems: "flex-start",
+            alignItems: isNarrow ? "stretch" : "flex-start",
             flexWrap: "wrap",
+            flexDirection: isNarrow ? "column" : "row",
           }}
         >
+          {/* Left metrics */}
           <div
             style={{
               display: "flex",
@@ -1493,16 +1495,25 @@ export default function CampaignComposerClient() {
             </div>
           </div>
 
-          <div style={{ flex: 1 }} />
+          {/* Spacer only on wide screens */}
+          {!isNarrow ? <div style={{ flex: 1 }} /> : null}
 
           {/* Audience filters (stackable) */}
-          <div style={{ minWidth: 420, maxWidth: 760, flex: "1 1 520px" }}>
+          <div
+            style={{
+              minWidth: 0, // key: allow shrinking
+              width: "100%",
+              maxWidth: isNarrow ? "100%" : 760,
+              flex: isNarrow ? "1 1 auto" : "1 1 520px",
+            }}
+          >
             <div
               style={{
                 display: "flex",
-                alignItems: "center",
+                alignItems: isNarrow ? "stretch" : "center",
                 justifyContent: "space-between",
                 gap: 10,
+                flexWrap: "wrap",
               }}
             >
               <div
@@ -1522,6 +1533,8 @@ export default function CampaignComposerClient() {
                   gap: 8,
                   alignItems: "center",
                   flexWrap: "wrap",
+                  width: isNarrow ? "100%" : undefined,
+                  justifyContent: isNarrow ? "flex-start" : "flex-end",
                 }}
               >
                 <button
@@ -1591,7 +1604,6 @@ export default function CampaignComposerClient() {
                         next[idx] = { id: f.id, kind: nextKind, value: "" };
 
                         // optional UX: prevent duplicates by kind (keeps backend semantics obvious)
-                        // If you WANT duplicates later, just delete this block.
                         const deduped: AudienceFilter[] = [];
                         const seen = new Set<AudienceFilterKind>();
                         for (const row of next) {
@@ -1599,7 +1611,6 @@ export default function CampaignComposerClient() {
                           seen.add(row.kind);
                           deduped.push(row);
                         }
-
                         setFiltersAndDebouncePersist(deduped);
                       }}
                       style={{
@@ -1651,7 +1662,6 @@ export default function CampaignComposerClient() {
                       );
                     }
 
-                    // DB-backed dropdowns (fallback to text if not loaded / empty)
                     const dropdown = (() => {
                       if (kind === "source") return audienceOptions.sources;
                       if (kind === "entitlementKey")
@@ -1725,13 +1735,16 @@ export default function CampaignComposerClient() {
                       key={f.id}
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "1.1fr 1.4fr auto",
+                        gridTemplateColumns: isNarrow
+                          ? "1fr"
+                          : "1.1fr 1.4fr auto",
                         gap: 8,
                         alignItems: "center",
+                        minWidth: 0,
                       }}
                     >
-                      <div style={{ minWidth: 160 }}>{kindSelect}</div>
-                      <div>{valueControl}</div>
+                      <div style={{ minWidth: 0 }}>{kindSelect}</div>
+                      <div style={{ minWidth: 0 }}>{valueControl}</div>
 
                       <button
                         type="button"
@@ -1747,6 +1760,7 @@ export default function CampaignComposerClient() {
                           ...softButtonStyle({ small: true }),
                           padding: "8px 10px",
                           opacity: 0.9,
+                          width: isNarrow ? "100%" : undefined,
                         }}
                       >
                         Remove
