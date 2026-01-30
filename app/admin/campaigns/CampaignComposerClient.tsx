@@ -288,17 +288,73 @@ export default function CampaignComposerClient() {
   // --- styling helpers (match your prior "hazard zone" look) ---
   const surfaceBg = 'rgba(255,255,255,0.06)'
   const surfaceBorder = 'rgba(255,255,255,0.14)'
-  const inputStyle: React.CSSProperties = useMemo(
-    () => ({
-      width: '100%',
-      padding: 10,
-      borderRadius: 10,
-      border: `1px solid ${surfaceBorder}`,
-      background: surfaceBg,
-      color: 'inherit',
-    }),
-    [surfaceBorder, surfaceBg]
-  )
+  // --- UI scale + surfaces (single source of truth) ---
+const UI = {
+  maxWidth: 1100,
+  padOuter: 16,
+  gap: 16,
+  radius: 12,
+  radiusSm: 10,
+  font: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
+  mono: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+  surfaceBg: 'rgba(255,255,255,0.06)',
+  surfaceBorder: 'rgba(255,255,255,0.14)',
+  surfaceBgSoft: 'rgba(255,255,255,0.035)',
+  dangerBg: 'rgba(176,0,32,0.12)',
+  dangerBorder: '1px solid rgba(176,0,32,0.35)',
+  dangerText: '#ffb3c0',
+}
+
+const labelLeft: React.CSSProperties = {fontSize: 10, opacity: 0.7, marginBottom: 6}
+const labelRight: React.CSSProperties = {fontSize: 12, opacity: 0.7, marginBottom: 6}
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: 10,
+  borderRadius: UI.radiusSm,
+  border: `1px solid ${UI.surfaceBorder}`,
+  background: UI.surfaceBg,
+  color: 'inherit',
+}
+
+const pillStyle: React.CSSProperties = {
+  padding: '10px 14px',
+  borderRadius: UI.radiusSm,
+  background: 'rgba(186,156,103,0.18)',
+  border: '1px solid rgba(186,156,103,0.45)',
+  color: 'rgba(255,255,255,0.9)',
+  fontSize: 13,
+  fontWeight: 500,
+}
+
+function softButtonStyle(opts?: {small?: boolean}): React.CSSProperties {
+  const small = !!opts?.small
+  return {
+    padding: small ? '8px 10px' : '10px 14px',
+    borderRadius: UI.radiusSm,
+    fontSize: small ? 10 : 13,
+    background: 'rgba(255,255,255,0.04)',
+    border: `1px solid ${UI.surfaceBorder}`,
+    color: 'inherit',
+    cursor: 'pointer',
+  }
+}
+
+function iconButtonStyle(): React.CSSProperties {
+  return {
+    width: 34,
+    height: 30,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: UI.radiusSm,
+    border: `1px solid ${UI.surfaceBorder}`,
+    background: 'rgba(255,255,255,0.04)',
+    color: 'inherit',
+    cursor: 'pointer',
+    padding: 0,
+  }
+}
 
   const hazardStripe = useCallback(
     (angleDeg: number) =>
@@ -628,8 +684,7 @@ export default function CampaignComposerClient() {
     setSendStatus({state: 'idle'})
   }, [])
 
-  const hazardZone = useMemo(() => {
-    return (
+  const hazardZone = (
       <div style={hazardCardStyle}>
         <div style={{...hazardEdgeStyle, backgroundImage: hazardStripe(45)}} />
 
@@ -644,7 +699,7 @@ export default function CampaignComposerClient() {
           <div style={{height: 10}} />
 
           <div style={{display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap'}}>
-            <button onClick={() => void enqueue()} disabled={enqueueing || draining || !canEnqueue} style={{padding: '10px 14px', borderRadius: 10}}>
+            <button onClick={() => void enqueue()} disabled={enqueueing || draining || !canEnqueue} style={softButtonStyle()}>
               {enqueueing ? 'Enqueueing…' : 'Enqueue campaign'}
             </button>
 
@@ -655,32 +710,36 @@ export default function CampaignComposerClient() {
               </code>
             </div>
 
-            <div style={{fontSize: 12, opacity: 0.85}}>
-              Mailable:{' '}
-              <b style={{marginLeft: 6}}>{audienceCount ?? '—'}</b>
+            <div style={{fontSize: 11, opacity: 0.75}}>
+              Mailable <b style={{marginLeft: 6, opacity: 0.95}}>{audienceCount ?? '—'}</b>
             </div>
+
           </div>
 
           <div style={{marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center'}}>
             <button
               onClick={() => void sendAutoDrain({limit: 50, maxLoops: 50})}
               disabled={!campaignId || enqueueing || draining}
-              style={{padding: '10px 14px', borderRadius: 10}}
+              style={softButtonStyle()}
             >
               Send campaign (auto-drain)
             </button>
 
-            <button onClick={cancelSending} disabled={!draining} style={{padding: '10px 14px', borderRadius: 10}}>
+            <button onClick={cancelSending} disabled={!draining} style={{
+                ...softButtonStyle(),
+                background: draining ? 'rgba(176,0,32,0.10)' : softButtonStyle().background,
+                border: draining ? '1px solid rgba(176,0,32,0.25)' : `1px solid ${UI.surfaceBorder}`,
+              }}>
               Cancel
             </button>
 
-            <button onClick={() => void drainOnce(25)} disabled={!campaignId || enqueueing || draining} style={{padding: '8px 10px', borderRadius: 10, fontSize: 10}}>
+            <button onClick={() => void drainOnce(25)} disabled={!campaignId || enqueueing || draining} style={softButtonStyle({small: true})}>
               Drain 25
             </button>
-            <button onClick={() => void drainOnce(50)} disabled={!campaignId || enqueueing || draining} style={{padding: '8px 10px', borderRadius: 10, fontSize: 10}}>
+            <button onClick={() => void drainOnce(50)} disabled={!campaignId || enqueueing || draining} style={softButtonStyle({small: true})}>
               Drain 50
             </button>
-            <button onClick={() => void drainOnce(100)} disabled={!campaignId || enqueueing || draining} style={{padding: '8px 10px', borderRadius: 10, fontSize: 10}}>
+            <button onClick={() => void drainOnce(100)} disabled={!campaignId || enqueueing || draining} style={softButtonStyle({small: true})}>
               Drain 100
             </button>
           </div>
@@ -751,32 +810,37 @@ export default function CampaignComposerClient() {
         <div style={{...hazardEdgeStyle, backgroundImage: hazardStripe(-45)}} />
       </div>
     )
-  }, [
-    hazardCardStyle,
-    hazardEdgeStyle,
-    hazardStripe,
-    enqueue,
-    enqueueing,
-    draining,
-    sendStatus,
-    canEnqueue,
-    campaignId,
-    audienceCount,
-    cancelSending,
-    drainOnce,
-    sendAutoDrain,
-    surfaceBg,
-    surfaceBorder,
-    enqueueError,
-    drainError,
-    drainResult,
-  ])
 
   return (
-    <div style={{maxWidth: 1100, margin: '24px auto', padding: 16, fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial'}}>
-      <div style={{display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap'}}>
+    <div
+  style={{
+    maxWidth: UI.maxWidth,
+    margin: '24px auto',
+    padding: UI.padOuter,
+    fontFamily: UI.font,
+  }}
+>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}
+      >
         <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
-          <h1 style={{marginTop: 0, marginBottom: 0}}>BJR Campaign Composer</h1>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 34,
+              fontWeight: 800,
+              letterSpacing: -0.6,
+              lineHeight: 1.05,
+            }}
+          >
+            BJR Campaign Composer
+          </h1>
 
           <a
             href="https://console.neon.tech/app/projects/purple-king-38858370"
@@ -785,46 +849,47 @@ export default function CampaignComposerClient() {
             title="Open Neon membership database"
             style={{display: 'inline-flex', alignItems: 'center'}}
           >
-            <img
-              src="https://www.brendanjohnroch.com/gfx/neon_logo.png" 
-              alt="Neon"
-              style={{height: 30, opacity: 0.9}}
-            />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="https://www.brendanjohnroch.com/gfx/neon_logo.png" alt="Neon" style={{height: 30, opacity: 0.9}} />
           </a>
         </div>
 
         <div style={{display: 'flex', gap: 10, alignItems: 'center'}}>
-          <button onClick={reset} disabled={enqueueing || draining} style={{padding: '10px 14px', borderRadius: 10}}>
+          <button onClick={reset} disabled={enqueueing || draining} style={softButtonStyle()}>
             Reset session
           </button>
 
-          <button onClick={() => void refreshPreviewHtml()} disabled={previewLoading} style={{padding: '10px 14px', borderRadius: 10}}>
+          <button onClick={() => void refreshPreviewHtml()} disabled={previewLoading} style={softButtonStyle()}>
             {previewLoading ? 'Refreshing…' : 'Refresh preview'}
           </button>
         </div>
       </div>
 
-      <div style={{padding: 12, borderRadius: 12, marginTop: 10, marginBottom: 16}}>
+
+      <div
+        style={{
+          padding: 12,
+          borderRadius: UI.radius,
+          marginTop: 10,
+          marginBottom: 16,
+          border: `1px solid ${UI.surfaceBorder}`,
+          background: UI.surfaceBgSoft,
+        }}
+      >
         <div style={{display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap'}}>
-          <div
-            style={{
-              padding: '10px 14px',
-              borderRadius: 10,
-              background: 'rgba(186,156,103,0.18)',
-              border: '1px solid rgba(186,156,103,0.45)',
-              color: 'rgba(255,255,255,0.9)',
-              fontSize: 13,
-              fontWeight: 500,
-            }}
-          >
+          <div style={pillStyle}>
             Mailable Contacts <b style={{marginLeft: 6}}>{audienceCount ?? '—'}</b>
           </div>
 
           <div style={{fontSize: 12, opacity: 0.75}}>
             Enqueued <b>{enqueuedCount ?? 0}</b> (this session)
           </div>
+
+          <div style={{flex: 1}} />
+
         </div>
       </div>
+
 
       <div style={{display: 'grid', gridTemplateColumns: isNarrow ? '1fr' : '1fr 2fr', gap: 16, alignItems: 'start'}}>
         {/* LEFT */}
@@ -832,12 +897,12 @@ export default function CampaignComposerClient() {
           <h2 style={{marginTop: 0, marginBottom: 8, fontSize: 18}}>Compose</h2>
 
           <label style={{display: 'block', marginBottom: 10}}>
-            <div style={{fontSize: 10, opacity: 0.7, marginBottom: 6}}>Campaign name</div>
+            <div style={labelLeft}>Campaign name</div>
             <input value={draft.campaignName} onChange={(e) => markDirtyAndDebouncePersist({...draft, campaignName: e.target.value})} style={inputStyle} />
           </label>
 
           <label style={{display: 'block', marginBottom: 10}}>
-            <div style={{fontSize: 10, opacity: 0.7, marginBottom: 6}}>Source filter (optional)</div>
+            <div style={labelLeft}>Source filter (optional)</div>
             <input
               value={draft.source}
               onChange={(e) => markDirtyAndDebouncePersist({...draft, source: e.target.value})}
@@ -847,15 +912,15 @@ export default function CampaignComposerClient() {
           </label>
 
           <label style={{display: 'block', marginBottom: 10}}>
-            <div style={{fontSize: 10, opacity: 0.7, marginBottom: 6}}>Subject</div>
+            <div style={labelLeft}>Subject</div>
             <input value={draft.subjectTemplate} onChange={(e) => markDirtyAndDebouncePersist({...draft, subjectTemplate: e.target.value})} style={inputStyle} />
           </label>
 
           <label style={{display: 'block', marginBottom: 10}}>
-            <div style={{fontSize: 10, opacity: 0.7, marginBottom: 6}}>Body (Markdown)</div>
+            <div style={labelLeft}>Body (Markdown)</div>
 
-            <div style={{border: `1px solid ${surfaceBorder}`, borderRadius: 12, overflow: 'hidden', background: surfaceBg}}>
-              <div style={{display: 'flex', gap: 6, padding: 8, borderBottom: `1px solid ${surfaceBorder}`, alignItems: 'center', flexWrap: 'wrap'}}>
+            <div style={{border: `1px solid ${UI.surfaceBorder}`, borderRadius: UI.radius, overflow: 'hidden', background: UI.surfaceBg}}>
+              <div style={{display: 'flex', gap: 6, padding: 8, borderBottom: `1px solid ${UI.surfaceBorder}`, alignItems: 'center', flexWrap: 'wrap'}}>
                 {[
                   {
                     title: 'Bold',
@@ -934,19 +999,7 @@ export default function CampaignComposerClient() {
                     onClick={b.run}
                     title={b.title}
                     aria-label={b.title}
-                    style={{
-                      width: 34,
-                      height: 30,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      borderRadius: 10,
-                      border: `1px solid ${surfaceBorder}`,
-                      background: 'rgba(255,255,255,0.04)',
-                      color: 'inherit',
-                      cursor: 'pointer',
-                      padding: 0,
-                    }}
+                    style={iconButtonStyle()}
                   >
                     {b.icon}
                   </button>
@@ -966,8 +1019,10 @@ export default function CampaignComposerClient() {
                   outline: 'none',
                   background: 'transparent',
                   color: 'inherit',
-                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                  fontFamily: UI.mono,
                   resize: 'vertical',
+                  fontSize: 13, // key: keeps body “important” but not huge
+                  lineHeight: 1.45,
                 }}
               />
             </div>
@@ -985,34 +1040,45 @@ export default function CampaignComposerClient() {
           <h2 style={{marginTop: 0, marginBottom: 8, fontSize: 18}}>Preview</h2>
 
           {previewErr ? (
-            <div style={{padding: 10, borderRadius: 10, background: 'rgba(176,0,32,0.12)', border: '1px solid rgba(176,0,32,0.35)', color: '#ffb3c0'}}>
+            <div style={{padding: 10, borderRadius: UI.radiusSm, background: UI.dangerBg, border: UI.dangerBorder, color: UI.dangerText}}>
               <b>Preview error:</b> {previewErr}
             </div>
+
           ) : (
             <iframe
               title="email-preview"
               srcDoc={iframeSrcDoc}
-              style={{width: '100%', height: 520, border: `1px solid ${surfaceBorder}`, borderRadius: 10, background: surfaceBg}}
+              style={{
+                width: '100%',
+                height: 520,
+                border: `1px solid ${UI.surfaceBorder}`,
+                borderRadius: UI.radiusSm,
+                background: UI.surfaceBg,
+              }}
               sandbox="allow-same-origin"
             />
           )}
 
           <div style={{marginTop: 12}}>
-            <div style={{fontSize: 12, opacity: 0.7, marginBottom: 6}}>Rendered plaintext (stored in campaign body)</div>
+            <div style={labelRight}>Rendered plaintext (stored in campaign body)</div>
             <pre
               style={{
                 whiteSpace: 'pre-wrap',
                 padding: 10,
-                borderRadius: 10,
-                background: surfaceBg,
-                border: `1px solid ${surfaceBorder}`,
+                borderRadius: UI.radiusSm,
+                background: UI.surfaceBg,
+                border: `1px solid ${UI.surfaceBorder}`,
                 margin: 0,
                 maxHeight: 260,
                 overflow: 'auto',
+                fontSize: 12,
+                opacity: 0.78,
+                lineHeight: 1.45,
               }}
             >
               {draft.bodyTemplate}
             </pre>
+
           </div>
         </div>
 

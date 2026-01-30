@@ -3,7 +3,7 @@ import * as React from 'react'
 import {Html, Head, Preview, Body, Container, Section, Img, Text} from '@react-email/components'
 import {Markdown} from '@react-email/markdown'
 
-export type PressPitchEmailProps = {
+export type FanMailoutProps = {
   previewText?: string
   brandName?: string
   logoUrl?: string
@@ -12,11 +12,11 @@ export type PressPitchEmailProps = {
   unsubscribeUrl?: string
 }
 
-const BOX_BG = '#ba9c67'
+const BOX_BG = '#af78c4'
 const PAGE_BG = '#0b0b0b'
 const TEXT = '#14110b'
 const MUTED = 'rgba(20,17,11,0.72)'
-const FOOTER_TONE = 'rgba(221,193,143,0.95)'
+const FOOTER_TONE = 'rgba(175, 120, 196, 1)'
 
 const styles = {
   body: {
@@ -106,7 +106,7 @@ const mdStyles: Record<string, React.CSSProperties> = {
   em: {color: MUTED},
 }
 
-export default function PressPitchEmail(props: PressPitchEmailProps) {
+export default function FanMailout(props: FanMailoutProps) {
   const {previewText, brandName = 'Angelfish Records', logoUrl, heroUrl, bodyMarkdown, unsubscribeUrl} = props
   const preview = previewText ?? brandName
 
