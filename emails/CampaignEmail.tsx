@@ -107,7 +107,7 @@ const mdStyles: Record<string, React.CSSProperties> = {
 }
 
 export default function PressPitchEmail(props: PressPitchEmailProps) {
-  const {previewText, brandName = 'Brendan John Roch', logoUrl, heroUrl, bodyMarkdown, unsubscribeUrl} = props
+  const {previewText, brandName = 'Angelfish Records', logoUrl, heroUrl, bodyMarkdown, unsubscribeUrl} = props
   const preview = previewText ?? brandName
 
   return (

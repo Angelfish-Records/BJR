@@ -775,10 +775,22 @@ export default function CampaignComposerClient() {
   return (
     <div style={{maxWidth: 1100, margin: '24px auto', padding: 16, fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial'}}>
       <div style={{display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap'}}>
-        <div>
-          <div style={{fontSize: 12, opacity: 0.7}}>Campaigns</div>
-          <h1 style={{margin: 0}}>Composer</h1>
-          <div style={{fontSize: 12, opacity: 0.7, marginTop: 6}}>Draft stays local until you enqueue. Preview is server-rendered from your React Email template.</div>
+        <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
+          <h1 style={{marginTop: 0, marginBottom: 0}}>BJR Campaign Composer</h1>
+
+          <a
+            href="https://console.neon.tech/app/projects/purple-king-38858370"
+            target="_blank"
+            rel="noreferrer"
+            title="Open Neon membership database"
+            style={{display: 'inline-flex', alignItems: 'center'}}
+          >
+            <img
+              src="https://www.brendanjohnroch.com/gfx/neon_logo.png"
+              alt="Neon"
+              style={{height: 30, opacity: 0.9}}
+            />
+          </a>
         </div>
 
         <div style={{display: 'flex', gap: 10, alignItems: 'center'}}>
@@ -822,16 +834,6 @@ export default function CampaignComposerClient() {
           <label style={{display: 'block', marginBottom: 10}}>
             <div style={{fontSize: 10, opacity: 0.7, marginBottom: 6}}>Campaign name</div>
             <input value={draft.campaignName} onChange={(e) => markDirtyAndDebouncePersist({...draft, campaignName: e.target.value})} style={inputStyle} />
-          </label>
-
-          <label style={{display: 'block', marginBottom: 10}}>
-            <div style={{fontSize: 10, opacity: 0.7, marginBottom: 6}}>Reply-To (optional)</div>
-            <input
-              value={draft.replyTo}
-              onChange={(e) => markDirtyAndDebouncePersist({...draft, replyTo: e.target.value})}
-              style={inputStyle}
-              placeholder="admin@brendanjohnroch.com"
-            />
           </label>
 
           <label style={{display: 'block', marginBottom: 10}}>
@@ -980,7 +982,7 @@ export default function CampaignComposerClient() {
 
         {/* RIGHT */}
         <div style={{padding: 12, borderRadius: 12}}>
-          <h2 style={{marginTop: 0, marginBottom: 8, fontSize: 18}}>Preview (React Email)</h2>
+          <h2 style={{marginTop: 0, marginBottom: 8, fontSize: 18}}>Preview</h2>
 
           {previewErr ? (
             <div style={{padding: 10, borderRadius: 10, background: 'rgba(176,0,32,0.12)', border: '1px solid rgba(176,0,32,0.35)', color: '#ffb3c0'}}>
