@@ -1,3 +1,4 @@
+//api/admin/campaigns/preview/route.ts
 import 'server-only'
 import * as React from 'react'
 import {NextRequest, NextResponse} from 'next/server'

@@ -1,3 +1,4 @@
+// web/app/admin/campaigns/CampaignComposerClient.tsx
 'use client'
 
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react'
@@ -200,6 +201,10 @@ function IconBullets(props: {size?: number}) {
   )
 }
 
+function clampInt(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, Math.floor(n)))
+}
+
 export default function CampaignComposerClient() {
   // Draft fields (local + sessionStorage)
   const [draft, setDraft] = useState<Draft>(DEFAULT_DRAFT)
@@ -212,7 +217,7 @@ export default function CampaignComposerClient() {
   const [enqueuedCount, setEnqueuedCount] = useState<number | null>(null)
   const [audienceCount, setAudienceCount] = useState<number | null>(null)
 
-  // Drain state
+  // Drain state (single flag that covers drainOnce + auto loop)
   const [draining, setDraining] = useState(false)
   const [drainError, setDrainError] = useState<string | null>(null)
   const [drainResult, setDrainResult] = useState<{sent: number; remainingQueued: number; runId: string} | null>(null)
@@ -221,7 +226,12 @@ export default function CampaignComposerClient() {
   const [previewHtml, setPreviewHtml] = useState<string>('')
   const [previewErr, setPreviewErr] = useState<string>('')
   const [previewLoading, setPreviewLoading] = useState(false)
-  const previewReqIdRef = useRef(0)
+
+  const previewAbortRef = useRef<AbortController | null>(null)
+
+  // Auto-drain cancellation + abort
+  const drainAbortRef = useRef<AbortController | null>(null)
+  const cancelSeqRef = useRef(0)
 
   // Optional: tune these defaults as you like
   const previewBrandName = 'Brendan John Roch'
@@ -265,10 +275,15 @@ export default function CampaignComposerClient() {
   useEffect(() => {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current)
+      if (previewAbortRef.current) previewAbortRef.current.abort()
+      if (drainAbortRef.current) drainAbortRef.current.abort()
     }
   }, [])
 
-  const canEnqueue = useMemo(() => draft.subjectTemplate.trim().length > 0 && draft.bodyTemplate.trim().length > 0, [draft.bodyTemplate, draft.subjectTemplate])
+  const canEnqueue = useMemo(
+    () => draft.subjectTemplate.trim().length > 0 && draft.bodyTemplate.trim().length > 0,
+    [draft.bodyTemplate, draft.subjectTemplate]
+  )
 
   // --- styling helpers (match your prior "hazard zone" look) ---
   const surfaceBg = 'rgba(255,255,255,0.06)'
@@ -331,7 +346,11 @@ export default function CampaignComposerClient() {
   }, [])
 
   const refreshPreviewHtml = useCallback(async () => {
-    const reqId = ++previewReqIdRef.current
+    // Abort any in-flight preview request (cuts server load)
+    if (previewAbortRef.current) previewAbortRef.current.abort()
+    const ac = new AbortController()
+    previewAbortRef.current = ac
+
     setPreviewLoading(true)
     setPreviewErr('')
 
@@ -346,11 +365,11 @@ export default function CampaignComposerClient() {
           bodyText: draft.bodyTemplate,
           unsubscribeUrl: previewUnsubscribeUrl || undefined,
         }),
+        signal: ac.signal,
       })
 
       const raw = await readJson(res)
       const data: PreviewResponse | null = raw as PreviewResponse | null
-      if (reqId !== previewReqIdRef.current) return
 
       if (!res.ok) {
         if (isApiErr(data)) throw new Error(`${data.error}${data.message ? `: ${data.message}` : ''}`)
@@ -362,12 +381,16 @@ export default function CampaignComposerClient() {
 
       setPreviewHtml(data.html)
     } catch (e) {
-      if (reqId !== previewReqIdRef.current) return
+      // ignore aborts (user typed / refreshed quickly)
+      if (e instanceof DOMException && e.name === 'AbortError') return
       setPreviewErr(errorMessage(e))
       setPreviewHtml('')
     } finally {
-      if (reqId !== previewReqIdRef.current) return
-      setPreviewLoading(false)
+      // Only clear if we're still the current controller
+      if (previewAbortRef.current === ac) {
+        previewAbortRef.current = null
+        setPreviewLoading(false)
+      }
     }
   }, [draft.bodyTemplate, draft.subjectTemplate, previewBrandName, previewLogoUrl, previewUnsubscribeUrl])
 
@@ -429,6 +452,8 @@ export default function CampaignComposerClient() {
   const drainOnce = useCallback(
     async (limit: number) => {
       if (!campaignId) return
+      if (draining) return
+
       setDraining(true)
       setDrainError(null)
 
@@ -457,10 +482,10 @@ export default function CampaignComposerClient() {
         setDraining(false)
       }
     },
-    [campaignId]
+    [campaignId, draining]
   )
 
-  // Auto-drain loop (optional but mirrors your hazard UI)
+  // Auto-drain loop status
   const [sendStatus, setSendStatus] = useState<
     | {state: 'idle'}
     | {state: 'sending'; campaignId: string; totalSent: number; lastSent: number; remainingQueued: number; loops: number; startedAtMs: number; runId?: string}
@@ -469,23 +494,44 @@ export default function CampaignComposerClient() {
     | {state: 'locked'; message: string}
     | {state: 'error'; message: string}
   >({state: 'idle'})
-  const [cancelToken, setCancelToken] = useState(0)
 
   const cancelSending = useCallback(() => {
-    setCancelToken((x) => x + 1)
+    cancelSeqRef.current += 1
+    if (drainAbortRef.current) drainAbortRef.current.abort()
   }, [])
 
-  const sleep = useCallback((ms: number) => new Promise((r) => setTimeout(r, ms)), [])
+  const sleep = useCallback(async (ms: number, signal?: AbortSignal) => {
+    if (ms <= 0) return
+    await new Promise<void>((resolve, reject) => {
+      const t = window.setTimeout(resolve, ms)
+      if (!signal) return
+      const onAbort = () => {
+        window.clearTimeout(t)
+        reject(new DOMException('Aborted', 'AbortError'))
+      }
+      if (signal.aborted) return onAbort()
+      signal.addEventListener('abort', onAbort, {once: true})
+    })
+  }, [])
 
   const sendAutoDrain = useCallback(
     async (opts?: {limit?: number; maxLoops?: number}) => {
       if (!campaignId) return
+      if (draining) return
 
-      const limit = Math.max(1, Math.min(100, Math.floor(opts?.limit ?? 50)))
-      const maxLoops = Math.max(1, Math.min(50, Math.floor(opts?.maxLoops ?? 50)))
+      // Abort any prior run
+      if (drainAbortRef.current) drainAbortRef.current.abort()
+
+      const ac = new AbortController()
+      drainAbortRef.current = ac
+      const myCancelSeq = cancelSeqRef.current
+
+      const limit = clampInt(opts?.limit ?? 50, 1, 100)
+      const maxLoops = clampInt(opts?.maxLoops ?? 50, 1, 50)
       const startedAtMs = Date.now()
-      const myCancelToken = cancelToken
 
+      setDraining(true)
+      setDrainError(null)
       setSendStatus({state: 'sending', campaignId, totalSent: 0, lastSent: 0, remainingQueued: Number.NaN, loops: 0, startedAtMs})
 
       try {
@@ -495,7 +541,7 @@ export default function CampaignComposerClient() {
         let lastRunId: string | undefined
 
         while (loops < maxLoops && remainingQueued > 0) {
-          if (cancelToken !== myCancelToken) {
+          if (cancelSeqRef.current !== myCancelSeq) {
             setSendStatus({state: 'cancelled', campaignId, totalSent})
             return
           }
@@ -506,6 +552,7 @@ export default function CampaignComposerClient() {
             method: 'POST',
             headers: {'content-type': 'application/json'},
             body: JSON.stringify({campaignId, limit}),
+            signal: ac.signal,
           })
 
           const raw = await readJson(res)
@@ -547,25 +594,31 @@ export default function CampaignComposerClient() {
             runId: lastRunId,
           })
 
+          setDrainResult({sent: sentThis, remainingQueued, runId: lastRunId})
+
           if (remainingQueued <= 0) break
 
-          const nextPollMs = Math.max(0, Math.min(5000, Math.floor(data.nextPollMs ?? 900)))
-          if (cancelToken !== myCancelToken) {
-            setSendStatus({state: 'cancelled', campaignId, totalSent})
-            return
-          }
-          await sleep(nextPollMs)
+          const nextPollMs = clampInt(data.nextPollMs ?? 900, 0, 5000)
+          await sleep(nextPollMs, ac.signal)
         }
 
         setSendStatus({state: 'done', campaignId, totalSent, endedAtMs: Date.now()})
       } catch (e: unknown) {
+        if (e instanceof DOMException && e.name === 'AbortError') {
+          setSendStatus({state: 'cancelled', campaignId, totalSent: 0})
+          return
+        }
         setSendStatus({state: 'error', message: errorMessage(e)})
+      } finally {
+        if (drainAbortRef.current === ac) drainAbortRef.current = null
+        setDraining(false)
       }
     },
-    [campaignId, cancelToken, sleep]
+    [campaignId, draining, sleep]
   )
 
   const reset = useCallback(() => {
+    if (drainAbortRef.current) drainAbortRef.current.abort()
     setCampaignId(null)
     setEnqueuedCount(null)
     setAudienceCount(null)
@@ -591,7 +644,7 @@ export default function CampaignComposerClient() {
           <div style={{height: 10}} />
 
           <div style={{display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap'}}>
-            <button onClick={() => void enqueue()} disabled={enqueueing || draining || sendStatus.state === 'sending' || !canEnqueue} style={{padding: '10px 14px', borderRadius: 10}}>
+            <button onClick={() => void enqueue()} disabled={enqueueing || draining || !canEnqueue} style={{padding: '10px 14px', borderRadius: 10}}>
               {enqueueing ? 'Enqueueing…' : 'Enqueue campaign'}
             </button>
 
@@ -611,13 +664,13 @@ export default function CampaignComposerClient() {
           <div style={{marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center'}}>
             <button
               onClick={() => void sendAutoDrain({limit: 50, maxLoops: 50})}
-              disabled={!campaignId || enqueueing || draining || sendStatus.state === 'sending'}
+              disabled={!campaignId || enqueueing || draining}
               style={{padding: '10px 14px', borderRadius: 10}}
             >
               Send campaign (auto-drain)
             </button>
 
-            <button onClick={cancelSending} disabled={sendStatus.state !== 'sending'} style={{padding: '10px 14px', borderRadius: 10}}>
+            <button onClick={cancelSending} disabled={!draining} style={{padding: '10px 14px', borderRadius: 10}}>
               Cancel
             </button>
 
@@ -660,7 +713,7 @@ export default function CampaignComposerClient() {
 
             {sendStatus.state === 'cancelled' && (
               <div style={{fontSize: 12}}>
-                <b>Cancelled.</b> Sent <b>{sendStatus.totalSent}</b> before stopping.
+                <b>Cancelled.</b> You can resume with auto-drain again.
               </div>
             )}
 
@@ -677,8 +730,16 @@ export default function CampaignComposerClient() {
               </div>
             )}
 
-            {enqueueError ? <div style={{marginTop: 8, fontSize: 12, color: '#ffb3c0'}}><b>Enqueue error:</b> {enqueueError}</div> : null}
-            {drainError ? <div style={{marginTop: 8, fontSize: 12, color: '#ffb3c0'}}><b>Drain error:</b> {drainError}</div> : null}
+            {enqueueError ? (
+              <div style={{marginTop: 8, fontSize: 12, color: '#ffb3c0'}}>
+                <b>Enqueue error:</b> {enqueueError}
+              </div>
+            ) : null}
+            {drainError ? (
+              <div style={{marginTop: 8, fontSize: 12, color: '#ffb3c0'}}>
+                <b>Drain error:</b> {drainError}
+              </div>
+            ) : null}
             {drainResult ? (
               <div style={{marginTop: 8, fontSize: 11, opacity: 0.8}}>
                 Last drain: sent {drainResult.sent} • remaining {drainResult.remainingQueued} • runId <code>{drainResult.runId}</code>
@@ -717,13 +778,11 @@ export default function CampaignComposerClient() {
         <div>
           <div style={{fontSize: 12, opacity: 0.7}}>Campaigns</div>
           <h1 style={{margin: 0}}>Composer</h1>
-          <div style={{fontSize: 12, opacity: 0.7, marginTop: 6}}>
-            Draft stays local until you enqueue. Preview is server-rendered from your React Email template.
-          </div>
+          <div style={{fontSize: 12, opacity: 0.7, marginTop: 6}}>Draft stays local until you enqueue. Preview is server-rendered from your React Email template.</div>
         </div>
 
         <div style={{display: 'flex', gap: 10, alignItems: 'center'}}>
-          <button onClick={reset} disabled={enqueueing || draining || sendStatus.state === 'sending'} style={{padding: '10px 14px', borderRadius: 10}}>
+          <button onClick={reset} disabled={enqueueing || draining} style={{padding: '10px 14px', borderRadius: 10}}>
             Reset session
           </button>
 
@@ -755,14 +814,7 @@ export default function CampaignComposerClient() {
         </div>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: isNarrow ? '1fr' : '1fr 2fr',
-          gap: 16,
-          alignItems: 'start',
-        }}
-      >
+      <div style={{display: 'grid', gridTemplateColumns: isNarrow ? '1fr' : '1fr 2fr', gap: 16, alignItems: 'start'}}>
         {/* LEFT */}
         <div style={{padding: 12, borderRadius: 12, fontSize: 14}}>
           <h2 style={{marginTop: 0, marginBottom: 8, fontSize: 18}}>Compose</h2>
@@ -774,12 +826,22 @@ export default function CampaignComposerClient() {
 
           <label style={{display: 'block', marginBottom: 10}}>
             <div style={{fontSize: 10, opacity: 0.7, marginBottom: 6}}>Reply-To (optional)</div>
-            <input value={draft.replyTo} onChange={(e) => markDirtyAndDebouncePersist({...draft, replyTo: e.target.value})} style={inputStyle} placeholder="admin@brendanjohnroch.com" />
+            <input
+              value={draft.replyTo}
+              onChange={(e) => markDirtyAndDebouncePersist({...draft, replyTo: e.target.value})}
+              style={inputStyle}
+              placeholder="admin@brendanjohnroch.com"
+            />
           </label>
 
           <label style={{display: 'block', marginBottom: 10}}>
             <div style={{fontSize: 10, opacity: 0.7, marginBottom: 6}}>Source filter (optional)</div>
-            <input value={draft.source} onChange={(e) => markDirtyAndDebouncePersist({...draft, source: e.target.value})} style={inputStyle} placeholder="e.g. early_access_form" />
+            <input
+              value={draft.source}
+              onChange={(e) => markDirtyAndDebouncePersist({...draft, source: e.target.value})}
+              style={inputStyle}
+              placeholder="e.g. early_access_form"
+            />
           </label>
 
           <label style={{display: 'block', marginBottom: 10}}>
@@ -909,8 +971,7 @@ export default function CampaignComposerClient() {
             </div>
 
             <div style={{marginTop: 10, fontSize: 11, opacity: 0.7}}>
-              Merge vars supported:{' '}
-              <code>{'{{email}} {{member_id}}'}</code>
+              Merge vars supported: <code>{'{{email}} {{member_id}}'}</code>
             </div>
           </label>
 
@@ -936,7 +997,18 @@ export default function CampaignComposerClient() {
 
           <div style={{marginTop: 12}}>
             <div style={{fontSize: 12, opacity: 0.7, marginBottom: 6}}>Rendered plaintext (stored in campaign body)</div>
-            <pre style={{whiteSpace: 'pre-wrap', padding: 10, borderRadius: 10, background: surfaceBg, border: `1px solid ${surfaceBorder}`, margin: 0, maxHeight: 260, overflow: 'auto'}}>
+            <pre
+              style={{
+                whiteSpace: 'pre-wrap',
+                padding: 10,
+                borderRadius: 10,
+                background: surfaceBg,
+                border: `1px solid ${surfaceBorder}`,
+                margin: 0,
+                maxHeight: 260,
+                overflow: 'auto',
+              }}
+            >
               {draft.bodyTemplate}
             </pre>
           </div>
