@@ -141,6 +141,74 @@ function handleUndoRedoKeydown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
   }
 }
 
+function replaceSelection(
+  textarea: HTMLTextAreaElement,
+  replacement: string,
+  selectRange?: [number, number],
+) {
+  const start = textarea.selectionStart ?? textarea.value.length;
+  const end = textarea.selectionEnd ?? textarea.value.length;
+
+  const before = textarea.value.slice(0, start);
+  const after = textarea.value.slice(end);
+
+  textarea.value = before + replacement + after;
+
+  const cursorPos = selectRange
+    ? start + selectRange[0]
+    : start + replacement.length;
+
+  textarea.focus();
+  textarea.setSelectionRange(
+    cursorPos,
+    selectRange ? start + selectRange[1] : cursorPos,
+  );
+}
+
+function wrapSelectionOrInsert(
+  textarea: HTMLTextAreaElement,
+  wrapperBefore: string,
+  wrapperAfter: string,
+  placeholderInner: string,
+  selectInner?: boolean,
+) {
+  const start = textarea.selectionStart ?? textarea.value.length;
+  const end = textarea.selectionEnd ?? textarea.value.length;
+
+  const selected = textarea.value.slice(start, end);
+  const inner = selected.length > 0 ? selected : placeholderInner;
+
+  const replacement = `${wrapperBefore}${inner}${wrapperAfter}`;
+
+  const innerStart = wrapperBefore.length;
+  const innerEnd = wrapperBefore.length + inner.length;
+
+  replaceSelection(
+    textarea,
+    replacement,
+    selectInner ? ([innerStart, innerEnd] as [number, number]) : undefined,
+  );
+}
+
+function buildCenteredImageBlock(params: {
+  url: string;
+  alt: string;
+  maxWidthPx: number;
+}) {
+  const { url, alt, maxWidthPx } = params;
+
+  // Email-safe: size via width/max-width; keep height:auto.
+  return (
+    `\n\n<div style="text-align:center; margin: 16px 0;">\n` +
+    `  <img src="${url}" alt="${alt}" style="max-width:${maxWidthPx}px; width:100%; height:auto; border-radius:12px;" />\n` +
+    `</div>\n\n`
+  );
+}
+
+function getBodyTextarea(): HTMLTextAreaElement | null {
+  return document.getElementById("body-template") as HTMLTextAreaElement | null;
+}
+
 function insertAtCursor(
   textarea: HTMLTextAreaElement,
   insert: string,
@@ -188,6 +256,46 @@ function IconUpload(props: { size?: number }) {
       />
       <path
         d="M4 20h16"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function IconAlignCenter(props: { size?: number }) {
+  const s = props.size ?? 14;
+  return (
+    <svg
+      width={s}
+      height={s}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M6 7h12M8 11h8M6 15h12M8 19h8"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function IconJustify(props: { size?: number }) {
+  const s = props.size ?? 14;
+  return (
+    <svg
+      width={s}
+      height={s}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M4 7h16M4 11h16M4 15h16M4 19h16"
         stroke="currentColor"
         strokeWidth="2"
         strokeLinecap="round"
@@ -829,7 +937,17 @@ export default function CampaignComposerClient() {
         const base = (file.name || "image").replace(/\.[^.]+$/, "");
         const alt = base.trim() ? base : "image";
 
-        insertAtCursor(el, `![${alt}](${url})`, [2, 2 + alt.length]);
+        const block = buildCenteredImageBlock({
+          url,
+          alt,
+          maxWidthPx: 520, // "M" preset
+        });
+
+        // Select the alt text so you can quickly rename if you want.
+        const altStart = block.indexOf(`alt="`) + `alt="`.length;
+        const altEnd = block.indexOf(`"`, altStart);
+
+        insertAtCursor(el, block, [altStart, altEnd]);
         markDirtyAndDebouncePersist({ ...draft, bodyTemplate: el.value });
       } catch (e) {
         setImageUploadErr(errorMessage(e));
@@ -1949,6 +2067,129 @@ export default function CampaignComposerClient() {
                       });
                     },
                   },
+                  {
+                    title: "Center (wrap selection)",
+                    icon: <IconAlignCenter />,
+                    run: () => {
+                      const el = getBodyTextarea();
+                      if (!el) return;
+
+                      // Wrap selection, or insert starter block with selected inner text highlighted
+                      wrapSelectionOrInsert(
+                        el,
+                        `<div style="text-align:center; margin: 12px 0;">\n  `,
+                        `\n</div>`,
+                        `Your text here…`,
+                        true,
+                      );
+
+                      markDirtyAndDebouncePersist({
+                        ...draft,
+                        bodyTemplate: el.value,
+                      });
+                    },
+                  },
+                  {
+                    title: "Justify (wrap selection)",
+                    icon: <IconJustify />,
+                    run: () => {
+                      const el = getBodyTextarea();
+                      if (!el) return;
+
+                      wrapSelectionOrInsert(
+                        el,
+                        `<div style="text-align:justify;">\n  `,
+                        `\n</div>`,
+                        `Your longer paragraph here…`,
+                        true,
+                      );
+
+                      markDirtyAndDebouncePersist({
+                        ...draft,
+                        bodyTemplate: el.value,
+                      });
+                    },
+                  },
+                  {
+                    title: "Image block (S)",
+                    icon: <IconUpload />,
+                    run: () => {
+                      const el = getBodyTextarea();
+                      if (!el) return;
+
+                      const url = lastImageUrl ?? "URL_HERE";
+                      const alt = "ALT_HERE";
+
+                      const block = buildCenteredImageBlock({
+                        url,
+                        alt,
+                        maxWidthPx: 360,
+                      });
+
+                      // Select the ALT text for quick edit
+                      const altStart = block.indexOf(`alt="`) + `alt="`.length;
+                      const altEnd = block.indexOf(`"`, altStart);
+
+                      insertAtCursor(el, block, [altStart, altEnd]);
+                      markDirtyAndDebouncePersist({
+                        ...draft,
+                        bodyTemplate: el.value,
+                      });
+                    },
+                  },
+                  {
+                    title: "Image block (M)",
+                    icon: <IconUpload />,
+                    run: () => {
+                      const el = getBodyTextarea();
+                      if (!el) return;
+
+                      const url = lastImageUrl ?? "URL_HERE";
+                      const alt = "ALT_HERE";
+
+                      const block = buildCenteredImageBlock({
+                        url,
+                        alt,
+                        maxWidthPx: 520,
+                      });
+
+                      const altStart = block.indexOf(`alt="`) + `alt="`.length;
+                      const altEnd = block.indexOf(`"`, altStart);
+
+                      insertAtCursor(el, block, [altStart, altEnd]);
+                      markDirtyAndDebouncePersist({
+                        ...draft,
+                        bodyTemplate: el.value,
+                      });
+                    },
+                  },
+                  {
+                    title: "Image block (L)",
+                    icon: <IconUpload />,
+                    run: () => {
+                      const el = getBodyTextarea();
+                      if (!el) return;
+
+                      const url = lastImageUrl ?? "URL_HERE";
+                      const alt = "ALT_HERE";
+
+                      const block = buildCenteredImageBlock({
+                        url,
+                        alt,
+                        maxWidthPx: 680,
+                      });
+
+                      const altStart = block.indexOf(`alt="`) + `alt="`.length;
+                      const altEnd = block.indexOf(`"`, altStart);
+
+                      insertAtCursor(el, block, [altStart, altEnd]);
+                      markDirtyAndDebouncePersist({
+                        ...draft,
+                        bodyTemplate: el.value,
+                      });
+                    },
+                  },
+
                   {
                     title: imageUploading ? "Uploading…" : "Upload image",
                     icon: <IconUpload />,
