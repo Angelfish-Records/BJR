@@ -97,16 +97,17 @@ function setSavedSt(slug: string, st: string) {
 function IconPlayer() {
   return (
     <svg
-      width="18"
-      height="18"
+      width="28"
+      height="28"
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"
       className="afIcon afIconPlayer"
     >
-      <g transform="scale(1.9) translate(2.8 2.8)">
-        <path d="M10 7.6L18.2 12L10 16.4V7.6Z" fill="currentColor" />
-      </g>
+      <path
+        d="M10 7.6L18.2 12L10 16.4V7.6Z"
+        fill="currentColor"
+      />
     </svg>
   );
 }
@@ -114,33 +115,32 @@ function IconPlayer() {
 function IconPortal() {
   return (
     <svg
-      width="18"
-      height="18"
+      width="28"
+      height="28"
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"
       className="afIcon afIconPortal"
     >
-      <g transform="scale(1.9) translate(2.8 2.4)">
-        <path
-          d="M12 4.3L4.35 8.05L12 11.8L19.65 8.05L12 4.3Z"
-          stroke="currentColor"
-          strokeWidth="2.15"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          className="afPortalTop"
-        />
-        <path
-          d="M4.35 11.05L12 14.75L19.65 11.05"
-          stroke="currentColor"
-          strokeWidth="2.15"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-      </g>
+      <path
+        d="M12 4.3L4.35 8.05L12 11.8L19.65 8.05L12 4.3Z"
+        stroke="currentColor"
+        strokeWidth="2.15"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        className="afPortalTop"
+      />
+      <path
+        d="M4.35 11.05L12 14.75L19.65 11.05"
+        stroke="currentColor"
+        strokeWidth="2.15"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
+
 
 /** Top-right (spotlight-clonable) bar: ONLY for auth/blocking attention. */
 function MiniMessageBar(props: { attentionMessage: string | null }) {
@@ -1107,7 +1107,7 @@ export default function PortalArea(props: {
 
   /* Icon baseline centering */
   .afIcon {
-    transform: translateY(0.3px);
+    transform: translateY(0px);
     transition: transform 160ms ease;
     will-change: transform;
   }
