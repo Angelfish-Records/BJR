@@ -104,12 +104,9 @@ function IconPlayer() {
       aria-hidden="true"
       className="afIcon afIconPlayer"
     >
-      {/* slightly rounded triangle reads cleaner in a circle */}
-      <path
-        d="M10 7.6L18.2 12L10 16.4V7.6Z"
-        fill="currentColor"
-        className="afIconFill"
-      />
+      <g transform="scale(1.9) translate(2.8 2.8)">
+        <path d="M10 7.6L18.2 12L10 16.4V7.6Z" fill="currentColor" />
+      </g>
     </svg>
   );
 }
@@ -124,24 +121,23 @@ function IconPortal() {
       aria-hidden="true"
       className="afIcon afIconPortal"
     >
-      {/* top layer */}
-      <path
-        d="M12 4.3L4.35 8.05L12 11.8L19.65 8.05L12 4.3Z"
-        stroke="currentColor"
-        strokeWidth="2.15"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        className="afPortalTop"
-      />
-      {/* bottom layer */}
-      <path
-        d="M4.35 11.05L12 14.75L19.65 11.05"
-        stroke="currentColor"
-        strokeWidth="2.15"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        className="afPortalBase"
-      />
+      <g transform="scale(1.9) translate(2.8 2.4)">
+        <path
+          d="M12 4.3L4.35 8.05L12 11.8L19.65 8.05L12 4.3Z"
+          stroke="currentColor"
+          strokeWidth="2.15"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          className="afPortalTop"
+        />
+        <path
+          d="M4.35 11.05L12 14.75L19.65 11.05"
+          stroke="currentColor"
+          strokeWidth="2.15"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      </g>
     </svg>
   );
 }
@@ -1070,50 +1066,79 @@ export default function PortalArea(props: {
                 <div className="afTopBarControls">
                   <div className="afTopBarLeft">
                     <style>{`
-    .afTopBarBtn {
-      transition: transform 160ms ease, opacity 160ms ease, filter 160ms ease, box-shadow 160ms ease;
-      will-change: transform, filter;
-    }
-    .afTopBarBtn:hover {
-      transform: translateY(-1px);
-      opacity: 0.98;
-      filter: brightness(1.05);
-    }
-    .afTopBarBtn:active {
-      transform: translateY(0px) scale(0.98);
-      filter: brightness(0.98);
-    }
+  .afTopBarBtn {
+    position: relative;
+    transition:
+      transform 160ms ease,
+      opacity 160ms ease,
+      filter 160ms ease,
+      box-shadow 160ms ease;
+    will-change: transform, filter;
+  }
 
-    /* Icon baseline: slightly lower so it feels centered in the circle */
-    .afIcon {
-      transform: translateY(0.25px);
-      transition: transform 160ms ease, opacity 160ms ease;
-      will-change: transform;
-    }
+  /* Inner highlight ring */
+  .afTopBarBtn::after {
+    content: "";
+    position: absolute;
+    inset: 1px;
+    border-radius: 999px;
+    pointer-events: none;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.18),
+      inset 0 -1px 0 rgba(0,0,0,0.18);
+    opacity: 0;
+    transition: opacity 160ms ease;
+  }
 
-    /* Player hover: triangle nudges “into” the interface */
-    .afTopBarBtn:hover .afIconPlayer {
-      transform: translate(0.4px, 0.1px) scale(1.02);
-    }
+  .afTopBarBtn:hover::after {
+    opacity: 1;
+  }
 
-    /* Portal hover: top layer lifts from the stack */
-    .afPortalTop {
-      transition: transform 180ms ease, opacity 180ms ease;
-      transform-origin: 12px 8px;
-    }
-    .afTopBarBtn:hover .afPortalTop {
-      transform: translateY(-0.7px);
-    }
-    .afTopBarBtn:hover .afIconPortal {
-      transform: translateY(0px) scale(1.015);
-    }
+  .afTopBarBtn:hover {
+    transform: translateY(-1px);
+    opacity: 0.98;
+    filter: brightness(1.06);
+  }
 
-    /* Keyboard focus */
-    .afTopBarBtn:focus-visible {
-      outline: none;
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 26%, transparent), 0 14px 30px rgba(0,0,0,0.22);
-    }
-  `}</style>
+  .afTopBarBtn:active {
+    transform: translateY(0px) scale(0.97);
+    filter: brightness(0.97);
+  }
+
+  /* Icon baseline centering */
+  .afIcon {
+    transform: translateY(0.3px);
+    transition: transform 160ms ease;
+    will-change: transform;
+  }
+
+  /* Player hover: forward intent */
+  .afTopBarBtn:hover .afIconPlayer {
+    transform: translate(0.6px, 0.2px) scale(1.02);
+  }
+
+  /* Portal hover: top layer lifts */
+  .afPortalTop {
+    transition: transform 180ms ease;
+    transform-origin: 12px 8px;
+  }
+
+  .afTopBarBtn:hover .afPortalTop {
+    transform: translateY(-0.8px);
+  }
+
+  .afTopBarBtn:hover .afIconPortal {
+    transform: translateY(0px) scale(1.015);
+  }
+
+  /* Keyboard focus */
+  .afTopBarBtn:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--accent) 26%, transparent),
+      0 14px 30px rgba(0,0,0,0.22);
+  }
+`}</style>
 
                     {(() => {
                       const commonBtn: React.CSSProperties = {
