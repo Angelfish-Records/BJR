@@ -2306,7 +2306,7 @@ export default function CampaignComposerClient() {
                   color: "inherit",
                   fontFamily: UI.mono,
                   resize: "vertical",
-                  fontSize: 13,
+                  fontSize: 12,
                   lineHeight: 1.45,
                 }}
               />
@@ -2367,7 +2367,7 @@ export default function CampaignComposerClient() {
                 margin: 0,
                 maxHeight: 260,
                 overflow: "auto",
-                fontSize: 12,
+                fontSize: 10,
                 opacity: 0.78,
                 lineHeight: 1.45,
               }}

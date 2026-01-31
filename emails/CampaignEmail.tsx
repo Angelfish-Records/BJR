@@ -1,34 +1,24 @@
 // emails/CampaignEmail.tsx
 import * as React from "react";
-import {
-  Html,
-  Head,
-  Preview,
-  Body,
-  Container,
-  Section,
-  Img,
-  Text,
-} from "@react-email/components";
+import { Html, Head, Preview, Body, Container, Section, Text } from "@react-email/components";
 import { Markdown } from "@react-email/markdown";
 
 export type FanMailoutProps = {
   previewText?: string;
   brandName?: string;
-  logoUrl?: string;
   heroUrl?: string;
   bodyMarkdown: string;
   unsubscribeUrl?: string;
 };
 
 // Dark + regal purple palette (lean, email-safe)
-const PAGE_BG = "#07060B"; // near-black with purple bias
-const BOX_BG = "#121022"; // deep aubergine card
-const BOX_INNER = "#161332"; // slightly lifted for subtle depth
-const BORDER = "rgba(186, 134, 255, 0.14)"; // faint amethyst edge
-const TEXT = "rgba(246, 243, 255, 0.92)"; // soft off-white
+const PAGE_BG = "#07060B";
+const BOX_BG = "#121022";
+const BOX_INNER = "#161332";
+const BORDER = "rgba(186, 134, 255, 0.14)";
+const TEXT = "rgba(246, 243, 255, 0.92)";
 const MUTED = "rgba(246, 243, 255, 0.70)";
-const ACCENT = "#B58CFF"; // amethyst link/accent
+const ACCENT = "#B58CFF";
 const FOOTER_TONE = "rgba(181, 140, 255, 0.92)";
 const SUBTLE = "rgba(246, 243, 255, 0.14)";
 
@@ -43,27 +33,31 @@ const styles = {
     margin: "0 auto",
     padding: "38px 18px",
   },
-  topLogoWrap: {
+
+  // Header mark (replaces logo entirely)
+  topMarkWrap: {
     textAlign: "center" as const,
     paddingBottom: 18,
   },
-  logoImg: {
+  monogramChip: {
     display: "inline-block",
-    height: 34,
-    width: "auto",
-  } as const,
-  logoPlaceholder: {
-    display: "inline-block",
-    width: 140,
-    height: 34,
-    lineHeight: "34px",
-    borderRadius: 12,
-    border: `1px dashed ${BORDER}`,
-    color: MUTED,
+    padding: "8px 12px",
+    borderRadius: 999,
+    border: `1px solid ${BORDER}`,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    color: TEXT,
     fontFamily:
       "Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial",
-    fontSize: 12,
-    letterSpacing: "0.3px",
+    fontSize: 11,
+    letterSpacing: "2.8px",
+    textTransform: "uppercase" as const,
+    lineHeight: "1",
+  } as const,
+  markRule: {
+    margin: "12px auto 0",
+    width: 220,
+    borderTop: `1px solid ${SUBTLE}`,
+    opacity: 0.9,
   } as const,
 
   card: {
@@ -72,7 +66,6 @@ const styles = {
     overflow: "hidden" as const,
     border: `1px solid ${BORDER}`,
   },
-  // Optional subtle inner panel to make text area feel lux without extra markup bloat
   content: {
     padding: "22px 22px 24px",
     backgroundColor: BOX_INNER,
@@ -114,9 +107,7 @@ const styles = {
   } as const,
 } as const;
 
-type MarkdownCustomStyles = React.ComponentProps<
-  typeof Markdown
->["markdownCustomStyles"];
+type MarkdownCustomStyles = React.ComponentProps<typeof Markdown>["markdownCustomStyles"];
 
 const mdStyles: Record<string, React.CSSProperties> = {
   p: { margin: "0 0 12px" },
@@ -132,12 +123,7 @@ const mdStyles: Record<string, React.CSSProperties> = {
     margin: "16px 0",
   },
   h1: { fontSize: "18px", lineHeight: "1.25", margin: "0 0 12px", color: TEXT },
-  h2: {
-    fontSize: "15px",
-    lineHeight: "1.3",
-    margin: "14px 0 8px",
-    color: TEXT,
-  },
+  h2: { fontSize: "15px", lineHeight: "1.3", margin: "14px 0 8px", color: TEXT },
   li: { margin: "0 0 6px" },
   strong: { color: TEXT },
   em: { color: MUTED },
@@ -147,17 +133,16 @@ export default function FanMailout(props: FanMailoutProps) {
   const {
     previewText,
     brandName = "Angelfish Records",
-    logoUrl,
     heroUrl,
     bodyMarkdown,
     unsubscribeUrl,
   } = props;
+
   const preview = previewText ?? brandName;
 
   return (
     <Html>
       <Head>
-        {/* Keep light-only to avoid clients "helpfully" inverting and wrecking contrast */}
         <meta name="color-scheme" content="light only" />
         <meta name="supported-color-schemes" content="light only" />
         <style>{`
@@ -165,7 +150,6 @@ export default function FanMailout(props: FanMailoutProps) {
           body { -webkit-text-size-adjust: 100%; }
           img { filter: none !important; -webkit-filter: none !important; }
 
-          /* Client hardening: keep background + text stable */
           .bg-page { background: ${PAGE_BG} !important; }
           .card { background: ${BOX_BG} !important; }
           .prose, .prose * { color: ${TEXT} !important; }
@@ -177,17 +161,18 @@ export default function FanMailout(props: FanMailoutProps) {
 
       <Body style={styles.body} className="bg-page">
         <Container style={styles.outer}>
-          <Section style={styles.topLogoWrap}>
-            {logoUrl ? (
-              <Img src={logoUrl} alt={brandName} style={styles.logoImg} />
-            ) : (
-              <Text style={styles.logoPlaceholder}>LOGO</Text>
-            )}
+          {/* Fixed monogram mark */}
+          <Section style={styles.topMarkWrap}>
+            <Text style={{ margin: 0 }}>
+              <span style={styles.monogramChip}>BJR</span>
+            </Text>
+            <div style={styles.markRule} />
           </Section>
 
           <Section style={styles.card} className="card">
             {heroUrl ? (
-              <Img src={heroUrl} alt="" width={720} style={styles.hero} />
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={heroUrl} alt="" width={720} style={styles.hero} />
             ) : null}
 
             <Section style={styles.content}>
@@ -199,9 +184,7 @@ export default function FanMailout(props: FanMailoutProps) {
                     lineHeight: styles.proseWrap.lineHeight,
                     color: styles.proseWrap.color,
                   }}
-                  markdownCustomStyles={
-                    mdStyles as unknown as MarkdownCustomStyles
-                  }
+                  markdownCustomStyles={mdStyles as unknown as MarkdownCustomStyles}
                 >
                   {bodyMarkdown}
                 </Markdown>
