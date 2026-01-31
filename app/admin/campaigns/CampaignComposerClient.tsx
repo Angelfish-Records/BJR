@@ -832,7 +832,7 @@ export default function CampaignComposerClient() {
   const UI = {
     maxWidth: 1100,
     padOuter: 16,
-    gap: 16,
+    gap: 12,
     radius: 12,
     radiusSm: 10,
     font: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial",
@@ -858,7 +858,7 @@ export default function CampaignComposerClient() {
 
   const inputStyle: React.CSSProperties = {
     width: "100%",
-    padding: 10,
+    padding: 8,
     borderRadius: UI.radiusSm,
     border: `1px solid ${UI.surfaceBorder}`,
     background: UI.surfaceBg,
@@ -866,7 +866,7 @@ export default function CampaignComposerClient() {
   };
 
   const pillStyle: React.CSSProperties = {
-    padding: "10px 14px",
+    padding: "8px 12px",
     borderRadius: UI.radiusSm,
     background: "rgba(186,156,103,0.18)",
     border: "1px solid rgba(186,156,103,0.45)",
@@ -1377,7 +1377,7 @@ export default function CampaignComposerClient() {
             display: "flex",
             alignItems: "baseline",
             justifyContent: "space-between",
-            gap: 12,
+            gap: 10,
             flexWrap: "wrap",
           }}
         >
@@ -1601,7 +1601,7 @@ export default function CampaignComposerClient() {
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          gap: 12,
+          gap: 10,
           flexWrap: "wrap",
         }}
       >
@@ -1974,13 +1974,13 @@ export default function CampaignComposerClient() {
         style={{
           display: "grid",
           gridTemplateColumns: isNarrow ? "1fr" : "1fr 2fr",
-          gap: 16,
+          gap: 12,
           alignItems: "start",
         }}
       >
         {/* LEFT */}
-        <div style={{ padding: 12, borderRadius: 12, fontSize: 14 }}>
-          <h2 style={{ marginTop: 0, marginBottom: 8, fontSize: 18 }}>
+        <div style={{ padding: 12, borderRadius: 12, fontSize: 12 }}>
+          <h2 style={{ marginTop: 0, marginBottom: 8, fontSize: 18, fontWeight: 700 }}>
             Compose
           </h2>
 
@@ -2322,7 +2322,7 @@ export default function CampaignComposerClient() {
 
         {/* RIGHT */}
         <div style={{ padding: 12, borderRadius: 12 }}>
-          <h2 style={{ marginTop: 0, marginBottom: 8, fontSize: 18 }}>
+          <h2 style={{ marginTop: 0, marginBottom: 8, fontSize: 18, fontWeight: 700 }}>
             Preview
           </h2>
 
