@@ -51,7 +51,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     // ✅ Canonical, stable, not environment/dev-gating dependent.
-    title: "Brendan John Roch",
+    title: "Home",
     // or if you *want* a leaf title, let RootLayout template handle it:
     // title: "Home",
 
