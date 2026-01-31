@@ -255,10 +255,6 @@ export async function POST(req: NextRequest) {
     }
 
     const siteUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
-    const logoUrl = siteUrl
-      ? `${siteUrl}/android-chrome-192x192.png`
-      : undefined;
-
     const emails = await Promise.all(
       claimed.rows.map(async (row) => {
         const to = asString(row.to_email).trim().toLowerCase();
@@ -300,7 +296,6 @@ export async function POST(req: NextRequest) {
         const html = await renderEmail(
           React.createElement(CampaignEmail, {
             brandName: "Angelfish Records MMXXVI",
-            logoUrl,
             bodyMarkdown: mergedBody,
             unsubscribeUrl: unsubscribeUrl || undefined,
           }),

@@ -22,7 +22,6 @@ export async function POST(req: NextRequest) {
 
   const body = (await req.json().catch(() => null)) as null | {
     brandName?: unknown;
-    logoUrl?: unknown;
     subject?: unknown;
     bodyText?: unknown;
     unsubscribeUrl?: unknown;
@@ -32,7 +31,6 @@ export async function POST(req: NextRequest) {
     asString(body?.brandName).trim() || "Angelfish Records MMXXVI",
     120,
   );
-  const logoUrl = clampString(asString(body?.logoUrl).trim(), 2048);
   const subject = clampString(asString(body?.subject).trim(), 200);
   const bodyText = clampString(asString(body?.bodyText), 60_000); // generous but bounded
   const unsubscribeUrl = clampString(
@@ -44,7 +42,6 @@ export async function POST(req: NextRequest) {
     const html = await renderEmail(
       React.createElement(CampaignEmail, {
         brandName,
-        logoUrl: logoUrl || undefined,
         bodyMarkdown: bodyText,
         unsubscribeUrl: unsubscribeUrl || undefined,
       }),

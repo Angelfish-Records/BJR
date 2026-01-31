@@ -1,6 +1,8 @@
 // web/app/admin/campaigns/CampaignComposerClient.tsx
 "use client";
 
+import Head from 'next/head'
+
 import React, {
   useCallback,
   useEffect,
@@ -728,7 +730,6 @@ export default function CampaignComposerClient() {
 
   // Optional: tune these defaults as you like
   const previewBrandName = "Angelfish Records MMXXVI";
-  const previewLogoUrl = "";
   const previewUnsubscribeUrl = "";
 
   // Hydrate draft from sessionStorage
@@ -1031,7 +1032,6 @@ export default function CampaignComposerClient() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           brandName: previewBrandName,
-          logoUrl: previewLogoUrl || undefined,
           subject: draft.subjectTemplate,
           bodyText: draft.bodyTemplate,
           unsubscribeUrl: previewUnsubscribeUrl || undefined,
@@ -1072,7 +1072,6 @@ export default function CampaignComposerClient() {
     draft.bodyTemplate,
     draft.subjectTemplate,
     previewBrandName,
-    previewLogoUrl,
     previewUnsubscribeUrl,
   ]);
 
@@ -1588,6 +1587,11 @@ export default function CampaignComposerClient() {
   );
 
   return (
+    <>
+    <Head>
+        <title>BJR Campaign Composer</title>
+        <meta name="description" content="Internal tool for composing and sending BJR fan mailouts." />
+      </Head>
     <div
       style={{
         maxWidth: UI.maxWidth,
@@ -2380,5 +2384,6 @@ export default function CampaignComposerClient() {
         {isNarrow && hazardZone}
       </div>
     </div>
+    </>
   );
 }
