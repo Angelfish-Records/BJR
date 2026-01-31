@@ -104,10 +104,7 @@ function IconPlayer() {
       aria-hidden="true"
       className="afIcon afIconPlayer"
     >
-      <path
-        d="M10 7.6L18.2 12L10 16.4V7.6Z"
-        fill="currentColor"
-      />
+      <path d="M10 7.6L18.2 12L10 16.4V7.6Z" fill="currentColor" />
     </svg>
   );
 }
@@ -140,7 +137,6 @@ function IconPortal() {
     </svg>
   );
 }
-
 
 /** Top-right (spotlight-clonable) bar: ONLY for auth/blocking attention. */
 function MiniMessageBar(props: { attentionMessage: string | null }) {
@@ -1076,23 +1072,27 @@ export default function PortalArea(props: {
     will-change: transform, filter;
   }
 
-  /* Inner highlight ring */
-  .afTopBarBtn::after {
-    content: "";
-    position: absolute;
-    inset: 1px;
-    border-radius: 999px;
-    pointer-events: none;
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.18),
-      inset 0 -1px 0 rgba(0,0,0,0.18);
-    opacity: 0;
-    transition: opacity 160ms ease;
-  }
+.afTopBarBtn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      circle at 50% 45%,
+      rgba(255,255,255,0.10),
+      rgba(255,255,255,0.04) 40%,
+      rgba(255,255,255,0.00) 65%
+    );
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
 
-  .afTopBarBtn:hover::after {
-    opacity: 1;
-  }
+.afTopBarBtn:hover::after {
+  opacity: 1;
+}
+
 
   .afTopBarBtn:hover {
     transform: translateY(-1px);
@@ -1111,6 +1111,10 @@ export default function PortalArea(props: {
     transition: transform 160ms ease;
     will-change: transform;
   }
+
+  .afIconPortal {
+  transform: translateY(2px);
+}
 
   /* Player hover: forward intent */
   .afTopBarBtn:hover .afIconPlayer {
