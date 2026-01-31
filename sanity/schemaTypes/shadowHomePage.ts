@@ -1,3 +1,4 @@
+//web/sanity/schemaTypes/shadowHomePage.ts
 import { defineField, defineType } from "sanity";
 
 export const shadowHomePage = defineType({

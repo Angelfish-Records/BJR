@@ -42,14 +42,19 @@ const shadowHomeQuery = `
 `;
 
 export async function generateMetadata(): Promise<Metadata> {
-  const page = await client.fetch<{ title?: string; subtitle?: string }>(
-    `*[_type == "shadowHomePage" && slug.current == "home"][0]{ title, subtitle }`,
+  // Keep description flexible if you want, but do NOT let Sanity control tab title.
+  const page = await client.fetch<{ subtitle?: string }>(
+    `*[_type == "shadowHomePage" && slug.current == "home"][0]{ subtitle }`,
     {},
     { next: { tags: ["shadowHome"] } },
   );
 
   return {
-    title: page?.title ?? "Brendan John Roch",
+    // ✅ Canonical, stable, not environment/dev-gating dependent.
+    title: "Brendan John Roch",
+    // or if you *want* a leaf title, let RootLayout template handle it:
+    // title: "Home",
+
     description:
       page?.subtitle ??
       "Portal shell: panels swap; identity stays boring; access stays canonical.",

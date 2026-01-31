@@ -1,3 +1,4 @@
+//web/sanity/schemaTypes/index.ts
 import { type SchemaTypeDefinition } from "sanity";
 import { landingPage } from "./landingPage";
 import { shadowHomePage } from "./shadowHomePage";
