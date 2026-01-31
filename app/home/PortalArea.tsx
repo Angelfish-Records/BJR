@@ -1113,7 +1113,7 @@ export default function PortalArea(props: {
   }
 
   .afIconPortal {
-  transform: translateY(2px);
+  transform: translateY(3px);
 }
 
   /* Player hover: forward intent */
@@ -1128,7 +1128,7 @@ export default function PortalArea(props: {
   }
 
   .afTopBarBtn:hover .afPortalTop {
-    transform: translateY(-0.5px);
+    transform: translateY(-0.4px);
   }
 
   .afTopBarBtn:hover .afIconPortal {
