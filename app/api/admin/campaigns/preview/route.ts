@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   };
 
   const brandName = clampString(
-    asString(body?.brandName).trim() || "Brendan John Roch",
+    asString(body?.brandName).trim() || "Angelfish Records MMXXVI",
     120,
   );
   const logoUrl = clampString(asString(body?.logoUrl).trim(), 2048);

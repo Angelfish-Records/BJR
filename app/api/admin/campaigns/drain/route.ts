@@ -299,7 +299,7 @@ export async function POST(req: NextRequest) {
 
         const html = await renderEmail(
           React.createElement(CampaignEmail, {
-            brandName: "Brendan John Roch",
+            brandName: "Angelfish Records MMXXVI",
             logoUrl,
             bodyMarkdown: mergedBody,
             unsubscribeUrl: unsubscribeUrl || undefined,

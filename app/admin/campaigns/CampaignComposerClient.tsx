@@ -264,6 +264,38 @@ function IconUpload(props: { size?: number }) {
   );
 }
 
+function IconImageBlock(props: { size?: number }) {
+  const s = props.size ?? 14;
+  return (
+    <svg
+      width={s}
+      height={s}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5v-11Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8 10.5a1.5 1.5 0 1 0 0-3a1.5 1.5 0 0 0 0 3Z"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
+      <path
+        d="M5.5 18l6.2-6.2a1.2 1.2 0 0 1 1.7 0L18.5 17"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function IconAlignCenter(props: { size?: number }) {
   const s = props.size ?? 14;
   return (
@@ -276,26 +308,6 @@ function IconAlignCenter(props: { size?: number }) {
     >
       <path
         d="M6 7h12M8 11h8M6 15h12M8 19h8"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function IconJustify(props: { size?: number }) {
-  const s = props.size ?? 14;
-  return (
-    <svg
-      width={s}
-      height={s}
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M4 7h16M4 11h16M4 15h16M4 19h16"
         stroke="currentColor"
         strokeWidth="2"
         strokeLinecap="round"
@@ -715,7 +727,7 @@ export default function CampaignComposerClient() {
   const cancelSeqRef = useRef(0);
 
   // Optional: tune these defaults as you like
-  const previewBrandName = "Brendan John Roch";
+  const previewBrandName = "Angelfish Records MMXXVI";
   const previewLogoUrl = "";
   const previewUnsubscribeUrl = "";
 
@@ -1617,7 +1629,7 @@ export default function CampaignComposerClient() {
             <img
               src="https://www.brendanjohnroch.com/gfx/neon_logo.png"
               alt="Neon"
-              style={{ height: 30, opacity: 0.9 }}
+              style={{ height: 30, width: "auto", flexShrink: 0, opacity: 0.9 }}
             />
           </a>
         </div>
@@ -2090,29 +2102,8 @@ export default function CampaignComposerClient() {
                     },
                   },
                   {
-                    title: "Justify (wrap selection)",
-                    icon: <IconJustify />,
-                    run: () => {
-                      const el = getBodyTextarea();
-                      if (!el) return;
-
-                      wrapSelectionOrInsert(
-                        el,
-                        `<div style="text-align:justify;">\n  `,
-                        `\n</div>`,
-                        `Your longer paragraph here…`,
-                        true,
-                      );
-
-                      markDirtyAndDebouncePersist({
-                        ...draft,
-                        bodyTemplate: el.value,
-                      });
-                    },
-                  },
-                  {
                     title: "Image block (S)",
-                    icon: <IconUpload />,
+                    icon: <IconImageBlock />,
                     run: () => {
                       const el = getBodyTextarea();
                       if (!el) return;
@@ -2137,59 +2128,6 @@ export default function CampaignComposerClient() {
                       });
                     },
                   },
-                  {
-                    title: "Image block (M)",
-                    icon: <IconUpload />,
-                    run: () => {
-                      const el = getBodyTextarea();
-                      if (!el) return;
-
-                      const url = lastImageUrl ?? "URL_HERE";
-                      const alt = "ALT_HERE";
-
-                      const block = buildCenteredImageBlock({
-                        url,
-                        alt,
-                        maxWidthPx: 520,
-                      });
-
-                      const altStart = block.indexOf(`alt="`) + `alt="`.length;
-                      const altEnd = block.indexOf(`"`, altStart);
-
-                      insertAtCursor(el, block, [altStart, altEnd]);
-                      markDirtyAndDebouncePersist({
-                        ...draft,
-                        bodyTemplate: el.value,
-                      });
-                    },
-                  },
-                  {
-                    title: "Image block (L)",
-                    icon: <IconUpload />,
-                    run: () => {
-                      const el = getBodyTextarea();
-                      if (!el) return;
-
-                      const url = lastImageUrl ?? "URL_HERE";
-                      const alt = "ALT_HERE";
-
-                      const block = buildCenteredImageBlock({
-                        url,
-                        alt,
-                        maxWidthPx: 680,
-                      });
-
-                      const altStart = block.indexOf(`alt="`) + `alt="`.length;
-                      const altEnd = block.indexOf(`"`, altStart);
-
-                      insertAtCursor(el, block, [altStart, altEnd]);
-                      markDirtyAndDebouncePersist({
-                        ...draft,
-                        bodyTemplate: el.value,
-                      });
-                    },
-                  },
-
                   {
                     title: imageUploading ? "Uploading…" : "Upload image",
                     icon: <IconUpload />,

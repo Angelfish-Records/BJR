@@ -196,7 +196,7 @@ export default function PortalArtistPosts(props: {
     requireAuthAfter,
     minVisibility,
     authorName = "Brendan John Roch",
-    authorInitials = "BJ",
+    authorInitials = "BJR",
   } = props;
 
   const sp = useClientSearchParams();

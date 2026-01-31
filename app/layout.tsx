@@ -25,7 +25,7 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: {
     default: "Brendan John Roch",
-    template: "%s · Angelfish",
+    template: "%s · Brendan John Roch",
   },
   description: "A member-owned media system built by Angelfish Records.",
   icons: {
