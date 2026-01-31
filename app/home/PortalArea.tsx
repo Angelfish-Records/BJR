@@ -1118,7 +1118,7 @@ export default function PortalArea(props: {
 
   /* Player hover: forward intent */
   .afTopBarBtn:hover .afIconPlayer {
-    transform: translate(0.6px, 0.2px) scale(1.02);
+    transform: translate(0.8px, -0.2px) scale(1.03);
   }
 
   /* Portal hover: top layer lifts */
@@ -1128,7 +1128,7 @@ export default function PortalArea(props: {
   }
 
   .afTopBarBtn:hover .afPortalTop {
-    transform: translateY(-0.8px);
+    transform: translateY(-0.5px);
   }
 
   .afTopBarBtn:hover .afIconPortal {
