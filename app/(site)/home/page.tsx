@@ -14,7 +14,11 @@ import { deriveTier } from "@/lib/vocab";
 import { fetchPortalPage } from "@/lib/portal";
 import PortalModules from "@/app/home/PortalModules";
 import PortalArea from "@/app/home/PortalArea";
-import { listAlbumsForBrowse, getAlbumBySlug } from "@/lib/albums";
+import {
+  listAlbumsForBrowse,
+  getAlbumBySlug,
+  getFeaturedAlbumSlugFromSanity,
+} from "@/lib/albums";
 import type { AlbumNavItem } from "@/lib/types";
 import StageInline from "@/app/home/player/StageInline";
 import FooterDrawer from "@/app/home/FooterDrawer";
@@ -83,13 +87,14 @@ export default async function Home(props: {
     user?.emailAddresses?.[0]?.emailAddress ??
     null;
 
-  const [page, portal] = await Promise.all([
+  const [page, portal, featured] = await Promise.all([
     client.fetch<ShadowHomeDoc>(
       shadowHomeQuery,
       { slug: "home" },
       { next: { tags: ["shadowHome"] } },
     ),
     fetchPortalPage("home"),
+    getFeaturedAlbumSlugFromSanity(),
   ]);
 
   let member: null | {
@@ -159,7 +164,13 @@ export default async function Home(props: {
   );
 
   // ---- choose initial album from URL (authoritative) ----
-  const featuredAlbumSlug = "consolers";
+
+  // Sanity-driven featured album with layered fallbacks.
+  // 1) siteFlags.featuredAlbum (reference -> slug)
+  // 2) siteFlags.featuredAlbumFallbackSlug
+  // 3) final emergency constant (only used if Sanity is empty)
+  const featuredAlbumSlug =
+    featured.slug ?? featured.fallbackSlug ?? "consolers";
 
   const qAlbumSlug =
     typeof sp.album === "string" && sp.album.trim() ? sp.album.trim() : null;

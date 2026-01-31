@@ -37,6 +37,33 @@ type TrackLyricsDoc = {
   cues?: Array<{ tMs?: number; text?: string; endMs?: number }>;
 };
 
+export async function getFeaturedAlbumSlugFromSanity(): Promise<{
+  slug: string | null;
+  fallbackSlug: string | null;
+}> {
+  const q = `
+    *[_type == "siteFlags"]
+      | order(_updatedAt desc)[0]{
+        "slug": featuredAlbum->slug.current,
+        "fallbackSlug": featuredAlbumFallbackSlug
+      }
+  `;
+
+  const res = await client.fetch<{slug?: string | null; fallbackSlug?: string | null}>(
+    q,
+    {},
+    { next: { tags: ["siteFlags"] } }
+  );
+
+  return {
+    slug: typeof res?.slug === "string" && res.slug.trim() ? res.slug.trim() : null,
+    fallbackSlug:
+      typeof res?.fallbackSlug === "string" && res.fallbackSlug.trim()
+        ? res.fallbackSlug.trim()
+        : null,
+  };
+}
+
 export type AlbumBrowseItem = {
   id: string;
   slug: string;

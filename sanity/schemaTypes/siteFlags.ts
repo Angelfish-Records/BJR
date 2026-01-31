@@ -22,5 +22,23 @@ export const siteFlags = defineType({
         'Where the shadow homepage lives today. Later you can swap this to "/".',
       validation: (Rule) => Rule.required(),
     }),
+    defineField({
+      name: "featuredAlbum",
+      title: "Featured album",
+      type: "reference",
+      to: [{type: "album"}],
+      description:
+        "Default album shown on /home when no ?album= is provided. Use an album reference (not a slug string).",
+    }),
+
+    // Optional: a safe fallback that keeps prod alive if the reference is unset/broken.
+    defineField({
+      name: "featuredAlbumFallbackSlug",
+      title: "Featured album fallback slug",
+      type: "string",
+      description:
+        "Only used if Featured album reference is missing. Example: consolers",
+      validation: (r) => r.regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).warning("Use a slug-like value"),
+    }),
   ],
 });
