@@ -23,7 +23,7 @@ type SanityPostDoc = {
 type ApiImageValue = {
   _type: "image";
   url?: string;
-  // optional; PortalArtistPosts supports aspectRatio if present
+  maxWidth?: number;
   metadata?: {
     dimensions?: { width?: number; height?: number; aspectRatio?: number };
   };
@@ -92,6 +92,20 @@ function setSeenCountCookie(res: NextResponse, n: number) {
   });
 }
 
+function clampMaxWidthPx(v: unknown): number | undefined {
+  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+  if (!Number.isFinite(n)) return undefined;
+  return Math.max(160, Math.min(1400, Math.round(n)));
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
+function isImageBlock(v: unknown): v is Record<string, unknown> & { _type: "image" } {
+  return isRecord(v) && v["_type"] === "image";
+}
+
 const postsQuery = `
   *[_type == "artistPost" && defined(slug.current)]
     | order(pinned desc, publishedAt desc)[$offset...$end]{
@@ -105,9 +119,11 @@ const postsQuery = `
     }
 `;
 
+type UrlForSource = Parameters<typeof urlFor>[0];
+
 export async function GET(req: NextRequest) {
   const correlationId =
-    req.headers.get("x-correlation-id") ?? crypto.randomUUID();
+    req.headers.get("x-correlation-id") ?? globalThis.crypto.randomUUID();
 
   const url = new URL(req.url);
   const limit = clampInt(url.searchParams.get("limit"), 10, 1, 30);
@@ -124,20 +140,13 @@ export async function GET(req: NextRequest) {
 
   // Create response early so anon cookie can be persisted if newly minted
   const res = NextResponse.json<OkResponse>(
-    {
-      ok: true,
-      requiresAuth: false,
-      posts: [],
-      nextCursor: null,
-      correlationId,
-    },
+    { ok: true, requiresAuth: false, posts: [], nextCursor: null, correlationId },
     { status: 200 },
   );
 
   // ✅ anon id (stable) + persistence when new
   const anon = ensureAnonId(req, res);
-  const anonId = anon.anonId;
-  void anonId;
+  void anon.anonId;
 
   // Session gate for anon users (N posts per session)
   if (!userId && requireAuthAfter > 0) {
@@ -157,7 +166,6 @@ export async function GET(req: NextRequest) {
   }
 
   // Viewer tier for now: signed-in => friend, otherwise public.
-  // Later we can derive patron/partner from entitlements if you want.
   const viewerTier: Visibility = userId ? "friend" : "public";
 
   const docs = await client.fetch<SanityPostDoc[]>(
@@ -173,23 +181,27 @@ export async function GET(req: NextRequest) {
 
     const vis: Visibility = d.visibility ?? "public";
     if (!canSee(vis, viewerTier)) continue;
-    if (!canSee(minVisibility, viewerTier)) {
-      // if the whole module is configured minVisibility > viewerTier,
-      // you can optionally gate here; leaving as-is keeps it simple.
-    }
+
+    // If the whole module is configured to hide above viewer tier, keep it simple: return nothing.
+    if (!canSee(minVisibility, viewerTier)) continue;
 
     const body = Array.isArray(d.body) ? d.body : [];
-    const mappedBody = body.map((b) => {
-      const obj = b as Record<string, unknown>;
-      if (obj?._type !== "image") return b;
 
-      // Best-effort: render a usable URL for images
+    const mappedBody = body.map((node) => {
+      if (!isImageBlock(node)) return node;
+
+      const maxWidth = clampMaxWidthPx(node["maxWidth"]);
+
       try {
-        const u = urlFor(obj).width(1600).quality(80).url();
-        const out: ApiImageValue = { _type: "image", url: u };
+        const u = urlFor(node as UrlForSource).width(1600).quality(80).url();
+        const out: ApiImageValue = { _type: "image", url: u, maxWidth };
         return out;
       } catch {
-        return b;
+        // Preserve maxWidth even if URL building fails
+        if (maxWidth !== undefined) {
+          return { ...node, maxWidth };
+        }
+        return node;
       }
     });
 
@@ -197,9 +209,7 @@ export async function GET(req: NextRequest) {
       slug,
       title: typeof d.title === "string" ? d.title : undefined,
       publishedAt:
-        typeof d.publishedAt === "string"
-          ? d.publishedAt
-          : new Date().toISOString(),
+        typeof d.publishedAt === "string" ? d.publishedAt : new Date().toISOString(),
       pinned: Boolean(d.pinned),
       visibility: vis,
       body: mappedBody,
@@ -214,10 +224,9 @@ export async function GET(req: NextRequest) {
     if (!cur) setSeenCountCookie(res, 0);
   }
 
-  // Return the real payload by mutating the response body via a fresh json response
-  // (NextResponse bodies are immutable once created).
+  // Return the real payload while preserving Set-Cookie headers from anon seeding
   return NextResponse.json<OkResponse>(
     { ok: true, requiresAuth: false, posts, nextCursor, correlationId },
-    { status: 200, headers: res.headers }, // keep set-cookie from anon seeding
+    { status: 200, headers: res.headers },
   );
 }

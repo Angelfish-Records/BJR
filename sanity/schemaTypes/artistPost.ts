@@ -1,3 +1,4 @@
+//web/sanity/schemaTypes/artistPost.ts
 import { defineField, defineType } from "sanity";
 
 export const artistPost = defineType({
@@ -12,32 +13,62 @@ export const artistPost = defineType({
       options: { source: "title" },
       validation: (r) => r.required(),
     }),
-    defineField({
-      name: "title",
-      title: "Title (optional)",
-      type: "string",
-    }),
+    defineField({ name: "title", title: "Title (optional)", type: "string" }),
     defineField({
       name: "publishedAt",
       title: "Published at",
       type: "datetime",
       validation: (r) => r.required(),
     }),
+
     defineField({
       name: "body",
       title: "Body",
       type: "array",
-      of: [{ type: "block" }, { type: "image", options: { hotspot: true } }],
+      of: [
+        { type: "block" },
+        {
+          type: "image",
+          options: { hotspot: true },
+          fields: [
+            defineField({
+              name: "maxWidth",
+              title: "Max width (px)",
+              type: "number",
+              description:
+                "Optional: cap the rendered inline image width (px). E.g. 320, 480, 640. Leave blank for auto sizing.",
+              validation: (r) => r.min(160).max(1400).integer(),
+            }),
+          ],
+        },
+      ],
       validation: (r) => r.required().min(1),
     }),
+
     defineField({
       name: "images",
       title: "Images (optional)",
       type: "array",
-      of: [{ type: "image", options: { hotspot: true } }],
+      of: [
+        {
+          type: "image",
+          options: { hotspot: true },
+          fields: [
+            defineField({
+              name: "maxWidth",
+              title: "Max width (px)",
+              type: "number",
+              description:
+                "Optional: cap the rendered image width (px). Leave blank for auto sizing.",
+              validation: (r) => r.min(160).max(1400).integer(),
+            }),
+          ],
+        },
+      ],
       description:
         "If you prefer images separate from body, use this. Otherwise embed images inside Body.",
     }),
+
     defineField({
       name: "visibility",
       title: "Visibility",
@@ -61,11 +92,7 @@ export const artistPost = defineType({
     }),
   ],
   preview: {
-    select: {
-      title: "title",
-      slug: "slug.current",
-      publishedAt: "publishedAt",
-    },
+    select: { title: "title", slug: "slug.current", publishedAt: "publishedAt" },
     prepare({ title, slug, publishedAt }) {
       return {
         title: title ?? slug ?? "Post",

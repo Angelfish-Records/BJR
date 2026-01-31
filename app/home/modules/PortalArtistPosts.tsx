@@ -5,16 +5,21 @@ import React from "react";
 import { PortableText, type PortableTextComponents } from "@portabletext/react";
 import type { PortableTextBlock } from "@portabletext/types";
 import { useClientSearchParams, replaceQuery } from "@/app/home/urlState";
-import {
-  useShareAction,
-  useShareBuilders,
-} from "@/app/home/player/ShareAction";
+import { useShareAction, useShareBuilders } from "@/app/home/player/ShareAction";
 
 type Visibility = "public" | "friend" | "patron" | "partner";
 
 type SanityImageValue = {
   _type: "image";
   url?: string;
+
+  // ✅ Optional sizing hints (easy to add later in Sanity + API projection)
+  // - maxWidth: preferred cap in px for the *container* (image stays width:100% inside it)
+  // - width: alias
+  // You can store as number or string; we’ll sanitize.
+  maxWidth?: number | string;
+  width?: number | string;
+
   metadata?: {
     dimensions?: {
       width?: number;
@@ -91,6 +96,81 @@ function parsePostsResponse(raw: unknown): ArtistPostsResponse {
     correlationId:
       typeof r.correlationId === "string" ? r.correlationId : undefined,
   };
+}
+
+/* -------------------------
+   Image sizing helpers
+-------------------------- */
+
+function clampInt(n: number, min: number, max: number) {
+  if (!Number.isFinite(n)) return null;
+  return Math.max(min, Math.min(max, Math.round(n)));
+}
+
+function parsePxLike(v: unknown): number | null {
+  if (typeof v === "number") return clampInt(v, 160, 1400);
+  if (typeof v === "string") {
+    const m = v.trim().match(/^(\d{2,4})/);
+    if (!m) return null;
+    const n = Number(m[1]);
+    return clampInt(n, 160, 1400);
+  }
+  return null;
+}
+
+function parseWidthHintFromUrl(url: string): number | null {
+  // Supports:
+  // - hash: ...#w=520 or ...#maxWidth=520
+  // - query: ...?w=520 or ...?maxWidth=520 or ...?mw=520
+  try {
+    const u = new URL(url, "https://example.invalid");
+
+    const qp =
+      u.searchParams.get("maxWidth") ??
+      u.searchParams.get("mw") ??
+      u.searchParams.get("w") ??
+      u.searchParams.get("width");
+
+    const fromQ = parsePxLike(qp);
+    if (fromQ) return fromQ;
+
+    const h = (u.hash || "").replace(/^#/, "");
+    if (!h) return null;
+
+    // allow "w=520" or "maxWidth=520" or "mw=520"
+    const parts = h.split("&");
+    for (const part of parts) {
+      const [k, val] = part.split("=");
+      const key = (k || "").trim().toLowerCase();
+      if (key === "w" || key === "width" || key === "mw" || key === "maxwidth") {
+        const fromH = parsePxLike(val);
+        if (fromH) return fromH;
+      }
+    }
+    return null;
+  } catch {
+    // if url is non-standard, do a small regex fallback
+    const m =
+      url.match(/[?#&](?:maxWidth|mw|w|width)=(\d{2,4})/i) ??
+      url.match(/#(?:maxWidth|mw|w|width)=(\d{2,4})/i);
+    if (m?.[1]) return clampInt(Number(m[1]), 160, 1400);
+    return null;
+  }
+}
+
+function resolveImageMaxWidthPx(value: SanityImageValue, tall: boolean) {
+  // Priority:
+  // 1) explicit value.maxWidth / value.width
+  // 2) URL hint (?w= / #w=)
+  // 3) existing heuristic: tall => 520, else full width
+  const explicit = parsePxLike(value?.maxWidth ?? value?.width);
+  if (explicit) return explicit;
+
+  const url = value?.url ?? "";
+  const hinted = url ? parseWidthHintFromUrl(url) : null;
+  if (hinted) return hinted;
+
+  return tall ? 520 : null;
 }
 
 /* -------------------------
@@ -190,6 +270,9 @@ export default function PortalArtistPosts(props: {
   // Optional: later you can feed a real image URL from Sanity/settings; keep default now.
   authorName?: string;
   authorInitials?: string;
+
+  // ✅ Optional global cap: if set, it will cap ALL images unless the image has an explicit maxWidth/width hint
+  defaultInlineImageMaxWidthPx?: number;
 }) {
   const {
     pageSize,
@@ -197,6 +280,7 @@ export default function PortalArtistPosts(props: {
     minVisibility,
     authorName = "Brendan John Roch",
     authorInitials = "BJR",
+    defaultInlineImageMaxWidthPx,
   } = props;
 
   const sp = useClientSearchParams();
@@ -341,7 +425,13 @@ export default function PortalArtistPosts(props: {
           if (!url) return null;
 
           const tall = isTall(ar);
-          const maxWidth = tall ? 520 : undefined;
+
+          // ✅ per-image sizing
+          const perImage = resolveImageMaxWidthPx(value, tall);
+
+          // ✅ optional global cap (only applies if the image didn’t specify one)
+          const globalCap = parsePxLike(defaultInlineImageMaxWidthPx);
+          const maxWidthPx = perImage ?? globalCap ?? null;
 
           return (
             <div
@@ -354,7 +444,7 @@ export default function PortalArtistPosts(props: {
               <div
                 style={{
                   width: "100%",
-                  maxWidth: maxWidth ?? "100%",
+                  maxWidth: maxWidthPx ? `${maxWidthPx}px` : "100%",
                   borderRadius: 18,
                   overflow: "hidden",
                   border: "1px solid rgba(255,255,255,0.10)",
@@ -438,7 +528,6 @@ export default function PortalArtistPosts(props: {
         ),
       },
 
-      // ✅ Lists: explicit bullets/numbering + sane font size
       list: {
         bullet: ({ children }) => (
           <ul
@@ -472,12 +561,8 @@ export default function PortalArtistPosts(props: {
         ),
       },
       listItem: {
-        bullet: ({ children }) => (
-          <li style={{ margin: "6px 0" }}>{children}</li>
-        ),
-        number: ({ children }) => (
-          <li style={{ margin: "6px 0" }}>{children}</li>
-        ),
+        bullet: ({ children }) => <li style={{ margin: "6px 0" }}>{children}</li>,
+        number: ({ children }) => <li style={{ margin: "6px 0" }}>{children}</li>,
       },
 
       marks: {
@@ -521,7 +606,7 @@ export default function PortalArtistPosts(props: {
         },
       },
     }),
-    [],
+    [defaultInlineImageMaxWidthPx],
   );
 
   return (
@@ -651,7 +736,7 @@ export default function PortalArtistPosts(props: {
                   <PortableText value={p.body ?? []} components={components} />
                 </div>
 
-                {/* Actions row (left-justified, graphical) */}
+                {/* Actions row */}
                 <div
                   style={{
                     marginTop: 10,
@@ -668,7 +753,6 @@ export default function PortalArtistPosts(props: {
                   </ActionBtn>
                 </div>
 
-                {/* subtle tail divider inside the post */}
                 <div
                   style={{
                     height: 1,
@@ -693,6 +777,7 @@ export default function PortalArtistPosts(props: {
           </div>
         ) : null}
       </div>
+
       {/* Share overlays (must be rendered) */}
       {intentSheet}
       {fallbackModal}
