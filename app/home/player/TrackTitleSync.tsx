@@ -18,36 +18,25 @@ function buildTitle(opts: {
   artist: string;
   album: string;
 }) {
-  const { siteName, fallbackLeaf, mode, status, trackTitle, artist, album } =
+  const { siteName, fallbackLeaf, mode, trackTitle, artist, album } =
     opts;
-
-  const badge =
-    status === "playing"
-      ? "▶︎ "
-      : status === "paused"
-        ? "⏸ "
-        : status === "loading"
-          ? "⟳ "
-          : status === "blocked"
-            ? "⛔ "
-            : "";
 
   if (mode === "off") return `${fallbackLeaf} · ${siteName}`;
 
   if (mode === "album") {
     const leaf = album || fallbackLeaf;
-    return `${badge}${leaf} · ${siteName}`;
+    return `${leaf} · ${siteName}`;
   }
 
   // mode === "track"
   if (trackTitle) {
     const leaf = artist ? `${trackTitle} — ${artist}` : trackTitle;
-    return `${badge}${leaf} · ${siteName}`;
+    return `${leaf} · ${siteName}`;
   }
 
   // No track title available => fall back to album or fallback leaf
   const leaf = album || fallbackLeaf;
-  return `${badge}${leaf} · ${siteName}`;
+  return `${leaf} · ${siteName}`;
 }
 
 export default function TrackTitleSync(props: {
