@@ -1,7 +1,7 @@
 // web/app/admin/campaigns/CampaignComposerClient.tsx
 "use client";
 
-import Head from 'next/head'
+import Head from "next/head";
 
 import React, {
   useCallback,
@@ -1588,802 +1588,835 @@ export default function CampaignComposerClient() {
 
   return (
     <>
-    <Head>
+      <Head>
         <title>BJR Campaign Composer</title>
-        <meta name="description" content="Internal tool for composing and sending BJR fan mailouts." />
+        <meta
+          name="description"
+          content="Internal tool for composing and sending BJR fan mailouts."
+        />
       </Head>
-    <div
-      style={{
-        maxWidth: UI.maxWidth,
-        margin: "24px auto",
-        padding: UI.padOuter,
-        fontFamily: UI.font,
-      }}
-    >
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 10,
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 34,
-              fontWeight: 800,
-              letterSpacing: -0.6,
-              lineHeight: 1.05,
-            }}
-          >
-            BJR Campaign Composer
-          </h1>
-
-          <a
-            href="https://console.neon.tech/app/projects/purple-king-38858370"
-            target="_blank"
-            rel="noreferrer"
-            title="Open Neon membership database"
-            style={{ display: "inline-flex", alignItems: "center" }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="https://www.brendanjohnroch.com/gfx/neon_logo.png"
-              alt="Neon"
-              style={{ height: 30, width: "auto", flexShrink: 0, opacity: 0.9 }}
-            />
-          </a>
-        </div>
-
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <button
-            onClick={reset}
-            disabled={enqueueing || draining}
-            style={softButtonStyle()}
-          >
-            Reset session
-          </button>
-
-          <button
-            onClick={() => void refreshPreviewHtml()}
-            disabled={previewLoading}
-            style={softButtonStyle()}
-          >
-            {previewLoading ? "Refreshing…" : "Refresh preview"}
-          </button>
-        </div>
-      </div>
-
-      <div
-        style={{
-          padding: 12,
-          borderRadius: UI.radius,
-          marginTop: 10,
-          marginBottom: 16,
-          border: `1px solid ${UI.surfaceBorder}`,
-          background: UI.surfaceBgSoft,
+          maxWidth: UI.maxWidth,
+          margin: "24px auto",
+          padding: UI.padOuter,
+          fontFamily: UI.font,
         }}
       >
         <div
           style={{
             display: "flex",
-            gap: 12,
-            alignItems: isNarrow ? "stretch" : "flex-start",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
             flexWrap: "wrap",
-            flexDirection: isNarrow ? "column" : "row",
           }}
         >
-          {/* Left metrics */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: 34,
+                fontWeight: 800,
+                letterSpacing: -0.6,
+                lineHeight: 1.05,
+              }}
+            >
+              BJR Campaign Composer
+            </h1>
+
+            <a
+              href="https://console.neon.tech/app/projects/purple-king-38858370"
+              target="_blank"
+              rel="noreferrer"
+              title="Open Neon membership database"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                flex: "0 0 auto", // <- key: do not shrink/grow as flex item
+                minWidth: 0,
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://www.brendanjohnroch.com/gfx/neon_logo.png"
+                alt="Neon"
+                style={{
+                  height: 30,
+                  width: "auto",
+                  display: "block", // <- avoids inline image baseline weirdness
+                  flex: "0 0 auto", // <- belt + braces for iOS
+                  maxWidth: "none", // <- prevents “helpful” downscaling
+                  objectFit: "contain", // <- if something *does* constrain, it won't distort
+                  opacity: 0.9,
+                }}
+              />
+            </a>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <button
+              onClick={reset}
+              disabled={enqueueing || draining}
+              style={softButtonStyle()}
+            >
+              Reset session
+            </button>
+
+            <button
+              onClick={() => void refreshPreviewHtml()}
+              disabled={previewLoading}
+              style={softButtonStyle()}
+            >
+              {previewLoading ? "Refreshing…" : "Refresh preview"}
+            </button>
+          </div>
+        </div>
+
+        <div
+          style={{
+            padding: 12,
+            borderRadius: UI.radius,
+            marginTop: 10,
+            marginBottom: 16,
+            border: `1px solid ${UI.surfaceBorder}`,
+            background: UI.surfaceBgSoft,
+          }}
+        >
           <div
             style={{
               display: "flex",
               gap: 12,
-              alignItems: "center",
+              alignItems: isNarrow ? "stretch" : "flex-start",
               flexWrap: "wrap",
+              flexDirection: isNarrow ? "column" : "row",
             }}
           >
-            <div style={pillStyle}>
-              Mailable Contacts{" "}
-              <b style={{ marginLeft: 6 }}>{audienceCount ?? "—"}</b>
-            </div>
-
-            <div style={{ fontSize: 12, opacity: 0.75, paddingTop: 9 }}>
-              Enqueued <b>{enqueuedCount ?? 0}</b> (this session)
-            </div>
-          </div>
-
-          {/* Spacer only on wide screens */}
-          {!isNarrow ? <div style={{ flex: 1 }} /> : null}
-
-          {/* Audience filters (stackable) */}
-          <div
-            style={{
-              minWidth: 0, // key: allow shrinking
-              width: "100%",
-              maxWidth: isNarrow ? "100%" : 760,
-              flex: isNarrow ? "1 1 auto" : "1 1 520px",
-            }}
-          >
+            {/* Left metrics */}
             <div
               style={{
                 display: "flex",
-                alignItems: isNarrow ? "stretch" : "center",
-                justifyContent: "space-between",
-                gap: 10,
+                gap: 12,
+                alignItems: "center",
                 flexWrap: "wrap",
+              }}
+            >
+              <div style={pillStyle}>
+                Mailable Contacts{" "}
+                <b style={{ marginLeft: 6 }}>{audienceCount ?? "—"}</b>
+              </div>
+
+              <div style={{ fontSize: 12, opacity: 0.75, paddingTop: 9 }}>
+                Enqueued <b>{enqueuedCount ?? 0}</b> (this session)
+              </div>
+            </div>
+
+            {/* Spacer only on wide screens */}
+            {!isNarrow ? <div style={{ flex: 1 }} /> : null}
+
+            {/* Audience filters (stackable) */}
+            <div
+              style={{
+                minWidth: 0, // key: allow shrinking
+                width: "100%",
+                maxWidth: isNarrow ? "100%" : 760,
+                flex: isNarrow ? "1 1 auto" : "1 1 520px",
               }}
             >
               <div
                 style={{
-                  fontSize: 10,
-                  opacity: 0.75,
-                  letterSpacing: 0.4,
-                  paddingTop: 2,
-                }}
-              >
-                AUDIENCE FILTERS
-              </div>
-
-              <div
-                style={{
                   display: "flex",
-                  gap: 8,
-                  alignItems: "center",
+                  alignItems: isNarrow ? "stretch" : "center",
+                  justifyContent: "space-between",
+                  gap: 10,
                   flexWrap: "wrap",
-                  width: isNarrow ? "100%" : undefined,
-                  justifyContent: isNarrow ? "flex-start" : "flex-end",
                 }}
               >
-                <button
-                  type="button"
-                  style={softButtonStyle({ small: true })}
-                  onClick={() => {
-                    const kind = firstUnusedKind(audienceFilters);
-                    setFiltersAndDebouncePersist([
-                      ...audienceFilters,
-                      { id: newId(), kind, value: "" },
-                    ]);
+                <div
+                  style={{
+                    fontSize: 10,
+                    opacity: 0.75,
+                    letterSpacing: 0.4,
+                    paddingTop: 2,
                   }}
                 >
-                  + Add filter
-                </button>
+                  AUDIENCE FILTERS
+                </div>
 
-                <button
-                  type="button"
-                  style={softButtonStyle({ small: true })}
-                  onClick={() => void refreshAudienceOptions()}
-                  disabled={audienceOptionsLoading}
-                  title={
-                    audienceOptionsErr
-                      ? `Last error: ${audienceOptionsErr}`
-                      : "Reload filter dropdown options from DB"
-                  }
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    width: isNarrow ? "100%" : undefined,
+                    justifyContent: isNarrow ? "flex-start" : "flex-end",
+                  }}
                 >
-                  {audienceOptionsLoading ? "Loading…" : "Refresh options"}
-                </button>
-
-                {audienceFilters.length > 0 ? (
                   <button
                     type="button"
                     style={softButtonStyle({ small: true })}
-                    onClick={() => setFiltersAndDebouncePersist([])}
+                    onClick={() => {
+                      const kind = firstUnusedKind(audienceFilters);
+                      setFiltersAndDebouncePersist([
+                        ...audienceFilters,
+                        { id: newId(), kind, value: "" },
+                      ]);
+                    }}
                   >
-                    Clear
+                    + Add filter
                   </button>
-                ) : null}
-              </div>
-            </div>
 
-            {audienceOptionsErr ? (
-              <div style={{ marginTop: 8, fontSize: 11, color: "#ffb3c0" }}>
-                Options load error: {audienceOptionsErr}
-              </div>
-            ) : null}
+                  <button
+                    type="button"
+                    style={softButtonStyle({ small: true })}
+                    onClick={() => void refreshAudienceOptions()}
+                    disabled={audienceOptionsLoading}
+                    title={
+                      audienceOptionsErr
+                        ? `Last error: ${audienceOptionsErr}`
+                        : "Reload filter dropdown options from DB"
+                    }
+                  >
+                    {audienceOptionsLoading ? "Loading…" : "Refresh options"}
+                  </button>
 
-            <div style={{ height: 8 }} />
-
-            {audienceFilters.length === 0 ? (
-              <div style={{ fontSize: 12, opacity: 0.7 }}>
-                No filters — sending to all marketing-opt-in contacts (minus
-                suppressions).
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {audienceFilters.map((f, idx) => {
-                  const kind = f.kind;
-
-                  const kindSelect = (
-                    <select
-                      value={kind}
-                      onChange={(e) => {
-                        const nextKind = e.target.value as AudienceFilterKind;
-                        const next = audienceFilters.slice();
-                        next[idx] = { id: f.id, kind: nextKind, value: "" };
-
-                        // optional UX: prevent duplicates by kind (keeps backend semantics obvious)
-                        const deduped: AudienceFilter[] = [];
-                        const seen = new Set<AudienceFilterKind>();
-                        for (const row of next) {
-                          if (seen.has(row.kind)) continue;
-                          seen.add(row.kind);
-                          deduped.push(row);
-                        }
-                        setFiltersAndDebouncePersist(deduped);
-                      }}
-                      style={{
-                        ...inputStyle,
-                        padding: "8px 10px",
-                        fontSize: 12,
-                      }}
+                  {audienceFilters.length > 0 ? (
+                    <button
+                      type="button"
+                      style={softButtonStyle({ small: true })}
+                      onClick={() => setFiltersAndDebouncePersist([])}
                     >
-                      {(
-                        [
-                          "source",
-                          "entitlementKey",
-                          "entitlementExpiresWithinDays",
-                          "joinedWithinDays",
-                          "consentVersionMax",
-                          "hasPurchased",
-                          "purchasedWithinDays",
-                          "engagedEventType",
-                          "engagedWithinDays",
-                        ] as AudienceFilterKind[]
-                      ).map((k) => (
-                        <option key={k} value={k}>
-                          {FILTER_KIND_LABEL[k]}
-                        </option>
-                      ))}
-                    </select>
-                  );
+                      Clear
+                    </button>
+                  ) : null}
+                </div>
+              </div>
 
-                  const valueControl = (() => {
-                    if (kind === "hasPurchased") {
-                      return (
-                        <select
-                          value={f.value}
-                          onChange={(e) => {
-                            const next = audienceFilters.slice();
-                            next[idx] = { ...f, value: e.target.value };
-                            setFiltersAndDebouncePersist(next);
-                          }}
-                          style={{
-                            ...inputStyle,
-                            padding: "8px 10px",
-                            fontSize: 12,
-                          }}
-                        >
-                          <option value="">(any)</option>
-                          <option value="true">Yes</option>
-                          <option value="false">No</option>
-                        </select>
-                      );
-                    }
+              {audienceOptionsErr ? (
+                <div style={{ marginTop: 8, fontSize: 11, color: "#ffb3c0" }}>
+                  Options load error: {audienceOptionsErr}
+                </div>
+              ) : null}
 
-                    const dropdown = (() => {
-                      if (kind === "source") return audienceOptions.sources;
-                      if (kind === "entitlementKey")
-                        return audienceOptions.entitlementKeys;
-                      if (kind === "engagedEventType")
-                        return audienceOptions.engagedEventTypes;
-                      return null;
-                    })();
+              <div style={{ height: 8 }} />
 
-                    if (dropdown && dropdown.length > 0) {
-                      return (
-                        <select
-                          value={f.value}
-                          onChange={(e) => {
-                            const next = audienceFilters.slice();
-                            next[idx] = { ...f, value: e.target.value };
-                            setFiltersAndDebouncePersist(next);
-                          }}
-                          style={{
-                            ...inputStyle,
-                            padding: "8px 10px",
-                            fontSize: 12,
-                          }}
-                        >
-                          <option value="">(any)</option>
-                          {dropdown.map((v) => (
-                            <option key={v} value={v}>
-                              {v}
-                            </option>
-                          ))}
-                        </select>
-                      );
-                    }
+              {audienceFilters.length === 0 ? (
+                <div style={{ fontSize: 12, opacity: 0.7 }}>
+                  No filters — sending to all marketing-opt-in contacts (minus
+                  suppressions).
+                </div>
+              ) : (
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                >
+                  {audienceFilters.map((f, idx) => {
+                    const kind = f.kind;
 
-                    const isNumber =
-                      kind === "entitlementExpiresWithinDays" ||
-                      kind === "joinedWithinDays" ||
-                      kind === "consentVersionMax" ||
-                      kind === "purchasedWithinDays" ||
-                      kind === "engagedWithinDays";
-
-                    return (
-                      <input
-                        value={f.value}
+                    const kindSelect = (
+                      <select
+                        value={kind}
                         onChange={(e) => {
+                          const nextKind = e.target.value as AudienceFilterKind;
                           const next = audienceFilters.slice();
-                          next[idx] = { ...f, value: e.target.value };
-                          setFiltersAndDebouncePersist(next);
+                          next[idx] = { id: f.id, kind: nextKind, value: "" };
+
+                          // optional UX: prevent duplicates by kind (keeps backend semantics obvious)
+                          const deduped: AudienceFilter[] = [];
+                          const seen = new Set<AudienceFilterKind>();
+                          for (const row of next) {
+                            if (seen.has(row.kind)) continue;
+                            seen.add(row.kind);
+                            deduped.push(row);
+                          }
+                          setFiltersAndDebouncePersist(deduped);
                         }}
                         style={{
                           ...inputStyle,
                           padding: "8px 10px",
                           fontSize: 12,
                         }}
-                        inputMode={isNumber ? "numeric" : undefined}
-                        placeholder={
-                          kind === "source"
-                            ? "e.g. early_access_form"
-                            : kind === "entitlementKey"
-                              ? "e.g. tier:patron"
-                              : kind === "engagedEventType"
-                                ? "e.g. played_track"
-                                : "Enter a value"
-                        }
-                      />
+                      >
+                        {(
+                          [
+                            "source",
+                            "entitlementKey",
+                            "entitlementExpiresWithinDays",
+                            "joinedWithinDays",
+                            "consentVersionMax",
+                            "hasPurchased",
+                            "purchasedWithinDays",
+                            "engagedEventType",
+                            "engagedWithinDays",
+                          ] as AudienceFilterKind[]
+                        ).map((k) => (
+                          <option key={k} value={k}>
+                            {FILTER_KIND_LABEL[k]}
+                          </option>
+                        ))}
+                      </select>
                     );
-                  })();
 
-                  return (
-                    <div
-                      key={f.id}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: isNarrow
-                          ? "1fr"
-                          : "1.1fr 1.4fr auto",
-                        gap: 8,
-                        alignItems: "center",
-                        minWidth: 0,
-                      }}
-                    >
-                      <div style={{ minWidth: 0 }}>{kindSelect}</div>
-                      <div style={{ minWidth: 0 }}>{valueControl}</div>
+                    const valueControl = (() => {
+                      if (kind === "hasPurchased") {
+                        return (
+                          <select
+                            value={f.value}
+                            onChange={(e) => {
+                              const next = audienceFilters.slice();
+                              next[idx] = { ...f, value: e.target.value };
+                              setFiltersAndDebouncePersist(next);
+                            }}
+                            style={{
+                              ...inputStyle,
+                              padding: "8px 10px",
+                              fontSize: 12,
+                            }}
+                          >
+                            <option value="">(any)</option>
+                            <option value="true">Yes</option>
+                            <option value="false">No</option>
+                          </select>
+                        );
+                      }
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next = audienceFilters.filter(
-                            (x) => x.id !== f.id,
-                          );
-                          setFiltersAndDebouncePersist(next);
-                        }}
-                        title="Remove filter"
-                        aria-label="Remove filter"
+                      const dropdown = (() => {
+                        if (kind === "source") return audienceOptions.sources;
+                        if (kind === "entitlementKey")
+                          return audienceOptions.entitlementKeys;
+                        if (kind === "engagedEventType")
+                          return audienceOptions.engagedEventTypes;
+                        return null;
+                      })();
+
+                      if (dropdown && dropdown.length > 0) {
+                        return (
+                          <select
+                            value={f.value}
+                            onChange={(e) => {
+                              const next = audienceFilters.slice();
+                              next[idx] = { ...f, value: e.target.value };
+                              setFiltersAndDebouncePersist(next);
+                            }}
+                            style={{
+                              ...inputStyle,
+                              padding: "8px 10px",
+                              fontSize: 12,
+                            }}
+                          >
+                            <option value="">(any)</option>
+                            {dropdown.map((v) => (
+                              <option key={v} value={v}>
+                                {v}
+                              </option>
+                            ))}
+                          </select>
+                        );
+                      }
+
+                      const isNumber =
+                        kind === "entitlementExpiresWithinDays" ||
+                        kind === "joinedWithinDays" ||
+                        kind === "consentVersionMax" ||
+                        kind === "purchasedWithinDays" ||
+                        kind === "engagedWithinDays";
+
+                      return (
+                        <input
+                          value={f.value}
+                          onChange={(e) => {
+                            const next = audienceFilters.slice();
+                            next[idx] = { ...f, value: e.target.value };
+                            setFiltersAndDebouncePersist(next);
+                          }}
+                          style={{
+                            ...inputStyle,
+                            padding: "8px 10px",
+                            fontSize: 12,
+                          }}
+                          inputMode={isNumber ? "numeric" : undefined}
+                          placeholder={
+                            kind === "source"
+                              ? "e.g. early_access_form"
+                              : kind === "entitlementKey"
+                                ? "e.g. tier:patron"
+                                : kind === "engagedEventType"
+                                  ? "e.g. played_track"
+                                  : "Enter a value"
+                          }
+                        />
+                      );
+                    })();
+
+                    return (
+                      <div
+                        key={f.id}
                         style={{
-                          ...softButtonStyle({ small: true }),
-                          padding: "8px 10px",
-                          opacity: 0.9,
-                          width: isNarrow ? "100%" : undefined,
+                          display: "grid",
+                          gridTemplateColumns: isNarrow
+                            ? "1fr"
+                            : "1.1fr 1.4fr auto",
+                          gap: 8,
+                          alignItems: "center",
+                          minWidth: 0,
                         }}
                       >
-                        Remove
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                        <div style={{ minWidth: 0 }}>{kindSelect}</div>
+                        <div style={{ minWidth: 0 }}>{valueControl}</div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = audienceFilters.filter(
+                              (x) => x.id !== f.id,
+                            );
+                            setFiltersAndDebouncePersist(next);
+                          }}
+                          title="Remove filter"
+                          aria-label="Remove filter"
+                          style={{
+                            ...softButtonStyle({ small: true }),
+                            padding: "8px 10px",
+                            opacity: 0.9,
+                            width: isNarrow ? "100%" : undefined,
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: isNarrow ? "1fr" : "1fr 2fr",
-          gap: 12,
-          alignItems: "start",
-        }}
-      >
-        {/* LEFT */}
-        <div style={{ padding: 12, borderRadius: 12, fontSize: 12 }}>
-          <h2 style={{ marginTop: 0, marginBottom: 8, fontSize: 18, fontWeight: 700 }}>
-            Compose
-          </h2>
-
-          <label style={{ display: "block", marginBottom: 10 }}>
-            <div style={labelLeft}>Campaign name</div>
-            <input
-              value={draft.campaignName}
-              onChange={(e) =>
-                markDirtyAndDebouncePersist({
-                  ...draft,
-                  campaignName: e.target.value,
-                })
-              }
-              style={inputStyle}
-            />
-          </label>
-
-          <label style={{ display: "block", marginBottom: 10 }}>
-            <div style={labelLeft}>Subject</div>
-            <input
-              value={draft.subjectTemplate}
-              onChange={(e) =>
-                markDirtyAndDebouncePersist({
-                  ...draft,
-                  subjectTemplate: e.target.value,
-                })
-              }
-              style={inputStyle}
-            />
-          </label>
-
-          <label style={{ display: "block", marginBottom: 10 }}>
-            <div style={labelLeft}>Body (Markdown)</div>
-
-            <div
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isNarrow ? "1fr" : "1fr 2fr",
+            gap: 12,
+            alignItems: "start",
+          }}
+        >
+          {/* LEFT */}
+          <div style={{ padding: 12, borderRadius: 12, fontSize: 12 }}>
+            <h2
               style={{
-                border: `1px solid ${UI.surfaceBorder}`,
-                borderRadius: UI.radius,
-                overflow: "hidden",
-                background: UI.surfaceBg,
+                marginTop: 0,
+                marginBottom: 8,
+                fontSize: 18,
+                fontWeight: 700,
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  gap: 6,
-                  padding: 8,
-                  borderBottom: `1px solid ${UI.surfaceBorder}`,
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                }}
-              >
-                {[
-                  {
-                    title: "Bold",
-                    icon: <IconBold />,
-                    run: () => {
-                      const el = document.getElementById(
-                        "body-template",
-                      ) as HTMLTextAreaElement | null;
-                      if (!el) return;
-                      insertAtCursor(el, "**bold text**", [2, 11]);
-                      markDirtyAndDebouncePersist({
-                        ...draft,
-                        bodyTemplate: el.value,
-                      });
-                    },
-                  },
-                  {
-                    title: "Italic",
-                    icon: <IconItalic />,
-                    run: () => {
-                      const el = document.getElementById(
-                        "body-template",
-                      ) as HTMLTextAreaElement | null;
-                      if (!el) return;
-                      insertAtCursor(el, "*italic text*", [1, 12]);
-                      markDirtyAndDebouncePersist({
-                        ...draft,
-                        bodyTemplate: el.value,
-                      });
-                    },
-                  },
-                  {
-                    title: "Link",
-                    icon: <IconLink />,
-                    run: () => {
-                      const el = document.getElementById(
-                        "body-template",
-                      ) as HTMLTextAreaElement | null;
-                      if (!el) return;
-                      insertAtCursor(el, "[link text](https://)", [1, 10]);
-                      markDirtyAndDebouncePersist({
-                        ...draft,
-                        bodyTemplate: el.value,
-                      });
-                    },
-                  },
-                  {
-                    title: "Center (wrap selection)",
-                    icon: <IconAlignCenter />,
-                    run: () => {
-                      const el = getBodyTextarea();
-                      if (!el) return;
+              Compose
+            </h2>
 
-                      // Wrap selection, or insert starter block with selected inner text highlighted
-                      wrapSelectionOrInsert(
-                        el,
-                        `<div style="text-align:center; margin: 12px 0;">\n  `,
-                        `\n</div>`,
-                        `Your text here…`,
-                        true,
-                      );
-
-                      markDirtyAndDebouncePersist({
-                        ...draft,
-                        bodyTemplate: el.value,
-                      });
-                    },
-                  },
-                  {
-                    title: "Image block (S)",
-                    icon: <IconImageBlock />,
-                    run: () => {
-                      const el = getBodyTextarea();
-                      if (!el) return;
-
-                      const url = lastImageUrl ?? "URL_HERE";
-                      const alt = "ALT_HERE";
-
-                      const block = buildCenteredImageBlock({
-                        url,
-                        alt,
-                        maxWidthPx: 360,
-                      });
-
-                      // Select the ALT text for quick edit
-                      const altStart = block.indexOf(`alt="`) + `alt="`.length;
-                      const altEnd = block.indexOf(`"`, altStart);
-
-                      insertAtCursor(el, block, [altStart, altEnd]);
-                      markDirtyAndDebouncePersist({
-                        ...draft,
-                        bodyTemplate: el.value,
-                      });
-                    },
-                  },
-                  {
-                    title: imageUploading ? "Uploading…" : "Upload image",
-                    icon: <IconUpload />,
-                    run: () => {
-                      if (imageUploading) return;
-                      imageInputRef.current?.click();
-                    },
-                  },
-                  {
-                    title: "Divider",
-                    icon: <IconDivider />,
-                    run: () => {
-                      const el = document.getElementById(
-                        "body-template",
-                      ) as HTMLTextAreaElement | null;
-                      if (!el) return;
-                      insertAtCursor(el, "\n\n---\n\n");
-                      markDirtyAndDebouncePersist({
-                        ...draft,
-                        bodyTemplate: el.value,
-                      });
-                    },
-                  },
-                  {
-                    title: "Heading",
-                    icon: <IconH2 />,
-                    run: () => {
-                      const el = document.getElementById(
-                        "body-template",
-                      ) as HTMLTextAreaElement | null;
-                      if (!el) return;
-                      insertAtCursor(el, "\n\n## Heading text\n\n", [4, 16]);
-                      markDirtyAndDebouncePersist({
-                        ...draft,
-                        bodyTemplate: el.value,
-                      });
-                    },
-                  },
-                  {
-                    title: "Bullets",
-                    icon: <IconBullets />,
-                    run: () => {
-                      const el = document.getElementById(
-                        "body-template",
-                      ) as HTMLTextAreaElement | null;
-                      if (!el) return;
-                      insertAtCursor(
-                        el,
-                        "\n\n- Bullet one\n- Bullet two\n- Bullet three\n\n",
-                        [4, 14],
-                      );
-                      markDirtyAndDebouncePersist({
-                        ...draft,
-                        bodyTemplate: el.value,
-                      });
-                    },
-                  },
-                ].map((b) => (
-                  <button
-                    key={b.title}
-                    type="button"
-                    onClick={b.run}
-                    title={b.title}
-                    aria-label={b.title}
-                    style={iconButtonStyle()}
-                  >
-                    {b.icon}
-                  </button>
-                ))}
-
-                {/* Upload status row: uses imageUploadErr + lastImageUrl (fixes unused vars) */}
-                <div style={{ flex: 1 }} />
-
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    flexWrap: "wrap",
-                    fontSize: 11,
-                    opacity: 0.85,
-                  }}
-                >
-                  {imageUploading ? (
-                    <span style={{ opacity: 0.85 }}>Uploading…</span>
-                  ) : null}
-
-                  {imageUploadErr ? (
-                    <span style={{ color: "#ffb3c0" }}>{imageUploadErr}</span>
-                  ) : null}
-
-                  {lastImageUrl ? (
-                    <>
-                      <a
-                        href={lastImageUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{
-                          color: "inherit",
-                          textDecoration: "underline",
-                        }}
-                        title="Open last uploaded image"
-                      >
-                        Open
-                      </a>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const text = lastImageUrl;
-                          if (!text) return;
-                          if (navigator.clipboard?.writeText) {
-                            void navigator.clipboard.writeText(text);
-                          } else {
-                            // fallback
-                            const ta = document.createElement("textarea");
-                            ta.value = text;
-                            ta.style.position = "fixed";
-                            ta.style.left = "-9999px";
-                            document.body.appendChild(ta);
-                            ta.focus();
-                            ta.select();
-                            try {
-                              document.execCommand("copy");
-                            } catch {
-                              // ignore
-                            }
-                            document.body.removeChild(ta);
-                          }
-                        }}
-                        style={{
-                          ...iconButtonStyle(),
-                          width: "auto",
-                          padding: "0 10px",
-                          fontSize: 11,
-                        }}
-                        title="Copy last URL"
-                        aria-label="Copy last URL"
-                      >
-                        Copy URL
-                      </button>
-                    </>
-                  ) : null}
-                </div>
-              </div>
-
+            <label style={{ display: "block", marginBottom: 10 }}>
+              <div style={labelLeft}>Campaign name</div>
               <input
-                ref={imageInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  e.currentTarget.value = "";
-                  if (!f) return;
-                  void uploadImageFile(f);
-                }}
-              />
-
-              <textarea
-                id="body-template"
-                value={draft.bodyTemplate}
+                value={draft.campaignName}
                 onChange={(e) =>
                   markDirtyAndDebouncePersist({
                     ...draft,
-                    bodyTemplate: e.target.value,
+                    campaignName: e.target.value,
                   })
                 }
-                onKeyDown={(e) => handleUndoRedoKeydown(e)}
-                rows={18}
+                style={inputStyle}
+              />
+            </label>
+
+            <label style={{ display: "block", marginBottom: 10 }}>
+              <div style={labelLeft}>Subject</div>
+              <input
+                value={draft.subjectTemplate}
+                onChange={(e) =>
+                  markDirtyAndDebouncePersist({
+                    ...draft,
+                    subjectTemplate: e.target.value,
+                  })
+                }
+                style={inputStyle}
+              />
+            </label>
+
+            <label style={{ display: "block", marginBottom: 10 }}>
+              <div style={labelLeft}>Body (Markdown)</div>
+
+              <div
+                style={{
+                  border: `1px solid ${UI.surfaceBorder}`,
+                  borderRadius: UI.radius,
+                  overflow: "hidden",
+                  background: UI.surfaceBg,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 6,
+                    padding: 8,
+                    borderBottom: `1px solid ${UI.surfaceBorder}`,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {[
+                    {
+                      title: "Bold",
+                      icon: <IconBold />,
+                      run: () => {
+                        const el = document.getElementById(
+                          "body-template",
+                        ) as HTMLTextAreaElement | null;
+                        if (!el) return;
+                        insertAtCursor(el, "**bold text**", [2, 11]);
+                        markDirtyAndDebouncePersist({
+                          ...draft,
+                          bodyTemplate: el.value,
+                        });
+                      },
+                    },
+                    {
+                      title: "Italic",
+                      icon: <IconItalic />,
+                      run: () => {
+                        const el = document.getElementById(
+                          "body-template",
+                        ) as HTMLTextAreaElement | null;
+                        if (!el) return;
+                        insertAtCursor(el, "*italic text*", [1, 12]);
+                        markDirtyAndDebouncePersist({
+                          ...draft,
+                          bodyTemplate: el.value,
+                        });
+                      },
+                    },
+                    {
+                      title: "Link",
+                      icon: <IconLink />,
+                      run: () => {
+                        const el = document.getElementById(
+                          "body-template",
+                        ) as HTMLTextAreaElement | null;
+                        if (!el) return;
+                        insertAtCursor(el, "[link text](https://)", [1, 10]);
+                        markDirtyAndDebouncePersist({
+                          ...draft,
+                          bodyTemplate: el.value,
+                        });
+                      },
+                    },
+                    {
+                      title: "Center (wrap selection)",
+                      icon: <IconAlignCenter />,
+                      run: () => {
+                        const el = getBodyTextarea();
+                        if (!el) return;
+
+                        // Wrap selection, or insert starter block with selected inner text highlighted
+                        wrapSelectionOrInsert(
+                          el,
+                          `<div style="text-align:center; margin: 12px 0;">\n  `,
+                          `\n</div>`,
+                          `Your text here…`,
+                          true,
+                        );
+
+                        markDirtyAndDebouncePersist({
+                          ...draft,
+                          bodyTemplate: el.value,
+                        });
+                      },
+                    },
+                    {
+                      title: "Image block (S)",
+                      icon: <IconImageBlock />,
+                      run: () => {
+                        const el = getBodyTextarea();
+                        if (!el) return;
+
+                        const url = lastImageUrl ?? "URL_HERE";
+                        const alt = "ALT_HERE";
+
+                        const block = buildCenteredImageBlock({
+                          url,
+                          alt,
+                          maxWidthPx: 360,
+                        });
+
+                        // Select the ALT text for quick edit
+                        const altStart =
+                          block.indexOf(`alt="`) + `alt="`.length;
+                        const altEnd = block.indexOf(`"`, altStart);
+
+                        insertAtCursor(el, block, [altStart, altEnd]);
+                        markDirtyAndDebouncePersist({
+                          ...draft,
+                          bodyTemplate: el.value,
+                        });
+                      },
+                    },
+                    {
+                      title: imageUploading ? "Uploading…" : "Upload image",
+                      icon: <IconUpload />,
+                      run: () => {
+                        if (imageUploading) return;
+                        imageInputRef.current?.click();
+                      },
+                    },
+                    {
+                      title: "Divider",
+                      icon: <IconDivider />,
+                      run: () => {
+                        const el = document.getElementById(
+                          "body-template",
+                        ) as HTMLTextAreaElement | null;
+                        if (!el) return;
+                        insertAtCursor(el, "\n\n---\n\n");
+                        markDirtyAndDebouncePersist({
+                          ...draft,
+                          bodyTemplate: el.value,
+                        });
+                      },
+                    },
+                    {
+                      title: "Heading",
+                      icon: <IconH2 />,
+                      run: () => {
+                        const el = document.getElementById(
+                          "body-template",
+                        ) as HTMLTextAreaElement | null;
+                        if (!el) return;
+                        insertAtCursor(el, "\n\n## Heading text\n\n", [4, 16]);
+                        markDirtyAndDebouncePersist({
+                          ...draft,
+                          bodyTemplate: el.value,
+                        });
+                      },
+                    },
+                    {
+                      title: "Bullets",
+                      icon: <IconBullets />,
+                      run: () => {
+                        const el = document.getElementById(
+                          "body-template",
+                        ) as HTMLTextAreaElement | null;
+                        if (!el) return;
+                        insertAtCursor(
+                          el,
+                          "\n\n- Bullet one\n- Bullet two\n- Bullet three\n\n",
+                          [4, 14],
+                        );
+                        markDirtyAndDebouncePersist({
+                          ...draft,
+                          bodyTemplate: el.value,
+                        });
+                      },
+                    },
+                  ].map((b) => (
+                    <button
+                      key={b.title}
+                      type="button"
+                      onClick={b.run}
+                      title={b.title}
+                      aria-label={b.title}
+                      style={iconButtonStyle()}
+                    >
+                      {b.icon}
+                    </button>
+                  ))}
+
+                  {/* Upload status row: uses imageUploadErr + lastImageUrl (fixes unused vars) */}
+                  <div style={{ flex: 1 }} />
+
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      flexWrap: "wrap",
+                      fontSize: 11,
+                      opacity: 0.85,
+                    }}
+                  >
+                    {imageUploading ? (
+                      <span style={{ opacity: 0.85 }}>Uploading…</span>
+                    ) : null}
+
+                    {imageUploadErr ? (
+                      <span style={{ color: "#ffb3c0" }}>{imageUploadErr}</span>
+                    ) : null}
+
+                    {lastImageUrl ? (
+                      <>
+                        <a
+                          href={lastImageUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            color: "inherit",
+                            textDecoration: "underline",
+                          }}
+                          title="Open last uploaded image"
+                        >
+                          Open
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const text = lastImageUrl;
+                            if (!text) return;
+                            if (navigator.clipboard?.writeText) {
+                              void navigator.clipboard.writeText(text);
+                            } else {
+                              // fallback
+                              const ta = document.createElement("textarea");
+                              ta.value = text;
+                              ta.style.position = "fixed";
+                              ta.style.left = "-9999px";
+                              document.body.appendChild(ta);
+                              ta.focus();
+                              ta.select();
+                              try {
+                                document.execCommand("copy");
+                              } catch {
+                                // ignore
+                              }
+                              document.body.removeChild(ta);
+                            }
+                          }}
+                          style={{
+                            ...iconButtonStyle(),
+                            width: "auto",
+                            padding: "0 10px",
+                            fontSize: 11,
+                          }}
+                          title="Copy last URL"
+                          aria-label="Copy last URL"
+                        >
+                          Copy URL
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.currentTarget.value = "";
+                    if (!f) return;
+                    void uploadImageFile(f);
+                  }}
+                />
+
+                <textarea
+                  id="body-template"
+                  value={draft.bodyTemplate}
+                  onChange={(e) =>
+                    markDirtyAndDebouncePersist({
+                      ...draft,
+                      bodyTemplate: e.target.value,
+                    })
+                  }
+                  onKeyDown={(e) => handleUndoRedoKeydown(e)}
+                  rows={18}
+                  style={{
+                    width: "100%",
+                    padding: 12,
+                    border: "none",
+                    outline: "none",
+                    background: "transparent",
+                    color: "inherit",
+                    fontFamily: UI.mono,
+                    resize: "vertical",
+                    fontSize: 12,
+                    lineHeight: 1.45,
+                  }}
+                />
+              </div>
+
+              <div style={{ marginTop: 10, fontSize: 11, opacity: 0.7 }}>
+                Merge vars supported: <code>{"{{email}} {{member_id}}"}</code>
+              </div>
+            </label>
+
+            {!isNarrow && hazardZone}
+          </div>
+
+          {/* RIGHT */}
+          <div style={{ padding: 12, borderRadius: 12 }}>
+            <h2
+              style={{
+                marginTop: 0,
+                marginBottom: 8,
+                fontSize: 18,
+                fontWeight: 700,
+              }}
+            >
+              Preview
+            </h2>
+
+            {previewErr ? (
+              <div
+                style={{
+                  padding: 10,
+                  borderRadius: UI.radiusSm,
+                  background: UI.dangerBg,
+                  border: UI.dangerBorder,
+                  color: UI.dangerText,
+                }}
+              >
+                <b>Preview error:</b> {previewErr}
+              </div>
+            ) : (
+              <iframe
+                title="email-preview"
+                srcDoc={iframeSrcDoc}
                 style={{
                   width: "100%",
-                  padding: 12,
-                  border: "none",
-                  outline: "none",
-                  background: "transparent",
-                  color: "inherit",
-                  fontFamily: UI.mono,
-                  resize: "vertical",
-                  fontSize: 12,
+                  height: 520,
+                  border: `1px solid ${UI.surfaceBorder}`,
+                  borderRadius: UI.radiusSm,
+                  background: UI.surfaceBg,
+                }}
+                sandbox="allow-same-origin"
+              />
+            )}
+
+            <div style={{ marginTop: 12 }}>
+              <div style={labelRight}>
+                Rendered plaintext (stored in campaign body)
+              </div>
+              <pre
+                style={{
+                  whiteSpace: "pre-wrap",
+                  padding: 10,
+                  borderRadius: UI.radiusSm,
+                  background: UI.surfaceBg,
+                  border: `1px solid ${UI.surfaceBorder}`,
+                  margin: 0,
+                  maxHeight: 260,
+                  overflow: "auto",
+                  fontSize: 10,
+                  opacity: 0.78,
                   lineHeight: 1.45,
                 }}
-              />
+              >
+                {draft.bodyTemplate}
+              </pre>
             </div>
-
-            <div style={{ marginTop: 10, fontSize: 11, opacity: 0.7 }}>
-              Merge vars supported: <code>{"{{email}} {{member_id}}"}</code>
-            </div>
-          </label>
-
-          {!isNarrow && hazardZone}
-        </div>
-
-        {/* RIGHT */}
-        <div style={{ padding: 12, borderRadius: 12 }}>
-          <h2 style={{ marginTop: 0, marginBottom: 8, fontSize: 18, fontWeight: 700 }}>
-            Preview
-          </h2>
-
-          {previewErr ? (
-            <div
-              style={{
-                padding: 10,
-                borderRadius: UI.radiusSm,
-                background: UI.dangerBg,
-                border: UI.dangerBorder,
-                color: UI.dangerText,
-              }}
-            >
-              <b>Preview error:</b> {previewErr}
-            </div>
-          ) : (
-            <iframe
-              title="email-preview"
-              srcDoc={iframeSrcDoc}
-              style={{
-                width: "100%",
-                height: 520,
-                border: `1px solid ${UI.surfaceBorder}`,
-                borderRadius: UI.radiusSm,
-                background: UI.surfaceBg,
-              }}
-              sandbox="allow-same-origin"
-            />
-          )}
-
-          <div style={{ marginTop: 12 }}>
-            <div style={labelRight}>
-              Rendered plaintext (stored in campaign body)
-            </div>
-            <pre
-              style={{
-                whiteSpace: "pre-wrap",
-                padding: 10,
-                borderRadius: UI.radiusSm,
-                background: UI.surfaceBg,
-                border: `1px solid ${UI.surfaceBorder}`,
-                margin: 0,
-                maxHeight: 260,
-                overflow: "auto",
-                fontSize: 10,
-                opacity: 0.78,
-                lineHeight: 1.45,
-              }}
-            >
-              {draft.bodyTemplate}
-            </pre>
           </div>
-        </div>
 
-        {isNarrow && hazardZone}
+          {isNarrow && hazardZone}
+        </div>
       </div>
-    </div>
     </>
   );
 }

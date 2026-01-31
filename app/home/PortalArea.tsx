@@ -100,10 +100,16 @@ function IconPlayer() {
       width="18"
       height="18"
       viewBox="0 0 24 24"
-      fill="currentColor"
+      fill="none"
       aria-hidden="true"
+      className="afIcon afIconPlayer"
     >
-      <polygon points="9,7 19,12 9,17" />
+      {/* slightly rounded triangle reads cleaner in a circle */}
+      <path
+        d="M10 7.6L18.2 12L10 16.4V7.6Z"
+        fill="currentColor"
+        className="afIconFill"
+      />
     </svg>
   );
 }
@@ -116,23 +122,28 @@ function IconPortal() {
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"
+      className="afIcon afIconPortal"
     >
+      {/* top layer */}
       <path
-        d="M12 4L4 8l8 4 8-4-8-4Z"
+        d="M12 4.3L4.35 8.05L12 11.8L19.65 8.05L12 4.3Z"
         stroke="currentColor"
-        strokeWidth="2"
+        strokeWidth="2.15"
         strokeLinejoin="round"
         strokeLinecap="round"
+        className="afPortalTop"
       />
+      {/* bottom layer */}
       <path
-        d="M4 11l8 4 8-4"
+        d="M4.35 11.05L12 14.75L19.65 11.05"
         stroke="currentColor"
-        strokeWidth="2"
+        strokeWidth="2.15"
         strokeLinejoin="round"
         strokeLinecap="round"
+        className="afPortalBase"
       />
     </svg>
-  )
+  );
 }
 
 /** Top-right (spotlight-clonable) bar: ONLY for auth/blocking attention. */
@@ -1058,59 +1069,110 @@ export default function PortalArea(props: {
 
                 <div className="afTopBarControls">
                   <div className="afTopBarLeft">
-                    <button
-                      type="button"
-                      aria-label="Player"
-                      title="Player"
-                      onClick={() => forceSurface("player")}
-                      style={{
-                        width: 46,
-                        height: 46,
-                        borderRadius: 999,
-                        border: "1px solid rgba(255,255,255,0.14)",
-                        background: isPlayer
-                          ? "color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))"
-                          : "rgba(255,255,255,0.04)",
-                        boxShadow: isPlayer
-                          ? "0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)"
-                          : "0 12px 26px rgba(0,0,0,0.18)",
-                        color: "rgba(255,255,255,0.90)",
-                        cursor: "pointer",
-                        opacity: isPlayer ? 0.98 : 0.78,
-                        display: "grid",
-                        placeItems: "center",
-                        userSelect: "none",
-                      }}
-                    >
-                      <IconPlayer />
-                    </button>
+                    <style>{`
+    .afTopBarBtn {
+      transition: transform 160ms ease, opacity 160ms ease, filter 160ms ease, box-shadow 160ms ease;
+      will-change: transform, filter;
+    }
+    .afTopBarBtn:hover {
+      transform: translateY(-1px);
+      opacity: 0.98;
+      filter: brightness(1.05);
+    }
+    .afTopBarBtn:active {
+      transform: translateY(0px) scale(0.98);
+      filter: brightness(0.98);
+    }
 
-                    <button
-                      type="button"
-                      aria-label="Portal"
-                      title="Portal"
-                      onClick={() => forceSurface("portal")}
-                      style={{
+    /* Icon baseline: slightly lower so it feels centered in the circle */
+    .afIcon {
+      transform: translateY(0.25px);
+      transition: transform 160ms ease, opacity 160ms ease;
+      will-change: transform;
+    }
+
+    /* Player hover: triangle nudges “into” the interface */
+    .afTopBarBtn:hover .afIconPlayer {
+      transform: translate(0.4px, 0.1px) scale(1.02);
+    }
+
+    /* Portal hover: top layer lifts from the stack */
+    .afPortalTop {
+      transition: transform 180ms ease, opacity 180ms ease;
+      transform-origin: 12px 8px;
+    }
+    .afTopBarBtn:hover .afPortalTop {
+      transform: translateY(-0.7px);
+    }
+    .afTopBarBtn:hover .afIconPortal {
+      transform: translateY(0px) scale(1.015);
+    }
+
+    /* Keyboard focus */
+    .afTopBarBtn:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 26%, transparent), 0 14px 30px rgba(0,0,0,0.22);
+    }
+  `}</style>
+
+                    {(() => {
+                      const commonBtn: React.CSSProperties = {
                         width: 46,
                         height: 46,
                         borderRadius: 999,
                         border: "1px solid rgba(255,255,255,0.14)",
-                        background: !isPlayer
-                          ? "color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))"
-                          : "rgba(255,255,255,0.04)",
-                        boxShadow: !isPlayer
-                          ? "0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)"
-                          : "0 12px 26px rgba(0,0,0,0.18)",
                         color: "rgba(255,255,255,0.90)",
                         cursor: "pointer",
-                        opacity: !isPlayer ? 0.98 : 0.78,
                         display: "grid",
                         placeItems: "center",
                         userSelect: "none",
-                      }}
-                    >
-                      <IconPortal />
-                    </button>
+                        WebkitTapHighlightColor: "transparent",
+                      };
+
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            aria-label="Player"
+                            title="Player"
+                            onClick={() => forceSurface("player")}
+                            className="afTopBarBtn"
+                            style={{
+                              ...commonBtn,
+                              background: isPlayer
+                                ? "color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))"
+                                : "rgba(255,255,255,0.04)",
+                              boxShadow: isPlayer
+                                ? "0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)"
+                                : "0 12px 26px rgba(0,0,0,0.18)",
+                              opacity: isPlayer ? 0.98 : 0.78,
+                            }}
+                          >
+                            <IconPlayer />
+                          </button>
+
+                          <button
+                            type="button"
+                            aria-label="Portal"
+                            title="Portal"
+                            onClick={() => forceSurface("portal")}
+                            className="afTopBarBtn"
+                            style={{
+                              ...commonBtn,
+                              background: !isPlayer
+                                ? "color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))"
+                                : "rgba(255,255,255,0.04)",
+                              boxShadow: !isPlayer
+                                ? "0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)"
+                                : "0 12px 26px rgba(0,0,0,0.18)",
+                              opacity: !isPlayer ? 0.98 : 0.78,
+                            }}
+                          >
+                            <IconPortal />
+                          </button>
+                        </>
+                      );
+                    })()}
                   </div>
 
                   <div className="afTopBarRight">
