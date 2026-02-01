@@ -62,15 +62,22 @@ void main() {
   float r = length(px);
 
   float t = uTime * 0.85;
-  float p = easeInOut(uProgress);
+    float p = easeInOut(uProgress);
 
-  // Portal center has slight drift.
-  vec2 c = vec2(0.0) + 0.02 * vec2(sin(t*0.7), cos(t*0.6));
-  float rc = length(px - c);
+      float driftGate = smoothstep(0.05, 0.25, uProgress);
+  vec2 c = vec2(0.0) + (0.02 * driftGate) * vec2(sin(t*0.7), cos(t*0.6));
 
-  // Portal radius expands (menu -> world).
-  float portalR = mix(0.08, 1.35, p);
-  float ringW = mix(0.08, 0.02, p);
+
+  // Use a faster-start curve for the radius so it doesn't "hang" at the center.
+  // (easeInOut has zero velocity at t=0, which reads as a micro-pause.)
+  float pr = 1.0 - pow(1.0 - clamp(uProgress, 0.0, 1.0), 2.2); // easeOut-ish
+
+  // Portal radius expands (start smaller so it feels like it emerges).
+  float portalR = mix(0.028, 1.35, pr);
+
+  // Keep ring width tied to the same radius curve (slightly thicker at start).
+  float ringW = mix(0.095, 0.02, pr);
+
   float ring = smoothstep(portalR + ringW, portalR, rc) * smoothstep(portalR - ringW, portalR, rc);
 
      // Noise field (0..1) in a square-ish domain
@@ -160,8 +167,10 @@ export type PortalWipe = {
 
 export function createPortalWipe(): PortalWipe {
   let program: WebGLProgram | null = null;
-  let tri: { vao: WebGLVertexArrayObject | null; buf: WebGLBuffer | null } | null =
-    null;
+  let tri: {
+    vao: WebGLVertexArrayObject | null;
+    buf: WebGLBuffer | null;
+  } | null = null;
 
   let uFrom: WebGLUniformLocation | null = null;
   let uTo: WebGLUniformLocation | null = null;
