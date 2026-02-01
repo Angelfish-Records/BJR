@@ -197,6 +197,9 @@ export function VisualizerSnapshotCanvas(props: {
     const tick = (t: number) => {
       raf = requestAnimationFrame(tick);
 
+      bump("tick");
+      maybeLog(t);
+
       if (!activeRef.current) {
         bump("inactive");
         maybeLog(t);
@@ -247,44 +250,42 @@ export function VisualizerSnapshotCanvas(props: {
       }
 
       // ---- DIAG: force simplest possible mapping ----
-const sx = 0;
-const sy = 0;
-const sw = srcW;
-const sh = srcH;
+      const sx = 0;
+      const sy = 0;
+      const sw = srcW;
+      const sh = srcH;
 
-const dX = 0;
-const dY = 0;
-const dW = pxW;
-const dH = pxH;
-// ---------------------------------------------
-
+      const dX = 0;
+      const dY = 0;
+      const dW = pxW;
+      const dH = pxH;
+      // ---------------------------------------------
 
       bump("draw_path");
       maybeLog(t);
 
       try {
-  // draw DIRECTLY to onscreen to eliminate backbuffer/present as a variable
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.globalCompositeOperation = "source-over";
-  ctx.globalAlpha = 1;
-  ctx.filter = "none";
+        // draw DIRECTLY to onscreen to eliminate backbuffer/present as a variable
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+        ctx.filter = "none";
 
-  // DIAG: fill the whole canvas magenta (cannot miss it)
-  ctx.clearRect(0, 0, pxW, pxH);
-  ctx.fillStyle = "rgba(255,0,255,1)";
-  ctx.fillRect(0, 0, pxW, pxH);
+        // DIAG: fill the whole canvas magenta (cannot miss it)
+        ctx.clearRect(0, 0, pxW, pxH);
+        ctx.fillStyle = "rgba(255,0,255,1)";
+        ctx.fillRect(0, 0, pxW, pxH);
 
-  // now attempt the source draw on top
-  ctx.drawImage(src, sx, sy, sw, sh, dX, dY, dW, dH);
+        // now attempt the source draw on top
+        ctx.drawImage(src, sx, sy, sw, sh, dX, dY, dW, dH);
 
-  bump("direct_present_ok");
-  maybeLog(t);
-} catch (err) {
-  bump("direct_present_throw");
-  // eslint-disable-next-line no-console
-  console.warn("[sip-snapshot] direct draw threw", err);
-}
-
+        bump("direct_present_ok");
+        maybeLog(t);
+      } catch (err) {
+        bump("direct_present_throw");
+        // eslint-disable-next-line no-console
+        console.warn("[sip-snapshot] direct draw threw", err);
+      }
     };
 
     raf = requestAnimationFrame(tick);
@@ -387,6 +388,34 @@ function VisualizerRingGlowCanvas(props: {
 
     return () => ro.disconnect();
   }, []);
+
+  React.useEffect(() => {
+  const el = canvasRef.current;
+  if (!el) return;
+
+  // Expose for console inspection without `any`
+  type SipDebugGlobal = typeof globalThis & {
+    __AF_SIP_CANVAS?: HTMLCanvasElement;
+  };
+
+  (globalThis as SipDebugGlobal).__AF_SIP_CANVAS = el;
+
+  const cs = getComputedStyle(el);
+
+  console.log("[sip-mount]", {
+    node: el,
+    client: [el.clientWidth, el.clientHeight],
+    rect: el.getBoundingClientRect(),
+    display: cs.display,
+    visibility: cs.visibility,
+    opacity: cs.opacity,
+    zIndex: cs.zIndex,
+    position: cs.position,
+    transform: cs.transform,
+    pointerEvents: cs.pointerEvents,
+  });
+}, []);
+
 
   React.useEffect(() => {
     let raf = 0;
