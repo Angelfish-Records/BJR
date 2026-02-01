@@ -9,15 +9,16 @@ type SourceRect =
   | { mode: "center"; scale?: number }
   | { mode: "random"; seed: number; scale?: number };
 
+function clamp(n: number, a: number, b: number) {
+  return Math.max(a, Math.min(b, n));
+}
+
 function pickRect(
   srcW: number,
   srcH: number,
   rect: SourceRect,
 ): { sx: number; sy: number; sw: number; sh: number } {
   if (srcW <= 1 || srcH <= 1) return { sx: 0, sy: 0, sw: srcW, sh: srcH };
-
-  const clamp = (n: number, a: number, b: number) =>
-    Math.max(a, Math.min(b, n));
 
   if (rect.mode === "full") return { sx: 0, sy: 0, sw: srcW, sh: srcH };
 
@@ -47,12 +48,28 @@ function pickRect(
   return { sx, sy, sw, sh };
 }
 
+function cssBoxSize(el: HTMLCanvasElement): { cssW: number; cssH: number } {
+  // Prefer integer box metrics to avoid fractional jitter/resizing loops.
+  const cssW = Math.max(1, el.clientWidth || Math.round(el.getBoundingClientRect().width));
+  const cssH = Math.max(1, el.clientHeight || Math.round(el.getBoundingClientRect().height));
+  return { cssW, cssH };
+}
+
+function getSrcSize(src: HTMLCanvasElement): { srcW: number; srcH: number } {
+  // WebGL canvas uses backing-store width/height; fall back to client box if needed.
+  const srcW = src.width || src.clientWidth || 0;
+  const srcH = src.height || src.clientHeight || 0;
+  return { srcW, srcH };
+}
+
 export function VisualizerSnapshotCanvas(props: {
+  /** CSS size comes from container; this is for internal pixel density */
   className?: string;
   style?: React.CSSProperties;
   fps?: number;
   opacity?: number;
   sourceRect?: SourceRect;
+  /** If provided, draws only when true */
   active?: boolean;
 }) {
   const {
@@ -95,35 +112,25 @@ export function VisualizerSnapshotCanvas(props: {
 
   // Canvas sizing via ResizeObserver (no per-frame layout reads).
   const sizeRef = React.useRef({ pxW: 1, pxH: 1, dpr: 1 });
+
   React.useEffect(() => {
     const dst = canvasRef.current;
     if (!dst) return;
 
-    const ro = new ResizeObserver(() => {
-      const r = dst.getBoundingClientRect();
-      const cssW = Math.max(1, Math.round(r.width));
-      const cssH = Math.max(1, Math.round(r.height));
+    const apply = () => {
+      const { cssW, cssH } = cssBoxSize(dst);
       const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
       const pxW = Math.max(1, Math.round(cssW * dpr));
       const pxH = Math.max(1, Math.round(cssH * dpr));
 
       sizeRef.current = { pxW, pxH, dpr };
-
       if (dst.width !== pxW) dst.width = pxW;
       if (dst.height !== pxH) dst.height = pxH;
-    });
+    };
 
+    const ro = new ResizeObserver(apply);
     ro.observe(dst);
-    // Prime once
-    const r = dst.getBoundingClientRect();
-    const cssW = Math.max(1, Math.round(r.width));
-    const cssH = Math.max(1, Math.round(r.height));
-    const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
-    const pxW = Math.max(1, Math.round(cssW * dpr));
-    const pxH = Math.max(1, Math.round(cssH * dpr));
-    sizeRef.current = { pxW, pxH, dpr };
-    if (dst.width !== pxW) dst.width = pxW;
-    if (dst.height !== pxH) dst.height = pxH;
+    apply();
 
     return () => ro.disconnect();
   }, []);
@@ -151,17 +158,12 @@ export function VisualizerSnapshotCanvas(props: {
       const ctx = dst.getContext("2d", { alpha: true });
       if (!ctx) return;
 
-      const srcW = src.width || src.clientWidth || 1;
-      const srcH = src.height || src.clientHeight || 1;
-      const { sx, sy, sw, sh } = pickRect(
-        srcW,
-        srcH,
-        sourceRectRef.current,
-      );
+      const { srcW, srcH } = getSrcSize(src);
 
-      // Clear destination each frame (you want crisp “sample”)
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, pxW, pxH);
+      // If the source is mid-resize / not ready, keep last good frame (NO CLEAR).
+      if (srcW < 2 || srcH < 2) return;
+
+      const { sx, sy, sw, sh } = pickRect(srcW, srcH, sourceRectRef.current);
 
       // cover fill: keep aspect, crop if needed
       const srcAspect = sw / sh;
@@ -180,16 +182,19 @@ export function VisualizerSnapshotCanvas(props: {
         dX = Math.round((pxW - dW) / 2);
       }
 
-      ctx.save();
-      ctx.globalAlpha = opacityRef.current;
-      ctx.globalCompositeOperation = "screen";
+      // Only clear once we know we're able to draw a valid frame.
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
 
       try {
+        ctx.clearRect(0, 0, pxW, pxH);
+
+        ctx.save();
+        ctx.globalAlpha = opacityRef.current;
+        ctx.globalCompositeOperation = "screen";
         ctx.drawImage(src, sx, sy, sw, sh, dX, dY, dW, dH);
-      } catch {
-        // ignore transient draw errors
-      } finally {
         ctx.restore();
+      } catch {
+        // If draw fails (rare resize race), don't intentionally blank; next tick will repaint.
       }
     };
 
@@ -231,6 +236,7 @@ function VisualizerRingGlowCanvas(props: {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const srcRef = React.useRef<HTMLCanvasElement | null>(null);
 
+  // Keep latest prop values without re-starting RAF.
   const fpsRef = React.useRef(fps);
   const opacityRef = React.useRef(opacity);
   const blurRef = React.useRef(blurPx);
@@ -251,6 +257,7 @@ function VisualizerRingGlowCanvas(props: {
     activeRef.current = active;
   }, [fps, opacity, blurPx, ringPx, glowPx, size, sourceRect, active]);
 
+  // Subscribe once to the current visual canvas.
   React.useEffect(() => {
     srcRef.current = visualSurface.getCanvas();
     const unsub = visualSurface.subscribe((e) => {
@@ -263,16 +270,14 @@ function VisualizerRingGlowCanvas(props: {
     };
   }, []);
 
-  // Size canvas via ResizeObserver on its own CSS box (which you set explicitly).
+  // Size canvas via ResizeObserver on its own CSS box (explicit width/height set by parent).
   const sizeRef = React.useRef({ pxW: 1, pxH: 1, dpr: 1 });
   React.useEffect(() => {
     const dst = canvasRef.current;
     if (!dst) return;
 
-    const ro = new ResizeObserver(() => {
-      const r = dst.getBoundingClientRect();
-      const cssW = Math.max(1, Math.round(r.width));
-      const cssH = Math.max(1, Math.round(r.height));
+    const apply = () => {
+      const { cssW, cssH } = cssBoxSize(dst);
       const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
       const pxW = Math.max(1, Math.round(cssW * dpr));
       const pxH = Math.max(1, Math.round(cssH * dpr));
@@ -280,19 +285,11 @@ function VisualizerRingGlowCanvas(props: {
       sizeRef.current = { pxW, pxH, dpr };
       if (dst.width !== pxW) dst.width = pxW;
       if (dst.height !== pxH) dst.height = pxH;
-    });
+    };
 
+    const ro = new ResizeObserver(apply);
     ro.observe(dst);
-    // Prime once
-    const r = dst.getBoundingClientRect();
-    const cssW = Math.max(1, Math.round(r.width));
-    const cssH = Math.max(1, Math.round(r.height));
-    const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
-    const pxW = Math.max(1, Math.round(cssW * dpr));
-    const pxH = Math.max(1, Math.round(cssH * dpr));
-    sizeRef.current = { pxW, pxH, dpr };
-    if (dst.width !== pxW) dst.width = pxW;
-    if (dst.height !== pxH) dst.height = pxH;
+    apply();
 
     return () => ro.disconnect();
   }, []);
@@ -333,17 +330,17 @@ function VisualizerRingGlowCanvas(props: {
       const fadeStart = Math.max(0, outerR - fadeWidth);
       const innerR = Math.max(0, sizeNow / 2 - ringPxNow);
 
+      const { srcW, srcH } = getSrcSize(src);
+
+      // If source is not ready (common during WebGL backing-store resize), keep last frame.
+      if (srcW < 2 || srcH < 2) return;
+
+      // clear only once source is sane
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, pxW, pxH);
 
       // ---- draw sampled visual texture (cover fill) ----
-      const srcW = src.width || src.clientWidth || 1;
-      const srcH = src.height || src.clientHeight || 1;
-      const { sx, sy, sw, sh } = pickRect(
-        srcW,
-        srcH,
-        sourceRectRef.current,
-      );
+      const { sx, sy, sw, sh } = pickRect(srcW, srcH, sourceRectRef.current);
 
       const srcAspect = sw / sh;
       const dstAspect = pxW / pxH;
@@ -360,6 +357,7 @@ function VisualizerRingGlowCanvas(props: {
         dX = Math.round((pxW - dW) / 2);
       }
 
+      // IMPORTANT: do all “glow” effects in-canvas (no CSS filter = no square artifact)
       ctx.save();
       ctx.globalAlpha = opacityRef.current;
       ctx.globalCompositeOperation = "screen";
@@ -398,7 +396,7 @@ function VisualizerRingGlowCanvas(props: {
         ctx.restore();
       }
 
-      // ---- outer fade ----
+      // ---- outer fade: radial alpha falloff to transparent at the edge ----
       ctx.save();
       ctx.globalCompositeOperation = "destination-in";
       const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, outerRp);
@@ -415,7 +413,7 @@ function VisualizerRingGlowCanvas(props: {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // CSS size computed from params (same as before)
+  // CSS size is controlled by parent, but we set explicit dimensions for clarity
   const pad = ringPx + glowPx;
   const bleed = Math.max(2, Math.round(blurPx * 2));
   const outerPad = pad + bleed;
@@ -453,6 +451,7 @@ export function PatternRingGlow(props: {
     seed = 1337,
   } = props;
 
+  // (keep this consistent with VisualizerRingGlowCanvas)
   const pad = ringPx + glowPx;
   const bleed = Math.max(2, Math.round(blurPx * 2));
   const outerPad = pad + bleed;
@@ -531,8 +530,11 @@ export function PatternPillUnderlay(props: {
 }
 
 export function PatternRail(props: {
+  /** total rail height in px (you use 18px hitbox) */
   height: number;
+  /** progress 0..1 */
   progress01: number;
+  /** show? */
   active?: boolean;
 }) {
   const { height, progress01, active = true } = props;
@@ -551,6 +553,7 @@ export function PatternRail(props: {
         overflow: "hidden",
       }}
     >
+      {/* base rail (subtle) */}
       <div
         style={{
           position: "absolute",
@@ -562,6 +565,7 @@ export function PatternRail(props: {
           opacity: 0.75,
         }}
       />
+      {/* patterned progress */}
       <div
         style={{
           position: "absolute",

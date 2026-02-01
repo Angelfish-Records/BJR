@@ -228,7 +228,10 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
 
   // Feed "wantPlaying" into engine (drives idle vs transition vs playing)
   const wantPlaying =
-    p.status === "playing" || p.status === "loading" || p.intent === "play";
+    p.status === "playing" ||
+    p.status === "loading" ||
+    p.status === "paused" ||
+    p.intent === "play";
 
   React.useEffect(() => {
     const engine = engineRef.current;
