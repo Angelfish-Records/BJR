@@ -73,7 +73,7 @@ void main() {
   float ringW = mix(0.08, 0.02, p);
   float ring = smoothstep(portalR + ringW, portalR, rc) * smoothstep(portalR - ringW, portalR, rc);
 
-    // Noise field (0..1) in a square-ish domain
+     // Noise field (0..1) in a square-ish domain
   vec2 nUv = uv * vec2(uRes.x / min(uRes.x,uRes.y), uRes.y / min(uRes.x,uRes.y));
   float n = fbm(nUv * 5.0 + vec2(t*0.15, -t*0.12));
 
@@ -91,27 +91,43 @@ void main() {
   // Portal mask (1 inside portal, 0 outside)
   float inside = smoothstep(portalR + 0.02, portalR - 0.02, rc);
 
-  // --- KEY CHANGE ---
-  // Make reveal start at ~0 and grow with progress.
-  // Threshold slides DOWN from ~1 -> ~0 as p increases, so early frames reveal almost nothing.
-  float thr = 1.02 - p;              // p=0 -> ~1.02 (hide), p=1 -> ~0.02 (show)
+  // --- REVEAL: new theme emerges from inside the portal ---
+  // Threshold slides down as p increases, so early frames reveal almost nothing.
+  float thr = 1.02 - p; // p=0 -> ~1.02 hide, p=1 -> ~0.02 show
   float revealNoise = smoothstep(thr - 0.18, thr + 0.18, n);
 
-  // Only reveal the "to" scene where the portal is (portal itself expands outward).
-  float m = clamp(inside * revealNoise, 0.0, 1.0);
+  // Gate the reveal so it doesn't start instantly (gives the ring time to "form")
+  float revealGate = smoothstep(0.08, 0.24, p);
 
-  // --- BLOTCHY CLOAK ---
-  // A dark veil that initially covers the FROM scene, then dissolves away quickly.
+  // Only reveal TO where the portal is; portal expands outward via inside mask
+  float m = clamp(inside * revealNoise * revealGate, 0.0, 1.0);
+
+  // --- BLOTCHY CLOAK: "eats" the old theme more slowly ---
+  // The veil ramps IN (no instant cut), peaks, then ramps OUT.
   float veilN = fbm(nUv * 6.2 + vec2(-t*0.10, t*0.13));
-  float veilShape = smoothstep(0.25, 0.85, veilN);        // chunky blobs
-  float veilT = 1.0 - smoothstep(0.02, 0.26, p);          // strong at start, gone by ~26%
-  float veil = veilT * veilShape * (1.0 - inside);        // mostly outside the portal
+  float veilShape = smoothstep(0.22, 0.86, veilN); // chunky blobs
 
-  vec3 cloakedFrom = mix(fromCol, vec3(0.0), 0.75 * veil);
+  // Envelope: rise over first ~18%, then fall, gone by ~55%
+  float veilIn  = smoothstep(0.04, 0.18, p);
+  float veilOut = 1.0 - smoothstep(0.34, 0.58, p);
+  float veilEnv = clamp(veilIn * veilOut, 0.0, 1.0);
 
-  // Base blend: new theme truly "emerges" from the portal region
+  // Let the veil invade the portal interior early, but retreat as portal opens.
+  // inv=1 at start, fades toward 0 by ~35% progress.
+  float inv = 1.0 - smoothstep(0.10, 0.35, p);
+  float veilMask = clamp((1.0 - inside) + inv * inside * 0.55, 0.0, 1.0);
+
+  // Strongest near the ring (feels like the portal is doing the eating)
+  float ringBoost = 0.35 + 0.85 * ring;
+
+  float veil = veilEnv * veilShape * veilMask * ringBoost;
+
+  // Don't drive to pure black; keep a little "soot" detail so it reads as eating, not cutting.
+  vec3 soot = vec3(0.02, 0.02, 0.025);
+  vec3 cloakedFrom = mix(fromCol, soot, 0.82 * veil);
+
+  // Base blend: TO genuinely emerges from the portal; FROM is being eaten into soot.
   vec3 col = mix(cloakedFrom, toCol, m);
-
 
   // Add a bright ring / shimmer (feels like a lens opening)
   vec3 ringCol = vec3(0.85, 0.92, 1.0) * (0.18 + 0.55 * uOnset);
