@@ -1,4 +1,3 @@
-// web/app/home/player/VisualizerCanvas.tsx
 "use client";
 
 import React from "react";
@@ -9,12 +8,10 @@ import { mediaSurface, type StageVariant } from "./mediaSurface";
 import type { Theme } from "./visualizer/types";
 import { visualSurface } from "./visualSurface";
 
-// NEW idle theme
 import { createIdleMistTheme } from "./visualizer/themes/idleMist";
 
 type ThemeFactory = () => Theme;
 
-// Typed module shapes (no any)
 type NebulaMod = typeof import("./visualizer/themes/nebula");
 type LatticeMod = typeof import("./visualizer/themes/gravitationalLattice");
 type OrbitalMod = typeof import("./visualizer/themes/orbitalScript");
@@ -87,14 +84,12 @@ function canonicalThemeName(raw: string | undefined | null): ThemeName {
 
 const THEME_LOADERS: Record<ThemeName, () => Promise<ThemeFactory>> = {
   nebula: async () =>
-    ((await import("./visualizer/themes/nebula")) as NebulaMod)
-      .createNebulaTheme,
+    ((await import("./visualizer/themes/nebula")) as NebulaMod).createNebulaTheme,
   "gravitational-lattice": async () =>
     ((await import("./visualizer/themes/gravitationalLattice")) as LatticeMod)
       .createGravitationalLatticeTheme,
   "dream-fog": async () =>
-    ((await import("./visualizer/themes/dreamFog")) as FogMod)
-      .createDreamFogTheme,
+    ((await import("./visualizer/themes/dreamFog")) as FogMod).createDreamFogTheme,
   "filament-storm": async () =>
     ((await import("./visualizer/themes/filamentStorm")) as FilamentMod)
       .createFilamentStormTheme,
@@ -111,8 +106,7 @@ const THEME_LOADERS: Record<ThemeName, () => Promise<ThemeFactory>> = {
     ((await import("./visualizer/themes/phaseGlass")) as PhaseMod)
       .createPhaseGlassTheme,
   "mhd-silk": async () =>
-    ((await import("./visualizer/themes/mhdSilk")) as MhdMod)
-      .createMHDSilkTheme,
+    ((await import("./visualizer/themes/mhdSilk")) as MhdMod).createMHDSilkTheme,
   "pressure-glass": async () =>
     ((await import("./visualizer/themes/pressureGlass")) as PressureMod)
       .createPressureGlassTheme,
@@ -124,19 +118,13 @@ const THEME_LOADERS: Record<ThemeName, () => Promise<ThemeFactory>> = {
 async function loadThemeFactory(themeName: ThemeName): Promise<ThemeFactory> {
   const cached = themeCache.get(themeName);
   if (cached) return cached;
-
   const factory = await THEME_LOADERS[themeName]();
   themeCache.set(themeName, factory);
   return factory;
 }
 
 function createBlankTheme(): Theme {
-  return {
-    name: "blank",
-    init() {},
-    render() {},
-    dispose() {},
-  };
+  return { name: "blank", init() {}, render() {}, dispose() {} };
 }
 
 export default function VisualizerCanvas(props: { variant: StageVariant }) {
@@ -146,8 +134,8 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const engineRef = React.useRef<VisualizerEngine | null>(null);
 
-  const [activeStage, setActiveStage] = React.useState<StageVariant | null>(
-    () => mediaSurface.getStageVariant(),
+  const [activeStage, setActiveStage] = React.useState<StageVariant | null>(() =>
+    mediaSurface.getStageVariant(),
   );
 
   React.useEffect(() => {
@@ -156,18 +144,9 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
     });
   }, []);
 
-  const activeStageRef = React.useRef<StageVariant | null>(activeStage);
-  React.useEffect(() => {
-    activeStageRef.current = activeStage;
-  }, [activeStage]);
-
   const themeName: ThemeName = canonicalThemeName(p.current?.visualTheme);
-  const themeNameRef = React.useRef<ThemeName>(themeName);
-  React.useEffect(() => {
-    themeNameRef.current = themeName;
-  }, [themeName]);
 
-  // Engine lifecycle: mount per canvas instance, fully disposed on unmount.
+  // Mount engine once per canvas instance.
   React.useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -186,20 +165,13 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
       theme: createBlankTheme(),
     });
 
-    // Install idle theme (cheap + calm)
     engine.setIdleTheme(createIdleMistTheme());
-
     engineRef.current = engine;
 
-    const unreg = visualSurface.registerCanvas(variant, canvas);
-
-    if (activeStageRef.current === variant) engine.start();
-
-    // Prime target theme
+    // Prime target theme (async, engine-owned)
     let cancelled = false;
     (async () => {
-      const name = themeNameRef.current;
-      const factory = await loadThemeFactory(name);
+      const factory = await loadThemeFactory(canonicalThemeName(p.current?.visualTheme));
       if (cancelled) return;
       engine.setTargetTheme(factory());
     })().catch(() => {});
@@ -211,14 +183,38 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
         engine.dispose();
       } finally {
         engineRef.current = null;
-        try {
-          unreg();
-        } catch {}
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [variant]);
 
-  // Start/stop based on stage authority
+  // IMPORTANT: only register the canvas as the visual source when this variant
+  // is the authoritative stage. Otherwise samplers may lock onto a blank/stopped canvas.
+  const unregRef = React.useRef<null | (() => void)>(null);
+
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // cleanup any previous registration before changing
+    try {
+      unregRef.current?.();
+    } catch {}
+    unregRef.current = null;
+
+    if (activeStage === variant) {
+      unregRef.current = visualSurface.registerCanvas(variant, canvas);
+    }
+
+    return () => {
+      try {
+        unregRef.current?.();
+      } catch {}
+      unregRef.current = null;
+    };
+  }, [activeStage, variant]);
+
+  // Start/stop rendering based on stage authority.
   React.useEffect(() => {
     const engine = engineRef.current;
     if (!engine) return;
@@ -226,7 +222,7 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
     else engine.stop();
   }, [activeStage, variant]);
 
-  // Feed "wantPlaying" into engine (drives idle vs transition vs playing)
+  // Feed wantPlaying into engine.
   const wantPlaying =
     p.status === "playing" ||
     p.status === "loading" ||
@@ -236,13 +232,10 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
   React.useEffect(() => {
     const engine = engineRef.current;
     if (!engine) return;
-    engine.setWantPlaying(wantPlaying, {
-      // if you decide pause should *snap* to idle (no transition), set false here
-      toIdleTransition: true,
-    });
+    engine.setWantPlaying(wantPlaying, { toIdleTransition: true });
   }, [wantPlaying]);
 
-  // Swap target theme lazily when key changes
+  // Swap target theme lazily when key changes.
   React.useEffect(() => {
     const engine = engineRef.current;
     if (!engine) return;
