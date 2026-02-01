@@ -214,7 +214,7 @@ export default function LyricsOverlay(props: {
       >
         <div style={{ maxWidth: 520 }}>
           <div style={{ fontSize: 14, fontWeight: 650, opacity: 0.95 }}>
-            PRESS PLAY
+            PLAY A TRACK
           </div>
         </div>
       </div>
