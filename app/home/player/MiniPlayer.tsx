@@ -662,7 +662,7 @@ export default function MiniPlayer(props: {
         gridTemplateRows: `var(--af-dock-h, ${DOCK_H}px) ${SAFE_INSET}`,
         height: `calc(var(--af-dock-h, ${DOCK_H}px) + ${SAFE_INSET})`,
         paddingTop: 0,
-        paddingRight: 12,
+        paddingRight: 0,
         paddingLeft: 0,
 
         boxSizing: "border-box",
@@ -888,7 +888,7 @@ export default function MiniPlayer(props: {
               paddingTop: 0,
               paddingBottom: 0,
               paddingLeft: `calc(var(--af-dock-h, ${DOCK_H}px) + 12px)`,
-              paddingRight: 0,
+              paddingRight: 12,
             }}
           >
             <div
@@ -1149,7 +1149,7 @@ export default function MiniPlayer(props: {
               --af-dock-h: 64px;
               --af-mp-btn: 40px;
               --af-mp-cols: minmax(0, 1fr) auto;
-              padding-right: 10px;
+              padding-right: 0px;
             }
 
             div[data-af-miniplayer] div[data-af-actions]{
