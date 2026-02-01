@@ -232,10 +232,14 @@ export function VisualizerSnapshotCanvas(props: {
         bctx.setTransform(1, 0, 0, 1, 0, 0);
         bctx.clearRect(0, 0, pxW, pxH);
 
+        // DIAG: prove the canvas is visible and presenting at all
         bctx.save();
-        bctx.globalAlpha = 1;
         bctx.globalCompositeOperation = "source-over";
-        
+        bctx.globalAlpha = 0.8;
+        bctx.fillStyle = "rgba(255,0,255,1)"; // magenta
+        bctx.fillRect(0, 0, pxW, pxH);
+        bctx.restore();
+
         //bctx.globalAlpha = opacityRef.current;
         //bctx.globalCompositeOperation = "screen";
 

@@ -1,3 +1,4 @@
+//web/app/home/player/VisualizerCanvas.tsx
 "use client";
 
 import React from "react";
