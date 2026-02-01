@@ -21,8 +21,8 @@ type TierCfg = {
 
 const TIER: Record<StageTier, TierCfg> = {
   idle: { fpsCap: 24, dprMin: 0.45, dprMax: 0.62 },
-  active: { fpsCap: 60, dprMin: 0.60, dprMax: 1.00 },
-  transition: { fpsCap: 60, dprMin: 0.60, dprMax: 1.00 },
+  active: { fpsCap: 60, dprMin: 0.6, dprMax: 1.0 },
+  transition: { fpsCap: 60, dprMin: 0.6, dprMax: 1.0 },
 };
 
 type StageMode =
@@ -102,7 +102,11 @@ export class VisualizerEngine {
 
   /** Set the always-available idle theme. Engine owns it and will dispose on replacement. */
   setIdleTheme(next: Theme) {
-    if (!next || typeof next.init !== "function" || typeof next.render !== "function")
+    if (
+      !next ||
+      typeof next.init !== "function" ||
+      typeof next.render !== "function"
+    )
       return;
     if (this.idleTheme === next) return;
 
@@ -115,7 +119,10 @@ export class VisualizerEngine {
   }
 
   /** Request "playing" vs "idle". This is the state machine input. */
-  setWantPlaying(want: boolean, opts?: { transitionMs?: number; toIdleTransition?: boolean }) {
+  setWantPlaying(
+    want: boolean,
+    opts?: { transitionMs?: number; toIdleTransition?: boolean },
+  ) {
     const nextWant = !!want;
     const prevWant = this.wantPlaying;
     this.wantPlaying = nextWant;
@@ -129,7 +136,11 @@ export class VisualizerEngine {
 
   /** Provide the target theme (track theme). Engine owns it and will dispose old target/theme on swap. */
   setTargetTheme(next: Theme) {
-    if (!next || typeof next.init !== "function" || typeof next.render !== "function")
+    if (
+      !next ||
+      typeof next.init !== "function" ||
+      typeof next.render !== "function"
+    )
       return;
 
     // If the requested theme is the same object reference, do nothing.
@@ -148,7 +159,11 @@ export class VisualizerEngine {
 
   /** Convenience: swap "current main" theme without recreating canvas/GL/RAF. */
   private setCurrentTheme(next: Theme) {
-    if (!next || typeof next.init !== "function" || typeof next.render !== "function")
+    if (
+      !next ||
+      typeof next.init !== "function" ||
+      typeof next.render !== "function"
+    )
       return;
     if (next === this.currentTheme) return;
 
@@ -256,8 +271,10 @@ export class VisualizerEngine {
         // Composite transition to screen
         gl.viewport(0, 0, this.canvas.width, this.canvas.height);
         wipe.render(gl, {
-          fromTex: fromFbo.tex,
-          toTex: toFbo.tex,
+          // PortalWipe's internal blend direction appears reversed relative to our naming.
+          // Swap inputs so progress reveals the *new* theme over the *old* theme.
+          fromTex: toFbo.tex,
+          toTex: fromFbo.tex,
           width: this.canvas.width,
           height: this.canvas.height,
           time,
@@ -288,7 +305,9 @@ export class VisualizerEngine {
       } else {
         // Normal draw: either idle theme or current theme
         const useIdle = !this.wantPlaying;
-        const theme = useIdle ? (this.idleTheme ?? this.currentTheme) : this.currentTheme;
+        const theme = useIdle
+          ? (this.idleTheme ?? this.currentTheme)
+          : this.currentTheme;
 
         theme.render(gl, {
           time,
@@ -304,8 +323,10 @@ export class VisualizerEngine {
       this.avgFrameCostMs = this.avgFrameCostMs * 0.9 + frameCost * 0.1;
 
       // Standard adaptive target, then clamp by tier
-      if (this.avgFrameCostMs > 20) this.dprScale = Math.max(0.5, this.dprScale * 0.95);
-      else if (this.avgFrameCostMs < 12) this.dprScale = Math.min(1.0, this.dprScale * 1.02);
+      if (this.avgFrameCostMs > 20)
+        this.dprScale = Math.max(0.5, this.dprScale * 0.95);
+      else if (this.avgFrameCostMs < 12)
+        this.dprScale = Math.min(1.0, this.dprScale * 1.02);
 
       const cfg = TIER[this.tier];
       this.dprScale = clamp(this.dprScale, cfg.dprMin, cfg.dprMax);
@@ -345,7 +366,9 @@ export class VisualizerEngine {
 
     // Strong hint to actually release GPU resources in long-lived tabs.
     try {
-      const lose = gl.getExtension("WEBGL_lose_context") as { loseContext?: () => void } | null;
+      const lose = gl.getExtension("WEBGL_lose_context") as {
+        loseContext?: () => void;
+      } | null;
       lose?.loseContext?.();
     } catch {}
   }
@@ -407,7 +430,9 @@ export class VisualizerEngine {
     const time = tNowMs / 1000;
 
     const snapshotTheme =
-      this.mode.mode === "idle" ? (this.idleTheme ?? this.currentTheme) : this.currentTheme;
+      this.mode.mode === "idle"
+        ? (this.idleTheme ?? this.currentTheme)
+        : this.currentTheme;
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, fromFbo.fbo);
     gl.viewport(0, 0, fromFbo.w, fromFbo.h);

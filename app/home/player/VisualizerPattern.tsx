@@ -48,13 +48,11 @@ function pickRect(
 }
 
 export function VisualizerSnapshotCanvas(props: {
-  /** CSS size comes from container; this is for internal pixel density */
   className?: string;
   style?: React.CSSProperties;
   fps?: number;
   opacity?: number;
   sourceRect?: SourceRect;
-  /** If provided, draws only when true */
   active?: boolean;
 }) {
   const {
@@ -69,6 +67,20 @@ export function VisualizerSnapshotCanvas(props: {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const srcRef = React.useRef<HTMLCanvasElement | null>(null);
 
+  // Keep latest prop values without re-starting the RAF loop.
+  const fpsRef = React.useRef(fps);
+  const opacityRef = React.useRef(opacity);
+  const sourceRectRef = React.useRef<SourceRect>(sourceRect);
+  const activeRef = React.useRef(active);
+
+  React.useEffect(() => {
+    fpsRef.current = fps;
+    opacityRef.current = opacity;
+    sourceRectRef.current = sourceRect;
+    activeRef.current = active;
+  }, [fps, opacity, sourceRect, active]);
+
+  // Subscribe once to the current visual canvas.
   React.useEffect(() => {
     srcRef.current = visualSurface.getCanvas();
     const unsub = visualSurface.subscribe((e) => {
@@ -81,15 +93,52 @@ export function VisualizerSnapshotCanvas(props: {
     };
   }, []);
 
+  // Canvas sizing via ResizeObserver (no per-frame layout reads).
+  const sizeRef = React.useRef({ pxW: 1, pxH: 1, dpr: 1 });
   React.useEffect(() => {
-    if (!active) return;
+    const dst = canvasRef.current;
+    if (!dst) return;
 
+    const ro = new ResizeObserver(() => {
+      const r = dst.getBoundingClientRect();
+      const cssW = Math.max(1, Math.round(r.width));
+      const cssH = Math.max(1, Math.round(r.height));
+      const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
+      const pxW = Math.max(1, Math.round(cssW * dpr));
+      const pxH = Math.max(1, Math.round(cssH * dpr));
+
+      sizeRef.current = { pxW, pxH, dpr };
+
+      if (dst.width !== pxW) dst.width = pxW;
+      if (dst.height !== pxH) dst.height = pxH;
+    });
+
+    ro.observe(dst);
+    // Prime once
+    const r = dst.getBoundingClientRect();
+    const cssW = Math.max(1, Math.round(r.width));
+    const cssH = Math.max(1, Math.round(r.height));
+    const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
+    const pxW = Math.max(1, Math.round(cssW * dpr));
+    const pxH = Math.max(1, Math.round(cssH * dpr));
+    sizeRef.current = { pxW, pxH, dpr };
+    if (dst.width !== pxW) dst.width = pxW;
+    if (dst.height !== pxH) dst.height = pxH;
+
+    return () => ro.disconnect();
+  }, []);
+
+  // Draw loop (stable; doesn’t restart on prop identity changes).
+  React.useEffect(() => {
     let raf = 0;
     let last = 0;
-    const interval = 1000 / Math.max(1, fps);
 
     const tick = (t: number) => {
       raf = requestAnimationFrame(tick);
+
+      if (!activeRef.current) return;
+
+      const interval = 1000 / Math.max(1, fpsRef.current);
       if (t - last < interval) return;
       last = t;
 
@@ -97,27 +146,20 @@ export function VisualizerSnapshotCanvas(props: {
       const src = srcRef.current;
       if (!dst || !src) return;
 
-      const r = dst.getBoundingClientRect();
-      const cssW = Math.max(1, Math.round(r.width));
-      const cssH = Math.max(1, Math.round(r.height));
-
-      const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
-      const pxW = Math.max(1, Math.round(cssW * dpr));
-      const pxH = Math.max(1, Math.round(cssH * dpr));
-
-      if (dst.width !== pxW || dst.height !== pxH) {
-        dst.width = pxW;
-        dst.height = pxH;
-      }
+      const { pxW, pxH } = sizeRef.current;
 
       const ctx = dst.getContext("2d", { alpha: true });
       if (!ctx) return;
 
       const srcW = src.width || src.clientWidth || 1;
       const srcH = src.height || src.clientHeight || 1;
-      const { sx, sy, sw, sh } = pickRect(srcW, srcH, sourceRect);
+      const { sx, sy, sw, sh } = pickRect(
+        srcW,
+        srcH,
+        sourceRectRef.current,
+      );
 
-      // Fully transparent destination each frame
+      // Clear destination each frame (you want crisp “sample”)
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, pxW, pxH);
 
@@ -138,9 +180,8 @@ export function VisualizerSnapshotCanvas(props: {
         dX = Math.round((pxW - dW) / 2);
       }
 
-      // Key change: draw using SCREEN so black background in src contributes nothing
       ctx.save();
-      ctx.globalAlpha = opacity;
+      ctx.globalAlpha = opacityRef.current;
       ctx.globalCompositeOperation = "screen";
 
       try {
@@ -154,7 +195,7 @@ export function VisualizerSnapshotCanvas(props: {
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [fps, opacity, sourceRect, active]);
+  }, []);
 
   return (
     <canvas
@@ -190,7 +231,26 @@ function VisualizerRingGlowCanvas(props: {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const srcRef = React.useRef<HTMLCanvasElement | null>(null);
 
-  // match your existing subscription pattern
+  const fpsRef = React.useRef(fps);
+  const opacityRef = React.useRef(opacity);
+  const blurRef = React.useRef(blurPx);
+  const ringRef = React.useRef(ringPx);
+  const glowRef = React.useRef(glowPx);
+  const sizeParamRef = React.useRef(size);
+  const sourceRectRef = React.useRef<SourceRect>(sourceRect);
+  const activeRef = React.useRef(active);
+
+  React.useEffect(() => {
+    fpsRef.current = fps;
+    opacityRef.current = opacity;
+    blurRef.current = blurPx;
+    ringRef.current = ringPx;
+    glowRef.current = glowPx;
+    sizeParamRef.current = size;
+    sourceRectRef.current = sourceRect;
+    activeRef.current = active;
+  }, [fps, opacity, blurPx, ringPx, glowPx, size, sourceRect, active]);
+
   React.useEffect(() => {
     srcRef.current = visualSurface.getCanvas();
     const unsub = visualSurface.subscribe((e) => {
@@ -203,25 +263,50 @@ function VisualizerRingGlowCanvas(props: {
     };
   }, []);
 
+  // Size canvas via ResizeObserver on its own CSS box (which you set explicitly).
+  const sizeRef = React.useRef({ pxW: 1, pxH: 1, dpr: 1 });
   React.useEffect(() => {
-    if (!active) return;
+    const dst = canvasRef.current;
+    if (!dst) return;
 
+    const ro = new ResizeObserver(() => {
+      const r = dst.getBoundingClientRect();
+      const cssW = Math.max(1, Math.round(r.width));
+      const cssH = Math.max(1, Math.round(r.height));
+      const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
+      const pxW = Math.max(1, Math.round(cssW * dpr));
+      const pxH = Math.max(1, Math.round(cssH * dpr));
+
+      sizeRef.current = { pxW, pxH, dpr };
+      if (dst.width !== pxW) dst.width = pxW;
+      if (dst.height !== pxH) dst.height = pxH;
+    });
+
+    ro.observe(dst);
+    // Prime once
+    const r = dst.getBoundingClientRect();
+    const cssW = Math.max(1, Math.round(r.width));
+    const cssH = Math.max(1, Math.round(r.height));
+    const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
+    const pxW = Math.max(1, Math.round(cssW * dpr));
+    const pxH = Math.max(1, Math.round(cssH * dpr));
+    sizeRef.current = { pxW, pxH, dpr };
+    if (dst.width !== pxW) dst.width = pxW;
+    if (dst.height !== pxH) dst.height = pxH;
+
+    return () => ro.disconnect();
+  }, []);
+
+  React.useEffect(() => {
     let raf = 0;
     let last = 0;
-    const interval = 1000 / Math.max(1, fps);
-
-    // geometry (CSS px)
-    const pad = ringPx + glowPx;
-    const bleed = Math.max(2, Math.round(blurPx * 2));
-    const outerPad = pad + bleed;
-
-    const outerR = size / 2 + outerPad;
-    const fadeWidth = glowPx + bleed;
-    const fadeStart = Math.max(0, outerR - fadeWidth);
-    const innerR = Math.max(0, size / 2 - ringPx);
 
     const tick = (t: number) => {
       raf = requestAnimationFrame(tick);
+
+      if (!activeRef.current) return;
+
+      const interval = 1000 / Math.max(1, fpsRef.current);
       if (t - last < interval) return;
       last = t;
 
@@ -229,29 +314,36 @@ function VisualizerRingGlowCanvas(props: {
       const src = srcRef.current;
       if (!dst || !src) return;
 
-      const cssW = Math.max(1, Math.round(size + outerPad * 2));
-      const cssH = cssW;
-
-      const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
-      const pxW = Math.max(1, Math.round(cssW * dpr));
-      const pxH = Math.max(1, Math.round(cssH * dpr));
-
-      if (dst.width !== pxW || dst.height !== pxH) {
-        dst.width = pxW;
-        dst.height = pxH;
-      }
-
+      const { pxW, pxH, dpr } = sizeRef.current;
       const ctx = dst.getContext("2d", { alpha: true });
       if (!ctx) return;
 
-      // clear
+      const ringPxNow = ringRef.current;
+      const glowPxNow = glowRef.current;
+      const blurPxNow = blurRef.current;
+      const sizeNow = sizeParamRef.current;
+
+      // geometry (CSS px)
+      const pad = ringPxNow + glowPxNow;
+      const bleed = Math.max(2, Math.round(blurPxNow * 2));
+      const outerPad = pad + bleed;
+
+      const outerR = sizeNow / 2 + outerPad;
+      const fadeWidth = glowPxNow + bleed;
+      const fadeStart = Math.max(0, outerR - fadeWidth);
+      const innerR = Math.max(0, sizeNow / 2 - ringPxNow);
+
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, pxW, pxH);
 
       // ---- draw sampled visual texture (cover fill) ----
       const srcW = src.width || src.clientWidth || 1;
       const srcH = src.height || src.clientHeight || 1;
-      const { sx, sy, sw, sh } = pickRect(srcW, srcH, sourceRect);
+      const { sx, sy, sw, sh } = pickRect(
+        srcW,
+        srcH,
+        sourceRectRef.current,
+      );
 
       const srcAspect = sw / sh;
       const dstAspect = pxW / pxH;
@@ -268,11 +360,10 @@ function VisualizerRingGlowCanvas(props: {
         dX = Math.round((pxW - dW) / 2);
       }
 
-      // IMPORTANT: do all “glow” effects in-canvas (no CSS filter = no square artifact)
       ctx.save();
-      ctx.globalAlpha = opacity;
+      ctx.globalAlpha = opacityRef.current;
       ctx.globalCompositeOperation = "screen";
-      ctx.filter = `blur(${Math.max(0, blurPx) * dpr}px) contrast(1.55) saturate(1.55) brightness(1.25)`;
+      ctx.filter = `blur(${Math.max(0, blurPxNow) * dpr}px) contrast(1.55) saturate(1.55) brightness(1.25)`;
 
       try {
         ctx.drawImage(src, sx, sy, sw, sh, dX, dY, dW, dH);
@@ -307,7 +398,7 @@ function VisualizerRingGlowCanvas(props: {
         ctx.restore();
       }
 
-      // ---- outer fade: radial alpha falloff to transparent at the edge ----
+      // ---- outer fade ----
       ctx.save();
       ctx.globalCompositeOperation = "destination-in";
       const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, outerRp);
@@ -322,9 +413,9 @@ function VisualizerRingGlowCanvas(props: {
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [active, fps, glowPx, blurPx, opacity, ringPx, size, sourceRect]);
+  }, []);
 
-  // CSS size is controlled by parent, but we set explicit dimensions for clarity
+  // CSS size computed from params (same as before)
   const pad = ringPx + glowPx;
   const bleed = Math.max(2, Math.round(blurPx * 2));
   const outerPad = pad + bleed;
@@ -362,7 +453,6 @@ export function PatternRingGlow(props: {
     seed = 1337,
   } = props;
 
-  // (keep this consistent with VisualizerRingGlowCanvas)
   const pad = ringPx + glowPx;
   const bleed = Math.max(2, Math.round(blurPx * 2));
   const outerPad = pad + bleed;
@@ -441,11 +531,8 @@ export function PatternPillUnderlay(props: {
 }
 
 export function PatternRail(props: {
-  /** total rail height in px (you use 18px hitbox) */
   height: number;
-  /** progress 0..1 */
   progress01: number;
-  /** show? */
   active?: boolean;
 }) {
   const { height, progress01, active = true } = props;
@@ -464,7 +551,6 @@ export function PatternRail(props: {
         overflow: "hidden",
       }}
     >
-      {/* base rail (subtle) */}
       <div
         style={{
           position: "absolute",
@@ -476,7 +562,6 @@ export function PatternRail(props: {
           opacity: 0.75,
         }}
       />
-      {/* patterned progress */}
       <div
         style={{
           position: "absolute",
@@ -487,9 +572,7 @@ export function PatternRail(props: {
           overflow: "hidden",
         }}
       >
-        <div
-          style={{ position: "absolute", inset: 0, transform: "scaleY(18)" }}
-        >
+        <div style={{ position: "absolute", inset: 0, transform: "scaleY(18)" }}>
           <VisualizerSnapshotCanvas
             active={active}
             fps={14}
