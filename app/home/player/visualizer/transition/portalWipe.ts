@@ -64,11 +64,12 @@ void main() {
   float t = uTime * 0.85;
     float p = easeInOut(uProgress);
 
-      float driftGate = smoothstep(0.05, 0.25, uProgress);
-  vec2 c = vec2(0.0) + (0.02 * driftGate) * vec2(sin(t*0.7), cos(t*0.6));
+  float driftGate = smoothstep(0.05, 0.25, uProgress);
+vec2 c = vec2(0.0) + (0.02 * driftGate) * vec2(sin(t*0.7), cos(t*0.6));
+float rc = length(px - c);
 
+// Use a faster-start curve for the radius so it doesn't "hang" at the center.
 
-  // Use a faster-start curve for the radius so it doesn't "hang" at the center.
   // (easeInOut has zero velocity at t=0, which reads as a micro-pause.)
   float pr = 1.0 - pow(1.0 - clamp(uProgress, 0.0, 1.0), 2.2); // easeOut-ish
 
