@@ -114,14 +114,15 @@ export function VisualizerSnapshotCanvas(props: {
   React.useEffect(() => {
     srcRef.current = visualSurface.getCanvas();
     const unsub = visualSurface.subscribe((e) => {
-      if (e.type === "canvas") srcRef.current = e.canvas;
-    });
-    return () => {
-      try {
-        unsub();
-      } catch {}
-    };
-  }, []);
+    if (e.type === "snapshot") srcRef.current = e.canvas;
+  });
+
+  return () => {
+    try {
+      unsub();
+    } catch {}
+  };
+}, []);
 
   // Canvas sizing via ResizeObserver (no per-frame layout reads).
   const sizeRef = React.useRef({ pxW: 1, pxH: 1, dpr: 1 });
@@ -317,14 +318,15 @@ function VisualizerRingGlowCanvas(props: {
   React.useEffect(() => {
     srcRef.current = visualSurface.getCanvas();
     const unsub = visualSurface.subscribe((e) => {
-      if (e.type === "canvas") srcRef.current = e.canvas;
-    });
-    return () => {
-      try {
-        unsub();
-      } catch {}
-    };
-  }, []);
+    if (e.type === "snapshot") srcRef.current = e.canvas;
+  });
+
+  return () => {
+    try {
+      unsub();
+    } catch {}
+  };
+}, []);
 
   // Size canvas via ResizeObserver on its own CSS box (explicit width/height set by parent).
   const sizeRef = React.useRef({ pxW: 1, pxH: 1, dpr: 1 });
