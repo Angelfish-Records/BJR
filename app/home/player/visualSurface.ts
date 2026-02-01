@@ -31,6 +31,12 @@ class VisualSurface {
   private lastH = 0;
   private stableCount = 0;
 
+  // ---- Snapshot compositing controls ----
+  // Your probes show the sampled pixels are overwhelmingly transparent; forcing an opaque base
+  // makes “sipped” UI textures visible and stable.
+  private snapshotOpaqueBase = true;
+  private snapshotBaseFill: string = "rgba(0,0,0,1)"; // tweak if you want a different tint
+
   private ensureSnapshotCanvas() {
     if (this.snapshotCanvas) return;
     if (typeof document === "undefined") return;
@@ -39,6 +45,7 @@ class VisualSurface {
     // Start at 1x1 so consumers always have a canvas element.
     this.snapshotCanvas.width = 1;
     this.snapshotCanvas.height = 1;
+
     this.snapshotCtx = this.snapshotCanvas.getContext("2d", {
       alpha: true,
     }) as CanvasRenderingContext2D | null;
@@ -144,11 +151,35 @@ class VisualSurface {
     if (dst.height !== h) dst.height = h;
 
     try {
-      // "copy" overwrites without needing a clear.
+      // Save state (minimal but safe).
       const prevComp = ctx.globalCompositeOperation;
-      ctx.globalCompositeOperation = "copy";
+      const prevAlpha = ctx.globalAlpha;
+      const prevFill = ctx.fillStyle;
+      // Not all browsers expose ctx.filter/transform cleanly, but setTransform is standard.
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+      // 1) Opaque base (fix: prevents “mostly transparent” snapshots that vanish in UI canvases)
+      if (this.snapshotOpaqueBase) {
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = this.snapshotBaseFill;
+        ctx.fillRect(0, 0, w, h);
+      } else {
+        // If you ever disable opaque base, preserve prior behavior: hard overwrite.
+        ctx.globalCompositeOperation = "copy";
+        ctx.globalAlpha = 1;
+        ctx.clearRect(0, 0, w, h);
+      }
+
+      // 2) Draw the WebGL frame over the base.
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 1;
       ctx.drawImage(src, 0, 0);
+
+      // Restore state
       ctx.globalCompositeOperation = prevComp;
+      ctx.globalAlpha = prevAlpha;
+      ctx.fillStyle = prevFill;
 
       this.notify({ type: "snapshot", canvas: dst });
     } catch {
@@ -197,9 +228,8 @@ export const visualSurface = new VisualSurface();
 
 // Expose for console debugging (safe, read-only usage expected)
 declare global {
-
+  // eslint-disable-next-line no-var
   var visualSurface: VisualSurface | undefined;
 }
 
 globalThis.visualSurface = visualSurface;
-

@@ -1,7 +1,12 @@
 // web/app/home/FooterDrawer.tsx
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 type FooterKey =
   | "privacy"
@@ -148,9 +153,31 @@ export default function FooterDrawer(props: {
     [emailTo, licensingHref],
   );
 
+  const rootRef = useRef<HTMLElement | null>(null);
+
   const isMobile = useIsMobile(640);
 
   const [openKey, setOpenKey] = useState<FooterKey | null>(null);
+
+  // 3) add this effect somewhere after openKey state
+  useEffect(() => {
+    if (!openKey) return;
+
+    const onPointerDown = (e: PointerEvent) => {
+      const root = rootRef.current;
+      if (!root) return;
+      const t = e.target as Node | null;
+      if (!t) return;
+
+      // click/tap happened outside the drawer -> close
+      if (!root.contains(t)) setOpenKey(null);
+    };
+
+    // capture=true so we see it even if something stops propagation inside the app
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () =>
+      document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [openKey]);
 
   // Desktop shared-panel height animation
   const sharedRef = useRef<HTMLDivElement | null>(null);
@@ -262,7 +289,7 @@ export default function FooterDrawer(props: {
 
   if (!isMobile) {
     return (
-      <footer style={rootStyle} aria-label="Footer drawer">
+      <footer ref={rootRef} style={rootStyle} aria-label="Footer drawer">
         <div style={titleRowStyle}>
           {items.map((it) => {
             const isOpen = openKey === it.key;
@@ -294,7 +321,7 @@ export default function FooterDrawer(props: {
   }
 
   return (
-    <footer style={rootStyle} aria-label="Footer drawer">
+    <footer ref={rootRef} style={rootStyle} aria-label="Footer drawer">
       <div style={divider} />
 
       <div style={{ display: "grid", gap: 6, paddingTop: 8 }}>
