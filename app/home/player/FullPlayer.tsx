@@ -1179,25 +1179,49 @@ export default function FullPlayer(props: {
           transform: translateY(-2px);
         }
         .afEq i{
-          display: block;
-          width: 3px;
-          height: 6px;
-          background: currentColor;
-          border-radius: 2px;
-          transform-origin: 50% 100%; /* key: pin to bottom */
-          animation: afEq 900ms ease-in-out infinite;
-          opacity: 0.9;
-          will-change: transform;
-        }
+  display: block;
+  width: 3px;
+  height: 6px;
+  background: currentColor;
+  border-radius: 2px;
+  transform-origin: 50% 100%;
+  opacity: 0.9;
+  will-change: transform;
+  animation: afEq1 920ms linear infinite;
+}
 
-        }
-        .afEq i:nth-child(2){ animation-delay: 120ms; height: 10px; }
-        .afEq i:nth-child(3){ animation-delay: 240ms; height: 8px; }
+.afEq i:nth-child(2){
+  height: 10px;
+  animation: afEq2 780ms linear infinite;
+}
 
-        @keyframes afEq{
-          0%,100%{ transform: scaleY(0.55); }
-          50%{ transform: scaleY(1.35); }
-        }
+.afEq i:nth-child(3){
+  height: 8px;
+  animation: afEq3 1040ms linear infinite;
+}
+
+@keyframes afEq1{
+  0%{transform:scaleY(.40)}
+  18%{transform:scaleY(1.10)}
+  43%{transform:scaleY(.55)}
+  62%{transform:scaleY(1.35)}
+  100%{transform:scaleY(.45)}
+}
+@keyframes afEq2{
+  0%{transform:scaleY(.55)}
+  22%{transform:scaleY(1.35)}
+  50%{transform:scaleY(.45)}
+  74%{transform:scaleY(1.05)}
+  100%{transform:scaleY(.60)}
+}
+@keyframes afEq3{
+  0%{transform:scaleY(.35)}
+  28%{transform:scaleY(1.25)}
+  46%{transform:scaleY(.50)}
+  68%{transform:scaleY(1.10)}
+  100%{transform:scaleY(.40)}
+}
+
 
         @media (prefers-reduced-motion: reduce){
           .afEq i{ animation: none; }
