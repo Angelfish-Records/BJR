@@ -1184,8 +1184,12 @@ export default function FullPlayer(props: {
           height: 6px;
           background: currentColor;
           border-radius: 2px;
+          transform-origin: 50% 100%; /* key: pin to bottom */
           animation: afEq 900ms ease-in-out infinite;
           opacity: 0.9;
+          will-change: transform;
+        }
+
         }
         .afEq i:nth-child(2){ animation-delay: 120ms; height: 10px; }
         .afEq i:nth-child(3){ animation-delay: 240ms; height: 8px; }

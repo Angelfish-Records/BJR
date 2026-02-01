@@ -233,8 +233,11 @@ export function VisualizerSnapshotCanvas(props: {
         bctx.clearRect(0, 0, pxW, pxH);
 
         bctx.save();
-        bctx.globalAlpha = opacityRef.current;
-        bctx.globalCompositeOperation = "screen";
+        bctx.globalAlpha = 1;
+        bctx.globalCompositeOperation = "source-over";
+        
+        //bctx.globalAlpha = opacityRef.current;
+        //bctx.globalCompositeOperation = "screen";
 
         // ✅ apply filter to the context that actually draws
         bctx.filter = ctxFilterRef.current ?? "none";
