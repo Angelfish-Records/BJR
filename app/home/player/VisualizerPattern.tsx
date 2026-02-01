@@ -236,10 +236,13 @@ export function VisualizerSnapshotCanvas(props: {
         bctx.globalAlpha = opacityRef.current;
         bctx.globalCompositeOperation = "screen";
 
-        // IMPORTANT: do visual tweaks in-canvas (avoids CSS filter offscreen surfaces)
+        // ✅ apply filter to the context that actually draws
         bctx.filter = ctxFilterRef.current ?? "none";
 
         bctx.drawImage(src, sx, sy, sw, sh, dX, dY, dW, dH);
+
+        // prevent filter leakage
+        bctx.filter = "none";
         bctx.restore();
 
         // Present (atomic-ish): overwrite onscreen with the backbuffer.
