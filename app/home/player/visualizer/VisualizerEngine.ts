@@ -651,27 +651,53 @@ export class VisualizerEngine {
     const gl = this.gl;
     const fromFbo = this.fromFbo!;
 
-    const audio = this.getAudio();
-    const time = tNowMs / 1000;
+    // Capture "from" as the *last fully rendered frame* (presentFbo),
+    // not a one-off re-render of the theme (which can be blank during swaps/resizes).
+    if (this.presentFbo && this.presentProg && this.presentTri) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fromFbo.fbo);
+      gl.viewport(0, 0, fromFbo.w, fromFbo.h);
+      gl.disable(gl.DEPTH_TEST);
+      gl.disable(gl.BLEND);
 
-    const snapshotTheme =
-      this.mode.mode === "idle"
-        ? (this.idleTheme ?? this.currentTheme)
-        : this.currentTheme;
+      gl.useProgram(this.presentProg);
+      gl.bindVertexArray(this.presentTri.vao);
 
-    // Capture "from" into fromFbo exactly once at transition start.
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fromFbo.fbo);
-    gl.viewport(0, 0, fromFbo.w, fromFbo.h);
-    gl.clearColor(0, 0, 0, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    snapshotTheme.render(gl, {
-      time,
-      width: fromFbo.w,
-      height: fromFbo.h,
-      dpr: this.appliedDpr || this.baseDpr * this.dprScale,
-      audio,
-    });
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, this.presentFbo.tex);
+
+      // Present shader uniforms
+      if (this.uPresentTex) gl.uniform1i(this.uPresentTex, 0);
+      if (this.uPresentFlipY) gl.uniform1f(this.uPresentFlipY, 0.0);
+
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      gl.bindVertexArray(null);
+      gl.useProgram(null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    } else {
+      // Fallback: render the theme once (should be rare; mainly during very first frames).
+      const audio = this.getAudio();
+      const time = tNowMs / 1000;
+
+      const snapshotTheme =
+        this.mode.mode === "idle"
+          ? (this.idleTheme ?? this.currentTheme)
+          : this.currentTheme;
+
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fromFbo.fbo);
+      gl.viewport(0, 0, fromFbo.w, fromFbo.h);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      snapshotTheme.render(gl, {
+        time,
+        width: fromFbo.w,
+        height: fromFbo.h,
+        dpr: this.appliedDpr || this.baseDpr * this.dprScale,
+        audio,
+      });
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
 
     this.mode = {
       mode: "transition",
