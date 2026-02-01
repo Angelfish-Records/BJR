@@ -195,7 +195,11 @@ class VisualSurface {
 
 export const visualSurface = new VisualSurface();
 
-if (typeof window !== "undefined" && (globalThis as { __AF_VIS_DEBUG?: boolean }).__AF_VIS_DEBUG) {
-  (globalThis as { visualSurface?: unknown }).visualSurface = visualSurface;
+// Expose for console debugging (safe, read-only usage expected)
+declare global {
+  // eslint-disable-next-line no-var
+  var visualSurface: VisualSurface | undefined;
 }
+
+globalThis.visualSurface = visualSurface;
 
