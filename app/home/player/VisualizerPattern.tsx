@@ -168,14 +168,19 @@ export function VisualizerSnapshotCanvas(props: {
     };
     const ctxRef = { ctx: null as CanvasRenderingContext2D | null };
 
-    const ensure2d = (c: HTMLCanvasElement): CanvasRenderingContext2D | null => {
+    const ensure2d = (
+      c: HTMLCanvasElement,
+    ): CanvasRenderingContext2D | null => {
       if (ctxRef.ctx && ctxRef.ctx.canvas === c) return ctxRef.ctx;
       const ctx = c.getContext("2d", { alpha: true });
       ctxRef.ctx = ctx;
       return ctx;
     };
 
-    const ensureBack = (w: number, h: number): CanvasRenderingContext2D | null => {
+    const ensureBack = (
+      w: number,
+      h: number,
+    ): CanvasRenderingContext2D | null => {
       let bc = backRef.canvas;
       if (!bc) {
         bc = document.createElement("canvas");
@@ -268,23 +273,35 @@ export function VisualizerSnapshotCanvas(props: {
         bctx.setTransform(1, 0, 0, 1, 0, 0);
         bctx.clearRect(0, 0, pxW, pxH);
 
-        // DIAG: prove we can present anything at all (leave for now)
+        // Marker only (top-left) so it can’t mask the texture
         bctx.save();
         bctx.globalCompositeOperation = "source-over";
-        bctx.globalAlpha = 0.8;
+        bctx.globalAlpha = 1;
         bctx.fillStyle = "rgba(255,0,255,1)";
-        bctx.fillRect(0, 0, pxW, pxH);
+        bctx.fillRect(0, 0, Math.min(10, pxW), Math.min(10, pxH));
         bctx.restore();
 
         bctx.save();
-        bctx.globalAlpha = opacityRef.current;
-        bctx.globalCompositeOperation = "source-over"; // start simple
-        bctx.filter = ctxFilterRef.current ?? "none";
+        bctx.globalCompositeOperation = "source-over";
+        bctx.globalAlpha = 1; // force visibility for diagnosis
+        bctx.filter = "none";
 
-        // texture draw
-        bctx.drawImage(src, sx, sy, sw, sh, dX, dY, dW, dH);
+        let drew = false;
+        try {
+          bctx.drawImage(src, sx, sy, sw, sh, dX, dY, dW, dH);
+          drew = true;
+        } catch (err) {
+          // log at most once per second (reuse your maybeLog cadence)
+          bump("drawImage_throw");
+          // eslint-disable-next-line no-console
+          console.warn("[sip-snapshot] drawImage threw", err);
+        }
 
         bctx.restore();
+
+        // If drawImage didn’t throw but you still see only magenta marker,
+        // the pixels are likely transparent/black — we’ll probe next.
+        if (drew) bump("drawImage_ok");
 
         // ---- present once ----
         ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -321,7 +338,6 @@ export function VisualizerSnapshotCanvas(props: {
     />
   );
 }
-
 
 function VisualizerRingGlowCanvas(props: {
   size: number;
