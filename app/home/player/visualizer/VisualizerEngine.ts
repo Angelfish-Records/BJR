@@ -7,13 +7,13 @@ import { createPortalWipe, type PortalWipe } from "./transition/portalWipe";
 type EngineOpts = {
   canvas: HTMLCanvasElement;
   getAudio: () => AudioFeatures;
-  theme: Theme; // initial
+  theme: Theme; // initial (can be blank)
 };
 
 type StageTier = "idle" | "active" | "transition";
 
 type TierCfg = {
-  fpsCap: number;
+  fpsCap: number; // render cap; raf still runs
   dprMin: number;
   dprMax: number;
 };
@@ -38,51 +38,10 @@ type StageMode =
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
 }
+
 function easeInOut(x: number) {
   x = clamp(x, 0, 1);
   return x * x * (3 - 2 * x);
-}
-
-/** Toggle via: window.__AF_VIS_DEBUG = true */
-function debugEnabled(): boolean {
-  const g = globalThis as typeof globalThis & { __AF_VIS_DEBUG?: boolean };
-  return g.__AF_VIS_DEBUG === true;
-}
-
-type SampleResult = {
-  sum: number;
-  nonZero: number;
-  avgA: number; // avg alpha (0..255)
-};
-
-function samplePixels(
-  gl: WebGL2RenderingContext,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  scratch: Uint8Array
-): SampleResult {
-  const need = w * h * 4;
-  if (scratch.length < need) scratch = new Uint8Array(need);
-
-  gl.readPixels(x, y, w, h, gl.RGBA, gl.UNSIGNED_BYTE, scratch);
-
-  let sum = 0;
-  let nz = 0;
-  let aSum = 0;
-  for (let i = 0; i < need; i += 4) {
-    const r = scratch[i]!;
-    const g = scratch[i + 1]!;
-    const b = scratch[i + 2]!;
-    const a = scratch[i + 3]!;
-    const s = r + g + b + a;
-    sum += s;
-    if (s !== 0) nz++;
-    aSum += a;
-  }
-  const px = w * h;
-  return { sum, nonZero: nz, avgA: px ? aSum / px : 0 };
 }
 
 export class VisualizerEngine {
@@ -95,8 +54,8 @@ export class VisualizerEngine {
   private raf: number | null = null;
   private parent: HTMLElement | null = null;
 
-  private w = 1;
-  private h = 1;
+  private w = 1; // CSS px width of parent
+  private h = 1; // CSS px height of parent
 
   private baseDpr = 1;
   private dprScale = 0.7;
@@ -109,30 +68,28 @@ export class VisualizerEngine {
   private lastT = 0;
   private avgFrameCostMs = 16.7;
 
-  private currentTheme: Theme;
+  // Themes
+  private currentTheme: Theme; // what we consider "main"
   private idleTheme: Theme | null = null;
 
+  // Transition plumbing
   private mode: StageMode = { mode: "idle" };
   private fromFbo: FboTex | null = null;
   private toFbo: FboTex | null = null;
   private wipe: PortalWipe | null = null;
 
+  // Targets requested by UI
   private wantPlaying = false;
   private targetTheme: Theme | null = null;
 
   // --- sizing state ---
-  private appliedDpr = 0;
+  private appliedDpr = 0; // quantized effective DPR used for backing-store size
   private lastResizeAtMs = 0;
   private lastCssW = 0;
   private lastCssH = 0;
-  private cssDirty = true;
+  private cssDirty = true; // force first-time size apply
   private lastBackW = 0;
   private lastBackH = 0;
-
-  // --- sampler state ---
-  private dbgFrame = 0;
-  private dbgScratch = new Uint8Array(8 * 8 * 4);
-  private dbgLastLogAt = 0;
 
   constructor(opts: EngineOpts) {
     this.canvas = opts.canvas;
@@ -154,6 +111,7 @@ export class VisualizerEngine {
     this.currentTheme.init(this.gl);
   }
 
+  /** Set the always-available idle theme. Engine owns it and will dispose on replacement. */
   setIdleTheme(next: Theme) {
     if (!next || typeof next.init !== "function" || typeof next.render !== "function") return;
     if (this.idleTheme === next) return;
@@ -166,29 +124,35 @@ export class VisualizerEngine {
     this.idleTheme.init(gl);
   }
 
+  /** Request "playing" vs "idle". This is the state machine input. */
   setWantPlaying(want: boolean, opts?: { transitionMs?: number; toIdleTransition?: boolean }) {
     const nextWant = !!want;
     const prevWant = this.wantPlaying;
     this.wantPlaying = nextWant;
 
+    // If we just requested idle and we don't want a transition to idle, snap tier immediately.
     if (!nextWant && prevWant && opts?.toIdleTransition === false) {
       this.mode = { mode: "idle" };
       this.tier = "idle";
     }
   }
 
+  /** Provide the target theme (track theme). Engine owns it and will dispose old target/theme on swap. */
   setTargetTheme(next: Theme) {
     if (!next || typeof next.init !== "function" || typeof next.render !== "function") return;
     if (this.targetTheme === next) return;
 
     const gl = this.gl;
+
     try {
       this.targetTheme?.dispose(gl);
     } catch {}
+
     this.targetTheme = next;
     this.targetTheme.init(gl);
   }
 
+  /** Convenience: swap "current main" theme without recreating canvas/GL/RAF. */
   private setCurrentTheme(next: Theme) {
     if (!next || typeof next.init !== "function" || typeof next.render !== "function") return;
     if (next === this.currentTheme) return;
@@ -213,8 +177,10 @@ export class VisualizerEngine {
       const r = this.parent.getBoundingClientRect();
       const rawDpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
 
+      // Clamp base DPR (device DPR) – keep stable-ish.
       this.baseDpr = Math.max(1, Math.min(2, rawDpr));
 
+      // Integer CSS px box size. (This is what should drive backing store changes.)
       const nextW = Math.max(1, Math.floor(r.width));
       const nextH = Math.max(1, Math.floor(r.height));
 
@@ -224,6 +190,7 @@ export class VisualizerEngine {
         this.cssDirty = true;
       }
 
+      // Only touch CSS sizing on resize events, not every frame.
       if (this.lastCssW !== this.w || this.lastCssH !== this.h) {
         this.canvas.style.width = `${this.w}px`;
         this.canvas.style.height = `${this.h}px`;
@@ -243,6 +210,7 @@ export class VisualizerEngine {
       const dtSec = Math.min(0.05, (tNowMs - this.lastT) / 1000);
       this.lastT = tNowMs;
 
+      // FPS cap per tier
       const fpsCap = TIER[this.tier].fpsCap;
       const minFrame = 1000 / Math.max(1, fpsCap);
       if (this.lastDrawMs && tNowMs - this.lastDrawMs < minFrame) {
@@ -253,9 +221,13 @@ export class VisualizerEngine {
 
       const frameStart = performance.now();
 
+      // Step state machine before drawing (tier may change here)
       this.advanceStage(tNowMs);
+
+      // Apply backing-store size *after* tier decisions, but with strict rules.
       this.applyCanvasSize(tNowMs);
 
+      // Draw
       const gl = this.gl;
       gl.viewport(0, 0, this.canvas.width, this.canvas.height);
       gl.disable(gl.DEPTH_TEST);
@@ -335,10 +307,7 @@ export class VisualizerEngine {
         });
       }
 
-      // ---- sampler (after final render) ----
-      this.debugSampleIfNeeded(tNowMs);
-
-      // Adaptive DPR target (quality signal)
+      // Adaptive DPR target (quality signal), but backing-store resize is constrained in applyCanvasSize().
       const frameCost = performance.now() - frameStart;
       this.avgFrameCostMs = this.avgFrameCostMs * 0.9 + frameCost * 0.1;
 
@@ -384,6 +353,7 @@ export class VisualizerEngine {
     } catch {}
   }
 
+  /** The state machine step: decides when to transition, and captures "from" when needed. */
   private advanceStage(tNowMs: number) {
     const want = this.wantPlaying;
     const hasIdle = !!this.idleTheme;
@@ -396,6 +366,7 @@ export class VisualizerEngine {
     if (this.tier !== this.lastTier) {
       this.lastTier = this.tier;
       this.lastTierChangeAtMs = tNowMs;
+      // Treat tier changes as “size sensitive” moments where a one-off resize is acceptable.
       this.cssDirty = true;
     }
 
@@ -499,30 +470,46 @@ export class VisualizerEngine {
     this.wipe = null;
   }
 
+  /**
+   * Backing-store sizing policy:
+   * - Always respond immediately to parent CSS size changes (w/h).
+   * - During ACTIVE playback, do NOT resize the backing store just because dprScale changes.
+   *   (That resize is a prime cause of downstream blank-frame sampling.)
+   * - Allow rare DPR-driven resizes only after a long “quiet” period and meaningful delta.
+   */
   private applyCanvasSize(nowMs?: number) {
     const t = typeof nowMs === "number" ? nowMs : performance.now();
 
     const raw = this.baseDpr * this.dprScale;
-    const quant = Math.round(raw * 16) / 16;
+    const quant = Math.round(raw * 16) / 16; // 1/16th steps
 
     if (!this.appliedDpr) this.appliedDpr = quant;
 
+    // Calculate the candidate backing store size for current appliedDpr.
     const curW = Math.max(1, Math.floor(this.w * this.appliedDpr));
     const curH = Math.max(1, Math.floor(this.h * this.appliedDpr));
 
+    // Detect parent/CSS size change (dominant reason to resize backing store).
     const cssChanged = this.cssDirty || this.lastBackW !== curW || this.lastBackH !== curH;
 
+    // Decide whether we are allowed to adopt a new DPR for backing store.
     const dprDelta = Math.abs(quant - this.appliedDpr);
     const tierIsActive = this.tier === "active";
     const tierJustChanged = t - this.lastTierChangeAtMs < 400;
 
+    // “Quiet” window: only allow DPR-driven backing-store resize when stable for a while.
     const quietLongEnough = t - this.lastResizeAtMs > (tierIsActive ? 2200 : 700);
-    const meaningful = dprDelta >= (tierIsActive ? 0.125 : 0.0625);
 
+    // Meaningful delta: avoid tiny ping-pong.
+    const meaningful = dprDelta >= (tierIsActive ? 0.125 : 0.0625); // 1/8 active, 1/16 idle/transition
+
+    // In active playback: freeze DPR resizes unless CSS changed OR tier just changed OR long quiet + meaningful.
     const allowDprResize =
       !tierIsActive || tierJustChanged || (quietLongEnough && meaningful);
 
     if (cssChanged) {
+      // If CSS size changed, we do want the best available DPR *once*, but still quantized.
+      // This is a good moment to “snap” to quant so visuals look crisp after resizes.
       this.appliedDpr = quant;
     } else if (allowDprResize && meaningful && quietLongEnough) {
       this.appliedDpr = quant;
@@ -541,73 +528,5 @@ export class VisualizerEngine {
     this.lastBackW = W;
     this.lastBackH = H;
     this.cssDirty = false;
-  }
-
-  // --- DEBUG SAMPLER ---
-  private debugSampleIfNeeded(nowMs: number) {
-    if (!debugEnabled()) return;
-
-    // Sample 1 out of 15 frames to limit stalls.
-    this.dbgFrame++;
-    if (this.dbgFrame % 15 !== 0) return;
-
-    const gl = this.gl;
-    const W = this.canvas.width;
-    const H = this.canvas.height;
-
-    // bottom-left origin in GL; sample a tiny patch in a corner.
-    const sw = 8;
-    const sh = 8;
-    const sx = 0;
-    const sy = 0;
-
-    // Sample default framebuffer (what user sees).
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    const out = samplePixels(gl, sx, sy, sw, sh, this.dbgScratch);
-
-    // Define “blank”: literally all channels 0 OR extremely close to 0 with alpha ~0.
-    // (alpha will usually be 255 because alpha:false, but drivers can surprise you.)
-    const isBlank = out.sum === 0 || (out.nonZero === 0 && out.avgA < 5);
-
-    if (!isBlank) return;
-
-    // Rate-limit logs so we don't spam.
-    if (nowMs - this.dbgLastLogAt < 800) return;
-    this.dbgLastLogAt = nowMs;
-
-    // If we're in transition, also sample the FBOs to localise where blackness appears.
-    let fromS: SampleResult | null = null;
-    let toS: SampleResult | null = null;
-
-    if (this.mode.mode === "transition" && this.fromFbo && this.toFbo) {
-      gl.bindFramebuffer(gl.FRAMEBUFFER, this.fromFbo.fbo);
-      fromS = samplePixels(gl, 0, 0, sw, sh, this.dbgScratch);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, this.toFbo.fbo);
-      toS = samplePixels(gl, 0, 0, sw, sh, this.dbgScratch);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    }
-
-    const modeTag =
-      this.mode.mode === "transition"
-        ? `transition:${this.mode.kind}`
-        : this.mode.mode;
-
-    console.warn("[VIS] blank-frame detected", {
-      atMs: Math.round(nowMs),
-      tier: this.tier,
-      mode: modeTag,
-      wantPlaying: this.wantPlaying,
-      canvasCss: { w: this.w, h: this.h },
-      backingStore: { w: W, h: H },
-      baseDpr: this.baseDpr,
-      dprScale: this.dprScale,
-      appliedDpr: this.appliedDpr,
-      avgFrameCostMs: Math.round(this.avgFrameCostMs * 10) / 10,
-      outputSample: out,
-      fromFboSample: fromS,
-      toFboSample: toS,
-      lastResizeAgoMs: Math.round(nowMs - this.lastResizeAtMs),
-      lastTierChangeAgoMs: Math.round(nowMs - this.lastTierChangeAtMs),
-    });
   }
 }

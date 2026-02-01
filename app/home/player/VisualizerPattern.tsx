@@ -136,9 +136,35 @@ export function VisualizerSnapshotCanvas(props: {
   }, []);
 
   // Draw loop (stable; doesn’t restart on prop identity changes).
+  // Draw loop (stable; doesn’t restart on prop identity changes).
   React.useEffect(() => {
     let raf = 0;
     let last = 0;
+
+    // Cache contexts + a backbuffer to avoid blanking on transient draw failures.
+    const backRef = { canvas: null as HTMLCanvasElement | null, ctx: null as CanvasRenderingContext2D | null };
+    const ctxRef = { ctx: null as CanvasRenderingContext2D | null };
+
+    const ensure2d = (c: HTMLCanvasElement): CanvasRenderingContext2D | null => {
+      if (ctxRef.ctx && (ctxRef.ctx.canvas === c)) return ctxRef.ctx;
+      const ctx = c.getContext("2d", { alpha: true });
+      ctxRef.ctx = ctx;
+      return ctx;
+    };
+
+    const ensureBack = (w: number, h: number): CanvasRenderingContext2D | null => {
+      let bc = backRef.canvas;
+      if (!bc) {
+        bc = document.createElement("canvas");
+        backRef.canvas = bc;
+      }
+      if (bc.width !== w) bc.width = w;
+      if (bc.height !== h) bc.height = h;
+
+      if (backRef.ctx && backRef.ctx.canvas === bc) return backRef.ctx;
+      backRef.ctx = bc.getContext("2d", { alpha: true });
+      return backRef.ctx;
+    };
 
     const tick = (t: number) => {
       raf = requestAnimationFrame(tick);
@@ -154,13 +180,10 @@ export function VisualizerSnapshotCanvas(props: {
       if (!dst || !src) return;
 
       const { pxW, pxH } = sizeRef.current;
-
-      const ctx = dst.getContext("2d", { alpha: true });
+      const ctx = ensure2d(dst);
       if (!ctx) return;
 
       const { srcW, srcH } = getSrcSize(src);
-
-      // If the source is mid-resize / not ready, keep last good frame (NO CLEAR).
       if (srcW < 2 || srcH < 2) return;
 
       const { sx, sy, sw, sh } = pickRect(srcW, srcH, sourceRectRef.current);
@@ -169,11 +192,7 @@ export function VisualizerSnapshotCanvas(props: {
       const srcAspect = sw / sh;
       const dstAspect = pxW / pxH;
 
-      let dW = pxW;
-      let dH = pxH;
-      let dX = 0;
-      let dY = 0;
-
+      let dW = pxW, dH = pxH, dX = 0, dY = 0;
       if (dstAspect > srcAspect) {
         dH = Math.round(pxW / srcAspect);
         dY = Math.round((pxH - dH) / 2);
@@ -182,25 +201,35 @@ export function VisualizerSnapshotCanvas(props: {
         dX = Math.round((pxW - dW) / 2);
       }
 
-      // Only clear once we know we're able to draw a valid frame.
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      // Render into backbuffer first; only present if successful.
+      const bctx = ensureBack(pxW, pxH);
+      if (!bctx) return;
 
       try {
-        ctx.clearRect(0, 0, pxW, pxH);
+        bctx.setTransform(1, 0, 0, 1, 0, 0);
+        bctx.clearRect(0, 0, pxW, pxH);
 
-        ctx.save();
-        ctx.globalAlpha = opacityRef.current;
-        ctx.globalCompositeOperation = "screen";
-        ctx.drawImage(src, sx, sy, sw, sh, dX, dY, dW, dH);
-        ctx.restore();
+        bctx.save();
+        bctx.globalAlpha = opacityRef.current;
+        bctx.globalCompositeOperation = "screen";
+        bctx.drawImage(src, sx, sy, sw, sh, dX, dY, dW, dH);
+        bctx.restore();
+
+        // Present (atomic-ish): overwrite onscreen with the backbuffer.
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = "copy";
+        ctx.drawImage(backRef.canvas as HTMLCanvasElement, 0, 0);
       } catch {
-        // If draw fails (rare resize race), don't intentionally blank; next tick will repaint.
+        // Keep last good onscreen frame; optional debug:
+        // if (debugEnabled()) console.warn("[VIS] snapshot draw failed", err);
       }
     };
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
+
 
   return (
     <canvas
@@ -294,9 +323,33 @@ function VisualizerRingGlowCanvas(props: {
     return () => ro.disconnect();
   }, []);
 
-  React.useEffect(() => {
+    React.useEffect(() => {
     let raf = 0;
     let last = 0;
+
+    const backRef = { canvas: null as HTMLCanvasElement | null, ctx: null as CanvasRenderingContext2D | null };
+    const ctxRef = { ctx: null as CanvasRenderingContext2D | null };
+
+    const ensure2d = (c: HTMLCanvasElement): CanvasRenderingContext2D | null => {
+      if (ctxRef.ctx && (ctxRef.ctx.canvas === c)) return ctxRef.ctx;
+      const ctx = c.getContext("2d", { alpha: true });
+      ctxRef.ctx = ctx;
+      return ctx;
+    };
+
+    const ensureBack = (w: number, h: number): CanvasRenderingContext2D | null => {
+      let bc = backRef.canvas;
+      if (!bc) {
+        bc = document.createElement("canvas");
+        backRef.canvas = bc;
+      }
+      if (bc.width !== w) bc.width = w;
+      if (bc.height !== h) bc.height = h;
+
+      if (backRef.ctx && backRef.ctx.canvas === bc) return backRef.ctx;
+      backRef.ctx = bc.getContext("2d", { alpha: true });
+      return backRef.ctx;
+    };
 
     const tick = (t: number) => {
       raf = requestAnimationFrame(tick);
@@ -312,8 +365,11 @@ function VisualizerRingGlowCanvas(props: {
       if (!dst || !src) return;
 
       const { pxW, pxH, dpr } = sizeRef.current;
-      const ctx = dst.getContext("2d", { alpha: true });
+      const ctx = ensure2d(dst);
       if (!ctx) return;
+
+      const { srcW, srcH } = getSrcSize(src);
+      if (srcW < 2 || srcH < 2) return;
 
       const ringPxNow = ringRef.current;
       const glowPxNow = glowRef.current;
@@ -330,25 +386,12 @@ function VisualizerRingGlowCanvas(props: {
       const fadeStart = Math.max(0, outerR - fadeWidth);
       const innerR = Math.max(0, sizeNow / 2 - ringPxNow);
 
-      const { srcW, srcH } = getSrcSize(src);
-
-      // If source is not ready (common during WebGL backing-store resize), keep last frame.
-      if (srcW < 2 || srcH < 2) return;
-
-      // clear only once source is sane
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, pxW, pxH);
-
-      // ---- draw sampled visual texture (cover fill) ----
       const { sx, sy, sw, sh } = pickRect(srcW, srcH, sourceRectRef.current);
 
+      // cover fill: keep aspect, crop if needed
       const srcAspect = sw / sh;
       const dstAspect = pxW / pxH;
-      let dW = pxW;
-      let dH = pxH;
-      let dX = 0;
-      let dY = 0;
-
+      let dW = pxW, dH = pxH, dX = 0, dY = 0;
       if (dstAspect > srcAspect) {
         dH = Math.round(pxW / srcAspect);
         dY = Math.round((pxH - dH) / 2);
@@ -357,61 +400,73 @@ function VisualizerRingGlowCanvas(props: {
         dX = Math.round((pxW - dW) / 2);
       }
 
-      // IMPORTANT: do all “glow” effects in-canvas (no CSS filter = no square artifact)
-      ctx.save();
-      ctx.globalAlpha = opacityRef.current;
-      ctx.globalCompositeOperation = "screen";
-      ctx.filter = `blur(${Math.max(0, blurPxNow) * dpr}px) contrast(1.55) saturate(1.55) brightness(1.25)`;
+      const bctx = ensureBack(pxW, pxH);
+      if (!bctx) return;
 
       try {
-        ctx.drawImage(src, sx, sy, sw, sh, dX, dY, dW, dH);
+        // ---- render EVERYTHING onto backbuffer ----
+        bctx.setTransform(1, 0, 0, 1, 0, 0);
+        bctx.clearRect(0, 0, pxW, pxH);
+
+        // texture
+        bctx.save();
+        bctx.globalAlpha = opacityRef.current;
+        bctx.globalCompositeOperation = "screen";
+        bctx.filter = `blur(${Math.max(0, blurPxNow) * dpr}px) contrast(1.55) saturate(1.55) brightness(1.25)`;
+        bctx.drawImage(src, sx, sy, sw, sh, dX, dY, dW, dH);
+        bctx.restore();
+
+        // donut mask
+        const cx = pxW / 2;
+        const cy = pxH / 2;
+        const outerRp = outerR * dpr;
+        const innerRp = innerR * dpr;
+
+        bctx.save();
+        bctx.globalCompositeOperation = "destination-in";
+        bctx.beginPath();
+        bctx.arc(cx, cy, outerRp, 0, Math.PI * 2);
+        bctx.closePath();
+        bctx.fill();
+        bctx.restore();
+
+        if (innerRp > 0) {
+          bctx.save();
+          bctx.globalCompositeOperation = "destination-out";
+          bctx.beginPath();
+          bctx.arc(cx, cy, innerRp, 0, Math.PI * 2);
+          bctx.closePath();
+          bctx.fill();
+          bctx.restore();
+        }
+
+        // outer fade
+        bctx.save();
+        bctx.globalCompositeOperation = "destination-in";
+        const g = bctx.createRadialGradient(cx, cy, 0, cx, cy, outerRp);
+        const s = Math.max(0, Math.min(1, fadeStart / outerR));
+        g.addColorStop(0, "rgba(0,0,0,1)");
+        g.addColorStop(s, "rgba(0,0,0,1)");
+        g.addColorStop(1, "rgba(0,0,0,0)");
+        bctx.fillStyle = g;
+        bctx.fillRect(0, 0, pxW, pxH);
+        bctx.restore();
+
+        // ---- present once ----
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = "copy";
+        ctx.drawImage(backRef.canvas as HTMLCanvasElement, 0, 0);
       } catch {
-        // transient draw errors ok
+        // Keep last good onscreen frame.
+        // if (debugEnabled()) console.warn("[VIS] ring draw failed", err);
       }
-      ctx.restore();
-
-      // ---- donut mask: keep only the ring band ----
-      const cx = pxW / 2;
-      const cy = pxH / 2;
-      const outerRp = outerR * dpr;
-      const innerRp = innerR * dpr;
-
-      // keep outer circle
-      ctx.save();
-      ctx.globalCompositeOperation = "destination-in";
-      ctx.beginPath();
-      ctx.arc(cx, cy, outerRp, 0, Math.PI * 2);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-
-      // punch inner hole
-      if (innerRp > 0) {
-        ctx.save();
-        ctx.globalCompositeOperation = "destination-out";
-        ctx.beginPath();
-        ctx.arc(cx, cy, innerRp, 0, Math.PI * 2);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-      }
-
-      // ---- outer fade: radial alpha falloff to transparent at the edge ----
-      ctx.save();
-      ctx.globalCompositeOperation = "destination-in";
-      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, outerRp);
-      const s = Math.max(0, Math.min(1, fadeStart / outerR));
-      g.addColorStop(0, "rgba(0,0,0,1)");
-      g.addColorStop(s, "rgba(0,0,0,1)");
-      g.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, pxW, pxH);
-      ctx.restore();
     };
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
+
 
   // CSS size is controlled by parent, but we set explicit dimensions for clarity
   const pad = ringPx + glowPx;

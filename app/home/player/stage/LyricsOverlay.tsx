@@ -205,11 +205,7 @@ export default function LyricsOverlay(props: {
       >
         <div style={{ maxWidth: 520 }}>
           <div style={{ fontSize: 14, fontWeight: 650, opacity: 0.95 }}>
-            No lyrics yet
-          </div>
-          <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
-            Wire cues from Sanity (or a sidecar) and this overlay will sync +
-            allow click-to-seek.
+            PRESS PLAY
           </div>
         </div>
       </div>
