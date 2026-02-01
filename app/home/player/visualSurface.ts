@@ -194,3 +194,8 @@ class VisualSurface {
 }
 
 export const visualSurface = new VisualSurface();
+
+if (typeof window !== "undefined" && (globalThis as { __AF_VIS_DEBUG?: boolean }).__AF_VIS_DEBUG) {
+  (globalThis as { visualSurface?: unknown }).visualSurface = visualSurface;
+}
+
