@@ -50,8 +50,14 @@ function pickRect(
 
 function cssBoxSize(el: HTMLCanvasElement): { cssW: number; cssH: number } {
   // Prefer integer box metrics to avoid fractional jitter/resizing loops.
-  const cssW = Math.max(1, el.clientWidth || Math.round(el.getBoundingClientRect().width));
-  const cssH = Math.max(1, el.clientHeight || Math.round(el.getBoundingClientRect().height));
+  const cssW = Math.max(
+    1,
+    el.clientWidth || Math.round(el.getBoundingClientRect().width),
+  );
+  const cssH = Math.max(
+    1,
+    el.clientHeight || Math.round(el.getBoundingClientRect().height),
+  );
   return { cssW, cssH };
 }
 
@@ -103,26 +109,19 @@ export function VisualizerSnapshotCanvas(props: {
     ctxFilterRef.current = ctxFilter;
   }, [fps, opacity, sourceRect, active, ctxFilter]);
 
+  // Subscribe once to the current visual SNAPSHOT canvas.
   React.useEffect(() => {
-    fpsRef.current = fps;
-    opacityRef.current = opacity;
-    sourceRectRef.current = sourceRect;
-    activeRef.current = active;
-  }, [fps, opacity, sourceRect, active]);
-
-  // Subscribe once to the current visual canvas.
-  React.useEffect(() => {
-    srcRef.current = visualSurface.getCanvas();
+    srcRef.current = visualSurface.getSnapshotCanvas();
     const unsub = visualSurface.subscribe((e) => {
-    if (e.type === "snapshot") srcRef.current = e.canvas;
-  });
+      if (e.type === "snapshot") srcRef.current = e.canvas;
+    });
 
-  return () => {
-    try {
-      unsub();
-    } catch {}
-  };
-}, []);
+    return () => {
+      try {
+        unsub();
+      } catch {}
+    };
+  }, []);
 
   // Canvas sizing via ResizeObserver (no per-frame layout reads).
   const sizeRef = React.useRef({ pxW: 1, pxH: 1, dpr: 1 });
@@ -150,23 +149,30 @@ export function VisualizerSnapshotCanvas(props: {
   }, []);
 
   // Draw loop (stable; doesn’t restart on prop identity changes).
-  // Draw loop (stable; doesn’t restart on prop identity changes).
   React.useEffect(() => {
     let raf = 0;
     let last = 0;
 
     // Cache contexts + a backbuffer to avoid blanking on transient draw failures.
-    const backRef = { canvas: null as HTMLCanvasElement | null, ctx: null as CanvasRenderingContext2D | null };
+    const backRef = {
+      canvas: null as HTMLCanvasElement | null,
+      ctx: null as CanvasRenderingContext2D | null,
+    };
     const ctxRef = { ctx: null as CanvasRenderingContext2D | null };
 
-    const ensure2d = (c: HTMLCanvasElement): CanvasRenderingContext2D | null => {
-      if (ctxRef.ctx && (ctxRef.ctx.canvas === c)) return ctxRef.ctx;
+    const ensure2d = (
+      c: HTMLCanvasElement,
+    ): CanvasRenderingContext2D | null => {
+      if (ctxRef.ctx && ctxRef.ctx.canvas === c) return ctxRef.ctx;
       const ctx = c.getContext("2d", { alpha: true });
       ctxRef.ctx = ctx;
       return ctx;
     };
 
-    const ensureBack = (w: number, h: number): CanvasRenderingContext2D | null => {
+    const ensureBack = (
+      w: number,
+      h: number,
+    ): CanvasRenderingContext2D | null => {
       let bc = backRef.canvas;
       if (!bc) {
         bc = document.createElement("canvas");
@@ -206,7 +212,10 @@ export function VisualizerSnapshotCanvas(props: {
       const srcAspect = sw / sh;
       const dstAspect = pxW / pxH;
 
-      let dW = pxW, dH = pxH, dX = 0, dY = 0;
+      let dW = pxW,
+        dH = pxH,
+        dX = 0,
+        dY = 0;
       if (dstAspect > srcAspect) {
         dH = Math.round(pxW / srcAspect);
         dY = Math.round((pxH - dH) / 2);
@@ -228,7 +237,7 @@ export function VisualizerSnapshotCanvas(props: {
         bctx.globalCompositeOperation = "screen";
 
         // IMPORTANT: do visual tweaks in-canvas (avoids CSS filter offscreen surfaces)
-        ctx.filter = ctxFilterRef.current ?? "none";
+        bctx.filter = ctxFilterRef.current ?? "none";
 
         bctx.drawImage(src, sx, sy, sw, sh, dX, dY, dW, dH);
         bctx.restore();
@@ -239,7 +248,7 @@ export function VisualizerSnapshotCanvas(props: {
         ctx.globalCompositeOperation = "copy";
         ctx.drawImage(backRef.canvas as HTMLCanvasElement, 0, 0);
         // Ensure no filter leaks across frames
-        ctx.filter = "none";
+        bctx.filter = "none";
       } catch {
         // Keep last good onscreen frame; optional debug:
         // if (debugEnabled()) console.warn("[VIS] snapshot draw failed", err);
@@ -250,8 +259,7 @@ export function VisualizerSnapshotCanvas(props: {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-
-    return (
+  return (
     <canvas
       ref={canvasRef}
       aria-hidden="true"
@@ -273,7 +281,6 @@ export function VisualizerSnapshotCanvas(props: {
       }}
     />
   );
-
 }
 
 function VisualizerRingGlowCanvas(props: {
@@ -314,19 +321,19 @@ function VisualizerRingGlowCanvas(props: {
     activeRef.current = active;
   }, [fps, opacity, blurPx, ringPx, glowPx, size, sourceRect, active]);
 
-  // Subscribe once to the current visual canvas.
+  // Subscribe once to the current visual SNAPSHOT canvas.
   React.useEffect(() => {
-    srcRef.current = visualSurface.getCanvas();
+    srcRef.current = visualSurface.getSnapshotCanvas();
     const unsub = visualSurface.subscribe((e) => {
-    if (e.type === "snapshot") srcRef.current = e.canvas;
-  });
+      if (e.type === "snapshot") srcRef.current = e.canvas;
+    });
 
-  return () => {
-    try {
-      unsub();
-    } catch {}
-  };
-}, []);
+    return () => {
+      try {
+        unsub();
+      } catch {}
+    };
+  }, []);
 
   // Size canvas via ResizeObserver on its own CSS box (explicit width/height set by parent).
   const sizeRef = React.useRef({ pxW: 1, pxH: 1, dpr: 1 });
@@ -352,21 +359,29 @@ function VisualizerRingGlowCanvas(props: {
     return () => ro.disconnect();
   }, []);
 
-    React.useEffect(() => {
+  React.useEffect(() => {
     let raf = 0;
     let last = 0;
 
-    const backRef = { canvas: null as HTMLCanvasElement | null, ctx: null as CanvasRenderingContext2D | null };
+    const backRef = {
+      canvas: null as HTMLCanvasElement | null,
+      ctx: null as CanvasRenderingContext2D | null,
+    };
     const ctxRef = { ctx: null as CanvasRenderingContext2D | null };
 
-    const ensure2d = (c: HTMLCanvasElement): CanvasRenderingContext2D | null => {
-      if (ctxRef.ctx && (ctxRef.ctx.canvas === c)) return ctxRef.ctx;
+    const ensure2d = (
+      c: HTMLCanvasElement,
+    ): CanvasRenderingContext2D | null => {
+      if (ctxRef.ctx && ctxRef.ctx.canvas === c) return ctxRef.ctx;
       const ctx = c.getContext("2d", { alpha: true });
       ctxRef.ctx = ctx;
       return ctx;
     };
 
-    const ensureBack = (w: number, h: number): CanvasRenderingContext2D | null => {
+    const ensureBack = (
+      w: number,
+      h: number,
+    ): CanvasRenderingContext2D | null => {
       let bc = backRef.canvas;
       if (!bc) {
         bc = document.createElement("canvas");
@@ -420,7 +435,10 @@ function VisualizerRingGlowCanvas(props: {
       // cover fill: keep aspect, crop if needed
       const srcAspect = sw / sh;
       const dstAspect = pxW / pxH;
-      let dW = pxW, dH = pxH, dX = 0, dY = 0;
+      let dW = pxW,
+        dH = pxH,
+        dX = 0,
+        dY = 0;
       if (dstAspect > srcAspect) {
         dH = Math.round(pxW / srcAspect);
         dY = Math.round((pxH - dH) / 2);
@@ -495,7 +513,6 @@ function VisualizerRingGlowCanvas(props: {
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
-
 
   // CSS size is controlled by parent, but we set explicit dimensions for clarity
   const pad = ringPx + glowPx;
@@ -664,7 +681,9 @@ export function PatternRail(props: {
           overflow: "hidden",
         }}
       >
-        <div style={{ position: "absolute", inset: 0, transform: "scaleY(18)" }}>
+        <div
+          style={{ position: "absolute", inset: 0, transform: "scaleY(18)" }}
+        >
           <VisualizerSnapshotCanvas
             active={active}
             fps={14}
