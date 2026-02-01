@@ -19,7 +19,6 @@ function pickRect(
   rect: SourceRect,
 ): { sx: number; sy: number; sw: number; sh: number } {
   if (srcW <= 1 || srcH <= 1) return { sx: 0, sy: 0, sw: srcW, sh: srcH };
-
   if (rect.mode === "full") return { sx: 0, sy: 0, sw: srcW, sh: srcH };
 
   const scale = clamp(rect.scale ?? 0.55, 0.15, 1);
@@ -39,17 +38,15 @@ function pickRect(
     x ^= x << 13;
     x ^= x >>> 17;
     x ^= x << 5;
-    // -> [0,1)
     return ((x >>> 0) % 1_000_000) / 1_000_000;
   };
 
-  const sx = Math.floor(rand() * (srcW - sw));
-  const sy = Math.floor(rand() * (srcH - sh));
+  const sx = Math.floor(rand() * Math.max(1, srcW - sw));
+  const sy = Math.floor(rand() * Math.max(1, srcH - sh));
   return { sx, sy, sw, sh };
 }
 
 function cssBoxSize(el: HTMLCanvasElement): { cssW: number; cssH: number } {
-  // Prefer integer box metrics to avoid fractional jitter/resizing loops.
   const cssW = Math.max(
     1,
     el.clientWidth || Math.round(el.getBoundingClientRect().width),
@@ -62,20 +59,43 @@ function cssBoxSize(el: HTMLCanvasElement): { cssW: number; cssH: number } {
 }
 
 function getSrcSize(src: HTMLCanvasElement): { srcW: number; srcH: number } {
-  // WebGL canvas uses backing-store width/height; fall back to client box if needed.
   const srcW = src.width || src.clientWidth || 0;
   const srcH = src.height || src.clientHeight || 0;
   return { srcW, srcH };
 }
 
+/** Cover-fit mapping into destination (fills the canvas, cropping if needed). */
+function coverMap(
+  dstW: number,
+  dstH: number,
+  srcW: number,
+  srcH: number,
+): { dX: number; dY: number; dW: number; dH: number } {
+  const srcAspect = srcW / Math.max(1, srcH);
+  const dstAspect = dstW / Math.max(1, dstH);
+
+  let dW = dstW,
+    dH = dstH,
+    dX = 0,
+    dY = 0;
+
+  if (dstAspect > srcAspect) {
+    dH = Math.round(dstW / srcAspect);
+    dY = Math.round((dstH - dH) / 2);
+  } else {
+    dW = Math.round(dstH * srcAspect);
+    dX = Math.round((dstW - dW) / 2);
+  }
+
+  return { dX, dY, dW, dH };
+}
+
 export function VisualizerSnapshotCanvas(props: {
-  /** CSS size comes from container; this is for internal pixel density */
   className?: string;
   style?: React.CSSProperties;
   fps?: number;
   opacity?: number;
   sourceRect?: SourceRect;
-  /** If provided, draws only when true */
   active?: boolean;
   /** Optional canvas-side filter (avoids CSS filter compositor flicker) */
   ctxFilter?: string;
@@ -93,7 +113,7 @@ export function VisualizerSnapshotCanvas(props: {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const srcRef = React.useRef<HTMLCanvasElement | null>(null);
 
-  // Keep latest prop values without re-starting the RAF loop.
+  // Keep latest prop values without restarting the RAF loop.
   const fpsRef = React.useRef(fps);
   const opacityRef = React.useRef(opacity);
   const sourceRectRef = React.useRef<SourceRect>(sourceRect);
@@ -149,18 +169,6 @@ export function VisualizerSnapshotCanvas(props: {
     let raf = 0;
     let last = 0;
 
-    // one-per-second counters so we can see which early return dominates
-    const dbg = { lastLog: 0, counts: {} as Record<string, number> };
-    const bump = (k: string) => {
-      dbg.counts[k] = (dbg.counts[k] ?? 0) + 1;
-    };
-    const maybeLog = (t: number) => {
-      if (t - dbg.lastLog < 1000) return;
-      dbg.lastLog = t;
-      // eslint-disable-next-line no-console
-      console.log("[sip-snapshot]", dbg.counts);
-    };
-
     // Cache contexts + a backbuffer to avoid blanking on transient draw failures.
     const backRef = {
       canvas: null as HTMLCanvasElement | null,
@@ -172,9 +180,8 @@ export function VisualizerSnapshotCanvas(props: {
       c: HTMLCanvasElement,
     ): CanvasRenderingContext2D | null => {
       if (ctxRef.ctx && ctxRef.ctx.canvas === c) return ctxRef.ctx;
-      const ctx = c.getContext("2d", { alpha: true });
-      ctxRef.ctx = ctx;
-      return ctx;
+      ctxRef.ctx = c.getContext("2d", { alpha: true });
+      return ctxRef.ctx;
     };
 
     const ensureBack = (
@@ -197,94 +204,47 @@ export function VisualizerSnapshotCanvas(props: {
     const tick = (t: number) => {
       raf = requestAnimationFrame(tick);
 
-      bump("tick");
-      maybeLog(t);
-
-      if (!activeRef.current) {
-        bump("inactive");
-        maybeLog(t);
-        return;
-      }
+      if (!activeRef.current) return;
 
       const interval = 1000 / Math.max(1, fpsRef.current);
-      if (t - last < interval) {
-        bump("fps_gate");
-        maybeLog(t);
-        return;
-      }
+      if (t - last < interval) return;
       last = t;
 
       const dst = canvasRef.current;
       const src = srcRef.current;
-      if (!dst) {
-        bump("no_dst");
-        maybeLog(t);
-        return;
-      }
-      if (!src) {
-        bump("no_src");
-        maybeLog(t);
-        return;
-      }
+      if (!dst || !src) return;
 
       const { pxW, pxH } = sizeRef.current;
       const ctx = ensure2d(dst);
-      if (!ctx) {
-        bump("no_2d_ctx");
-        maybeLog(t);
-        return;
-      }
+      if (!ctx) return;
 
       const { srcW, srcH } = getSrcSize(src);
-      if (srcW < 2 || srcH < 2) {
-        bump("src_too_small");
-        maybeLog(t);
-        return;
-      }
+      if (srcW < 2 || srcH < 2) return;
 
       const bctx = ensureBack(pxW, pxH);
-      if (!bctx) {
-        bump("no_back_ctx");
-        maybeLog(t);
-        return;
-      }
+      if (!bctx || !backRef.canvas) return;
 
-      // ---- DIAG: force simplest possible mapping ----
-      const sx = 0;
-      const sy = 0;
-      const sw = srcW;
-      const sh = srcH;
-
-      const dX = 0;
-      const dY = 0;
-      const dW = pxW;
-      const dH = pxH;
-      // ---------------------------------------------
-
-      bump("draw_path");
-      maybeLog(t);
+      const { sx, sy, sw, sh } = pickRect(srcW, srcH, sourceRectRef.current);
+      const { dX, dY, dW, dH } = coverMap(pxW, pxH, sw, sh);
 
       try {
-        // draw DIRECTLY to onscreen to eliminate backbuffer/present as a variable
+        // ---- render onto backbuffer ----
+        bctx.setTransform(1, 0, 0, 1, 0, 0);
+        bctx.clearRect(0, 0, pxW, pxH);
+
+        bctx.globalCompositeOperation = "source-over";
+        bctx.globalAlpha = opacityRef.current;
+        bctx.filter = ctxFilterRef.current ?? "none";
+        bctx.drawImage(src, sx, sy, sw, sh, dX, dY, dW, dH);
+
+        // ---- present once ----
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.globalCompositeOperation = "source-over";
         ctx.globalAlpha = 1;
         ctx.filter = "none";
-
-        // DIAG: fill the whole canvas magenta (cannot miss it)
-        ctx.clearRect(0, 0, pxW, pxH);
-        ctx.fillStyle = "rgba(255,0,255,1)";
-        ctx.fillRect(0, 0, pxW, pxH);
-
-        // now attempt the source draw on top
-        ctx.drawImage(src, sx, sy, sw, sh, dX, dY, dW, dH);
-
-        bump("direct_present_ok");
-        maybeLog(t);
-      } catch (err) {
-        bump("direct_present_throw");
-        // eslint-disable-next-line no-console
-        console.warn("[sip-snapshot] direct draw threw", err);
+        ctx.globalCompositeOperation = "copy";
+        ctx.drawImage(backRef.canvas, 0, 0);
+      } catch {
+        // keep last good onscreen frame
       }
     };
 
@@ -324,13 +284,21 @@ function VisualizerRingGlowCanvas(props: {
   active: boolean;
   sourceRect: SourceRect;
 }) {
-  const { size, ringPx, glowPx, blurPx, opacity, fps, active, sourceRect } =
-    props;
+  const {
+    size,
+    ringPx,
+    glowPx,
+    blurPx,
+    opacity,
+    fps,
+    active,
+    sourceRect,
+  } = props;
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const srcRef = React.useRef<HTMLCanvasElement | null>(null);
 
-  // Keep latest prop values without re-starting RAF.
+  // Keep latest prop values without restarting RAF.
   const fpsRef = React.useRef(fps);
   const opacityRef = React.useRef(opacity);
   const blurRef = React.useRef(blurPx);
@@ -357,7 +325,6 @@ function VisualizerRingGlowCanvas(props: {
     const unsub = visualSurface.subscribe((e) => {
       if (e.type === "snapshot") srcRef.current = e.canvas;
     });
-
     return () => {
       try {
         unsub();
@@ -385,37 +352,8 @@ function VisualizerRingGlowCanvas(props: {
     const ro = new ResizeObserver(apply);
     ro.observe(dst);
     apply();
-
     return () => ro.disconnect();
   }, []);
-
-  React.useEffect(() => {
-  const el = canvasRef.current;
-  if (!el) return;
-
-  // Expose for console inspection without `any`
-  type SipDebugGlobal = typeof globalThis & {
-    __AF_SIP_CANVAS?: HTMLCanvasElement;
-  };
-
-  (globalThis as SipDebugGlobal).__AF_SIP_CANVAS = el;
-
-  const cs = getComputedStyle(el);
-
-  console.log("[sip-mount]", {
-    node: el,
-    client: [el.clientWidth, el.clientHeight],
-    rect: el.getBoundingClientRect(),
-    display: cs.display,
-    visibility: cs.visibility,
-    opacity: cs.opacity,
-    zIndex: cs.zIndex,
-    position: cs.position,
-    transform: cs.transform,
-    pointerEvents: cs.pointerEvents,
-  });
-}, []);
-
 
   React.useEffect(() => {
     let raf = 0;
@@ -431,9 +369,8 @@ function VisualizerRingGlowCanvas(props: {
       c: HTMLCanvasElement,
     ): CanvasRenderingContext2D | null => {
       if (ctxRef.ctx && ctxRef.ctx.canvas === c) return ctxRef.ctx;
-      const ctx = c.getContext("2d", { alpha: true });
-      ctxRef.ctx = ctx;
-      return ctx;
+      ctxRef.ctx = c.getContext("2d", { alpha: true });
+      return ctxRef.ctx;
     };
 
     const ensureBack = (
@@ -491,22 +428,10 @@ function VisualizerRingGlowCanvas(props: {
       const { sx, sy, sw, sh } = pickRect(srcW, srcH, sourceRectRef.current);
 
       // cover fill: keep aspect, crop if needed
-      const srcAspect = sw / sh;
-      const dstAspect = pxW / pxH;
-      let dW = pxW,
-        dH = pxH,
-        dX = 0,
-        dY = 0;
-      if (dstAspect > srcAspect) {
-        dH = Math.round(pxW / srcAspect);
-        dY = Math.round((pxH - dH) / 2);
-      } else {
-        dW = Math.round(pxH * srcAspect);
-        dX = Math.round((pxW - dW) / 2);
-      }
+      const { dX, dY, dW, dH } = coverMap(pxW, pxH, sw, sh);
 
       const bctx = ensureBack(pxW, pxH);
-      if (!bctx) return;
+      if (!bctx || !backRef.canvas) return;
 
       try {
         // ---- render EVERYTHING onto backbuffer ----
@@ -561,10 +486,9 @@ function VisualizerRingGlowCanvas(props: {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.globalAlpha = 1;
         ctx.globalCompositeOperation = "copy";
-        ctx.drawImage(backRef.canvas as HTMLCanvasElement, 0, 0);
+        ctx.drawImage(backRef.canvas, 0, 0);
       } catch {
         // Keep last good onscreen frame.
-        // if (debugEnabled()) console.warn("[VIS] ring draw failed", err);
       }
     };
 
@@ -610,7 +534,6 @@ export function PatternRingGlow(props: {
     seed = 1337,
   } = props;
 
-  // (keep this consistent with VisualizerRingGlowCanvas)
   const pad = ringPx + glowPx;
   const bleed = Math.max(2, Math.round(blurPx * 2));
   const outerPad = pad + bleed;
@@ -663,7 +586,6 @@ export function PatternPillUnderlay(props: {
         pointerEvents: "none",
         opacity: active ? 1 : 0,
         transition: "opacity 180ms ease",
-        // compositor isolation
         transform: "translateZ(0)",
         isolation: "isolate",
         contain: "paint",
@@ -693,11 +615,8 @@ export function PatternPillUnderlay(props: {
 }
 
 export function PatternRail(props: {
-  /** total rail height in px (you use 18px hitbox) */
   height: number;
-  /** progress 0..1 */
   progress01: number;
-  /** show? */
   active?: boolean;
 }) {
   const { height, progress01, active = true } = props;
@@ -716,7 +635,6 @@ export function PatternRail(props: {
         overflow: "hidden",
       }}
     >
-      {/* base rail (subtle) */}
       <div
         style={{
           position: "absolute",
@@ -728,7 +646,6 @@ export function PatternRail(props: {
           opacity: 0.75,
         }}
       />
-      {/* patterned progress */}
       <div
         style={{
           position: "absolute",
@@ -739,9 +656,7 @@ export function PatternRail(props: {
           overflow: "hidden",
         }}
       >
-        <div
-          style={{ position: "absolute", inset: 0, transform: "scaleY(18)" }}
-        >
+        <div style={{ position: "absolute", inset: 0, transform: "scaleY(18)" }}>
           <VisualizerSnapshotCanvas
             active={active}
             fps={14}
