@@ -73,10 +73,9 @@ void main() {
   float ringW = mix(0.08, 0.02, p);
   float ring = smoothstep(portalR + ringW, portalR, rc) * smoothstep(portalR - ringW, portalR, rc);
 
-  // A noisy dissolve threshold that moves with progress.
+    // Noise field (0..1) in a square-ish domain
   vec2 nUv = uv * vec2(uRes.x / min(uRes.x,uRes.y), uRes.y / min(uRes.x,uRes.y));
   float n = fbm(nUv * 5.0 + vec2(t*0.15, -t*0.12));
-  float dissolve = smoothstep(p - 0.25, p + 0.25, n);
 
   // Refractive warp: stronger near portal ring; pumped by onset.
   float warpAmt = (0.015 + 0.02 * uOnset) * (0.25 + 1.75 * ring);
@@ -89,13 +88,30 @@ void main() {
   vec3 fromCol = texture(uFrom, uvWarp).rgb;
   vec3 toCol   = texture(uTo,   uvWarp).rgb;
 
-  // Mask: inside portal uses "to", outside uses "from", but both are softened by dissolve.
+  // Portal mask (1 inside portal, 0 outside)
   float inside = smoothstep(portalR + 0.02, portalR - 0.02, rc);
-  float m = mix(dissolve, 1.0 - dissolve, inside); // invert dissolve inside portal for "reveal"
-  m = clamp(m, 0.0, 1.0);
 
-  // Base blend
-  vec3 col = mix(fromCol, toCol, m);
+  // --- KEY CHANGE ---
+  // Make reveal start at ~0 and grow with progress.
+  // Threshold slides DOWN from ~1 -> ~0 as p increases, so early frames reveal almost nothing.
+  float thr = 1.02 - p;              // p=0 -> ~1.02 (hide), p=1 -> ~0.02 (show)
+  float revealNoise = smoothstep(thr - 0.18, thr + 0.18, n);
+
+  // Only reveal the "to" scene where the portal is (portal itself expands outward).
+  float m = clamp(inside * revealNoise, 0.0, 1.0);
+
+  // --- BLOTCHY CLOAK ---
+  // A dark veil that initially covers the FROM scene, then dissolves away quickly.
+  float veilN = fbm(nUv * 6.2 + vec2(-t*0.10, t*0.13));
+  float veilShape = smoothstep(0.25, 0.85, veilN);        // chunky blobs
+  float veilT = 1.0 - smoothstep(0.02, 0.26, p);          // strong at start, gone by ~26%
+  float veil = veilT * veilShape * (1.0 - inside);        // mostly outside the portal
+
+  vec3 cloakedFrom = mix(fromCol, vec3(0.0), 0.75 * veil);
+
+  // Base blend: new theme truly "emerges" from the portal region
+  vec3 col = mix(cloakedFrom, toCol, m);
+
 
   // Add a bright ring / shimmer (feels like a lens opening)
   vec3 ringCol = vec3(0.85, 0.92, 1.0) * (0.18 + 0.55 * uOnset);

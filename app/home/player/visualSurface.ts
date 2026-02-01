@@ -225,11 +225,3 @@ class VisualSurface {
 }
 
 export const visualSurface = new VisualSurface();
-
-// Expose for console debugging (safe, read-only usage expected)
-declare global {
-  // eslint-disable-next-line no-var
-  var visualSurface: VisualSurface | undefined;
-}
-
-globalThis.visualSurface = visualSurface;
