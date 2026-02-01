@@ -186,7 +186,7 @@ export default function StageInline(props: {
     }
   }, []);
 
-  const nothingPlaying = !p.current?.id;
+  const nothingPlaying = p.queue.length === 0 && !p.current?.id;
 
   const overlay =
     mounted && open

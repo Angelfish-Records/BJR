@@ -263,7 +263,16 @@ export default function AudioEngine() {
       const active = st === "playing" || st === "loading";
 
       // If we have no analyser yet, poll slowly until user gesture creates it.
+      // IMPORTANT: still feed a tiny "alive" signal so idle visuals aren't dead.
       if (!analyser || !freq || !time) {
+        audioSurface.set({
+          rms: 0,
+          bass: 0,
+          mid: 0,
+          treble: 0,
+          centroid: 0,
+          energy: 0.08, // tiny idle energy pre-gesture
+        });
         to = window.setTimeout(tick, 250);
         return;
       }

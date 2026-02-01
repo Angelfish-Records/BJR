@@ -9,6 +9,9 @@ import { mediaSurface, type StageVariant } from "./mediaSurface";
 import type { Theme } from "./visualizer/types";
 import { visualSurface } from "./visualSurface";
 
+// NEW idle theme
+import { createIdleMistTheme } from "./visualizer/themes/idleMist";
+
 type ThemeFactory = () => Theme;
 
 // Typed module shapes (no any)
@@ -183,22 +186,23 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
       theme: createBlankTheme(),
     });
 
+    // Install idle theme (cheap + calm)
+    engine.setIdleTheme(createIdleMistTheme());
+
     engineRef.current = engine;
 
     const unreg = visualSurface.registerCanvas(variant, canvas);
 
     if (activeStageRef.current === variant) engine.start();
 
+    // Prime target theme
     let cancelled = false;
-
     (async () => {
       const name = themeNameRef.current;
       const factory = await loadThemeFactory(name);
       if (cancelled) return;
-      engine.setTheme(factory());
-    })().catch(() => {
-      // keep portal alive even if a theme chunk fails; you can log if you want
-    });
+      engine.setTargetTheme(factory());
+    })().catch(() => {});
 
     return () => {
       cancelled = true;
@@ -222,7 +226,20 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
     else engine.stop();
   }, [activeStage, variant]);
 
-  // Swap themes lazily when the key changes
+  // Feed "wantPlaying" into engine (drives idle vs transition vs playing)
+  const wantPlaying =
+    p.status === "playing" || p.status === "loading" || p.intent === "play";
+
+  React.useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    engine.setWantPlaying(wantPlaying, {
+      // if you decide pause should *snap* to idle (no transition), set false here
+      toIdleTransition: true,
+    });
+  }, [wantPlaying]);
+
+  // Swap target theme lazily when key changes
   React.useEffect(() => {
     const engine = engineRef.current;
     if (!engine) return;
@@ -231,7 +248,7 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
     (async () => {
       const factory = await loadThemeFactory(themeName);
       if (cancelled) return;
-      engine.setTheme(factory());
+      engine.setTargetTheme(factory());
     })().catch(() => {});
 
     return () => {
