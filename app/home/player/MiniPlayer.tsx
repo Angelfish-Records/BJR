@@ -518,6 +518,8 @@ export default function MiniPlayer(props: {
   const vol = p.volume;
   const muted = p.muted || p.volume <= 0.001;
 
+  const volPopupRef = React.useRef<HTMLDivElement | null>(null);
+
   const volBtnRef = React.useRef<HTMLButtonElement | null>(null);
   const [volAnchor, setVolAnchor] = React.useState<{
     x: number;
@@ -536,41 +538,52 @@ export default function MiniPlayer(props: {
     let raf: number | null = null;
 
     const computeNow = () => {
-      if (typeof document !== "undefined" && document.hidden) return;
+      if (document.hidden) return;
       const r = el.getBoundingClientRect();
       setVolAnchor({ x: r.left + r.width / 2, y: r.top });
     };
 
     const schedule = () => {
       if (raf != null) return;
-      raf = window.requestAnimationFrame(() => {
+      raf = requestAnimationFrame(() => {
         raf = null;
         computeNow();
       });
     };
 
+    const onPointerDown = (e: PointerEvent) => {
+      const btn = volBtnRef.current;
+      const popup = volPopupRef.current;
+      if (!btn || !popup) return;
+
+      const t = e.target as Node;
+      if (btn.contains(t)) return;
+      if (popup.contains(t)) return;
+
+      setVolOpen(false);
+    };
+
     // prime
     schedule();
 
-    const onScroll = () => schedule();
-    const onResize = () => schedule();
-    window.addEventListener("scroll", onScroll, {
+    document.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("scroll", schedule, {
       capture: true,
       passive: true,
     });
-    window.addEventListener("resize", onResize, { passive: true });
-
-    const onVis = () => {
-      if (typeof document !== "undefined" && !document.hidden) schedule();
-    };
-    document.addEventListener("visibilitychange", onVis, { passive: true });
+    window.addEventListener("resize", schedule, { passive: true });
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) schedule();
+    });
 
     return () => {
-      if (raf != null) window.cancelAnimationFrame(raf);
+      if (raf != null) cancelAnimationFrame(raf);
       raf = null;
-      window.removeEventListener("scroll", onScroll, true);
-      window.removeEventListener("resize", onResize);
-      document.removeEventListener("visibilitychange", onVis);
+
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("scroll", schedule, true);
+      window.removeEventListener("resize", schedule);
+      document.removeEventListener("visibilitychange", schedule);
     };
   }, [volOpen]);
 
@@ -1010,6 +1023,7 @@ export default function MiniPlayer(props: {
                   ? createPortal(
                       <>
                         <div
+                          ref={volPopupRef}
                           style={{
                             position: "fixed",
                             left: volAnchor.x,
