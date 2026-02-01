@@ -51,37 +51,34 @@ float fbm(vec2 p) {
   return v;
 }
 
-float easeInOut(float x) {
-  x = clamp(x, 0.0, 1.0);
-  return x * x * (3.0 - 2.0 * x);
-}
-
 void main() {
   vec2 uv = vUv;
   vec2 px = (uv * uRes - 0.5 * uRes) / min(uRes.x, uRes.y);
   float r = length(px);
 
   float t = uTime * 0.85;
-    float p = easeInOut(uProgress);
 
-  float driftGate = smoothstep(0.05, 0.25, uProgress);
-vec2 c = vec2(0.0) + (0.02 * driftGate) * vec2(sin(t*0.7), cos(t*0.6));
-float rc = length(px - c);
+  // ---- ONE progress curve to rule them all (keeps ring + reveal phase-locked) ----
+  float u = clamp(uProgress, 0.0, 1.0);
 
-// Use a faster-start curve for the radius so it doesn't "hang" at the center.
+  // Fast-start radius curve (avoids the micro-pause at center)
+  float p = 1.0 - pow(1.0 - u, 2.2);
 
-  // (easeInOut has zero velocity at t=0, which reads as a micro-pause.)
-  float pr = 1.0 - pow(1.0 - clamp(uProgress, 0.0, 1.0), 2.2); // easeOut-ish
+  // Drift only ramps in once the portal is actually moving
+  float driftGate = smoothstep(0.05, 0.25, p);
+  vec2 c = vec2(0.0) + (0.02 * driftGate) * vec2(sin(t*0.7), cos(t*0.6));
+  float rc = length(px - c);
 
   // Portal radius expands (start smaller so it feels like it emerges).
-  float portalR = mix(0.028, 1.35, pr);
+  float portalR = mix(0.028, 1.35, p);
 
   // Keep ring width tied to the same radius curve (slightly thicker at start).
-  float ringW = mix(0.095, 0.02, pr);
+  float ringW = mix(0.095, 0.02, p);
 
-  float ring = smoothstep(portalR + ringW, portalR, rc) * smoothstep(portalR - ringW, portalR, rc);
+  float ring = smoothstep(portalR + ringW, portalR, rc) *
+               smoothstep(portalR - ringW, portalR, rc);
 
-     // Noise field (0..1) in a square-ish domain
+  // Noise field (0..1) in a square-ish domain
   vec2 nUv = uv * vec2(uRes.x / min(uRes.x,uRes.y), uRes.y / min(uRes.x,uRes.y));
   float n = fbm(nUv * 5.0 + vec2(t*0.15, -t*0.12));
 
@@ -99,42 +96,33 @@ float rc = length(px - c);
   // Portal mask (1 inside portal, 0 outside)
   float inside = smoothstep(portalR + 0.02, portalR - 0.02, rc);
 
-  // --- REVEAL: new theme emerges from inside the portal ---
-  // Threshold slides down as p increases, so early frames reveal almost nothing.
+  // --- REVEAL: new theme emerges from inside the portal (uses SAME p as the ring) ---
   float thr = 1.02 - p; // p=0 -> ~1.02 hide, p=1 -> ~0.02 show
   float revealNoise = smoothstep(thr - 0.18, thr + 0.18, n);
 
-  // Gate the reveal so it doesn't start instantly (gives the ring time to "form")
-  float revealGate = smoothstep(0.08, 0.24, p);
+  // Slightly earlier gate (since p is ease-out now)
+  float revealGate = smoothstep(0.06, 0.18, p);
 
-  // Only reveal TO where the portal is; portal expands outward via inside mask
   float m = clamp(inside * revealNoise * revealGate, 0.0, 1.0);
 
-  // --- BLOTCHY CLOAK: "eats" the old theme more slowly ---
-  // The veil ramps IN (no instant cut), peaks, then ramps OUT.
+  // --- Optional soot-eat (kept from your current file) ---
   float veilN = fbm(nUv * 6.2 + vec2(-t*0.10, t*0.13));
-  float veilShape = smoothstep(0.22, 0.86, veilN); // chunky blobs
+  float veilShape = smoothstep(0.22, 0.86, veilN);
 
-  // Envelope: rise over first ~18%, then fall, gone by ~55%
   float veilIn  = smoothstep(0.04, 0.18, p);
   float veilOut = 1.0 - smoothstep(0.34, 0.58, p);
   float veilEnv = clamp(veilIn * veilOut, 0.0, 1.0);
 
-  // Let the veil invade the portal interior early, but retreat as portal opens.
-  // inv=1 at start, fades toward 0 by ~35% progress.
   float inv = 1.0 - smoothstep(0.10, 0.35, p);
   float veilMask = clamp((1.0 - inside) + inv * inside * 0.55, 0.0, 1.0);
 
-  // Strongest near the ring (feels like the portal is doing the eating)
   float ringBoost = 0.35 + 0.85 * ring;
-
   float veil = veilEnv * veilShape * veilMask * ringBoost;
 
-  // Don't drive to pure black; keep a little "soot" detail so it reads as eating, not cutting.
   vec3 soot = vec3(0.02, 0.02, 0.025);
   vec3 cloakedFrom = mix(fromCol, soot, 0.82 * veil);
 
-  // Base blend: TO genuinely emerges from the portal; FROM is being eaten into soot.
+  // Base blend: TO emerges in lockstep with the portal expansion.
   vec3 col = mix(cloakedFrom, toCol, m);
 
   // Add a bright ring / shimmer (feels like a lens opening)
@@ -168,10 +156,8 @@ export type PortalWipe = {
 
 export function createPortalWipe(): PortalWipe {
   let program: WebGLProgram | null = null;
-  let tri: {
-    vao: WebGLVertexArrayObject | null;
-    buf: WebGLBuffer | null;
-  } | null = null;
+  let tri: { vao: WebGLVertexArrayObject | null; buf: WebGLBuffer | null } | null =
+    null;
 
   let uFrom: WebGLUniformLocation | null = null;
   let uTo: WebGLUniformLocation | null = null;
