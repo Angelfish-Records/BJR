@@ -71,6 +71,8 @@ export function VisualizerSnapshotCanvas(props: {
   sourceRect?: SourceRect;
   /** If provided, draws only when true */
   active?: boolean;
+  /** Optional canvas-side filter (avoids CSS filter compositor flicker) */
+  ctxFilter?: string;
 }) {
   const {
     className,
@@ -79,6 +81,7 @@ export function VisualizerSnapshotCanvas(props: {
     opacity = 0.55,
     sourceRect = { mode: "center" },
     active = true,
+    ctxFilter,
   } = props;
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
@@ -89,6 +92,16 @@ export function VisualizerSnapshotCanvas(props: {
   const opacityRef = React.useRef(opacity);
   const sourceRectRef = React.useRef<SourceRect>(sourceRect);
   const activeRef = React.useRef(active);
+
+  const ctxFilterRef = React.useRef<string | undefined>(ctxFilter);
+
+  React.useEffect(() => {
+    fpsRef.current = fps;
+    opacityRef.current = opacity;
+    sourceRectRef.current = sourceRect;
+    activeRef.current = active;
+    ctxFilterRef.current = ctxFilter;
+  }, [fps, opacity, sourceRect, active, ctxFilter]);
 
   React.useEffect(() => {
     fpsRef.current = fps;
@@ -212,6 +225,10 @@ export function VisualizerSnapshotCanvas(props: {
         bctx.save();
         bctx.globalAlpha = opacityRef.current;
         bctx.globalCompositeOperation = "screen";
+
+        // IMPORTANT: do visual tweaks in-canvas (avoids CSS filter offscreen surfaces)
+        ctx.filter = ctxFilterRef.current ?? "none";
+
         bctx.drawImage(src, sx, sy, sw, sh, dX, dY, dW, dH);
         bctx.restore();
 
@@ -220,6 +237,8 @@ export function VisualizerSnapshotCanvas(props: {
         ctx.globalAlpha = 1;
         ctx.globalCompositeOperation = "copy";
         ctx.drawImage(backRef.canvas as HTMLCanvasElement, 0, 0);
+        // Ensure no filter leaks across frames
+        ctx.filter = "none";
       } catch {
         // Keep last good onscreen frame; optional debug:
         // if (debugEnabled()) console.warn("[VIS] snapshot draw failed", err);
@@ -231,7 +250,7 @@ export function VisualizerSnapshotCanvas(props: {
   }, []);
 
 
-  return (
+    return (
     <canvas
       ref={canvasRef}
       aria-hidden="true"
@@ -242,10 +261,18 @@ export function VisualizerSnapshotCanvas(props: {
         display: "block",
         pointerEvents: "none",
         background: "transparent",
+
+        // compositor isolation
+        transform: "translateZ(0)",
+        backfaceVisibility: "hidden",
+        willChange: "transform, opacity",
+        contain: "paint",
+
         ...style,
       }}
     />
   );
+
 }
 
 function VisualizerRingGlowCanvas(props: {
@@ -559,13 +586,17 @@ export function PatternPillUnderlay(props: {
         pointerEvents: "none",
         opacity: active ? 1 : 0,
         transition: "opacity 180ms ease",
+        // compositor isolation
+        transform: "translateZ(0)",
+        isolation: "isolate",
+        contain: "paint",
       }}
     >
       <VisualizerSnapshotCanvas
         opacity={opacity}
         fps={12}
         sourceRect={{ mode: "random", seed, scale: 0.6 }}
-        style={{ filter: "contrast(1.05) saturate(1.05)" }}
+        ctxFilter="contrast(1.05) saturate(1.05)"
         active={active}
       />
       <div
