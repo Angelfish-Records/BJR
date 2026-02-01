@@ -246,24 +246,18 @@ export function VisualizerSnapshotCanvas(props: {
         return;
       }
 
-      // compute rects *before* try so scope is correct
-      const { sx, sy, sw, sh } = pickRect(srcW, srcH, sourceRectRef.current);
+      // ---- DIAG: force simplest possible mapping ----
+const sx = 0;
+const sy = 0;
+const sw = srcW;
+const sh = srcH;
 
-      const srcAspect = sw / sh;
-      const dstAspect = pxW / pxH;
+const dX = 0;
+const dY = 0;
+const dW = pxW;
+const dH = pxH;
+// ---------------------------------------------
 
-      let dW = pxW,
-        dH = pxH,
-        dX = 0,
-        dY = 0;
-
-      if (dstAspect > srcAspect) {
-        dH = Math.round(pxW / srcAspect);
-        dY = Math.round((pxH - dH) / 2);
-      } else {
-        dW = Math.round(pxH * srcAspect);
-        dX = Math.round((pxW - dW) / 2);
-      }
 
       bump("draw_path");
       maybeLog(t);
