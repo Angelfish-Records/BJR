@@ -98,7 +98,6 @@ export function VisualizerSnapshotCanvas(props: {
   const opacityRef = React.useRef(opacity);
   const sourceRectRef = React.useRef<SourceRect>(sourceRect);
   const activeRef = React.useRef(active);
-
   const ctxFilterRef = React.useRef<string | undefined>(ctxFilter);
 
   React.useEffect(() => {
@@ -115,7 +114,6 @@ export function VisualizerSnapshotCanvas(props: {
     const unsub = visualSurface.subscribe((e) => {
       if (e.type === "snapshot") srcRef.current = e.canvas;
     });
-
     return () => {
       try {
         unsub();
@@ -125,7 +123,6 @@ export function VisualizerSnapshotCanvas(props: {
 
   // Canvas sizing via ResizeObserver (no per-frame layout reads).
   const sizeRef = React.useRef({ pxW: 1, pxH: 1, dpr: 1 });
-
   React.useEffect(() => {
     const dst = canvasRef.current;
     if (!dst) return;
@@ -144,7 +141,6 @@ export function VisualizerSnapshotCanvas(props: {
     const ro = new ResizeObserver(apply);
     ro.observe(dst);
     apply();
-
     return () => ro.disconnect();
   }, []);
 
@@ -153,6 +149,18 @@ export function VisualizerSnapshotCanvas(props: {
     let raf = 0;
     let last = 0;
 
+    // one-per-second counters so we can see which early return dominates
+    const dbg = { lastLog: 0, counts: {} as Record<string, number> };
+    const bump = (k: string) => {
+      dbg.counts[k] = (dbg.counts[k] ?? 0) + 1;
+    };
+    const maybeLog = (t: number) => {
+      if (t - dbg.lastLog < 1000) return;
+      dbg.lastLog = t;
+      // eslint-disable-next-line no-console
+      console.log("[sip-snapshot]", dbg.counts);
+    };
+
     // Cache contexts + a backbuffer to avoid blanking on transient draw failures.
     const backRef = {
       canvas: null as HTMLCanvasElement | null,
@@ -160,19 +168,14 @@ export function VisualizerSnapshotCanvas(props: {
     };
     const ctxRef = { ctx: null as CanvasRenderingContext2D | null };
 
-    const ensure2d = (
-      c: HTMLCanvasElement,
-    ): CanvasRenderingContext2D | null => {
+    const ensure2d = (c: HTMLCanvasElement): CanvasRenderingContext2D | null => {
       if (ctxRef.ctx && ctxRef.ctx.canvas === c) return ctxRef.ctx;
       const ctx = c.getContext("2d", { alpha: true });
       ctxRef.ctx = ctx;
       return ctx;
     };
 
-    const ensureBack = (
-      w: number,
-      h: number,
-    ): CanvasRenderingContext2D | null => {
+    const ensureBack = (w: number, h: number): CanvasRenderingContext2D | null => {
       let bc = backRef.canvas;
       if (!bc) {
         bc = document.createElement("canvas");
@@ -189,26 +192,58 @@ export function VisualizerSnapshotCanvas(props: {
     const tick = (t: number) => {
       raf = requestAnimationFrame(tick);
 
-      if (!activeRef.current) return;
+      if (!activeRef.current) {
+        bump("inactive");
+        maybeLog(t);
+        return;
+      }
 
       const interval = 1000 / Math.max(1, fpsRef.current);
-      if (t - last < interval) return;
+      if (t - last < interval) {
+        bump("fps_gate");
+        maybeLog(t);
+        return;
+      }
       last = t;
 
       const dst = canvasRef.current;
       const src = srcRef.current;
-      if (!dst || !src) return;
+      if (!dst) {
+        bump("no_dst");
+        maybeLog(t);
+        return;
+      }
+      if (!src) {
+        bump("no_src");
+        maybeLog(t);
+        return;
+      }
 
       const { pxW, pxH } = sizeRef.current;
       const ctx = ensure2d(dst);
-      if (!ctx) return;
+      if (!ctx) {
+        bump("no_2d_ctx");
+        maybeLog(t);
+        return;
+      }
 
       const { srcW, srcH } = getSrcSize(src);
-      if (srcW < 2 || srcH < 2) return;
+      if (srcW < 2 || srcH < 2) {
+        bump("src_too_small");
+        maybeLog(t);
+        return;
+      }
 
+      const bctx = ensureBack(pxW, pxH);
+      if (!bctx) {
+        bump("no_back_ctx");
+        maybeLog(t);
+        return;
+      }
+
+      // compute rects *before* try so scope is correct
       const { sx, sy, sw, sh } = pickRect(srcW, srcH, sourceRectRef.current);
 
-      // cover fill: keep aspect, crop if needed
       const srcAspect = sw / sh;
       const dstAspect = pxW / pxH;
 
@@ -216,6 +251,7 @@ export function VisualizerSnapshotCanvas(props: {
         dH = pxH,
         dX = 0,
         dY = 0;
+
       if (dstAspect > srcAspect) {
         dH = Math.round(pxW / srcAspect);
         dY = Math.round((pxH - dH) / 2);
@@ -224,44 +260,40 @@ export function VisualizerSnapshotCanvas(props: {
         dX = Math.round((pxW - dW) / 2);
       }
 
-      // Render into backbuffer first; only present if successful.
-      const bctx = ensureBack(pxW, pxH);
-      if (!bctx) return;
+      bump("draw_path");
+      maybeLog(t);
 
       try {
+        // ---- render to backbuffer ----
         bctx.setTransform(1, 0, 0, 1, 0, 0);
         bctx.clearRect(0, 0, pxW, pxH);
 
-        // DIAG: prove the canvas is visible and presenting at all
+        // DIAG: prove we can present anything at all (leave for now)
         bctx.save();
         bctx.globalCompositeOperation = "source-over";
         bctx.globalAlpha = 0.8;
-        bctx.fillStyle = "rgba(255,0,255,1)"; // magenta
+        bctx.fillStyle = "rgba(255,0,255,1)";
         bctx.fillRect(0, 0, pxW, pxH);
         bctx.restore();
 
-        //bctx.globalAlpha = opacityRef.current;
-        //bctx.globalCompositeOperation = "screen";
-
-        // ✅ apply filter to the context that actually draws
+        bctx.save();
+        bctx.globalAlpha = opacityRef.current;
+        bctx.globalCompositeOperation = "source-over"; // start simple
         bctx.filter = ctxFilterRef.current ?? "none";
 
+        // texture draw
         bctx.drawImage(src, sx, sy, sw, sh, dX, dY, dW, dH);
 
-        // prevent filter leakage
-        bctx.filter = "none";
         bctx.restore();
 
-        // Present (atomic-ish): overwrite onscreen with the backbuffer.
+        // ---- present once ----
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.globalAlpha = 1;
         ctx.globalCompositeOperation = "copy";
         ctx.drawImage(backRef.canvas as HTMLCanvasElement, 0, 0);
-        // Ensure no filter leaks across frames
-        bctx.filter = "none";
+        ctx.filter = "none";
       } catch {
-        // Keep last good onscreen frame; optional debug:
-        // if (debugEnabled()) console.warn("[VIS] snapshot draw failed", err);
+        // keep last good onscreen frame
       }
     };
 
@@ -280,18 +312,16 @@ export function VisualizerSnapshotCanvas(props: {
         display: "block",
         pointerEvents: "none",
         background: "transparent",
-
-        // compositor isolation
         transform: "translateZ(0)",
         backfaceVisibility: "hidden",
         willChange: "transform, opacity",
         contain: "paint",
-
         ...style,
       }}
     />
   );
 }
+
 
 function VisualizerRingGlowCanvas(props: {
   size: number;

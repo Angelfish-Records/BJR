@@ -1132,7 +1132,7 @@ export default function PortalArea(props: {
   }
 
   .afTopBarBtn:hover .afIconPortal {
-    transform: translateY(0px) scale(1.015);
+    transform: translateY(2px) scale(1.015);
   }
 
   /* Keyboard focus */
