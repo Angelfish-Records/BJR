@@ -79,6 +79,9 @@ export class VisualizerEngine {
   // Targets requested by UI
   private wantPlaying = false;
   private targetTheme: Theme | null = null;
+  private appliedDpr = 0;          // quantized “effective DPR”
+  private lastResizeAtMs = 0;      // resize hysteresis
+
 
   constructor(opts: EngineOpts) {
     this.canvas = opts.canvas;
@@ -190,7 +193,7 @@ export class VisualizerEngine {
       this.baseDpr = Math.max(1, Math.min(2, rawDpr));
       this.w = Math.max(1, Math.floor(r.width));
       this.h = Math.max(1, Math.floor(r.height));
-      this.applyCanvasSize();
+      this.applyCanvasSize(performance.now());
     };
 
     this.ro = new ResizeObserver(resize);
@@ -214,7 +217,7 @@ export class VisualizerEngine {
       this.lastDrawMs = tNowMs;
 
       const frameStart = performance.now();
-      this.applyCanvasSize();
+      this.applyCanvasSize(tNowMs);
 
       // Step state machine before drawing
       this.advanceStage(tNowMs);
@@ -497,16 +500,43 @@ export class VisualizerEngine {
     this.wipe = null;
   }
 
-  private applyCanvasSize() {
-    const dpr = this.baseDpr * this.dprScale;
+    private applyCanvasSize(nowMs?: number) {
+    const t = typeof nowMs === "number" ? nowMs : performance.now();
+
+    // Compute effective DPR and QUANTIZE it so it can’t jitter frame-to-frame.
+    const raw = this.baseDpr * this.dprScale;
+
+    // 1/16th steps is plenty; feel free to try 1/12 or 1/20.
+    const quant = Math.round(raw * 16) / 16;
+
+    // If we haven't applied yet, initialize.
+    if (!this.appliedDpr) this.appliedDpr = quant;
+
+    // Hysteresis: only accept a DPR change if it’s “meaningful”
+    // AND not too frequent (prevents resize ping-pong).
+    const dprDelta = Math.abs(quant - this.appliedDpr);
+    const tooSoon = t - this.lastResizeAtMs < 250; // ms
+
+    if (dprDelta >= 0.0625 && !tooSoon) { // >= 1/16 step change
+      this.appliedDpr = quant;
+    }
+
+    const dpr = this.appliedDpr;
+
     const W = Math.max(1, Math.floor(this.w * dpr));
     const H = Math.max(1, Math.floor(this.h * dpr));
 
-    if (this.canvas.width !== W) this.canvas.width = W;
-    if (this.canvas.height !== H) this.canvas.height = H;
+    // Only resize backing store if it actually changes.
+    // This is the expensive thing that causes “flicker” in any downstream sampling.
+    if (this.canvas.width !== W || this.canvas.height !== H) {
+      this.canvas.width = W;
+      this.canvas.height = H;
+      this.lastResizeAtMs = t;
+    }
 
     // Keep CSS sizing deterministic; parent measures drive it.
     this.canvas.style.width = `${this.w}px`;
     this.canvas.style.height = `${this.h}px`;
   }
+
 }
