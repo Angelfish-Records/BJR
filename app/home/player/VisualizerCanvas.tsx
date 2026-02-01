@@ -85,12 +85,14 @@ function canonicalThemeName(raw: string | undefined | null): ThemeName {
 
 const THEME_LOADERS: Record<ThemeName, () => Promise<ThemeFactory>> = {
   nebula: async () =>
-    ((await import("./visualizer/themes/nebula")) as NebulaMod).createNebulaTheme,
+    ((await import("./visualizer/themes/nebula")) as NebulaMod)
+      .createNebulaTheme,
   "gravitational-lattice": async () =>
     ((await import("./visualizer/themes/gravitationalLattice")) as LatticeMod)
       .createGravitationalLatticeTheme,
   "dream-fog": async () =>
-    ((await import("./visualizer/themes/dreamFog")) as FogMod).createDreamFogTheme,
+    ((await import("./visualizer/themes/dreamFog")) as FogMod)
+      .createDreamFogTheme,
   "filament-storm": async () =>
     ((await import("./visualizer/themes/filamentStorm")) as FilamentMod)
       .createFilamentStormTheme,
@@ -107,7 +109,8 @@ const THEME_LOADERS: Record<ThemeName, () => Promise<ThemeFactory>> = {
     ((await import("./visualizer/themes/phaseGlass")) as PhaseMod)
       .createPhaseGlassTheme,
   "mhd-silk": async () =>
-    ((await import("./visualizer/themes/mhdSilk")) as MhdMod).createMHDSilkTheme,
+    ((await import("./visualizer/themes/mhdSilk")) as MhdMod)
+      .createMHDSilkTheme,
   "pressure-glass": async () =>
     ((await import("./visualizer/themes/pressureGlass")) as PressureMod)
       .createPressureGlassTheme,
@@ -135,8 +138,8 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const engineRef = React.useRef<VisualizerEngine | null>(null);
 
-  const [activeStage, setActiveStage] = React.useState<StageVariant | null>(() =>
-    mediaSurface.getStageVariant(),
+  const [activeStage, setActiveStage] = React.useState<StageVariant | null>(
+    () => mediaSurface.getStageVariant(),
   );
 
   React.useEffect(() => {
@@ -172,7 +175,9 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
     // Prime target theme (async, engine-owned)
     let cancelled = false;
     (async () => {
-      const factory = await loadThemeFactory(canonicalThemeName(p.current?.visualTheme));
+      const factory = await loadThemeFactory(
+        canonicalThemeName(p.current?.visualTheme),
+      );
       if (cancelled) return;
       engine.setTargetTheme(factory());
     })().catch(() => {});
@@ -204,7 +209,10 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
     unregRef.current = null;
 
     if (activeStage === variant) {
-      unregRef.current = visualSurface.registerCanvas(variant, canvas);
+      // Register the *stable snapshot canvas* (2D) as the sip source.
+      // This avoids sampling WebGL's default framebuffer (esp. with preserveDrawingBuffer:false).
+      const src = engineRef.current?.getStableSnapshotCanvas?.() ?? canvas;
+      unregRef.current = visualSurface.registerCanvas(variant, src);
     }
 
     return () => {
