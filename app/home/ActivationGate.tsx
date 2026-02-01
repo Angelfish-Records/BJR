@@ -620,7 +620,7 @@ export default function ActivationGate(props: Props) {
                 >
                   <input
                     type="email"
-                    placeholder="you@email.com"
+                    placeholder="Enter email for access."
                     value={email}
                     onChange={(e) => setEmail(e.target.value.trim())}
                     style={{

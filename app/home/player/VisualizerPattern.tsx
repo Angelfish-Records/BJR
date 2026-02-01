@@ -263,49 +263,28 @@ const dH = pxH;
       maybeLog(t);
 
       try {
-        // ---- render to backbuffer ----
-        bctx.setTransform(1, 0, 0, 1, 0, 0);
-        bctx.clearRect(0, 0, pxW, pxH);
+  // draw DIRECTLY to onscreen to eliminate backbuffer/present as a variable
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1;
+  ctx.filter = "none";
 
-        // Marker only (top-left) so it can’t mask the texture
-        bctx.save();
-        bctx.globalCompositeOperation = "source-over";
-        bctx.globalAlpha = 1;
-        bctx.fillStyle = "rgba(255,0,255,1)";
-        bctx.fillRect(0, 0, Math.min(10, pxW), Math.min(10, pxH));
-        bctx.restore();
+  // DIAG: fill the whole canvas magenta (cannot miss it)
+  ctx.clearRect(0, 0, pxW, pxH);
+  ctx.fillStyle = "rgba(255,0,255,1)";
+  ctx.fillRect(0, 0, pxW, pxH);
 
-        bctx.save();
-        bctx.globalCompositeOperation = "source-over";
-        bctx.globalAlpha = 1; // force visibility for diagnosis
-        bctx.filter = "none";
+  // now attempt the source draw on top
+  ctx.drawImage(src, sx, sy, sw, sh, dX, dY, dW, dH);
 
-        let drew = false;
-        try {
-          bctx.drawImage(src, sx, sy, sw, sh, dX, dY, dW, dH);
-          drew = true;
-        } catch (err) {
-          // log at most once per second (reuse your maybeLog cadence)
-          bump("drawImage_throw");
-          // eslint-disable-next-line no-console
-          console.warn("[sip-snapshot] drawImage threw", err);
-        }
+  bump("direct_present_ok");
+  maybeLog(t);
+} catch (err) {
+  bump("direct_present_throw");
+  // eslint-disable-next-line no-console
+  console.warn("[sip-snapshot] direct draw threw", err);
+}
 
-        bctx.restore();
-
-        // If drawImage didn’t throw but you still see only magenta marker,
-        // the pixels are likely transparent/black — we’ll probe next.
-        if (drew) bump("drawImage_ok");
-
-        // ---- present once ----
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.globalAlpha = 1;
-        ctx.globalCompositeOperation = "copy";
-        ctx.drawImage(backRef.canvas as HTMLCanvasElement, 0, 0);
-        ctx.filter = "none";
-      } catch {
-        // keep last good onscreen frame
-      }
     };
 
     raf = requestAnimationFrame(tick);
