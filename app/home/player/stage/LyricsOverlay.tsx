@@ -62,6 +62,15 @@ export default function LyricsOverlay(props: {
   const isAutoScrollingRef = React.useRef(false);
   const autoScrollClearRef = React.useRef<number | null>(null);
 
+  // Fade-in whenever a new lyrics set becomes available.
+  const [fadeInKey, setFadeInKey] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!cues || cues.length === 0) return;
+    // bump key so CSS animation restarts on new cues
+    setFadeInKey((k) => k + 1);
+  }, [cues]);
+
   React.useEffect(() => {
     activeIdxRef.current = activeIdx;
   }, [activeIdx]);
@@ -192,6 +201,7 @@ export default function LyricsOverlay(props: {
   if (!cues || cues.length === 0) {
     return (
       <div
+        key={fadeInKey}
         style={{
           position: "absolute",
           inset: 0,
@@ -201,6 +211,11 @@ export default function LyricsOverlay(props: {
           color: "rgba(255,255,255,0.82)",
           textAlign: "center",
           pointerEvents: "none",
+          // --- fade-in ---
+          opacity: 0,
+          animation: isInline
+            ? "afLyricsFadeIn 380ms ease-out forwards"
+            : "afLyricsFadeIn 520ms ease-out forwards",
         }}
       >
         <div style={{ maxWidth: 520 }}>
@@ -208,6 +223,23 @@ export default function LyricsOverlay(props: {
             PRESS PLAY
           </div>
         </div>
+        <style>{`
+        @keyframes afLyricsFadeIn {
+          from { opacity: 0; transform: translate3d(0, 6px, 0); filter: blur(1.5px); }
+          to   { opacity: 1; transform: translate3d(0, 0, 0); filter: blur(0px); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .af-lyrics-scroll { scroll-behavior: auto !important; }
+          @keyframes afLyricsFadeIn {
+            from { opacity: 1; transform: none; filter: none; }
+            to   { opacity: 1; transform: none; filter: none; }
+          }
+        }
+
+        .af-lyrics-scroll::-webkit-scrollbar { width: 0px; height: 0px; }
+        .af-lyrics-scroll::-webkit-scrollbar-thumb { background: transparent; }
+      `}</style>
       </div>
     );
   }
