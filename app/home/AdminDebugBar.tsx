@@ -46,6 +46,15 @@ function actionForCode(code: string): BlockAction | undefined {
   return undefined;
 }
 
+type UiActionId =
+  | "apply_ui"
+  | "clear_ui"
+  | "spotlight_on"
+  | "spotlight_off"
+  | "apply_cookie"
+  | "clear_force_cookie"
+  | "reset_cookie";
+
 export default function AdminDebugBar(props: { isAdmin: boolean }) {
   // Hooks must always run, even if we return null later.
   const p = usePlayer();
@@ -53,6 +62,9 @@ export default function AdminDebugBar(props: { isAdmin: boolean }) {
   const [force, setForce] = React.useState<string>("none");
   const [tokensOpen, setTokensOpen] = React.useState(false);
   const [mounted, setMounted] = React.useState(false);
+
+  // NEW: combined dropdown for all buttons after Force state
+  const [uiAction, setUiAction] = React.useState<UiActionId>("apply_ui");
 
   React.useEffect(() => setMounted(true), []);
 
@@ -184,6 +196,56 @@ export default function AdminDebugBar(props: { isAdmin: boolean }) {
         )
       : null;
 
+  const runUiAction = (id: UiActionId) => {
+    switch (id) {
+      // NEW: immediate client-side forcing (tests spotlight/veil path)
+      case "apply_ui": {
+        if (force === "none") {
+          p.clearBlocked();
+          return;
+        }
+        p.setBlocked(`DEBUG: forced ${force}`, {
+          code: force,
+          action: actionForCode(force),
+          correlationId: "debug",
+        });
+        return;
+      }
+      case "clear_ui": {
+        p.clearBlocked();
+        return;
+      }
+      case "spotlight_on": {
+        try {
+          window.sessionStorage.setItem("af:dbgSpotlight", "1");
+        } catch {}
+        window.location.reload();
+        return;
+      }
+      case "spotlight_off": {
+        try {
+          window.sessionStorage.removeItem("af:dbgSpotlight");
+        } catch {}
+        window.location.reload();
+        return;
+      }
+
+      // Cookie-based forcing (server-side behaviours)
+      case "apply_cookie": {
+        void setDebug({ force });
+        return;
+      }
+      case "clear_force_cookie": {
+        void setDebug({ force: "none" });
+        return;
+      }
+      case "reset_cookie": {
+        void clearDebug();
+        return;
+      }
+    }
+  };
+
   return (
     <>
       <div
@@ -271,78 +333,45 @@ export default function AdminDebugBar(props: { isAdmin: boolean }) {
             </div>
           </div>
 
-          {/* Cookie-based forcing (server-side behaviours) */}
-          <button
-            style={btn}
-            onClick={() => {
-              void setDebug({ force });
-            }}
-          >
-            Apply (cookie)
-          </button>
+          {/* NEW: single dropdown for all remaining actions */}
+          <div style={{ position: "relative", display: "grid" }}>
+            <select
+              aria-label="UI Action"
+              value={uiAction}
+              onChange={(e) => setUiAction(e.currentTarget.value as UiActionId)}
+              style={selectStyle}
+            >
+              <option value="apply_ui">UI Action: Apply (UI)</option>
+              <option value="clear_ui">UI Action: Clear (UI)</option>
+              <option value="spotlight_on">UI Action: Spotlight ON (debug)</option>
+              <option value="spotlight_off">
+                UI Action: Spotlight OFF (debug)
+              </option>
+              <option value="apply_cookie">UI Action: Apply (cookie)</option>
+              <option value="clear_force_cookie">
+                UI Action: Clear force (cookie)
+              </option>
+              <option value="reset_cookie">UI Action: Reset (cookie)</option>
+            </select>
 
-          <button style={btn} onClick={() => void setDebug({ force: "none" })}>
-            Clear force (cookie)
-          </button>
+            <div
+              aria-hidden
+              style={{
+                position: "absolute",
+                right: 10,
+                top: "50%",
+                transform: "translateY(-50%)",
+                pointerEvents: "none",
+                opacity: 0.8,
+                fontSize: 10,
+              }}
+            >
+              ▼
+            </div>
+          </div>
 
-          <button style={btn} onClick={clearDebug}>
-            Reset (cookie)
-          </button>
-
-          <span
-            aria-hidden
-            style={{
-              width: 1,
-              height: 18,
-              background: "rgba(255,255,255,0.18)",
-              margin: "0 4px",
-            }}
-          />
-
-          {/* NEW: immediate client-side forcing (tests spotlight/veil path) */}
-          <button
-            style={btn}
-            onClick={() => {
-              if (force === "none") {
-                p.clearBlocked();
-                return;
-              }
-              p.setBlocked(`DEBUG: forced ${force}`, {
-                code: force,
-                action: actionForCode(force),
-                correlationId: "debug",
-              });
-            }}
-          >
-            Apply (UI)
-          </button>
-
-          <button style={btn} onClick={() => p.clearBlocked()}>
-            Clear (UI)
-          </button>
-
-          <button
-            style={btn}
-            onClick={() => {
-              try {
-                window.sessionStorage.setItem("af:dbgSpotlight", "1");
-              } catch {}
-              window.location.reload();
-            }}
-          >
-            Spotlight ON (debug)
-          </button>
-
-          <button
-            style={btn}
-            onClick={() => {
-              try {
-                window.sessionStorage.removeItem("af:dbgSpotlight");
-              } catch {}
-              window.location.reload();
-            }}
-          >
-            Spotlight OFF (debug)
+          <button style={btn} onClick={() => runUiAction(uiAction)}>
+            Run
           </button>
         </div>
       </div>
