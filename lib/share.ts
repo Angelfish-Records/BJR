@@ -38,7 +38,7 @@ export function getOrigin(explicitOrigin?: string) {
   if (explicitOrigin) return stripTrailingSlash(explicitOrigin);
   if (typeof window !== "undefined" && window.location?.origin)
     return window.location.origin;
-  const env = process.env.NEXT_NEXT_PUBLIC_APP_URL;
+  const env = process.env.NEXT_PUBLIC_APP_URL;
   if (env) return stripTrailingSlash(env);
   return "";
 }

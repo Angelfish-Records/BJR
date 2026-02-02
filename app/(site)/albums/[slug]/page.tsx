@@ -35,8 +35,7 @@ export async function generateMetadata(props: {
   const album = albumData.album as AlbumInfo;
   const tracks = albumData.tracks as PlayerTrack[];
 
-  const origin =
-    process.env.NEXT_NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "") || "";
+  const origin = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "") || "";
   const canonicalPath = t
     ? `/albums/${slug}?t=${encodeURIComponent(t)}`
     : `/albums/${slug}`;
@@ -56,7 +55,17 @@ export async function generateMetadata(props: {
     ? `Listen to “${trackTitle}” on ${albumTitle}${artist ? ` by ${artist}` : ""}.`
     : `Listen to ${albumTitle}${artist ? ` by ${artist}` : ""}.`;
 
-  const img =
+  const ogImg =
+    hasArtwork(album) && album.artwork
+      ? urlFor(album.artwork)
+          .width(1200)
+          .height(630)
+          .fit("crop") // or "clip" depending on your preference
+          .quality(85)
+          .url()
+      : undefined;
+
+  const squareImg =
     hasArtwork(album) && album.artwork
       ? urlFor(album.artwork).width(1200).height(1200).quality(85).url()
       : undefined;
@@ -70,13 +79,32 @@ export async function generateMetadata(props: {
       description,
       url: canonical,
       type: "music.album",
-      images: img ? [{ url: img, width: 1200, height: 1200 }] : undefined,
+      images: ogImg
+        ? [
+            {
+              url: ogImg,
+              width: 1200,
+              height: 630,
+              alt: `${albumTitle} cover`,
+            },
+            ...(squareImg
+              ? [
+                  {
+                    url: squareImg,
+                    width: 1200,
+                    height: 1200,
+                    alt: `${albumTitle} cover (square)`,
+                  },
+                ]
+              : []),
+          ]
+        : undefined,
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
-      images: img ? [img] : undefined,
+      images: ogImg ? [ogImg] : squareImg ? [squareImg] : undefined,
     },
   };
 }
