@@ -563,6 +563,7 @@ function renderModule(m: PortalModule, entitlementKeys: string[]) {
         pageSize={m.pageSize ?? 10}
         requireAuthAfter={m.requireAuthAfter ?? 3}
         minVisibility={m.minVisibility ?? "public"}
+        authorAvatarSrc="https://www.brendanjohnroch.com/gfx/BJR_posts_avatar.jpeg"
       />
     );
   }

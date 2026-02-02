@@ -12,14 +12,8 @@ type Visibility = "public" | "friend" | "patron" | "partner";
 type SanityImageValue = {
   _type: "image";
   url?: string;
-
-  // ✅ Optional sizing hints (easy to add later in Sanity + API projection)
-  // - maxWidth: preferred cap in px for the *container* (image stays width:100% inside it)
-  // - width: alias
-  // You can store as number or string; we’ll sanitize.
   maxWidth?: number | string;
   width?: number | string;
-
   metadata?: {
     dimensions?: {
       width?: number;
@@ -67,21 +61,14 @@ function isTall(aspectRatio: number | null | undefined) {
 function shareUrlFor(slug: string) {
   if (typeof window === "undefined") return "";
   const url = new URL(window.location.href);
-
-  // Canonical: p drives surface+tab. Posts tab is p=posts.
   url.searchParams.set("p", "posts");
   url.searchParams.set("post", slug);
-
-  // retire legacy
   url.searchParams.delete("pt");
   url.searchParams.delete("panel");
-
-  // strip player-ish params
   url.searchParams.delete("album");
   url.searchParams.delete("track");
   url.searchParams.delete("t");
   url.searchParams.delete("autoplay");
-
   return url.toString();
 }
 
@@ -119,9 +106,6 @@ function parsePxLike(v: unknown): number | null {
 }
 
 function parseWidthHintFromUrl(url: string): number | null {
-  // Supports:
-  // - hash: ...#w=520 or ...#maxWidth=520
-  // - query: ...?w=520 or ...?maxWidth=520 or ...?mw=520
   try {
     const u = new URL(url, "https://example.invalid");
 
@@ -137,7 +121,6 @@ function parseWidthHintFromUrl(url: string): number | null {
     const h = (u.hash || "").replace(/^#/, "");
     if (!h) return null;
 
-    // allow "w=520" or "maxWidth=520" or "mw=520"
     const parts = h.split("&");
     for (const part of parts) {
       const [k, val] = part.split("=");
@@ -149,7 +132,6 @@ function parseWidthHintFromUrl(url: string): number | null {
     }
     return null;
   } catch {
-    // if url is non-standard, do a small regex fallback
     const m =
       url.match(/[?#&](?:maxWidth|mw|w|width)=(\d{2,4})/i) ??
       url.match(/#(?:maxWidth|mw|w|width)=(\d{2,4})/i);
@@ -159,10 +141,6 @@ function parseWidthHintFromUrl(url: string): number | null {
 }
 
 function resolveImageMaxWidthPx(value: SanityImageValue, tall: boolean) {
-  // Priority:
-  // 1) explicit value.maxWidth / value.width
-  // 2) URL hint (?w= / #w=)
-  // 3) existing heuristic: tall => 520, else full width
   const explicit = parsePxLike(value?.maxWidth ?? value?.width);
   if (explicit) return explicit;
 
@@ -221,6 +199,43 @@ function DefaultAvatar(props: { label: string }) {
   );
 }
 
+// NEW: supports a normal square/rect image and crops it into a circle
+function Avatar(props: { label: string; src?: string; alt?: string }) {
+  const { label, src, alt } = props;
+
+  if (!src) return <DefaultAvatar label={label} />;
+
+  return (
+    <div
+      title={alt || label}
+      style={{
+        width: 32,
+        height: 32,
+        borderRadius: 999,
+        border: "1px solid rgba(255,255,255,0.14)",
+        background: "rgba(255,255,255,0.06)",
+        boxShadow: "0 10px 26px rgba(0,0,0,0.18)",
+        overflow: "hidden",
+        flex: "0 0 auto",
+      }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt || label}
+        width={32}
+        height={32}
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "block",
+          objectFit: "cover",
+        }}
+      />
+    </div>
+  );
+}
+
 function ActionBtn(props: {
   onClick: () => void;
   children: React.ReactNode;
@@ -267,11 +282,12 @@ export default function PortalArtistPosts(props: {
   requireAuthAfter: number;
   minVisibility: Visibility;
 
-  // Optional: later you can feed a real image URL from Sanity/settings; keep default now.
   authorName?: string;
   authorInitials?: string;
 
-  // ✅ Optional global cap: if set, it will cap ALL images unless the image has an explicit maxWidth/width hint
+  // NEW: point this at /public asset, R2, or any absolute URL
+  authorAvatarSrc?: string;
+
   defaultInlineImageMaxWidthPx?: number;
 }) {
   const {
@@ -280,6 +296,7 @@ export default function PortalArtistPosts(props: {
     minVisibility,
     authorName = "Brendan John Roch",
     authorInitials = "BJR",
+    authorAvatarSrc,
     defaultInlineImageMaxWidthPx,
   } = props;
 
@@ -311,7 +328,6 @@ export default function PortalArtistPosts(props: {
         u.searchParams.set("minVisibility", minVisibility);
         u.searchParams.set("requireAuthAfter", String(requireAuthAfter));
         if (nextCursor) {
-          // API uses offset; cursor is treated as offset string
           u.searchParams.set("offset", nextCursor);
         }
 
@@ -425,11 +441,7 @@ export default function PortalArtistPosts(props: {
           if (!url) return null;
 
           const tall = isTall(ar);
-
-          // ✅ per-image sizing
           const perImage = resolveImageMaxWidthPx(value, tall);
-
-          // ✅ optional global cap (only applies if the image didn’t specify one)
           const globalCap = parsePxLike(defaultInlineImageMaxWidthPx);
           const maxWidthPx = perImage ?? globalCap ?? null;
 
@@ -687,7 +699,11 @@ export default function PortalArtistPosts(props: {
               >
                 {/* “Substack notes” header row */}
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <DefaultAvatar label={authorInitials} />
+                  <Avatar
+                    label={authorInitials}
+                    src={authorAvatarSrc}
+                    alt={authorName}
+                  />
                   <div style={{ minWidth: 0 }}>
                     <div
                       style={{
