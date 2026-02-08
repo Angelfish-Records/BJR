@@ -600,7 +600,7 @@ export default function ActivationGate(props: Props) {
     typingTimerRef.current = window.setTimeout(() => {
       setIsTypingEmail(false);
       typingTimerRef.current = null;
-    }, 1400);
+    }, 2600);
   }
 
   function onEmailChange(nextRaw: string) {
@@ -889,9 +889,9 @@ export default function ActivationGate(props: Props) {
                       >
                         <div
                           style={{
-                            fontSize: 12,
-                            lineHeight: "16px",
-                            opacity: 0.82,
+                            fontSize: 10,
+                            lineHeight: "14px",
+                            opacity: 0.78,
                           }}
                         >
                           By signing up, you agree to receive occasional emails
@@ -899,16 +899,15 @@ export default function ActivationGate(props: Props) {
                           Unsubscribe anytime.
                         </div>
                       </div>
-
-                      {/* subtle hint when email is valid */}
-                      {emailValid && (
-                        <div style={{ fontSize: 12, opacity: 0.62 }}>
-                          Press Enter to continue.
-                        </div>
-                      )}
                     </div>
                   ) : (
-                    <div style={{ display: "grid", gap: 10, justifyItems: "center" }}>
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: 10,
+                        justifyItems: "center",
+                      }}
+                    >
                       <OtpBoxes
                         maxWidth={EMAIL_W}
                         value={code}
@@ -958,7 +957,7 @@ export default function ActivationGate(props: Props) {
                       }}
                     >
                       {isFriend
-                        ? "Support future work, access exclusive content. Secured by Stripe."
+                        ? "Support future work, access exclusive content."
                         : "Switch tier, or cancel."}
                     </div>
 
@@ -1005,6 +1004,24 @@ export default function ActivationGate(props: Props) {
                           ],
                         }}
                       />
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 6,
+                        marginTop: 6,
+                        fontSize: 11,
+                        lineHeight: "14px",
+                        opacity: 0.7,
+                      }}
+                    >
+                      <span aria-hidden style={{ fontSize: 12 }}>
+                        🔒
+                      </span>
+                      <span>Secured by Stripe.</span>
                     </div>
 
                     {(isPatron || isPartner) && (
