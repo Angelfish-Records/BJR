@@ -264,6 +264,34 @@ function normalizeDigits(raw: string): string {
   return raw.replace(/\D/g, "").slice(0, 6);
 }
 
+function LockIcon(props: { size?: number }) {
+  const { size = 12 } = props;
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+      style={{ display: "block" }}
+    >
+      <path
+        d="M7 11V8a5 5 0 0 1 10 0v3"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M7.8 11h8.4c.99 0 1.8.81 1.8 1.8v6.4c0 .99-.81 1.8-1.8 1.8H7.8c-.99 0-1.8-.81-1.8-1.8v-6.4c0-.99.81-1.8 1.8-1.8Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function OtpBoxes(props: {
   value: string;
   onChange: (next: string) => void;
@@ -1012,15 +1040,13 @@ export default function ActivationGate(props: Props) {
                         alignItems: "center",
                         justifyContent: "center",
                         gap: 6,
-                        marginTop: 6,
+                        marginTop: 3,
                         fontSize: 11,
                         lineHeight: "14px",
                         opacity: 0.7,
                       }}
                     >
-                      <span aria-hidden style={{ fontSize: 12 }}>
-                        🔒
-                      </span>
+                      <LockIcon size={12} />
                       <span>Secured by Stripe.</span>
                     </div>
 
