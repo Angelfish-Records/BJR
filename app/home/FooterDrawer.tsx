@@ -48,11 +48,9 @@ export default function FooterDrawer(props: {
         body: (
           <>
             Identity is email-only (Clerk). We use your email to authenticate
-            access and, where you’ve opted in, to send first-party
-            communications about releases, events, and account activity; you can
-            unsubscribe at any time. Access decisions, entitlements, and
-            playthrough telemetry are stored first-party in Postgres
-            (Neon/Vercel Postgres). Streaming is delivered via Mux using
+            access and to send opt-out first-party
+            communications about releases, events, and account activity. Access decisions, entitlements, and
+            playthrough telemetry are stored first-party in Neon Postgres. Streaming is delivered via Mux using
             short-lived signed tokens. We don’t sell personal data, share it
             with advertisers, or embed ad-tracking pixels. Cookies are used only
             for session/authentication and basic anti-abuse controls. Logs are

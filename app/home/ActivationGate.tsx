@@ -354,14 +354,18 @@ function OtpBoxes(props: {
   );
 }
 
-function OverlayPanel(props: { open: boolean; children: React.ReactNode }) {
-  const { open, children } = props;
+function OverlayPanel(props: {
+  open: boolean;
+  children: React.ReactNode;
+  maxHeightOpen?: number;
+}) {
+  const { open, children, maxHeightOpen = 520 } = props;
   return (
     <div
       style={{
         transform: open ? "translateY(0px)" : "translateY(-6px)",
         opacity: open ? 1 : 0,
-        maxHeight: open ? 520 : 0, // large enough; we clip via maxHeight when closed
+        maxHeight: open ? maxHeightOpen : 0,
         overflow: open ? "visible" : "hidden",
         transition:
           "max-height 240ms cubic-bezier(.2,.8,.2,1), opacity 160ms ease, transform 220ms cubic-bezier(.2,.8,.2,1)",
@@ -379,9 +383,9 @@ function OverlayPanel(props: { open: boolean; children: React.ReactNode }) {
           padding: open ? 12 : 0,
           boxShadow: open
             ? `
-              0 18px 42px rgba(0,0,0,0.55),      /* lift */
-              0 0 0 1px rgba(255,255,255,0.04),  /* subtle edge definition */
-              0 40px 120px rgba(0,0,0,0.85)      /* ambient separation */
+              0 18px 42px rgba(0,0,0,0.55),
+              0 0 0 1px rgba(255,255,255,0.04),
+              0 40px 120px rgba(0,0,0,0.85)
             `
             : "none",
           transition:
@@ -428,6 +432,10 @@ export default function ActivationGate(props: Props) {
 
   const [billingOpen, setBillingOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+
+  // NEW: “briefly while typing” privacy notice timer
+  const [isTypingEmail, setIsTypingEmail] = useState(false);
+  const typingTimerRef = useRef<number | null>(null);
 
   const isActive = !!isSignedIn;
   const clerkLoaded = signInLoaded && signUpLoaded;
@@ -559,9 +567,55 @@ export default function ActivationGate(props: Props) {
     return () => window.removeEventListener("mousedown", onDown);
   }, [billingOpen]);
 
+  // NEW: if we leave idle/email phase, stop the “typing” state
+  useEffect(() => {
+    if (phase !== "idle") setIsTypingEmail(false);
+  }, [phase]);
+
   const toggleOn = isActive || phase === "code" || isSending || isVerifying;
   const otpOpen = !isActive && phase === "code";
   const showBillingTrigger = isActive && canManageBilling;
+
+  // NEW: privacy notice opens briefly while typing (and never when OTP is open)
+  const privacyOpen =
+    !isActive &&
+    phase === "idle" &&
+    !otpOpen &&
+    !!email &&
+    (isTypingEmail || needsAttention);
+
+  const overlayOpen = otpOpen || billingOpen || privacyOpen;
+
+  // NEW: single “box” that can smoothly grow from notice → OTP
+  const overlayMode: "otp" | "billing" | "privacy" | "none" = otpOpen
+    ? "otp"
+    : billingOpen
+      ? "billing"
+      : privacyOpen
+        ? "privacy"
+        : "none";
+
+  function scheduleTypingFade() {
+    if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = window.setTimeout(() => {
+      setIsTypingEmail(false);
+      typingTimerRef.current = null;
+    }, 1400);
+  }
+
+  function onEmailChange(nextRaw: string) {
+    const next = nextRaw.trim();
+    setEmail(next);
+
+    // show notice while actively typing
+    setIsTypingEmail(true);
+    scheduleTypingFade();
+  }
+
+  function submitFromEnter() {
+    if (!toggleClickable) return;
+    void startEmailCode();
+  }
 
   return (
     <div
@@ -597,191 +651,206 @@ export default function ActivationGate(props: Props) {
             minWidth: 0,
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0 12px",
-              width: "100%",
-              minWidth: 0,
-              justifyContent: "flex-end",
+          {/* NEW: wrap the email+toggle row in a form so Enter submits */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitFromEnter();
             }}
+            style={{ margin: 0 }}
           >
-            <div style={{ flex: "1 1 auto", minWidth: 0, maxWidth: EMAIL_W }}>
-              {!isActive ? (
-                <PatternRingOutline
-                  ringPx={2}
-                  glowPx={18}
-                  blurPx={10}
-                  seed={888}
-                  opacity={0.92}
-                  disabled={!clerkLoaded}
-                  innerBg="rgb(10, 10, 14)"
-                >
-                  <input
-                    type="email"
-                    placeholder="Enter email for access."
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value.trim())}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0 12px",
+                width: "100%",
+                minWidth: 0,
+                justifyContent: "flex-end",
+              }}
+            >
+              <div style={{ flex: "1 1 auto", minWidth: 0, maxWidth: EMAIL_W }}>
+                {!isActive ? (
+                  <PatternRingOutline
+                    ringPx={2}
+                    glowPx={18}
+                    blurPx={10}
+                    seed={888}
+                    opacity={0.92}
+                    disabled={!clerkLoaded}
+                    innerBg="rgb(10, 10, 14)"
+                  >
+                    <input
+                      type="email"
+                      placeholder="Enter email for access."
+                      value={email}
+                      onChange={(e) => onEmailChange(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          submitFromEnter();
+                        }
+                      }}
+                      style={{
+                        width: "100%",
+                        minWidth: 0,
+                        height: 32,
+                        padding: "0 14px",
+                        fontSize: 12,
+                        lineHeight: "16px",
+                        WebkitTextSizeAdjust: "100%",
+                        borderRadius: 999,
+                        border: "0px solid transparent",
+                        background: "rgb(10, 10, 14)",
+                        color: "rgba(255,255,255,0.92)",
+                        outline: "none",
+                        textAlign: "left",
+                        boxShadow: needsAttention
+                          ? `0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent),
+                          0 0 26px color-mix(in srgb, var(--accent) 40%, transparent),
+                          0 14px 30px rgba(0,0,0,0.22)`
+                          : "0 14px 30px rgba(0,0,0,0.22)",
+                        transition: "box-shadow 220ms ease",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </PatternRingOutline>
+                ) : (
+                  <div
+                    aria-label="Signed in identity"
                     style={{
                       width: "100%",
                       minWidth: 0,
                       height: 32,
-                      padding: "0 14px",
-                      fontSize: 12,
-                      lineHeight: "16px",
-                      WebkitTextSizeAdjust: "100%",
-                      borderRadius: 999,
-                      border: "0px solid transparent",
-                      background: "rgb(10, 10, 14)",
-                      color: "rgba(255,255,255,0.92)",
-                      outline: "none",
-                      textAlign: "left",
-                      boxShadow: needsAttention
-                        ? `0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent),
-                          0 0 26px color-mix(in srgb, var(--accent) 40%, transparent),
-                          0 14px 30px rgba(0,0,0,0.22)`
-                        : "0 14px 30px rgba(0,0,0,0.22)",
-                      transition: "box-shadow 220ms ease",
-                      boxSizing: "border-box",
-                    }}
-                  />
-                </PatternRingOutline>
-              ) : (
-                <div
-                  aria-label="Signed in identity"
-                  style={{
-                    width: "100%",
-                    minWidth: 0,
-                    height: 32,
-                    display: "grid",
-                    gridTemplateRows: "1fr 1fr",
-                    alignItems: "center",
-                    justifyItems: "end",
-                    rowGap: 0,
-                  }}
-                >
-                  <div
-                    style={{
-                      minWidth: 0,
-                      width: "100%",
-                      display: "flex",
+                      display: "grid",
+                      gridTemplateRows: "1fr 1fr",
                       alignItems: "center",
-                      justifyContent: "flex-end",
-                      gap: 8,
-                      color: "rgba(255,255,255,0.82)",
-                      fontSize: 12,
-                      lineHeight: "16px",
-                      letterSpacing: "0.01em",
+                      justifyItems: "end",
+                      rowGap: 0,
                     }}
                   >
-                    <span
-                      aria-hidden
+                    <div
                       style={{
-                        width: 16,
-                        height: 16,
-                        borderRadius: 999,
-                        display: "grid",
-                        placeItems: "center",
-                        background:
-                          "color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.10))",
-                        boxShadow:
-                          "0 10px 18px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.18)",
-                        flex: "0 0 auto",
+                        minWidth: 0,
+                        width: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "flex-end",
+                        gap: 8,
+                        color: "rgba(255,255,255,0.82)",
+                        fontSize: 12,
+                        lineHeight: "16px",
+                        letterSpacing: "0.01em",
                       }}
                     >
                       <span
+                        aria-hidden
                         style={{
-                          fontSize: 11,
-                          lineHeight: "11px",
-                          transform: "translateY(-0.5px)",
-                          color: "rgba(255,255,255,0.92)",
+                          width: 16,
+                          height: 16,
+                          borderRadius: 999,
+                          display: "grid",
+                          placeItems: "center",
+                          background:
+                            "color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.10))",
+                          boxShadow:
+                            "0 10px 18px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.18)",
+                          flex: "0 0 auto",
                         }}
                       >
-                        ✓
+                        <span
+                          style={{
+                            fontSize: 11,
+                            lineHeight: "11px",
+                            transform: "translateY(-0.5px)",
+                            color: "rgba(255,255,255,0.92)",
+                          }}
+                        >
+                          ✓
+                        </span>
                       </span>
-                    </span>
 
-                    <span
-                      style={{
-                        minWidth: 0,
-                        maxWidth: "100%",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        textAlign: "right",
-                      }}
-                      title={displayEmail}
-                    >
-                      {displayEmail}
-                    </span>
-                  </div>
-
-                  <div
-                    style={{
-                      width: "100%",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "flex-end",
-                      gap: 8,
-                      fontSize: 12,
-                      lineHeight: "16px",
-                      minWidth: 0,
-                      opacity: 0.95,
-                    }}
-                  >
-                    {tier ? (
-                      <>
-                        <span style={{ opacity: 0.72 }} title={tier}>
-                          {tier}
-                        </span>
-                        <span aria-hidden style={{ opacity: 0.35 }}>
-                          |
-                        </span>
-                      </>
-                    ) : null}
-
-                    {showBillingTrigger ? (
-                      <button
-                        type="button"
-                        onClick={() => setBillingOpen((v) => !v)}
+                      <span
                         style={{
-                          appearance: "none",
-                          border: 0,
-                          background: "transparent",
-                          padding: 0,
-                          margin: 0,
-                          cursor: "pointer",
-                          color: "rgba(255,255,255,0.84)",
-                          textDecoration: "underline",
-                          textUnderlineOffset: 3,
-                          textDecorationColor: "rgba(255,255,255,0.28)",
+                          minWidth: 0,
+                          maxWidth: "100%",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          textAlign: "right",
                         }}
-                        title="View membership options"
+                        title={displayEmail}
                       >
-                        Membership
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              )}
-            </div>
+                        {displayEmail}
+                      </span>
+                    </div>
 
-            <div
-              style={{
-                flex: "0 0 auto",
-                display: "grid",
-                alignItems: "center",
-              }}
-            >
-              <Toggle
-                checked={toggleOn}
-                disabled={!toggleClickable}
-                onClick={startEmailCode}
-                mode={isActive ? "auth" : "anon"}
-              />
+                    <div
+                      style={{
+                        width: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "flex-end",
+                        gap: 8,
+                        fontSize: 12,
+                        lineHeight: "16px",
+                        minWidth: 0,
+                        opacity: 0.95,
+                      }}
+                    >
+                      {tier ? (
+                        <>
+                          <span style={{ opacity: 0.72 }} title={tier}>
+                            {tier}
+                          </span>
+                          <span aria-hidden style={{ opacity: 0.35 }}>
+                            |
+                          </span>
+                        </>
+                      ) : null}
+
+                      {showBillingTrigger ? (
+                        <button
+                          type="button"
+                          onClick={() => setBillingOpen((v) => !v)}
+                          style={{
+                            appearance: "none",
+                            border: 0,
+                            background: "transparent",
+                            padding: 0,
+                            margin: 0,
+                            cursor: "pointer",
+                            color: "rgba(255,255,255,0.84)",
+                            textDecoration: "underline",
+                            textUnderlineOffset: 3,
+                            textDecorationColor: "rgba(255,255,255,0.28)",
+                          }}
+                          title="View membership options"
+                        >
+                          Membership
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div
+                style={{
+                  flex: "0 0 auto",
+                  display: "grid",
+                  alignItems: "center",
+                }}
+              >
+                <Toggle
+                  checked={toggleOn}
+                  disabled={!toggleClickable}
+                  onClick={startEmailCode}
+                  mode={isActive ? "auth" : "anon"}
+                />
+              </div>
             </div>
-          </div>
+          </form>
 
           {/* OVERLAY STACK anchored to header row (true dropdown; no layout shift) */}
           <div
@@ -790,53 +859,88 @@ export default function ActivationGate(props: Props) {
               top: "calc(100% + 8px)",
               right: 0,
               zIndex: 60,
-              pointerEvents: otpOpen || billingOpen ? "auto" : "none",
+              pointerEvents: overlayOpen ? "auto" : "none",
 
-              // let children choose their own width; we just anchor to the right edge
               display: "grid",
               justifyItems: "end",
               width: "max-content",
-              maxWidth: "min(92vw, 520px)", // safety on small screens
+              maxWidth: "min(92vw, 520px)",
             }}
           >
-            {/* OTP dropdown */}
+            {/* OTP + Privacy share the same panel so it can “grow” */}
             {!isActive && (
               <div style={{ width: OTP_W, maxWidth: "92vw" }}>
-                <OverlayPanel open={otpOpen}>
-                  <div
-                    style={{ display: "grid", gap: 10, justifyItems: "center" }}
-                  >
-                    <OtpBoxes
-                      maxWidth={EMAIL_W}
-                      value={code}
-                      onChange={(next) => setCode(normalizeDigits(next))}
-                      disabled={isVerifying}
-                    />
-
-                    {(isSending || !flow) && (
-                      <div style={{ fontSize: 12, opacity: 0.7 }}>
-                        Sending code…
-                      </div>
-                    )}
-                    {isVerifying && (
-                      <div style={{ fontSize: 12, opacity: 0.7 }}>
-                        Verifying…
-                      </div>
-                    )}
-
-                    {error && (
+                <OverlayPanel
+                  open={overlayMode === "otp" || overlayMode === "privacy"}
+                  maxHeightOpen={overlayMode === "otp" ? 520 : 120}
+                >
+                  {overlayMode === "privacy" ? (
+                    <div style={{ width: "100%", display: "grid", gap: 8 }}>
                       <div
                         style={{
-                          fontSize: 12,
-                          opacity: 0.88,
-                          color: "#ffb4b4",
-                          textAlign: "center",
+                          width: "100%",
+                          borderRadius: 12,
+                          border: "1px solid rgba(255,255,255,0.18)",
+                          background: "rgba(0,0,0,0.35)",
+                          boxShadow: "0 12px 26px rgba(0,0,0,0.24)",
+                          padding: "10px 12px",
+                          boxSizing: "border-box",
                         }}
                       >
-                        {error}
+                        <div
+                          style={{
+                            fontSize: 12,
+                            lineHeight: "16px",
+                            opacity: 0.82,
+                          }}
+                        >
+                          By signing up, you agree to receive occasional emails
+                          about releases, events, and account activity.
+                          Unsubscribe anytime.
+                        </div>
                       </div>
-                    )}
-                  </div>
+
+                      {/* subtle hint when email is valid */}
+                      {emailValid && (
+                        <div style={{ fontSize: 12, opacity: 0.62 }}>
+                          Press Enter to continue.
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 10, justifyItems: "center" }}>
+                      <OtpBoxes
+                        maxWidth={EMAIL_W}
+                        value={code}
+                        onChange={(next) => setCode(normalizeDigits(next))}
+                        disabled={isVerifying}
+                      />
+
+                      {(isSending || !flow) && (
+                        <div style={{ fontSize: 12, opacity: 0.7 }}>
+                          Sending code…
+                        </div>
+                      )}
+                      {isVerifying && (
+                        <div style={{ fontSize: 12, opacity: 0.7 }}>
+                          Verifying…
+                        </div>
+                      )}
+
+                      {error && (
+                        <div
+                          style={{
+                            fontSize: 12,
+                            opacity: 0.88,
+                            color: "#ffb4b4",
+                            textAlign: "center",
+                          }}
+                        >
+                          {error}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </OverlayPanel>
               </div>
             )}

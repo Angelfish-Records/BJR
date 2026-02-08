@@ -285,7 +285,7 @@ export default function PortalArtistPosts(props: {
   authorName?: string;
   authorInitials?: string;
 
-  // NEW: point this at /public asset, R2, or any absolute URL
+  // point this at /public asset, R2, or any absolute URL where the module is called
   authorAvatarSrc?: string;
 
   defaultInlineImageMaxWidthPx?: number;
