@@ -977,7 +977,7 @@ export default function ActivationGate(props: Props) {
               }}
             >
               <LockIcon size={12} />
-              <span>Secured by Stripe.</span>
+              <span>Secured by Stripe. Your payment is protected and we will never share your data.</span>
             </div>
 
             {(isPatron || isPartner) && (

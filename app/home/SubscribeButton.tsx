@@ -118,12 +118,12 @@ function PriceBlock(props: { price: string; subcopy: string }) {
     >
       <div
         style={{
-          fontSize: 20,
-          lineHeight: "30px",
+          fontSize: "clamp(16px, 4.2vw, 20px)",
+          lineHeight: "clamp(20px, 5vw, 28px)",
           fontWeight: 750,
           letterSpacing: "0.01em",
           color: "rgba(255,255,255,0.94)",
-          whiteSpace: "nowrap",
+          whiteSpace: "normal", // allow wrap if needed
         }}
       >
         {price}
@@ -134,7 +134,7 @@ function PriceBlock(props: { price: string; subcopy: string }) {
           fontSize: 11,
           lineHeight: "14px",
           opacity: 0.72,
-          maxWidth: 200,
+          maxWidth: "none",
         }}
       >
         {subcopy}
@@ -296,7 +296,11 @@ export default function SubscribeButton(props: Props) {
               ? "0 18px 42px rgba(0,0,0,0.42)"
               : "0 14px 34px rgba(0,0,0,0.34)",
 
-          transform: current ? "translateY(-1px)" : isHovering ? "translateY(-1px)" : "translateY(0px)",
+          transform: current
+            ? "translateY(-1px)"
+            : isHovering
+              ? "translateY(-1px)"
+              : "translateY(0px)",
           transition:
             "transform 180ms cubic-bezier(.2,.8,.2,1), background 180ms ease, border-color 180ms ease, box-shadow 220ms ease, opacity 180ms ease",
 
@@ -344,13 +348,20 @@ export default function SubscribeButton(props: Props) {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr auto",
+            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 180px)",
             columnGap: 18,
             alignItems: "stretch",
             minWidth: 0,
           }}
         >
-          <div style={{ display: "grid", gap: 12, alignContent: "start", minWidth: 0 }}>
+          <div
+            style={{
+              display: "grid",
+              gap: 12,
+              alignContent: "start",
+              minWidth: 0,
+            }}
+          >
             <div
               style={{
                 fontSize: 16,
