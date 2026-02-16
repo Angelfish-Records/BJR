@@ -856,7 +856,8 @@ export default function ActivationGate(props: Props) {
               display: "grid",
               gap: 14,
               maxHeight: "min(82vh, 680px)",
-              overflow: "auto",
+              overflowY: "auto",
+              overflowX: "hidden",
             }}
           >
             {/* Header row */}
@@ -868,7 +869,14 @@ export default function ActivationGate(props: Props) {
                 gap: 12,
               }}
             >
-              <div style={{ display: "grid", gap: 6, minWidth: 0,  flex: "1 1 auto" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gap: 6,
+                  minWidth: 0,
+                  flex: "1 1 auto",
+                }}
+              >
                 <div
                   style={{
                     fontSize: 14,
@@ -941,7 +949,11 @@ export default function ActivationGate(props: Props) {
                 card={{
                   title: "Patron",
                   price: "$5 / month",
-                  bullets: ["All downloads", "First listener access", "Artist posts and Q&A"],
+                  bullets: [
+                    "All downloads",
+                    "First listener access",
+                    "Artist posts and Q&A",
+                  ],
                 }}
               />
 
@@ -977,7 +989,10 @@ export default function ActivationGate(props: Props) {
               }}
             >
               <LockIcon size={12} />
-              <span>Secured by Stripe. Your payment is protected and we will never share your data.</span>
+              <span>
+                Secured by Stripe. Your payment is protected and we will never
+                share your data.
+              </span>
             </div>
 
             {(isPatron || isPartner) && (
