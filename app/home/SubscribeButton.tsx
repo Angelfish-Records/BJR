@@ -44,20 +44,17 @@ function TickIcon(props: { size?: number }) {
   );
 }
 
+/**
+ * Minimal “feature table” rows:
+ * - tick icon instead of bullet
+ * - separators between rows
+ * - NO outer container border/background
+ */
 function FeatureRows(props: { items: string[] }) {
   const { items } = props;
 
   return (
-    <div
-      style={{
-        width: "100%",
-        borderRadius: 14,
-        border: "1px solid rgba(255,255,255,0.12)",
-        background: "rgba(0,0,0,0.22)",
-        overflow: "hidden",
-        boxShadow: "0 12px 26px rgba(0,0,0,0.20)",
-      }}
-    >
+    <div style={{ width: "100%", display: "grid" }}>
       {items.map((t, i) => (
         <div key={`${t}:${i}`}>
           <div
@@ -66,7 +63,7 @@ function FeatureRows(props: { items: string[] }) {
               gridTemplateColumns: "18px 1fr",
               alignItems: "center",
               columnGap: 10,
-              padding: "10px 12px",
+              padding: "10px 0px",
             }}
           >
             <div style={{ display: "grid", placeItems: "center" }}>
@@ -91,8 +88,7 @@ function FeatureRows(props: { items: string[] }) {
               style={{
                 height: 1,
                 background: "rgba(255,255,255,0.08)",
-                marginLeft: 12,
-                marginRight: 12,
+                marginLeft: 28, // align divider under text (past icon)
               }}
             />
           )}
@@ -102,6 +98,11 @@ function FeatureRows(props: { items: string[] }) {
   );
 }
 
+/**
+ * Price block:
+ * - NO pill container/border/background
+ * - designed to sit vertically centered in the right column
+ */
 function PriceBlock(props: { price: string; subcopy: string }) {
   const { price, subcopy } = props;
 
@@ -110,26 +111,19 @@ function PriceBlock(props: { price: string; subcopy: string }) {
       style={{
         display: "grid",
         justifyItems: "end",
-        gap: 6,
         textAlign: "right",
-        flex: "0 0 auto",
+        gap: 8,
+        alignSelf: "center",
       }}
     >
       <div
         style={{
-          fontSize: 20,
-          lineHeight: "22px",
-          fontWeight: 800,
+          fontSize: 28,
+          lineHeight: "30px",
+          fontWeight: 850,
           letterSpacing: "0.01em",
           color: "rgba(255,255,255,0.94)",
-          padding: "8px 10px",
-          borderRadius: 14,
-          border: "1px solid rgba(255,255,255,0.14)",
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0.18))",
-          boxShadow: "0 12px 30px rgba(0,0,0,0.22)",
-          display: "inline-block",
-          minWidth: 150,
+          whiteSpace: "nowrap",
         }}
       >
         {price}
@@ -140,7 +134,7 @@ function PriceBlock(props: { price: string; subcopy: string }) {
           fontSize: 11,
           lineHeight: "14px",
           opacity: 0.72,
-          maxWidth: 190,
+          maxWidth: 200,
         }}
       >
         {subcopy}
@@ -292,7 +286,7 @@ export default function SubscribeButton(props: Props) {
               ? "rgba(255,255,255,0.07)"
               : "rgba(255,255,255,0.045)",
 
-          padding: 14,
+          padding: 16,
           cursor: disabled ? "default" : "pointer",
           color: "rgba(255,255,255,0.92)",
 
@@ -302,20 +296,13 @@ export default function SubscribeButton(props: Props) {
               ? "0 18px 42px rgba(0,0,0,0.42)"
               : "0 14px 34px rgba(0,0,0,0.34)",
 
-          transform: current
-            ? "translateY(-1px)"
-            : isHovering
-              ? "translateY(-1px)"
-              : "translateY(0px)",
+          transform: current ? "translateY(-1px)" : isHovering ? "translateY(-1px)" : "translateY(0px)",
           transition:
             "transform 180ms cubic-bezier(.2,.8,.2,1), background 180ms ease, border-color 180ms ease, box-shadow 220ms ease, opacity 180ms ease",
 
           opacity: disabled && !current ? 0.75 : 1,
           overflow: "visible",
           alignSelf: "stretch",
-          display: "grid",
-          gridTemplateRows: "auto 1fr",
-          alignItems: "start",
         }}
       >
         {/* Current-tier glow ring */}
@@ -351,19 +338,23 @@ export default function SubscribeButton(props: Props) {
           </div>
         )}
 
-        <div style={{ display: "grid", gap: 12, alignContent: "start" }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "space-between",
-              gap: 12,
-            }}
-          >
+        {/* Two-column layout:
+            - left: title + features
+            - right: price block, vertically centered */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr auto",
+            columnGap: 18,
+            alignItems: "stretch",
+            minWidth: 0,
+          }}
+        >
+          <div style={{ display: "grid", gap: 12, alignContent: "start", minWidth: 0 }}>
             <div
               style={{
-                fontSize: 15,
-                fontWeight: 650,
+                fontSize: 16,
+                fontWeight: 700,
                 letterSpacing: "0.01em",
                 paddingTop: 2,
               }}
@@ -371,12 +362,12 @@ export default function SubscribeButton(props: Props) {
               {spec.title}
             </div>
 
-            <PriceBlock price={spec.price} subcopy={subcopy} />
+            {Array.isArray(spec.bullets) && spec.bullets.length > 0 ? (
+              <FeatureRows items={spec.bullets.slice(0, 3)} />
+            ) : null}
           </div>
 
-          {Array.isArray(spec.bullets) && spec.bullets.length > 0 ? (
-            <FeatureRows items={spec.bullets.slice(0, 3)} />
-          ) : null}
+          <PriceBlock price={spec.price} subcopy={subcopy} />
         </div>
       </button>
     );
