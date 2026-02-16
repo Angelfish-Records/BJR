@@ -536,7 +536,10 @@ export default function ActivationGate(props: Props) {
   const CONTENT_W = placement === "modal" ? 420 : 360;
   const EMAIL_W = CONTENT_W;
   const OTP_W = CONTENT_W;
-  const BILLING_W = 450;
+
+  // New membership modal sizing (bigger, centered)
+  const BILLING_MODAL_MAX_W = 860;
+  const BILLING_MODAL_MIN_W = 640;
 
   const needsAttention = !isActive && !!attentionMessage;
   const toggleClickable =
@@ -644,19 +647,20 @@ export default function ActivationGate(props: Props) {
     if (!isActive || !canManageBilling) setBillingOpen(false);
   }, [isActive, canManageBilling]);
 
-  // Click-outside closes billing dropdown (topbar only)
+  // Close membership modal via Escape (but don't interfere with OTP)
   useEffect(() => {
-    if (placement !== "topbar") return;
-    function onDown(e: MouseEvent) {
-      if (!billingOpen) return;
-      const el = rootRef.current;
-      if (!el) return;
-      if (e.target instanceof Node && el.contains(e.target)) return;
+    if (!billingOpen) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      // If OTP is open, don't steal Escape; membership modal only.
+      if (!isActive) return;
+      e.preventDefault();
+      e.stopPropagation();
       setBillingOpen(false);
     }
-    window.addEventListener("mousedown", onDown);
-    return () => window.removeEventListener("mousedown", onDown);
-  }, [billingOpen, placement]);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [billingOpen, isActive]);
 
   // If we leave idle/email phase, stop the “typing” state
   useEffect(() => {
@@ -686,15 +690,13 @@ export default function ActivationGate(props: Props) {
     !!email &&
     (isTypingEmail || needsAttention);
 
-  const overlayOpen = otpOpen || billingOpen || privacyOpen;
+  const overlayOpen = otpOpen || privacyOpen; // billing no longer lives in the topbar overlay stack
 
-  const overlayMode: "otp" | "billing" | "privacy" | "none" = otpOpen
+  const overlayMode: "otp" | "privacy" | "none" = otpOpen
     ? "otp"
-    : billingOpen
-      ? "billing"
-      : privacyOpen
-        ? "privacy"
-        : "none";
+    : privacyOpen
+      ? "privacy"
+      : "none";
 
   function scheduleTypingFade() {
     if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
@@ -762,7 +764,9 @@ export default function ActivationGate(props: Props) {
       {(isSending || !flow) && (
         <div style={{ fontSize: 12, opacity: 0.7 }}>Sending code…</div>
       )}
-      {isVerifying && <div style={{ fontSize: 12, opacity: 0.7 }}>Verifying…</div>}
+      {isVerifying && (
+        <div style={{ fontSize: 12, opacity: 0.7 }}>Verifying…</div>
+      )}
 
       {error && (
         <div
@@ -779,6 +783,216 @@ export default function ActivationGate(props: Props) {
     </div>
   );
 
+  const membershipModalOpen = billingOpen && isActive && canManageBilling;
+
+  const membershipModal = membershipModalOpen ? (
+    <div
+      aria-hidden={false}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 5000,
+        // allow the page to remain interactable by default
+        pointerEvents: "none",
+      }}
+    >
+      {/* Backdrop: click-catcher + subtle blur/lift. */}
+      <div
+        aria-hidden
+        onMouseDown={() => setBillingOpen(false)}
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "auto",
+          // minimal tint; mostly blur, not blockade
+          background: "rgba(0,0,0,0.06)",
+          backdropFilter: "blur(10px)",
+          WebkitBackdropFilter: "blur(10px)",
+        }}
+      />
+
+      {/* Centered modal container */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "grid",
+          placeItems: "center",
+          padding: "min(8vh, 56px) 16px",
+          pointerEvents: "none",
+        }}
+      >
+        {/* Gradient border frame */}
+        <div
+          role="dialog"
+          aria-modal="false"
+          aria-label="Membership options"
+          onMouseDown={(e) => {
+            // prevent backdrop click from closing when clicking inside modal
+            e.stopPropagation();
+          }}
+          style={{
+            width: "100%",
+            maxWidth: `min(92vw, ${BILLING_MODAL_MAX_W}px)`,
+            minWidth: `min(92vw, ${BILLING_MODAL_MIN_W}px)`,
+            borderRadius: 26,
+            padding: 1, // gradient border thickness
+            pointerEvents: "auto",
+            background:
+              "linear-gradient(135deg, rgba(255,215,130,0.62), rgba(255,234,170,0.18) 38%, rgba(255,215,130,0.46) 65%, rgba(255,255,255,0.10))",
+            boxShadow:
+              "0 30px 90px rgba(0,0,0,0.55), 0 60px 160px rgba(0,0,0,0.55)",
+            transform: "translateZ(0)",
+          }}
+        >
+          {/* Inner panel */}
+          <div
+            style={{
+              borderRadius: 25,
+              background: "rgba(10,10,14,0.92)",
+              backdropFilter: "blur(14px)",
+              WebkitBackdropFilter: "blur(14px)",
+              border: "1px solid rgba(255,255,255,0.06)",
+              boxShadow:
+                "0 0 0 1px rgba(255,255,255,0.03) inset, 0 18px 52px rgba(0,0,0,0.35)",
+              padding: 18,
+              display: "grid",
+              gap: 14,
+              maxHeight: "min(82vh, 680px)",
+              overflow: "auto",
+            }}
+          >
+            {/* Header row */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
+              <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: 14,
+                    lineHeight: "18px",
+                    fontWeight: 700,
+                    letterSpacing: "0.01em",
+                    color: "rgba(255,255,255,0.92)",
+                  }}
+                >
+                  Membership
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    lineHeight: "16px",
+                    opacity: 0.82,
+                    maxWidth: 560,
+                  }}
+                >
+                  {isFriend
+                    ? "Support future work, access exclusive content."
+                    : "Switch tier, or cancel."}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                aria-label="Close membership"
+                onClick={() => setBillingOpen(false)}
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 999,
+                  border: "1px solid rgba(255,255,255,0.14)",
+                  background: "rgba(255,255,255,0.06)",
+                  color: "rgba(255,255,255,0.88)",
+                  cursor: "pointer",
+                  display: "grid",
+                  placeItems: "center",
+                  lineHeight: 1,
+                  fontSize: 18,
+                  userSelect: "none",
+                  flex: "0 0 auto",
+                }}
+                title="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Cards row (keeps the 2-up layout, but with more vertical room) */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 14,
+                alignItems: "stretch",
+              }}
+            >
+              <SubscribeButton
+                loggedIn={true}
+                variant="card"
+                tier="patron"
+                disabled={isPatron}
+                current={isPatron}
+                label={isPatron ? "Current" : "Choose Patron"}
+                card={{
+                  title: "Patron",
+                  price: "$5 / month",
+                  bullets: ["All downloads", "Early access", "Posts and Q&A"],
+                }}
+              />
+
+              <SubscribeButton
+                loggedIn={true}
+                variant="card"
+                tier="partner"
+                disabled={isPartner}
+                current={isPartner}
+                label={isPartner ? "Current" : "Choose Partner"}
+                card={{
+                  title: "Partner",
+                  price: "$299 / year",
+                  bullets: ["Release credits", "Creative livestreams", "Something else"],
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                marginTop: 2,
+                fontSize: 11,
+                lineHeight: "14px",
+                opacity: 0.7,
+              }}
+            >
+              <LockIcon size={12} />
+              <span>Secured by Stripe.</span>
+            </div>
+
+            {(isPatron || isPartner) && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  marginTop: 2,
+                }}
+              >
+                <CancelSubscriptionButton variant="link" label="Cancel subscription" />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div
       ref={rootRef}
@@ -792,6 +1006,9 @@ export default function ActivationGate(props: Props) {
         justifyContent: modalCentered ? "center" : "flex-end",
       }}
     >
+      {/* Membership modal: centered overlay (non-blocking scroll) */}
+      {membershipModal}
+
       <div
         style={{
           position: "relative",
@@ -967,7 +1184,7 @@ export default function ActivationGate(props: Props) {
                       {showBillingTrigger ? (
                         <button
                           type="button"
-                          onClick={() => setBillingOpen((v) => !v)}
+                          onClick={() => setBillingOpen(true)}
                           style={{
                             appearance: "none",
                             border: 0,
@@ -1012,22 +1229,38 @@ export default function ActivationGate(props: Props) {
             <div
               style={{
                 width: "100%",
+                minWidth: 0,
                 display: "grid",
                 justifyItems: "center",
                 marginTop: 12,
               }}
             >
-              <div style={{ width: OTP_W, maxWidth: "92vw" }}>
+              <div
+                style={{
+                  width: "100%",
+                  maxWidth: OTP_W,
+                  minWidth: 0,
+                  boxSizing: "border-box",
+                }}
+              >
                 <OverlayPanel
                   open={inlinePanelOpen}
                   maxHeightOpen={inlineMaxHeight}
                   yOffsetClosed={-4}
                 >
-                  <CrossfadeSwap
-                    mode={overlayMode === "otp" ? "otp" : "privacy"}
-                    privacy={privacyNode}
-                    otp={otpNode}
-                  />
+                  <div
+                    style={{
+                      width: "100%",
+                      minWidth: 0,
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <CrossfadeSwap
+                      mode={overlayMode === "otp" ? "otp" : "privacy"}
+                      privacy={privacyNode}
+                      otp={otpNode}
+                    />
+                  </div>
                 </OverlayPanel>
               </div>
             </div>
@@ -1060,94 +1293,6 @@ export default function ActivationGate(props: Props) {
                       privacy={privacyNode}
                       otp={otpNode}
                     />
-                  </OverlayPanel>
-                </div>
-              )}
-
-              {isActive && canManageBilling && (
-                <div style={{ width: BILLING_W, maxWidth: "92vw" }}>
-                  <OverlayPanel open={billingOpen}>
-                    <div style={{ display: "grid", gap: 10 }}>
-                      <div
-                        style={{
-                          fontSize: 12,
-                          lineHeight: "16px",
-                          opacity: 0.82,
-                        }}
-                      >
-                        {isFriend
-                          ? "Support future work, access exclusive content."
-                          : "Switch tier, or cancel."}
-                      </div>
-
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr 1fr",
-                          gap: 10,
-                          alignItems: "stretch",
-                        }}
-                      >
-                        <SubscribeButton
-                          loggedIn={true}
-                          variant="card"
-                          tier="patron"
-                          disabled={isPatron}
-                          current={isPatron}
-                          label={isPatron ? "Current" : "Choose Patron"}
-                          card={{
-                            title: "Patron",
-                            price: "$5 / month",
-                            bullets: ["All downloads", "Early access", "Posts and Q&A"],
-                          }}
-                        />
-
-                        <SubscribeButton
-                          loggedIn={true}
-                          variant="card"
-                          tier="partner"
-                          disabled={isPartner}
-                          current={isPartner}
-                          label={isPartner ? "Current" : "Choose Partner"}
-                          card={{
-                            title: "Partner",
-                            price: "$299 / year",
-                            bullets: ["Release credits", "Creative livestreams", "Something else"],
-                          }}
-                        />
-                      </div>
-
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: 6,
-                          marginTop: 3,
-                          fontSize: 11,
-                          lineHeight: "14px",
-                          opacity: 0.7,
-                        }}
-                      >
-                        <LockIcon size={12} />
-                        <span>Secured by Stripe.</span>
-                      </div>
-
-                      {(isPatron || isPartner) && (
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "flex-end",
-                            marginTop: 2,
-                          }}
-                        >
-                          <CancelSubscriptionButton
-                            variant="link"
-                            label="Cancel subscription"
-                          />
-                        </div>
-                      )}
-                    </div>
                   </OverlayPanel>
                 </div>
               )}

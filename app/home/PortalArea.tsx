@@ -18,7 +18,7 @@ import MiniPlayer from "./player/MiniPlayer";
 import ActivationGate from "@/app/home/ActivationGate";
 import Image from "next/image";
 
-const DEFAULT_PORTAL_TAB = "download";
+const DEFAULT_PORTAL_TAB = "extras";
 
 function normalizeP(raw: string | null | undefined): string {
   const v = (raw ?? "").trim();
@@ -204,58 +204,6 @@ function ModalAttentionMessage(props: { attentionMessage: string | null }) {
         gap: 8,
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          gap: 12,
-          alignItems: "center",
-          minWidth: 0,
-        }}
-      >
-        <div
-          aria-hidden
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 999,
-            display: "grid",
-            placeItems: "center",
-            background:
-              "color-mix(in srgb, var(--accent) 16%, rgba(255,255,255,0.06))",
-            border: "1px solid rgba(255,255,255,0.14)",
-            boxShadow: "0 12px 26px rgba(0,0,0,0.22)",
-            flex: "0 0 auto",
-          }}
-        >
-          <span aria-hidden style={{ transform: "translateY(-0.5px)" }}>
-            🔒
-          </span>
-        </div>
-
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 15,
-              lineHeight: "19px",
-              letterSpacing: "0.01em",
-              color: "rgba(255,255,255,0.92)",
-            }}
-          >
-            Sign in to continue
-          </div>
-          <div
-            style={{
-              marginTop: 3,
-              fontSize: 12,
-              lineHeight: "16px",
-              opacity: 0.8,
-            }}
-          >
-            This step unlocks the next action.
-          </div>
-        </div>
-      </div>
-
       <div
         style={{
           fontSize: 13,
