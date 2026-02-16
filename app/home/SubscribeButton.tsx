@@ -160,6 +160,7 @@ function CardGlowRing(props: {
     blurPx = 10,
   } = props;
   const pad = ringPx + glowPx;
+  const outerRadius = radius + pad;
 
   return (
     <div
@@ -167,7 +168,7 @@ function CardGlowRing(props: {
       style={{
         position: "absolute",
         inset: -pad,
-        borderRadius: radius,
+        borderRadius: outerRadius,
         pointerEvents: "none",
 
         // Ring mask (padding-box XOR content-box), same trick as your toggle ring.

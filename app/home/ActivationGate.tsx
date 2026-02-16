@@ -890,7 +890,7 @@ export default function ActivationGate(props: Props) {
                 >
                   {isFriend
                     ? "Support future work, access exclusive content."
-                    : "Switch tier, or cancel."}
+                    : "Change or cancel your membership below. Thank you for supporting future work on this independent platform."}
                 </div>
               </div>
 
@@ -937,11 +937,11 @@ export default function ActivationGate(props: Props) {
                 tier="patron"
                 disabled={isPatron}
                 current={isPatron}
-                label={isPatron ? "Current" : "Choose Patron"}
+                label={isPatron ? "Active" : "Choose Patron"}
                 card={{
                   title: "Patron",
                   price: "$5 / month",
-                  bullets: ["All downloads", "Early access", "Posts and Q&A"],
+                  bullets: ["All downloads", "First listener access", "Artist posts and Q&A"],
                 }}
               />
 
@@ -951,7 +951,7 @@ export default function ActivationGate(props: Props) {
                 tier="partner"
                 disabled={isPartner}
                 current={isPartner}
-                label={isPartner ? "Current" : "Choose Partner"}
+                label={isPartner ? "Active" : "Choose Partner"}
                 card={{
                   title: "Partner",
                   price: "$299 / year",
@@ -984,7 +984,7 @@ export default function ActivationGate(props: Props) {
               <div
                 style={{
                   display: "flex",
-                  justifyContent: "flex-end",
+                  justifyContent: "center",
                   marginTop: 2,
                 }}
               >
