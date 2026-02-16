@@ -22,7 +22,7 @@ import {
 } from "@/lib/albumPolicy";
 import { listCurrentEntitlementKeys } from "@/lib/entitlements";
 
-const ANON_DISTINCT_TRACK_CAP = 3;
+const ANON_DISTINCT_TRACK_CAP = 1;
 const ANON_WINDOW_DAYS = 30;
 
 type Action = "login" | "subscribe" | "buy" | "wait" | null;

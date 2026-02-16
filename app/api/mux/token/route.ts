@@ -46,7 +46,7 @@ type TokenBlocked = {
 };
 
 const AUD = "v";
-const ANON_DISTINCT_TRACK_CAP = 3;
+const ANON_DISTINCT_TRACK_CAP = 1;
 const ANON_WINDOW_DAYS = 30;
 
 function mustEnv(...names: string[]) {
