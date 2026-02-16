@@ -1,12 +1,7 @@
 // web/app/home/FooterDrawer.tsx
 "use client";
 
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 type FooterKey =
   | "privacy"
@@ -47,10 +42,12 @@ export default function FooterDrawer(props: {
         title: "Privacy",
         body: (
           <>
-            Identity is email-only (Clerk). We use your email to authenticate
-            access and to send opt-out first-party
-            communications about releases, events, and account activity. Access decisions, entitlements, and
-            playthrough telemetry are stored first-party in Neon Postgres. Streaming is delivered via Mux using
+            Identity is email-only (authenticated with Clerk); we will never ask
+            you for your name, location, phone number, or social handles. We use
+            your email to authenticate access and to send opt-out first-party
+            communications about releases, events, and account activity. Access
+            decisions, entitlements, and playthrough telemetry are stored
+            first-party in Neon Postgres. Streaming is delivered via Mux using
             short-lived signed tokens. We don’t sell personal data, share it
             with advertisers, or embed ad-tracking pixels. Cookies are used only
             for session/authentication and basic anti-abuse controls. Logs are

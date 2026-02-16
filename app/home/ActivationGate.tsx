@@ -20,6 +20,13 @@ type Props = {
   canManageBilling?: boolean;
   isPatron?: boolean;
   tier?: string | null;
+
+  /**
+   * Where the gate is being rendered.
+   * - "topbar": native top-right layout (default)
+   * - "modal": centered modal CTA layout (bigger + centered)
+   */
+  placement?: "topbar" | "modal";
 };
 
 function getClerkErrorMessage(err: unknown): string {
@@ -433,7 +440,9 @@ export default function ActivationGate(props: Props) {
     canManageBilling = false,
     isPatron = false,
     tier = null,
+    placement = "topbar",
   } = props;
+
   const router = useRouter();
 
   const { isSignedIn } = useAuth();
@@ -460,8 +469,9 @@ export default function ActivationGate(props: Props) {
 
   const [billingOpen, setBillingOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const emailInputRef = useRef<HTMLInputElement | null>(null);
 
-  // NEW: “briefly while typing” privacy notice timer
+  // “briefly while typing” privacy notice timer
   const [isTypingEmail, setIsTypingEmail] = useState(false);
   const typingTimerRef = useRef<number | null>(null);
 
@@ -472,15 +482,17 @@ export default function ActivationGate(props: Props) {
     () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),
     [email],
   );
+
   const displayEmail =
     (user?.primaryEmailAddress?.emailAddress ??
       user?.emailAddresses?.[0]?.emailAddress ??
       "") ||
     email;
 
-  const EMAIL_W = 360;
-  const OTP_W = EMAIL_W; // 360
-  const BILLING_W = 450; // matches .afTopBarRightInner maxWidth
+  const EMAIL_W = placement === "modal" ? 420 : 360;
+  const OTP_W = EMAIL_W;
+  const BILLING_W = 450;
+
   const needsAttention = !isActive && !!attentionMessage;
   const toggleClickable =
     !isActive && phase === "idle" && emailValid && clerkLoaded;
@@ -582,8 +594,9 @@ export default function ActivationGate(props: Props) {
     if (!isActive || !canManageBilling) setBillingOpen(false);
   }, [isActive, canManageBilling]);
 
-  // Click-outside closes billing dropdown
+  // Click-outside closes billing dropdown (topbar only; modal doesn't need it)
   useEffect(() => {
+    if (placement !== "topbar") return;
     function onDown(e: MouseEvent) {
       if (!billingOpen) return;
       const el = rootRef.current;
@@ -593,18 +606,30 @@ export default function ActivationGate(props: Props) {
     }
     window.addEventListener("mousedown", onDown);
     return () => window.removeEventListener("mousedown", onDown);
-  }, [billingOpen]);
+  }, [billingOpen, placement]);
 
-  // NEW: if we leave idle/email phase, stop the “typing” state
+  // If we leave idle/email phase, stop the “typing” state
   useEffect(() => {
     if (phase !== "idle") setIsTypingEmail(false);
   }, [phase]);
+
+  // Modal UX: when the gate is demanding attention, focus email input
+  useEffect(() => {
+    if (placement !== "modal") return;
+    if (isActive) return;
+    if (!needsAttention) return;
+    // Slight delay avoids focus racing initial paint
+    const t = window.setTimeout(() => {
+      emailInputRef.current?.focus();
+    }, 20);
+    return () => window.clearTimeout(t);
+  }, [placement, isActive, needsAttention]);
 
   const toggleOn = isActive || phase === "code" || isSending || isVerifying;
   const otpOpen = !isActive && phase === "code";
   const showBillingTrigger = isActive && canManageBilling;
 
-  // NEW: privacy notice opens briefly while typing (and never when OTP is open)
+  // Privacy notice opens briefly while typing (and never when OTP is open)
   const privacyOpen =
     !isActive &&
     phase === "idle" &&
@@ -614,7 +639,6 @@ export default function ActivationGate(props: Props) {
 
   const overlayOpen = otpOpen || billingOpen || privacyOpen;
 
-  // NEW: single “box” that can smoothly grow from notice → OTP
   const overlayMode: "otp" | "billing" | "privacy" | "none" = otpOpen
     ? "otp"
     : billingOpen
@@ -635,7 +659,6 @@ export default function ActivationGate(props: Props) {
     const next = nextRaw.trim();
     setEmail(next);
 
-    // show notice while actively typing
     setIsTypingEmail(true);
     scheduleTypingFade();
   }
@@ -644,6 +667,46 @@ export default function ActivationGate(props: Props) {
     if (!toggleClickable) return;
     void startEmailCode();
   }
+
+  const containerAlign: React.CSSProperties =
+    placement === "modal"
+      ? {
+          alignItems: "center",
+          justifyContent: "center",
+        }
+      : {
+          alignItems: "center",
+          justifyContent: "flex-end",
+        };
+
+  const headerJustify: React.CSSProperties =
+    placement === "modal"
+      ? {
+          justifyItems: "center",
+          alignContent: "center",
+        }
+      : {
+          justifyItems: "end",
+          alignContent: "end",
+        };
+
+  const rowJustify: React.CSSProperties =
+    placement === "modal"
+      ? { justifyContent: "center" }
+      : { justifyContent: "flex-end" };
+
+  const overlayPos: React.CSSProperties =
+    placement === "modal"
+      ? {
+          left: "50%",
+          transform: "translateX(-50%)",
+          right: "auto",
+          justifyItems: "center",
+        }
+      : {
+          right: 0,
+          justifyItems: "end",
+        };
 
   return (
     <div
@@ -654,8 +717,7 @@ export default function ActivationGate(props: Props) {
         minWidth: 0,
         display: "flex",
         flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "flex-end",
+        ...containerAlign,
       }}
     >
       <div
@@ -664,22 +726,14 @@ export default function ActivationGate(props: Props) {
           zIndex: 42,
           width: "100%",
           minWidth: 0,
-          maxWidth: EMAIL_W,
+          maxWidth: placement === "modal" ? 560 : EMAIL_W,
           display: "grid",
-          gap: 4,
-          justifyItems: "end",
-          alignContent: "end",
+          gap: placement === "modal" ? 8 : 4,
+          ...headerJustify,
         }}
       >
         {/* HEADER ROW */}
-        <div
-          style={{
-            position: "relative",
-            width: "100%",
-            minWidth: 0,
-          }}
-        >
-          {/* NEW: wrap the email+toggle row in a form so Enter submits */}
+        <div style={{ position: "relative", width: "100%", minWidth: 0 }}>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -694,7 +748,7 @@ export default function ActivationGate(props: Props) {
                 gap: "0 12px",
                 width: "100%",
                 minWidth: 0,
-                justifyContent: "flex-end",
+                ...rowJustify,
               }}
             >
               <div style={{ flex: "1 1 auto", minWidth: 0, maxWidth: EMAIL_W }}>
@@ -709,6 +763,7 @@ export default function ActivationGate(props: Props) {
                     innerBg="rgb(10, 10, 14)"
                   >
                     <input
+                      ref={emailInputRef}
                       type="email"
                       placeholder="Enter email for access."
                       value={email}
@@ -722,9 +777,9 @@ export default function ActivationGate(props: Props) {
                       style={{
                         width: "100%",
                         minWidth: 0,
-                        height: 32,
-                        padding: "0 14px",
-                        fontSize: 12,
+                        height: placement === "modal" ? 38 : 32,
+                        padding: placement === "modal" ? "0 16px" : "0 14px",
+                        fontSize: placement === "modal" ? 13 : 12,
                         lineHeight: "16px",
                         WebkitTextSizeAdjust: "100%",
                         borderRadius: 999,
@@ -753,7 +808,7 @@ export default function ActivationGate(props: Props) {
                       display: "grid",
                       gridTemplateRows: "1fr 1fr",
                       alignItems: "center",
-                      justifyItems: "end",
+                      justifyItems: placement === "modal" ? "center" : "end",
                       rowGap: 0,
                     }}
                   >
@@ -763,7 +818,8 @@ export default function ActivationGate(props: Props) {
                         width: "100%",
                         display: "flex",
                         alignItems: "center",
-                        justifyContent: "flex-end",
+                        justifyContent:
+                          placement === "modal" ? "center" : "flex-end",
                         gap: 8,
                         color: "rgba(255,255,255,0.82)",
                         fontSize: 12,
@@ -805,7 +861,7 @@ export default function ActivationGate(props: Props) {
                           overflow: "hidden",
                           textOverflow: "ellipsis",
                           whiteSpace: "nowrap",
-                          textAlign: "right",
+                          textAlign: placement === "modal" ? "center" : "right",
                         }}
                         title={displayEmail}
                       >
@@ -818,7 +874,8 @@ export default function ActivationGate(props: Props) {
                         width: "100%",
                         display: "flex",
                         alignItems: "center",
-                        justifyContent: "flex-end",
+                        justifyContent:
+                          placement === "modal" ? "center" : "flex-end",
                         gap: 8,
                         fontSize: 12,
                         lineHeight: "16px",
@@ -880,27 +937,26 @@ export default function ActivationGate(props: Props) {
             </div>
           </form>
 
-          {/* OVERLAY STACK anchored to header row (true dropdown; no layout shift) */}
+          {/* OVERLAY STACK (dropdown in topbar; centered stack in modal) */}
           <div
             style={{
               position: "absolute",
-              top: "calc(100% + 8px)",
-              right: 0,
+              top: "calc(100% + 10px)",
               zIndex: 60,
               pointerEvents: overlayOpen ? "auto" : "none",
 
               display: "grid",
-              justifyItems: "end",
               width: "max-content",
-              maxWidth: "min(92vw, 520px)",
+              maxWidth: "min(92vw, 560px)",
+              ...overlayPos,
             }}
           >
-            {/* OTP + Privacy share the same panel so it can “grow” */}
+            {/* OTP + Privacy share same panel */}
             {!isActive && (
               <div style={{ width: OTP_W, maxWidth: "92vw" }}>
                 <OverlayPanel
                   open={overlayMode === "otp" || overlayMode === "privacy"}
-                  maxHeightOpen={overlayMode === "otp" ? 520 : 120}
+                  maxHeightOpen={overlayMode === "otp" ? 520 : 140}
                 >
                   {overlayMode === "privacy" ? (
                     <div style={{ width: "100%", display: "grid", gap: 8 }}>
@@ -972,7 +1028,7 @@ export default function ActivationGate(props: Props) {
               </div>
             )}
 
-            {/* Billing dropdown */}
+            {/* Billing dropdown (topbar-only in practice, but harmless in modal) */}
             {isActive && canManageBilling && (
               <div style={{ width: BILLING_W, maxWidth: "92vw" }}>
                 <OverlayPanel open={billingOpen}>
