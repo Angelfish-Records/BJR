@@ -194,20 +194,20 @@ function ModalAttentionMessage(props: { attentionMessage: string | null }) {
     <div
       style={{
         width: "100%",
-        borderRadius: 18,
+        borderRadius: 20,
         border: "1px solid rgba(255,255,255,0.14)",
         background:
           "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.24))",
-        padding: "14px 14px",
+        padding: "16px 16px",
         boxShadow: "0 18px 52px rgba(0,0,0,0.35)",
         display: "grid",
-        gap: 6,
+        gap: 8,
       }}
     >
       <div
         style={{
           display: "flex",
-          gap: 10,
+          gap: 12,
           alignItems: "center",
           minWidth: 0,
         }}
@@ -215,8 +215,8 @@ function ModalAttentionMessage(props: { attentionMessage: string | null }) {
         <div
           aria-hidden
           style={{
-            width: 26,
-            height: 26,
+            width: 28,
+            height: 28,
             borderRadius: 999,
             display: "grid",
             placeItems: "center",
@@ -235,8 +235,8 @@ function ModalAttentionMessage(props: { attentionMessage: string | null }) {
         <div style={{ minWidth: 0 }}>
           <div
             style={{
-              fontSize: 14,
-              lineHeight: "18px",
+              fontSize: 15,
+              lineHeight: "19px",
               letterSpacing: "0.01em",
               color: "rgba(255,255,255,0.92)",
             }}
@@ -245,7 +245,7 @@ function ModalAttentionMessage(props: { attentionMessage: string | null }) {
           </div>
           <div
             style={{
-              marginTop: 2,
+              marginTop: 3,
               fontSize: 12,
               lineHeight: "16px",
               opacity: 0.8,
@@ -258,8 +258,8 @@ function ModalAttentionMessage(props: { attentionMessage: string | null }) {
 
       <div
         style={{
-          fontSize: 12,
-          lineHeight: "16px",
+          fontSize: 13,
+          lineHeight: "17px",
           opacity: 0.9,
           paddingLeft: 2,
         }}
@@ -513,7 +513,6 @@ function useFocusTrap(
     if (!root) return;
 
     const isElementDisabled = (el: Element): boolean => {
-      // Covers the common interactive elements that support `disabled`.
       if (el instanceof HTMLButtonElement) return el.disabled;
       if (el instanceof HTMLInputElement) return el.disabled;
       if (el instanceof HTMLSelectElement) return el.disabled;
@@ -524,7 +523,6 @@ function useFocusTrap(
     };
 
     const isActuallyFocusable = (el: HTMLElement): boolean => {
-      // Exclude elements that cannot be interacted with / focused.
       if (el.tabIndex < 0) return false;
       if (isElementDisabled(el)) return false;
 
@@ -546,12 +544,10 @@ function useFocusTrap(
         "a",
       ]);
 
-      // Anchor is only focusable if it has an href (or a positive tabindex).
       if (tag === "a") {
         const a = el as HTMLAnchorElement;
         if (!a.href && el.tabIndex <= 0) return false;
       } else if (!focusableTags.has(tag)) {
-        // Allow custom role-based controls if they’re tabbable.
         if (el.getAttribute("role") !== "button") return false;
       }
 
@@ -567,7 +563,6 @@ function useFocusTrap(
       if (!enabled) return;
 
       if (e.key === "Escape") {
-        // Hard gate: do nothing.
         e.preventDefault();
         e.stopPropagation();
         return;
@@ -581,10 +576,8 @@ function useFocusTrap(
         return;
       }
 
-      const active = document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
-
+      const active =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
       const idx = active ? items.indexOf(active) : -1;
 
       const nextIdx = e.shiftKey
@@ -612,7 +605,7 @@ function SpotlightModal(props: {
   const { active, attentionMessage, gateNode } = props;
   const modalRef = React.useRef<HTMLDivElement | null>(null);
 
-  useFocusTrap(active, modalRef as React.RefObject<HTMLElement>);
+  useFocusTrap(active, modalRef);
 
   if (!active) return null;
 
@@ -626,7 +619,7 @@ function SpotlightModal(props: {
           pointerEvents: "auto",
           display: "grid",
           placeItems: "center",
-          padding: "min(6vh, 44px) 16px",
+          padding: "min(7vh, 56px) 16px",
         }}
       >
         <div
@@ -636,8 +629,9 @@ function SpotlightModal(props: {
           aria-label="Authentication required"
           style={{
             width: "100%",
-            maxWidth: "min(92vw, 620px)",
-            borderRadius: 22,
+            // slimmer + taller feel
+            maxWidth: "min(92vw, 520px)",
+            borderRadius: 24,
             border: "1px solid rgba(255,255,255,0.16)",
             background: "rgba(10,10,14,0.92)",
             backdropFilter: "blur(14px)",
@@ -647,9 +641,9 @@ function SpotlightModal(props: {
               0 0 0 1px rgba(255,255,255,0.04),
               0 60px 160px rgba(0,0,0,0.80)
             `,
-            padding: 16,
+            padding: 20,
             display: "grid",
-            gap: 12,
+            gap: 14,
           }}
         >
           <ModalAttentionMessage attentionMessage={attentionMessage} />
@@ -657,10 +651,10 @@ function SpotlightModal(props: {
           <div
             style={{
               width: "100%",
-              borderRadius: 18,
+              borderRadius: 20,
               border: "1px solid rgba(255,255,255,0.12)",
               background: "rgba(0,0,0,0.22)",
-              padding: 14,
+              padding: 16,
               boxShadow: "0 16px 40px rgba(0,0,0,0.22)",
               display: "grid",
               placeItems: "center",
@@ -675,7 +669,8 @@ function SpotlightModal(props: {
               lineHeight: "14px",
               opacity: 0.58,
               textAlign: "center",
-              paddingTop: 2,
+              paddingTop: 4,
+              paddingBottom: 2,
             }}
           >
             This is required to proceed.
@@ -799,7 +794,6 @@ export default function PortalArea(props: {
     }
   }, [rawP, bannerDismissed, bannerKey, dismissBanner]);
 
-  // Auth-ish messaging stays top-right (unless spotlight modal is active)
   const derivedAttentionMessage =
     attentionMessage ??
     (p.shouldShowTopbarBlockMessage ? (p.lastError ?? null) : null);
@@ -1094,11 +1088,7 @@ export default function PortalArea(props: {
   const bannerCode = gift ?? checkout ?? null;
   const bannerNode =
     !bannerDismissed && bannerKind && bannerCode ? (
-      <FullWidthBanner
-        kind={bannerKind}
-        code={bannerCode}
-        onDismiss={dismissBanner}
-      />
+      <FullWidthBanner kind={bannerKind} code={bannerCode} onDismiss={dismissBanner} />
     ) : null;
 
   return (
@@ -1110,9 +1100,7 @@ export default function PortalArea(props: {
         gateNode={gateNodeModal}
       />
 
-      <div
-        style={{ height: "100%", minHeight: 0, minWidth: 0, display: "grid" }}
-      >
+      <div style={{ height: "100%", minHeight: 0, minWidth: 0, display: "grid" }}>
         <PortalShell
           panels={panels}
           defaultPanelId="player"
@@ -1153,30 +1141,18 @@ export default function PortalArea(props: {
 }
 `}</style>
 
-              <div
-                className="afTopBar"
-                style={{ position: "relative", zIndex: 5 }}
-              >
+              <div className="afTopBar" style={{ position: "relative", zIndex: 5 }}>
                 <div className="afTopBarLogo">
                   <div className="afTopBarLogoInner">
                     {props.topLogoUrl ? (
                       <Image
                         src={props.topLogoUrl}
                         alt="Logo"
-                        height={Math.max(
-                          16,
-                          Math.min(120, props.topLogoHeight ?? 38),
-                        )}
-                        width={Math.max(
-                          16,
-                          Math.min(120, props.topLogoHeight ?? 38),
-                        )}
+                        height={Math.max(16, Math.min(120, props.topLogoHeight ?? 38))}
+                        width={Math.max(16, Math.min(120, props.topLogoHeight ?? 38))}
                         sizes="(max-width: 720px) 120px, 160px"
                         style={{
-                          height: Math.max(
-                            16,
-                            Math.min(120, props.topLogoHeight ?? 38),
-                          ),
+                          height: Math.max(16, Math.min(120, props.topLogoHeight ?? 38)),
                           width: "auto",
                           objectFit: "contain",
                           opacity: 0.94,
@@ -1212,64 +1188,18 @@ export default function PortalArea(props: {
                 <div className="afTopBarControls">
                   <div className="afTopBarLeft">
                     <style>{`
-  .afTopBarBtn {
-    position: relative;
-    transition:
-      transform 160ms ease,
-      opacity 160ms ease,
-      filter 160ms ease,
-      box-shadow 160ms ease;
-    will-change: transform, filter;
-  }
-
-.afTopBarBtn::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 999px;
-  pointer-events: none;
-  background:
-    radial-gradient(
-      circle at 50% 45%,
-      rgba(255,255,255,0.10),
-      rgba(255,255,255,0.04) 40%,
-      rgba(255,255,255,0.00) 65%
-    );
-  opacity: 0;
-  transition: opacity 160ms ease;
-}
-
-.afTopBarBtn:hover::after { opacity: 1; }
-
-  .afTopBarBtn:hover {
-    transform: translateY(-1px);
-    opacity: 0.98;
-    filter: brightness(1.06);
-  }
-
-  .afTopBarBtn:active {
-    transform: translateY(0px) scale(0.97);
-    filter: brightness(0.97);
-  }
-
-  .afIcon { transform: translateY(0px); transition: transform 160ms ease; will-change: transform; }
-  .afIconPortal { transform: translateY(3px); }
-
-  .afTopBarBtn:hover .afIconPlayer {
-    transform: translate(0.8px, -0.2px) scale(1.03);
-  }
-
-  .afPortalTop { transition: transform 180ms ease; transform-origin: 12px 8px; }
-  .afTopBarBtn:hover .afPortalTop { transform: translateY(-0.4px); }
-
-  .afTopBarBtn:hover .afIconPortal { transform: translateY(2px) scale(1.015); }
-
-  .afTopBarBtn:focus-visible {
-    outline: none;
-    box-shadow:
-      0 0 0 3px color-mix(in srgb, var(--accent) 26%, transparent),
-      0 14px 30px rgba(0,0,0,0.22);
-  }
+.afTopBarBtn { position: relative; transition: transform 160ms ease, opacity 160ms ease, filter 160ms ease, box-shadow 160ms ease; will-change: transform, filter; }
+.afTopBarBtn::after { content:""; position:absolute; inset:0; border-radius:999px; pointer-events:none; background: radial-gradient(circle at 50% 45%, rgba(255,255,255,0.10), rgba(255,255,255,0.04) 40%, rgba(255,255,255,0.00) 65%); opacity:0; transition:opacity 160ms ease; }
+.afTopBarBtn:hover::after { opacity:1; }
+.afTopBarBtn:hover { transform: translateY(-1px); opacity:0.98; filter:brightness(1.06); }
+.afTopBarBtn:active { transform: translateY(0px) scale(0.97); filter:brightness(0.97); }
+.afIcon { transform: translateY(0px); transition: transform 160ms ease; will-change: transform; }
+.afIconPortal { transform: translateY(3px); }
+.afTopBarBtn:hover .afIconPlayer { transform: translate(0.8px, -0.2px) scale(1.03); }
+.afPortalTop { transition: transform 180ms ease; transform-origin: 12px 8px; }
+.afTopBarBtn:hover .afPortalTop { transform: translateY(-0.4px); }
+.afTopBarBtn:hover .afIconPortal { transform: translateY(2px) scale(1.015); }
+.afTopBarBtn:focus-visible { outline:none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 26%, transparent), 0 14px 30px rgba(0,0,0,0.22); }
 `}</style>
 
                     {(() => {
@@ -1333,10 +1263,7 @@ export default function PortalArea(props: {
                   </div>
 
                   <div className="afTopBarRight">
-                    <div
-                      className="afTopBarRightInner"
-                      style={{ maxWidth: 520, minWidth: 0 }}
-                    >
+                    <div className="afTopBarRightInner" style={{ maxWidth: 520, minWidth: 0 }}>
                       <div
                         style={{
                           position: "relative",

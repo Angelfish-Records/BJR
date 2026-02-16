@@ -22,9 +22,8 @@ type Props = {
   tier?: string | null;
 
   /**
-   * Where the gate is being rendered.
-   * - "topbar": native top-right layout (default)
-   * - "modal": centered modal CTA layout (bigger + centered)
+   * - "topbar": native top-right layout (dropdown panels are absolutely positioned)
+   * - "modal": centered CTA layout (panels render inline and expand the card)
    */
   placement?: "topbar" | "modal";
 };
@@ -393,15 +392,16 @@ function OverlayPanel(props: {
   open: boolean;
   children: React.ReactNode;
   maxHeightOpen?: number;
+  yOffsetClosed?: number;
 }) {
-  const { open, children, maxHeightOpen = 520 } = props;
+  const { open, children, maxHeightOpen = 520, yOffsetClosed = -6 } = props;
   return (
     <div
       style={{
-        transform: open ? "translateY(0px)" : "translateY(-6px)",
+        transform: open ? "translateY(0px)" : `translateY(${yOffsetClosed}px)`,
         opacity: open ? 1 : 0,
         maxHeight: open ? maxHeightOpen : 0,
-        overflow: open ? "visible" : "hidden",
+        overflow: "hidden",
         transition:
           "max-height 240ms cubic-bezier(.2,.8,.2,1), opacity 160ms ease, transform 220ms cubic-bezier(.2,.8,.2,1)",
         pointerEvents: open ? "auto" : "none",
@@ -428,6 +428,49 @@ function OverlayPanel(props: {
         }}
       >
         {children}
+      </div>
+    </div>
+  );
+}
+
+function CrossfadeSwap(props: {
+  mode: "privacy" | "otp";
+  privacy: React.ReactNode;
+  otp: React.ReactNode;
+}) {
+  const { mode, privacy, otp } = props;
+  const isOtp = mode === "otp";
+
+  return (
+    <div style={{ position: "relative", width: "100%" }}>
+      <div
+        aria-hidden={isOtp}
+        style={{
+          position: isOtp ? "absolute" : "relative",
+          inset: isOtp ? 0 : undefined,
+          opacity: isOtp ? 0 : 1,
+          transform: isOtp ? "translateY(-3px)" : "translateY(0px)",
+          transition: "opacity 140ms ease, transform 180ms ease",
+          pointerEvents: isOtp ? "none" : "auto",
+          width: "100%",
+        }}
+      >
+        {privacy}
+      </div>
+
+      <div
+        aria-hidden={!isOtp}
+        style={{
+          position: isOtp ? "relative" : "absolute",
+          inset: isOtp ? undefined : 0,
+          opacity: isOtp ? 1 : 0,
+          transform: isOtp ? "translateY(0px)" : "translateY(3px)",
+          transition: "opacity 140ms ease, transform 180ms ease",
+          pointerEvents: isOtp ? "auto" : "none",
+          width: "100%",
+        }}
+      >
+        {otp}
       </div>
     </div>
   );
@@ -489,8 +532,10 @@ export default function ActivationGate(props: Props) {
       "") ||
     email;
 
-  const EMAIL_W = placement === "modal" ? 420 : 360;
-  const OTP_W = EMAIL_W;
+  // Unified widths: everything should line up cleanly
+  const CONTENT_W = placement === "modal" ? 420 : 360;
+  const EMAIL_W = CONTENT_W;
+  const OTP_W = CONTENT_W;
   const BILLING_W = 450;
 
   const needsAttention = !isActive && !!attentionMessage;
@@ -589,12 +634,17 @@ export default function ActivationGate(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, phase]);
 
+  // Modal: billing dropdown isn't used (keep state clean)
+  useEffect(() => {
+    if (placement === "modal") setBillingOpen(false);
+  }, [placement]);
+
   // Close billing if auth state changes
   useEffect(() => {
     if (!isActive || !canManageBilling) setBillingOpen(false);
   }, [isActive, canManageBilling]);
 
-  // Click-outside closes billing dropdown (topbar only; modal doesn't need it)
+  // Click-outside closes billing dropdown (topbar only)
   useEffect(() => {
     if (placement !== "topbar") return;
     function onDown(e: MouseEvent) {
@@ -618,7 +668,6 @@ export default function ActivationGate(props: Props) {
     if (placement !== "modal") return;
     if (isActive) return;
     if (!needsAttention) return;
-    // Slight delay avoids focus racing initial paint
     const t = window.setTimeout(() => {
       emailInputRef.current?.focus();
     }, 20);
@@ -658,7 +707,6 @@ export default function ActivationGate(props: Props) {
   function onEmailChange(nextRaw: string) {
     const next = nextRaw.trim();
     setEmail(next);
-
     setIsTypingEmail(true);
     scheduleTypingFade();
   }
@@ -668,45 +716,68 @@ export default function ActivationGate(props: Props) {
     void startEmailCode();
   }
 
-  const containerAlign: React.CSSProperties =
-    placement === "modal"
-      ? {
-          alignItems: "center",
-          justifyContent: "center",
-        }
-      : {
-          alignItems: "center",
-          justifyContent: "flex-end",
-        };
+  const modalCentered = placement === "modal";
 
-  const headerJustify: React.CSSProperties =
-    placement === "modal"
-      ? {
-          justifyItems: "center",
-          alignContent: "center",
-        }
-      : {
-          justifyItems: "end",
-          alignContent: "end",
-        };
+  const inlinePanelOpen = overlayMode === "otp" || overlayMode === "privacy";
+  const inlineMaxHeight =
+    overlayMode === "otp" ? 520 : overlayMode === "privacy" ? 160 : 0;
 
-  const rowJustify: React.CSSProperties =
-    placement === "modal"
-      ? { justifyContent: "center" }
-      : { justifyContent: "flex-end" };
+  const privacyNode = (
+    <div style={{ width: "100%", display: "grid", gap: 8 }}>
+      <div
+        style={{
+          width: "100%",
+          borderRadius: 14,
+          border: "1px solid rgba(255,255,255,0.16)",
+          background: "rgba(0,0,0,0.32)",
+          boxShadow: "0 12px 26px rgba(0,0,0,0.24)",
+          padding: "12px 12px",
+          boxSizing: "border-box",
+        }}
+      >
+        <div
+          style={{
+            fontSize: 11,
+            lineHeight: "15px",
+            opacity: 0.82,
+            textAlign: "left",
+          }}
+        >
+          By signing up, you agree to receive occasional emails about releases,
+          events, and account activity. Unsubscribe anytime.
+        </div>
+      </div>
+    </div>
+  );
 
-  const overlayPos: React.CSSProperties =
-    placement === "modal"
-      ? {
-          left: "50%",
-          transform: "translateX(-50%)",
-          right: "auto",
-          justifyItems: "center",
-        }
-      : {
-          right: 0,
-          justifyItems: "end",
-        };
+  const otpNode = (
+    <div style={{ display: "grid", gap: 10, justifyItems: "center" }}>
+      <OtpBoxes
+        maxWidth={EMAIL_W}
+        value={code}
+        onChange={(next) => setCode(normalizeDigits(next))}
+        disabled={isVerifying}
+      />
+
+      {(isSending || !flow) && (
+        <div style={{ fontSize: 12, opacity: 0.7 }}>Sending code…</div>
+      )}
+      {isVerifying && <div style={{ fontSize: 12, opacity: 0.7 }}>Verifying…</div>}
+
+      {error && (
+        <div
+          style={{
+            fontSize: 12,
+            opacity: 0.88,
+            color: "#ffb4b4",
+            textAlign: "center",
+          }}
+        >
+          {error}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div
@@ -717,7 +788,8 @@ export default function ActivationGate(props: Props) {
         minWidth: 0,
         display: "flex",
         flexDirection: "column",
-        ...containerAlign,
+        alignItems: "center",
+        justifyContent: modalCentered ? "center" : "flex-end",
       }}
     >
       <div
@@ -726,13 +798,13 @@ export default function ActivationGate(props: Props) {
           zIndex: 42,
           width: "100%",
           minWidth: 0,
-          maxWidth: placement === "modal" ? 560 : EMAIL_W,
+          maxWidth: modalCentered ? 520 : CONTENT_W,
           display: "grid",
-          gap: placement === "modal" ? 8 : 4,
-          ...headerJustify,
+          gap: modalCentered ? 10 : 4,
+          justifyItems: "center",
+          alignContent: modalCentered ? "center" : "end",
         }}
       >
-        {/* HEADER ROW */}
         <div style={{ position: "relative", width: "100%", minWidth: 0 }}>
           <form
             onSubmit={(e) => {
@@ -748,14 +820,14 @@ export default function ActivationGate(props: Props) {
                 gap: "0 12px",
                 width: "100%",
                 minWidth: 0,
-                ...rowJustify,
+                justifyContent: modalCentered ? "center" : "flex-end",
               }}
             >
               <div style={{ flex: "1 1 auto", minWidth: 0, maxWidth: EMAIL_W }}>
                 {!isActive ? (
                   <PatternRingOutline
                     ringPx={2}
-                    glowPx={18}
+                    glowPx={modalCentered ? 20 : 18}
                     blurPx={10}
                     seed={888}
                     opacity={0.92}
@@ -777,9 +849,9 @@ export default function ActivationGate(props: Props) {
                       style={{
                         width: "100%",
                         minWidth: 0,
-                        height: placement === "modal" ? 38 : 32,
-                        padding: placement === "modal" ? "0 16px" : "0 14px",
-                        fontSize: placement === "modal" ? 13 : 12,
+                        height: modalCentered ? 40 : 32,
+                        padding: modalCentered ? "0 16px" : "0 14px",
+                        fontSize: modalCentered ? 13 : 12,
                         lineHeight: "16px",
                         WebkitTextSizeAdjust: "100%",
                         borderRadius: 999,
@@ -808,7 +880,7 @@ export default function ActivationGate(props: Props) {
                       display: "grid",
                       gridTemplateRows: "1fr 1fr",
                       alignItems: "center",
-                      justifyItems: placement === "modal" ? "center" : "end",
+                      justifyItems: modalCentered ? "center" : "end",
                       rowGap: 0,
                     }}
                   >
@@ -818,8 +890,7 @@ export default function ActivationGate(props: Props) {
                         width: "100%",
                         display: "flex",
                         alignItems: "center",
-                        justifyContent:
-                          placement === "modal" ? "center" : "flex-end",
+                        justifyContent: modalCentered ? "center" : "flex-end",
                         gap: 8,
                         color: "rgba(255,255,255,0.82)",
                         fontSize: 12,
@@ -861,7 +932,7 @@ export default function ActivationGate(props: Props) {
                           overflow: "hidden",
                           textOverflow: "ellipsis",
                           whiteSpace: "nowrap",
-                          textAlign: placement === "modal" ? "center" : "right",
+                          textAlign: modalCentered ? "center" : "right",
                         }}
                         title={displayEmail}
                       >
@@ -874,8 +945,7 @@ export default function ActivationGate(props: Props) {
                         width: "100%",
                         display: "flex",
                         alignItems: "center",
-                        justifyContent:
-                          placement === "modal" ? "center" : "flex-end",
+                        justifyContent: modalCentered ? "center" : "flex-end",
                         gap: 8,
                         fontSize: 12,
                         lineHeight: "16px",
@@ -937,194 +1007,152 @@ export default function ActivationGate(props: Props) {
             </div>
           </form>
 
-          {/* OVERLAY STACK (dropdown in topbar; centered stack in modal) */}
-          <div
-            style={{
-              position: "absolute",
-              top: "calc(100% + 10px)",
-              zIndex: 60,
-              pointerEvents: overlayOpen ? "auto" : "none",
-
-              display: "grid",
-              width: "max-content",
-              maxWidth: "min(92vw, 560px)",
-              ...overlayPos,
-            }}
-          >
-            {/* OTP + Privacy share same panel */}
-            {!isActive && (
+          {/* MODAL: inline expanding area (smooth downward growth, same width) */}
+          {modalCentered && !isActive && (
+            <div
+              style={{
+                width: "100%",
+                display: "grid",
+                justifyItems: "center",
+                marginTop: 12,
+              }}
+            >
               <div style={{ width: OTP_W, maxWidth: "92vw" }}>
                 <OverlayPanel
-                  open={overlayMode === "otp" || overlayMode === "privacy"}
-                  maxHeightOpen={overlayMode === "otp" ? 520 : 140}
+                  open={inlinePanelOpen}
+                  maxHeightOpen={inlineMaxHeight}
+                  yOffsetClosed={-4}
                 >
-                  {overlayMode === "privacy" ? (
-                    <div style={{ width: "100%", display: "grid", gap: 8 }}>
-                      <div
-                        style={{
-                          width: "100%",
-                          borderRadius: 12,
-                          border: "1px solid rgba(255,255,255,0.18)",
-                          background: "rgba(0,0,0,0.35)",
-                          boxShadow: "0 12px 26px rgba(0,0,0,0.24)",
-                          padding: "10px 12px",
-                          boxSizing: "border-box",
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 10,
-                            lineHeight: "14px",
-                            opacity: 0.78,
-                          }}
-                        >
-                          By signing up, you agree to receive occasional emails
-                          about releases, events, and account activity.
-                          Unsubscribe anytime.
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        display: "grid",
-                        gap: 10,
-                        justifyItems: "center",
-                      }}
-                    >
-                      <OtpBoxes
-                        maxWidth={EMAIL_W}
-                        value={code}
-                        onChange={(next) => setCode(normalizeDigits(next))}
-                        disabled={isVerifying}
-                      />
-
-                      {(isSending || !flow) && (
-                        <div style={{ fontSize: 12, opacity: 0.7 }}>
-                          Sending code…
-                        </div>
-                      )}
-                      {isVerifying && (
-                        <div style={{ fontSize: 12, opacity: 0.7 }}>
-                          Verifying…
-                        </div>
-                      )}
-
-                      {error && (
-                        <div
-                          style={{
-                            fontSize: 12,
-                            opacity: 0.88,
-                            color: "#ffb4b4",
-                            textAlign: "center",
-                          }}
-                        >
-                          {error}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  <CrossfadeSwap
+                    mode={overlayMode === "otp" ? "otp" : "privacy"}
+                    privacy={privacyNode}
+                    otp={otpNode}
+                  />
                 </OverlayPanel>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Billing dropdown (topbar-only in practice, but harmless in modal) */}
-            {isActive && canManageBilling && (
-              <div style={{ width: BILLING_W, maxWidth: "92vw" }}>
-                <OverlayPanel open={billingOpen}>
-                  <div style={{ display: "grid", gap: 10 }}>
-                    <div
-                      style={{
-                        fontSize: 12,
-                        lineHeight: "16px",
-                        opacity: 0.82,
-                      }}
-                    >
-                      {isFriend
-                        ? "Support future work, access exclusive content."
-                        : "Switch tier, or cancel."}
-                    </div>
+          {/* TOPBAR: absolutely-positioned overlay stack (no layout shift) */}
+          {placement === "topbar" && (
+            <div
+              style={{
+                position: "absolute",
+                top: "calc(100% + 8px)",
+                right: 0,
+                zIndex: 60,
+                pointerEvents: overlayOpen ? "auto" : "none",
 
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gap: 10,
-                        alignItems: "stretch",
-                      }}
-                    >
-                      <SubscribeButton
-                        loggedIn={true}
-                        variant="card"
-                        tier="patron"
-                        disabled={isPatron}
-                        current={isPatron}
-                        label={isPatron ? "Current" : "Choose Patron"}
-                        card={{
-                          title: "Patron",
-                          price: "$5 / month",
-                          bullets: [
-                            "All downloads",
-                            "Early access",
-                            "Posts and Q&A",
-                          ],
+                display: "grid",
+                justifyItems: "end",
+                width: "max-content",
+                maxWidth: "min(92vw, 520px)",
+              }}
+            >
+              {!isActive && (
+                <div style={{ width: OTP_W, maxWidth: "92vw" }}>
+                  <OverlayPanel
+                    open={overlayMode === "otp" || overlayMode === "privacy"}
+                    maxHeightOpen={overlayMode === "otp" ? 520 : 140}
+                  >
+                    <CrossfadeSwap
+                      mode={overlayMode === "otp" ? "otp" : "privacy"}
+                      privacy={privacyNode}
+                      otp={otpNode}
+                    />
+                  </OverlayPanel>
+                </div>
+              )}
+
+              {isActive && canManageBilling && (
+                <div style={{ width: BILLING_W, maxWidth: "92vw" }}>
+                  <OverlayPanel open={billingOpen}>
+                    <div style={{ display: "grid", gap: 10 }}>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          lineHeight: "16px",
+                          opacity: 0.82,
                         }}
-                      />
+                      >
+                        {isFriend
+                          ? "Support future work, access exclusive content."
+                          : "Switch tier, or cancel."}
+                      </div>
 
-                      <SubscribeButton
-                        loggedIn={true}
-                        variant="card"
-                        tier="partner"
-                        disabled={isPartner}
-                        current={isPartner}
-                        label={isPartner ? "Current" : "Choose Partner"}
-                        card={{
-                          title: "Partner",
-                          price: "$299 / year",
-                          bullets: [
-                            "Release credits",
-                            "Creative livestreams",
-                            "Something else",
-                          ],
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1fr 1fr",
+                          gap: 10,
+                          alignItems: "stretch",
                         }}
-                      />
-                    </div>
+                      >
+                        <SubscribeButton
+                          loggedIn={true}
+                          variant="card"
+                          tier="patron"
+                          disabled={isPatron}
+                          current={isPatron}
+                          label={isPatron ? "Current" : "Choose Patron"}
+                          card={{
+                            title: "Patron",
+                            price: "$5 / month",
+                            bullets: ["All downloads", "Early access", "Posts and Q&A"],
+                          }}
+                        />
 
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: 6,
-                        marginTop: 3,
-                        fontSize: 11,
-                        lineHeight: "14px",
-                        opacity: 0.7,
-                      }}
-                    >
-                      <LockIcon size={12} />
-                      <span>Secured by Stripe.</span>
-                    </div>
+                        <SubscribeButton
+                          loggedIn={true}
+                          variant="card"
+                          tier="partner"
+                          disabled={isPartner}
+                          current={isPartner}
+                          label={isPartner ? "Current" : "Choose Partner"}
+                          card={{
+                            title: "Partner",
+                            price: "$299 / year",
+                            bullets: ["Release credits", "Creative livestreams", "Something else"],
+                          }}
+                        />
+                      </div>
 
-                    {(isPatron || isPartner) && (
                       <div
                         style={{
                           display: "flex",
-                          justifyContent: "flex-end",
-                          marginTop: 2,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 6,
+                          marginTop: 3,
+                          fontSize: 11,
+                          lineHeight: "14px",
+                          opacity: 0.7,
                         }}
                       >
-                        <CancelSubscriptionButton
-                          variant="link"
-                          label="Cancel subscription"
-                        />
+                        <LockIcon size={12} />
+                        <span>Secured by Stripe.</span>
                       </div>
-                    )}
-                  </div>
-                </OverlayPanel>
-              </div>
-            )}
-          </div>
+
+                      {(isPatron || isPartner) && (
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "flex-end",
+                            marginTop: 2,
+                          }}
+                        >
+                          <CancelSubscriptionButton
+                            variant="link"
+                            label="Cancel subscription"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </OverlayPanel>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {isActive && <>{children}</>}
