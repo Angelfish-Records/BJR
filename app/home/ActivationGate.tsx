@@ -729,8 +729,7 @@ export default function ActivationGate(props: Props) {
       <div
         style={{
           width: "100%",
-          borderRadius: 14,
-          border: "1px solid rgba(255,255,255,0.16)",
+          border: "none",
           background: "rgba(0,0,0,0.32)",
           boxShadow: "0 12px 26px rgba(0,0,0,0.24)",
           padding: "12px 12px",
@@ -924,9 +923,12 @@ export default function ActivationGate(props: Props) {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                // Two-up when there's room, single column when not.
+                gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
                 gap: 14,
                 alignItems: "stretch",
+                width: "100%",
+                minWidth: 0,
               }}
             >
               <SubscribeButton
@@ -953,7 +955,11 @@ export default function ActivationGate(props: Props) {
                 card={{
                   title: "Partner",
                   price: "$299 / year",
-                  bullets: ["Release credits", "Creative livestreams", "Something else"],
+                  bullets: [
+                    "Release credits",
+                    "Creative livestreams",
+                    "Something else",
+                  ],
                 }}
               />
             </div>
@@ -982,7 +988,10 @@ export default function ActivationGate(props: Props) {
                   marginTop: 2,
                 }}
               >
-                <CancelSubscriptionButton variant="link" label="Cancel subscription" />
+                <CancelSubscriptionButton
+                  variant="link"
+                  label="Cancel subscription"
+                />
               </div>
             )}
           </div>

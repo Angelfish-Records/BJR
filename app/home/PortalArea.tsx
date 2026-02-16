@@ -610,19 +610,6 @@ function SpotlightModal(props: {
           >
             {gateNode}
           </div>
-
-          <div
-            style={{
-              fontSize: 11,
-              lineHeight: "14px",
-              opacity: 0.58,
-              textAlign: "center",
-              paddingTop: 4,
-              paddingBottom: 2,
-            }}
-          >
-            This is required to proceed.
-          </div>
         </div>
       </div>
     </BodyPortal>

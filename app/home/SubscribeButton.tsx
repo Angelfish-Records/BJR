@@ -111,16 +111,16 @@ function PriceBlock(props: { price: string; subcopy: string }) {
       style={{
         display: "grid",
         justifyItems: "end",
-        textAlign: "right",
+        textAlign: "center",
         gap: 8,
         alignSelf: "center",
       }}
     >
       <div
         style={{
-          fontSize: 28,
+          fontSize: 20,
           lineHeight: "30px",
-          fontWeight: 850,
+          fontWeight: 750,
           letterSpacing: "0.01em",
           color: "rgba(255,255,255,0.94)",
           whiteSpace: "nowrap",
