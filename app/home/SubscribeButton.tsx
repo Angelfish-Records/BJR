@@ -21,6 +21,134 @@ type Props = {
   current?: boolean;
 };
 
+function TickIcon(props: { size?: number }) {
+  const { size = 14 } = props;
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+      style={{ display: "block" }}
+    >
+      <path
+        d="M20 6L9 17l-5-5"
+        stroke="rgba(255,255,255,0.92)"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function FeatureRows(props: { items: string[] }) {
+  const { items } = props;
+
+  return (
+    <div
+      style={{
+        width: "100%",
+        borderRadius: 14,
+        border: "1px solid rgba(255,255,255,0.12)",
+        background: "rgba(0,0,0,0.22)",
+        overflow: "hidden",
+        boxShadow: "0 12px 26px rgba(0,0,0,0.20)",
+      }}
+    >
+      {items.map((t, i) => (
+        <div key={`${t}:${i}`}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "18px 1fr",
+              alignItems: "center",
+              columnGap: 10,
+              padding: "10px 12px",
+            }}
+          >
+            <div style={{ display: "grid", placeItems: "center" }}>
+              <TickIcon />
+            </div>
+
+            <div
+              style={{
+                fontSize: 12,
+                lineHeight: "16px",
+                color: "rgba(255,255,255,0.86)",
+                minWidth: 0,
+              }}
+            >
+              {t}
+            </div>
+          </div>
+
+          {i < items.length - 1 && (
+            <div
+              aria-hidden
+              style={{
+                height: 1,
+                background: "rgba(255,255,255,0.08)",
+                marginLeft: 12,
+                marginRight: 12,
+              }}
+            />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PriceBlock(props: { price: string; subcopy: string }) {
+  const { price, subcopy } = props;
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        justifyItems: "end",
+        gap: 6,
+        textAlign: "right",
+        flex: "0 0 auto",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 20,
+          lineHeight: "22px",
+          fontWeight: 800,
+          letterSpacing: "0.01em",
+          color: "rgba(255,255,255,0.94)",
+          padding: "8px 10px",
+          borderRadius: 14,
+          border: "1px solid rgba(255,255,255,0.14)",
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0.18))",
+          boxShadow: "0 12px 30px rgba(0,0,0,0.22)",
+          display: "inline-block",
+          minWidth: 150,
+        }}
+      >
+        {price}
+      </div>
+
+      <div
+        style={{
+          fontSize: 11,
+          lineHeight: "14px",
+          opacity: 0.72,
+          maxWidth: 190,
+        }}
+      >
+        {subcopy}
+      </div>
+    </div>
+  );
+}
+
 function CardGlowRing(props: {
   radius?: number;
   seed?: number;
@@ -134,6 +262,11 @@ export default function SubscribeButton(props: Props) {
     const isHovering = hover && !disabled;
     const radius = 16;
 
+    const subcopy =
+      tier === "partner"
+        ? "Billed annually. Cancel anytime."
+        : "Billed monthly. Cancel anytime.";
+
     return (
       <button
         type="button"
@@ -159,7 +292,7 @@ export default function SubscribeButton(props: Props) {
               ? "rgba(255,255,255,0.07)"
               : "rgba(255,255,255,0.045)",
 
-          padding: 12,
+          padding: 14,
           cursor: disabled ? "default" : "pointer",
           color: "rgba(255,255,255,0.92)",
 
@@ -218,42 +351,32 @@ export default function SubscribeButton(props: Props) {
           </div>
         )}
 
-        <div style={{ display: "grid", gap: 8, alignContent: "start" }}>
+        <div style={{ display: "grid", gap: 12, alignContent: "start" }}>
           <div
             style={{
               display: "flex",
-              alignItems: "baseline",
+              alignItems: "flex-start",
               justifyContent: "space-between",
-              gap: 10,
+              gap: 12,
             }}
           >
             <div
-              style={{ fontSize: 14, fontWeight: 600, letterSpacing: "0.01em" }}
+              style={{
+                fontSize: 15,
+                fontWeight: 650,
+                letterSpacing: "0.01em",
+                paddingTop: 2,
+              }}
             >
               {spec.title}
             </div>
-            <div style={{ fontSize: 12, opacity: 0.78 }}>{spec.price}</div>
+
+            <PriceBlock price={spec.price} subcopy={subcopy} />
           </div>
 
-          <div style={{ display: "grid", gap: 6 }}>
-            {spec.bullets.slice(0, 3).map((b, i) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  fontSize: 12,
-                  lineHeight: "16px",
-                  opacity: 0.82,
-                }}
-              >
-                <span aria-hidden style={{ opacity: 0.55 }}>
-                  •
-                </span>
-                <span style={{ minWidth: 0 }}>{b}</span>
-              </div>
-            ))}
-          </div>
+          {Array.isArray(spec.bullets) && spec.bullets.length > 0 ? (
+            <FeatureRows items={spec.bullets.slice(0, 3)} />
+          ) : null}
         </div>
       </button>
     );

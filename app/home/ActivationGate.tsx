@@ -806,8 +806,6 @@ export default function ActivationGate(props: Props) {
           pointerEvents: "auto",
           // minimal tint; mostly blur, not blockade
           background: "rgba(0,0,0,0.06)",
-          backdropFilter: "blur(10px)",
-          WebkitBackdropFilter: "blur(10px)",
         }}
       />
 
