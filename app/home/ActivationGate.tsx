@@ -868,7 +868,7 @@ export default function ActivationGate(props: Props) {
                 gap: 12,
               }}
             >
-              <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+              <div style={{ display: "grid", gap: 6, minWidth: 0,  flex: "1 1 auto" }}>
                 <div
                   style={{
                     fontSize: 14,
@@ -885,7 +885,7 @@ export default function ActivationGate(props: Props) {
                     fontSize: 12,
                     lineHeight: "16px",
                     opacity: 0.82,
-                    maxWidth: 560,
+                    maxWidth: "calc(100% - 58px)", // 34 (button) + 12 (gap) + 12 (breathing room)
                   }}
                 >
                   {isFriend

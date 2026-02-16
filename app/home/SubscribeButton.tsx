@@ -339,7 +339,7 @@ export default function SubscribeButton(props: Props) {
               pointerEvents: "none",
             }}
           >
-            Current
+            Active
           </div>
         )}
 
