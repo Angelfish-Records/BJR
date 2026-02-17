@@ -217,7 +217,7 @@ export default function DownloadAlbumButton(props: Props) {
 
   const buttonText =
     busy ? "Preparing download…"
-    : coolingDown ? `Download started. Button inactive for ${Math.ceil(remainingMs / 1000)}s`
+    : coolingDown ? `Download started. Button disabled for ${Math.ceil(remainingMs / 1000)}s`
     : label;
 
   return (

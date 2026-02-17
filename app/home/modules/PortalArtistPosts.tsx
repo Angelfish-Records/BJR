@@ -156,17 +156,23 @@ function resolveImageMaxWidthPx(value: SanityImageValue, tall: boolean) {
 -------------------------- */
 
 const ICON_SHARE = (
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    aria-hidden="true"
-  >
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <path
       d="M16 8a3 3 0 1 0-2.83-4H13a3 3 0 0 0 .17 1l-6.5 3.25A3 3 0 0 0 4 7a3 3 0 1 0 0 6 3 3 0 0 0 2.67-1.5l6.5 3.25A3 3 0 0 0 13 16a3 3 0 1 0 .17-1l-6.5-3.25A3 3 0 0 0 7 10c0-.35-.06-.69-.17-1l6.5-3.25A3 3 0 0 0 16 8Z"
       stroke="currentColor"
       strokeWidth="1.6"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+const ICON_CHECK = (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M20 7L10.5 16.5L4 10"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
       strokeLinejoin="round"
     />
   </svg>
@@ -199,7 +205,6 @@ function DefaultAvatar(props: { label: string }) {
   );
 }
 
-// NEW: supports a normal square/rect image and crops it into a circle
 function Avatar(props: { label: string; src?: string; alt?: string }) {
   const { label, src, alt } = props;
 
@@ -276,6 +281,48 @@ function ActionBtn(props: {
   );
 }
 
+/* -------------------------
+   Micro toast
+-------------------------- */
+
+function CopyToast(props: { visible: boolean; text: string }) {
+  return (
+    <div
+      aria-live="polite"
+      style={{
+        position: "fixed",
+        left: "50%",
+        bottom: 18,
+        transform: "translateX(-50%)",
+        zIndex: 100000,
+        pointerEvents: "none",
+        opacity: props.visible ? 1 : 0,
+        transition: "opacity 160ms ease",
+      }}
+    >
+      <div
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          borderRadius: 999,
+          padding: "10px 12px",
+          border: "1px solid rgba(255,255,255,0.14)",
+          background: "rgba(20,20,20,0.92)",
+          backdropFilter: "blur(10px)",
+          WebkitBackdropFilter: "blur(10px)",
+          color: "rgba(255,255,255,0.92)",
+          fontSize: 12,
+          boxShadow: "0 18px 55px rgba(0,0,0,0.35)",
+        }}
+      >
+        <span aria-hidden>{ICON_CHECK}</span>
+        <span>{props.text}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function PortalArtistPosts(props: {
   title?: string;
   pageSize: number;
@@ -285,7 +332,6 @@ export default function PortalArtistPosts(props: {
   authorName?: string;
   authorInitials?: string;
 
-  // point this at /public asset, R2, or any absolute URL where the module is called
   authorAvatarSrc?: string;
 
   defaultInlineImageMaxWidthPx?: number;
@@ -303,7 +349,7 @@ export default function PortalArtistPosts(props: {
   const sp = useClientSearchParams();
   const deepSlug = (sp.get("post") ?? "").trim() || null;
 
-  const { openIntentSheet, intentSheet, fallbackModal } = useShareAction();
+  const { share, fallbackModal } = useShareAction();
   const shareBuilders = useShareBuilders();
 
   const [posts, setPosts] = React.useState<Post[]>([]);
@@ -311,6 +357,20 @@ export default function PortalArtistPosts(props: {
   const [loading, setLoading] = React.useState(false);
   const [requiresAuth, setRequiresAuth] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
+
+  // Tactile feedback state (ONLY for actual clipboard copy fallback)
+  const [copiedSlug, setCopiedSlug] = React.useState<string | null>(null);
+  const [toastVisible, setToastVisible] = React.useState(false);
+
+  const copiedTimerRef = React.useRef<number | null>(null);
+  const toastTimerRef = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current) window.clearTimeout(copiedTimerRef.current);
+      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    };
+  }, []);
 
   const seenRef = React.useRef<Set<string>>(new Set());
   const postEls = React.useRef<Map<string, HTMLDivElement>>(new Map());
@@ -327,9 +387,7 @@ export default function PortalArtistPosts(props: {
         u.searchParams.set("limit", String(pageSize));
         u.searchParams.set("minVisibility", minVisibility);
         u.searchParams.set("requireAuthAfter", String(requireAuthAfter));
-        if (nextCursor) {
-          u.searchParams.set("offset", nextCursor);
-        }
+        if (nextCursor) u.searchParams.set("offset", nextCursor);
 
         const res = await fetch(u.toString(), { method: "GET" });
         if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
@@ -407,8 +465,24 @@ export default function PortalArtistPosts(props: {
     return () => io.disconnect();
   }, [posts, markSeen]);
 
+  function triggerCopiedFeedback(slug: string) {
+    // Button morph
+    setCopiedSlug(slug);
+    if (copiedTimerRef.current) window.clearTimeout(copiedTimerRef.current);
+    copiedTimerRef.current = window.setTimeout(() => {
+      setCopiedSlug((cur) => (cur === slug ? null : cur));
+    }, 1200);
+
+    // Toast
+    setToastVisible(true);
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastVisible(false);
+    }, 1600);
+  }
+
   const onShare = React.useCallback(
-    (post: { slug: string; title?: string }) => {
+    async (post: { slug: string; title?: string }) => {
       const url = shareUrlFor(post.slug);
 
       const target = shareBuilders.post(
@@ -416,7 +490,12 @@ export default function PortalArtistPosts(props: {
         authorName,
       );
 
-      openIntentSheet({ ...target, url });
+      const res = await share({ ...target, url });
+
+      // Only show tactile feedback when we *actually* used clipboard copy fallback.
+      if (res.ok && res.method === "copy") {
+        triggerCopiedFeedback(post.slug);
+      }
 
       replaceQuery({
         p: "posts",
@@ -429,7 +508,7 @@ export default function PortalArtistPosts(props: {
         autoplay: null,
       });
     },
-    [openIntentSheet, shareBuilders, authorName],
+    [share, shareBuilders, authorName],
   );
 
   const components: PortableTextComponents = React.useMemo(
@@ -446,13 +525,7 @@ export default function PortalArtistPosts(props: {
           const maxWidthPx = perImage ?? globalCap ?? null;
 
           return (
-            <div
-              style={{
-                margin: "12px 0",
-                display: "flex",
-                justifyContent: "center",
-              }}
-            >
+            <div style={{ margin: "12px 0", display: "flex", justifyContent: "center" }}>
               <div
                 style={{
                   width: "100%",
@@ -464,11 +537,7 @@ export default function PortalArtistPosts(props: {
                 }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={url}
-                  alt=""
-                  style={{ width: "100%", height: "auto", display: "block" }}
-                />
+                <img src={url} alt="" style={{ width: "100%", height: "auto", display: "block" }} />
               </div>
             </div>
           );
@@ -477,50 +546,22 @@ export default function PortalArtistPosts(props: {
 
       block: {
         normal: ({ children }) => (
-          <p
-            style={{
-              margin: "10px 0",
-              lineHeight: 1.68,
-              fontSize: 13,
-              opacity: 0.92,
-            }}
-          >
+          <p style={{ margin: "10px 0", lineHeight: 1.68, fontSize: 13, opacity: 0.92 }}>
             {children}
           </p>
         ),
         h1: ({ children }) => (
-          <h3
-            style={{
-              margin: "14px 0 8px",
-              fontSize: 16,
-              lineHeight: 1.25,
-              opacity: 0.95,
-            }}
-          >
+          <h3 style={{ margin: "14px 0 8px", fontSize: 16, lineHeight: 1.25, opacity: 0.95 }}>
             {children}
           </h3>
         ),
         h2: ({ children }) => (
-          <h4
-            style={{
-              margin: "14px 0 8px",
-              fontSize: 15,
-              lineHeight: 1.25,
-              opacity: 0.95,
-            }}
-          >
+          <h4 style={{ margin: "14px 0 8px", fontSize: 15, lineHeight: 1.25, opacity: 0.95 }}>
             {children}
           </h4>
         ),
         h3: ({ children }) => (
-          <h5
-            style={{
-              margin: "12px 0 6px",
-              fontSize: 14,
-              lineHeight: 1.25,
-              opacity: 0.92,
-            }}
-          >
+          <h5 style={{ margin: "12px 0 6px", fontSize: 14, lineHeight: 1.25, opacity: 0.92 }}>
             {children}
           </h5>
         ),
@@ -578,9 +619,7 @@ export default function PortalArtistPosts(props: {
       },
 
       marks: {
-        strong: ({ children }) => (
-          <strong style={{ fontWeight: 750, opacity: 0.98 }}>{children}</strong>
-        ),
+        strong: ({ children }) => <strong style={{ fontWeight: 750, opacity: 0.98 }}>{children}</strong>,
         em: ({ children }) => <em style={{ opacity: 0.95 }}>{children}</em>,
         code: ({ children }) => (
           <code
@@ -654,26 +693,19 @@ export default function PortalArtistPosts(props: {
       </div>
 
       {requiresAuth ? (
-        <div
-          style={{
-            marginTop: 12,
-            fontSize: 13,
-            opacity: 0.85,
-            lineHeight: 1.55,
-          }}
-        >
+        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85, lineHeight: 1.55 }}>
           Sign in to keep reading posts.
         </div>
       ) : null}
 
-      {err ? (
-        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.8 }}>{err}</div>
-      ) : null}
+      {err ? <div style={{ marginTop: 12, fontSize: 13, opacity: 0.8 }}>{err}</div> : null}
 
       {/* Feed */}
       <div style={{ marginTop: 6 }}>
         {posts.map((p) => {
           const isDeep = deepSlug === p.slug;
+          const isCopied = copiedSlug === p.slug;
+
           return (
             <div
               key={p.slug}
@@ -682,10 +714,7 @@ export default function PortalArtistPosts(props: {
                 else postEls.current.set(p.slug, el);
               }}
               data-slug={p.slug}
-              style={{
-                padding: "14px 0",
-                borderBottom: "1px solid rgba(255,255,255,0.07)",
-              }}
+              style={{ padding: "14px 0", borderBottom: "1px solid rgba(255,255,255,0.07)" }}
             >
               <div
                 style={{
@@ -697,51 +726,19 @@ export default function PortalArtistPosts(props: {
                     : undefined,
                 }}
               >
-                {/* “Substack notes” header row */}
+                {/* header row */}
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <Avatar
-                    label={authorInitials}
-                    src={authorAvatarSrc}
-                    alt={authorName}
-                  />
+                  <Avatar label={authorInitials} src={authorAvatarSrc} alt={authorName} />
                   <div style={{ minWidth: 0 }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "baseline",
-                        gap: 10,
-                        minWidth: 0,
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 700,
-                          opacity: 0.92,
-                          whiteSpace: "nowrap",
-                        }}
-                      >
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.92, whiteSpace: "nowrap" }}>
                         {authorName}
                       </div>
-                      <div
-                        style={{
-                          fontSize: 12,
-                          opacity: 0.56,
-                          whiteSpace: "nowrap",
-                        }}
-                      >
+                      <div style={{ fontSize: 12, opacity: 0.56, whiteSpace: "nowrap" }}>
                         {fmtDate(p.publishedAt)}
                       </div>
                       {p.pinned ? (
-                        <div
-                          style={{
-                            fontSize: 12,
-                            opacity: 0.62,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          • pinned
-                        </div>
+                        <div style={{ fontSize: 12, opacity: 0.62, whiteSpace: "nowrap" }}>• pinned</div>
                       ) : null}
                     </div>
                   </div>
@@ -753,19 +750,10 @@ export default function PortalArtistPosts(props: {
                 </div>
 
                 {/* Actions row */}
-                <div
-                  style={{
-                    marginTop: 10,
-                    display: "flex",
-                    justifyContent: "flex-start",
-                  }}
-                >
-                  <ActionBtn
-                    onClick={() => onShare({ slug: p.slug, title: p.title })}
-                    label="Share post"
-                  >
-                    {ICON_SHARE}
-                    <span>Share</span>
+                <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-start" }}>
+                  <ActionBtn onClick={() => void onShare({ slug: p.slug, title: p.title })} label="Share post">
+                    {isCopied ? ICON_CHECK : ICON_SHARE}
+                    <span>{isCopied ? "Copied" : "Share"}</span>
                   </ActionBtn>
                 </div>
               </div>
@@ -773,21 +761,17 @@ export default function PortalArtistPosts(props: {
           );
         })}
 
-        {loading ? (
-          <div style={{ fontSize: 12, opacity: 0.7, padding: "12px 0" }}>
-            Loading…
-          </div>
-        ) : null}
+        {loading ? <div style={{ fontSize: 12, opacity: 0.7, padding: "12px 0" }}>Loading…</div> : null}
 
         {!loading && !requiresAuth && posts.length === 0 ? (
-          <div style={{ fontSize: 13, opacity: 0.75, padding: "12px 0" }}>
-            No posts yet.
-          </div>
+          <div style={{ fontSize: 13, opacity: 0.75, padding: "12px 0" }}>No posts yet.</div>
         ) : null}
       </div>
 
-      {/* Share overlays (must be rendered) */}
-      {intentSheet}
+      {/* Toast (clipboard copy only) */}
+      <CopyToast visible={toastVisible} text="Link copied" />
+
+      {/* Manual copy fallback modal (only when clipboard is unavailable) */}
       {fallbackModal}
     </div>
   );
