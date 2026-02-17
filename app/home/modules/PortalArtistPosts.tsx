@@ -58,14 +58,12 @@ function fmtDate(iso: string) {
   }
 }
 
-function SubmitQuestionCTA(props: {
-  onOpenComposer: () => void;
-}) {
+function SubmitQuestionCTA(props: { onOpenComposer: () => void }) {
   const { onOpenComposer } = props;
   const { viewerTier, isSignedIn } = usePortalViewer();
   const { openMembershipModal } = useMembershipModal();
 
-  // You can choose to hide this entirely for anon; this keeps the posts UI clean.
+  // Keep the posts UI clean: only show for signed-in viewers who have *some* tier.
   if (!isSignedIn || viewerTier === "none") return null;
 
   const locked = viewerTier === "friend";
@@ -100,7 +98,6 @@ function SubmitQuestionCTA(props: {
         transition: "transform 160ms ease, opacity 160ms ease, filter 160ms ease",
       }}
       onMouseDown={(e) => {
-        // tiny tactile feel, consistent with your other CTAs
         const el = e.currentTarget;
         el.style.transform = "scale(0.98)";
         window.setTimeout(() => (el.style.transform = "scale(1)"), 120);
@@ -110,7 +107,6 @@ function SubmitQuestionCTA(props: {
     </button>
   );
 }
-
 
 function isTall(aspectRatio: number | null | undefined) {
   if (!aspectRatio || !Number.isFinite(aspectRatio)) return false;
@@ -427,6 +423,8 @@ export default function PortalArtistPosts(props: {
 
   const { share, fallbackModal } = useShareAction();
   const shareBuilders = useShareBuilders();
+
+  // Keep the setter wired for the upcoming composer UI (no lint noise).
   const [, setComposerOpen] = React.useState(false);
 
   const [posts, setPosts] = React.useState<Post[]>([]);
@@ -784,43 +782,42 @@ export default function PortalArtistPosts(props: {
   return (
     <div style={{ minWidth: 0 }}>
       {/* Header */}
-<div
-  style={{
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-    marginTop: 2,
-  }}
->
-  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-    {cursor ? (
-      <button
-        type="button"
-        onClick={() => void fetchPage(cursor)}
-        disabled={loading || requiresAuth}
+      <div
         style={{
-          border: "none",
-          background: "transparent",
-          color: "rgba(255,255,255,0.70)",
-          cursor: loading ? "default" : "pointer",
-          fontSize: 12,
-          textDecoration: "underline",
-          textUnderlineOffset: 3,
-          opacity: loading ? 0.5 : 0.85,
-          padding: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          marginTop: 2,
         }}
       >
-        Load more
-      </button>
-    ) : null}
-  </div>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          {cursor ? (
+            <button
+              type="button"
+              onClick={() => void fetchPage(cursor)}
+              disabled={loading || requiresAuth}
+              style={{
+                border: "none",
+                background: "transparent",
+                color: "rgba(255,255,255,0.70)",
+                cursor: loading ? "default" : "pointer",
+                fontSize: 12,
+                textDecoration: "underline",
+                textUnderlineOffset: 3,
+                opacity: loading ? 0.5 : 0.85,
+                padding: 0,
+              }}
+            >
+              Load more
+            </button>
+          ) : null}
+        </div>
 
-  <div style={{ flex: "0 0 auto" }}>
-    <SubmitQuestionCTA onOpenComposer={() => setComposerOpen(true)} />
-  </div>
-</div>
-
+        <div style={{ flex: "0 0 auto" }}>
+          <SubmitQuestionCTA onOpenComposer={() => setComposerOpen(true)} />
+        </div>
+      </div>
 
       {requiresAuth ? (
         <div
@@ -932,9 +929,7 @@ export default function PortalArtistPosts(props: {
                   }}
                 >
                   <ActionBtn
-                    onClick={() =>
-                      void onShare({ slug: p.slug, title: p.title })
-                    }
+                    onClick={() => void onShare({ slug: p.slug, title: p.title })}
                     label="Share post"
                   >
                     {isCopied ? ICON_CHECK : ICON_SHARE}
