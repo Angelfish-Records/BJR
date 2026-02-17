@@ -44,20 +44,20 @@ function placeholders(count: number, startAt = 1): string {
   return Array.from({ length: count }, (_, i) => `$${startAt + i}`).join(",");
 }
 
+type Visibility = "public" | "friend" | "patron" | "partner";
+
 type Body = {
-  questionIds: string[];
-  title?: string;
-  answer?: string;
-  visibility?: "public" | "friend" | "patron" | "partner";
-  pinned?: boolean;
+  questionIds?: unknown;
+  ids?: unknown;
+  selectedIds?: unknown;
+  title?: unknown;
+  answer?: unknown;
+  visibility?: unknown;
+  pinned?: unknown;
 };
 
 type PTSpan = { _type: "span"; text: string };
-type PTBlock = {
-  _type: "block";
-  style: string;
-  children: PTSpan[];
-};
+type PTBlock = { _type: "block"; style: string; children: PTSpan[] };
 type PortableText = PTBlock[];
 
 function answerToPortableTextBlocks(answer: string): PortableText {
@@ -68,11 +68,7 @@ function answerToPortableTextBlocks(answer: string): PortableText {
 
   if (!paras.length) {
     return [
-      {
-        _type: "block",
-        style: "normal",
-        children: [{ _type: "span", text: "—" }],
-      },
+      { _type: "block", style: "normal", children: [{ _type: "span", text: "—" }] },
     ];
   }
 
@@ -83,35 +79,73 @@ function answerToPortableTextBlocks(answer: string): PortableText {
   }));
 }
 
+function pickIds(body: Body | null): { raw: unknown; ids: string[] } {
+  const raw = body?.questionIds ?? body?.ids ?? body?.selectedIds ?? null;
+
+  // Accept:
+  // - string UUID
+  // - string "uuid,uuid"
+  // - string[] / unknown[]
+  if (typeof raw === "string") {
+    const s = raw.trim();
+    if (!s) return { raw, ids: [] };
+    const parts = s.includes(",") ? s.split(",") : [s];
+    return { raw, ids: parts.map((x) => x.trim()).filter(Boolean) };
+  }
+
+  if (Array.isArray(raw)) {
+    const ids = raw.map((x) => String(x)).map((x) => x.trim()).filter(Boolean);
+    return { raw, ids };
+  }
+
+  return { raw, ids: [] };
+}
+
+function asVisibility(v: unknown): Visibility {
+  const s = typeof v === "string" ? v.trim().toLowerCase() : "";
+  if (s === "friend" || s === "patron" || s === "partner") return s;
+  return "public";
+}
+
 export async function POST(req: NextRequest) {
   await requireAdminMemberId();
 
   const body = (await req.json().catch(() => null)) as Body | null;
 
-  const rawIds = Array.isArray(body?.questionIds) ? body!.questionIds : [];
-  const questionIds = rawIds.map(String);
+  const { raw: rawIds, ids: rawList } = pickIds(body);
 
-  if (!questionIds.length) return json(400, { ok: false, code: "BAD_IDS" });
-  if (questionIds.some((id) => !isUuid(id)))
-    return json(400, { ok: false, code: "BAD_IDS" });
+  const badIds = rawList.filter((id) => !isUuid(id));
+  if (!rawList.length || badIds.length) {
+    return json(400, {
+      ok: false,
+      code: "BAD_IDS",
+      // diagnostics so you can see what the client sent
+      receivedKeys: body ? Object.keys(body) : [],
+      receivedIdsType: rawIds === null ? "null" : Array.isArray(rawIds) ? "array" : typeof rawIds,
+      receivedIdsSample:
+        typeof rawIds === "string"
+          ? rawIds.slice(0, 200)
+          : Array.isArray(rawIds)
+            ? rawIds.slice(0, 5)
+            : rawIds,
+      badIds: badIds.slice(0, 10),
+    });
+  }
 
-  const title = (body?.title ?? "").trim();
-  const answer = (body?.answer ?? "").trim();
-  const visibility = (body?.visibility ?? "public") as
-    | "public"
-    | "friend"
-    | "patron"
-    | "partner";
+  // De-dupe while preserving order
+  const seen = new Set<string>();
+  const questionIds = rawList.filter((id) => (seen.has(id) ? false : (seen.add(id), true)));
+
+  const title = typeof body?.title === "string" ? body.title.trim() : "";
+  const answer = typeof body?.answer === "string" ? body.answer.trim() : "";
+  const visibility = asVisibility(body?.visibility);
   const pinned = Boolean(body?.pinned);
 
   if (!answer) return json(400, { ok: false, code: "EMPTY_ANSWER" });
 
   // Load questions
   const inPh1 = placeholders(questionIds.length, 1);
-  const qRes = await sql.query<{
-    id: string;
-    question_text: string;
-  }>(
+  const qRes = await sql.query<{ id: string; question_text: string }>(
     `
     select id::text as id, question_text
     from mailbag_questions
@@ -156,12 +190,10 @@ export async function POST(req: NextRequest) {
   }
 
   // Create Sanity post
-  const nowIso = new Date().toISOString();
-
   const doc: SanityDocumentStub = {
     _type: "artistPost",
     title: title || undefined,
-    publishedAt: nowIso,
+    publishedAt: new Date().toISOString(),
     visibility,
     pinned,
     body: blocks,
@@ -180,7 +212,7 @@ export async function POST(req: NextRequest) {
   const slug = created?.slug?.current;
   if (!slug) return json(500, { ok: false, code: "SANITY_SLUG_MISSING" });
 
-  // Update rows -> answered (IDs start at $3)
+  // Mark answered (IDs start at $3)
   const inPh3 = placeholders(questionIds.length, 3);
   await sql.query(
     `
@@ -195,7 +227,7 @@ export async function POST(req: NextRequest) {
     [created._id, slug, ...questionIds],
   );
 
-  // Public link target (adjust param if your URL state differs)
+  // Public post URL (your confirmed tab + slug param)
   const postUrl = `${appOrigin()}/home?p=posts&post=${encodeURIComponent(slug)}`;
 
   // Eligible notifications: answered + unstamped + not suppressed
@@ -231,8 +263,7 @@ export async function POST(req: NextRequest) {
     "BJR";
 
   const supportEmail =
-    (process.env.SUPPORT_EMAIL && process.env.SUPPORT_EMAIL.trim()) ||
-    undefined;
+    (process.env.SUPPORT_EMAIL && process.env.SUPPORT_EMAIL.trim()) || undefined;
 
   const subject = title
     ? `Your question was answered: ${title}`
@@ -331,9 +362,6 @@ export async function POST(req: NextRequest) {
   return json(200, {
     ok: true,
     post: { id: created._id, slug, url: postUrl },
-    notified: {
-      attempted: notifyRes.rows.length,
-      sent: sentQuestionIds.length,
-    },
+    notified: { attempted: notifyRes.rows.length, sent: sentQuestionIds.length },
   });
 }
