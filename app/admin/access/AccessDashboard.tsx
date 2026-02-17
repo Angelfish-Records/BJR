@@ -15,8 +15,6 @@ import AdminEntitlementsPanel from "../share-tokens/AdminEntitlementsPanel";
 
 type TabId = "tokens" | "entitlements";
 
-const BASE_PATH = "/admin/access";
-
 async function getMemberIdByClerkUserId(
   userId: string,
 ): Promise<string | null> {
@@ -33,13 +31,6 @@ async function getMemberIdByClerkUserId(
 function asTab(v: unknown): TabId {
   const s = typeof v === "string" ? v.trim().toLowerCase() : "";
   return s === "entitlements" ? "entitlements" : "tokens";
-}
-
-function buildHref(tab: TabId, embed: boolean) {
-  const sp = new URLSearchParams();
-  sp.set("tab", tab);
-  if (embed) sp.set("embed", "1");
-  return `${BASE_PATH}?${sp.toString()}`;
 }
 
 export default async function AccessDashboard(props: {
@@ -81,29 +72,6 @@ export default async function AccessDashboard(props: {
 
   const albums = await listAlbumsForBrowse();
 
-  const tabBtn = (id: TabId, label: string) => {
-    const active = tab === id;
-    return (
-      <a
-        href={buildHref(id, embed)}
-        style={{
-          padding: "10px 12px",
-          borderRadius: 12,
-          border: "1px solid rgba(255,255,255,0.14)",
-          background: active
-            ? "rgba(255,255,255,0.10)"
-            : "rgba(255,255,255,0.04)",
-          color: "rgba(255,255,255,0.92)",
-          textDecoration: "none",
-          fontSize: 13,
-          opacity: active ? 0.98 : 0.78,
-        }}
-      >
-        {label}
-      </a>
-    );
-  };
-
   const shellStyle: React.CSSProperties = embed
     ? { padding: 0, margin: 0 }
     : { padding: 24, maxWidth: 980 };
@@ -112,18 +80,6 @@ export default async function AccessDashboard(props: {
     <div style={shellStyle}>
       <div style={{ padding: embed ? 16 : 0 }}>
         <h1 style={{ fontSize: 22, margin: "0 0 10px" }}>Access dashboard</h1>
-
-        <div
-          style={{
-            display: "flex",
-            gap: 10,
-            marginBottom: 18,
-            flexWrap: "wrap",
-          }}
-        >
-          {tabBtn("tokens", "Share / press tokens")}
-          {tabBtn("entitlements", "Entitlements")}
-        </div>
       </div>
 
       <div style={{ padding: embed ? 16 : 0, paddingTop: 0 }}>
