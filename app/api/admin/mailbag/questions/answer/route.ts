@@ -47,11 +47,20 @@ function placeholders(count: number, startAt = 1): string {
 type Visibility = "public" | "friend" | "patron" | "partner";
 
 type Body = {
+  // ids (accept multiple keys)
   questionIds?: unknown;
   ids?: unknown;
   selectedIds?: unknown;
+
+  // content (accept multiple keys)
   title?: unknown;
   answer?: unknown;
+  body?: unknown;
+  content?: unknown;
+  text?: unknown;
+  answerText?: unknown;
+
+  // options
   visibility?: unknown;
   pinned?: unknown;
 };
@@ -82,10 +91,6 @@ function answerToPortableTextBlocks(answer: string): PortableText {
 function pickIds(body: Body | null): { raw: unknown; ids: string[] } {
   const raw = body?.questionIds ?? body?.ids ?? body?.selectedIds ?? null;
 
-  // Accept:
-  // - string UUID
-  // - string "uuid,uuid"
-  // - string[] / unknown[]
   if (typeof raw === "string") {
     const s = raw.trim();
     if (!s) return { raw, ids: [] };
@@ -101,6 +106,20 @@ function pickIds(body: Body | null): { raw: unknown; ids: string[] } {
   return { raw, ids: [] };
 }
 
+function pickText(
+  body: Body | null,
+  keys: Array<keyof Body>,
+): { key: string | null; value: string } {
+  for (const k of keys) {
+    const v = body?.[k];
+    if (typeof v === "string") {
+      const t = v.trim();
+      if (t) return { key: String(k), value: t };
+    }
+  }
+  return { key: null, value: "" };
+}
+
 function asVisibility(v: unknown): Visibility {
   const s = typeof v === "string" ? v.trim().toLowerCase() : "";
   if (s === "friend" || s === "patron" || s === "partner") return s;
@@ -113,35 +132,50 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as Body | null;
 
   const { raw: rawIds, ids: rawList } = pickIds(body);
-
   const badIds = rawList.filter((id) => !isUuid(id));
+
   if (!rawList.length || badIds.length) {
     return json(400, {
       ok: false,
       code: "BAD_IDS",
-      // diagnostics so you can see what the client sent
       receivedKeys: body ? Object.keys(body) : [],
-      receivedIdsType: rawIds === null ? "null" : Array.isArray(rawIds) ? "array" : typeof rawIds,
-      receivedIdsSample:
-        typeof rawIds === "string"
-          ? rawIds.slice(0, 200)
-          : Array.isArray(rawIds)
-            ? rawIds.slice(0, 5)
-            : rawIds,
+      receivedIdsType:
+        rawIds === null ? "null" : Array.isArray(rawIds) ? "array" : typeof rawIds,
       badIds: badIds.slice(0, 10),
     });
   }
 
   // De-dupe while preserving order
   const seen = new Set<string>();
-  const questionIds = rawList.filter((id) => (seen.has(id) ? false : (seen.add(id), true)));
+  const questionIds = rawList.filter((id) =>
+    seen.has(id) ? false : (seen.add(id), true),
+  );
 
-  const title = typeof body?.title === "string" ? body.title.trim() : "";
-  const answer = typeof body?.answer === "string" ? body.answer.trim() : "";
+  // Title can be optional; accept a few keys anyway
+  const pickedTitle = pickText(body, ["title"]);
+  const title = pickedTitle.value;
+
+  // Answer is required; accept multiple keys
+  const pickedAnswer = pickText(body, [
+    "answer",
+    "answerText",
+    "body",
+    "content",
+    "text",
+  ]);
+  const answer = pickedAnswer.value;
+
   const visibility = asVisibility(body?.visibility);
   const pinned = Boolean(body?.pinned);
 
-  if (!answer) return json(400, { ok: false, code: "EMPTY_ANSWER" });
+  if (!answer) {
+    return json(400, {
+      ok: false,
+      code: "EMPTY_ANSWER",
+      receivedKeys: body ? Object.keys(body) : [],
+      hint: "Expected one of: answer | answerText | body | content | text",
+    });
+  }
 
   // Load questions
   const inPh1 = placeholders(questionIds.length, 1);
@@ -227,7 +261,7 @@ export async function POST(req: NextRequest) {
     [created._id, slug, ...questionIds],
   );
 
-  // Public post URL (your confirmed tab + slug param)
+  // Public URL (your confirmed tab + slug param)
   const postUrl = `${appOrigin()}/home?p=posts&post=${encodeURIComponent(slug)}`;
 
   // Eligible notifications: answered + unstamped + not suppressed
@@ -363,5 +397,9 @@ export async function POST(req: NextRequest) {
     ok: true,
     post: { id: created._id, slug, url: postUrl },
     notified: { attempted: notifyRes.rows.length, sent: sentQuestionIds.length },
+    debug: {
+      acceptedAnswerKey: pickedAnswer.key,
+      acceptedTitleKey: pickedTitle.key,
+    },
   });
 }
