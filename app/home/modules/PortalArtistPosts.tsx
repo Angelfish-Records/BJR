@@ -95,7 +95,8 @@ function SubmitQuestionCTA(props: { onOpenComposer: () => void }) {
         cursor: "pointer",
         opacity: locked ? 0.86 : 1,
         userSelect: "none",
-        transition: "transform 160ms ease, opacity 160ms ease, filter 160ms ease",
+        transition:
+          "transform 160ms ease, opacity 160ms ease, filter 160ms ease",
       }}
       onMouseDown={(e) => {
         const el = e.currentTarget;
@@ -424,8 +425,31 @@ export default function PortalArtistPosts(props: {
   const { share, fallbackModal } = useShareAction();
   const shareBuilders = useShareBuilders();
 
-  // Keep the setter wired for the upcoming composer UI (no lint noise).
-  const [, setComposerOpen] = React.useState(false);
+  const { openMembershipModal } = useMembershipModal();
+  const { viewerTier, isSignedIn } = usePortalViewer();
+
+  const [composerOpen, setComposerOpen] = React.useState(false);
+  const [questionText, setQuestionText] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
+  const [submitErr, setSubmitErr] = React.useState<string | null>(null);
+  const [thanks, setThanks] = React.useState(false);
+
+  const MAX_CHARS = 800;
+
+  const canSubmit =
+    isSignedIn && (viewerTier === "patron" || viewerTier === "partner");
+
+  const thankTimerRef = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    return () => {
+      if (thankTimerRef.current) window.clearTimeout(thankTimerRef.current);
+    };
+  }, []);
+
+  const closeComposer = React.useCallback(() => {
+    setComposerOpen(false);
+    setSubmitErr(null);
+  }, []);
 
   const [posts, setPosts] = React.useState<Post[]>([]);
   const [cursor, setCursor] = React.useState<string | null>(null);
@@ -554,6 +578,105 @@ export default function PortalArtistPosts(props: {
     toastTimerRef.current = window.setTimeout(() => {
       setToastVisible(false);
     }, 1600);
+  }
+
+  type SubmitFailCode =
+    | "NOT_AUTHED"
+    | "TIER_REQUIRED"
+    | "RATE_LIMIT"
+    | "TOO_LONG"
+    | "EMPTY"
+    | "BAD_REQUEST"
+    | "SERVER_ERROR";
+
+  type SubmitOk = { ok: true };
+  type SubmitFail = {
+    ok: false;
+    code: SubmitFailCode;
+    maxChars?: number;
+    limitPerDay?: number;
+  };
+  type SubmitResponse = SubmitOk | SubmitFail;
+
+  function isSubmitResponse(x: unknown): x is SubmitResponse {
+    if (!x || typeof x !== "object") return false;
+    const r = x as Record<string, unknown>;
+    if (typeof r.ok !== "boolean") return false;
+    if (r.ok === true) return true;
+    return typeof r.code === "string";
+  }
+
+  async function submitQuestion() {
+    if (!canSubmit) {
+      openMembershipModal();
+      return;
+    }
+
+    const text = questionText.trim();
+    if (!text) {
+      setSubmitErr("Write a question first.");
+      return;
+    }
+    if (text.length > MAX_CHARS) {
+      setSubmitErr(`Keep it under ${MAX_CHARS} characters.`);
+      return;
+    }
+
+    setSubmitting(true);
+    setSubmitErr(null);
+
+    try {
+      const res = await fetch("/api/mailbag/questions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ questionText: text }),
+      });
+
+      if (res.status === 404) {
+        setSubmitErr("Mailbag submissions aren’t live yet.");
+        return;
+      }
+
+      const raw: unknown = await res.json().catch(() => null);
+      const data: SubmitResponse | null = isSubmitResponse(raw) ? raw : null;
+
+      if (!res.ok || !data || data.ok === false) {
+        const code = data && data.ok === false ? data.code : null;
+
+        if (code === "TIER_REQUIRED") {
+          openMembershipModal();
+          setSubmitErr("Upgrade to Patron to submit questions.");
+          return;
+        }
+        if (code === "RATE_LIMIT") {
+          setSubmitErr(
+            "You’ve hit the daily limit (3 questions). Try tomorrow.",
+          );
+          return;
+        }
+        if (code === "TOO_LONG") {
+          setSubmitErr(`Keep it under ${MAX_CHARS} characters.`);
+          return;
+        }
+        if (code === "NOT_AUTHED") {
+          setSubmitErr("Please sign in first.");
+          return;
+        }
+
+        setSubmitErr("Couldn’t submit right now. Try again.");
+        return;
+      }
+
+      setQuestionText("");
+      closeComposer();
+      setThanks(true);
+      if (thankTimerRef.current) window.clearTimeout(thankTimerRef.current);
+      thankTimerRef.current = window.setTimeout(() => setThanks(false), 2200);
+    } catch {
+      setSubmitErr("Couldn’t submit right now. Try again.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const onShare = React.useCallback(
@@ -815,9 +938,136 @@ export default function PortalArtistPosts(props: {
         </div>
 
         <div style={{ flex: "0 0 auto" }}>
-          <SubmitQuestionCTA onOpenComposer={() => setComposerOpen(true)} />
+          <SubmitQuestionCTA
+            onOpenComposer={() => {
+              setThanks(false);
+              setSubmitErr(null);
+              setComposerOpen(true);
+            }}
+          />
         </div>
       </div>
+
+      {/* Inline mailbag composer (Patron+) */}
+      <div
+        style={{
+          marginTop: 10,
+          borderRadius: 18,
+          border: "1px solid rgba(255,255,255,0.10)",
+          background: "rgba(255,255,255,0.03)",
+          overflow: "hidden",
+          maxHeight: composerOpen ? 360 : 0,
+          opacity: composerOpen ? 1 : 0,
+          transition: "max-height 260ms ease, opacity 220ms ease",
+        }}
+        aria-hidden={!composerOpen}
+      >
+        <div style={{ padding: 12 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              gap: 10,
+              marginBottom: 10,
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 750, opacity: 0.92 }}>
+              Submit a question
+            </div>
+            <button
+              type="button"
+              onClick={closeComposer}
+              style={{
+                border: "none",
+                background: "transparent",
+                color: "rgba(255,255,255,0.70)",
+                cursor: "pointer",
+                fontSize: 12,
+                opacity: 0.85,
+              }}
+            >
+              Close
+            </button>
+          </div>
+
+          <textarea
+            value={questionText}
+            onChange={(e) => setQuestionText(e.target.value)}
+            maxLength={MAX_CHARS + 200} // allow typing past; server enforces; UI warns
+            placeholder="Ask anything you want considered for a future Q&A."
+            style={{
+              width: "100%",
+              minHeight: 96,
+              resize: "vertical",
+              borderRadius: 14,
+              border: "1px solid rgba(255,255,255,0.14)",
+              background: "rgba(0,0,0,0.22)",
+              color: "rgba(255,255,255,0.92)",
+              padding: "10px 12px",
+              fontSize: 13,
+              lineHeight: 1.6,
+              outline: "none",
+            }}
+          />
+
+          <div
+            style={{
+              marginTop: 10,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+            }}
+          >
+            <div style={{ fontSize: 12, opacity: 0.62 }}>
+              {questionText.trim().length}/{MAX_CHARS}
+              {questionText.trim().length > MAX_CHARS ? (
+                <span style={{ marginLeft: 8, opacity: 0.95 }}>• too long</span>
+              ) : null}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void submitQuestion()}
+              disabled={submitting}
+              style={{
+                height: 32,
+                padding: "0 14px",
+                borderRadius: 999,
+                border: "1px solid rgba(255,255,255,0.16)",
+                background: "rgba(255,255,255,0.08)",
+                color: "rgba(255,255,255,0.92)",
+                cursor: submitting ? "default" : "pointer",
+                opacity: submitting ? 0.6 : 1,
+                userSelect: "none",
+              }}
+            >
+              {submitting ? "Sending…" : "Send"}
+            </button>
+          </div>
+
+          {submitErr ? (
+            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.78 }}>
+              {submitErr}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {thanks ? (
+        <div
+          style={{
+            marginTop: 10,
+            fontSize: 13,
+            opacity: 0.85,
+            lineHeight: 1.55,
+          }}
+        >
+          Thank you for your question. You will receive an email when it is
+          answered.
+        </div>
+      ) : null}
 
       {requiresAuth ? (
         <div
@@ -929,7 +1179,9 @@ export default function PortalArtistPosts(props: {
                   }}
                 >
                   <ActionBtn
-                    onClick={() => void onShare({ slug: p.slug, title: p.title })}
+                    onClick={() =>
+                      void onShare({ slug: p.slug, title: p.title })
+                    }
                     label="Share post"
                   >
                     {isCopied ? ICON_CHECK : ICON_SHARE}
