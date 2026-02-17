@@ -1,3 +1,4 @@
+// web/app/api/admin/mailbag/questions/answer/route.ts
 import "server-only";
 import * as React from "react";
 import { NextRequest, NextResponse } from "next/server";
@@ -42,6 +43,21 @@ function normalizeEmail(s: string): string {
 
 function placeholders(count: number, startAt = 1): string {
   return Array.from({ length: count }, (_, i) => `$${startAt + i}`).join(",");
+}
+
+function slugify(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/['"]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+function shortId(): string {
+  const u = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+  return u.replace(/[^a-z0-9]/gi, "").slice(0, 10).toLowerCase();
 }
 
 type Visibility = "public" | "friend" | "patron" | "partner";
@@ -151,11 +167,11 @@ export async function POST(req: NextRequest) {
     seen.has(id) ? false : (seen.add(id), true),
   );
 
-  // Title can be optional; accept a few keys anyway
+  // Title optional, but we’ll force a fallback title for slug stability.
   const pickedTitle = pickText(body, ["title"]);
   const title = pickedTitle.value;
 
-  // Answer is required; accept multiple keys
+  // Answer required; accept multiple keys
   const pickedAnswer = pickText(body, [
     "answer",
     "answerText",
@@ -223,10 +239,16 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // Force a stable title + explicit slug so Sanity can never “miss” it
+  const fallbackTitle = `Mailbag Answers — ${new Date().toISOString().slice(0, 10)}`;
+  const finalTitle = title || fallbackTitle;
+  const slugCurrent = `${slugify(finalTitle)}-${shortId()}`;
+
   // Create Sanity post
   const doc: SanityDocumentStub = {
     _type: "artistPost",
-    title: title || undefined,
+    title: finalTitle,
+    slug: { _type: "slug", current: slugCurrent },
     publishedAt: new Date().toISOString(),
     visibility,
     pinned,
@@ -243,8 +265,7 @@ export async function POST(req: NextRequest) {
     return json(500, { ok: false, code: "SANITY_CREATE_FAILED" });
   }
 
-  const slug = created?.slug?.current;
-  if (!slug) return json(500, { ok: false, code: "SANITY_SLUG_MISSING" });
+  const slug = created?.slug?.current || slugCurrent;
 
   // Mark answered (IDs start at $3)
   const inPh3 = placeholders(questionIds.length, 3);
@@ -261,7 +282,7 @@ export async function POST(req: NextRequest) {
     [created._id, slug, ...questionIds],
   );
 
-  // Public URL (your confirmed tab + slug param)
+  // Public URL (posts tab + slug param)
   const postUrl = `${appOrigin()}/home?p=posts&post=${encodeURIComponent(slug)}`;
 
   // Eligible notifications: answered + unstamped + not suppressed
@@ -323,7 +344,7 @@ export async function POST(req: NextRequest) {
     const text = [
       "Your question was answered.",
       "",
-      title ? `Post: ${title}` : "Post: (new post)",
+      title ? `Post: ${title}` : `Post: ${finalTitle}`,
       `Link: ${postUrl}`,
       "",
       "Your question:",
@@ -400,6 +421,7 @@ export async function POST(req: NextRequest) {
     debug: {
       acceptedAnswerKey: pickedAnswer.key,
       acceptedTitleKey: pickedTitle.key,
+      finalTitle,
     },
   });
 }
