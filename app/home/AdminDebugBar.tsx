@@ -63,6 +63,9 @@ export default function AdminDebugBar(props: { isAdmin: boolean }) {
   const [tokensOpen, setTokensOpen] = React.useState(false);
   const [mounted, setMounted] = React.useState(false);
 
+  type AdminPanelId = "access" | "share_tokens" | "mailbag";
+  const [adminPanel, setAdminPanel] = React.useState<AdminPanelId>("access");
+
   // NEW: combined dropdown for all buttons after Force state
   const [uiAction, setUiAction] = React.useState<UiActionId>("apply_ui");
 
@@ -85,6 +88,23 @@ export default function AdminDebugBar(props: { isAdmin: boolean }) {
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [tokensOpen]);
+
+  function openAdmin(panel: AdminPanelId) {
+    setAdminPanel(panel);
+    setTokensOpen(true);
+  }
+
+  function adminTitle(panel: AdminPanelId) {
+    if (panel === "access") return "Admin — Access";
+    if (panel === "share_tokens") return "Admin — Share tokens";
+    return "Admin — Mailbag";
+  }
+
+  function adminSrc(panel: AdminPanelId) {
+    if (panel === "access") return "/admin/access?embed=1";
+    if (panel === "share_tokens") return "/admin/access?tab=tokens&embed=1";
+    return "/admin/mailbag?embed=1";
+  }
 
   if (!ENABLED) return null;
   if (!props.isAdmin) return null;
@@ -154,11 +174,54 @@ export default function AdminDebugBar(props: { isAdmin: boolean }) {
               >
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 12, fontWeight: 650, opacity: 0.92 }}>
-                    Admin — Share tokens
+                    {adminTitle(adminPanel)}
                   </div>
+
                   <div style={{ fontSize: 11, opacity: 0.62 }}>
                     Inline modal shell (server page inside iframe)
                   </div>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 6,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {(["access", "share_tokens", "mailbag"] as const).map(
+                    (id) => {
+                      const active = adminPanel === id;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => setAdminPanel(id)}
+                          style={{
+                            height: 28,
+                            padding: "0 10px",
+                            borderRadius: 999,
+                            border: "1px solid rgba(255,255,255,0.14)",
+                            background: active
+                              ? "rgba(255,255,255,0.10)"
+                              : "rgba(255,255,255,0.04)",
+                            color: "rgba(255,255,255,0.90)",
+                            cursor: "pointer",
+                            fontSize: 12,
+                            opacity: active ? 1 : 0.78,
+                            userSelect: "none",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {id === "access"
+                            ? "Access"
+                            : id === "share_tokens"
+                              ? "Share tokens"
+                              : "Mailbag"}
+                        </button>
+                      );
+                    },
+                  )}
                 </div>
 
                 <button
@@ -181,8 +244,8 @@ export default function AdminDebugBar(props: { isAdmin: boolean }) {
               </div>
 
               <iframe
-                title="Share tokens admin"
-                src="/admin/access?embed=1"
+                title={adminTitle(adminPanel)}
+                src={adminSrc(adminPanel)}
                 style={{
                   width: "100%",
                   height: "100%",
@@ -289,8 +352,14 @@ export default function AdminDebugBar(props: { isAdmin: boolean }) {
             justifyContent: "flex-end",
           }}
         >
-          <button style={btn} onClick={() => setTokensOpen(true)}>
-            Access dashboard
+          <button style={btn} onClick={() => openAdmin("access")}>
+            Access
+          </button>
+          <button style={btn} onClick={() => openAdmin("share_tokens")}>
+            Share tokens
+          </button>
+          <button style={btn} onClick={() => openAdmin("mailbag")}>
+            Mailbag
           </button>
 
           <span
@@ -343,7 +412,9 @@ export default function AdminDebugBar(props: { isAdmin: boolean }) {
             >
               <option value="apply_ui">UI Action: Apply (UI)</option>
               <option value="clear_ui">UI Action: Clear (UI)</option>
-              <option value="spotlight_on">UI Action: Spotlight ON (debug)</option>
+              <option value="spotlight_on">
+                UI Action: Spotlight ON (debug)
+              </option>
               <option value="spotlight_off">
                 UI Action: Spotlight OFF (debug)
               </option>
