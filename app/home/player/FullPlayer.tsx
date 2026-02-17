@@ -1251,7 +1251,7 @@ export default function FullPlayer(props: {
   place-items: center;
   border-radius: 4px;
   border: none;
-  background: rgba(255,255,255,0.14);
+  background: rgba(255, 255, 255, 0.31);
   color: rgba(0,0,0,0.92);
   font-size: 9px;
   font-weight: 750;
