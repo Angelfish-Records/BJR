@@ -24,15 +24,15 @@ type ListResponse = {
   nextCursor: string | null;
 };
 
-type AnswerResponse =
-  | {
-      ok: true;
-      postId: string;
-      postSlug: string;
-      updated: number;
-      answeredCount: number;
-    }
-  | { ok: false; code?: string };
+type PublishOk = {
+  ok: true;
+  post: { id: string; slug: string; url: string };
+  notified?: { attempted: number; sent: number };
+};
+
+type PublishErr = { ok: false; code?: string };
+
+type PublishResponse = PublishOk | PublishErr;
 
 function fmtDate(iso: string) {
   try {
@@ -48,11 +48,19 @@ function fmtDate(iso: string) {
   }
 }
 
-function isAnswerResponse(x: unknown): x is AnswerResponse {
+function isPublishResponse(x: unknown): x is PublishResponse {
   if (!x || typeof x !== "object") return false;
   const r = x as Record<string, unknown>;
   if (typeof r.ok !== "boolean") return false;
-  if (r.ok === true) return typeof r.postSlug === "string";
+  if (r.ok === true) {
+    const post = r.post as Record<string, unknown> | undefined;
+    return (
+      !!post &&
+      typeof post.slug === "string" &&
+      typeof post.url === "string" &&
+      typeof post.id === "string"
+    );
+  }
   return true;
 }
 
@@ -167,7 +175,7 @@ export default function MailbagDashboardClient(props: { embed?: boolean }) {
 
     const title = answerTitle.trim();
     const text = answerText.trim();
-    if (!title || !text) return;
+    if (!text) return; // title can be blank; server will fallback
 
     setPublishing(true);
     setPublishErr(null);
@@ -188,17 +196,27 @@ export default function MailbagDashboardClient(props: { embed?: boolean }) {
         }),
       });
 
-      const raw: unknown = await res.json().catch(() => null);
-      const data = isAnswerResponse(raw) ? raw : null;
+      let raw: unknown = null;
+      try {
+        raw = await res.json();
+      } catch {
+        raw = null;
+      }
 
+      const data = isPublishResponse(raw) ? raw : null;
+
+      // ✅ Treat 200 + {ok:true,...} as success. Anything else is failure.
       if (!res.ok || !data || data.ok !== true) {
-        const code = data && data.ok === false ? String(data.code ?? "") : "";
+        const code =
+          data && data.ok === false && typeof data.code === "string"
+            ? data.code
+            : "";
         throw new Error(
           code ? `Publish failed (${code})` : `Publish failed (${res.status})`,
         );
       }
 
-      setLastPublishedSlug(data.postSlug);
+      setLastPublishedSlug(data.post.slug);
       setAnswerText("");
       setAnswerOpen(false);
 
@@ -502,12 +520,7 @@ export default function MailbagDashboardClient(props: { embed?: boolean }) {
             <button
               type="button"
               onClick={() => void publishAnswer()}
-              disabled={
-                publishing ||
-                !canAnswer ||
-                !answerTitle.trim() ||
-                !answerText.trim()
-              }
+              disabled={publishing || !canAnswer || !answerText.trim()}
               style={{
                 height: 32,
                 padding: "0 12px",
