@@ -84,7 +84,6 @@ export function buildShareTarget(
         methodHint?: ShareMethod;
         origin?: string;
         post: { slug: string; title?: string; id?: string };
-        // optional if you want nicer copy like “New note” vs “Post”
         authorName?: string;
       },
 ): ShareTarget {
@@ -170,151 +169,10 @@ export type ShareResult =
   | { ok: true; method: "native" | "copy"; url: string }
   | { ok: false; reason: "clipboard_unavailable" | "failed"; url: string };
 
-function encodeShareText(target: ShareTarget) {
-  return `${target.text}\n${target.url}`.trim();
-}
-
-export type ShareIntentId =
-  | "whatsapp"
-  | "instagram"
-  | "signal"
-  | "telegram"
-  | "email"
-  | "x"
-  | "messenger"
-  | "snapchat"
-  | "discord";
-
-export type ShareIntent = {
-  id: ShareIntentId;
-  label: string;
-  href: string;
-  note?: string;
-};
-
-function isAndroid() {
-  if (typeof navigator === "undefined") return false;
-  return /Android/i.test(navigator.userAgent || "");
-}
-function isiOS() {
-  if (typeof navigator === "undefined") return false;
-  return /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
-}
-
-/**
- * IMPORTANT:
- * - WhatsApp / Telegram / Email / X are reliable.
- * - Instagram / Snapchat / Signal are "open app" best-effort, not “direct send”.
- * - Messenger is inconsistent; web flow often forces login.
- * - Discord can’t receive a prefilled message from web reliably; open app and paste.
- */
-export function getShareIntents(target: ShareTarget): ShareIntent[] {
-  const shareText = encodeShareText(target);
-  const msg = encodeURIComponent(shareText);
-
-  const subj = encodeURIComponent(target.title);
-  const body = encodeURIComponent(shareText);
-
-  const urlEnc = encodeURIComponent(target.url);
-  const textEnc = encodeURIComponent(target.text);
-
-  const intents: ShareIntent[] = [
-    { id: "whatsapp", label: "WhatsApp", href: `https://wa.me/?text=${msg}` },
-
-    ...(isAndroid()
-      ? [
-          {
-            id: "instagram" as const,
-            label: "Instagram",
-            href: `intent://#Intent;package=com.instagram.android;scheme=https;end`,
-            note: "Opens app (paste link)",
-          },
-        ]
-      : [
-          {
-            id: "instagram" as const,
-            label: "Instagram",
-            href: `instagram://app`,
-            note: "Opens app (paste link)",
-          },
-        ]),
-
-    ...(isAndroid()
-      ? [
-          {
-            id: "signal" as const,
-            label: "Signal",
-            href: `intent://#Intent;package=org.thoughtcrime.securesms;scheme=signal;end`,
-            note: "Opens app (paste link)",
-          },
-        ]
-      : [
-          {
-            id: "signal" as const,
-            label: "Signal",
-            href: `sgnl://`,
-            note: "Opens app (paste link)",
-          },
-        ]),
-
-    {
-      id: "telegram",
-      label: "Telegram",
-      href: `https://t.me/share/url?url=${urlEnc}&text=${textEnc}`,
-    },
-
-    {
-      id: "email",
-      label: "Email",
-      href: `mailto:?subject=${subj}&body=${body}`,
-    },
-
-    {
-      id: "x",
-      label: "X",
-      href: `https://twitter.com/intent/tweet?text=${textEnc}&url=${urlEnc}`,
-    },
-
-    {
-      id: "messenger",
-      label: "Messenger",
-      href: isiOS()
-        ? `fb-messenger://share?link=${urlEnc}`
-        : `https://www.facebook.com/dialog/send?link=${urlEnc}`,
-      note: "May prompt login",
-    },
-
-    // Extra: hip hop fans absolutely use Discord + Snapchat.
-    {
-      id: "discord",
-      label: "Discord",
-      href: `discord://`,
-      note: "Opens app (paste link)",
-    },
-
-    ...(isAndroid()
-      ? [
-          {
-            id: "snapchat" as const,
-            label: "Snapchat",
-            href: `intent://#Intent;package=com.snapchat.android;scheme=https;end`,
-            note: "Opens app (paste link)",
-          },
-        ]
-      : [
-          {
-            id: "snapchat" as const,
-            label: "Snapchat",
-            href: `snapchat://`,
-            note: "Opens app (paste link)",
-          },
-        ]),
-  ];
-
-  const seen = new Set<string>();
-  return intents.filter((x) =>
-    seen.has(x.id) ? false : (seen.add(x.id), true),
-  );
+function isAbortError(err: unknown) {
+  if (!err || typeof err !== "object") return false;
+  const anyErr = err as { name?: unknown; message?: unknown };
+  return anyErr.name === "AbortError";
 }
 
 export async function performShare(target: ShareTarget): Promise<ShareResult> {
@@ -322,11 +180,7 @@ export async function performShare(target: ShareTarget): Promise<ShareResult> {
 
   if (typeof navigator !== "undefined") {
     const nav = navigator as Navigator & {
-      share?: (data: {
-        title?: string;
-        text?: string;
-        url?: string;
-      }) => Promise<void>;
+      share?: (data: { title?: string; text?: string; url?: string }) => Promise<void>;
       canShare?: (data?: {
         title?: string;
         text?: string;
@@ -341,8 +195,13 @@ export async function performShare(target: ShareTarget): Promise<ShareResult> {
         try {
           await nav.share(payload);
           return { ok: true, method: "native", url };
-        } catch {
-          // fall through
+        } catch (err) {
+          // Key fix:
+          // If user cancels/dismisses the native share sheet, DO NOT fall back to copying.
+          if (isAbortError(err)) {
+            return { ok: false, reason: "failed", url };
+          }
+          // Otherwise, fall through to clipboard fallback (useful for genuine failures).
         }
       }
     }
