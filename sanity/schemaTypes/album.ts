@@ -199,6 +199,16 @@ export default defineType({
               validation: (r) => r.required(),
             }),
 
+            // ✅ NEW: Explicit flag (per track)
+            defineField({
+              name: "explicit",
+              title: "Explicit",
+              type: "boolean",
+              initialValue: false,
+              description:
+                "If enabled, the UI can show an Explicit (E) badge next to this track title.",
+            }),
+
             // ✅ Track override theme
             defineField({
               name: "visualTheme",
@@ -220,17 +230,20 @@ export default defineType({
               subtitle: "muxPlaybackId",
               theme: "visualTheme",
               cat: "catalogId",
+              explicit: "explicit",
             },
             prepare({
               title,
               subtitle,
               theme,
               cat,
+              explicit,
             }: {
               title?: string;
               subtitle?: string;
               theme?: string;
               cat?: string;
+              explicit?: boolean;
             }) {
               const t =
                 typeof theme === "string" && theme.trim().length
@@ -240,9 +253,10 @@ export default defineType({
                 typeof cat === "string" && cat.trim().length
                   ? cat.trim()
                   : "no catalogId";
+              const e = explicit ? " · E" : "";
               return {
                 title,
-                subtitle: `${subtitle ?? ""}${subtitle ? " · " : ""}${t} · ${cid}`,
+                subtitle: `${subtitle ?? ""}${subtitle ? " · " : ""}${t} · ${cid}${e}`,
               };
             },
           },

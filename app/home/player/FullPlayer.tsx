@@ -879,23 +879,44 @@ export default function FullPlayer(props: {
 
                 <div className="afRowMid" style={{ minWidth: 0 }}>
                   <div
-                    className={shimmerTitle ? "afShimmerText" : undefined}
-                    data-reason={
-                      isCur && p.status === "loading"
-                        ? (p.loadingReason ?? "")
-                        : ""
-                    }
                     style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      minWidth: 0,
                       fontSize: 13,
                       opacity: 1,
                       color: titleColor,
                       whiteSpace: "nowrap",
                       overflow: "hidden",
-                      textOverflow: "ellipsis",
                       transition: "opacity 160ms ease, color 160ms ease",
                     }}
+                    data-reason={
+                      isCur && p.status === "loading"
+                        ? (p.loadingReason ?? "")
+                        : ""
+                    }
                   >
-                    {t.title ?? t.id}
+                    <span
+                      className={shimmerTitle ? "afShimmerText" : undefined}
+                      style={{
+                        minWidth: 0,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {t.title ?? t.id}
+                    </span>
+
+                    {t.explicit ? (
+                      <span
+                        className="afExplicitBadge"
+                        aria-label="Explicit"
+                        title="Explicit"
+                      >
+                        E
+                      </span>
+                    ) : null}
                   </div>
 
                   <div className="afRowDurUnder" aria-hidden="true">
@@ -1222,6 +1243,23 @@ export default function FullPlayer(props: {
   100%{transform:scaleY(.40)}
 }
 
+.afExplicitBadge{
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.22);
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.92);
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1;
+  letter-spacing: 0.2px;
+  transform: translateY(-0.5px);
+  user-select: none;
+}
 
         @media (prefers-reduced-motion: reduce){
           .afEq i{ animation: none; }

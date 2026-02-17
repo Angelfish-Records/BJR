@@ -52,4 +52,7 @@ export type PlayerTrack = {
   durationMs?: number;
   muxPlaybackId?: string;
   visualTheme?: string;
+
+  // NEW
+  explicit?: boolean;
 };

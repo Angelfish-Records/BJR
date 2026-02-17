@@ -13,7 +13,6 @@ type AlbumDoc = {
   description?: string;
   artwork?: unknown;
   visualTheme?: string;
-  // ⬇️ new
   publicPageVisible?: boolean;
   releaseAt?: string;
   embargoNote?: string;
@@ -28,6 +27,9 @@ type AlbumDoc = {
     durationMs?: number;
     muxPlaybackId?: string;
     visualTheme?: string;
+
+    // NEW
+    explicit?: boolean;
   }>;
 };
 
@@ -49,10 +51,10 @@ export async function getFeaturedAlbumSlugFromSanity(): Promise<{
       }
   `;
 
-  const res = await client.fetch<{slug?: string | null; fallbackSlug?: string | null}>(
+  const res = await client.fetch<{ slug?: string | null; fallbackSlug?: string | null }>(
     q,
     {},
-    { next: { tags: ["siteFlags"] } }
+    { next: { tags: ["siteFlags"] } },
   );
 
   return {
@@ -149,7 +151,7 @@ export async function getAlbumBySlug(
       visualTheme,
       publicPageVisible,
       releaseAt,
-      embargoNote,  
+      embargoNote,
       earlyAccessEnabled,
       earlyAccessTiers,
       minTierToLoad,
@@ -160,7 +162,8 @@ export async function getAlbumBySlug(
         artist,
         durationMs,
         muxPlaybackId,
-        visualTheme
+        visualTheme,
+        explicit
       }
     }
   `;
@@ -206,7 +209,6 @@ export async function getAlbumBySlug(
       earlyAccessTiers: parseTierNameArray(doc.earlyAccessTiers),
       minTierToLoad: parseTierName(doc.minTierToLoad),
     },
-    // ✅ optimistic embargo UI (still not an entitlement decision)
     embargo: {
       embargoed: isEmbargoedByDate,
       releaseAt,
@@ -214,8 +216,6 @@ export async function getAlbumBySlug(
     },
   };
 
-  // Tracks: keep legacy id as the runtime player id (so lyrics + existing wiring keep working),
-  // but attach catalogId for future-proofing and entitlement scoping if you later go track-level.
   const tracks: PlayerTrack[] = Array.isArray(doc.tracks)
     ? doc.tracks
         .filter((t) => t?.id)
@@ -226,18 +226,20 @@ export async function getAlbumBySlug(
           const trackTheme = normTheme(t.visualTheme);
 
           return {
-            id: t.id, // legacy runtime ID (matches lyrics today)
+            id: t.id,
             catalogId: normStr(t.catalogId) ?? null,
             title: normStr(t.title),
             artist: normStr(t.artist),
             muxPlaybackId: normStr(t.muxPlaybackId),
             durationMs: typeof n === "number" && n > 0 ? n : undefined,
             visualTheme: trackTheme ?? albumTheme,
+
+            // NEW
+            explicit: t.explicit === true,
           };
         })
     : [];
 
-  // Lyrics are still keyed by legacy trackId for now.
   const trackIds = tracks
     .map((t) => t.id)
     .filter((x): x is string => typeof x === "string" && x.length > 0);
