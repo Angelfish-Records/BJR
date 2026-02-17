@@ -768,14 +768,6 @@ export default function PortalArtistPosts(props: {
                     <span>Share</span>
                   </ActionBtn>
                 </div>
-
-                <div
-                  style={{
-                    height: 1,
-                    background: "rgba(255,255,255,0.06)",
-                    marginTop: 12,
-                  }}
-                />
               </div>
             </div>
           );
