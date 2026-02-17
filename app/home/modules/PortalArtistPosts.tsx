@@ -4,8 +4,12 @@
 import React from "react";
 import { PortableText, type PortableTextComponents } from "@portabletext/react";
 import type { PortableTextBlock } from "@portabletext/types";
+import { useMembershipModal } from "@/app/home/MembershipModalProvider";
 import { useClientSearchParams, replaceQuery } from "@/app/home/urlState";
-import { useShareAction, useShareBuilders } from "@/app/home/player/ShareAction";
+import {
+  useShareAction,
+  useShareBuilders,
+} from "@/app/home/player/ShareAction";
 
 type Visibility = "public" | "friend" | "patron" | "partner";
 
@@ -125,7 +129,12 @@ function parseWidthHintFromUrl(url: string): number | null {
     for (const part of parts) {
       const [k, val] = part.split("=");
       const key = (k || "").trim().toLowerCase();
-      if (key === "w" || key === "width" || key === "mw" || key === "maxwidth") {
+      if (
+        key === "w" ||
+        key === "width" ||
+        key === "mw" ||
+        key === "maxwidth"
+      ) {
         const fromH = parsePxLike(val);
         if (fromH) return fromH;
       }
@@ -156,7 +165,13 @@ function resolveImageMaxWidthPx(value: SanityImageValue, tall: boolean) {
 -------------------------- */
 
 const ICON_SHARE = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    aria-hidden="true"
+  >
     <path
       d="M16 8a3 3 0 1 0-2.83-4H13a3 3 0 0 0 .17 1l-6.5 3.25A3 3 0 0 0 4 7a3 3 0 1 0 0 6 3 3 0 0 0 2.67-1.5l6.5 3.25A3 3 0 0 0 13 16a3 3 0 1 0 .17-1l-6.5-3.25A3 3 0 0 0 7 10c0-.35-.06-.69-.17-1l6.5-3.25A3 3 0 0 0 16 8Z"
       stroke="currentColor"
@@ -167,7 +182,13 @@ const ICON_SHARE = (
 );
 
 const ICON_CHECK = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    aria-hidden="true"
+  >
     <path
       d="M20 7L10.5 16.5L4 10"
       stroke="currentColor"
@@ -351,6 +372,7 @@ export default function PortalArtistPosts(props: {
 
   const { share, fallbackModal } = useShareAction();
   const shareBuilders = useShareBuilders();
+  const { openMembershipModal } = useMembershipModal();
 
   const [posts, setPosts] = React.useState<Post[]>([]);
   const [cursor, setCursor] = React.useState<string | null>(null);
@@ -525,7 +547,13 @@ export default function PortalArtistPosts(props: {
           const maxWidthPx = perImage ?? globalCap ?? null;
 
           return (
-            <div style={{ margin: "12px 0", display: "flex", justifyContent: "center" }}>
+            <div
+              style={{
+                margin: "12px 0",
+                display: "flex",
+                justifyContent: "center",
+              }}
+            >
               <div
                 style={{
                   width: "100%",
@@ -537,7 +565,11 @@ export default function PortalArtistPosts(props: {
                 }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt="" style={{ width: "100%", height: "auto", display: "block" }} />
+                <img
+                  src={url}
+                  alt=""
+                  style={{ width: "100%", height: "auto", display: "block" }}
+                />
               </div>
             </div>
           );
@@ -546,22 +578,50 @@ export default function PortalArtistPosts(props: {
 
       block: {
         normal: ({ children }) => (
-          <p style={{ margin: "10px 0", lineHeight: 1.68, fontSize: 13, opacity: 0.92 }}>
+          <p
+            style={{
+              margin: "10px 0",
+              lineHeight: 1.68,
+              fontSize: 13,
+              opacity: 0.92,
+            }}
+          >
             {children}
           </p>
         ),
         h1: ({ children }) => (
-          <h3 style={{ margin: "14px 0 8px", fontSize: 16, lineHeight: 1.25, opacity: 0.95 }}>
+          <h3
+            style={{
+              margin: "14px 0 8px",
+              fontSize: 16,
+              lineHeight: 1.25,
+              opacity: 0.95,
+            }}
+          >
             {children}
           </h3>
         ),
         h2: ({ children }) => (
-          <h4 style={{ margin: "14px 0 8px", fontSize: 15, lineHeight: 1.25, opacity: 0.95 }}>
+          <h4
+            style={{
+              margin: "14px 0 8px",
+              fontSize: 15,
+              lineHeight: 1.25,
+              opacity: 0.95,
+            }}
+          >
             {children}
           </h4>
         ),
         h3: ({ children }) => (
-          <h5 style={{ margin: "12px 0 6px", fontSize: 14, lineHeight: 1.25, opacity: 0.92 }}>
+          <h5
+            style={{
+              margin: "12px 0 6px",
+              fontSize: 14,
+              lineHeight: 1.25,
+              opacity: 0.92,
+            }}
+          >
             {children}
           </h5>
         ),
@@ -614,12 +674,18 @@ export default function PortalArtistPosts(props: {
         ),
       },
       listItem: {
-        bullet: ({ children }) => <li style={{ margin: "6px 0" }}>{children}</li>,
-        number: ({ children }) => <li style={{ margin: "6px 0" }}>{children}</li>,
+        bullet: ({ children }) => (
+          <li style={{ margin: "6px 0" }}>{children}</li>
+        ),
+        number: ({ children }) => (
+          <li style={{ margin: "6px 0" }}>{children}</li>
+        ),
       },
 
       marks: {
-        strong: ({ children }) => <strong style={{ fontWeight: 750, opacity: 0.98 }}>{children}</strong>,
+        strong: ({ children }) => (
+          <strong style={{ fontWeight: 750, opacity: 0.98 }}>{children}</strong>
+        ),
         em: ({ children }) => <em style={{ opacity: 0.95 }}>{children}</em>,
         code: ({ children }) => (
           <code
@@ -693,12 +759,21 @@ export default function PortalArtistPosts(props: {
       </div>
 
       {requiresAuth ? (
-        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85, lineHeight: 1.55 }}>
+        <div
+          style={{
+            marginTop: 12,
+            fontSize: 13,
+            opacity: 0.85,
+            lineHeight: 1.55,
+          }}
+        >
           Sign in to keep reading posts.
         </div>
       ) : null}
 
-      {err ? <div style={{ marginTop: 12, fontSize: 13, opacity: 0.8 }}>{err}</div> : null}
+      {err ? (
+        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.8 }}>{err}</div>
+      ) : null}
 
       {/* Feed */}
       <div style={{ marginTop: 6 }}>
@@ -714,7 +789,10 @@ export default function PortalArtistPosts(props: {
                 else postEls.current.set(p.slug, el);
               }}
               data-slug={p.slug}
-              style={{ padding: "14px 0", borderBottom: "1px solid rgba(255,255,255,0.07)" }}
+              style={{
+                padding: "14px 0",
+                borderBottom: "1px solid rgba(255,255,255,0.07)",
+              }}
             >
               <div
                 style={{
@@ -728,17 +806,49 @@ export default function PortalArtistPosts(props: {
               >
                 {/* header row */}
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <Avatar label={authorInitials} src={authorAvatarSrc} alt={authorName} />
+                  <Avatar
+                    label={authorInitials}
+                    src={authorAvatarSrc}
+                    alt={authorName}
+                  />
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.92, whiteSpace: "nowrap" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "baseline",
+                        gap: 10,
+                        minWidth: 0,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          opacity: 0.92,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         {authorName}
                       </div>
-                      <div style={{ fontSize: 12, opacity: 0.56, whiteSpace: "nowrap" }}>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          opacity: 0.56,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         {fmtDate(p.publishedAt)}
                       </div>
                       {p.pinned ? (
-                        <div style={{ fontSize: 12, opacity: 0.62, whiteSpace: "nowrap" }}>• pinned</div>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            opacity: 0.62,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          • pinned
+                        </div>
                       ) : null}
                     </div>
                   </div>
@@ -750,8 +860,19 @@ export default function PortalArtistPosts(props: {
                 </div>
 
                 {/* Actions row */}
-                <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-start" }}>
-                  <ActionBtn onClick={() => void onShare({ slug: p.slug, title: p.title })} label="Share post">
+                <div
+                  style={{
+                    marginTop: 10,
+                    display: "flex",
+                    justifyContent: "flex-start",
+                  }}
+                >
+                  <ActionBtn
+                    onClick={() =>
+                      void onShare({ slug: p.slug, title: p.title })
+                    }
+                    label="Share post"
+                  >
                     {isCopied ? ICON_CHECK : ICON_SHARE}
                     <span>{isCopied ? "Copied" : "Share"}</span>
                   </ActionBtn>
@@ -761,10 +882,16 @@ export default function PortalArtistPosts(props: {
           );
         })}
 
-        {loading ? <div style={{ fontSize: 12, opacity: 0.7, padding: "12px 0" }}>Loading…</div> : null}
+        {loading ? (
+          <div style={{ fontSize: 12, opacity: 0.7, padding: "12px 0" }}>
+            Loading…
+          </div>
+        ) : null}
 
         {!loading && !requiresAuth && posts.length === 0 ? (
-          <div style={{ fontSize: 13, opacity: 0.75, padding: "12px 0" }}>No posts yet.</div>
+          <div style={{ fontSize: 13, opacity: 0.75, padding: "12px 0" }}>
+            No posts yet.
+          </div>
         ) : null}
       </div>
 

@@ -4,6 +4,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth, useSignIn, useSignUp, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
+import { useMembershipModal } from "@/app/home/MembershipModalProvider";
 import SubscribeButton from "@/app/home/SubscribeButton";
 import CancelSubscriptionButton from "@/app/home/CancelSubscriptionButton";
 import {
@@ -510,7 +511,7 @@ export default function ActivationGate(props: Props) {
   const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [billingOpen, setBillingOpen] = useState(false);
+  const { isMembershipOpen, openMembershipModal, closeMembershipModal } = useMembershipModal();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const emailInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -639,28 +640,28 @@ export default function ActivationGate(props: Props) {
 
   // Modal: billing dropdown isn't used (keep state clean)
   useEffect(() => {
-    if (placement === "modal") setBillingOpen(false);
-  }, [placement]);
+    if (placement === "modal") closeMembershipModal();
+  }, [placement, closeMembershipModal]);
 
   // Close billing if auth state changes
   useEffect(() => {
-    if (!isActive || !canManageBilling) setBillingOpen(false);
-  }, [isActive, canManageBilling]);
+    if (!isActive || !canManageBilling) closeMembershipModal();
+  }, [isActive, canManageBilling, closeMembershipModal]);
 
   // Close membership modal via Escape (but don't interfere with OTP)
   useEffect(() => {
-    if (!billingOpen) return;
+    if (!isMembershipOpen) return;
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
       // If OTP is open, don't steal Escape; membership modal only.
       if (!isActive) return;
       e.preventDefault();
       e.stopPropagation();
-      setBillingOpen(false);
+      closeMembershipModal();
     }
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [billingOpen, isActive]);
+  }, [isMembershipOpen, isActive, closeMembershipModal]);
 
   // If we leave idle/email phase, stop the “typing” state
   useEffect(() => {
@@ -782,7 +783,7 @@ export default function ActivationGate(props: Props) {
     </div>
   );
 
-  const membershipModalOpen = billingOpen && isActive && canManageBilling;
+  const membershipModalOpen = isMembershipOpen && isActive && canManageBilling;
 
   const membershipModal = membershipModalOpen ? (
     <div
@@ -798,7 +799,7 @@ export default function ActivationGate(props: Props) {
       {/* Backdrop: click-catcher + subtle blur/lift. */}
       <div
         aria-hidden
-        onMouseDown={() => setBillingOpen(false)}
+        onMouseDown={() => closeMembershipModal()}
         style={{
           position: "absolute",
           inset: 0,
@@ -905,7 +906,7 @@ export default function ActivationGate(props: Props) {
               <button
                 type="button"
                 aria-label="Close membership"
-                onClick={() => setBillingOpen(false)}
+                onClick={() => closeMembershipModal()}
                 style={{
                   width: 34,
                   height: 34,
@@ -1206,7 +1207,7 @@ export default function ActivationGate(props: Props) {
                       {showBillingTrigger ? (
                         <button
                           type="button"
-                          onClick={() => setBillingOpen(true)}
+                          onClick={() => openMembershipModal()}
                           style={{
                             appearance: "none",
                             border: 0,
