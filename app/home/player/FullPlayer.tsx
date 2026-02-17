@@ -1245,15 +1245,15 @@ export default function FullPlayer(props: {
 
 .afExplicitBadge{
   flex: 0 0 auto;
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   display: inline-grid;
   place-items: center;
   border-radius: 4px;
   border: none;
   background: rgba(255, 255, 255, 0.31);
   color: rgba(0,0,0,0.92);
-  font-size: 9px;
+  font-size: 7px;
   font-weight: 750;
   line-height: 1;
   letter-spacing: 0.2px;

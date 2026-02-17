@@ -1,3 +1,4 @@
+// sanity/schemaTypes/moduleArtistPosts.ts
 import { defineField, defineType } from "sanity";
 
 export const moduleArtistPosts = defineType({
