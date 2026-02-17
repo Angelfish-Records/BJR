@@ -10,10 +10,12 @@ type Props = {
   className?: string;
   style?: React.CSSProperties;
 
-  // NEW
   variant?: "default" | "primary" | "ghost" | "link";
   fullWidth?: boolean;
   buttonStyle?: React.CSSProperties;
+
+  // Optional: client-side cooldown (UX)
+  cooldownMs?: number; // default 10s
 };
 
 type DownloadResponse =
@@ -32,6 +34,14 @@ function mergeStyle(
   return { ...(a ?? {}), ...(b ?? {}) };
 }
 
+function readRetryAfterSeconds(res: Response): number | null {
+  const v = res.headers.get("retry-after");
+  if (!v) return null;
+  // Retry-After can be seconds or HTTP date; we handle seconds only.
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 export default function DownloadAlbumButton(props: Props) {
   const {
     albumSlug,
@@ -44,15 +54,75 @@ export default function DownloadAlbumButton(props: Props) {
     variant = "default",
     fullWidth = false,
     buttonStyle,
+
+    cooldownMs = 10_000,
   } = props;
 
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
 
+  // --- cooldown state (persisted) ---
+  const storageKey = `dlcooldown:${albumSlug}:${assetId}`;
+  const [cooldownUntil, setCooldownUntil] = React.useState<number>(0);
+  const [now, setNow] = React.useState<number>(() => Date.now());
+
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      const n = raw ? Number(raw) : 0;
+      if (Number.isFinite(n) && n > Date.now()) setCooldownUntil(n);
+    } catch {
+      // ignore
+    }
+  }, [storageKey]);
+
+  React.useEffect(() => {
+    if (!cooldownUntil) return;
+    const t = window.setInterval(() => setNow(Date.now()), 250);
+    return () => window.clearInterval(t);
+  }, [cooldownUntil]);
+
+  const remainingMs = Math.max(0, cooldownUntil - now);
+  const coolingDown = remainingMs > 0;
+
+  const setCooldownForSeconds = React.useCallback(
+    (seconds: number) => {
+      const ms = Math.max(0, Math.floor(seconds * 1000));
+      const until = Date.now() + ms;
+      setCooldownUntil(until);
+      try {
+        localStorage.setItem(storageKey, String(until));
+      } catch {
+        // ignore
+      }
+    },
+    [storageKey],
+  );
+
+  const armCooldown = React.useCallback(() => {
+    const until = Date.now() + cooldownMs;
+    setCooldownUntil(until);
+    try {
+      localStorage.setItem(storageKey, String(until));
+    } catch {
+      // ignore
+    }
+  }, [cooldownMs, storageKey]);
+
   const onClick = async () => {
     if (busy || disabled) return;
+
+    if (coolingDown) {
+      // Keep it low-friction: gentle hint only.
+      setErr(`Please wait ${Math.ceil(remainingMs / 1000)}s before retrying.`);
+      return;
+    }
+
     setBusy(true);
     setErr(null);
+
+    // Start cooldown immediately so even fast failures can't be spammed.
+    armCooldown();
 
     try {
       const res = await fetch("/api/downloads/album", {
@@ -61,17 +131,24 @@ export default function DownloadAlbumButton(props: Props) {
         body: JSON.stringify({ albumSlug, assetId }),
       });
 
-      const data = (await res
-        .json()
-        .catch(() => null)) as DownloadResponse | null;
+      // If server says "slow down", respect it and extend the cooldown.
+      if (res.status === 429) {
+        const retryAfter = readRetryAfterSeconds(res);
+        if (retryAfter) setCooldownForSeconds(retryAfter);
+        const data = (await res.json().catch(() => null)) as DownloadResponse | null;
+        const msg =
+          data && data.ok === false && data.error
+            ? data.error
+            : retryAfter
+              ? `Please wait ${retryAfter}s and try again.`
+              : "Please wait and try again.";
+        setErr(msg);
+        return;
+      }
 
-      if (
-        !res.ok ||
-        !data ||
-        data.ok !== true ||
-        !("url" in data) ||
-        !data.url
-      ) {
+      const data = (await res.json().catch(() => null)) as DownloadResponse | null;
+
+      if (!res.ok || !data || data.ok !== true || !("url" in data) || !data.url) {
         const msg =
           data && data.ok === false && data.error
             ? data.error
@@ -98,9 +175,10 @@ export default function DownloadAlbumButton(props: Props) {
     padding: "12px 14px",
     fontSize: 14,
     fontWeight: 650,
-    cursor: busy || disabled ? "not-allowed" : "pointer",
-    opacity: busy || disabled ? 0.55 : 1,
+    cursor: busy || disabled || coolingDown ? "not-allowed" : "pointer",
+    opacity: busy || disabled || coolingDown ? 0.55 : 1,
     width: fullWidth ? "100%" : undefined,
+    userSelect: "none",
   };
 
   const variants: Record<NonNullable<Props["variant"]>, React.CSSProperties> = {
@@ -111,7 +189,7 @@ export default function DownloadAlbumButton(props: Props) {
       padding: "8px 12px",
       fontSize: 13,
       fontWeight: 600,
-      opacity: busy || disabled ? 0.55 : 0.9,
+      opacity: busy || disabled || coolingDown ? 0.55 : 0.9,
     },
     primary: {
       border: "1px solid rgba(255,255,255,0.14)",
@@ -137,15 +215,21 @@ export default function DownloadAlbumButton(props: Props) {
 
   const computed = mergeStyle(mergeStyle(base, variants[variant]), buttonStyle);
 
+  const buttonText =
+    busy ? "Preparing download…"
+    : coolingDown ? `Try again in ${Math.ceil(remainingMs / 1000)}s`
+    : label;
+
   return (
     <div className={className} style={style}>
       <button
         type="button"
         onClick={onClick}
-        disabled={busy || disabled}
+        disabled={busy || disabled || coolingDown}
         style={computed}
+        aria-disabled={busy || disabled || coolingDown}
       >
-        {busy ? "Preparing download…" : label}
+        {buttonText}
       </button>
 
       {err ? (

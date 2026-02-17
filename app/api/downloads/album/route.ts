@@ -11,47 +11,166 @@ import { normalizeEmail } from "../../../../lib/members";
 
 export const runtime = "nodejs";
 
-function json(status: number, body: unknown) {
-  return NextResponse.json(body, { status });
+// ---- tuning knobs (safe defaults) ----
+const MEMBER_COOLDOWN_SECONDS = 10; // same user + same asset
+const IP_WINDOW_SECONDS = 30; // rolling window
+const IP_MAX_HITS_PER_WINDOW = 20; // generous; only trips on obvious automation
+const R2_EXISTENCE_CACHE_SECONDS = 6 * 60 * 60; // 6 hours
+
+type JsonError = { ok: false; error: string; detail?: unknown };
+type JsonOk = {
+  ok: true;
+  url: string;
+  albumSlug: string;
+  asset: { id: string; label: string; filename: string };
+};
+type JsonBody = JsonOk | JsonError;
+
+function json(status: number, body: JsonBody, headers?: HeadersInit) {
+  return NextResponse.json(body, { status, headers });
 }
 
 async function resolveMemberId(params: {
   userId: string | null;
   email: string | null;
-}) {
+}): Promise<string | null> {
   const { userId, email } = params;
 
-  // Prefer clerk_user_id when present (your canonical resolution order remains intact elsewhere too).
   if (userId) {
-    const r = await sql`
+    const r = await sql<{ id: string }>`
       select id
       from members
       where clerk_user_id = ${userId}
       limit 1
     `;
-    const id = (r.rows[0]?.id as string | undefined) ?? null;
+    const id = r.rows[0]?.id ?? null;
     if (id) return id;
   }
 
   if (email) {
-    const r = await sql`
+    const r = await sql<{ id: string }>`
       select id
       from members
       where email = ${email}
       limit 1
     `;
-    const id = (r.rows[0]?.id as string | undefined) ?? null;
+    const id = r.rows[0]?.id ?? null;
     if (id) return id;
   }
 
   return null;
 }
 
+function getClientIp(req: Request): string | null {
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) {
+    const first = xff.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  const rip = req.headers.get("x-real-ip")?.trim();
+  return rip || null;
+}
+
+// ---- Throttles / caches (require small tables) ----
+
+async function checkMemberCooldown(params: {
+  memberId: string;
+  albumSlug: string;
+  assetId: string;
+}): Promise<{ ok: true } | { ok: false; retryAfterSeconds: number }> {
+  const { memberId, albumSlug, assetId } = params;
+
+  const prev = await sql<{ last_at: Date }>`
+    select last_at
+    from download_throttle_member
+    where member_id = ${memberId}
+      and album_slug = ${albumSlug}
+      and asset_id = ${assetId}
+    limit 1
+  `;
+
+  const lastAt: Date | null = prev.rows[0]?.last_at ?? null;
+  if (lastAt) {
+    const ms = Date.now() - lastAt.getTime();
+    if (ms < MEMBER_COOLDOWN_SECONDS * 1000) {
+      const retry = Math.ceil(
+        (MEMBER_COOLDOWN_SECONDS * 1000 - ms) / 1000,
+      );
+      return { ok: false, retryAfterSeconds: retry };
+    }
+  }
+
+  await sql`
+    insert into download_throttle_member (member_id, album_slug, asset_id, last_at)
+    values (${memberId}, ${albumSlug}, ${assetId}, now())
+    on conflict (member_id, album_slug, asset_id)
+    do update set last_at = excluded.last_at
+  `;
+
+  return { ok: true };
+}
+
+async function checkIpThrottle(
+  ip: string | null,
+): Promise<{ ok: true } | { ok: false; retryAfterSeconds: number }> {
+  if (!ip) return { ok: true };
+
+  const windowStartSeconds =
+    Math.floor(Date.now() / 1000 / IP_WINDOW_SECONDS) * IP_WINDOW_SECONDS;
+
+  const r = await sql<{ hits: number }>`
+    insert into download_throttle_ip (ip, window_start, hits)
+    values (${ip}, to_timestamp(${windowStartSeconds}), 1)
+    on conflict (ip, window_start)
+    do update set hits = download_throttle_ip.hits + 1
+    returning hits
+  `;
+
+  const hits = Number(r.rows[0]?.hits ?? 1);
+  if (hits > IP_MAX_HITS_PER_WINDOW) {
+    return { ok: false, retryAfterSeconds: IP_WINDOW_SECONDS };
+  }
+
+  return { ok: true };
+}
+
+async function assertR2ExistsCached(r2Key: string): Promise<void> {
+  const cached = await sql<{ verified_at: Date }>`
+    select verified_at
+    from r2_object_presence_cache
+    where r2_key = ${r2Key}
+    limit 1
+  `;
+
+  const verifiedAt: Date | null = cached.rows[0]?.verified_at ?? null;
+  if (verifiedAt) {
+    const ms = Date.now() - verifiedAt.getTime();
+    if (ms < R2_EXISTENCE_CACHE_SECONDS * 1000) return;
+  }
+
+  await assertObjectExists(r2Key);
+
+  await sql`
+    insert into r2_object_presence_cache (r2_key, verified_at)
+    values (${r2Key}, now())
+    on conflict (r2_key)
+    do update set verified_at = excluded.verified_at
+  `;
+}
+
+type DownloadRequestBody = { albumSlug?: unknown; assetId?: unknown };
+
+function parseBody(value: unknown): DownloadRequestBody | null {
+  if (!value || typeof value !== "object") return null;
+  // We only care about these two keys; keep it permissive.
+  const v = value as Record<string, unknown>;
+  return { albumSlug: v.albumSlug, assetId: v.assetId };
+}
+
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => null)) as null | {
-    albumSlug?: unknown;
-    assetId?: unknown;
-  };
+  const raw = await req.json().catch(() => null);
+  const body = parseBody(raw);
+
   const albumSlug = (body?.albumSlug ?? "").toString().trim().toLowerCase();
   const assetId = (body?.assetId ?? "bundle_zip")
     .toString()
@@ -63,9 +182,22 @@ export async function POST(req: Request) {
   const offer = getAlbumOffer(albumSlug);
   if (!offer) return json(400, { ok: false, error: "Unknown albumSlug" });
 
-  // v1 policy: downloads require an authenticated session (keeps abuse surface tiny)
+  // v1 policy: downloads require an authenticated session
   const { userId } = await auth();
   if (!userId) return json(401, { ok: false, error: "Sign in required" });
+
+  // Best-effort IP throttle (very generous; only trips on obvious automation)
+  const ipGate = await checkIpThrottle(getClientIp(req));
+  if (!ipGate.ok) {
+    return json(
+      429,
+      {
+        ok: false,
+        error: `Too many requests. Please wait ${ipGate.retryAfterSeconds}s.`,
+      },
+      { "Retry-After": String(ipGate.retryAfterSeconds) },
+    );
+  }
 
   const user = await currentUser();
   const emailRaw =
@@ -85,17 +217,36 @@ export async function POST(req: Request) {
   const asset = offer.assets.find((a) => a.id === assetId) ?? null;
   if (!asset) return json(400, { ok: false, error: "Unknown assetId" });
 
-  // Fail loud if R2 is misconfigured or object missing.
+  // Primary protection: per-member per-asset cooldown
+  const memberGate = await checkMemberCooldown({
+    memberId,
+    albumSlug: offer.albumSlug,
+    assetId: asset.id,
+  });
+  if (!memberGate.ok) {
+    return json(
+      429,
+      {
+        ok: false,
+        error: `Please wait ${memberGate.retryAfterSeconds}s and try again.`,
+      },
+      { "Retry-After": String(memberGate.retryAfterSeconds) },
+    );
+  }
+
+  // Existence check, cached so it can’t be abused to force repeated HEAD calls
   try {
-    await assertObjectExists(asset.r2Key);
+    await assertR2ExistsCached(asset.r2Key);
   } catch (err: unknown) {
-    // Surface the attempted key in non-prod to eliminate guesswork.
-    const detail = {
-      attemptedKey: asset.r2Key,
-      bucket: process.env.R2_BUCKET ?? null,
-      endpoint: process.env.R2_ENDPOINT ?? null,
-      err: err instanceof Error ? err.message : String(err),
-    };
+    const detail =
+      process.env.NODE_ENV !== "production"
+        ? {
+            attemptedKey: asset.r2Key,
+            bucket: process.env.R2_BUCKET ?? null,
+            endpoint: process.env.R2_ENDPOINT ?? null,
+            err: err instanceof Error ? err.message : String(err),
+          }
+        : undefined;
 
     return json(500, {
       ok: false,
