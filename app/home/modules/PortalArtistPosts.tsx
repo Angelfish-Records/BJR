@@ -4,6 +4,7 @@
 import React from "react";
 import { PortableText, type PortableTextComponents } from "@portabletext/react";
 import type { PortableTextBlock } from "@portabletext/types";
+import { usePortalViewer } from "@/app/home/PortalViewerProvider";
 import { useMembershipModal } from "@/app/home/MembershipModalProvider";
 import { useClientSearchParams, replaceQuery } from "@/app/home/urlState";
 import {
@@ -56,6 +57,60 @@ function fmtDate(iso: string) {
     return iso;
   }
 }
+
+function SubmitQuestionCTA(props: {
+  onOpenComposer: () => void;
+}) {
+  const { onOpenComposer } = props;
+  const { viewerTier, isSignedIn } = usePortalViewer();
+  const { openMembershipModal } = useMembershipModal();
+
+  // You can choose to hide this entirely for anon; this keeps the posts UI clean.
+  if (!isSignedIn || viewerTier === "none") return null;
+
+  const locked = viewerTier === "friend";
+  const label = locked ? "Submit Question (Patron+)" : "Submit Question";
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (locked) openMembershipModal();
+        else onOpenComposer();
+      }}
+      // IMPORTANT: don't use disabled — we want click-through for the upsell.
+      aria-disabled={locked}
+      title={
+        locked
+          ? "Upgrade to Patron to submit questions."
+          : "Send a question for the next Q&A post."
+      }
+      style={{
+        height: 32,
+        padding: "0 14px",
+        borderRadius: 999,
+        border: "1px solid rgba(255,255,255,0.16)",
+        background: locked
+          ? "rgba(255,255,255,0.04)"
+          : "rgba(255,255,255,0.08)",
+        color: locked ? "rgba(255,255,255,0.62)" : "rgba(255,255,255,0.92)",
+        cursor: "pointer",
+        opacity: locked ? 0.86 : 1,
+        userSelect: "none",
+        transition: "transform 160ms ease, opacity 160ms ease, filter 160ms ease",
+      }}
+      onMouseDown={(e) => {
+        // tiny tactile feel, consistent with your other CTAs
+        const el = e.currentTarget;
+        el.style.transform = "scale(0.98)";
+        window.setTimeout(() => (el.style.transform = "scale(1)"), 120);
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 
 function isTall(aspectRatio: number | null | undefined) {
   if (!aspectRatio || !Number.isFinite(aspectRatio)) return false;
@@ -372,7 +427,7 @@ export default function PortalArtistPosts(props: {
 
   const { share, fallbackModal } = useShareAction();
   const shareBuilders = useShareBuilders();
-  const { openMembershipModal } = useMembershipModal();
+  const [, setComposerOpen] = React.useState(false);
 
   const [posts, setPosts] = React.useState<Post[]>([]);
   const [cursor, setCursor] = React.useState<string | null>(null);
@@ -729,34 +784,43 @@ export default function PortalArtistPosts(props: {
   return (
     <div style={{ minWidth: 0 }}>
       {/* Header */}
-      <div
+<div
+  style={{
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    marginTop: 2,
+  }}
+>
+  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+    {cursor ? (
+      <button
+        type="button"
+        onClick={() => void fetchPage(cursor)}
+        disabled={loading || requiresAuth}
         style={{
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          gap: 10,
+          border: "none",
+          background: "transparent",
+          color: "rgba(255,255,255,0.70)",
+          cursor: loading ? "default" : "pointer",
+          fontSize: 12,
+          textDecoration: "underline",
+          textUnderlineOffset: 3,
+          opacity: loading ? 0.5 : 0.85,
+          padding: 0,
         }}
       >
-        {cursor ? (
-          <button
-            type="button"
-            onClick={() => void fetchPage(cursor)}
-            disabled={loading || requiresAuth}
-            style={{
-              border: "none",
-              background: "transparent",
-              color: "rgba(255,255,255,0.70)",
-              cursor: loading ? "default" : "pointer",
-              fontSize: 12,
-              textDecoration: "underline",
-              textUnderlineOffset: 3,
-              opacity: loading ? 0.5 : 0.85,
-            }}
-          >
-            Load more
-          </button>
-        ) : null}
-      </div>
+        Load more
+      </button>
+    ) : null}
+  </div>
+
+  <div style={{ flex: "0 0 auto" }}>
+    <SubmitQuestionCTA onOpenComposer={() => setComposerOpen(true)} />
+  </div>
+</div>
+
 
       {requiresAuth ? (
         <div
