@@ -1,10 +1,8 @@
+// web/app/api/admin/mailbag/questions/answer/route.ts
 import "server-only";
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import { requireAdminMemberId } from "@/lib/adminAuth";
-
-// 🔧 Adjust this import to match your actual write-capable Sanity client export.
-// Common patterns: `sanityWriteClient`, `sanityClient`, `getSanityWriteClient()`, etc.
 import { sanityWrite } from "@/lib/sanityClient";
 
 export const runtime = "nodejs";
@@ -23,13 +21,11 @@ function json(status: number, body: unknown) {
   return NextResponse.json(body, { status });
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function isUuid(x: unknown): x is string {
-  return (
-    typeof x === "string" &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      x,
-    )
-  );
+  return typeof x === "string" && UUID_RE.test(x);
 }
 
 function clampLen(s: string, max: number) {
@@ -49,7 +45,6 @@ function slugify(input: string) {
 
 function makeUniqueSlug(title: string) {
   const base = slugify(title) || "qa";
-  // compact timestamp: YYYYMMDD-HHMM (UTC)
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   const ts = `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(
@@ -62,8 +57,6 @@ function makeUniqueSlug(title: string) {
  * Minimal Portable Text builder:
  * - One blockquote per question
  * - Then answer paragraphs (split on blank lines)
- *
- * This avoids having to build rich editor UI today.
  */
 type PTSpan = { _type: "span"; text: string; marks?: string[] };
 type PTBlock = {
@@ -112,7 +105,9 @@ export async function POST(req: Request) {
 
     const ids = Array.isArray(r.ids) ? r.ids.filter(isUuid) : [];
     const title = typeof r.title === "string" ? clampLen(r.title, 140) : "";
-    const answerText = typeof r.answerText === "string" ? r.answerText.trim() : "";
+    const answerText =
+      typeof r.answerText === "string" ? r.answerText.trim() : "";
+
     const visibility: Visibility =
       r.visibility === "friend" ||
       r.visibility === "patron" ||
@@ -120,6 +115,7 @@ export async function POST(req: Request) {
       r.visibility === "public"
         ? r.visibility
         : "public";
+
     const pinned = Boolean(r.pinned);
 
     if (ids.length === 0) return json(400, { ok: false, code: "NO_IDS" });
@@ -127,27 +123,27 @@ export async function POST(req: Request) {
     if (!answerText) return json(400, { ok: false, code: "NO_ANSWER" });
 
     // Fetch ONLY open questions (safe default)
-    const q = await sql<{
+    const placeholders = ids.map((_, i) => `$${i + 1}::uuid`).join(", ");
+
+    const q = await sql.query<{
       id: string;
       member_id: string;
       question_text: string;
       created_at: string;
-    }>`
-      SELECT id, member_id, question_text, created_at
-      FROM mailbag_questions
-      WHERE id IN (${ids.map((_, i) => `$${i + 1}::uuid`).join(", ")})
-        AND status = 'open'::mailbag_question_status
-      ORDER BY created_at ASC, id ASC
-    ` as unknown as { rows: { id: string; member_id: string; question_text: string; created_at: string }[] };
-    // ^ TS note: @vercel/postgres tag typing doesn't like dynamic placeholders.
-    // If you prefer, switch this SELECT to sql.query like we did for UPDATE below.
+    }>(
+      `
+  SELECT id, member_id, question_text, created_at
+  FROM mailbag_questions
+  WHERE id IN (${placeholders})
+    AND status = 'open'::mailbag_question_status
+  ORDER BY created_at ASC, id ASC
+  `,
+      ids,
+    );
 
     const questions = q.rows ?? [];
-    if (questions.length === 0) {
-      return json(409, { ok: false, code: "NO_OPEN_QUESTIONS" });
-    }
 
-    // Build Portable Text body: heading + quotes + answer
+    // Build Portable Text body
     const blocks: PTBlock[] = [];
     blocks.push(block("normal", "Mailbag Q&A — selected questions."));
     blocks.push(block("h3", "Questions"));
@@ -172,34 +168,35 @@ export async function POST(req: Request) {
       visibility,
       pinned,
       body: blocks,
-      // Optional tag if/when you add tags/postType later:
-      // postType: "qa",
-      // tags: ["qa"],
     };
 
     const created = await sanityWrite.create(doc);
     const postId = String((created as { _id?: unknown })._id ?? "");
-
     if (!postId) {
       return json(500, { ok: false, code: "SANITY_CREATE_FAILED" });
     }
 
-    // Mark questions answered + link post
-    const placeholders = questions.map((_, i) => `$${i + 1}::uuid`).join(", ");
     const answeredIds = questions.map((x) => x.id);
+    const inPlaceholders = answeredIds
+      .map((_, i) => `$${i + 1}::uuid`)
+      .join(", ");
+
+    // postId + postSlug are appended after the uuids
+    const postIdParam = `$${answeredIds.length + 1}`;
+    const postSlugParam = `$${answeredIds.length + 2}`;
 
     const upd = await sql.query(
       `
-      UPDATE mailbag_questions
-      SET
-        status = 'answered'::mailbag_question_status,
-        answered_at = now(),
-        answer_post_id = $${answeredIds.length + 1},
-        answer_post_slug = $${answeredIds.length + 2},
-        updated_at = now()
-      WHERE id IN (${placeholders})
-        AND status = 'open'::mailbag_question_status
-      `,
+  UPDATE mailbag_questions
+  SET
+    status = 'answered'::mailbag_question_status,
+    answered_at = now(),
+    answer_post_id = ${postIdParam},
+    answer_post_slug = ${postSlugParam},
+    updated_at = now()
+  WHERE id IN (${inPlaceholders})
+    AND status = 'open'::mailbag_question_status
+  `,
       [...answeredIds, postId, postSlug],
     );
 
