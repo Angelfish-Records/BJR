@@ -67,7 +67,7 @@ function SubmitQuestionCTA(props: { onOpenComposer: () => void }) {
   if (!isSignedIn || viewerTier === "none") return null;
 
   const locked = viewerTier === "friend";
-  const label = locked ? "Submit Question (Patron+)" : "Submit Question";
+  const label = locked ? "Ask a Question (Patron+)" : "Ask a Question";
 
   return (
     <button
@@ -80,21 +80,25 @@ function SubmitQuestionCTA(props: { onOpenComposer: () => void }) {
       aria-disabled={locked}
       title={
         locked
-          ? "Upgrade to Patron to submit questions."
+          ? "Become a Patron to submit questions."
           : "Send a question for the next Q&A post."
       }
       style={{
-        height: 32,
-        padding: "0 14px",
-        borderRadius: 999,
-        border: "1px solid rgba(255,255,255,0.16)",
+        height: 28,
+        padding: "0 12px",
+        borderRadius: 12,
+        border: "1px solid rgba(255,255,255,0.14)",
         background: locked
-          ? "rgba(255,255,255,0.04)"
-          : "rgba(255,255,255,0.08)",
+          ? "rgba(255,255,255,0.035)"
+          : "rgba(255,255,255,0.07)",
         color: locked ? "rgba(255,255,255,0.62)" : "rgba(255,255,255,0.92)",
         cursor: "pointer",
         opacity: locked ? 0.86 : 1,
         userSelect: "none",
+        fontSize: 12,
+        lineHeight: "28px",
+        fontWeight: 700,
+        letterSpacing: 0.2,
         transition:
           "transform 160ms ease, opacity 160ms ease, filter 160ms ease",
       }}

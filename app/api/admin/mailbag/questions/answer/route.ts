@@ -56,8 +56,12 @@ function slugify(input: string): string {
 }
 
 function shortId(): string {
-  const u = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
-  return u.replace(/[^a-z0-9]/gi, "").slice(0, 10).toLowerCase();
+  const u =
+    globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+  return u
+    .replace(/[^a-z0-9]/gi, "")
+    .slice(0, 10)
+    .toLowerCase();
 }
 
 type Visibility = "public" | "friend" | "patron" | "partner";
@@ -81,9 +85,31 @@ type Body = {
   pinned?: unknown;
 };
 
-type PTSpan = { _type: "span"; text: string };
-type PTBlock = { _type: "block"; style: string; children: PTSpan[] };
+type PTSpan = { _type: "span"; _key: string; text: string };
+type PTBlock = {
+  _type: "block";
+  _key: string;
+  style: string;
+  children: PTSpan[];
+};
 type PortableText = PTBlock[];
+
+function k(prefix = "k"): string {
+  const u =
+    globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+  return `${prefix}_${u
+    .replace(/[^a-z0-9]/gi, "")
+    .slice(0, 16)
+    .toLowerCase()}`;
+}
+
+function span(text: string): PTSpan {
+  return { _type: "span", _key: k("s"), text };
+}
+
+function block(style: string, text: string): PTBlock {
+  return { _type: "block", _key: k("b"), style, children: [span(text)] };
+}
 
 function answerToPortableTextBlocks(answer: string): PortableText {
   const paras = answer
@@ -91,17 +117,9 @@ function answerToPortableTextBlocks(answer: string): PortableText {
     .map((p) => p.trim())
     .filter(Boolean);
 
-  if (!paras.length) {
-    return [
-      { _type: "block", style: "normal", children: [{ _type: "span", text: "—" }] },
-    ];
-  }
+  if (!paras.length) return [block("normal", "—")];
 
-  return paras.map((p) => ({
-    _type: "block",
-    style: "normal",
-    children: [{ _type: "span", text: p }],
-  }));
+  return paras.map((p) => block("normal", p));
 }
 
 function pickIds(body: Body | null): { raw: unknown; ids: string[] } {
@@ -115,7 +133,10 @@ function pickIds(body: Body | null): { raw: unknown; ids: string[] } {
   }
 
   if (Array.isArray(raw)) {
-    const ids = raw.map((x) => String(x)).map((x) => x.trim()).filter(Boolean);
+    const ids = raw
+      .map((x) => String(x))
+      .map((x) => x.trim())
+      .filter(Boolean);
     return { raw, ids };
   }
 
@@ -156,7 +177,11 @@ export async function POST(req: NextRequest) {
       code: "BAD_IDS",
       receivedKeys: body ? Object.keys(body) : [],
       receivedIdsType:
-        rawIds === null ? "null" : Array.isArray(rawIds) ? "array" : typeof rawIds,
+        rawIds === null
+          ? "null"
+          : Array.isArray(rawIds)
+            ? "array"
+            : typeof rawIds,
       badIds: badIds.slice(0, 10),
     });
   }
@@ -208,39 +233,36 @@ export async function POST(req: NextRequest) {
     return json(404, { ok: false, code: "NOT_FOUND" });
   }
 
-  // Build Portable Text blocks
+  // Build Portable Text blocks (with _key everywhere)
   const blocks: PortableText = [];
 
   if (title) {
-    blocks.push({
-      _type: "block",
-      style: "h2",
-      children: [{ _type: "span", text: title }],
-    });
+    blocks.push(block("h2", title));
   }
 
-  blocks.push({
-    _type: "block",
-    style: "normal",
-    children: [{ _type: "span", text: "Mailbag answers." }],
-  });
+  blocks.push(
+    block(
+      "normal",
+      "This post responds to mailbag questions from Patrons and Partners.",
+    ),
+  );
 
   for (const q of qRes.rows) {
     blocks.push({
       _type: "block",
+      _key: k("bq"),
       style: "blockquote",
-      children: [{ _type: "span", text: q.question_text }],
+      children: [span(q.question_text)],
     });
+
     blocks.push(...answerToPortableTextBlocks(answer));
-    blocks.push({
-      _type: "block",
-      style: "normal",
-      children: [{ _type: "span", text: " " }],
-    });
+
+    // spacer
+    blocks.push(block("normal", " "));
   }
 
   // Force a stable title + explicit slug so Sanity can never “miss” it
-  const fallbackTitle = `Mailbag Answers — ${new Date().toISOString().slice(0, 10)}`;
+  const fallbackTitle = `Q&A — ${new Date().toISOString().slice(0, 10)}`;
   const finalTitle = title || fallbackTitle;
   const slugCurrent = `${slugify(finalTitle)}-${shortId()}`;
 
@@ -248,7 +270,7 @@ export async function POST(req: NextRequest) {
   const doc: SanityDocumentStub = {
     _type: "artistPost",
     title: finalTitle,
-    slug: { _type: "slug", current: slugCurrent },
+    slug: { current: slugCurrent }, // ✅ simplest canonical shape
     publishedAt: new Date().toISOString(),
     visibility,
     pinned,
@@ -318,7 +340,8 @@ export async function POST(req: NextRequest) {
     "BJR";
 
   const supportEmail =
-    (process.env.SUPPORT_EMAIL && process.env.SUPPORT_EMAIL.trim()) || undefined;
+    (process.env.SUPPORT_EMAIL && process.env.SUPPORT_EMAIL.trim()) ||
+    undefined;
 
   const subject = title
     ? `Your question was answered: ${title}`
@@ -417,7 +440,10 @@ export async function POST(req: NextRequest) {
   return json(200, {
     ok: true,
     post: { id: created._id, slug, url: postUrl },
-    notified: { attempted: notifyRes.rows.length, sent: sentQuestionIds.length },
+    notified: {
+      attempted: notifyRes.rows.length,
+      sent: sentQuestionIds.length,
+    },
     debug: {
       acceptedAnswerKey: pickedAnswer.key,
       acceptedTitleKey: pickedTitle.key,
