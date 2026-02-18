@@ -220,9 +220,13 @@ export async function POST(req: NextRequest) {
 
   // Load questions
   const inPh1 = placeholders(questionIds.length, 1);
-  const qRes = await sql.query<{ id: string; question_text: string }>(
+  const qRes = await sql.query<{
+    id: string;
+    question_text: string;
+    asker_name: string | null;
+  }>(
     `
-    select id::text as id, question_text
+    select id::text as id, question_text, asker_name
     from mailbag_questions
     where id in (${inPh1})
     `,
@@ -244,16 +248,17 @@ export async function POST(req: NextRequest) {
   );
 
   for (const q of qRes.rows) {
+    const name = (q.asker_name ?? "").trim();
+    const quoteText = name ? `${q.question_text} — ${name}` : q.question_text;
+
     blocks.push({
       _type: "block",
       _key: k("bq"),
       style: "blockquote",
-      children: [span(q.question_text)],
+      children: [span(quoteText)],
     });
 
     blocks.push(...answerToPortableTextBlocks(answer));
-
-    // spacer
     blocks.push(block("normal", " "));
   }
 

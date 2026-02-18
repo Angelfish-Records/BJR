@@ -7,6 +7,7 @@ import { sql } from "@vercel/postgres";
 export const runtime = "nodejs";
 
 const MAX_CHARS = 800;
+const MAX_NAME_CHARS = 48;
 const MAX_PER_UTC_DAY = 3;
 
 type FailCode =
@@ -26,9 +27,26 @@ function normalizeEmail(raw: string): string {
   return raw.trim().toLowerCase();
 }
 
+function normalizeAskerName(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const t = v
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!t) return null;
+  return t.length > MAX_NAME_CHARS ? t.slice(0, MAX_NAME_CHARS) : t;
+}
+
+type MailbagSubmitBody = {
+  questionText?: unknown;
+  askerName?: unknown;
+  name?: unknown;
+  displayName?: unknown;
+};
+
 /**
  * Tier resolution: use member_entitlements_current as the canonical read model.
- * Assumes entitlement_key values like: "tier:friend" | "tier:patron" | "tier:partner"
+ * Assumes entitlement_key values like: "tier_friend" | "tier_patron" | "tier_partner"
  * If your keys differ, adjust ONLY this function.
  */
 async function resolveTierForMember(
@@ -87,7 +105,7 @@ async function resolveOrCreateMemberId(params: {
     return id;
   }
 
-  // 3) Create member row (consistent with your schema defaults)
+  // 3) Create member row
   const created = await sql<{ id: string }>`
     INSERT INTO members (email, source, source_detail, clerk_user_id)
     VALUES (${email}, 'unknown', '{}'::jsonb, ${clerkUserId})
@@ -110,13 +128,10 @@ export async function POST(req: Request) {
     const email = normalizeEmail(emailRaw);
 
     if (!email) {
-      // extremely rare, but keep it explicit
       return json(400, { ok: false, code: "BAD_REQUEST" satisfies FailCode });
     }
 
-    const body = (await req.json().catch(() => null)) as {
-      questionText?: unknown;
-    } | null;
+    const body = (await req.json().catch(() => null)) as MailbagSubmitBody | null;
 
     const questionText =
       typeof body?.questionText === "string" ? body.questionText.trim() : "";
@@ -145,11 +160,11 @@ export async function POST(req: Request) {
 
     // Rate limit: 3 per UTC day
     const countRes = await sql<{ n: number }>`
-  SELECT COUNT(*)::int AS n
-  FROM mailbag_questions
-  WHERE member_id = ${memberId}::uuid
-    AND created_at >= (date_trunc('day', now() AT TIME ZONE 'utc') AT TIME ZONE 'utc')
-`;
+      SELECT COUNT(*)::int AS n
+      FROM mailbag_questions
+      WHERE member_id = ${memberId}::uuid
+        AND created_at >= (date_trunc('day', now() AT TIME ZONE 'utc') AT TIME ZONE 'utc')
+    `;
 
     const n = countRes.rows[0]?.n ?? 0;
     if (n >= MAX_PER_UTC_DAY) {
@@ -160,9 +175,13 @@ export async function POST(req: Request) {
       });
     }
 
+    const askerName = normalizeAskerName(
+      body?.askerName ?? body?.name ?? body?.displayName,
+    );
+
     await sql`
-      INSERT INTO mailbag_questions (member_id, question_text, status)
-      VALUES (${memberId}::uuid, ${questionText}, 'open'::mailbag_question_status)
+      INSERT INTO mailbag_questions (member_id, question_text, asker_name, status)
+      VALUES (${memberId}::uuid, ${questionText}, ${askerName}, 'open'::mailbag_question_status)
     `;
 
     return json(200, { ok: true });

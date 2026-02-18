@@ -395,9 +395,9 @@ function TypeBadge(props: { t?: PostType | null }) {
         alignItems: "center",
         height: 18,
         padding: "0 8px",
-        borderRadius: 8,
-        border: "1px solid rgba(255,255,255,0.12)",
-        background: "rgba(255, 255, 255, 0.31)",
+        borderRadius: 5,
+        border: "none",
+        background: "rgba(225, 192, 253, 0.16)",
         color: "rgba(0,0,0,0.92)",
         fontSize: 10,
         fontWeight: 750,
@@ -509,6 +509,9 @@ export default function PortalArtistPosts(props: {
 
   const MAX_CHARS = 800;
 
+  const [askerName, setAskerName] = React.useState("");
+  const MAX_NAME_CHARS = 48;
+
   const canSubmit =
     isSignedIn && (viewerTier === "patron" || viewerTier === "partner");
 
@@ -552,6 +555,7 @@ export default function PortalArtistPosts(props: {
       if (loading) return;
       if (requiresAuth) return;
       setLoading(true);
+      const filterAtCall = postTypeFilter;
       setErr(null);
 
       try {
@@ -566,6 +570,8 @@ export default function PortalArtistPosts(props: {
         if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
 
         const json = parsePostsResponse(await res.json());
+        // Ignore stale responses if the filter changed mid-flight.
+        if (filterAtCall !== postTypeFilter) return;
 
         if (json.requiresAuth) {
           setRequiresAuth(true);
@@ -716,10 +722,15 @@ export default function PortalArtistPosts(props: {
     setSubmitErr(null);
 
     try {
+      const nameClean = askerName.trim();
+
       const res = await fetch("/api/mailbag/questions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ questionText: text }),
+        body: JSON.stringify({
+          questionText: text,
+          askerName: nameClean ? nameClean : null,
+        }),
       });
 
       if (res.status === 404) {
@@ -758,6 +769,7 @@ export default function PortalArtistPosts(props: {
       }
 
       setQuestionText("");
+      setAskerName("");
       closeComposer();
       setThanks(true);
       if (thankTimerRef.current) window.clearTimeout(thankTimerRef.current);
@@ -1123,6 +1135,25 @@ export default function PortalArtistPosts(props: {
               Close
             </button>
           </div>
+
+          <input
+            value={askerName}
+            onChange={(e) => setAskerName(e.target.value)}
+            maxLength={MAX_NAME_CHARS + 20}
+            placeholder="Your name (optional)"
+            style={{
+              width: "100%",
+              height: 36,
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.14)",
+              background: "rgba(0,0,0,0.22)",
+              color: "rgba(255,255,255,0.92)",
+              padding: "0 12px",
+              fontSize: 13,
+              outline: "none",
+              marginBottom: 10,
+            }}
+          />
 
           <textarea
             value={questionText}
