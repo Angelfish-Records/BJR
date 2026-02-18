@@ -11,7 +11,10 @@ import type { PortableTextBlock } from "@portabletext/types";
 import { usePortalViewer } from "@/app/home/PortalViewerProvider";
 import { useMembershipModal } from "@/app/home/MembershipModalProvider";
 import { useClientSearchParams, replaceQuery } from "@/app/home/urlState";
-import { useShareAction, useShareBuilders } from "@/app/home/player/ShareAction";
+import {
+  useShareAction,
+  useShareBuilders,
+} from "@/app/home/player/ShareAction";
 
 type Visibility = "public" | "friend" | "patron" | "partner";
 type PostType = "qa" | "creative" | "civic" | "cosmic";
@@ -249,7 +252,13 @@ function resolveImageMaxWidthPx(value: SanityImageValue, tall: boolean) {
 -------------------------- */
 
 const ICON_SHARE = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    aria-hidden="true"
+  >
     <path
       d="M16 8a3 3 0 1 0-2.83-4H13a3 3 0 0 0 .17 1l-6.5 3.25A3 3 0 0 0 4 7a3 3 0 1 0 0 6 3 3 0 0 0 2.67-1.5l6.5 3.25A3 3 0 0 0 13 16a3 3 0 1 0 .17-1l-6.5-3.25A3 3 0 0 0 7 10c0-.35-.06-.69-.17-1l6.5-3.25A3 3 0 0 0 16 8Z"
       stroke="currentColor"
@@ -260,7 +269,13 @@ const ICON_SHARE = (
 );
 
 const ICON_CHECK = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    aria-hidden="true"
+  >
     <path
       d="M20 7L10.5 16.5L4 10"
       stroke="currentColor"
@@ -552,7 +567,13 @@ function TermsModal(props: { open: boolean; onClose: () => void }) {
             </p>
           </div>
 
-          <div style={{ marginTop: 14, display: "flex", justifyContent: "flex-end" }}>
+          <div
+            style={{
+              marginTop: 14,
+              display: "flex",
+              justifyContent: "flex-end",
+            }}
+          >
             <button
               type="button"
               onClick={onClose}
@@ -568,7 +589,7 @@ function TermsModal(props: { open: boolean; onClose: () => void }) {
                 fontWeight: 750,
               }}
             >
-              Got it
+              Understood
             </button>
           </div>
         </div>
@@ -944,7 +965,13 @@ export default function PortalArtistPosts(props: {
           const maxWidthPx = perImage ?? globalCap ?? null;
 
           return (
-            <div style={{ margin: "12px 0", display: "flex", justifyContent: "center" }}>
+            <div
+              style={{
+                margin: "12px 0",
+                display: "flex",
+                justifyContent: "center",
+              }}
+            >
               <div
                 style={{
                   width: "100%",
@@ -982,19 +1009,40 @@ export default function PortalArtistPosts(props: {
         ),
 
         h1: (props: PortableTextComponentProps<PortableTextBlock>) => (
-          <h3 style={{ margin: "14px 0 8px", fontSize: 16, lineHeight: 1.25, opacity: 0.95 }}>
+          <h3
+            style={{
+              margin: "14px 0 8px",
+              fontSize: 16,
+              lineHeight: 1.25,
+              opacity: 0.95,
+            }}
+          >
             {props.children}
           </h3>
         ),
 
         h2: (props: PortableTextComponentProps<PortableTextBlock>) => (
-          <h4 style={{ margin: "14px 0 8px", fontSize: 15, lineHeight: 1.25, opacity: 0.95 }}>
+          <h4
+            style={{
+              margin: "14px 0 8px",
+              fontSize: 15,
+              lineHeight: 1.25,
+              opacity: 0.95,
+            }}
+          >
             {props.children}
           </h4>
         ),
 
         h3: (props: PortableTextComponentProps<PortableTextBlock>) => (
-          <h5 style={{ margin: "12px 0 6px", fontSize: 14, lineHeight: 1.25, opacity: 0.92 }}>
+          <h5
+            style={{
+              margin: "12px 0 6px",
+              fontSize: 14,
+              lineHeight: 1.25,
+              opacity: 0.92,
+            }}
+          >
             {props.children}
           </h5>
         ),
@@ -1002,12 +1050,11 @@ export default function PortalArtistPosts(props: {
         // ✅ single blockquote, with optional asker line styled inside the same quote
         blockquote: (props: PortableTextComponentProps<PortableTextBlock>) => {
           const nodes = React.Children.toArray(props.children);
-          const joined =
-            nodes.every((n) => typeof n === "string")
-              ? (nodes as string[]).join("")
-              : typeof props.children === "string"
-                ? props.children
-                : null;
+          const joined = nodes.every((n) => typeof n === "string")
+            ? (nodes as string[]).join("")
+            : typeof props.children === "string"
+              ? props.children
+              : null;
 
           // We intentionally generate blockquote text like:
           // "Question text\n— Name"
@@ -1056,7 +1103,9 @@ export default function PortalArtistPosts(props: {
                 opacity: 0.92,
               }}
             >
-              <div style={{ fontSize: 13, lineHeight: 1.65 }}>{props.children}</div>
+              <div style={{ fontSize: 13, lineHeight: 1.65 }}>
+                {props.children}
+              </div>
             </blockquote>
           );
         },
@@ -1129,8 +1178,12 @@ export default function PortalArtistPosts(props: {
             {props.children}
           </code>
         ),
-        link: (props: { value?: { href?: string }; children?: React.ReactNode }) => {
-          const href = typeof props.value?.href === "string" ? props.value.href : "#";
+        link: (props: {
+          value?: { href?: string };
+          children?: React.ReactNode;
+        }) => {
+          const href =
+            typeof props.value?.href === "string" ? props.value.href : "#";
           return (
             <a
               href={href}
@@ -1191,7 +1244,14 @@ export default function PortalArtistPosts(props: {
           ) : null}
         </div>
 
-        <div style={{ flex: "0 0 auto", display: "inline-flex", gap: 8, alignItems: "center" }}>
+        <div
+          style={{
+            flex: "0 0 auto",
+            display: "inline-flex",
+            gap: 8,
+            alignItems: "center",
+          }}
+        >
           <select
             value={postTypeFilter}
             onChange={(e) => onChangeFilter(e.target.value as "" | PostType)}
@@ -1201,7 +1261,10 @@ export default function PortalArtistPosts(props: {
               borderRadius: 10,
               border: "1px solid rgba(255,255,255,0.14)",
               background: "rgba(255,255,255,0.035)",
-              color: "rgba(255,255,255,0.86)",
+              color:
+                postTypeFilter === ""
+                  ? "rgba(255,255,255,0.5)"
+                  : "rgba(255,255,255,0.86)",
               padding: "0 10px",
               fontSize: 12,
               fontWeight: 700,
@@ -1210,6 +1273,10 @@ export default function PortalArtistPosts(props: {
               cursor: "pointer",
             }}
           >
+            <option value="" disabled>
+              Post type
+            </option>
+
             {POST_TYPES.map((opt) => (
               <option key={opt.label} value={opt.value}>
                 {opt.label}
@@ -1321,7 +1388,9 @@ export default function PortalArtistPosts(props: {
               <div style={{ fontSize: 12, opacity: 0.62 }}>
                 {questionText.trim().length}/{MAX_CHARS}
                 {questionText.trim().length > MAX_CHARS ? (
-                  <span style={{ marginLeft: 8, opacity: 0.95 }}>• too long</span>
+                  <span style={{ marginLeft: 8, opacity: 0.95 }}>
+                    • too long
+                  </span>
                 ) : null}
               </div>
 
@@ -1350,15 +1419,19 @@ export default function PortalArtistPosts(props: {
               onClick={() => void submitQuestion()}
               disabled={submitting}
               style={{
-                height: 32,
+                height: 28,
                 padding: "0 14px",
-                borderRadius: 999,
-                border: "1px solid rgba(255,255,255,0.16)",
-                background: "rgba(255,255,255,0.08)",
+                borderRadius: 5,
+                border: "none",
+                background: "rgba(225, 192, 253, 0.16)",
                 color: "rgba(255,255,255,0.92)",
                 cursor: submitting ? "default" : "pointer",
                 opacity: submitting ? 0.6 : 1,
                 userSelect: "none",
+                fontSize: 12,
+                lineHeight: "28px",
+                fontWeight: 700,
+                letterSpacing: 0.2,
               }}
             >
               {submitting ? "Sending…" : "Send"}
@@ -1374,18 +1447,35 @@ export default function PortalArtistPosts(props: {
       </div>
 
       {thanks ? (
-        <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85, lineHeight: 1.55 }}>
-          Thank you for your question. You will receive an email when it is answered.
+        <div
+          style={{
+            marginTop: 10,
+            fontSize: 13,
+            opacity: 0.85,
+            lineHeight: 1.55,
+          }}
+        >
+          Thank you for your question. You will receive an email when it is
+          answered.
         </div>
       ) : null}
 
       {requiresAuth ? (
-        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85, lineHeight: 1.55 }}>
+        <div
+          style={{
+            marginTop: 12,
+            fontSize: 13,
+            opacity: 0.85,
+            lineHeight: 1.55,
+          }}
+        >
           Sign in to keep reading posts.
         </div>
       ) : null}
 
-      {err ? <div style={{ marginTop: 12, fontSize: 13, opacity: 0.8 }}>{err}</div> : null}
+      {err ? (
+        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.8 }}>{err}</div>
+      ) : null}
 
       <div style={{ marginTop: 6 }}>
         {posts.map((p) => {
@@ -1400,7 +1490,10 @@ export default function PortalArtistPosts(props: {
                 else postEls.current.set(p.slug, el);
               }}
               data-slug={p.slug}
-              style={{ padding: "14px 0", borderBottom: "1px solid rgba(255,255,255,0.07)" }}
+              style={{
+                padding: "14px 0",
+                borderBottom: "1px solid rgba(255,255,255,0.07)",
+              }}
             >
               <div
                 style={{
@@ -1413,7 +1506,11 @@ export default function PortalArtistPosts(props: {
                 }}
               >
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <Avatar label={authorInitials} src={authorAvatarSrc} alt={authorName} />
+                  <Avatar
+                    label={authorInitials}
+                    src={authorAvatarSrc}
+                    alt={authorName}
+                  />
 
                   <div style={{ minWidth: 0, flex: "1 1 auto" }}>
                     <div
@@ -1425,16 +1522,35 @@ export default function PortalArtistPosts(props: {
                         flexWrap: "wrap",
                       }}
                     >
-                      <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.92, whiteSpace: "nowrap" }}>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          opacity: 0.92,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         {authorName}
                       </div>
 
-                      <div style={{ fontSize: 12, opacity: 0.56, whiteSpace: "nowrap" }}>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          opacity: 0.56,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         {fmtDate(p.publishedAt)}
                       </div>
 
                       {p.pinned ? (
-                        <div style={{ fontSize: 12, opacity: 0.62, whiteSpace: "nowrap" }}>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            opacity: 0.62,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
                           • pinned
                         </div>
                       ) : null}
@@ -1443,7 +1559,15 @@ export default function PortalArtistPosts(props: {
                 </div>
 
                 {p.title?.trim() ? (
-                  <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                  <div
+                    style={{
+                      marginTop: 10,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      minWidth: 0,
+                    }}
+                  >
                     <TypeBadge t={p.postType ?? null} />
                     <div
                       style={{
@@ -1467,9 +1591,17 @@ export default function PortalArtistPosts(props: {
                   <PortableText value={p.body ?? []} components={components} />
                 </div>
 
-                <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-start" }}>
+                <div
+                  style={{
+                    marginTop: 10,
+                    display: "flex",
+                    justifyContent: "flex-start",
+                  }}
+                >
                   <ActionBtn
-                    onClick={() => void onShare({ slug: p.slug, title: p.title })}
+                    onClick={() =>
+                      void onShare({ slug: p.slug, title: p.title })
+                    }
                     label="Share post"
                   >
                     {isCopied ? ICON_CHECK : ICON_SHARE}
