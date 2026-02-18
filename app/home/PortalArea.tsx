@@ -761,6 +761,25 @@ export default function PortalArea(props: {
   const qShareToken = sp.get("st") ?? sp.get("share") ?? null;
   const hasSt = (sp.get("st") ?? sp.get("share") ?? "").trim().length > 0;
 
+  const forcedPlayerRef = React.useRef(false);
+  React.useEffect(() => {
+    if (forcedPlayerRef.current) return;
+
+    const playbackIntent = Boolean(qTrack) || Boolean(qAutoplay); // add other “intent” flags here if needed
+
+    if (!playbackIntent) return;
+
+    // If we’re already on player, nothing to do.
+    if (rawP === "player") {
+      forcedPlayerRef.current = true;
+      return;
+    }
+
+    // Canonicalise: playback intent implies player surface.
+    forcedPlayerRef.current = true;
+    patchQuery({ p: "player" });
+  }, [qTrack, qAutoplay, rawP, patchQuery]);
+
   const [currentAlbumSlug, setCurrentAlbumSlug] =
     React.useState<string>(albumSlug);
   const [album, setAlbum] = React.useState<AlbumInfo | null>(initialAlbum);
@@ -832,12 +851,11 @@ export default function PortalArea(props: {
   }, [isPlayer, qAlbum, currentAlbumSlug, onSelectAlbum]);
 
   React.useEffect(() => {
-    if (!isPlayer) return;
     if (!qTrack) return;
     selectTrack(qTrack);
     setPendingTrackId(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlayer, qTrack]);
+  }, [qTrack]);
 
   const primedRef = React.useRef(false);
   React.useEffect(() => {

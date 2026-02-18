@@ -94,9 +94,13 @@ export function buildShareTarget(
     const postTitle = input.post.title?.trim() || "Post";
     const basePath = `/posts/${encodeURIComponent(input.post.slug)}`;
     const baseAbs = origin ? `${origin}${basePath}` : basePath;
-    const url = origin
-      ? addUtm(new URL(baseAbs), method, "post").toString()
-      : baseAbs;
+    const abs = origin ? new URL(baseAbs) : null;
+    if (abs) {
+      abs.searchParams.set("p", "player");
+      addUtm(abs, method, "album");
+    }
+
+    const url = abs ? abs.toString() : `${baseAbs}?p=player`;
 
     const who = input.authorName?.trim();
     const title = who ? `${postTitle} — ${who}` : postTitle;
@@ -139,13 +143,15 @@ export function buildShareTarget(
   const trackTitle = input.track.title?.trim() || "Track";
   const abs = origin ? new URL(baseAbs) : null;
   if (abs) {
-    abs.searchParams.set("t", input.track.id);
+    abs.searchParams.set("p", "player");
+    abs.searchParams.set("track", input.track.id); // canonical for PortalArea
     addUtm(abs, method, "track");
   }
 
   const url = abs
     ? abs.toString()
-    : `${baseAbs}?t=${encodeURIComponent(input.track.id)}`;
+    : `${baseAbs}?p=player&track=${encodeURIComponent(input.track.id)}`;
+
   const title = artist
     ? `${trackTitle} — ${albumTitle} — ${artist}`
     : `${trackTitle} — ${albumTitle}`;
@@ -180,7 +186,11 @@ export async function performShare(target: ShareTarget): Promise<ShareResult> {
 
   if (typeof navigator !== "undefined") {
     const nav = navigator as Navigator & {
-      share?: (data: { title?: string; text?: string; url?: string }) => Promise<void>;
+      share?: (data: {
+        title?: string;
+        text?: string;
+        url?: string;
+      }) => Promise<void>;
       canShare?: (data?: {
         title?: string;
         text?: string;

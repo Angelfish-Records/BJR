@@ -26,8 +26,8 @@ export async function generateMetadata(props: {
 }) {
   const { slug } = await props.params;
   const sp = (props.searchParams ? await props.searchParams : {}) ?? {};
-  const tRaw = sp.t;
-  const t = Array.isArray(tRaw) ? tRaw[0] : tRaw;
+  const trackRaw = sp.track;
+  const trackId = Array.isArray(trackRaw) ? trackRaw[0] : trackRaw;
 
   const albumData = await getAlbumBySlug(slug);
   if (!albumData.album) return {};
@@ -36,15 +36,17 @@ export async function generateMetadata(props: {
   const tracks = albumData.tracks as PlayerTrack[];
 
   const origin = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "") || "";
-  const canonicalPath = t
-    ? `/albums/${slug}?t=${encodeURIComponent(t)}`
+  const canonicalPath = trackId
+    ? `/albums/${slug}?track=${encodeURIComponent(trackId)}`
     : `/albums/${slug}`;
+
   const canonical = origin ? `${origin}${canonicalPath}` : canonicalPath;
 
   const artist = (album.artist ?? "").toString().trim();
   const albumTitle = (album.title ?? "").toString().trim() || slug;
 
-  const track = t ? tracks.find((x) => x?.id === t) : undefined;
+  const track = trackId ? tracks.find((x) => x?.id === trackId) : undefined;
+
   const trackTitle = track?.title ? String(track.title).trim() : "";
 
   const title = trackTitle
@@ -121,7 +123,7 @@ export default async function AlbumPage(props: {
 
   return (
     <>
-      {/* Client-side resolver: /albums/:slug(?t=) -> /home?p=player&album=...&track=... */}
+      {/* Client-side resolver: /albums/:slug(?track=) -> /home?p=player&album=...&track=... */}
       <AlbumDeepLinkBridge />
 
       {/* Minimal fallback content (in case the redirect is delayed/blocked) */}

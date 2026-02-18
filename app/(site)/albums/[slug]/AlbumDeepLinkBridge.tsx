@@ -37,7 +37,7 @@ export default function AlbumDeepLinkBridge() {
     const slug = params?.slug;
     if (!slug) return;
 
-    const t = (sp.get("t") ?? "").trim();
+    const track = (sp.get("track") ?? "").trim();
     const stFromUrl = (sp.get("st") ?? sp.get("share") ?? "").trim();
 
     if (stFromUrl) setSavedSt(slug, stFromUrl);
@@ -47,7 +47,8 @@ export default function AlbumDeepLinkBridge() {
     const next = new URLSearchParams();
     next.set("p", "player");
     next.set("album", slug);
-    if (t) next.set("track", t);
+    if (track) next.set("track", track);
+
     if (st) next.set("st", st);
 
     router.replace(`/home?${next.toString()}`);
