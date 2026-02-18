@@ -9,6 +9,14 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type Visibility = "public" | "friend" | "patron" | "partner";
+type PostType = "qa" | "creative" | "civic" | "cosmic";
+
+const VALID_POST_TYPES: readonly PostType[] = [
+  "qa",
+  "creative",
+  "civic",
+  "cosmic",
+];
 
 type SanityPostDoc = {
   _id: string;
@@ -17,6 +25,7 @@ type SanityPostDoc = {
   publishedAt?: string;
   pinned?: boolean;
   visibility?: Visibility;
+  postType?: PostType;
   body?: unknown[]; // portable text array; includes blocks + image objects
 };
 
@@ -35,6 +44,7 @@ type ApiPost = {
   publishedAt: string;
   pinned?: boolean;
   visibility: Visibility;
+  postType: PostType;
   body: unknown[];
 };
 
@@ -77,6 +87,23 @@ function canSee(min: Visibility, viewer: Visibility): boolean {
   return visibilityRank(viewer) >= visibilityRank(min);
 }
 
+function asPostType(v: unknown): PostType {
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    if (VALID_POST_TYPES.includes(s as PostType)) return s as PostType;
+  }
+  // choose your canonical default
+  return "creative";
+}
+
+function parsePostTypeFilter(v: string | null): PostType | null {
+  const s = (v ?? "").trim().toLowerCase();
+  if (!s) return null;
+  if (s === "all") return null;
+  if (VALID_POST_TYPES.includes(s as PostType)) return s as PostType;
+  return null;
+}
+
 function getSeenCountFromCookie(req: NextRequest): number {
   const raw = req.cookies.get("af_posts_seen")?.value ?? "0";
   const n = Number(raw);
@@ -102,22 +129,11 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
 
-function isImageBlock(v: unknown): v is Record<string, unknown> & { _type: "image" } {
+function isImageBlock(
+  v: unknown,
+): v is Record<string, unknown> & { _type: "image" } {
   return isRecord(v) && v["_type"] === "image";
 }
-
-const postsQuery = `
-  *[_type == "artistPost" && defined(slug.current)]
-    | order(pinned desc, publishedAt desc)[$offset...$end]{
-      _id,
-      title,
-      slug,
-      publishedAt,
-      pinned,
-      visibility,
-      body
-    }
-`;
 
 type UrlForSource = Parameters<typeof urlFor>[0];
 
@@ -135,6 +151,7 @@ export async function GET(req: NextRequest) {
     50,
   );
   const minVisibility = asVisibility(url.searchParams.get("minVisibility"));
+  const postTypeFilter = parsePostTypeFilter(url.searchParams.get("postType"));
 
   const { userId } = await auth();
 
@@ -168,9 +185,27 @@ export async function GET(req: NextRequest) {
   // Viewer tier for now: signed-in => friend, otherwise public.
   const viewerTier: Visibility = userId ? "friend" : "public";
 
+  const typeClause = postTypeFilter ? ' && postType == $postType' : "";
+
+  const postsQuery = `
+    *[_type == "artistPost" && defined(slug.current)${typeClause}]
+      | order(pinned desc, publishedAt desc)[$offset...$end]{
+        _id,
+        title,
+        slug,
+        publishedAt,
+        pinned,
+        visibility,
+        postType,
+        body
+      }
+  `;
+
   const docs = await client.fetch<SanityPostDoc[]>(
     postsQuery,
-    { offset, end: offset + limit },
+    postTypeFilter
+      ? { offset, end: offset + limit, postType: postTypeFilter }
+      : { offset, end: offset + limit },
     { next: { tags: ["artistPost"] } },
   );
 
@@ -209,9 +244,12 @@ export async function GET(req: NextRequest) {
       slug,
       title: typeof d.title === "string" ? d.title : undefined,
       publishedAt:
-        typeof d.publishedAt === "string" ? d.publishedAt : new Date().toISOString(),
+        typeof d.publishedAt === "string"
+          ? d.publishedAt
+          : new Date().toISOString(),
       pinned: Boolean(d.pinned),
       visibility: vis,
+      postType: asPostType(d.postType),
       body: mappedBody,
     });
   }

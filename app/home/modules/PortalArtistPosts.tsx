@@ -13,6 +13,15 @@ import {
 } from "@/app/home/player/ShareAction";
 
 type Visibility = "public" | "friend" | "patron" | "partner";
+type PostType = "qa" | "creative" | "civic" | "cosmic";
+
+const POST_TYPES: { value: "" | PostType; label: string }[] = [
+  { value: "", label: "All" },
+  { value: "qa", label: "Q&A" },
+  { value: "creative", label: "Creative" },
+  { value: "civic", label: "Civic" },
+  { value: "cosmic", label: "Cosmic" },
+];
 
 type SanityImageValue = {
   _type: "image";
@@ -34,6 +43,7 @@ type Post = {
   publishedAt: string;
   visibility: Visibility;
   pinned?: boolean;
+  postType?: PostType;
   body: PortableTextBlock[];
 };
 
@@ -76,7 +86,6 @@ function SubmitQuestionCTA(props: { onOpenComposer: () => void }) {
         if (locked) openMembershipModal();
         else onOpenComposer();
       }}
-      // IMPORTANT: don't use disabled — we want click-through for the upsell.
       aria-disabled={locked}
       title={
         locked
@@ -143,6 +152,57 @@ function parsePostsResponse(raw: unknown): ArtistPostsResponse {
     correlationId:
       typeof r.correlationId === "string" ? r.correlationId : undefined,
   };
+}
+
+/* -------------------------
+   Title + type helpers
+-------------------------- */
+
+function asPostType(v: unknown): PostType | null {
+  if (typeof v !== "string") return null;
+  const s = v.trim().toLowerCase();
+  if (s === "qa" || s === "creative" || s === "civic" || s === "cosmic")
+    return s;
+  return null;
+}
+
+function postTypeLabel(t: PostType | null | undefined): string {
+  if (t === "qa") return "Q&A";
+  if (t === "civic") return "Civic";
+  if (t === "cosmic") return "Cosmic";
+  return "Creative";
+}
+
+function flattenPortableTextText(node: unknown): string {
+  if (!node || typeof node !== "object") return "";
+  const r = node as Record<string, unknown>;
+  const t = r["text"];
+  return typeof t === "string" ? t : "";
+}
+
+function firstBlockHeadingText(body: unknown): string {
+  if (!Array.isArray(body) || body.length === 0) return "";
+  const first = body[0] as unknown;
+  if (!first || typeof first !== "object") return "";
+  const b = first as Record<string, unknown>;
+  const style = typeof b["style"] === "string" ? b["style"] : "";
+  if (style !== "h1" && style !== "h2" && style !== "h3") return "";
+
+  const children = Array.isArray(b["children"]) ? (b["children"] as unknown[]) : [];
+  const text = children.map(flattenPortableTextText).join("").trim();
+  return text;
+}
+
+function shouldRenderExternalTitle(p: Post): boolean {
+  const title = (p.title ?? "").trim();
+  if (!title) return false;
+
+  // If the first portable text block is already a heading containing the same title,
+  // don’t show it twice (mailbag Q&A posts previously embedded the title as an h2).
+  const head = firstBlockHeadingText(p.body);
+  if (head && head.toLowerCase() === title.toLowerCase()) return false;
+
+  return true;
 }
 
 /* -------------------------
@@ -358,6 +418,34 @@ function ActionBtn(props: {
   );
 }
 
+function TypeBadge(props: { t?: PostType | null }) {
+  const t = asPostType(props.t ?? null) ?? "creative";
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        height: 18,
+        padding: "0 8px",
+        borderRadius: 9,
+        border: "1px solid rgba(255,255,255,0.12)",
+        background: "rgba(255,255,255,0.04)",
+        color: "rgba(255,255,255,0.72)",
+        fontSize: 11,
+        fontWeight: 750,
+        letterSpacing: 0.35,
+        textTransform: "uppercase",
+        lineHeight: "18px",
+        flex: "0 0 auto",
+      }}
+      title={`Type: ${postTypeLabel(t)}`}
+      aria-label={`Post type ${postTypeLabel(t)}`}
+    >
+      {postTypeLabel(t)}
+    </span>
+  );
+}
+
 /* -------------------------
    Micro toast
 -------------------------- */
@@ -426,6 +514,16 @@ export default function PortalArtistPosts(props: {
   const sp = useClientSearchParams();
   const deepSlug = (sp.get("post") ?? "").trim() || null;
 
+  const urlType = (sp.get("postType") ?? "").trim().toLowerCase();
+  const initialFilter: "" | PostType =
+    urlType === "qa" || urlType === "creative" || urlType === "civic" || urlType === "cosmic"
+      ? (urlType as PostType)
+      : "";
+
+  const [postTypeFilter, setPostTypeFilter] = React.useState<"" | PostType>(
+    initialFilter,
+  );
+
   const { share, fallbackModal } = useShareAction();
   const shareBuilders = useShareBuilders();
 
@@ -490,6 +588,7 @@ export default function PortalArtistPosts(props: {
         u.searchParams.set("limit", String(pageSize));
         u.searchParams.set("minVisibility", minVisibility);
         u.searchParams.set("requireAuthAfter", String(requireAuthAfter));
+        if (postTypeFilter) u.searchParams.set("postType", postTypeFilter);
         if (nextCursor) u.searchParams.set("offset", nextCursor);
 
         const res = await fetch(u.toString(), { method: "GET" });
@@ -513,14 +612,32 @@ export default function PortalArtistPosts(props: {
         setLoading(false);
       }
     },
-    [loading, requiresAuth, pageSize, minVisibility, requireAuthAfter],
+    [
+      loading,
+      requiresAuth,
+      pageSize,
+      minVisibility,
+      requireAuthAfter,
+      postTypeFilter,
+    ],
   );
 
+  // initial fetch
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     void fetchPage(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // refetch when filter changes
+  React.useEffect(() => {
+    setRequiresAuth(false);
+    setCursor(null);
+    setPosts([]);
+    setErr(null);
+    void fetchPage(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [postTypeFilter]);
 
   React.useEffect(() => {
     if (!deepSlug) return;
@@ -569,14 +686,12 @@ export default function PortalArtistPosts(props: {
   }, [posts, markSeen]);
 
   function triggerCopiedFeedback(slug: string) {
-    // Button morph
     setCopiedSlug(slug);
     if (copiedTimerRef.current) window.clearTimeout(copiedTimerRef.current);
     copiedTimerRef.current = window.setTimeout(() => {
       setCopiedSlug((cur) => (cur === slug ? null : cur));
     }, 1200);
 
-    // Toast
     setToastVisible(true);
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
     toastTimerRef.current = window.setTimeout(() => {
@@ -694,7 +809,6 @@ export default function PortalArtistPosts(props: {
 
       const res = await share({ ...target, url });
 
-      // Only show tactile feedback when we *actually* used clipboard copy fallback.
       if (res.ok && res.method === "copy") {
         triggerCopiedFeedback(post.slug);
       }
@@ -702,6 +816,7 @@ export default function PortalArtistPosts(props: {
       replaceQuery({
         p: "posts",
         post: post.slug,
+        postType: postTypeFilter || null,
         pt: null,
         panel: null,
         album: null,
@@ -710,7 +825,7 @@ export default function PortalArtistPosts(props: {
         autoplay: null,
       });
     },
-    [share, shareBuilders, authorName],
+    [share, shareBuilders, authorName, postTypeFilter],
   );
 
   const components: PortableTextComponents = React.useMemo(
@@ -906,6 +1021,17 @@ export default function PortalArtistPosts(props: {
     [defaultInlineImageMaxWidthPx],
   );
 
+  function onChangeFilter(next: "" | PostType) {
+    setPostTypeFilter(next);
+
+    // Keep the URL canonical, and prevent `post=` deep-links leaking into other views/filters.
+    replaceQuery({
+      p: "posts",
+      postType: next || null,
+      post: null,
+    });
+  }
+
   return (
     <div style={{ minWidth: 0 }}>
       {/* Header */}
@@ -941,7 +1067,39 @@ export default function PortalArtistPosts(props: {
           ) : null}
         </div>
 
-        <div style={{ flex: "0 0 auto" }}>
+        <div
+          style={{
+            flex: "0 0 auto",
+            display: "inline-flex",
+            gap: 8,
+            alignItems: "center",
+          }}
+        >
+          <select
+            value={postTypeFilter}
+            onChange={(e) => onChangeFilter(e.target.value as "" | PostType)}
+            aria-label="Filter posts by type"
+            style={{
+              height: 28,
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.14)",
+              background: "rgba(255,255,255,0.035)",
+              color: "rgba(255,255,255,0.86)",
+              padding: "0 10px",
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: 0.2,
+              outline: "none",
+              cursor: "pointer",
+            }}
+          >
+            {POST_TYPES.map((opt) => (
+              <option key={opt.label} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+
           <SubmitQuestionCTA
             onOpenComposer={() => {
               setThanks(false);
@@ -998,7 +1156,7 @@ export default function PortalArtistPosts(props: {
           <textarea
             value={questionText}
             onChange={(e) => setQuestionText(e.target.value)}
-            maxLength={MAX_CHARS + 200} // allow typing past; server enforces; UI warns
+            maxLength={MAX_CHARS + 200}
             placeholder="Ask anything you want considered for a future Q&A."
             style={{
               width: "100%",
@@ -1096,6 +1254,9 @@ export default function PortalArtistPosts(props: {
           const isDeep = deepSlug === p.slug;
           const isCopied = copiedSlug === p.slug;
 
+          const showTitle = shouldRenderExternalTitle(p);
+          const safeTitle = (p.title ?? "").trim();
+
           return (
             <div
               key={p.slug}
@@ -1126,13 +1287,14 @@ export default function PortalArtistPosts(props: {
                     src={authorAvatarSrc}
                     alt={authorName}
                   />
-                  <div style={{ minWidth: 0 }}>
+                  <div style={{ minWidth: 0, flex: "1 1 auto" }}>
                     <div
                       style={{
                         display: "flex",
                         alignItems: "baseline",
                         gap: 10,
                         minWidth: 0,
+                        flexWrap: "wrap",
                       }}
                     >
                       <div
@@ -1166,6 +1328,36 @@ export default function PortalArtistPosts(props: {
                         </div>
                       ) : null}
                     </div>
+
+                    {/* Title row (universal) */}
+                    {showTitle && safeTitle ? (
+                      <div
+                        style={{
+                          marginTop: 6,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          minWidth: 0,
+                        }}
+                      >
+                        <TypeBadge t={p.postType ?? null} />
+                        <div
+                          style={{
+                            fontSize: 15,
+                            fontWeight: 850,
+                            opacity: 0.95,
+                            lineHeight: 1.25,
+                            minWidth: 0,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={safeTitle}
+                        >
+                          {safeTitle}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 

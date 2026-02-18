@@ -270,6 +270,7 @@ export async function POST(req: NextRequest) {
   const doc: SanityDocumentStub = {
     _type: "artistPost",
     title: finalTitle,
+    postType: "qa",
     slug: { current: slugCurrent }, // ✅ simplest canonical shape
     publishedAt: new Date().toISOString(),
     visibility,

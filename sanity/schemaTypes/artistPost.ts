@@ -22,6 +22,23 @@ export const artistPost = defineType({
     }),
 
     defineField({
+      name: "postType",
+      title: "Post type",
+      type: "string",
+      options: {
+        list: [
+          { title: "Creative", value: "creative" },
+          { title: "Civic", value: "civic" },
+          { title: "Cosmic", value: "cosmic" },
+          { title: "Q&A", value: "qa" },
+        ],
+        layout: "radio",
+      },
+      initialValue: "standard",
+      validation: (r) => r.required(),
+    }),
+
+    defineField({
       name: "body",
       title: "Body",
       type: "array",
@@ -92,7 +109,11 @@ export const artistPost = defineType({
     }),
   ],
   preview: {
-    select: { title: "title", slug: "slug.current", publishedAt: "publishedAt" },
+    select: {
+      title: "title",
+      slug: "slug.current",
+      publishedAt: "publishedAt",
+    },
     prepare({ title, slug, publishedAt }) {
       return {
         title: title ?? slug ?? "Post",
