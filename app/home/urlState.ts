@@ -41,6 +41,9 @@ export function getAutoplayFlag(sp: URLSearchParams): boolean {
  * - null/undefined/'' => delete
  * - otherwise => set
  * Preserves all other existing keys.
+ *
+ * Portal hygiene:
+ * - If `p` is set to anything other than "posts", clear post deep-link params.
  */
 export function replaceQuery(patch: Record<string, string | null | undefined>) {
   if (typeof window === "undefined") return;
@@ -48,10 +51,30 @@ export function replaceQuery(patch: Record<string, string | null | undefined>) {
   const url = new URL(window.location.href);
   const params = new URLSearchParams(url.search);
 
+  const prevP = (params.get("p") ?? "").trim().toLowerCase();
+
+  // apply patch
   for (const [k, v] of Object.entries(patch)) {
     const sv = v == null ? "" : String(v);
     if (v == null || sv.trim() === "") params.delete(k);
     else params.set(k, sv);
+  }
+
+  const nextP = (params.get("p") ?? "").trim().toLowerCase();
+
+  // If caller explicitly set p (tab switch), ensure post deep links don't leak into other tabs.
+  const patchSetsP = Object.prototype.hasOwnProperty.call(patch, "p");
+  if (patchSetsP) {
+    if (nextP !== "posts") {
+      params.delete("post");
+      params.delete("pt");
+    }
+  } else {
+    // If p changed implicitly (rare), still do the safe thing.
+    if (prevP !== nextP && nextP !== "posts") {
+      params.delete("post");
+      params.delete("pt");
+    }
   }
 
   const next = params.toString();

@@ -86,7 +86,7 @@ function SubmitQuestionCTA(props: { onOpenComposer: () => void }) {
       style={{
         height: 28,
         padding: "0 12px",
-        borderRadius: 12,
+        borderRadius: 10,
         border: "1px solid rgba(255,255,255,0.14)",
         background: locked
           ? "rgba(255,255,255,0.035)"
