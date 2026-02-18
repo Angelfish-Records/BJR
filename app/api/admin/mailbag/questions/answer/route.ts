@@ -236,10 +236,6 @@ export async function POST(req: NextRequest) {
   // Build Portable Text blocks (with _key everywhere)
   const blocks: PortableText = [];
 
-  if (title) {
-    blocks.push(block("h2", title));
-  }
-
   blocks.push(
     block(
       "normal",

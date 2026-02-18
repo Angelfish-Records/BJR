@@ -173,38 +173,6 @@ function postTypeLabel(t: PostType | null | undefined): string {
   return "Creative";
 }
 
-function flattenPortableTextText(node: unknown): string {
-  if (!node || typeof node !== "object") return "";
-  const r = node as Record<string, unknown>;
-  const t = r["text"];
-  return typeof t === "string" ? t : "";
-}
-
-function firstBlockHeadingText(body: unknown): string {
-  if (!Array.isArray(body) || body.length === 0) return "";
-  const first = body[0] as unknown;
-  if (!first || typeof first !== "object") return "";
-  const b = first as Record<string, unknown>;
-  const style = typeof b["style"] === "string" ? b["style"] : "";
-  if (style !== "h1" && style !== "h2" && style !== "h3") return "";
-
-  const children = Array.isArray(b["children"]) ? (b["children"] as unknown[]) : [];
-  const text = children.map(flattenPortableTextText).join("").trim();
-  return text;
-}
-
-function shouldRenderExternalTitle(p: Post): boolean {
-  const title = (p.title ?? "").trim();
-  if (!title) return false;
-
-  // If the first portable text block is already a heading containing the same title,
-  // don’t show it twice (mailbag Q&A posts previously embedded the title as an h2).
-  const head = firstBlockHeadingText(p.body);
-  if (head && head.toLowerCase() === title.toLowerCase()) return false;
-
-  return true;
-}
-
 /* -------------------------
    Image sizing helpers
 -------------------------- */
@@ -516,7 +484,10 @@ export default function PortalArtistPosts(props: {
 
   const urlType = (sp.get("postType") ?? "").trim().toLowerCase();
   const initialFilter: "" | PostType =
-    urlType === "qa" || urlType === "creative" || urlType === "civic" || urlType === "cosmic"
+    urlType === "qa" ||
+    urlType === "creative" ||
+    urlType === "civic" ||
+    urlType === "cosmic"
       ? (urlType as PostType)
       : "";
 
@@ -1254,9 +1225,6 @@ export default function PortalArtistPosts(props: {
           const isDeep = deepSlug === p.slug;
           const isCopied = copiedSlug === p.slug;
 
-          const showTitle = shouldRenderExternalTitle(p);
-          const safeTitle = (p.title ?? "").trim();
-
           return (
             <div
               key={p.slug}
@@ -1287,6 +1255,7 @@ export default function PortalArtistPosts(props: {
                     src={authorAvatarSrc}
                     alt={authorName}
                   />
+
                   <div style={{ minWidth: 0, flex: "1 1 auto" }}>
                     <div
                       style={{
@@ -1307,6 +1276,7 @@ export default function PortalArtistPosts(props: {
                       >
                         {authorName}
                       </div>
+
                       <div
                         style={{
                           fontSize: 12,
@@ -1316,6 +1286,7 @@ export default function PortalArtistPosts(props: {
                       >
                         {fmtDate(p.publishedAt)}
                       </div>
+
                       {p.pinned ? (
                         <div
                           style={{
@@ -1328,38 +1299,38 @@ export default function PortalArtistPosts(props: {
                         </div>
                       ) : null}
                     </div>
-
-                    {/* Title row (universal) */}
-                    {showTitle && safeTitle ? (
-                      <div
-                        style={{
-                          marginTop: 6,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          minWidth: 0,
-                        }}
-                      >
-                        <TypeBadge t={p.postType ?? null} />
-                        <div
-                          style={{
-                            fontSize: 15,
-                            fontWeight: 850,
-                            opacity: 0.95,
-                            lineHeight: 1.25,
-                            minWidth: 0,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                          title={safeTitle}
-                        >
-                          {safeTitle}
-                        </div>
-                      </div>
-                    ) : null}
                   </div>
                 </div>
+
+                {/* Title row (full-width, below header row) */}
+                {p.title?.trim() ? (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      minWidth: 0,
+                    }}
+                  >
+                    <TypeBadge t={p.postType ?? null} />
+                    <div
+                      style={{
+                        fontSize: 15,
+                        fontWeight: 850,
+                        opacity: 0.95,
+                        lineHeight: 1.25,
+                        minWidth: 0,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={p.title.trim()}
+                    >
+                      {p.title.trim()}
+                    </div>
+                  </div>
+                ) : null}
 
                 {/* Body */}
                 <div style={{ marginTop: 8 }}>
