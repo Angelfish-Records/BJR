@@ -456,6 +456,149 @@ function CopyToast(props: { visible: boolean; text: string }) {
   );
 }
 
+function TermsModal(props: { open: boolean; onClose: () => void }) {
+  const { open, onClose } = props;
+
+  React.useEffect(() => {
+    if (!open) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Question terms and conditions"
+      onMouseDown={(e) => {
+        // click outside closes
+        if (e.target === e.currentTarget) onClose();
+      }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 100000,
+        background: "rgba(0,0,0,0.55)",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+        display: "grid",
+        placeItems: "center",
+        padding: 16,
+      }}
+    >
+      <div
+        style={{
+          width: "min(520px, 100%)",
+          borderRadius: 18,
+          border: "1px solid rgba(255,255,255,0.14)",
+          background: "rgba(16,16,16,0.92)",
+          boxShadow: "0 26px 90px rgba(0,0,0,0.55)",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            padding: 14,
+            display: "flex",
+            alignItems: "baseline",
+            justifyContent: "space-between",
+            gap: 12,
+            borderBottom: "1px solid rgba(255,255,255,0.10)",
+          }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 800, opacity: 0.92 }}>
+            Question terms
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              border: "none",
+              background: "transparent",
+              color: "rgba(255,255,255,0.72)",
+              cursor: "pointer",
+              fontSize: 12,
+              opacity: 0.9,
+            }}
+          >
+            Close
+          </button>
+        </div>
+
+        <div style={{ padding: 14 }}>
+          <div
+            style={{
+              fontSize: 12.5,
+              lineHeight: 1.7,
+              color: "rgba(255,255,255,0.84)",
+            }}
+          >
+            <p style={{ margin: "0 0 10px" }}>
+              You are voluntarily submitting a question to the official website
+              of Brendan John Roch. If your question is selected, it, along with
+              the response will feature on this website.
+            </p>
+
+            <p style={{ margin: "0 0 10px" }}>
+              The answered question, along with any modifications made for
+              clarity and adherence to guidelines, may be published on our
+              website. If your question is chosen, any personal information
+              contained in your submission may be published in accordance with
+              these terms and conditions and you give your express consent
+              thereto.
+            </p>
+
+            <p style={{ margin: "0 0 10px" }}>
+              By submitting your question, you grant Brendan John Roch the
+              non-exclusive right to publish, reproduce, and distribute the
+              question and its corresponding answer on our website, Brendan John
+              Roch mailer and on other related platforms.
+            </p>
+
+            <p style={{ margin: "0 0 10px" }}>
+              We reserve the right to edit or modify the question and answer for
+              clarity, compliance with guidelines, and other editorial
+              considerations. 
+            </p>
+          </div>
+
+          <div
+            style={{
+              marginTop: 14,
+              display: "flex",
+              justifyContent: "flex-end",
+            }}
+          >
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                height: 30,
+                padding: "0 12px",
+                borderRadius: 10,
+                border: "1px solid rgba(255,255,255,0.14)",
+                background: "rgba(255,255,255,0.06)",
+                color: "rgba(255,255,255,0.88)",
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 750,
+              }}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PortalArtistPosts(props: {
   title?: string;
   pageSize: number;
@@ -506,6 +649,8 @@ export default function PortalArtistPosts(props: {
   const [submitting, setSubmitting] = React.useState(false);
   const [submitErr, setSubmitErr] = React.useState<string | null>(null);
   const [thanks, setThanks] = React.useState(false);
+
+  const [termsOpen, setTermsOpen] = React.useState(false);
 
   const MAX_CHARS = 800;
 
@@ -751,7 +896,7 @@ export default function PortalArtistPosts(props: {
         }
         if (code === "RATE_LIMIT") {
           setSubmitErr(
-            "You’ve hit the daily limit (3 questions). Try tomorrow.",
+            "You’ve asked three questions today. Hold on until tomorrow to ask another.",
           );
           return;
         }
@@ -1140,7 +1285,7 @@ export default function PortalArtistPosts(props: {
             value={askerName}
             onChange={(e) => setAskerName(e.target.value)}
             maxLength={MAX_NAME_CHARS + 20}
-            placeholder="Your name (optional)"
+            placeholder="Your name / city / handle (totally optional)"
             style={{
               width: "100%",
               height: 36,
@@ -1189,6 +1334,40 @@ export default function PortalArtistPosts(props: {
               {questionText.trim().length > MAX_CHARS ? (
                 <span style={{ marginLeft: 8, opacity: 0.95 }}>• too long</span>
               ) : null}
+            </div>
+
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: 12,
+                opacity: 0.62,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 10,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setTermsOpen(true)}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: "rgba(255,255,255,0.72)",
+                  cursor: "pointer",
+                  padding: 0,
+                  fontSize: 12,
+                  textDecoration: "underline",
+                  textUnderlineOffset: 3,
+                  opacity: 0.9,
+                }}
+              >
+                Terms & Conditions
+              </button>
+
+              <div style={{ opacity: 0.72 }}>
+                By sending, you agree to the terms.
+              </div>
             </div>
 
             <button
@@ -1403,6 +1582,8 @@ export default function PortalArtistPosts(props: {
           </div>
         ) : null}
       </div>
+
+      <TermsModal open={termsOpen} onClose={() => setTermsOpen(false)} />
 
       {/* Toast (clipboard copy only) */}
       <CopyToast visible={toastVisible} text="Link copied" />
