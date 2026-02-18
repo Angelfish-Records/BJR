@@ -564,7 +564,7 @@ function TermsModal(props: { open: boolean; onClose: () => void }) {
             <p style={{ margin: "0 0 10px" }}>
               We reserve the right to edit or modify the question and answer for
               clarity, compliance with guidelines, and other editorial
-              considerations. 
+              considerations.
             </p>
           </div>
 
@@ -1324,29 +1324,22 @@ export default function PortalArtistPosts(props: {
             style={{
               marginTop: 10,
               display: "flex",
-              alignItems: "center",
+              alignItems: "flex-start",
               justifyContent: "space-between",
               gap: 10,
             }}
           >
-            <div style={{ fontSize: 12, opacity: 0.62 }}>
-              {questionText.trim().length}/{MAX_CHARS}
-              {questionText.trim().length > MAX_CHARS ? (
-                <span style={{ marginLeft: 8, opacity: 0.95 }}>• too long</span>
-              ) : null}
-            </div>
+            {/* LEFT COLUMN */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ fontSize: 12, opacity: 0.62 }}>
+                {questionText.trim().length}/{MAX_CHARS}
+                {questionText.trim().length > MAX_CHARS ? (
+                  <span style={{ marginLeft: 8, opacity: 0.95 }}>
+                    • too long
+                  </span>
+                ) : null}
+              </div>
 
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: 12,
-                opacity: 0.62,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 10,
-              }}
-            >
               <button
                 type="button"
                 onClick={() => setTermsOpen(true)}
@@ -1360,16 +1353,14 @@ export default function PortalArtistPosts(props: {
                   textDecoration: "underline",
                   textUnderlineOffset: 3,
                   opacity: 0.9,
+                  alignSelf: "flex-start",
                 }}
               >
                 Terms & Conditions
               </button>
-
-              <div style={{ opacity: 0.72 }}>
-                By sending, you agree to the terms.
-              </div>
             </div>
 
+            {/* RIGHT COLUMN (Send button) */}
             <button
               type="button"
               onClick={() => void submitQuestion()}
