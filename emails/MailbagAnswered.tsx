@@ -65,7 +65,7 @@ export function MailbagAnsweredEmail(props: MailbagAnsweredEmailProps) {
                 lineHeight: 1.5,
               }}
             >
-              I published an answer in{" "}
+              Brendan John Roch selected your question for response in{" "}
               <span style={{ color: "#ffffff", fontWeight: 700 }}>
                 {postTitle?.trim() ? postTitle.trim() : "a new post"}
               </span>

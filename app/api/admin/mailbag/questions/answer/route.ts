@@ -250,25 +250,33 @@ export async function POST(req: NextRequest) {
 
   // All questions first
   for (const q of qRes.rows) {
-    const name = typeof q.asker_name === "string" ? q.asker_name.trim() : "";
-    const quoteText = name ? `${q.question_text} — ${name}` : q.question_text;
+    const name =
+      typeof (q as unknown as { asker_name?: unknown }).asker_name === "string"
+        ? (q as unknown as { asker_name?: string }).asker_name!.trim()
+        : "";
 
+    // Question line (blockquote panel)
     blocks.push({
       _type: "block",
       _key: k("bq"),
       style: "blockquote",
-      children: [span(quoteText)],
+      children: [span(q.question_text)],
     });
+
+    // Optional name line (still visually "inside" the same quoted area via styling)
+    if (name) {
+      blocks.push({
+        _type: "block",
+        _key: k("bn"),
+        style: "blockquote",
+        children: [span(`— ${name}`)],
+        // We'll style this block differently in the renderer using a wrapper span (below)
+      });
+    }
+
+    blocks.push(...answerToPortableTextBlocks(answer));
+    blocks.push(block("normal", " "));
   }
-
-  // Spacer between questions and answer
-  blocks.push(block("normal", " "));
-
-  // Single answer (once)
-  blocks.push(...answerToPortableTextBlocks(answer));
-
-  // Optional trailing spacer (keeps your existing visual rhythm)
-  blocks.push(block("normal", " "));
 
   // Force a stable title + explicit slug so Sanity can never “miss” it
   const fallbackTitle = `Q&A — ${new Date().toISOString().slice(0, 10)}`;

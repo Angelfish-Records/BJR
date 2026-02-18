@@ -541,30 +541,27 @@ function TermsModal(props: { open: boolean; onClose: () => void }) {
           >
             <p style={{ margin: "0 0 10px" }}>
               You are voluntarily submitting a question to the official website
-              of Brendan John Roch. If your question is selected, it, along with
-              the response will feature on this website.
+              of Brendan John Roch, which is wholly owned and managed by
+              Angelfish Records. If your question is selected, it, along with
+              the response, will be published on this website.
             </p>
 
             <p style={{ margin: "0 0 10px" }}>
-              The answered question, along with any modifications made for
-              clarity and adherence to guidelines, may be published on our
-              website. If your question is chosen, any personal information
-              contained in your submission may be published in accordance with
-              these terms and conditions and you give your express consent
-              thereto.
+              Any personal information contained in your submission may be
+              published in accordance with these terms and conditions and you
+              give your express consent thereto.
             </p>
 
             <p style={{ margin: "0 0 10px" }}>
-              By submitting your question, you grant Brendan John Roch the
+              By submitting your question, you grant Angelfish Records the
               non-exclusive right to publish, reproduce, and distribute the
-              question and its corresponding answer on our website, Brendan John
-              Roch mailer and on other related platforms.
+              question and its corresponding answer on this website or in the
+              Brendan John Roch mailer.
             </p>
 
             <p style={{ margin: "0 0 10px" }}>
-              We reserve the right to edit or modify the question and answer for
-              clarity, compliance with guidelines, and other editorial
-              considerations.
+              We reserve the right to edit the question and answer for clarity
+              and other editorial considerations.
             </p>
           </div>
 
@@ -1000,7 +997,7 @@ export default function PortalArtistPosts(props: {
       },
 
       block: {
-        normal: ({ children }) => (
+        normal: ({ children }: { children?: React.ReactNode }) => (
           <p
             style={{
               margin: "10px 0",
@@ -1012,7 +1009,7 @@ export default function PortalArtistPosts(props: {
             {children}
           </p>
         ),
-        h1: ({ children }) => (
+        h1: ({ children }: { children?: React.ReactNode }) => (
           <h3
             style={{
               margin: "14px 0 8px",
@@ -1024,7 +1021,7 @@ export default function PortalArtistPosts(props: {
             {children}
           </h3>
         ),
-        h2: ({ children }) => (
+        h2: ({ children }: { children?: React.ReactNode }) => (
           <h4
             style={{
               margin: "14px 0 8px",
@@ -1036,7 +1033,7 @@ export default function PortalArtistPosts(props: {
             {children}
           </h4>
         ),
-        h3: ({ children }) => (
+        h3: ({ children }: { children?: React.ReactNode }) => (
           <h5
             style={{
               margin: "12px 0 6px",
@@ -1048,24 +1045,45 @@ export default function PortalArtistPosts(props: {
             {children}
           </h5>
         ),
-        blockquote: ({ children }) => (
-          <blockquote
-            style={{
-              margin: "12px 0",
-              padding: "10px 12px",
-              borderLeft: "2px solid rgba(255,255,255,0.18)",
-              background: "rgba(255,255,255,0.03)",
-              borderRadius: 12,
-              opacity: 0.92,
-            }}
-          >
-            <div style={{ fontSize: 13, lineHeight: 1.65 }}>{children}</div>
-          </blockquote>
-        ),
+        blockquote: ({ children }: { children?: React.ReactNode }) => {
+          // Heuristic: if the rendered text begins with an em-dash, treat as “asked by” footer
+          const asText =
+            typeof children === "string"
+              ? children
+              : Array.isArray(children)
+                ? children.join("")
+                : "";
+
+          const isFooter = asText.trim().startsWith("—");
+
+          return (
+            <blockquote
+              style={{
+                margin: isFooter ? "6px 0 12px" : "12px 0 6px",
+                padding: isFooter ? "0 12px 10px" : "10px 12px 0px",
+                borderLeft: "2px solid rgba(255,255,255,0.18)",
+                background: "rgba(255,255,255,0.03)",
+                borderRadius: 12,
+                opacity: 0.92,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: isFooter ? 12 : 13,
+                  lineHeight: isFooter ? 1.35 : 1.65,
+                  opacity: isFooter ? 0.62 : 0.92,
+                  fontStyle: isFooter ? "italic" : "normal",
+                }}
+              >
+                {children}
+              </div>
+            </blockquote>
+          );
+        },
       },
 
       list: {
-        bullet: ({ children }) => (
+        bullet: ({ children }: { children?: React.ReactNode }) => (
           <ul
             style={{
               margin: "10px 0",
@@ -1080,7 +1098,7 @@ export default function PortalArtistPosts(props: {
             {children}
           </ul>
         ),
-        number: ({ children }) => (
+        number: ({ children }: { children?: React.ReactNode }) => (
           <ol
             style={{
               margin: "10px 0",
@@ -1096,21 +1114,24 @@ export default function PortalArtistPosts(props: {
           </ol>
         ),
       },
+
       listItem: {
-        bullet: ({ children }) => (
+        bullet: ({ children }: { children?: React.ReactNode }) => (
           <li style={{ margin: "6px 0" }}>{children}</li>
         ),
-        number: ({ children }) => (
+        number: ({ children }: { children?: React.ReactNode }) => (
           <li style={{ margin: "6px 0" }}>{children}</li>
         ),
       },
 
       marks: {
-        strong: ({ children }) => (
+        strong: ({ children }: { children?: React.ReactNode }) => (
           <strong style={{ fontWeight: 750, opacity: 0.98 }}>{children}</strong>
         ),
-        em: ({ children }) => <em style={{ opacity: 0.95 }}>{children}</em>,
-        code: ({ children }) => (
+        em: ({ children }: { children?: React.ReactNode }) => (
+          <em style={{ opacity: 0.95 }}>{children}</em>
+        ),
+        code: ({ children }: { children?: React.ReactNode }) => (
           <code
             style={{
               fontFamily:
@@ -1126,7 +1147,13 @@ export default function PortalArtistPosts(props: {
             {children}
           </code>
         ),
-        link: ({ value, children }) => {
+        link: ({
+          value,
+          children,
+        }: {
+          value?: { href?: string };
+          children: React.ReactNode;
+        }) => {
           const href = typeof value?.href === "string" ? value.href : "#";
           return (
             <a
@@ -1285,7 +1312,7 @@ export default function PortalArtistPosts(props: {
             value={askerName}
             onChange={(e) => setAskerName(e.target.value)}
             maxLength={MAX_NAME_CHARS + 20}
-            placeholder="Your name / city / handle (totally optional)"
+            placeholder="Your name / city / handle (you can leave this blank, it is totally optional)"
             style={{
               width: "100%",
               height: 36,
