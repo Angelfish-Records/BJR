@@ -147,11 +147,11 @@ function pickText(
   body: Body | null,
   keys: Array<keyof Body>,
 ): { key: string | null; value: string } {
-  for (const k of keys) {
-    const v = body?.[k];
+  for (const kk of keys) {
+    const v = body?.[kk];
     if (typeof v === "string") {
       const t = v.trim();
-      if (t) return { key: String(k), value: t };
+      if (t) return { key: String(kk), value: t };
     }
   }
   return { key: null, value: "" };
@@ -192,7 +192,7 @@ export async function POST(req: NextRequest) {
     seen.has(id) ? false : (seen.add(id), true),
   );
 
-  // Title optional, but we’ll force a fallback title for slug stability.
+  // Title optional (fallback for slug stability)
   const pickedTitle = pickText(body, ["title"]);
   const title = pickedTitle.value;
 
@@ -237,10 +237,12 @@ export async function POST(req: NextRequest) {
     return json(404, { ok: false, code: "NOT_FOUND" });
   }
 
-  // Build Portable Text blocks (with _key everywhere)
+  // Build Portable Text blocks:
+  // - intro
+  // - all selected questions as blockquotes (question + optional asker line inside SAME blockquote)
+  // - answer body ONCE
   const blocks: PortableText = [];
 
-  // Intro
   blocks.push(
     block(
       "normal",
@@ -248,35 +250,21 @@ export async function POST(req: NextRequest) {
     ),
   );
 
-  // All questions first
   for (const q of qRes.rows) {
-    const name =
-      typeof (q as unknown as { asker_name?: unknown }).asker_name === "string"
-        ? (q as unknown as { asker_name?: string }).asker_name!.trim()
-        : "";
+    const name = (q.asker_name ?? "").trim();
+    const quoteText = name
+      ? `${q.question_text}\n— ${name}`
+      : q.question_text;
 
-    // Question line (blockquote panel)
     blocks.push({
       _type: "block",
       _key: k("bq"),
       style: "blockquote",
-      children: [span(q.question_text)],
+      children: [span(quoteText)],
     });
-
-    // Optional name line (still visually "inside" the same quoted area via styling)
-    if (name) {
-      blocks.push({
-        _type: "block",
-        _key: k("bn"),
-        style: "blockquote",
-        children: [span(`— ${name}`)],
-        // We'll style this block differently in the renderer using a wrapper span (below)
-      });
-    }
-
-    blocks.push(...answerToPortableTextBlocks(answer));
-    blocks.push(block("normal", " "));
   }
+
+  blocks.push(...answerToPortableTextBlocks(answer));
 
   // Force a stable title + explicit slug so Sanity can never “miss” it
   const fallbackTitle = `Q&A — ${new Date().toISOString().slice(0, 10)}`;
@@ -288,7 +276,7 @@ export async function POST(req: NextRequest) {
     _type: "artistPost",
     title: finalTitle,
     postType: "qa",
-    slug: { current: slugCurrent }, // ✅ simplest canonical shape
+    slug: { current: slugCurrent },
     publishedAt: new Date().toISOString(),
     visibility,
     pinned,
@@ -322,7 +310,6 @@ export async function POST(req: NextRequest) {
     [created._id, slug, ...questionIds],
   );
 
-  // Public URL (posts tab + slug param)
   const postUrl = `${appOrigin()}/home?p=posts&post=${encodeURIComponent(slug)}`;
 
   // Eligible notifications: answered + unstamped + not suppressed

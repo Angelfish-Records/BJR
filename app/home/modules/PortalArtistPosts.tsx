@@ -2,15 +2,16 @@
 "use client";
 
 import React from "react";
-import { PortableText, type PortableTextComponents } from "@portabletext/react";
+import {
+  PortableText,
+  type PortableTextComponents,
+  type PortableTextComponentProps,
+} from "@portabletext/react";
 import type { PortableTextBlock } from "@portabletext/types";
 import { usePortalViewer } from "@/app/home/PortalViewerProvider";
 import { useMembershipModal } from "@/app/home/MembershipModalProvider";
 import { useClientSearchParams, replaceQuery } from "@/app/home/urlState";
-import {
-  useShareAction,
-  useShareBuilders,
-} from "@/app/home/player/ShareAction";
+import { useShareAction, useShareBuilders } from "@/app/home/player/ShareAction";
 
 type Visibility = "public" | "friend" | "patron" | "partner";
 type PostType = "qa" | "creative" | "civic" | "cosmic";
@@ -73,7 +74,6 @@ function SubmitQuestionCTA(props: { onOpenComposer: () => void }) {
   const { viewerTier, isSignedIn } = usePortalViewer();
   const { openMembershipModal } = useMembershipModal();
 
-  // Keep the posts UI clean: only show for signed-in viewers who have *some* tier.
   if (!isSignedIn || viewerTier === "none") return null;
 
   const locked = viewerTier === "friend";
@@ -249,13 +249,7 @@ function resolveImageMaxWidthPx(value: SanityImageValue, tall: boolean) {
 -------------------------- */
 
 const ICON_SHARE = (
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    aria-hidden="true"
-  >
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <path
       d="M16 8a3 3 0 1 0-2.83-4H13a3 3 0 0 0 .17 1l-6.5 3.25A3 3 0 0 0 4 7a3 3 0 1 0 0 6 3 3 0 0 0 2.67-1.5l6.5 3.25A3 3 0 0 0 13 16a3 3 0 1 0 .17-1l-6.5-3.25A3 3 0 0 0 7 10c0-.35-.06-.69-.17-1l6.5-3.25A3 3 0 0 0 16 8Z"
       stroke="currentColor"
@@ -266,13 +260,7 @@ const ICON_SHARE = (
 );
 
 const ICON_CHECK = (
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    aria-hidden="true"
-  >
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <path
       d="M20 7L10.5 16.5L4 10"
       stroke="currentColor"
@@ -477,7 +465,6 @@ function TermsModal(props: { open: boolean; onClose: () => void }) {
       aria-modal="true"
       aria-label="Question terms and conditions"
       onMouseDown={(e) => {
-        // click outside closes
         if (e.target === e.currentTarget) onClose();
       }}
       style={{
@@ -565,13 +552,7 @@ function TermsModal(props: { open: boolean; onClose: () => void }) {
             </p>
           </div>
 
-          <div
-            style={{
-              marginTop: 14,
-              display: "flex",
-              justifyContent: "flex-end",
-            }}
-          >
+          <div style={{ marginTop: 14, display: "flex", justifyContent: "flex-end" }}>
             <button
               type="button"
               onClick={onClose}
@@ -675,7 +656,6 @@ export default function PortalArtistPosts(props: {
   const [requiresAuth, setRequiresAuth] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
 
-  // Tactile feedback state (ONLY for actual clipboard copy fallback)
   const [copiedSlug, setCopiedSlug] = React.useState<string | null>(null);
   const [toastVisible, setToastVisible] = React.useState(false);
 
@@ -711,19 +691,18 @@ export default function PortalArtistPosts(props: {
         const res = await fetch(u.toString(), { method: "GET" });
         if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
 
-        const json = parsePostsResponse(await res.json());
-        // Ignore stale responses if the filter changed mid-flight.
+        const j = parsePostsResponse(await res.json());
         if (filterAtCall !== postTypeFilter) return;
 
-        if (json.requiresAuth) {
+        if (j.requiresAuth) {
           setRequiresAuth(true);
           setCursor(null);
           return;
         }
 
-        const nextPosts = Array.isArray(json.posts) ? json.posts : [];
+        const nextPosts = Array.isArray(j.posts) ? j.posts : [];
         setPosts((p) => (nextCursor ? [...p, ...nextPosts] : nextPosts));
-        setCursor(json.nextCursor);
+        setCursor(j.nextCursor);
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Failed to load posts";
         setErr(msg);
@@ -741,14 +720,12 @@ export default function PortalArtistPosts(props: {
     ],
   );
 
-  // initial fetch
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     void fetchPage(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // refetch when filter changes
   React.useEffect(() => {
     setRequiresAuth(false);
     setCursor(null);
@@ -967,13 +944,7 @@ export default function PortalArtistPosts(props: {
           const maxWidthPx = perImage ?? globalCap ?? null;
 
           return (
-            <div
-              style={{
-                margin: "12px 0",
-                display: "flex",
-                justifyContent: "center",
-              }}
-            >
+            <div style={{ margin: "12px 0", display: "flex", justifyContent: "center" }}>
               <div
                 style={{
                   width: "100%",
@@ -997,7 +968,7 @@ export default function PortalArtistPosts(props: {
       },
 
       block: {
-        normal: ({ children }: { children?: React.ReactNode }) => (
+        normal: (props: PortableTextComponentProps<PortableTextBlock>) => (
           <p
             style={{
               margin: "10px 0",
@@ -1006,84 +977,93 @@ export default function PortalArtistPosts(props: {
               opacity: 0.92,
             }}
           >
-            {children}
+            {props.children}
           </p>
         ),
-        h1: ({ children }: { children?: React.ReactNode }) => (
-          <h3
-            style={{
-              margin: "14px 0 8px",
-              fontSize: 16,
-              lineHeight: 1.25,
-              opacity: 0.95,
-            }}
-          >
-            {children}
+
+        h1: (props: PortableTextComponentProps<PortableTextBlock>) => (
+          <h3 style={{ margin: "14px 0 8px", fontSize: 16, lineHeight: 1.25, opacity: 0.95 }}>
+            {props.children}
           </h3>
         ),
-        h2: ({ children }: { children?: React.ReactNode }) => (
-          <h4
-            style={{
-              margin: "14px 0 8px",
-              fontSize: 15,
-              lineHeight: 1.25,
-              opacity: 0.95,
-            }}
-          >
-            {children}
+
+        h2: (props: PortableTextComponentProps<PortableTextBlock>) => (
+          <h4 style={{ margin: "14px 0 8px", fontSize: 15, lineHeight: 1.25, opacity: 0.95 }}>
+            {props.children}
           </h4>
         ),
-        h3: ({ children }: { children?: React.ReactNode }) => (
-          <h5
-            style={{
-              margin: "12px 0 6px",
-              fontSize: 14,
-              lineHeight: 1.25,
-              opacity: 0.92,
-            }}
-          >
-            {children}
+
+        h3: (props: PortableTextComponentProps<PortableTextBlock>) => (
+          <h5 style={{ margin: "12px 0 6px", fontSize: 14, lineHeight: 1.25, opacity: 0.92 }}>
+            {props.children}
           </h5>
         ),
-        blockquote: ({ children }: { children?: React.ReactNode }) => {
-          // Heuristic: if the rendered text begins with an em-dash, treat as “asked by” footer
-          const asText =
-            typeof children === "string"
-              ? children
-              : Array.isArray(children)
-                ? children.join("")
-                : "";
 
-          const isFooter = asText.trim().startsWith("—");
+        // ✅ single blockquote, with optional asker line styled inside the same quote
+        blockquote: (props: PortableTextComponentProps<PortableTextBlock>) => {
+          const nodes = React.Children.toArray(props.children);
+          const joined =
+            nodes.every((n) => typeof n === "string")
+              ? (nodes as string[]).join("")
+              : typeof props.children === "string"
+                ? props.children
+                : null;
 
+          // We intentionally generate blockquote text like:
+          // "Question text\n— Name"
+          if (typeof joined === "string" && joined.includes("\n")) {
+            const [q, ...rest] = joined.split("\n");
+            const footer = rest.join("\n").trim();
+
+            return (
+              <blockquote
+                style={{
+                  margin: "12px 0",
+                  padding: "10px 12px",
+                  borderLeft: "2px solid rgba(255,255,255,0.18)",
+                  background: "rgba(255,255,255,0.03)",
+                  borderRadius: 12,
+                  opacity: 0.92,
+                }}
+              >
+                <div style={{ fontSize: 13, lineHeight: 1.65 }}>{q}</div>
+                {footer ? (
+                  <div
+                    style={{
+                      marginTop: 6,
+                      fontSize: 12,
+                      lineHeight: 1.35,
+                      opacity: 0.62,
+                      fontStyle: "italic",
+                    }}
+                  >
+                    {footer}
+                  </div>
+                ) : null}
+              </blockquote>
+            );
+          }
+
+          // Fallback: render whatever PortableText gave us
           return (
             <blockquote
               style={{
-                margin: isFooter ? "6px 0 12px" : "12px 0 6px",
-                padding: isFooter ? "0 12px 10px" : "10px 12px 0px",
+                margin: "12px 0",
+                padding: "10px 12px",
                 borderLeft: "2px solid rgba(255,255,255,0.18)",
                 background: "rgba(255,255,255,0.03)",
                 borderRadius: 12,
                 opacity: 0.92,
               }}
             >
-              <div
-                style={{
-                  fontSize: isFooter ? 12 : 13,
-                  lineHeight: isFooter ? 1.35 : 1.65,
-                  opacity: isFooter ? 0.62 : 0.92,
-                  fontStyle: isFooter ? "italic" : "normal",
-                }}
-              >
-                {children}
-              </div>
+              <div style={{ fontSize: 13, lineHeight: 1.65 }}>{props.children}</div>
             </blockquote>
           );
         },
       },
 
       list: {
-        bullet: ({ children }: { children?: React.ReactNode }) => (
+        bullet: (props: { children?: React.ReactNode }) => (
           <ul
             style={{
               margin: "10px 0",
@@ -1095,10 +1075,10 @@ export default function PortalArtistPosts(props: {
               opacity: 0.92,
             }}
           >
-            {children}
+            {props.children}
           </ul>
         ),
-        number: ({ children }: { children?: React.ReactNode }) => (
+        number: (props: { children?: React.ReactNode }) => (
           <ol
             style={{
               margin: "10px 0",
@@ -1110,28 +1090,30 @@ export default function PortalArtistPosts(props: {
               opacity: 0.92,
             }}
           >
-            {children}
+            {props.children}
           </ol>
         ),
       },
 
       listItem: {
-        bullet: ({ children }: { children?: React.ReactNode }) => (
-          <li style={{ margin: "6px 0" }}>{children}</li>
+        bullet: (props: { children?: React.ReactNode }) => (
+          <li style={{ margin: "6px 0" }}>{props.children}</li>
         ),
-        number: ({ children }: { children?: React.ReactNode }) => (
-          <li style={{ margin: "6px 0" }}>{children}</li>
+        number: (props: { children?: React.ReactNode }) => (
+          <li style={{ margin: "6px 0" }}>{props.children}</li>
         ),
       },
 
       marks: {
-        strong: ({ children }: { children?: React.ReactNode }) => (
-          <strong style={{ fontWeight: 750, opacity: 0.98 }}>{children}</strong>
+        strong: (props: { children?: React.ReactNode }) => (
+          <strong style={{ fontWeight: 750, opacity: 0.98 }}>
+            {props.children}
+          </strong>
         ),
-        em: ({ children }: { children?: React.ReactNode }) => (
-          <em style={{ opacity: 0.95 }}>{children}</em>
+        em: (props: { children?: React.ReactNode }) => (
+          <em style={{ opacity: 0.95 }}>{props.children}</em>
         ),
-        code: ({ children }: { children?: React.ReactNode }) => (
+        code: (props: { children?: React.ReactNode }) => (
           <code
             style={{
               fontFamily:
@@ -1144,17 +1126,11 @@ export default function PortalArtistPosts(props: {
               opacity: 0.95,
             }}
           >
-            {children}
+            {props.children}
           </code>
         ),
-        link: ({
-          value,
-          children,
-        }: {
-          value?: { href?: string };
-          children: React.ReactNode;
-        }) => {
-          const href = typeof value?.href === "string" ? value.href : "#";
+        link: (props: { value?: { href?: string }; children?: React.ReactNode }) => {
+          const href = typeof props.value?.href === "string" ? props.value.href : "#";
           return (
             <a
               href={href}
@@ -1167,7 +1143,7 @@ export default function PortalArtistPosts(props: {
                 opacity: 0.9,
               }}
             >
-              {children}
+              {props.children}
             </a>
           );
         },
@@ -1178,18 +1154,11 @@ export default function PortalArtistPosts(props: {
 
   function onChangeFilter(next: "" | PostType) {
     setPostTypeFilter(next);
-
-    // Keep the URL canonical, and prevent `post=` deep-links leaking into other views/filters.
-    replaceQuery({
-      p: "posts",
-      postType: next || null,
-      post: null,
-    });
+    replaceQuery({ p: "posts", postType: next || null, post: null });
   }
 
   return (
     <div style={{ minWidth: 0 }}>
-      {/* Header */}
       <div
         style={{
           display: "flex",
@@ -1222,14 +1191,7 @@ export default function PortalArtistPosts(props: {
           ) : null}
         </div>
 
-        <div
-          style={{
-            flex: "0 0 auto",
-            display: "inline-flex",
-            gap: 8,
-            alignItems: "center",
-          }}
-        >
+        <div style={{ flex: "0 0 auto", display: "inline-flex", gap: 8, alignItems: "center" }}>
           <select
             value={postTypeFilter}
             onChange={(e) => onChangeFilter(e.target.value as "" | PostType)}
@@ -1265,7 +1227,6 @@ export default function PortalArtistPosts(props: {
         </div>
       </div>
 
-      {/* Inline mailbag composer (Patron+) */}
       <div
         style={{
           marginTop: 10,
@@ -1356,14 +1317,11 @@ export default function PortalArtistPosts(props: {
               gap: 10,
             }}
           >
-            {/* LEFT COLUMN */}
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ fontSize: 12, opacity: 0.62 }}>
                 {questionText.trim().length}/{MAX_CHARS}
                 {questionText.trim().length > MAX_CHARS ? (
-                  <span style={{ marginLeft: 8, opacity: 0.95 }}>
-                    • too long
-                  </span>
+                  <span style={{ marginLeft: 8, opacity: 0.95 }}>• too long</span>
                 ) : null}
               </div>
 
@@ -1387,7 +1345,6 @@ export default function PortalArtistPosts(props: {
               </button>
             </div>
 
-            {/* RIGHT COLUMN (Send button) */}
             <button
               type="button"
               onClick={() => void submitQuestion()}
@@ -1417,37 +1374,19 @@ export default function PortalArtistPosts(props: {
       </div>
 
       {thanks ? (
-        <div
-          style={{
-            marginTop: 10,
-            fontSize: 13,
-            opacity: 0.85,
-            lineHeight: 1.55,
-          }}
-        >
-          Thank you for your question. You will receive an email when it is
-          answered.
+        <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85, lineHeight: 1.55 }}>
+          Thank you for your question. You will receive an email when it is answered.
         </div>
       ) : null}
 
       {requiresAuth ? (
-        <div
-          style={{
-            marginTop: 12,
-            fontSize: 13,
-            opacity: 0.85,
-            lineHeight: 1.55,
-          }}
-        >
+        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85, lineHeight: 1.55 }}>
           Sign in to keep reading posts.
         </div>
       ) : null}
 
-      {err ? (
-        <div style={{ marginTop: 12, fontSize: 13, opacity: 0.8 }}>{err}</div>
-      ) : null}
+      {err ? <div style={{ marginTop: 12, fontSize: 13, opacity: 0.8 }}>{err}</div> : null}
 
-      {/* Feed */}
       <div style={{ marginTop: 6 }}>
         {posts.map((p) => {
           const isDeep = deepSlug === p.slug;
@@ -1461,10 +1400,7 @@ export default function PortalArtistPosts(props: {
                 else postEls.current.set(p.slug, el);
               }}
               data-slug={p.slug}
-              style={{
-                padding: "14px 0",
-                borderBottom: "1px solid rgba(255,255,255,0.07)",
-              }}
+              style={{ padding: "14px 0", borderBottom: "1px solid rgba(255,255,255,0.07)" }}
             >
               <div
                 style={{
@@ -1476,13 +1412,8 @@ export default function PortalArtistPosts(props: {
                     : undefined,
                 }}
               >
-                {/* header row */}
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <Avatar
-                    label={authorInitials}
-                    src={authorAvatarSrc}
-                    alt={authorName}
-                  />
+                  <Avatar label={authorInitials} src={authorAvatarSrc} alt={authorName} />
 
                   <div style={{ minWidth: 0, flex: "1 1 auto" }}>
                     <div
@@ -1494,35 +1425,16 @@ export default function PortalArtistPosts(props: {
                         flexWrap: "wrap",
                       }}
                     >
-                      <div
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 700,
-                          opacity: 0.92,
-                          whiteSpace: "nowrap",
-                        }}
-                      >
+                      <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.92, whiteSpace: "nowrap" }}>
                         {authorName}
                       </div>
 
-                      <div
-                        style={{
-                          fontSize: 12,
-                          opacity: 0.56,
-                          whiteSpace: "nowrap",
-                        }}
-                      >
+                      <div style={{ fontSize: 12, opacity: 0.56, whiteSpace: "nowrap" }}>
                         {fmtDate(p.publishedAt)}
                       </div>
 
                       {p.pinned ? (
-                        <div
-                          style={{
-                            fontSize: 12,
-                            opacity: 0.62,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <div style={{ fontSize: 12, opacity: 0.62, whiteSpace: "nowrap" }}>
                           • pinned
                         </div>
                       ) : null}
@@ -1530,17 +1442,8 @@ export default function PortalArtistPosts(props: {
                   </div>
                 </div>
 
-                {/* Title row (full-width, below header row) */}
                 {p.title?.trim() ? (
-                  <div
-                    style={{
-                      marginTop: 10,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      minWidth: 0,
-                    }}
-                  >
+                  <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                     <TypeBadge t={p.postType ?? null} />
                     <div
                       style={{
@@ -1560,23 +1463,13 @@ export default function PortalArtistPosts(props: {
                   </div>
                 ) : null}
 
-                {/* Body */}
                 <div style={{ marginTop: 8 }}>
                   <PortableText value={p.body ?? []} components={components} />
                 </div>
 
-                {/* Actions row */}
-                <div
-                  style={{
-                    marginTop: 10,
-                    display: "flex",
-                    justifyContent: "flex-start",
-                  }}
-                >
+                <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-start" }}>
                   <ActionBtn
-                    onClick={() =>
-                      void onShare({ slug: p.slug, title: p.title })
-                    }
+                    onClick={() => void onShare({ slug: p.slug, title: p.title })}
                     label="Share post"
                   >
                     {isCopied ? ICON_CHECK : ICON_SHARE}
@@ -1602,11 +1495,7 @@ export default function PortalArtistPosts(props: {
       </div>
 
       <TermsModal open={termsOpen} onClose={() => setTermsOpen(false)} />
-
-      {/* Toast (clipboard copy only) */}
       <CopyToast visible={toastVisible} text="Link copied" />
-
-      {/* Manual copy fallback modal (only when clipboard is unavailable) */}
       {fallbackModal}
     </div>
   );
