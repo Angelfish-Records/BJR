@@ -841,15 +841,19 @@ export default function PortalArea(props: {
 
   const primedRef = React.useRef(false);
   React.useEffect(() => {
-    if (!isPlayer) return;
+    // Prime the queue once as soon as we have album+tracks,
+    // regardless of which portal surface the user landed on.
     if (primedRef.current) return;
     if (!album || tracks.length === 0) return;
 
+    // If something already exists (restored session, prior nav), don't override it.
     if (p.current || p.queue.length > 0) {
       primedRef.current = true;
       return;
     }
 
+    // If a specific track is requested via URL, let the track-selection effect handle it.
+    // (We still need the queue, but we shouldn't force-select first track here.)
     if (qTrack) {
       primedRef.current = true;
       return;
@@ -861,6 +865,7 @@ export default function PortalArea(props: {
     const ctxId = hasSt
       ? (album.catalogId ?? undefined)
       : (album.catalogId ?? album.id ?? undefined);
+
     const ctxSlug = qAlbum ?? currentAlbumSlug;
 
     p.setQueue(tracks, {
@@ -875,7 +880,7 @@ export default function PortalArea(props: {
     p.setPendingTrackId(undefined);
 
     primedRef.current = true;
-  }, [isPlayer, album, tracks, hasSt, qAlbum, currentAlbumSlug, qTrack, p]);
+  }, [album, tracks, hasSt, qAlbum, currentAlbumSlug, qTrack, p]);
 
   const autoplayFiredRef = React.useRef<string | null>(null);
   React.useEffect(() => {

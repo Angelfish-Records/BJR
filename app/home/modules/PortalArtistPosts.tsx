@@ -1318,7 +1318,7 @@ export default function PortalArtistPosts(props: {
             }}
           >
             <div style={{ fontSize: 13, fontWeight: 750, opacity: 0.92 }}>
-              Submit a question
+              Ask Me Anything
             </div>
             <button
               type="button"
@@ -1359,7 +1359,7 @@ export default function PortalArtistPosts(props: {
             value={questionText}
             onChange={(e) => setQuestionText(e.target.value)}
             maxLength={MAX_CHARS + 200}
-            placeholder="Ask anything you want considered for a future Q&A."
+            placeholder="Your question will be added to the mailbag."
             style={{
               width: "100%",
               minHeight: 96,
