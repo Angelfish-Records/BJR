@@ -240,6 +240,7 @@ export async function POST(req: NextRequest) {
   // Build Portable Text blocks (with _key everywhere)
   const blocks: PortableText = [];
 
+  // Intro
   blocks.push(
     block(
       "normal",
@@ -247,8 +248,9 @@ export async function POST(req: NextRequest) {
     ),
   );
 
+  // All questions first
   for (const q of qRes.rows) {
-    const name = (q.asker_name ?? "").trim();
+    const name = typeof q.asker_name === "string" ? q.asker_name.trim() : "";
     const quoteText = name ? `${q.question_text} — ${name}` : q.question_text;
 
     blocks.push({
@@ -257,10 +259,16 @@ export async function POST(req: NextRequest) {
       style: "blockquote",
       children: [span(quoteText)],
     });
-
-    blocks.push(...answerToPortableTextBlocks(answer));
-    blocks.push(block("normal", " "));
   }
+
+  // Spacer between questions and answer
+  blocks.push(block("normal", " "));
+
+  // Single answer (once)
+  blocks.push(...answerToPortableTextBlocks(answer));
+
+  // Optional trailing spacer (keeps your existing visual rhythm)
+  blocks.push(block("normal", " "));
 
   // Force a stable title + explicit slug so Sanity can never “miss” it
   const fallbackTitle = `Q&A — ${new Date().toISOString().slice(0, 10)}`;
