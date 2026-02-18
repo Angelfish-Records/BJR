@@ -199,7 +199,6 @@ export default defineType({
               validation: (r) => r.required(),
             }),
 
-            // ✅ NEW: Explicit flag (per track)
             defineField({
               name: "explicit",
               title: "Explicit",
@@ -209,7 +208,6 @@ export default defineType({
                 "If enabled, the UI can show an Explicit (E) badge next to this track title.",
             }),
 
-            // ✅ Track override theme
             defineField({
               name: "visualTheme",
               title: "Visualizer Theme (Override)",
