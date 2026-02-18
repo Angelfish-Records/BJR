@@ -513,7 +513,7 @@ function TermsModal(props: { open: boolean; onClose: () => void }) {
           }}
         >
           <div style={{ fontSize: 13, fontWeight: 800, opacity: 0.92 }}>
-            Question terms
+            Terms &amp; Conditions
           </div>
           <button
             type="button"
