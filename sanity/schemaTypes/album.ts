@@ -21,6 +21,17 @@ const TIER_OPTIONS = [
   { title: "Partner", value: "partner" },
 ] as const;
 
+const STREAMING_PLATFORM_OPTIONS = [
+  { title: "Spotify", value: "spotify" },
+  { title: "Apple Music", value: "appleMusic" },
+  { title: "YouTube Music", value: "youtubeMusic" },
+  { title: "Amazon Music", value: "amazonMusic" },
+  { title: "Tidal", value: "tidal" },
+  { title: "Deezer", value: "deezer" },
+] as const;
+
+type StreamingPlatform = (typeof STREAMING_PLATFORM_OPTIONS)[number]["value"];
+
 type AlbumDocForVisibility = {
   earlyAccessEnabled?: boolean;
 };
@@ -66,6 +77,78 @@ export default defineType({
     }),
 
     defineField({ name: "description", type: "text" }),
+
+    defineField({
+      name: "platformLinks",
+      title: "Streaming platform links",
+      type: "array",
+      description:
+        "Outbound links to major streaming platforms for this release. Rendered in neutral monochrome on the website.",
+      of: [
+        {
+          type: "object",
+          name: "platformLink",
+          title: "Platform link",
+          fields: [
+            defineField({
+              name: "platform",
+              title: "Platform",
+              type: "string",
+              options: {
+                list: STREAMING_PLATFORM_OPTIONS as unknown as {
+                  title: string;
+                  value: string;
+                }[],
+              },
+              validation: (r) => r.required(),
+            }),
+            defineField({
+              name: "url",
+              title: "URL",
+              type: "url",
+              description: "Full https URL to the release on this platform.",
+              validation: (r) =>
+                r
+                  .required()
+                  .uri({ scheme: ["https"] })
+                  .custom((v) => {
+                    if (!v) return true;
+                    try {
+                      const u = new URL(String(v));
+                      if (!u.hostname) return "Invalid URL";
+                      return true;
+                    } catch {
+                      return "Invalid URL";
+                    }
+                  }),
+            }),
+          ],
+          preview: {
+            select: { platform: "platform", url: "url" },
+            prepare({
+              platform,
+              url,
+            }: {
+              platform?: StreamingPlatform;
+              url?: string;
+            }) {
+              return { title: platform ?? "Platform", subtitle: url ?? "" };
+            },
+          },
+        },
+      ],
+      validation: (r) =>
+        r.custom((arr) => {
+          if (!arr) return true;
+          const items = arr as Array<{ platform?: string; url?: string }>;
+          const plats = items
+            .map((x) => x.platform)
+            .filter(Boolean) as string[];
+          const dup = plats.find((p, i) => plats.indexOf(p) !== i);
+          if (dup) return `Duplicate platform: ${dup}`;
+          return true;
+        }),
+    }),
 
     // ---- Release + access policy (Approach A) ----
 

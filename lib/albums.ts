@@ -19,6 +19,10 @@ type AlbumDoc = {
   earlyAccessEnabled?: boolean;
   earlyAccessTiers?: string[];
   minTierToLoad?: string;
+  platformLinks?: Array<{
+    platform?: string;
+    url?: string;
+  }>;
   tracks?: Array<{
     id: string; // legacy
     catalogId?: string; // new canonical
@@ -51,14 +55,14 @@ export async function getFeaturedAlbumSlugFromSanity(): Promise<{
       }
   `;
 
-  const res = await client.fetch<{ slug?: string | null; fallbackSlug?: string | null }>(
-    q,
-    {},
-    { next: { tags: ["siteFlags"] } },
-  );
+  const res = await client.fetch<{
+    slug?: string | null;
+    fallbackSlug?: string | null;
+  }>(q, {}, { next: { tags: ["siteFlags"] } });
 
   return {
-    slug: typeof res?.slug === "string" && res.slug.trim() ? res.slug.trim() : null,
+    slug:
+      typeof res?.slug === "string" && res.slug.trim() ? res.slug.trim() : null,
     fallbackSlug:
       typeof res?.fallbackSlug === "string" && res.fallbackSlug.trim()
         ? res.fallbackSlug.trim()
@@ -132,9 +136,7 @@ function parseTierNameArray(v: unknown): TierName[] {
   return v.map(parseTierName).filter((x): x is TierName => x !== null);
 }
 
-export async function getAlbumBySlug(
-  slug: string,
-): Promise<{
+export async function getAlbumBySlug(slug: string): Promise<{
   album: AlbumInfo | null;
   tracks: PlayerTrack[];
   lyrics: AlbumLyricsBundle;
@@ -155,6 +157,10 @@ export async function getAlbumBySlug(
       earlyAccessEnabled,
       earlyAccessTiers,
       minTierToLoad,
+      platformLinks[]{
+        platform,
+        url
+      },
       "tracks": tracks[]{
         id,
         catalogId,
@@ -202,6 +208,18 @@ export async function getAlbumBySlug(
     artworkUrl: doc.artwork
       ? urlFor(doc.artwork).width(900).height(900).quality(85).url()
       : null,
+        platformLinks: Array.isArray(doc.platformLinks)
+      ? doc.platformLinks
+          .filter(
+            (p): p is { platform: string; url: string } =>
+              typeof p?.platform === "string" &&
+              typeof p?.url === "string",
+          )
+          .map((p) => ({
+            platform: p.platform,
+            url: p.url,
+          }))
+      : [],
     policy: {
       publicPageVisible: doc.publicPageVisible !== false,
       releaseAt: doc.releaseAt ?? null,

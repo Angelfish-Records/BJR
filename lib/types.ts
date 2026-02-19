@@ -19,6 +19,7 @@ export type AlbumInfo = {
   artworkUrl?: string | null;
   policy?: AlbumPolicy;
   embargo?: AlbumEmbargoInfo;
+  platformLinks?: { platform: string; url: string }[];
 };
 
 export type AlbumPolicy = {
