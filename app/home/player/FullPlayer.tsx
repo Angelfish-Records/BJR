@@ -282,38 +282,26 @@ function PlatformIcon({ platform }: { platform: StreamingPlatform }) {
 
     case "amazonMusic":
       return (
-        <svg {...common} viewBox="0 0 24 24">
-          <g transform="translate(-87 -292.9) scale(0.09375)">
-            <path
-              fill="currentColor"
-              fillRule="evenodd"
-              d="M306,500.1c-1.3,0-2.6,0.3-3.8,0.9c-1.4,0.6-2.8,1.2-4.1,1.7l-1.9,0.8l-2.5,1v0c-27.5,11.1-56.3,17.7-83,18.2
-          c-1,0-2,0-2.9,0c-42,0-76.2-19.5-110.8-38.6c-1.2-0.6-2.4-1-3.6-1c-1.6,0-3.1,0.6-4.3,1.7c-1.2,1.1-1.9,2.7-1.8,4.3
-          c0,2.1,1.1,4,2.7,5.3c32.4,28.2,68,54.3,115.8,54.4c0.9,0,1.9,0,2.8,0c30.4-0.7,64.8-11,91.5-27.7l0.2-0.1c3.5-2.1,7-4.5,10.3-7.1
-          c2-1.5,3.5-3.9,3.5-6.4C313.7,503.1,310,500.1,306,500.1z"
-            />
-            <path
-              fill="currentColor"
-              fillRule="evenodd"
-              d="M343,484.6L343,484.6c-0.1-2.7-0.7-4.7-1.8-6.4l-0.1-0.2l-0.1-0.2c-1.1-1.2-2.2-1.7-3.4-2.2
-          c-3.5-1.3-8.6-2.1-14.7-2.1c-4.4,0-9.3,0.4-14.2,1.5l0-0.3l-4.9,1.6l-0.1,0l-2.8,0.9v0.1c-3.3,1.4-6.2,3-9,5
-          c-1.7,1.3-3.1,3-3.2,5.6c0,1.4,0.7,3,1.9,4c1.2,1,2.6,1.3,3.8,1.3c0.3,0,0.6,0,0.8-0.1l0.2,0l0.2,0c2.4-0.5,5.9-0.8,10-1.4
-          c3.5-0.4,7.3-0.7,10.5-0.7c2.3,0,4.4,0.1,5.8,0.5c0.7,0.1,1.2,0.3,1.5,0.5c0.1,0,0.2,0.1,0.2,0.1c0.1,0.2,0.1,0.7,0.1,1.4
-          c0,2.7-1.1,7.7-2.7,12.6c-1.5,4.9-3.4,9.8-4.6,13.1c-0.3,0.8-0.5,1.6-0.5,2.5c0,1.3,0.5,2.9,1.6,4c1.1,1.1,2.6,1.5,3.8,1.5h0.1
-          c1.8,0,3.4-0.7,4.7-1.8c12.5-11.2,16.8-29.2,17-39.3L343,484.6z"
-            />
-            <path
-              fill="currentColor"
-              fillRule="evenodd"
-              d="M228.7,364.1c-7.3,0.6-15.8,1.1-24.3,2.2c-13,1.7-26,4-36.7,9.1c-20.9,8.5-35,26.5-35,53.1
-          c0,33.3,21.5,50.3,48.6,50.3c9,0,16.4-1.1,23.1-2.8c10.8-3.4,19.8-9.6,30.5-20.9c6.2,8.5,7.9,12.4,18.6,21.5
-          c2.8,1.1,5.7,1.1,7.9-0.6c6.8-5.7,18.7-15.8,24.9-21.5c2.8-2.3,2.3-5.7,0.6-8.5c-6.2-7.9-12.4-14.7-12.4-30v-50.8
-          c0-21.5,1.7-41.2-14.1-55.9c-13-11.9-33.3-16.4-49.2-16.4h-6.8c-28.8,1.7-59.3,14.1-66.1,49.7c-1.1,4.5,2.3,6.2,4.5,6.8l31.6,4
-          c3.4-0.6,5.1-3.4,5.6-6.2c2.8-12.4,13-18.7,24.3-19.8h2.3c6.8,0,14.1,2.8,18.1,8.5c4.5,6.8,4,15.8,4,23.7V364.1z M222.5,431.3
-          c-4,7.9-10.7,13-18.1,14.7c-1.1,0-2.8,0.6-4.5,0.6c-12.4,0-19.8-9.6-19.8-23.7c0-18.1,10.7-26.6,24.3-30.5
-          c7.3-1.7,15.8-2.3,24.3-2.3v6.8C228.7,409.9,229.3,420,222.5,431.3z"
-            />
-          </g>
+        <svg {...common} viewBox="0 0 32 32">
+          <path
+            fill="currentColor"
+            d="M16 2C8.27812 2 2 8.27812 2 16C2 23.7219 8.27812 30 16 30C23.7219 30 30 23.7219 30 16C30 8.27812 23.7219 2 16 2Z"
+            opacity="0.18"
+          />
+          <path
+            fill="currentColor"
+            fillRule="evenodd"
+            clipRule="evenodd"
+            d="M20.8099 18.038C20.7688 17.979 20.7274 17.9213 20.6862 17.8639C20.3513 17.3971 20.0322 16.9521 20.0322 16.0603V12.7356C20.0322 12.62 20.0328 12.5052 20.0335 12.3913C20.0408 11.1166 20.0474 9.95337 19.1281 9.06351C18.3397 8.27737 17.0301 8 16.0286 8C14.0698 8 11.8846 8.75761 11.4264 11.2681C11.3779 11.5348 11.5646 11.6743 11.734 11.7136L13.7285 11.9374C13.9153 11.9276 14.0502 11.7372 14.0863 11.5455C14.2574 10.6804 14.956 10.2648 15.741 10.2648C16.1643 10.2648 16.6451 10.4253 16.8956 10.8191C17.154 11.2117 17.1499 11.7359 17.1462 12.2047C17.1458 12.2593 17.1454 12.3131 17.1454 12.3659V12.6446C16.9603 12.6661 16.7664 12.6864 16.5667 12.7073C15.4789 12.8214 14.2185 12.9535 13.2746 13.3826C11.9859 13.9614 11.0809 15.1391 11.0809 16.8701C11.0809 19.0885 12.4275 20.1975 14.1613 20.1975C15.6244 20.1975 16.4251 19.8394 17.5539 18.6462C17.6103 18.7309 17.6609 18.809 17.7087 18.8826C17.9779 19.2978 18.1537 19.5687 18.7337 20.0691C18.8868 20.1538 19.0894 20.1506 19.2251 20.0231C19.6361 19.6441 20.3824 18.9717 20.8031 18.6061C20.9712 18.4629 20.9414 18.2315 20.8099 18.038ZM16.7604 17.0792C16.4337 17.6812 15.9133 18.0495 15.3351 18.0495C14.5467 18.0495 14.0838 17.4253 14.0838 16.5018C14.0838 14.6838 15.6572 14.3538 17.145 14.3538C17.145 14.4626 17.146 14.572 17.1469 14.6816C17.1542 15.5046 17.1617 16.3439 16.7604 17.0792Z"
+          />
+          <path
+            fill="currentColor"
+            d="M23.2699 21.6659C21.2997 23.1894 18.4425 24 15.9818 24C12.5345 24 9.42926 22.6645 7.07958 20.4412C6.89528 20.2664 7.05978 20.0277 7.28121 20.1634C9.81666 21.7097 12.9516 22.6405 16.1893 22.6405C18.3738 22.6405 20.7746 22.1658 22.9836 21.1832C23.3168 21.0355 23.5961 21.4139 23.2699 21.6659Z"
+          />
+          <path
+            fill="currentColor"
+            d="M21.7891 20.6047C22.4234 20.5244 23.8379 20.3467 24.0897 20.6845C24.3419 21.022 23.8123 22.4099 23.5736 23.0355L23.5719 23.04C23.5001 23.2287 23.6545 23.304 23.8172 23.161C24.8745 22.2346 25.1477 20.2928 24.931 20.0114C24.7161 19.7339 22.8677 19.4936 21.7398 20.3239C21.5664 20.4527 21.5961 20.6282 21.7891 20.6047Z"
+          />
         </svg>
       );
 
@@ -325,7 +313,6 @@ function PlatformIcon({ platform }: { platform: StreamingPlatform }) {
 function AvailableOnRibbon({ links }: { links: PlatformLink[] }) {
   if (!links.length) return null;
 
-  // stable, neutral order (don’t make it feel ideological)
   const order: StreamingPlatform[] = [
     "spotify",
     "appleMusic",
@@ -348,7 +335,9 @@ function AvailableOnRibbon({ links }: { links: PlatformLink[] }) {
 
   return (
     <div className="afAvailWrap" aria-label="Available on">
-      <div className="afAvailLabel">Available on</div>
+      <div className="afAvailLine" aria-hidden="true" />
+      <div className="afAvailLabel">AVAILABLE ON</div>
+
       <div className="afAvailIcons">
         {ordered.map(({ platform, url }) => (
           <a
@@ -1488,56 +1477,81 @@ export default function FullPlayer(props: {
         }
 
         .afAvailWrap{
-          margin-top: 10px;
-          display: flex;
-          justify-content: flex-end;
-          align-items: center;
-          gap: 10px;
-          color: rgba(255,255,255,0.62);
-          user-select: none;
-        }
-        .afAvailLabel{
-          font-size: 11px;
-          font-weight: 700;
-          letter-spacing: 0.28px;
-          text-transform: uppercase;
-          opacity: 0.85;
-        }
-        .afAvailIcons{
-          display: inline-flex;
-          align-items: center;
-          gap: 10px;
-        }
-        .afAvailIcon{
-          width: 26px;
-          height: 22px;
-          display: grid;
-          place-items: center;
-          border-radius: 10px;
-          border: 1px solid rgba(255,255,255,0.10);
-          background: rgba(255,255,255,0.03);
-          color: rgba(255,255,255,0.70);
-          transition: transform 120ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease, opacity 120ms ease;
-          opacity: 0.92;
-        }
-        .afAvailIcon:hover{
-          transform: translateY(-1px);
-          background: rgba(255,255,255,0.05);
-          border-color: rgba(255,255,255,0.14);
-          color: rgba(255,255,255,0.86);
-          opacity: 1;
-        }
-        .afAvailIcon:focus-visible{
-          outline: none;
-          box-shadow: 0 0 0 3px rgba(255,255,255,0.12);
-        }
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;          /* centers ribbon within parent */
+  justify-content: center;
+  gap: 8px;
+  color: rgba(255,255,255,0.62);
+  user-select: none;
+}
 
-        @media (max-width: 520px){
-          .afAvailWrap{
-            justify-content: center;
-            margin-top: 12px;
-          }
-        }
+.afAvailLine{
+  width: fit-content;
+  min-width: 110px;            /* fallback so it’s never tiny */
+  height: 1px;
+  background: rgba(255,255,255,0.14);
+  border-radius: 999px;
+  opacity: 0.85;
+}
+
+/* make the line match the icon row width */
+.afAvailIcons{
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+}
+.afAvailIcons::before{
+  content: "";
+  position: absolute;
+  top: -14px;                  /* sits above the label */
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(255,255,255,0.14);
+  border-radius: 999px;
+  opacity: 0.85;
+}
+
+/* kill the separate .afAvailLine if you prefer the ::before approach */
+.afAvailLine{ display: none; }
+
+.afAvailLabel{
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.28px;
+  text-transform: uppercase;
+  opacity: 0.85;
+  text-align: center;
+}
+
+.afAvailIcon{
+  width: 26px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.03);
+  color: rgba(255,255,255,0.70);
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease, opacity 120ms ease;
+  opacity: 0.92;
+}
+
+.afAvailIcon:hover{
+  transform: translateY(-1px);
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.86);
+  opacity: 1;
+}
+
+.afAvailIcon:focus-visible{
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.12);
+}
 
 
       `}</style>
