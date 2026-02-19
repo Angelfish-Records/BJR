@@ -22,8 +22,8 @@ function lockBodyScroll(lock: boolean) {
   }
 }
 
-type CuesByTrackId = Record<string, LyricCue[]>;
-type OffsetByTrackId = Record<string, number>;
+export type CuesByTrackId = Record<string, LyricCue[]>;
+export type OffsetByTrackId = Record<string, number>;
 
 function useIsMobile(breakpointPx = 640) {
   const [isMobile, setIsMobile] = React.useState(false);

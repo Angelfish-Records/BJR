@@ -24,7 +24,8 @@ import {
 } from "@/lib/albums";
 import type { AlbumNavItem } from "@/lib/types";
 
-import StageInline from "@/app/home/player/StageInline";
+import StageInlineHost from "@/app/home/player/StageInlineHost";
+import { createHash } from "crypto";
 import FooterDrawer from "@/app/home/FooterDrawer";
 
 export const dynamic = "force-dynamic";
@@ -162,6 +163,19 @@ export default async function HomeLayout(props: { children: React.ReactNode }) {
 
   const albumSlug = featuredAlbumSlug;
   const albumData = await getAlbumBySlug(albumSlug);
+
+  const cuesObj = albumData.lyrics.cuesByTrackId ?? {};
+  const offsetsObj = albumData.lyrics.offsetByTrackId ?? {};
+
+  // Stable content signature so client can ignore fresh object identities.
+  const cuesJson = JSON.stringify(cuesObj);
+  const offsetsJson = JSON.stringify(offsetsObj);
+
+  const sig = createHash("sha1")
+    .update(cuesJson)
+    .update("|")
+    .update(offsetsJson)
+    .digest("hex");
 
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
   const pageUrl = appUrl ? `${appUrl}/home/player` : "";
@@ -313,7 +327,10 @@ export default async function HomeLayout(props: { children: React.ReactNode }) {
             </div>
 
             {/* LEFT: portal shell (now persistent across /home/*) */}
-            <div className="shadowHomeMain" style={{ display: "grid", gap: 18 }}>
+            <div
+              className="shadowHomeMain"
+              style={{ display: "grid", gap: 18 }}
+            >
               <PortalArea
                 portalPanel={portalPanel}
                 albumSlug={albumSlug}
@@ -346,10 +363,11 @@ export default async function HomeLayout(props: { children: React.ReactNode }) {
                 gap: 14,
               }}
             >
-              <StageInline
+              <StageInlineHost
                 height={560}
-                cuesByTrackId={albumData.lyrics.cuesByTrackId}
-                offsetByTrackId={albumData.lyrics.offsetByTrackId}
+                cuesJson={cuesJson}
+                offsetsJson={offsetsJson}
+                sig={sig}
               />
             </aside>
           </div>

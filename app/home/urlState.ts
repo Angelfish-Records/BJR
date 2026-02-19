@@ -5,9 +5,57 @@ import * as React from "react";
 
 const QS_EVENT = "af:qs-change";
 
+// Secondary query policy (strict allowlist).
+// Surfaces are path-based now; query is for secondary concerns only.
+const ALLOW_KEYS = new Set([
+  "st",
+  "share",
+  "autoplay",
+  "gift",
+  "checkout",
+  "post",
+  "pt",
+]);
+
+const ALLOW_PREFIXES = ["utm_"];
+
+// Explicitly forbidden legacy/state keys (must never persist).
+const FORBIDDEN_KEYS = new Set(["p", "panel", "album", "track", "t"]);
+
 function safeGetSearch(): string {
   if (typeof window === "undefined") return "";
   return window.location.search || "";
+}
+
+function isAllowedKey(k: string): boolean {
+  if (ALLOW_KEYS.has(k)) return true;
+  return ALLOW_PREFIXES.some((p) => k.startsWith(p));
+}
+
+/** Mutates params to enforce the secondary-query policy. */
+export function sanitizeSecondaryQuery(params: URLSearchParams): void {
+  // 1) kill forbidden keys always
+  for (const k of Array.from(params.keys())) {
+    if (FORBIDDEN_KEYS.has(k)) params.delete(k);
+  }
+
+  // 2) strict allowlist for everything else
+  for (const k of Array.from(params.keys())) {
+    if (!isAllowedKey(k)) params.delete(k);
+  }
+
+  // 3) normalize share -> st when present (prefer explicit st)
+  const st = (params.get("st") ?? "").trim();
+  const share = (params.get("share") ?? "").trim();
+  if (!st && share) {
+    params.set("st", share);
+  }
+  if (share) params.delete("share");
+
+  // 4) trim empties
+  for (const [k, v] of Array.from(params.entries())) {
+    if (!String(v ?? "").trim()) params.delete(k);
+  }
 }
 
 export function useClientSearchParams(): URLSearchParams {
@@ -25,10 +73,11 @@ export function useClientSearchParams(): URLSearchParams {
     };
   }, []);
 
-  return React.useMemo(
-    () => new URLSearchParams((qs || "").replace(/^\?/, "")),
-    [qs],
-  );
+  return React.useMemo(() => {
+    const params = new URLSearchParams((qs || "").replace(/^\?/, ""));
+    sanitizeSecondaryQuery(params);
+    return params;
+  }, [qs]);
 }
 
 export function getAutoplayFlag(sp: URLSearchParams): boolean {
@@ -40,7 +89,6 @@ export function getAutoplayFlag(sp: URLSearchParams): boolean {
  * Patch semantics:
  * - null/undefined/'' => delete
  * - otherwise => set
- * Preserves all other existing keys.
  *
  * IMPORTANT: This must NOT implement any portal/player surface logic.
  * Surfaces are path-based now. Query is secondary only.
@@ -51,11 +99,20 @@ export function replaceQuery(patch: Record<string, string | null | undefined>) {
   const url = new URL(window.location.href);
   const params = new URLSearchParams(url.search);
 
+  // Never allow forbidden legacy keys to be introduced via patch.
+  for (const k of Object.keys(patch)) {
+    if (FORBIDDEN_KEYS.has(k)) delete patch[k];
+  }
+
+  // apply patch
   for (const [k, v] of Object.entries(patch)) {
     const sv = v == null ? "" : String(v);
     if (v == null || sv.trim() === "") params.delete(k);
     else params.set(k, sv);
   }
+
+  // Enforce policy after patch
+  sanitizeSecondaryQuery(params);
 
   const next = params.toString();
   const cur = url.searchParams.toString();
