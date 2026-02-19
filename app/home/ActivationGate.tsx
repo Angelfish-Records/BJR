@@ -511,7 +511,8 @@ export default function ActivationGate(props: Props) {
   const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { isMembershipOpen, openMembershipModal, closeMembershipModal } = useMembershipModal();
+  const { isMembershipOpen, openMembershipModal, closeMembershipModal } =
+    useMembershipModal();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const emailInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -1146,19 +1147,19 @@ export default function ActivationGate(props: Props) {
                           borderRadius: 999,
                           display: "grid",
                           placeItems: "center",
-                          background:
-                            "color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,0.10))",
-                          boxShadow:
-                            "0 10px 18px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.18)",
+                          background: "rgba(255,255,255,0.31)",
+                          border: "none",
+                          boxShadow: "none",
                           flex: "0 0 auto",
                         }}
                       >
                         <span
                           style={{
                             fontSize: 11,
-                            lineHeight: "11px",
-                            transform: "translateY(-0.5px)",
-                            color: "rgba(255,255,255,0.92)",
+                            lineHeight: 1,
+                            fontWeight: 700,
+                            color: "rgba(0,0,0,0.92)",
+                            transform: "translateY(-0.75px)",
                           }}
                         >
                           ✓

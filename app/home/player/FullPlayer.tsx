@@ -1257,7 +1257,7 @@ export default function FullPlayer(props: {
   font-weight: 750;
   line-height: 1;
   letter-spacing: 0.2px;
-  transform: translateY(-0.5px);
+  transform: translateY(-1.5px);
   user-select: none;
 }
 
