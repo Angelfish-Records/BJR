@@ -1265,7 +1265,7 @@ export default function PortalArtistPosts(props: {
 
       <div
         style={{
-          marginTop: 10,
+          marginTop: 2,
           borderRadius: 18,
           border: "1px solid rgba(255,255,255,0.10)",
           background: "rgba(255,255,255,0.03)",

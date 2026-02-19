@@ -218,27 +218,25 @@ const ICON_WAVE = (
   </svg>
 );
 
-const ICON_24 = (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+const ICON_FORMATS = (
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    aria-hidden="true"
+  >
     <path
-      d="M7 7h10v10H7z"
+      d="M20 13.5 12.5 21a2 2 0 0 1-2.8 0L3 14.3V4h10.3L20 10.7a2 2 0 0 1 0 2.8Z"
       stroke="currentColor"
       strokeWidth="1.6"
-      opacity="0.35"
-    />
-    <path
-      d="M7.5 14.5c2.3-2.6 5.2-2.6 5.2-.8 0 1.7-3.7 1.5-5.2 3.8h5.6"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
       strokeLinejoin="round"
     />
     <path
-      d="M15.6 12.2v5.3M18.7 16.1h-4.5"
+      d="M7.8 7.8h.01"
       stroke="currentColor"
-      strokeWidth="1.6"
+      strokeWidth="3"
       strokeLinecap="round"
-      strokeLinejoin="round"
     />
   </svg>
 );
@@ -377,7 +375,7 @@ function DownloadOfferCard(props: {
       {/* Bandcamp-style icon notes (hard-coded) */}
       <div style={{ marginTop: 14, display: "grid", gap: 10, fontSize: 13 }}>
         <NoteRow icon={ICON_WAVE}>{includesText}</NoteRow>
-        <NoteRow icon={ICON_24}>
+        <NoteRow icon={ICON_FORMATS}>
           {techSpec ?? "Download available in 24-bit / 96kHz."}
         </NoteRow>
         <NoteRow icon={ICON_DOLLAR}>
