@@ -27,7 +27,7 @@ type ModuleRichText = {
   title?: string;
   teaser?: import("@portabletext/types").PortableTextBlock[];
   full?: import("@portabletext/types").PortableTextBlock[];
-  requiresEntitlement?: string;
+  requiresEntitlement?: string | null;
 };
 
 type ModuleCardGrid = {
@@ -467,11 +467,10 @@ function renderModule(m: PortalModule, entitlementKeys: string[]) {
   if (m._type === "moduleHeading") return null;
 
   if (m._type === "moduleRichText") {
-    console.log("[PortalModules] entitlementKeys:", entitlementKeys);
-    console.log("[PortalModules] requiresEntitlement:", m.requiresEntitlement);
-
     const entitled = hasKey(entitlementKeys, m.requiresEntitlement);
-    const blocks = entitled ? (m.full ?? []) : (m.teaser ?? []);
+
+    const blocks =
+      !m.requiresEntitlement || entitled ? (m.full ?? []) : (m.teaser ?? []);
 
     return (
       <PortalRichText
