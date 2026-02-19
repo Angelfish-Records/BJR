@@ -467,8 +467,10 @@ function renderModule(m: PortalModule, entitlementKeys: string[]) {
   if (m._type === "moduleHeading") return null;
 
   if (m._type === "moduleRichText") {
-    const entitled = hasKey(entitlementKeys, m.requiresEntitlement);
+    console.log("[PortalModules] entitlementKeys:", entitlementKeys);
+    console.log("[PortalModules] requiresEntitlement:", m.requiresEntitlement);
 
+    const entitled = hasKey(entitlementKeys, m.requiresEntitlement);
     const blocks = entitled ? (m.full ?? []) : (m.teaser ?? []);
 
     return (
