@@ -1,3 +1,4 @@
+// sanity/schemaTypes/modules/moduleRichText.ts
 import { defineField, defineType } from "sanity";
 
 export const moduleRichText = defineType({
@@ -11,13 +12,24 @@ export const moduleRichText = defineType({
       type: "string",
     }),
 
-    // Keep it simple: portable text for both teaser and full.
+    // Shown when NOT entitled (optional if the module is not gated).
+    defineField({
+      name: "teaser",
+      title: "Teaser",
+      type: "array",
+      of: [{ type: "block" }],
+      description: "Shown when the viewer is not entitled (if gated).",
+    }),
+
+    // Shown when entitled (or always, if not gated).
     defineField({
       name: "full",
       title: "Full",
       type: "array",
       of: [{ type: "block" }],
-      description: "Only sent/rendered when entitled.",
+      description:
+        "Shown when the viewer is entitled (or always if not gated).",
+      validation: (r) => r.required(),
     }),
 
     defineField({
