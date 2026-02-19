@@ -879,16 +879,39 @@ export default function PortalArea(props: {
   }, [albumSlug, initialAlbum, initialTracks]);
 
   const onSelectAlbum = React.useCallback(
-    async (slug: string) => {
+    (slug: string) => {
       if (!slug) return;
 
-      const saved = getSavedSt(slug);
-      const qs = new URLSearchParams();
-      if (saved) qs.set("st", saved);
+      const out = new URLSearchParams();
 
-      router.push(
-        `/album/${encodeURIComponent(slug)}${qs.toString() ? `?${qs}` : ""}`,
-      );
+      // 1) carry forward allowed params from the current URL first
+      try {
+        const cur = new URLSearchParams(window.location.search);
+
+        const st = (cur.get("st") ?? "").trim();
+        const share = (cur.get("share") ?? "").trim();
+        const autoplay = (cur.get("autoplay") ?? "").trim();
+
+        if (st) out.set("st", st);
+        else if (share) out.set("share", share);
+
+        if (autoplay) out.set("autoplay", autoplay);
+
+        for (const [k, v] of cur.entries()) {
+          if (k.startsWith("utm_") && v.trim()) out.set(k, v.trim());
+        }
+      } catch {
+        // ignore
+      }
+
+      // 2) if we still don't have a token, fall back to per-album saved st
+      if (!out.get("st") && !out.get("share")) {
+        const saved = getSavedSt(slug);
+        if (saved) out.set("st", saved);
+      }
+
+      const q = out.toString();
+      router.push(`/album/${encodeURIComponent(slug)}${q ? `?${q}` : ""}`);
     },
     [router],
   );
