@@ -13,6 +13,7 @@ export type PortalModuleRichText = {
   _key: string;
   _type: "moduleRichText";
   title?: string;
+  teaser?: PortableTextBlock[];
   full?: PortableTextBlock[];
   requiresEntitlement?: string;
 };
@@ -104,6 +105,7 @@ const portalPageQuery = `
       blurb,
 
       // moduleRichText
+      teaser,
       full,
       requiresEntitlement,
 
