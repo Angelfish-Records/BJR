@@ -54,12 +54,23 @@ function addUtm(
   return u;
 }
 
+function maybeAddSt(u: URL, st?: string) {
+  const v = (st ?? "").trim();
+  if (v) u.searchParams.set("st", v);
+  return u;
+}
+
+function encodePathSeg(s: string) {
+  return encodeURIComponent(s);
+}
+
 export function buildShareTarget(
   input:
     | {
         type: "album";
         methodHint?: ShareMethod;
         origin?: string;
+        st?: string;
         album: {
           slug: string;
           title: string;
@@ -71,6 +82,7 @@ export function buildShareTarget(
         type: "track";
         methodHint?: ShareMethod;
         origin?: string;
+        st?: string;
         album: {
           slug: string;
           title: string;
@@ -83,6 +95,7 @@ export function buildShareTarget(
         type: "post";
         methodHint?: ShareMethod;
         origin?: string;
+        st?: string;
         post: { slug: string; title?: string; id?: string };
         authorName?: string;
       },
@@ -92,15 +105,16 @@ export function buildShareTarget(
 
   if (input.type === "post") {
     const postTitle = input.post.title?.trim() || "Post";
-    const basePath = `/posts/${encodeURIComponent(input.post.slug)}`;
+    const basePath = `/posts/${encodePathSeg(input.post.slug)}`;
     const baseAbs = origin ? `${origin}${basePath}` : basePath;
+
     const abs = origin ? new URL(baseAbs) : null;
     if (abs) {
-      abs.searchParams.set("p", "player");
-      addUtm(abs, method, "album");
+      maybeAddSt(abs, input.st);
+      addUtm(abs, method, "post");
     }
 
-    const url = abs ? abs.toString() : `${baseAbs}?p=player`;
+    const url = abs ? abs.toString() : baseAbs;
 
     const who = input.authorName?.trim();
     const title = who ? `${postTitle} — ${who}` : postTitle;
@@ -118,13 +132,16 @@ export function buildShareTarget(
 
   const artist = input.album.artistName?.trim();
   const albumTitle = input.album.title?.trim() || "Album";
-  const basePath = `/albums/${encodeURIComponent(input.album.slug)}`;
+
+  // ✅ canonical album base path
+  const basePath = `/album/${encodePathSeg(input.album.slug)}`;
   const baseAbs = origin ? `${origin}${basePath}` : basePath;
 
   if (input.type === "album") {
     const url = origin
-      ? addUtm(new URL(baseAbs), method, "album").toString()
+      ? addUtm(maybeAddSt(new URL(baseAbs), input.st), method, "album").toString()
       : baseAbs;
+
     const title = artist ? `${artist} — ${albumTitle}` : albumTitle;
     const text = artist
       ? `Listen to ${albumTitle} by ${artist}`
@@ -140,17 +157,16 @@ export function buildShareTarget(
     };
   }
 
+  // ✅ canonical track path (no query-based player state)
   const trackTitle = input.track.title?.trim() || "Track";
-  const abs = origin ? new URL(baseAbs) : null;
-  if (abs) {
-    abs.searchParams.set("p", "player");
-    abs.searchParams.set("track", input.track.id); // canonical for PortalArea
-    addUtm(abs, method, "track");
-  }
+  const trackPath = `/album/${encodePathSeg(input.album.slug)}/track/${encodePathSeg(
+    input.track.id,
+  )}`;
+  const trackAbs = origin ? `${origin}${trackPath}` : trackPath;
 
-  const url = abs
-    ? abs.toString()
-    : `${baseAbs}?p=player&track=${encodeURIComponent(input.track.id)}`;
+  const url = origin
+    ? addUtm(maybeAddSt(new URL(trackAbs), input.st), method, "track").toString()
+    : trackAbs;
 
   const title = artist
     ? `${trackTitle} — ${albumTitle} — ${artist}`
@@ -206,12 +222,10 @@ export async function performShare(target: ShareTarget): Promise<ShareResult> {
           await nav.share(payload);
           return { ok: true, method: "native", url };
         } catch (err) {
-          // Key fix:
-          // If user cancels/dismisses the native share sheet, DO NOT fall back to copying.
           if (isAbortError(err)) {
             return { ok: false, reason: "failed", url };
           }
-          // Otherwise, fall through to clipboard fallback (useful for genuine failures).
+          // fall through to clipboard
         }
       }
     }

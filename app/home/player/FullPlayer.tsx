@@ -2,6 +2,7 @@
 "use client";
 
 import React from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { usePlayer } from "./PlayerState";
 import type {
   AlbumInfo,
@@ -359,6 +360,44 @@ function AvailableOnRibbon({ links }: { links: PlatformLink[] }) {
   );
 }
 
+function parsePublicAlbumPath(pathname: string | null): {
+  albumSlug: string | null;
+  trackId: string | null;
+} {
+  const p = (pathname ?? "").trim();
+  // /album/:slug
+  // /album/:slug/track/:trackId
+  const m = p.match(/^\/album\/([^\/?#]+)(?:\/track\/([^\/?#]+))?\/?$/i);
+  if (!m) return { albumSlug: null, trackId: null };
+  const albumSlug = decodeURIComponent(m[1] ?? "").trim() || null;
+  const trackId = decodeURIComponent(m[2] ?? "").trim() || null;
+  return { albumSlug, trackId };
+}
+
+function canonicalCarryQuery(): string {
+  // Only carry the params that are allowed to exist on canonical public routes.
+  if (typeof window === "undefined") return "";
+  const sp = new URLSearchParams(window.location.search);
+  const out = new URLSearchParams();
+
+  const st = (sp.get("st") ?? "").trim();
+  const share = (sp.get("share") ?? "").trim();
+  const autoplay = (sp.get("autoplay") ?? "").trim();
+
+  if (st) out.set("st", st);
+  else if (share) out.set("share", share);
+
+  if (autoplay) out.set("autoplay", autoplay);
+
+  // keep utm_* if present
+  for (const [k, v] of sp.entries()) {
+    if (k.startsWith("utm_") && v.trim()) out.set(k, v.trim());
+  }
+
+  const q = out.toString();
+  return q ? `?${q}` : "";
+}
+
 export default function FullPlayer(props: {
   albumSlug: string;
   album: AlbumInfo | null;
@@ -400,6 +439,28 @@ export default function FullPlayer(props: {
   const effAlbumSlug = showCached ? stableView!.albumSlug : albumSlug;
   const effAlbum = showCached ? stableView!.album : album;
   const effTracks = showCached ? stableView!.tracks : tracks;
+
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const route = React.useMemo(() => parsePublicAlbumPath(pathname), [pathname]);
+  const isPublicAlbumRoute = Boolean(route.albumSlug);
+
+  const goCanonicalTrack = React.useCallback(
+    (trackId: string | null, mode: "push" | "replace" = "push") => {
+      if (!isPublicAlbumRoute) return;
+
+      const qs = canonicalCarryQuery();
+      const base = `/album/${encodeURIComponent(effAlbumSlug)}`;
+      const href = trackId
+        ? `${base}/track/${encodeURIComponent(trackId)}${qs}`
+        : `${base}${qs}`;
+
+      if (mode === "replace") router.replace(href);
+      else router.push(href);
+    },
+    [isPublicAlbumRoute, router, effAlbumSlug],
+  );
 
   const [pendingAlbumSlug, setPendingAlbumSlug] = React.useState<string | null>(
     null,
@@ -645,6 +706,11 @@ export default function FullPlayer(props: {
       contextArtist: effAlbum?.artist ?? undefined,
     });
 
+    if (isPublicAlbumRoute) {
+      // Pressing play on an album implies first-track is the canonical track leaf.
+      goCanonicalTrack(firstTrack.id, "replace");
+    }
+
     p.play(firstTrack);
     window.dispatchEvent(new Event("af:play-intent"));
   };
@@ -704,6 +770,11 @@ export default function FullPlayer(props: {
     const t = effTracks[i];
     if (!t) return;
     ensureAlbumQueue();
+    if (isPublicAlbumRoute) {
+      // User-initiated navigation; preserve history.
+      goCanonicalTrack(t.id, "push");
+    }
+
     p.play(t);
     window.dispatchEvent(new Event("af:play-intent"));
   }
@@ -985,6 +1056,7 @@ export default function FullPlayer(props: {
                 onFocus={() => prefetchTrack(t)}
                 onClick={() => {
                   if (!canPlay) return;
+
                   p.setQueue(effTracks, {
                     contextId: albumKey ?? undefined,
                     artworkUrl: effAlbum?.artworkUrl ?? null,
@@ -992,6 +1064,19 @@ export default function FullPlayer(props: {
                     contextTitle: effAlbum?.title ?? undefined,
                     contextArtist: effAlbum?.artist ?? undefined,
                   });
+
+                  if (isPublicAlbumRoute) {
+                    // Track selection should be reflected in canonical path.
+                    goCanonicalTrack(t.id, "push");
+                  } else {
+                    // Legacy/query runtime: reflect selection via query for now.
+                    replaceQuery({
+                      p: "player",
+                      album: effAlbumSlug,
+                      track: t.id,
+                      t: null,
+                    });
+                  }
 
                   if (isCoarsePointer) {
                     p.play(t);
@@ -1004,6 +1089,18 @@ export default function FullPlayer(props: {
                 onDoubleClick={() => {
                   if (isCoarsePointer) return;
                   if (!canPlay) return;
+
+                  if (isPublicAlbumRoute) {
+                    goCanonicalTrack(t.id, "push");
+                  } else {
+                    replaceQuery({
+                      p: "player",
+                      album: effAlbumSlug,
+                      track: t.id,
+                      t: null,
+                    });
+                  }
+
                   p.play(t);
                   window.dispatchEvent(new Event("af:play-intent"));
                 }}

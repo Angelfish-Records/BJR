@@ -2,6 +2,7 @@
 "use client";
 
 import React from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useAuth } from "@clerk/nextjs";
 import PortalShell, { PortalPanelSpec } from "./PortalShell";
@@ -621,6 +622,21 @@ function SpotlightModal(props: {
   );
 }
 
+function parsePublicAlbumPath(pathname: string | null): {
+  albumSlug: string | null;
+  trackId: string | null;
+} {
+  const p = (pathname ?? "").trim();
+  // Expected:
+  // /album/:slug
+  // /album/:slug/track/:trackId
+  const m = p.match(/^\/album\/([^\/?#]+)(?:\/track\/([^\/?#]+))?\/?$/i);
+  if (!m) return { albumSlug: null, trackId: null };
+  const albumSlug = decodeURIComponent(m[1] ?? "").trim() || null;
+  const trackId = decodeURIComponent(m[2] ?? "").trim() || null;
+  return { albumSlug, trackId };
+}
+
 export default function PortalArea(props: {
   portalPanel: React.ReactNode;
   topLogoUrl?: string | null;
@@ -654,7 +670,17 @@ export default function PortalArea(props: {
   const { isSignedIn: isSignedInRaw } = useAuth();
   const isSignedIn = Boolean(isSignedInRaw);
 
-  const rawP = normalizeP(sp.get("p") ?? "player");
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const route = React.useMemo(() => parsePublicAlbumPath(pathname), [pathname]);
+
+  const isPublicAlbumRoute = Boolean(route.albumSlug);
+
+  // On /album/... routes, primary navigation is path-first: force player surface.
+  const rawP = isPublicAlbumRoute
+    ? "player"
+    : normalizeP(sp.get("p") ?? "player");
   const isPlayer = rawP === "player";
   const portalTabId = isPlayer ? null : rawP;
 
@@ -664,9 +690,27 @@ export default function PortalArea(props: {
 
   const patchQuery = React.useCallback(
     (patch: Record<string, string | null | undefined>) => {
-      replaceQuery(patch);
+      if (!isPublicAlbumRoute) {
+        replaceQuery(patch);
+        return;
+      }
+
+      // On /album/... routes: query params are secondary only.
+      // Allow: st/share, autoplay, utm_*
+      const filtered: Record<string, string | null | undefined> = {};
+      for (const [k, v] of Object.entries(patch)) {
+        if (
+          k === "st" ||
+          k === "share" ||
+          k === "autoplay" ||
+          k.startsWith("utm_")
+        ) {
+          filtered[k] = v;
+        }
+      }
+      if (Object.keys(filtered).length) replaceQuery(filtered);
     },
-    [],
+    [isPublicAlbumRoute],
   );
 
   const forceSurface = React.useCallback(
@@ -755,11 +799,19 @@ export default function PortalArea(props: {
     spotlightEligibleCode &&
     (!isSignedIn || dbgForceSpotlight);
 
-  const qAlbum = sp.get("album");
-  const qTrack = sp.get("track");
+  const qAlbum =
+    (isPublicAlbumRoute
+      ? route.albumSlug
+      : (sp.get("album") ?? "").trim() || null) ?? null;
+  const qTrack =
+    (isPublicAlbumRoute
+      ? route.trackId
+      : (sp.get("track") ?? "").trim() || null) ?? null;
+
+  // Secondary concerns stay query-based (allowed everywhere)
   const qAutoplay = getAutoplayFlag(sp);
-  const qShareToken = sp.get("st") ?? sp.get("share") ?? null;
-  const hasSt = (sp.get("st") ?? sp.get("share") ?? "").trim().length > 0;
+  const qShareToken = (sp.get("st") ?? sp.get("share") ?? "").trim() || null;
+  const hasSt = Boolean(qShareToken);
 
   const forcedPlayerRef = React.useRef(false);
   React.useEffect(() => {
@@ -804,6 +856,20 @@ export default function PortalArea(props: {
       if (!slug) return;
       if (isBrowsingRef.current) return;
 
+      // If we're on canonical public album routes, navigate by path (not query).
+      if (isPublicAlbumRoute) {
+        const saved = getSavedSt(slug);
+
+        // Preserve st if available (secondary param), drop everything else.
+        const qs = new URLSearchParams();
+        if (saved) qs.set("st", saved);
+
+        // Note: we intentionally do NOT carry p/album/track in query.
+        const href = `/album/${encodeURIComponent(slug)}${qs.toString() ? `?${qs}` : ""}`;
+        router.push(href);
+        return;
+      }
+
       const saved = getSavedSt(slug);
 
       patchQuery({
@@ -841,7 +907,7 @@ export default function PortalArea(props: {
         setIsBrowsingAlbum(false);
       }
     },
-    [patchQuery],
+    [patchQuery, isPublicAlbumRoute, router],
   );
 
   React.useEffect(() => {
