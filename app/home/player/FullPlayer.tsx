@@ -283,7 +283,7 @@ function PlatformIcon({ platform }: { platform: StreamingPlatform }) {
     case "amazonMusic":
       return (
         <svg {...common} viewBox="0 0 32 32">
-          <g transform="translate(16 16) scale(1.08) translate(-16 -16)">
+          <g transform="translate(16 16) scale(1.12) translate(-16 -16)">
             <path
               fill="currentColor"
               d="M16 2C8.27812 2 2 8.27812 2 16C2 23.7219 8.27812 30 16 30C23.7219 30 30 23.7219 30 16C30 8.27812 23.7219 2 16 2Z"
@@ -1511,10 +1511,10 @@ export default function FullPlayer(props: {
 
 .afAvailLabel{
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.28px;
   text-transform: uppercase;
-  opacity: 0.85;
+  opacity: 0.75;
   text-align: center;
 }
 
@@ -1534,7 +1534,7 @@ export default function FullPlayer(props: {
   background: transparent;
   border-radius: 0;
   color: rgba(255,255,255,0.72);
-  opacity: 0.92;
+  opacity: 0.85;
   transition: transform 120ms ease, color 120ms ease, opacity 120ms ease;
 }
 
