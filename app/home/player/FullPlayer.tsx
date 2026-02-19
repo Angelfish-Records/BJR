@@ -1476,47 +1476,36 @@ export default function FullPlayer(props: {
           }
         }
 
-        .afAvailWrap{
-  margin-top: 14px;
+       .afAvailWrap{
+  margin-top: 18px;
   display: flex;
   flex-direction: column;
-  align-items: center;          /* centers ribbon within parent */
+  align-items: center;
   justify-content: center;
   gap: 8px;
   color: rgba(255,255,255,0.62);
   user-select: none;
-}
-
-.afAvailLine{
-  width: fit-content;
-  min-width: 110px;            /* fallback so it’s never tiny */
-  height: 1px;
-  background: rgba(255,255,255,0.14);
-  border-radius: 999px;
-  opacity: 0.85;
-}
-
-/* make the line match the icon row width */
-.afAvailIcons{
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
   position: relative;
 }
-.afAvailIcons::before{
+
+/* horizontal rule ABOVE the label */
+.afAvailWrap::before{
   content: "";
-  position: absolute;
-  top: -14px;                  /* sits above the label */
-  left: 0;
-  right: 0;
+  width: fit-content;
+  min-width: 120px;                 /* safety floor */
   height: 1px;
   background: rgba(255,255,255,0.14);
   border-radius: 999px;
   opacity: 0.85;
+  margin-bottom: 6px;               /* gap between line and label */
 }
 
-/* kill the separate .afAvailLine if you prefer the ::before approach */
-.afAvailLine{ display: none; }
+/* make rule auto-match icon width */
+.afAvailWrap{
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
+}
 
 .afAvailLabel{
   font-size: 11px;
@@ -1525,6 +1514,12 @@ export default function FullPlayer(props: {
   text-transform: uppercase;
   opacity: 0.85;
   text-align: center;
+}
+
+.afAvailIcons{
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .afAvailIcon{
@@ -1552,6 +1547,7 @@ export default function FullPlayer(props: {
   outline: none;
   box-shadow: 0 0 0 3px rgba(255,255,255,0.12);
 }
+
 
 
       `}</style>
