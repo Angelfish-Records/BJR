@@ -2,7 +2,8 @@
 "use client";
 
 import React from "react";
-import { useClientSearchParams, replaceQuery } from "./urlState";
+import { usePathname, useRouter } from "next/navigation";
+import { useClientSearchParams } from "./urlState";
 
 export type PortalTabSpec = {
   id: string;
@@ -12,103 +13,103 @@ export type PortalTabSpec = {
   content: React.ReactNode;
 };
 
+function tabFromHomePathname(pathname: string | null): string | null {
+  const p = (pathname ?? "").split("?")[0] ?? "";
+  const parts = p.split("/").filter(Boolean);
+  if (parts[0] !== "home") return null;
+  const t = (parts[1] ?? "").trim();
+  if (!t) return null;
+  return decodeURIComponent(t).toLowerCase();
+}
+
+function homePathForTab(tabId: string) {
+  const t = (tabId || "").trim().toLowerCase();
+  // PortalTabs should never navigate to player; but guard anyway.
+  if (!t || t === "player") return "/home/extras";
+  return `/home/${encodeURIComponent(t)}`;
+}
+
 export default function PortalTabs(props: {
   tabs: PortalTabSpec[];
   defaultTabId?: string | null;
-  queryParam?: string; // default: 'p' in new world
+  /** legacy only: interpret ?p=... and ?pt=... */
+  legacyQueryParam?: string; // default 'p'
 }) {
-  const { tabs, defaultTabId = null, queryParam = "p" } = props;
+  const { tabs, defaultTabId = null, legacyQueryParam = "p" } = props;
+
+  // ✅ hooks must come first, always
+  const router = useRouter();
+  const pathname = usePathname();
   const sp = useClientSearchParams();
 
-  const firstId = tabs[0]?.id ?? null;
+  const hasTabs = tabs.length > 0;
+  const firstId = (hasTabs ? tabs[0]?.id : null) ?? null;
 
-  // legacy support: pt used to control tabs
-  const legacyPt = (sp.get("pt") ?? "").trim() || null;
+  const pathTab = tabFromHomePathname(pathname);
 
-  const desiredRaw = (sp.get(queryParam) ?? "").trim();
-  const desired = desiredRaw || null;
+  const legacyPt = (sp.get("pt") ?? "").trim().toLowerCase() || null;
+  const legacyP = (sp.get(legacyQueryParam) ?? "").trim().toLowerCase() || null;
 
-  // IMPORTANT: when queryParam is 'p', 'player' is reserved for the player surface
-  // and should NOT be interpreted as a portal tab.
-  const isReservedSurface = queryParam === "p" && desired === "player";
+  const resolveValid = React.useCallback(
+    (candidate: string | null): string | null => {
+      if (!candidate) return null;
+      if (candidate === "player") return null; // reserved surface
+      return tabs.some((t) => t.id === candidate) ? candidate : null;
+    },
+    [tabs],
+  );
 
-  const validDesired =
-    !isReservedSurface && desired && tabs.some((t) => t.id === desired)
-      ? desired
-      : null;
+  const validPath = resolveValid(pathTab);
+  const validLegacy = resolveValid(legacyP) ?? resolveValid(legacyPt);
 
-  const validLegacy =
-    legacyPt && tabs.some((t) => t.id === legacyPt) ? legacyPt : null;
+  const initial = React.useMemo(() => {
+    if (!hasTabs) return null;
 
-  const initial =
-    validDesired ??
-    validLegacy ??
-    (defaultTabId && tabs.some((t) => t.id === defaultTabId)
-      ? defaultTabId
-      : null) ??
-    firstId;
+    const defaultValid =
+      defaultTabId && tabs.some((t) => t.id === defaultTabId)
+        ? defaultTabId
+        : null;
+
+    return validPath ?? validLegacy ?? defaultValid ?? firstId;
+  }, [hasTabs, defaultTabId, tabs, validPath, validLegacy, firstId]);
 
   const [activeId, setActiveId] = React.useState<string | null>(initial);
 
-  // Keep local state aligned with URL
+  // keep local state aligned
   React.useEffect(() => {
     if (!initial) return;
     if (activeId !== initial) setActiveId(initial);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial]);
 
-  // On mount: migrate legacy pt -> p, and ensure URL is canonical when we are in portal context.
+  // promote legacy query -> path (replace) when we’re not already path-native
   React.useEffect(() => {
     if (!initial) return;
+    if (validPath) return;
+    if (!validLegacy) return;
+    router.replace(homePathForTab(validLegacy));
+  }, [initial, validPath, validLegacy, router]);
 
-    const curP = (sp.get(queryParam) ?? "").trim();
-    const curPt = (sp.get("pt") ?? "").trim();
-
-    // If we see legacy pt, migrate it (and delete pt).
-    // Only do this if p is either missing/invalid or clearly portal-ish (not player).
-    if (curPt) {
-      const ptCandidate = tabs.some((t) => t.id === curPt) ? curPt : "";
-      if (ptCandidate) {
-        // Don't stomp p=player; that's the player surface.
-        if (!(queryParam === "p" && curP === "player")) {
-          replaceQuery({ [queryParam]: ptCandidate, pt: null, panel: null });
-          return;
-        }
-        // If we are on player, just delete pt to stop pollution.
-        replaceQuery({ pt: null });
-        return;
-      }
-
-      // pt exists but isn't valid; just delete it.
-      replaceQuery({ pt: null });
-      // keep going; we may still want to ensure p
-    }
-
-    // Ensure p has a valid tab id *unless* p=player (reserved).
-    if (queryParam === "p" && curP === "player") return;
-
-    if (curP === initial) return;
-    replaceQuery({ [queryParam]: initial, pt: null, panel: null });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const active = tabs.find((t) => t.id === activeId) ?? tabs[0] ?? null;
+  const active = React.useMemo(() => {
+    if (!hasTabs) return null;
+    return tabs.find((t) => t.id === activeId) ?? tabs[0] ?? null;
+  }, [hasTabs, tabs, activeId]);
 
   const wrap: React.CSSProperties = { display: "grid", gap: 12, minWidth: 0 };
 
-  // ✅ refs to measure active tab + rail span
+  // indicator/rail measurement refs
   const rowRef = React.useRef<HTMLDivElement | null>(null);
   const btnRefs = React.useRef<Map<string, HTMLButtonElement>>(new Map());
 
-  const [indicator, setIndicator] = React.useState<{
-    x: number;
-    w: number;
-  } | null>(null);
+  const [indicator, setIndicator] = React.useState<{ x: number; w: number } | null>(
+    null,
+  );
   const [rail, setRail] = React.useState<{ x: number; w: number } | null>(null);
 
   const measure = React.useCallback(() => {
     const row = rowRef.current;
-    if (!row || tabs.length === 0) return;
+    if (!row) return;
+    if (!hasTabs) return;
 
     const rowRect = row.getBoundingClientRect();
 
@@ -124,11 +125,9 @@ export default function PortalTabs(props: {
     const firstRect = first.getBoundingClientRect();
     const lastRect = last.getBoundingClientRect();
 
-    // Convert viewport coords -> row content coords
     const railX = firstRect.left - rowRect.left + row.scrollLeft;
     const railW = lastRect.right - firstRect.left;
 
-    // Round to device pixels to avoid subpixel “1px off” shimmer
     const r = (n: number) =>
       Math.round(n * (window.devicePixelRatio || 1)) /
       (window.devicePixelRatio || 1);
@@ -145,7 +144,7 @@ export default function PortalTabs(props: {
     const w = b.width;
 
     setIndicator({ x: r(x), w: r(w) });
-  }, [active?.id, tabs]);
+  }, [hasTabs, tabs, active?.id]);
 
   React.useLayoutEffect(() => {
     measure();
@@ -165,7 +164,7 @@ export default function PortalTabs(props: {
     flexWrap: "nowrap",
     overflowX: "auto",
     WebkitOverflowScrolling: "touch",
-    padding: "2px 2px 12px", // room for rail + indicator
+    padding: "2px 2px 12px",
     scrollbarWidth: "none",
     minWidth: 0,
   };
@@ -182,10 +181,11 @@ export default function PortalTabs(props: {
     letterSpacing: 0.2,
     lineHeight: 1.2,
     color: isActive ? "rgba(255,255,255,0.80)" : "rgba(255,255,255,0.46)",
-    textDecoration: "none", // ✅ kill legacy underline
+    textDecoration: "none",
   });
 
-  if (!tabs.length) return null;
+  // ✅ now it’s safe to return null (hooks already executed)
+  if (!hasTabs) return null;
 
   return (
     <div style={wrap}>
@@ -199,12 +199,11 @@ export default function PortalTabs(props: {
         style={tabRow}
         onScroll={() => measure()}
       >
-        {/* ✅ Rail (scoped to rendered tabs) */}
         <div
           aria-hidden
           style={{
             position: "absolute",
-            bottom: 3, // 👈 sits slightly above indicator for "pressed" feel
+            bottom: 3,
             left: rail?.x ?? 0,
             width: rail?.w ?? 0,
             height: 1,
@@ -215,7 +214,6 @@ export default function PortalTabs(props: {
           }}
         />
 
-        {/* ✅ Active indicator (animated slide + width) */}
         <div
           aria-hidden
           style={{
@@ -247,7 +245,7 @@ export default function PortalTabs(props: {
               aria-label={t.title}
               onClick={() => {
                 setActiveId(t.id);
-                replaceQuery({ [queryParam]: t.id, pt: null, panel: null });
+                router.push(homePathForTab(t.id));
               }}
               style={tabBtn(isActive)}
               title={t.locked ? (t.lockedHint ?? "Locked") : t.title}

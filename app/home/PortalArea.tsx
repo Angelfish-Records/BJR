@@ -22,6 +22,20 @@ import { MembershipModalProvider } from "@/app/home/MembershipModalProvider";
 import Image from "next/image";
 
 const DEFAULT_PORTAL_TAB = "extras";
+function homeTabFromPathname(pathname: string | null): string | null {
+  const p = (pathname ?? "").split("?")[0] ?? "";
+  // expects /home/player OR /home/<tab>
+  const parts = p.split("/").filter(Boolean);
+  if (parts[0] !== "home") return null;
+  return parts[1] ? parts[1] : null;
+}
+
+function homePathForTab(tab: string) {
+  const t = (tab || "").trim().toLowerCase();
+  if (!t || t === "home") return "/home/player";
+  if (t === "player") return "/home/player";
+  return `/home/${encodeURIComponent(t)}`;
+}
 
 function normalizeP(raw: string | null | undefined): string {
   const v = (raw ?? "").trim();
@@ -668,19 +682,22 @@ export default function PortalArea(props: {
   useGlobalTransportKeys(p, { enabled: true });
   const sp = useClientSearchParams();
   const { isSignedIn: isSignedInRaw } = useAuth();
+
   const isSignedIn = Boolean(isSignedInRaw);
 
   const router = useRouter();
   const pathname = usePathname();
+  const pathTabRaw = homeTabFromPathname(pathname);
+  const pathTab = (pathTabRaw ?? "").trim().toLowerCase() || null;
 
   const route = React.useMemo(() => parsePublicAlbumPath(pathname), [pathname]);
 
   const isPublicAlbumRoute = Boolean(route.albumSlug);
 
   // On /album/... routes, primary navigation is path-first: force player surface.
-  const rawP = isPublicAlbumRoute
-    ? "player"
-    : normalizeP(sp.get("p") ?? "player");
+  const legacyP = normalizeP(sp.get("p") ?? "player");
+  const rawP = pathTab ?? legacyP;
+
   const isPlayer = rawP === "player";
   const portalTabId = isPlayer ? null : rawP;
 
@@ -713,32 +730,68 @@ export default function PortalArea(props: {
     [isPublicAlbumRoute],
   );
 
+  const navHome = React.useCallback(
+    (
+      tab: string,
+      patch: Record<string, string | null | undefined>,
+      mode: "push" | "replace" = "push",
+    ) => {
+      const nextParams = new URLSearchParams(sp.toString());
+
+      // apply patch semantics
+      for (const [k, v] of Object.entries(patch)) {
+        const sv = v == null ? "" : String(v);
+        if (v == null || sv.trim() === "") nextParams.delete(k);
+        else nextParams.set(k, sv);
+      }
+
+      // strip legacy p if present
+      nextParams.delete("p");
+
+      // portal hygiene: if leaving posts, clear deep link params
+      const t = (tab ?? "").trim().toLowerCase();
+      if (t !== "posts") {
+        nextParams.delete("post");
+        nextParams.delete("pt");
+      }
+
+      const href =
+        nextParams.toString().length > 0
+          ? `${homePathForTab(tab)}?${nextParams.toString()}`
+          : homePathForTab(tab);
+
+      if (mode === "replace") router.replace(href);
+      else router.push(href);
+    },
+    [router, sp],
+  );
+
   const forceSurface = React.useCallback(
-    (surface: "player" | "portal", tabId?: string | null) => {
+    (
+      surface: "player" | "portal",
+      tabId?: string | null,
+      mode: "push" | "replace" = "push",
+    ) => {
       if (surface === "player") {
-        if (rawP === "player") return;
-        patchQuery({ p: "player", post: null, autoplay: null });
+        // keep player-relevant params; path becomes canonical
+        navHome("player", { post: null, autoplay: null }, mode);
         return;
       }
 
-      const desired =
-        (
-          tabId ??
-          getLastPortalTab() ??
-          portalTabId ??
-          DEFAULT_PORTAL_TAB
-        ).trim() || DEFAULT_PORTAL_TAB;
-      if (rawP === desired) return;
+      const desiredRaw =
+        (tabId ?? getLastPortalTab() ?? portalTabId ?? DEFAULT_PORTAL_TAB) ||
+        DEFAULT_PORTAL_TAB;
 
-      patchQuery({
-        p: desired,
-        album: null,
-        track: null,
-        t: null,
-        autoplay: null,
-      });
+      const desired = desiredRaw.trim() || DEFAULT_PORTAL_TAB;
+
+      // when entering portal, clear player-deep-link params
+      navHome(
+        desired,
+        { album: null, track: null, t: null, autoplay: null },
+        mode,
+      );
     },
-    [patchQuery, rawP, portalTabId],
+    [navHome, portalTabId],
   );
 
   const gift = (sp.get("gift") ?? "").trim() || null;
@@ -829,8 +882,8 @@ export default function PortalArea(props: {
 
     // Canonicalise: playback intent implies player surface.
     forcedPlayerRef.current = true;
-    patchQuery({ p: "player" });
-  }, [qTrack, qAutoplay, rawP, patchQuery]);
+    forceSurface("player", null, "replace");
+  }, [qTrack, qAutoplay, rawP, patchQuery, forceSurface]);
 
   const [currentAlbumSlug, setCurrentAlbumSlug] =
     React.useState<string>(albumSlug);
@@ -872,15 +925,18 @@ export default function PortalArea(props: {
 
       const saved = getSavedSt(slug);
 
-      patchQuery({
-        p: "player",
-        album: slug,
-        track: null,
-        t: null,
-        autoplay: null,
-        st: saved || null,
-        share: null,
-      });
+      navHome(
+        "player",
+        {
+          album: slug,
+          track: null,
+          t: null,
+          autoplay: null,
+          st: saved || null,
+          share: null,
+        },
+        "push",
+      );
 
       setIsBrowsingAlbum(true);
       setCurrentAlbumSlug(slug);
@@ -907,7 +963,7 @@ export default function PortalArea(props: {
         setIsBrowsingAlbum(false);
       }
     },
-    [patchQuery, isPublicAlbumRoute, router],
+    [isPublicAlbumRoute, router, navHome],
   );
 
   React.useEffect(() => {

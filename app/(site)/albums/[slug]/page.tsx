@@ -1,5 +1,4 @@
 // web/app/(site)/albums/[slug]/page.tsx
-import React from "react";
 import { redirect } from "next/navigation";
 
 type PageSearchParams = Record<string, string | string[] | undefined>;
