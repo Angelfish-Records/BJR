@@ -1047,68 +1047,24 @@ export default function PortalArtistPosts(props: {
           </h5>
         ),
 
-        // ✅ single blockquote, with optional asker line styled inside the same quote
-        blockquote: (props: PortableTextComponentProps<PortableTextBlock>) => {
-          const nodes = React.Children.toArray(props.children);
-          const joined = nodes.every((n) => typeof n === "string")
-            ? (nodes as string[]).join("")
-            : typeof props.children === "string"
-              ? props.children
-              : null;
-
-          // We intentionally generate blockquote text like:
-          // "Question text\n— Name"
-          if (typeof joined === "string" && joined.includes("\n")) {
-            const [q, ...rest] = joined.split("\n");
-            const footer = rest.join("\n").trim();
-
-            return (
-              <blockquote
-                style={{
-                  margin: "12px 0",
-                  padding: "10px 12px",
-                  borderLeft: "2px solid rgba(255,255,255,0.18)",
-                  background: "rgba(255,255,255,0.03)",
-                  borderRadius: 12,
-                  opacity: 0.92,
-                }}
-              >
-                <div style={{ fontSize: 13, lineHeight: 1.65 }}>{q}</div>
-                {footer ? (
-                  <div
-                    style={{
-                      marginTop: 6,
-                      fontSize: 12,
-                      lineHeight: 1.35,
-                      opacity: 0.62,
-                      fontStyle: "italic",
-                    }}
-                  >
-                    {footer}
-                  </div>
-                ) : null}
-              </blockquote>
-            );
-          }
-
-          // Fallback: render whatever PortableText gave us
-          return (
-            <blockquote
-              style={{
-                margin: "12px 0",
-                padding: "10px 12px",
-                borderLeft: "2px solid rgba(255,255,255,0.18)",
-                background: "rgba(255,255,255,0.03)",
-                borderRadius: 12,
-                opacity: 0.92,
-              }}
+        blockquote: (props: PortableTextComponentProps<PortableTextBlock>) => (
+          <blockquote
+            style={{
+              margin: "12px 0",
+              padding: "10px 12px",
+              borderLeft: "2px solid rgba(255,255,255,0.18)",
+              background: "rgba(255,255,255,0.03)",
+              borderRadius: 12,
+              opacity: 0.92,
+            }}
+          >
+            <div
+              style={{ fontSize: 13, lineHeight: 1.65, whiteSpace: "pre-wrap" }}
             >
-              <div style={{ fontSize: 13, lineHeight: 1.65 }}>
-                {props.children}
-              </div>
-            </blockquote>
-          );
-        },
+              {props.children}
+            </div>
+          </blockquote>
+        ),
       },
 
       list: {
@@ -1159,9 +1115,21 @@ export default function PortalArtistPosts(props: {
             {props.children}
           </strong>
         ),
+
+        // ✅ asker line hook: smaller + greyer, not italic
         em: (props: { children?: React.ReactNode }) => (
-          <em style={{ opacity: 0.95 }}>{props.children}</em>
+          <em
+            style={{
+              fontStyle: "normal",
+              fontSize: "0.92em",
+              color: "rgba(255,255,255,0.62)",
+              opacity: 1,
+            }}
+          >
+            {props.children}
+          </em>
         ),
+
         code: (props: { children?: React.ReactNode }) => (
           <code
             style={{
@@ -1178,6 +1146,7 @@ export default function PortalArtistPosts(props: {
             {props.children}
           </code>
         ),
+
         link: (props: {
           value?: { href?: string };
           children?: React.ReactNode;

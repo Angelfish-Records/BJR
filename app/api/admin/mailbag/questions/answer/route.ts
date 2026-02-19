@@ -85,7 +85,7 @@ type Body = {
   pinned?: unknown;
 };
 
-type PTSpan = { _type: "span"; _key: string; text: string };
+type PTSpan = { _type: "span"; _key: string; text: string; marks?: string[] };
 type PTBlock = {
   _type: "block";
   _key: string;
@@ -103,8 +103,10 @@ function k(prefix = "k"): string {
     .toLowerCase()}`;
 }
 
-function span(text: string): PTSpan {
-  return { _type: "span", _key: k("s"), text };
+function span(text: string, marks?: string[]): PTSpan {
+  return marks?.length
+    ? { _type: "span", _key: k("s"), text, marks }
+    : { _type: "span", _key: k("s"), text };
 }
 
 function block(style: string, text: string): PTBlock {
@@ -252,15 +254,19 @@ export async function POST(req: NextRequest) {
 
   for (const q of qRes.rows) {
     const name = (q.asker_name ?? "").trim();
-    const quoteText = name
-      ? `${q.question_text}\n— ${name}`
-      : q.question_text;
+
+    const children: PTSpan[] = [span((q.question_text || "").trim())];
+
+    if (name) {
+      children.push(span("\n")); // line break inside the same blockquote
+      children.push(span(`— ${name}`, ["em"])); // built-in decorator hook
+    }
 
     blocks.push({
       _type: "block",
       _key: k("bq"),
       style: "blockquote",
-      children: [span(quoteText)],
+      children,
     });
   }
 
