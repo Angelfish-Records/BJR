@@ -1147,23 +1147,31 @@ export default function ActivationGate(props: Props) {
                           borderRadius: 999,
                           display: "grid",
                           placeItems: "center",
-                          background: "rgba(255,255,255,0.31)",
+                          background: "rgba(255,255,255,0.31)", // match explicit badge
                           border: "none",
                           boxShadow: "none",
                           flex: "0 0 auto",
                         }}
                       >
-                        <span
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          aria-hidden="true"
                           style={{
-                            fontSize: 11,
-                            lineHeight: 1,
-                            fontWeight: 700,
-                            color: "rgba(0,0,0,0.92)",
-                            transform: "translateY(-0.75px)",
+                            display: "block", // avoids inline SVG baseline weirdness
+                            transform: "translateY(-0.5px)", // tiny optical lift; tweak ±0.5px if needed
                           }}
                         >
-                          ✓
-                        </span>
+                          <path
+                            d="M20 6L9 17l-5-5"
+                            stroke="rgba(0,0,0,0.92)" // cutout tone
+                            strokeWidth="2.6"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
                       </span>
 
                       <span
