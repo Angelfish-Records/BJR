@@ -75,6 +75,13 @@ export default function PortalTabs(props: {
 
   const [activeId, setActiveId] = React.useState<string | null>(initial);
 
+  React.useEffect(() => {
+  // warm the RSC cache for sibling tab routes
+  tabs.forEach((t) => {
+    router.prefetch(homePathForTab(t.id));
+  });
+}, [router, tabs]);
+
   // keep local state aligned
   React.useEffect(() => {
     if (!initial) return;

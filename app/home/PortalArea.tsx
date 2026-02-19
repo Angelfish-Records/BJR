@@ -21,13 +21,15 @@ import { PortalViewerProvider } from "@/app/home/PortalViewerProvider";
 import { MembershipModalProvider } from "@/app/home/MembershipModalProvider";
 import Image from "next/image";
 
+// --- SURFACE: path-only (NO ?p= fallback) ---
+
 const DEFAULT_PORTAL_TAB = "extras";
+
 function homeTabFromPathname(pathname: string | null): string | null {
   const p = (pathname ?? "").split("?")[0] ?? "";
-  // expects /home/player OR /home/<tab>
   const parts = p.split("/").filter(Boolean);
   if (parts[0] !== "home") return null;
-  return parts[1] ? parts[1] : null;
+  return parts[1] ? decodeURIComponent(parts[1]).toLowerCase() : null;
 }
 
 function homePathForTab(tab: string) {
@@ -35,11 +37,6 @@ function homePathForTab(tab: string) {
   if (!t || t === "home") return "/home/player";
   if (t === "player") return "/home/player";
   return `/home/${encodeURIComponent(t)}`;
-}
-
-function normalizeP(raw: string | null | undefined): string {
-  const v = (raw ?? "").trim();
-  return v || "player";
 }
 
 function getLastPortalTab(): string | null {
@@ -54,6 +51,18 @@ function setLastPortalTab(id: string) {
   try {
     sessionStorage.setItem("af:lastPortalTab", id);
   } catch {}
+}
+
+function parsePublicAlbumPath(pathname: string | null): {
+  albumSlug: string | null;
+  trackId: string | null;
+} {
+  const p = (pathname ?? "").trim();
+  const m = p.match(/^\/album\/([^\/?#]+)(?:\/track\/([^\/?#]+))?\/?$/i);
+  if (!m) return { albumSlug: null, trackId: null };
+  const albumSlug = decodeURIComponent(m[1] ?? "").trim() || null;
+  const trackId = decodeURIComponent(m[2] ?? "").trim() || null;
+  return { albumSlug, trackId };
 }
 
 function MiniPlayerHost(props: { onExpand: () => void }) {
@@ -94,8 +103,6 @@ function MiniPlayerHost(props: { onExpand: () => void }) {
     />
   );
 }
-
-type AlbumPayload = { album: AlbumInfo | null; tracks: PlayerTrack[] };
 
 function getSavedSt(slug: string): string {
   try {
@@ -636,21 +643,6 @@ function SpotlightModal(props: {
   );
 }
 
-function parsePublicAlbumPath(pathname: string | null): {
-  albumSlug: string | null;
-  trackId: string | null;
-} {
-  const p = (pathname ?? "").trim();
-  // Expected:
-  // /album/:slug
-  // /album/:slug/track/:trackId
-  const m = p.match(/^\/album\/([^\/?#]+)(?:\/track\/([^\/?#]+))?\/?$/i);
-  if (!m) return { albumSlug: null, trackId: null };
-  const albumSlug = decodeURIComponent(m[1] ?? "").trim() || null;
-  const trackId = decodeURIComponent(m[2] ?? "").trim() || null;
-  return { albumSlug, trackId };
-}
-
 export default function PortalArea(props: {
   portalPanel: React.ReactNode;
   topLogoUrl?: string | null;
@@ -687,19 +679,14 @@ export default function PortalArea(props: {
 
   const router = useRouter();
   const pathname = usePathname();
-  const pathTabRaw = homeTabFromPathname(pathname);
-  const pathTab = (pathTabRaw ?? "").trim().toLowerCase() || null;
-
+  const pathTab = homeTabFromPathname(pathname);
   const route = React.useMemo(() => parsePublicAlbumPath(pathname), [pathname]);
-
   const isPublicAlbumRoute = Boolean(route.albumSlug);
 
-  // On /album/... routes, primary navigation is path-first: force player surface.
-  const legacyP = normalizeP(sp.get("p") ?? "player");
-  const rawP = pathTab ?? legacyP;
-
-  const isPlayer = rawP === "player";
-  const portalTabId = isPlayer ? null : rawP;
+  // home surface is path-only; if not on /home/* we treat it as player surface
+  const isHomeRoute = (pathname ?? "").startsWith("/home");
+  const isPlayer = !isHomeRoute || !pathTab || pathTab === "player";
+  const portalTabId = !isPlayer ? pathTab : null;
 
   React.useEffect(() => {
     if (!isPlayer && portalTabId) setLastPortalTab(portalTabId);
@@ -745,8 +732,12 @@ export default function PortalArea(props: {
         else nextParams.set(k, sv);
       }
 
-      // strip legacy p if present
+      // hard strip legacy surface + album state keys (never allowed on /home/* now)
       nextParams.delete("p");
+      nextParams.delete("panel");
+      nextParams.delete("album");
+      nextParams.delete("track");
+      nextParams.delete("t");
 
       // portal hygiene: if leaving posts, clear deep link params
       const t = (tab ?? "").trim().toLowerCase();
@@ -773,8 +764,8 @@ export default function PortalArea(props: {
       mode: "push" | "replace" = "push",
     ) => {
       if (surface === "player") {
-        // keep player-relevant params; path becomes canonical
-        navHome("player", { post: null, autoplay: null }, mode);
+        // player surface on home is just /home/player (+secondary params only)
+        navHome("player", {}, mode);
         return;
       }
 
@@ -782,14 +773,7 @@ export default function PortalArea(props: {
         (tabId ?? getLastPortalTab() ?? portalTabId ?? DEFAULT_PORTAL_TAB) ||
         DEFAULT_PORTAL_TAB;
 
-      const desired = desiredRaw.trim() || DEFAULT_PORTAL_TAB;
-
-      // when entering portal, clear player-deep-link params
-      navHome(
-        desired,
-        { album: null, track: null, t: null, autoplay: null },
-        mode,
-      );
+      navHome(desiredRaw, {}, mode);
     },
     [navHome, portalTabId],
   );
@@ -823,14 +807,19 @@ export default function PortalArea(props: {
     if (checkout) replaceQuery({ checkout: null });
   }, [bannerKey, gift, checkout]);
 
-  const lastPRawRef = React.useRef<string>(rawP);
+  // dismiss banner when surface/tab changes (player <-> portal or portal tab changes)
+  const lastSurfaceKeyRef = React.useRef<string>(
+    `${isPlayer ? "player" : `portal:${portalTabId ?? ""}`}`,
+  );
+
   React.useEffect(() => {
-    const prev = lastPRawRef.current;
-    if (prev !== rawP) {
-      lastPRawRef.current = rawP;
+    const key = `${isPlayer ? "player" : `portal:${portalTabId ?? ""}`}`;
+    const prev = lastSurfaceKeyRef.current;
+    if (prev !== key) {
+      lastSurfaceKeyRef.current = key;
       if (!bannerDismissed && bannerKey) dismissBanner();
     }
-  }, [rawP, bannerDismissed, bannerKey, dismissBanner]);
+  }, [isPlayer, portalTabId, bannerDismissed, bannerKey, dismissBanner]);
 
   const derivedAttentionMessage =
     attentionMessage ??
@@ -852,14 +841,8 @@ export default function PortalArea(props: {
     spotlightEligibleCode &&
     (!isSignedIn || dbgForceSpotlight);
 
-  const qAlbum =
-    (isPublicAlbumRoute
-      ? route.albumSlug
-      : (sp.get("album") ?? "").trim() || null) ?? null;
-  const qTrack =
-    (isPublicAlbumRoute
-      ? route.trackId
-      : (sp.get("track") ?? "").trim() || null) ?? null;
+  const qAlbum = (isPublicAlbumRoute ? route.albumSlug : null) ?? null;
+  const qTrack = (isPublicAlbumRoute ? route.trackId : null) ?? null;
 
   // Secondary concerns stay query-based (allowed everywhere)
   const qAutoplay = getAutoplayFlag(sp);
@@ -870,26 +853,24 @@ export default function PortalArea(props: {
   React.useEffect(() => {
     if (forcedPlayerRef.current) return;
 
-    const playbackIntent = Boolean(qTrack) || Boolean(qAutoplay); // add other “intent” flags here if needed
-
+    const playbackIntent = Boolean(qTrack) || Boolean(qAutoplay);
     if (!playbackIntent) return;
 
-    // If we’re already on player, nothing to do.
-    if (rawP === "player") {
+    // already on player surface
+    if (isPlayer) {
       forcedPlayerRef.current = true;
       return;
     }
 
-    // Canonicalise: playback intent implies player surface.
     forcedPlayerRef.current = true;
     forceSurface("player", null, "replace");
-  }, [qTrack, qAutoplay, rawP, patchQuery, forceSurface]);
+  }, [qTrack, qAutoplay, isPlayer, forceSurface]);
 
   const [currentAlbumSlug, setCurrentAlbumSlug] =
     React.useState<string>(albumSlug);
   const [album, setAlbum] = React.useState<AlbumInfo | null>(initialAlbum);
   const [tracks, setTracks] = React.useState<PlayerTrack[]>(initialTracks);
-  const [isBrowsingAlbum, setIsBrowsingAlbum] = React.useState(false);
+  const isBrowsingAlbum = false;
 
   React.useEffect(() => {
     setAlbum(initialAlbum);
@@ -897,73 +878,19 @@ export default function PortalArea(props: {
     setCurrentAlbumSlug(albumSlug);
   }, [albumSlug, initialAlbum, initialTracks]);
 
-  const fetchSeq = React.useRef(0);
-  const isBrowsingRef = React.useRef(false);
-
-  React.useEffect(() => {
-    isBrowsingRef.current = isBrowsingAlbum;
-  }, [isBrowsingAlbum]);
-
   const onSelectAlbum = React.useCallback(
     async (slug: string) => {
       if (!slug) return;
-      if (isBrowsingRef.current) return;
-
-      // If we're on canonical public album routes, navigate by path (not query).
-      if (isPublicAlbumRoute) {
-        const saved = getSavedSt(slug);
-
-        // Preserve st if available (secondary param), drop everything else.
-        const qs = new URLSearchParams();
-        if (saved) qs.set("st", saved);
-
-        // Note: we intentionally do NOT carry p/album/track in query.
-        const href = `/album/${encodeURIComponent(slug)}${qs.toString() ? `?${qs}` : ""}`;
-        router.push(href);
-        return;
-      }
 
       const saved = getSavedSt(slug);
+      const qs = new URLSearchParams();
+      if (saved) qs.set("st", saved);
 
-      navHome(
-        "player",
-        {
-          album: slug,
-          track: null,
-          t: null,
-          autoplay: null,
-          st: saved || null,
-          share: null,
-        },
-        "push",
+      router.push(
+        `/album/${encodeURIComponent(slug)}${qs.toString() ? `?${qs}` : ""}`,
       );
-
-      setIsBrowsingAlbum(true);
-      setCurrentAlbumSlug(slug);
-      setAlbum(null);
-      setTracks([]);
-
-      const seq = ++fetchSeq.current;
-
-      try {
-        const res = await fetch(`/api/albums/${encodeURIComponent(slug)}`, {
-          method: "GET",
-        });
-        if (!res.ok) throw new Error(`Album fetch failed (${res.status})`);
-        const json = (await res.json()) as AlbumPayload;
-        if (seq !== fetchSeq.current) return;
-
-        setAlbum(json.album ?? null);
-        setTracks(Array.isArray(json.tracks) ? json.tracks : []);
-      } catch (e) {
-        if (seq !== fetchSeq.current) return;
-        console.error(e);
-      } finally {
-        if (seq !== fetchSeq.current) return;
-        setIsBrowsingAlbum(false);
-      }
     },
-    [isPublicAlbumRoute, router, navHome],
+    [router],
   );
 
   React.useEffect(() => {
