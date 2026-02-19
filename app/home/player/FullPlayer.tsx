@@ -441,7 +441,7 @@ function AvailableOnRibbon({ links }: { links: PlatformLink[] }) {
             key={platform}
             href={url}
             target="_blank"
-            rel="noopener noreferrer"
+            rel="noopener noreferrer external nofollow"
             className="afAvailIcon"
             aria-label={`Open on ${platform}`}
             title={`Open on ${platform}`}

@@ -2,6 +2,7 @@
 import React from "react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { musicAlbumJsonLd } from "@/lib/structuredData";
 import { client } from "@/sanity/lib/client";
 import { urlFor } from "@/sanity/lib/image";
 import { auth, currentUser } from "@clerk/nextjs/server";
@@ -44,6 +45,16 @@ const shadowHomeQuery = `
     topLogoHeight
   }
 `;
+
+function JsonLdScript({ data }: { data: Record<string, unknown> }) {
+  return (
+    <script
+      type="application/ld+json"
+      // JSON.stringify drops undefined object props automatically (good).
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+    />
+  );
+}
 
 export async function generateMetadata(): Promise<Metadata> {
   // Keep description flexible if you want, but do NOT let Sanity control tab title.
@@ -187,6 +198,21 @@ export default async function Home(props: {
     albumData = await getAlbumBySlug(albumSlug);
   }
 
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
+  const pageUrl =
+    appUrl && albumSlug
+      ? `${appUrl}/home?album=${encodeURIComponent(albumSlug)}`
+      : "";
+
+  const jsonLd =
+    albumData.album && pageUrl
+      ? musicAlbumJsonLd({
+          album: albumData.album,
+          tracks: albumData.tracks,
+          pageUrl,
+        })
+      : null;
+
   const browseAlbumsRaw = await listAlbumsForBrowse();
 
   const asTierName = (v: unknown): "friend" | "patron" | "partner" | null => {
@@ -215,6 +241,7 @@ export default async function Home(props: {
 
   return (
     <main style={mainStyle}>
+      {jsonLd ? <JsonLdScript data={jsonLd} /> : null}
       {isAdmin ? <AdminDebugBar isAdmin /> : null}
       <style>{`
         .shadowHomeGrid {
