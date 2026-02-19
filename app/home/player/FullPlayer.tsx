@@ -1499,7 +1499,7 @@ export default function FullPlayer(props: {
   background: rgba(255,255,255,0.14);
   border-radius: 999px;
   opacity: 0.85;
-  margin-bottom: 6px;               /* gap between line and label */
+  margin-bottom: 3px;               /* gap between line and label */
 }
 
 /* make rule auto-match icon width */
