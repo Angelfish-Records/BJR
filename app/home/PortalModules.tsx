@@ -25,6 +25,7 @@ type ModuleRichText = {
   _key: string;
   _type: "moduleRichText";
   title?: string;
+  teaser?: import("@portabletext/types").PortableTextBlock[];
   full?: import("@portabletext/types").PortableTextBlock[];
   requiresEntitlement?: string;
 };
@@ -467,7 +468,9 @@ function renderModule(m: PortalModule, entitlementKeys: string[]) {
 
   if (m._type === "moduleRichText") {
     const entitled = hasKey(entitlementKeys, m.requiresEntitlement);
-    const blocks = entitled ? (m.full ?? []) : (m.full ?? []);
+
+    const blocks = entitled ? (m.full ?? []) : (m.teaser ?? []);
+
     return (
       <PortalRichText
         key={m._key}
