@@ -186,6 +186,274 @@ type StableView = {
   tracks: PlayerTrack[];
 };
 
+type StreamingPlatform =
+  | "spotify"
+  | "appleMusic"
+  | "youtubeMusic"
+  | "amazonMusic"
+  | "tidal"
+  | "deezer";
+
+type PlatformLink = { platform: StreamingPlatform; url: string };
+
+function isStreamingPlatform(v: unknown): v is StreamingPlatform {
+  return (
+    v === "spotify" ||
+    v === "appleMusic" ||
+    v === "youtubeMusic" ||
+    v === "amazonMusic" ||
+    v === "tidal" ||
+    v === "deezer"
+  );
+}
+
+function isPlatformLink(v: unknown): v is PlatformLink {
+  if (typeof v !== "object" || v === null) return false;
+
+  const maybe = v as Record<string, unknown>;
+
+  return (
+    isStreamingPlatform(maybe.platform) &&
+    typeof maybe.url === "string" &&
+    /^https:\/\//i.test(maybe.url)
+  );
+}
+
+function normalizePlatformLinks(
+  links: AlbumInfo["platformLinks"],
+): PlatformLink[] {
+  if (!Array.isArray(links)) return [];
+  return links.filter(isPlatformLink);
+}
+
+function PlatformIcon({ platform }: { platform: StreamingPlatform }) {
+  // Minimal, clean, monochrome glyphs (not brand-colour). Uses currentColor.
+  // If you later want exact brand SVGs, swap paths here without changing the UI.
+  const common = { width: 16, height: 16, viewBox: "0 0 24 24" as const };
+  switch (platform) {
+    case "spotify":
+      return (
+        <svg {...common} aria-hidden="true" fill="none">
+          <circle
+            cx="12"
+            cy="12"
+            r="9"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            opacity="0.95"
+          />
+          <path
+            d="M7.8 10.2c3.9-1 7.5-.7 10.6 1"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            opacity="0.95"
+          />
+          <path
+            d="M8.3 13c3.2-.7 6.2-.4 8.7.8"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            opacity="0.85"
+          />
+          <path
+            d="M8.8 15.6c2.5-.5 4.8-.3 6.6.6"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            opacity="0.75"
+          />
+        </svg>
+      );
+    case "appleMusic":
+      return (
+        <svg {...common} aria-hidden="true" fill="none">
+          <path
+            d="M15 5.3l-6.7 1.4v9.2"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M15 5.3v8.3"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+          />
+          <path
+            d="M8.3 18.5c1.2 0 2.2-.7 2.2-1.7s-1-1.7-2.2-1.7-2.2.7-2.2 1.7 1 1.7 2.2 1.7Z"
+            fill="currentColor"
+            opacity="0.9"
+          />
+          <path
+            d="M15 17.8c1.2 0 2.2-.7 2.2-1.7s-1-1.7-2.2-1.7-2.2.7-2.2 1.7 1 1.7 2.2 1.7Z"
+            fill="currentColor"
+            opacity="0.9"
+          />
+        </svg>
+      );
+    case "youtubeMusic":
+      return (
+        <svg {...common} aria-hidden="true" fill="none">
+          <circle
+            cx="12"
+            cy="12"
+            r="9"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            opacity="0.95"
+          />
+          <circle
+            cx="12"
+            cy="12"
+            r="4.6"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            opacity="0.9"
+          />
+          <polygon
+            points="11,10 15,12 11,14"
+            fill="currentColor"
+            opacity="0.9"
+          />
+        </svg>
+      );
+    case "amazonMusic":
+      return (
+        <svg {...common} aria-hidden="true" fill="none">
+          <path
+            d="M7 15.4c2.2 1.4 5.6 1.6 8.3.4"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            opacity="0.9"
+          />
+          <path
+            d="M15.6 15.8l.2 2.1"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            opacity="0.9"
+          />
+          <path
+            d="M8 16.2c.5-2.3 1.9-4.5 4-6.3"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            opacity="0.85"
+          />
+          <path
+            d="M12 9.9c1.7 1.1 2.9 2.5 3.6 4.1"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            opacity="0.85"
+          />
+        </svg>
+      );
+    case "tidal":
+      return (
+        <svg {...common} aria-hidden="true" fill="currentColor">
+          <rect
+            x="7"
+            y="7"
+            width="3"
+            height="3"
+            transform="rotate(45 8.5 8.5)"
+            opacity="0.95"
+          />
+          <rect
+            x="11"
+            y="7"
+            width="3"
+            height="3"
+            transform="rotate(45 12.5 8.5)"
+            opacity="0.95"
+          />
+          <rect
+            x="15"
+            y="7"
+            width="3"
+            height="3"
+            transform="rotate(45 16.5 8.5)"
+            opacity="0.95"
+          />
+          <rect
+            x="11"
+            y="11"
+            width="3"
+            height="3"
+            transform="rotate(45 12.5 12.5)"
+            opacity="0.95"
+          />
+        </svg>
+      );
+    case "deezer":
+      return (
+        <svg {...common} aria-hidden="true" fill="currentColor">
+          <rect x="6" y="14" width="2.5" height="4" rx="0.6" opacity="0.75" />
+          <rect x="9.2" y="12" width="2.5" height="6" rx="0.6" opacity="0.8" />
+          <rect
+            x="12.4"
+            y="10"
+            width="2.5"
+            height="8"
+            rx="0.6"
+            opacity="0.85"
+          />
+          <rect x="15.6" y="8" width="2.5" height="10" rx="0.6" opacity="0.9" />
+        </svg>
+      );
+  }
+}
+
+function AvailableOnRibbon({ links }: { links: PlatformLink[] }) {
+  if (!links.length) return null;
+
+  // stable, neutral order (don’t make it feel ideological)
+  const order: StreamingPlatform[] = [
+    "spotify",
+    "appleMusic",
+    "youtubeMusic",
+    "amazonMusic",
+    "tidal",
+    "deezer",
+  ];
+
+  const byPlatform = new Map<StreamingPlatform, string>();
+  for (const l of links) byPlatform.set(l.platform, l.url);
+
+  const ordered = order
+    .map((p) => ({ platform: p, url: byPlatform.get(p) }))
+    .filter((x): x is { platform: StreamingPlatform; url: string } =>
+      Boolean(x.url),
+    );
+
+  if (!ordered.length) return null;
+
+  return (
+    <div className="afAvailWrap" aria-label="Available on">
+      <div className="afAvailLabel">Available on</div>
+      <div className="afAvailIcons">
+        {ordered.map(({ platform, url }) => (
+          <a
+            key={platform}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="afAvailIcon"
+            aria-label={`Open on ${platform}`}
+            title={`Open on ${platform}`}
+          >
+            <PlatformIcon platform={platform} />
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function FullPlayer(props: {
   albumSlug: string;
   album: AlbumInfo | null;
@@ -239,6 +507,12 @@ export default function FullPlayer(props: {
   const albumDesc =
     effAlbum?.description ??
     "This is placeholder copy. Soon: pull album description from Sanity.";
+
+  const platformLinks = React.useMemo(
+    () => normalizePlatformLinks(effAlbum?.platformLinks),
+    [effAlbum?.platformLinks],
+  );
+
   const browseAlbums = albums.filter((a) => a.id !== effAlbum?.id);
 
   const playingish = p.status === "playing" || p.status === "loading";
@@ -970,6 +1244,8 @@ export default function FullPlayer(props: {
           })}
         </div>
 
+        <AvailableOnRibbon links={platformLinks} />
+
         {browseAlbums.length ? (
           <div style={{ marginTop: 18 }}>
             <div
@@ -1296,6 +1572,60 @@ export default function FullPlayer(props: {
             transform: none;
           }
         }
+
+        .afAvailWrap{
+          margin-top: 10px;
+          display: flex;
+          justify-content: flex-end;
+          align-items: center;
+          gap: 10px;
+          color: rgba(255,255,255,0.62);
+          user-select: none;
+        }
+        .afAvailLabel{
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.28px;
+          text-transform: uppercase;
+          opacity: 0.85;
+        }
+        .afAvailIcons{
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .afAvailIcon{
+          width: 26px;
+          height: 22px;
+          display: grid;
+          place-items: center;
+          border-radius: 10px;
+          border: 1px solid rgba(255,255,255,0.10);
+          background: rgba(255,255,255,0.03);
+          color: rgba(255,255,255,0.70);
+          transition: transform 120ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease, opacity 120ms ease;
+          opacity: 0.92;
+        }
+        .afAvailIcon:hover{
+          transform: translateY(-1px);
+          background: rgba(255,255,255,0.05);
+          border-color: rgba(255,255,255,0.14);
+          color: rgba(255,255,255,0.86);
+          opacity: 1;
+        }
+        .afAvailIcon:focus-visible{
+          outline: none;
+          box-shadow: 0 0 0 3px rgba(255,255,255,0.12);
+        }
+
+        @media (max-width: 520px){
+          .afAvailWrap{
+            justify-content: center;
+            margin-top: 12px;
+          }
+        }
+
+
       `}</style>
     </div>
   );
