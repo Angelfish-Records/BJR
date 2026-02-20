@@ -1,11 +1,11 @@
 // web/app/home/player/StageInlineHost.tsx
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React from "react";
 import { createPortal } from "react-dom";
-
 import StageInline from "@/app/home/player/StageInline";
 
+// Derive the cue/offset prop types from StageInline itself (future-proof)
 type StageInlineProps = React.ComponentProps<typeof StageInline>;
 type CuesByTrackId = NonNullable<StageInlineProps["cuesByTrackId"]>;
 type OffsetByTrackId = NonNullable<StageInlineProps["offsetByTrackId"]>;
@@ -14,27 +14,25 @@ type SlotConfig = {
   height: number;
   cuesJson: string;
   offsetsJson: string;
-  sig: string;
+  sig: string; // for cheap change detection only; StageInline doesn't consume it
 };
-
-let _hostEl: HTMLDivElement | null = null;
 
 function safeParseHeight(v: string | null | undefined, fallback: number) {
   const n = v ? Number(v) : NaN;
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-function readSlotConfig(slot: HTMLElement | null, fallback: SlotConfig): SlotConfig {
-  if (!slot) return fallback;
-  return {
-    height: safeParseHeight(slot.getAttribute("data-height"), fallback.height),
-    cuesJson: slot.getAttribute("data-cues") ?? fallback.cuesJson,
-    offsetsJson: slot.getAttribute("data-offsets") ?? fallback.offsetsJson,
-    sig: slot.getAttribute("data-sig") ?? fallback.sig,
-  };
+function safeParseJsonObject<T>(json: string, fallback: T): T {
+  try {
+    const v = JSON.parse(json);
+    if (v && typeof v === "object") return v as T;
+  } catch {
+    // ignore
+  }
+  return fallback;
 }
 
-function ensureOffscreenHost(): HTMLElement {
+function ensureOffscreenParking(): HTMLElement {
   const existing = document.getElementById("af-stage-inline-offscreen");
   if (existing) return existing;
 
@@ -52,41 +50,59 @@ function ensureOffscreenHost(): HTMLElement {
   return el;
 }
 
-function getOrCreateHostEl(): HTMLDivElement {
-  if (_hostEl && document.body.contains(_hostEl)) return _hostEl;
+/**
+ * A single stable host element that React portals into forever.
+ * We physically move this element into the current slot (if present),
+ * otherwise park it offscreen. Moving the DOM node does NOT remount React.
+ */
+function ensureStableHostEl(): HTMLElement {
+  const existing = document.getElementById("af-stage-inline-host");
+  if (existing) return existing;
 
   const el = document.createElement("div");
   el.id = "af-stage-inline-host";
   el.style.width = "100%";
   el.style.height = "100%";
-  el.style.borderRadius = "18px";
-  el.style.overflow = "hidden";
-
-  ensureOffscreenHost().appendChild(el);
-  _hostEl = el;
+  // Important: do not position here; it inherits context from the slot container.
   return el;
 }
 
-function safeParseJsonObject<T>(json: string, fallback: T): T {
+function readSlotConfig(slot: HTMLElement | null, fallback: SlotConfig): SlotConfig {
+  if (!slot) return fallback;
+
+  const height = safeParseHeight(slot.getAttribute("data-height"), fallback.height);
+  const cuesJson = slot.getAttribute("data-cues") ?? fallback.cuesJson;
+  const offsetsJson = slot.getAttribute("data-offsets") ?? fallback.offsetsJson;
+  const sig = slot.getAttribute("data-sig") ?? fallback.sig;
+
+  return { height, cuesJson, offsetsJson, sig };
+}
+
+function dbgEnabled(): boolean {
   try {
-    const v = JSON.parse(json);
-    if (v && typeof v === "object") return v as T;
+    return window.sessionStorage.getItem("af_dbg_stage_host") === "1";
   } catch {
-    // ignore
+    return false;
   }
-  return fallback;
+}
+
+function dbg(...args: unknown[]) {
+  if (!dbgEnabled()) return;
+  console.log("[StageInlineHost]", ...args);
 }
 
 export default function StageInlineHost(props: {
+  /** Optional defaults; layouts can override via slot data-* attrs */
   height?: number;
   cuesJson?: string;
   offsetsJson?: string;
   sig?: string;
+  /** Slot id to attach the host into when present */
   slotId?: string;
 }) {
   const slotId = props.slotId ?? "af-stage-inline-slot";
 
-  const fallback = useMemo<SlotConfig>(
+  const fallback = React.useMemo<SlotConfig>(
     () => ({
       height: props.height ?? 560,
       cuesJson: props.cuesJson ?? "{}",
@@ -96,20 +112,36 @@ export default function StageInlineHost(props: {
     [props.height, props.cuesJson, props.offsetsJson, props.sig],
   );
 
-  const [cfg, setCfg] = useState<SlotConfig>(fallback);
-  const [ready, setReady] = useState(false);
+  // Create the stable host element exactly once (client-only).
+  const [hostEl] = React.useState<HTMLElement | null>(() => {
+    if (typeof document === "undefined") return null;
+    return ensureStableHostEl();
+  });
 
-  useEffect(() => {
-    const offscreen = ensureOffscreenHost();
+  // Config is stateful (allowed to change), but portal container is NOT.
+  const [cfg, setCfg] = React.useState<SlotConfig>(fallback);
 
-    const apply = () => {
-      const hostEl = getOrCreateHostEl();
+  // Ensure hostEl is attached somewhere, and move it as the slot appears/disappears.
+  React.useEffect(() => {
+    if (!hostEl) return;
+
+    const parking = ensureOffscreenParking();
+
+    const attach = () => {
       const slot = document.getElementById(slotId) as HTMLElement | null;
+      const targetParent = slot ?? parking;
 
-      // Reparent the SAME hostEl. Portal target stays constant => no remount.
-      const parent = slot ?? offscreen;
-      if (hostEl.parentElement !== parent) parent.appendChild(hostEl);
+      // Move hostEl if parent changed.
+      if (hostEl.parentElement !== targetParent) {
+        try {
+          targetParent.appendChild(hostEl);
+          dbg("moved hostEl into", slot ? `#${slotId}` : "#af-stage-inline-offscreen");
+        } catch (e) {
+          dbg("appendChild failed", e);
+        }
+      }
 
+      // Read config from slot (or fallback if no slot).
       const nextCfg = readSlotConfig(slot, fallback);
       setCfg((prev) => {
         if (
@@ -120,15 +152,15 @@ export default function StageInlineHost(props: {
         ) {
           return prev;
         }
+        dbg("cfg updated", { prev, next: nextCfg });
         return nextCfg;
       });
-
-      setReady(true);
     };
 
-    queueMicrotask(apply);
+    // Initial attach in a microtask so we’re not doing sync state changes on mount timing edges.
+    queueMicrotask(attach);
 
-    const mo = new MutationObserver(() => apply());
+    const mo = new MutationObserver(() => attach());
     mo.observe(document.body, {
       childList: true,
       subtree: true,
@@ -136,23 +168,22 @@ export default function StageInlineHost(props: {
       attributeFilter: ["data-height", "data-cues", "data-offsets", "data-sig"],
     });
 
-    return () => mo.disconnect();
-  }, [slotId, fallback]);
+    return () => {
+      mo.disconnect();
+      // Do NOT remove hostEl; leaving it parked preserves state even if tree reorders.
+      // If you *want* to remove it on unmount, you can, but it will reset state.
+    };
+  }, [hostEl, slotId, fallback]);
 
-  const cuesByTrackId = useMemo(() => {
+  const cuesByTrackId = React.useMemo(() => {
     return safeParseJsonObject<CuesByTrackId>(cfg.cuesJson, {} as CuesByTrackId);
   }, [cfg.cuesJson]);
 
-  const offsetByTrackId = useMemo(() => {
-    return safeParseJsonObject<OffsetByTrackId>(
-      cfg.offsetsJson,
-      {} as OffsetByTrackId,
-    );
+  const offsetByTrackId = React.useMemo(() => {
+    return safeParseJsonObject<OffsetByTrackId>(cfg.offsetsJson, {} as OffsetByTrackId);
   }, [cfg.offsetsJson]);
 
-  if (!ready) return null;
-
-  const hostEl = getOrCreateHostEl();
+  if (!hostEl) return null;
 
   return createPortal(
     <StageInline

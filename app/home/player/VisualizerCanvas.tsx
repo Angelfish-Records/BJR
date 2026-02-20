@@ -135,6 +135,24 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
   const { variant } = props;
   const p = usePlayer();
 
+    // ---- DEBUG: mount/unmount tracer (safe; remove anytime) ----
+  const mountIdRef = React.useRef<string>(
+    `vc_${Math.random().toString(16).slice(2)}_${Date.now()}`,
+  );
+
+  React.useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log("[VisualizerCanvas] MOUNT", mountIdRef.current, { variant });
+
+    return () => {
+      // eslint-disable-next-line no-console
+      console.log("[VisualizerCanvas] UNMOUNT", mountIdRef.current, { variant });
+    };
+    // Intentionally run once per component instance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // ---- /DEBUG ----
+
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const engineRef = React.useRef<VisualizerEngine | null>(null);
 
