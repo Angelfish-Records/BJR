@@ -21,7 +21,6 @@ import {
 } from "@/lib/albums";
 import type { AlbumNavItem } from "@/lib/types";
 
-import StageInlineHost from "@/app/home/player/StageInlineHost";
 import FooterDrawer from "@/app/home/FooterDrawer";
 
 export const dynamic = "force-dynamic";
@@ -265,7 +264,10 @@ export default async function PortalLayout(props: {
               <div id="af-portal-topbar-slot" />
             </div>
 
-            <div className="shadowHomeMain" style={{ display: "grid", gap: 18 }}>
+            <div
+              className="shadowHomeMain"
+              style={{ display: "grid", gap: 18 }}
+            >
               <PortalArea
                 portalPanel={portalPanel}
                 albumSlug={albumSlug}
@@ -292,11 +294,18 @@ export default async function PortalLayout(props: {
                 gap: 14,
               }}
             >
-              <StageInlineHost
-                height={560}
-                cuesJson={cuesJson}
-                offsetsJson={offsetsJson}
-                sig={sig}
+              <div
+                id="af-stage-inline-slot"
+                data-height="560"
+                data-cues={cuesJson}
+                data-offsets={offsetsJson}
+                data-sig={sig}
+                style={{
+                  width: "100%",
+                  height: 560,
+                  borderRadius: 18,
+                  overflow: "hidden",
+                }}
               />
             </aside>
           </div>
