@@ -23,7 +23,6 @@ import type { AlbumNavItem } from "@/lib/types";
 
 import StageInlineHost from "@/app/home/player/StageInlineHost";
 import FooterDrawer from "@/app/home/FooterDrawer";
-import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -47,17 +46,6 @@ const shadowHomeQuery = `
   }
 `;
 
-// ✅ allow-list only. Any random /foo should NOT become a “portal tab”.
-const ALLOWED_TABS = new Set<string>([
-  "posts",
-  "download",
-  "about",
-  "contact",
-  "license",
-  "subscribe",
-  "faq",
-]);
-
 export async function generateMetadata(): Promise<Metadata> {
   const page = await client.fetch<{ subtitle?: string }>(
     `*[_type == "shadowHomePage" && slug.current == "home"][0]{ subtitle }`,
@@ -71,16 +59,10 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function PortalTabsLayout(props: {
+export default async function PortalLayout(props: {
   children: React.ReactNode;
-  params: Promise<{ tab: string }>;
 }) {
   headers();
-
-  const { tab } = await props.params;
-  const tabKey = (tab ?? "").trim().toLowerCase();
-
-  if (!ALLOWED_TABS.has(tabKey)) notFound();
 
   const { userId } = await auth();
   const user = userId ? await currentUser() : null;
@@ -107,8 +89,10 @@ export default async function PortalTabsLayout(props: {
     const ensured = await ensureMemberByClerk({
       clerkUserId: userId,
       email,
-      source: "portal_tabs_layout_clerk",
-      sourceDetail: { route: `/${tabKey}` },
+      source: "portal_layout_clerk",
+      // We can't reliably know the exact tab in a route-group layout.
+      // (If you really want it later, we can wire it via a small client reporter.)
+      sourceDetail: { route: "portal_layout" },
     });
 
     member = { id: ensured.id, created: ensured.created, email };
