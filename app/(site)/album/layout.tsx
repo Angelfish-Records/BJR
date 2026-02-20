@@ -3,8 +3,6 @@ import React from "react";
 import { headers } from "next/headers";
 import { client } from "@/sanity/lib/client";
 import { urlFor } from "@/sanity/lib/image";
-
-import StageInline from "@/app/home/player/StageInline";
 import FooterDrawer from "@/app/home/FooterDrawer";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +19,9 @@ const shadowHomeQuery = `
   }
 `;
 
-export default async function AlbumLayout(props: { children: React.ReactNode }) {
+export default async function AlbumLayout(props: {
+  children: React.ReactNode;
+}) {
   headers();
 
   const page = await client.fetch<ShadowHomeDoc>(
@@ -144,7 +144,10 @@ export default async function AlbumLayout(props: { children: React.ReactNode }) 
             </div>
 
             {/* LEFT: page content */}
-            <div className="shadowHomeMain" style={{ display: "grid", gap: 18 }}>
+            <div
+              className="shadowHomeMain"
+              style={{ display: "grid", gap: 18 }}
+            >
               {props.children}
             </div>
 
@@ -159,9 +162,15 @@ export default async function AlbumLayout(props: { children: React.ReactNode }) 
                 gap: 14,
               }}
             >
-              {/* Don’t pass album-bound cues/offsets here.
-                  StageInline already lazy-loads by currentTrackId, so this stays stable. */}
-              <StageInline height={560} />
+              {/* StageInline is hosted globally by StageInlineHost (in PlayerHost).
+    Album pages only provide the slot it portals into. */}
+              <div
+                id="af-stage-inline-slot"
+                data-height="560"
+                data-cues="{}"
+                data-offsets="{}"
+                data-sig="album-default"
+              />
             </aside>
           </div>
 

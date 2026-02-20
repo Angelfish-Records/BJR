@@ -232,6 +232,7 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
     if (activeStage === variant) engine.start();
     else engine.stop();
   }, [activeStage, variant]);
+  
 
   // Feed wantPlaying into engine.
   const wantPlaying =
