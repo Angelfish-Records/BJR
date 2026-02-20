@@ -670,7 +670,6 @@ export default async function PortalModules(props: Props) {
     <PortalTabs
       tabs={tabs}
       defaultTabId={tabs[0]?.id ?? null}
-      legacyQueryParam="p"
     />
   );
 }

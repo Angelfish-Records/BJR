@@ -136,7 +136,6 @@ function shareUrlFor(slug: string) {
   url.searchParams.set("p", "posts");
   url.searchParams.set("post", slug);
   url.searchParams.delete("pt");
-  url.searchParams.delete("panel");
   url.searchParams.delete("album");
   url.searchParams.delete("track");
   url.searchParams.delete("t");
@@ -941,7 +940,6 @@ export default function PortalArtistPosts(props: {
         post: post.slug,
         postType: postTypeFilter || null,
         pt: null,
-        panel: null,
         album: null,
         track: null,
         t: null,

@@ -6,20 +6,14 @@ import { headers } from "next/headers";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { client } from "@/sanity/lib/client";
 import { urlFor } from "@/sanity/lib/image";
-
+import { deriveTier } from "@/lib/vocab";
 import { musicAlbumJsonLd } from "@/lib/structuredData";
 import { ensureMemberByClerk } from "@/lib/members";
 import { listCurrentEntitlementKeys } from "@/lib/entitlements";
-import { ENTITLEMENTS, deriveTier } from "@/lib/vocab";
-import { checkAccess } from "@/lib/access";
 import { fetchPortalPage } from "@/lib/portal";
-import {
-  listAlbumsForBrowse,
-  getAlbumBySlug,
-} from "@/lib/albums";
+import { listAlbumsForBrowse, getAlbumBySlug } from "@/lib/albums";
 import type { AlbumNavItem } from "@/lib/types";
 
-import AdminDebugBar from "@/app/home/AdminDebugBar";
 import PortalModules from "@/app/home/PortalModules";
 import PortalArea from "@/app/home/PortalArea";
 
@@ -58,11 +52,15 @@ export async function generateMetadata(props: {
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await props.params;
+
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
+  const canonical = appUrl
+    ? `${appUrl}/album/${encodeURIComponent(slug)}`
+    : `/album/${encodeURIComponent(slug)}`;
+
   return {
     title: slug,
-    alternates: {
-      canonical: `/album/${encodeURIComponent(slug)}`,
-    },
+    alternates: { canonical },
   };
 }
 
@@ -112,16 +110,6 @@ export default async function AlbumCanonicalPage(props: {
   }
 
   const isPatron = tier === "patron";
-
-  let isAdmin = false;
-  if (member?.id) {
-    const d = await checkAccess(
-      member.id,
-      { kind: "global", required: [ENTITLEMENTS.ADMIN] },
-      { log: false },
-    );
-    isAdmin = d.allowed;
-  }
 
   const portalPanel = portal?.modules?.length ? (
     <PortalModules modules={portal.modules} memberId={member?.id ?? null} />
@@ -178,24 +166,22 @@ export default async function AlbumCanonicalPage(props: {
       : null;
 
   return (
-  <>
-    {jsonLd ? <JsonLdScript data={jsonLd} /> : null}
-    {isAdmin ? <AdminDebugBar isAdmin /> : null}
+    <>
+      {jsonLd ? <JsonLdScript data={jsonLd} /> : null}
 
-    <PortalArea
-      portalPanel={portalPanel}
-      albumSlug={slug}
-      album={albumData.album}
-      tracks={albumData.tracks}
-      albums={browseAlbums}
-      attentionMessage={null}
-      tier={tier}
-      isPatron={isPatron}
-      isAdmin={isAdmin}
-      canManageBilling={!!member}
-      topLogoUrl={page?.topLogoUrl ?? null}
-      topLogoHeight={page?.topLogoHeight ?? null}
-    />
-  </>
-);
+      <PortalArea
+        portalPanel={portalPanel}
+        albumSlug={slug}
+        album={albumData.album}
+        tracks={albumData.tracks}
+        albums={browseAlbums}
+        attentionMessage={null}
+        tier={tier}
+        isPatron={isPatron}
+        canManageBilling={!!member}
+        topLogoUrl={page?.topLogoUrl ?? null}
+        topLogoHeight={page?.topLogoHeight ?? null}
+      />
+    </>
+  );
 }

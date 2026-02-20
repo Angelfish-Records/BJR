@@ -352,7 +352,6 @@ export default function MiniPlayer(props: {
     const patch: Record<string, string | null | undefined> = { p: "player" };
     if (p.queueContextSlug) patch.album = p.queueContextSlug;
     if (p.current?.id) patch.track = p.current.id;
-    patch.panel = null;
     patch.t = null;
     replaceQuery(patch);
     onExpand?.();

@@ -25,18 +25,14 @@ import Image from "next/image";
 
 const DEFAULT_PORTAL_TAB = "extras";
 
-function homeTabFromPathname(pathname: string | null): string | null {
+function portalTabFromPathname(pathname: string | null): string | null {
   const p = (pathname ?? "").split("?")[0] ?? "";
   const parts = p.split("/").filter(Boolean);
-  if (parts[0] !== "home") return null;
-  return parts[1] ? decodeURIComponent(parts[1]).toLowerCase() : null;
-}
-
-function homePathForTab(tab: string) {
-  const t = (tab || "").trim().toLowerCase();
-  if (!t || t === "home") return "/home/player";
-  if (t === "player") return "/home/player";
-  return `/home/${encodeURIComponent(t)}`;
+  const head = (parts[0] ?? "").trim().toLowerCase();
+  if (!head) return null;
+  if (head === "player") return null;
+  if (head === "album") return null;
+  return decodeURIComponent(head);
 }
 
 function getLastPortalTab(): string | null {
@@ -433,10 +429,12 @@ function SpotlightVeil(props: { active: boolean }) {
   }, [active]);
 
   React.useEffect(() => {
-    const el =
+    const getEl = () =>
       typeof document !== "undefined"
         ? document.getElementById("af-admin-debugbar")
         : null;
+
+    const el = getEl();
     if (!el) return;
 
     if (debugbarStyleRef.current == null) {
@@ -453,6 +451,15 @@ function SpotlightVeil(props: { active: boolean }) {
       if (orig.trim()) el.setAttribute("style", orig);
       else el.removeAttribute("style");
     }
+
+    return () => {
+      // Cleanup if route changes while spotlight is active.
+      const el2 = getEl();
+      if (!el2) return;
+      const orig = debugbarStyleRef.current ?? "";
+      if (orig.trim()) el2.setAttribute("style", orig);
+      else el2.removeAttribute("style");
+    };
   }, [active]);
 
   if (!active) return null;
@@ -654,7 +661,8 @@ export default function PortalArea(props: {
   attentionMessage?: string | null;
   tier?: string | null;
   isPatron?: boolean;
-  isAdmin?: boolean;
+  // ✅ isAdmin is owned at /(site)/layout.tsx via AdminDebugBar.
+  // PortalArea should not take it as input.
   canManageBilling?: boolean;
 }) {
   const {
@@ -679,14 +687,20 @@ export default function PortalArea(props: {
 
   const router = useRouter();
   const pathname = usePathname();
-  const pathTab = homeTabFromPathname(pathname);
+
   const route = React.useMemo(() => parsePublicAlbumPath(pathname), [pathname]);
   const isPublicAlbumRoute = Boolean(route.albumSlug);
 
-  // home surface is path-only; if not on /home/* we treat it as player surface
-  const isHomeRoute = (pathname ?? "").startsWith("/home");
-  const isPlayer = !isHomeRoute || !pathTab || pathTab === "player";
+  const pathTab = portalTabFromPathname(pathname);
+
+  // ✅ Player surface is any /album/:slug(/track/:id) route.
+  // Portal surface is /{tab}.
+  const isPlayer = isPublicAlbumRoute;
   const portalTabId = !isPlayer ? pathTab : null;
+
+  // Base album slug to use when jumping "to player" from a portal tab.
+  // (On portal routes route.albumSlug is null, so we fall back to the shell’s current albumSlug prop.)
+  const playerAlbumSlug = route.albumSlug ?? albumSlug;
 
   React.useEffect(() => {
     if (!isPlayer && portalTabId) setLastPortalTab(portalTabId);
@@ -717,45 +731,33 @@ export default function PortalArea(props: {
     [isPublicAlbumRoute],
   );
 
-  const navHome = React.useCallback(
-    (
-      tab: string,
-      patch: Record<string, string | null | undefined>,
-      mode: "push" | "replace" = "push",
-    ) => {
-      const nextParams = new URLSearchParams(sp.toString());
-
-      // apply patch semantics
-      for (const [k, v] of Object.entries(patch)) {
-        const sv = v == null ? "" : String(v);
-        if (v == null || sv.trim() === "") nextParams.delete(k);
-        else nextParams.set(k, sv);
-      }
-
-      // hard strip legacy surface + album state keys (never allowed on /home/* now)
-      nextParams.delete("p");
-      nextParams.delete("panel");
-      nextParams.delete("album");
-      nextParams.delete("track");
-      nextParams.delete("t");
-
-      // portal hygiene: if leaving posts, clear deep link params
-      const t = (tab ?? "").trim().toLowerCase();
-      if (t !== "posts") {
-        nextParams.delete("post");
-        nextParams.delete("pt");
-      }
-
-      const href =
-        nextParams.toString().length > 0
-          ? `${homePathForTab(tab)}?${nextParams.toString()}`
-          : homePathForTab(tab);
-
-      if (mode === "replace") router.replace(href);
-      else router.push(href);
+  function buildSurfaceHref(
+    secondary: URLSearchParams,
+    opts: {
+      toPlayer?: boolean;
+      tab?: string | null;
+      clearPosts?: boolean;
+      albumSlugForPlayer: string;
     },
-    [router, sp],
-  );
+  ) {
+    const next = new URLSearchParams(secondary.toString());
+
+    // strip legacy/state keys (should already be sanitized, but belt + braces)
+    for (const k of ["p", "panel", "album", "track", "t"]) next.delete(k);
+
+    // if leaving posts, clear post params
+    if (opts.clearPosts) {
+      next.delete("post");
+      next.delete("pt");
+    }
+
+    const base = opts.toPlayer
+      ? `/album/${encodeURIComponent(opts.albumSlugForPlayer)}`
+      : `/${encodeURIComponent(opts.tab ?? DEFAULT_PORTAL_TAB)}`;
+
+    const q = next.toString();
+    return q ? `${base}?${q}` : base;
+  }
 
   const forceSurface = React.useCallback(
     (
@@ -763,19 +765,37 @@ export default function PortalArea(props: {
       tabId?: string | null,
       mode: "push" | "replace" = "push",
     ) => {
+      const leavingPosts = (portalTabId ?? "").toLowerCase() === "posts";
+
+      // Use the sanitized secondary query from urlState.
+      const secondary = new URLSearchParams(sp.toString());
+
       if (surface === "player") {
-        // player surface on home is just /home/player (+secondary params only)
-        navHome("player", {}, mode);
+        const href = buildSurfaceHref(secondary, {
+          toPlayer: true,
+          clearPosts: leavingPosts,
+          albumSlugForPlayer: playerAlbumSlug,
+        });
+        if (mode === "replace") router.replace(href);
+        else router.push(href);
         return;
       }
 
-      const desiredRaw =
+      const desired =
         (tabId ?? getLastPortalTab() ?? portalTabId ?? DEFAULT_PORTAL_TAB) ||
         DEFAULT_PORTAL_TAB;
 
-      navHome(desiredRaw, {}, mode);
+      const href = buildSurfaceHref(secondary, {
+        toPlayer: false,
+        tab: desired,
+        clearPosts: leavingPosts && desired !== "posts",
+        albumSlugForPlayer: playerAlbumSlug, // unused in this branch, but keeps signature uniform
+      });
+
+      if (mode === "replace") router.replace(href);
+      else router.push(href);
     },
-    [navHome, portalTabId],
+    [router, sp, portalTabId, playerAlbumSlug],
   );
 
   const gift = (sp.get("gift") ?? "").trim() || null;
@@ -856,7 +876,7 @@ export default function PortalArea(props: {
     const playbackIntent = Boolean(qTrack) || Boolean(qAutoplay);
     if (!playbackIntent) return;
 
-    // already on player surface
+    // already on /album/... (player surface)
     if (isPlayer) {
       forcedPlayerRef.current = true;
       return;
@@ -915,12 +935,6 @@ export default function PortalArea(props: {
     },
     [router],
   );
-
-  React.useEffect(() => {
-    if (!isPlayer) return;
-    if (!qAlbum) return;
-    if (qAlbum !== currentAlbumSlug) void onSelectAlbum(qAlbum);
-  }, [isPlayer, qAlbum, currentAlbumSlug, onSelectAlbum]);
 
   React.useEffect(() => {
     if (!qTrack) return;
@@ -1042,8 +1056,8 @@ export default function PortalArea(props: {
     const onOpen = (ev: Event) => {
       const e = ev as CustomEvent<{ albumSlug?: string | null }>;
       const slug = e.detail?.albumSlug ?? null;
-      forceSurface("player");
       if (slug) void onSelectAlbum(slug);
+      else forceSurface("player");
     };
 
     window.addEventListener("af:open-player", onOpen as EventListener);

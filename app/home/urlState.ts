@@ -20,7 +20,7 @@ const ALLOW_KEYS = new Set([
 const ALLOW_PREFIXES = ["utm_"];
 
 // Explicitly forbidden legacy/state keys (must never persist).
-const FORBIDDEN_KEYS = new Set(["p", "panel", "album", "track", "t"]);
+const FORBIDDEN_KEYS = new Set(["p", "album", "track", "t"]);
 
 function safeGetSearch(): string {
   if (typeof window === "undefined") return "";
@@ -47,15 +47,20 @@ export function sanitizeSecondaryQuery(params: URLSearchParams): void {
   // 3) normalize share -> st when present (prefer explicit st)
   const st = (params.get("st") ?? "").trim();
   const share = (params.get("share") ?? "").trim();
-  if (!st && share) {
-    params.set("st", share);
-  }
-  if (share) params.delete("share");
+  if (!st && share) params.set("st", share);
+  if (params.has("share")) params.delete("share");
 
   // 4) trim empties
   for (const [k, v] of Array.from(params.entries())) {
     if (!String(v ?? "").trim()) params.delete(k);
   }
+}
+
+/** Read current location query and return a policy-sanitized copy. */
+export function pickSecondaryQueryFromLocation(): URLSearchParams {
+  const params = new URLSearchParams(safeGetSearch().replace(/^\?/, ""));
+  sanitizeSecondaryQuery(params);
+  return params;
 }
 
 export function useClientSearchParams(): URLSearchParams {
@@ -99,16 +104,18 @@ export function replaceQuery(patch: Record<string, string | null | undefined>) {
   const url = new URL(window.location.href);
   const params = new URLSearchParams(url.search);
 
-  // Never allow forbidden legacy keys to be introduced via patch.
-  for (const k of Object.keys(patch)) {
-    if (FORBIDDEN_KEYS.has(k)) delete patch[k];
+  // Build a sanitized patch object WITHOUT mutating input.
+  const cleanPatch: Record<string, string | null> = {};
+  for (const [k, v] of Object.entries(patch)) {
+    if (FORBIDDEN_KEYS.has(k)) continue;
+    const sv = v == null ? "" : String(v);
+    cleanPatch[k] = sv.trim() ? sv : null;
   }
 
-  // apply patch
-  for (const [k, v] of Object.entries(patch)) {
-    const sv = v == null ? "" : String(v);
-    if (v == null || sv.trim() === "") params.delete(k);
-    else params.set(k, sv);
+  // Apply patch
+  for (const [k, v] of Object.entries(cleanPatch)) {
+    if (v == null) params.delete(k);
+    else params.set(k, v);
   }
 
   // Enforce policy after patch

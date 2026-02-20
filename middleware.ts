@@ -4,36 +4,44 @@ import { NextResponse } from "next/server";
 
 const PRESERVE_PREFIXES = ["utm_"];
 
-/**
- * Secondary params we intentionally allow to live on /home/*.
- * Everything else is either legacy surface state or not meant to persist.
- */
-const HOME_ALLOWED_KEYS = new Set([
+// Query keys that are allowed to survive canonicalization.
+const PRESERVE_KEYS = new Set<string>([
   "st",
   "share",
   "autoplay",
-  "gift",
-  "checkout",
+  // portal deep-linking / secondary concerns (keep if you use them)
   "post",
   "pt",
+  "gift",
+  "checkout",
 ]);
 
-const LEGACY_HOME_KEYS = new Set(["p", "panel", "album", "track", "t"]);
+// Legacy UI-surface keys that must NEVER survive.
+const STRIP_KEYS = new Set<string>(["p", "panel", "album", "track", "t"]);
 
 function splitPath(pathname: string): string[] {
   return (pathname ?? "").split("/").filter(Boolean);
 }
 
-function pickBasePreservedParams(url: URL): URLSearchParams {
+function pickPreservedParams(url: URL): URLSearchParams {
   const out = new URLSearchParams();
 
+  // unify share token into st
   const st = (url.searchParams.get("st") ?? url.searchParams.get("share") ?? "")
     .trim();
   if (st) out.set("st", st);
 
+  // keep autoplay if present
   const autoplay = (url.searchParams.get("autoplay") ?? "").trim();
   if (autoplay) out.set("autoplay", autoplay);
 
+  // preserve secondary keys you actively use
+  for (const k of ["post", "pt", "gift", "checkout"] as const) {
+    const v = (url.searchParams.get(k) ?? "").trim();
+    if (v) out.set(k, v);
+  }
+
+  // preserve utm_*
   for (const [k, v] of url.searchParams.entries()) {
     if (PRESERVE_PREFIXES.some((p) => k.startsWith(p)) && v) out.set(k, v);
   }
@@ -41,93 +49,93 @@ function pickBasePreservedParams(url: URL): URLSearchParams {
   return out;
 }
 
-function pickHomeAllowedParams(url: URL): URLSearchParams {
-  const out = pickBasePreservedParams(url);
-
-  // explicitly allow these on /home/*
-  for (const k of HOME_ALLOWED_KEYS) {
-    if (k === "st" || k === "share" || k === "autoplay") continue; // already handled
-    const v = (url.searchParams.get(k) ?? "").trim();
-    if (v) out.set(k, v);
+function filteredCanonicalParams(url: URL): URLSearchParams {
+  const out = new URLSearchParams();
+  for (const [k, v] of url.searchParams.entries()) {
+    if (STRIP_KEYS.has(k)) continue;
+    if (PRESERVE_KEYS.has(k) || PRESERVE_PREFIXES.some((p) => k.startsWith(p))) {
+      const vv = (v ?? "").trim();
+      if (vv) out.set(k, vv);
+    }
   }
 
-  // Also preserve utm_* (already handled) and nothing else.
+  // normalize share → st (never keep both)
+  const st = (out.get("st") ?? out.get("share") ?? "").trim();
+  out.delete("share");
+  if (st) out.set("st", st);
+
   return out;
 }
 
-function withQuery(dest: URL, qp: URLSearchParams): URL {
-  dest.search = "";
-  for (const [k, v] of qp.entries()) dest.searchParams.set(k, v);
-  return dest;
+function sameParams(a: URLSearchParams, b: URLSearchParams): boolean {
+  if (a.toString() === b.toString()) return true;
+  // (toString order can vary; do a stable compare)
+  if (a.size !== b.size) return false;
+  for (const [k, v] of a.entries()) {
+    if (b.get(k) !== v) return false;
+  }
+  return true;
 }
 
 function redirect308(reqUrl: URL, pathname: string, qp: URLSearchParams) {
   const dest = new URL(pathname, reqUrl.origin);
-  withQuery(dest, qp);
+  // assign params
+  for (const [k, v] of qp.entries()) dest.searchParams.set(k, v);
   return NextResponse.redirect(dest, 308);
-}
-
-function homePathForLegacyTab(tab: string): string {
-  const t = (tab ?? "").trim().toLowerCase();
-  if (!t || t === "home" || t === "player") return "/home/player";
-  return `/home/${encodeURIComponent(t)}`;
 }
 
 export default clerkMiddleware((_, req) => {
   const url = new URL(req.url);
   const pathname = url.pathname;
 
-  // ---- 0) /home -> /home/player (enter canonical universe immediately) ----
+  // ---- A) Hard upgrades: legacy /home family -> canonical tabs/player ----
   if (pathname === "/home") {
-    const preserved = pickHomeAllowedParams(url);
-    return redirect308(url, "/home/player", preserved);
+    return redirect308(url, "/posts", pickPreservedParams(url));
   }
 
-  // ---- 0.5) Canonicalise /home/* by stripping legacy surface params ----
-  // If any legacy keys exist, redirect to same path with only allowed keys.
-  if (pathname === "/home" || pathname.startsWith("/home/")) {
-    let hasLegacy = false;
-    for (const k of LEGACY_HOME_KEYS) {
-      if ((url.searchParams.get(k) ?? "").trim()) {
-        hasLegacy = true;
-        break;
-      }
-    }
-
-    // Also treat ?share as legacy alias but we preserve it as st.
-    // (Handled in pickHomeAllowedParams)
-    if (hasLegacy) {
-      const preserved = pickHomeAllowedParams(url);
-      return redirect308(url, pathname, preserved);
-    }
+  if (pathname === "/home/player") {
+    return redirect308(url, "/player", pickPreservedParams(url));
   }
 
-  // ---- 1) /albums (legacy) -> /album (canonical) ----
+  if (pathname.startsWith("/home/")) {
+    const parts = splitPath(pathname); // ["home", "<tab>", ...]
+    const tab = (parts[1] ?? "").trim();
+    return redirect308(url, tab ? `/${encodeURIComponent(tab)}` : "/posts", pickPreservedParams(url));
+  }
+
+  // ---- B) Hard upgrades: legacy /albums family -> canonical /album ----
   if (pathname.startsWith("/albums/")) {
-    const parts = splitPath(pathname);
-    const slug = parts[1] ?? "";
+    const parts = splitPath(pathname); // ["albums", ":slug", ...]
+    const slug = (parts[1] ?? "").trim();
     if (slug) {
-      const preserved = pickBasePreservedParams(url);
+      const preserved = pickPreservedParams(url);
 
       // /albums/:slug/track/:trackId
       if ((parts[2] ?? "") === "track" && parts[3]) {
-        const targetPath = `/album/${encodeURIComponent(slug)}/track/${encodeURIComponent(
-          parts[3],
-        )}`;
-        return redirect308(url, targetPath, preserved);
+        return redirect308(
+          url,
+          `/album/${encodeURIComponent(slug)}/track/${encodeURIComponent(parts[3])}`,
+          preserved,
+        );
       }
 
-      // legacy query /albums/:slug?track=:id
+      // /albums/:slug?track=...
       const trackQ = (url.searchParams.get("track") ?? "").trim();
-      const targetPath = trackQ
-        ? `/album/${encodeURIComponent(slug)}/track/${encodeURIComponent(trackQ)}`
-        : `/album/${encodeURIComponent(slug)}`;
+      if (trackQ) {
+        return redirect308(
+          url,
+          `/album/${encodeURIComponent(slug)}/track/${encodeURIComponent(trackQ)}`,
+          preserved,
+        );
+      }
 
-      return redirect308(url, targetPath, preserved);
+      // /albums/:slug
+      return redirect308(url, `/album/${encodeURIComponent(slug)}`, preserved);
     }
   }
 
-  // ---- 2) Legacy query-world /home?p=... -> canonical paths ----
+  // ---- C) Legacy query-world: /home?p=... -> new paths ----
+  // NOTE: This still matters for external links.
   if (pathname === "/home" || pathname.startsWith("/home/")) {
     const p = (url.searchParams.get("p") ?? "").trim().toLowerCase();
     const album = (url.searchParams.get("album") ?? "").trim();
@@ -135,30 +143,51 @@ export default clerkMiddleware((_, req) => {
     const post = (url.searchParams.get("post") ?? "").trim();
     const pt = (url.searchParams.get("pt") ?? "").trim();
 
-    const preserved = pickHomeAllowedParams(url);
+    const preserved = pickPreservedParams(url);
 
-    // /home?p=player&album=:slug&track=:id  ->  /album/:slug/track/:id
+    // /home?p=player&album=:slug&track=:id -> /album/:slug/track/:id
     if (p === "player" && album) {
-      const targetPath = track
+      const target = track
         ? `/album/${encodeURIComponent(album)}/track/${encodeURIComponent(track)}`
         : `/album/${encodeURIComponent(album)}`;
-      return redirect308(url, targetPath, pickBasePreservedParams(url));
+      return redirect308(url, target, preserved);
     }
 
-    // /home?p=<tab> -> /home/<tab>
+    // /home?p=<tab> -> /<tab>
     if (p && p !== "player") {
       if (p === "posts") {
         if (post) preserved.set("post", post);
         if (pt) preserved.set("pt", pt);
       }
-      return redirect308(url, homePathForLegacyTab(p), preserved);
+      return redirect308(url, `/${encodeURIComponent(p)}`, preserved);
     }
 
-    // legacy pt-only (no p) -> /home/<pt>
+    // pt-only -> /<pt>
     if (!p && pt) {
-      if (pt === "posts" && post) preserved.set("post", post);
+      if (post && pt === "posts") preserved.set("post", post);
       preserved.set("pt", pt);
-      return redirect308(url, homePathForLegacyTab(pt), preserved);
+      return redirect308(url, `/${encodeURIComponent(pt)}`, preserved);
+    }
+  }
+
+  // ---- D) On canonical routes, strip legacy UI-surface params if present ----
+  // This prevents old links from “dirtying” your canonical universe.
+  if (url.searchParams.size > 0) {
+    let hasLegacy = false;
+    for (const k of url.searchParams.keys()) {
+      if (STRIP_KEYS.has(k)) {
+        hasLegacy = true;
+        break;
+      }
+    }
+
+    if (hasLegacy) {
+      const filtered = filteredCanonicalParams(url);
+      const current = new URLSearchParams(url.searchParams.toString());
+      // If the filtered params differ, redirect to cleaned URL.
+      if (!sameParams(filtered, current)) {
+        return redirect308(url, pathname, filtered);
+      }
     }
   }
 

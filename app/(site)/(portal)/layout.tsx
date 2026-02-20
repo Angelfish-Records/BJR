@@ -1,19 +1,16 @@
-// web/app/(site)/home/layout.tsx
+// web/app/(site)/(portal)/layout.tsx
 import React from "react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { createHash } from "crypto";
 
-import { musicAlbumJsonLd } from "@/lib/structuredData";
 import { client } from "@/sanity/lib/client";
 import { urlFor } from "@/sanity/lib/image";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { ensureMemberByClerk } from "@/lib/members";
 import { listCurrentEntitlementKeys } from "@/lib/entitlements";
-import { ENTITLEMENTS } from "@/lib/vocab";
-import { checkAccess } from "@/lib/access";
 import { deriveTier } from "@/lib/vocab";
 
-import AdminDebugBar from "@/app/home/AdminDebugBar";
 import { fetchPortalPage } from "@/lib/portal";
 import PortalModules from "@/app/home/PortalModules";
 import PortalArea from "@/app/home/PortalArea";
@@ -25,8 +22,8 @@ import {
 import type { AlbumNavItem } from "@/lib/types";
 
 import StageInlineHost from "@/app/home/player/StageInlineHost";
-import { createHash } from "crypto";
 import FooterDrawer from "@/app/home/FooterDrawer";
+import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -50,14 +47,16 @@ const shadowHomeQuery = `
   }
 `;
 
-function JsonLdScript({ data }: { data: Record<string, unknown> }) {
-  return (
-    <script
-      type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
-    />
-  );
-}
+// ✅ allow-list only. Any random /foo should NOT become a “portal tab”.
+const ALLOWED_TABS = new Set<string>([
+  "posts",
+  "download",
+  "about",
+  "contact",
+  "license",
+  "subscribe",
+  "faq",
+]);
 
 export async function generateMetadata(): Promise<Metadata> {
   const page = await client.fetch<{ subtitle?: string }>(
@@ -67,20 +66,23 @@ export async function generateMetadata(): Promise<Metadata> {
   );
 
   return {
-    title: "Home",
-    description:
-      page?.subtitle ??
-      "Portal shell: panels swap; identity stays boring; access stays canonical.",
+    title: "Brendan John Roch",
+    description: page?.subtitle ?? "Music, posts, downloads, and more.",
   };
 }
 
-export default async function HomeLayout(props: { children: React.ReactNode }) {
+export default async function PortalTabsLayout(props: {
+  children: React.ReactNode;
+  params: Promise<{ tab: string }>;
+}) {
   headers();
 
-  // NOTE: /home/* is now path-canonical, so we do NOT read album selection from query here.
-  // Home uses the featured album for visualiser cues + JSON-LD context.
-  const { userId } = await auth();
+  const { tab } = await props.params;
+  const tabKey = (tab ?? "").trim().toLowerCase();
 
+  if (!ALLOWED_TABS.has(tabKey)) notFound();
+
+  const { userId } = await auth();
   const user = userId ? await currentUser() : null;
   const email =
     user?.primaryEmailAddress?.emailAddress ??
@@ -105,8 +107,8 @@ export default async function HomeLayout(props: { children: React.ReactNode }) {
     const ensured = await ensureMemberByClerk({
       clerkUserId: userId,
       email,
-      source: "shadow_home_clerk",
-      sourceDetail: { route: "/home" },
+      source: "portal_tabs_layout_clerk",
+      sourceDetail: { route: `/${tabKey}` },
     });
 
     member = { id: ensured.id, created: ensured.created, email };
@@ -115,16 +117,6 @@ export default async function HomeLayout(props: { children: React.ReactNode }) {
   }
 
   const isPatron = tier === "patron";
-
-  let isAdmin = false;
-  if (member?.id) {
-    const d = await checkAccess(
-      member.id,
-      { kind: "global", required: [ENTITLEMENTS.ADMIN] },
-      { log: false },
-    );
-    isAdmin = d.allowed;
-  }
 
   const bgUrl = page?.backgroundImage
     ? urlFor(page.backgroundImage).width(2400).height(1400).quality(80).url()
@@ -151,13 +143,12 @@ export default async function HomeLayout(props: { children: React.ReactNode }) {
         lineHeight: 1.55,
       }}
     >
-      No portal modules yet. Create a{" "}
-      <code style={{ opacity: 0.9 }}>portalPage</code> with slug{" "}
-      <code style={{ opacity: 0.9 }}>home</code> in Sanity Studio.
+      No portal modules yet. Create a <code>portalPage</code> with slug{" "}
+      <code>home</code> in Sanity Studio.
     </div>
   );
 
-  // Featured album (authoritative for Home shell)
+  // Featured album is used for visualizer cues in portal shell.
   const featuredAlbumSlug =
     featured.slug ?? featured.fallbackSlug ?? "consolers";
 
@@ -167,7 +158,6 @@ export default async function HomeLayout(props: { children: React.ReactNode }) {
   const cuesObj = albumData.lyrics.cuesByTrackId ?? {};
   const offsetsObj = albumData.lyrics.offsetByTrackId ?? {};
 
-  // Stable content signature so client can ignore fresh object identities.
   const cuesJson = JSON.stringify(cuesObj);
   const offsetsJson = JSON.stringify(offsetsObj);
 
@@ -176,18 +166,6 @@ export default async function HomeLayout(props: { children: React.ReactNode }) {
     .update("|")
     .update(offsetsJson)
     .digest("hex");
-
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
-  const pageUrl = appUrl ? `${appUrl}/home/player` : "";
-
-  const jsonLd =
-    albumData.album && pageUrl
-      ? musicAlbumJsonLd({
-          album: albumData.album,
-          tracks: albumData.tracks,
-          pageUrl,
-        })
-      : null;
 
   const browseAlbumsRaw = await listAlbumsForBrowse();
 
@@ -217,9 +195,6 @@ export default async function HomeLayout(props: { children: React.ReactNode }) {
 
   return (
     <main style={mainStyle}>
-      {jsonLd ? <JsonLdScript data={jsonLd} /> : null}
-      {isAdmin ? <AdminDebugBar isAdmin /> : null}
-
       <style>{`
         .shadowHomeGrid {
           display: grid;
@@ -227,45 +202,26 @@ export default async function HomeLayout(props: { children: React.ReactNode }) {
           gap: 8px 18px;
           align-items: start;
         }
-
         .shadowHomeMain,
         .shadowHomeSidebar,
-        .shadowHomeGrid > * {
-          min-width: 0;
-        }
-
-        .shadowHomeSidebar > * {
-          width: 100%;
-        }
+        .shadowHomeGrid > * { min-width: 0; }
+        .shadowHomeSidebar > * { width: 100%; }
 
         .portalCardGrid2up {
           display: grid;
           gap: 12px;
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
-
         @media (max-width: 700px) {
-          .portalCardGrid2up {
-            grid-template-columns: 1fr;
-          }
+          .portalCardGrid2up { grid-template-columns: 1fr; }
         }
-
         @media (max-width: 1060px) {
           .shadowHomeGrid { grid-template-columns: 1fr; }
-          .shadowHomeSidebar {
-            order: 1;
-            position: static !important;
-            top: auto !important;
-          }
+          .shadowHomeSidebar { order: 1; position: static !important; top: auto !important; }
           .shadowHomeMain { order: 0; }
         }
-
         @media (max-width: 520px) {
-          .shadowHomeOuter {
-            padding-left: 14px !important;
-            padding-right: 14px !important;
-          }
-
+          .shadowHomeOuter { padding-left: 14px !important; padding-right: 14px !important; }
           @media (max-width: 1060px) {
             .shadowHomeSidebar { position: static !important; }
           }
@@ -321,38 +277,27 @@ export default async function HomeLayout(props: { children: React.ReactNode }) {
           }}
         >
           <div className="shadowHomeGrid" style={{ minHeight: 0 }}>
-            {/* GRID-WIDE TOP BAR SLOT (PortalShell portals into this) */}
             <div style={{ gridColumn: "1 / -1", minWidth: 0 }}>
               <div id="af-portal-topbar-slot" />
             </div>
 
-            {/* LEFT: portal shell (now persistent across /home/*) */}
-            <div
-              className="shadowHomeMain"
-              style={{ display: "grid", gap: 18 }}
-            >
+            <div className="shadowHomeMain" style={{ display: "grid", gap: 18 }}>
               <PortalArea
                 portalPanel={portalPanel}
                 albumSlug={albumSlug}
                 album={albumData.album}
                 tracks={albumData.tracks}
                 albums={browseAlbums}
-                // NOTE: attentionMessage used to be driven by ?checkout=success on /home.
-                // That flow now lands users on /home/player; if you still want it, re-add a cookie-based flag or read it client-side.
                 attentionMessage={null}
                 tier={tier}
                 isPatron={isPatron}
-                isAdmin={isAdmin}
                 canManageBilling={!!member}
                 topLogoUrl={page?.topLogoUrl ?? null}
                 topLogoHeight={page?.topLogoHeight ?? null}
               />
-
-              {/* children are effectively a no-op, but keep slot for future */}
               {props.children}
             </div>
 
-            {/* RIGHT: visualiser sidebar (now persistent across /home/*) */}
             <aside
               className="shadowHomeSidebar"
               style={{

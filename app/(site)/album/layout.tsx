@@ -81,6 +81,12 @@ export default async function AlbumLayout(props: { children: React.ReactNode }) 
             .shadowHomeSidebar { position: static !important; }
           }
         }
+
+        /* Shared hook: portal header slot exists on album pages too (PortalShell portals into this) */
+        #af-portal-topbar-slot { min-width: 0; }
+
+        /* Shared hook: keep children from forcing horizontal scroll in grid contexts */
+        .shadowHomeMain > * { min-width: 0; }
       `}</style>
 
       {/* background layers */}

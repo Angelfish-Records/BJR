@@ -316,7 +316,7 @@ export async function POST(req: NextRequest) {
     [created._id, slug, ...questionIds],
   );
 
-  const postUrl = `${appOrigin()}/home?p=posts&post=${encodeURIComponent(slug)}`;
+  const postUrl = `${appOrigin()}/posts?post=${encodeURIComponent(slug)}`;
 
   // Eligible notifications: answered + unstamped + not suppressed
   const notifyRes = await sql.query<{

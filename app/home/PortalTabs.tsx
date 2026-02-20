@@ -3,52 +3,49 @@
 
 import React from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { useClientSearchParams } from "./urlState";
 
 export type PortalTabSpec = {
-  id: string;
+  id: string; // e.g. "extras" | "posts" | "download"
   title: string;
   locked?: boolean;
   lockedHint?: string | null;
   content: React.ReactNode;
 };
 
-function tabFromHomePathname(pathname: string | null): string | null {
+function tabFromPathname(pathname: string | null): string | null {
   const p = (pathname ?? "").split("?")[0] ?? "";
   const parts = p.split("/").filter(Boolean);
-  if (parts[0] !== "home") return null;
-  const t = (parts[1] ?? "").trim();
-  if (!t) return null;
-  return decodeURIComponent(t).toLowerCase();
+
+  const head = (parts[0] ?? "").trim().toLowerCase();
+  if (!head) return null;
+
+  // reserved/non-portal surfaces
+  if (head === "player") return null;
+  if (head === "album") return null;
+
+  return decodeURIComponent(head);
 }
 
-function homePathForTab(tabId: string) {
+function pathForTab(tabId: string) {
   const t = (tabId || "").trim().toLowerCase();
-  // PortalTabs should never navigate to player; but guard anyway.
-  if (!t || t === "player") return "/home/extras";
-  return `/home/${encodeURIComponent(t)}`;
+  if (!t || t === "player") return "/extras";
+  return `/${encodeURIComponent(t)}`;
 }
 
 export default function PortalTabs(props: {
   tabs: PortalTabSpec[];
   defaultTabId?: string | null;
-  /** legacy only: interpret ?p=... and ?pt=... */
-  legacyQueryParam?: string; // default 'p'
 }) {
-  const { tabs, defaultTabId = null, legacyQueryParam = "p" } = props;
+  const { tabs, defaultTabId = null } = props;
 
-  // ✅ hooks must come first, always
+  // ✅ hooks must be unconditional and top-level
   const router = useRouter();
   const pathname = usePathname();
-  const sp = useClientSearchParams();
 
   const hasTabs = tabs.length > 0;
   const firstId = (hasTabs ? tabs[0]?.id : null) ?? null;
 
-  const pathTab = tabFromHomePathname(pathname);
-
-  const legacyPt = (sp.get("pt") ?? "").trim().toLowerCase() || null;
-  const legacyP = (sp.get(legacyQueryParam) ?? "").trim().toLowerCase() || null;
+  const pathTab = tabFromPathname(pathname);
 
   const resolveValid = React.useCallback(
     (candidate: string | null): string | null => {
@@ -60,9 +57,8 @@ export default function PortalTabs(props: {
   );
 
   const validPath = resolveValid(pathTab);
-  const validLegacy = resolveValid(legacyP) ?? resolveValid(legacyPt);
 
-  const initial = React.useMemo(() => {
+    const initial = React.useMemo(() => {
     if (!hasTabs) return null;
 
     const defaultValid =
@@ -70,48 +66,25 @@ export default function PortalTabs(props: {
         ? defaultTabId
         : null;
 
-    return validPath ?? validLegacy ?? defaultValid ?? firstId;
-  }, [hasTabs, defaultTabId, tabs, validPath, validLegacy, firstId]);
+    return validPath ?? defaultValid ?? firstId;
+  }, [hasTabs, defaultTabId, tabs, validPath, firstId]);
 
   const [activeId, setActiveId] = React.useState<string | null>(initial);
-
-  React.useEffect(() => {
-  // warm the RSC cache for sibling tab routes
-  tabs.forEach((t) => {
-    router.prefetch(homePathForTab(t.id));
-  });
-}, [router, tabs]);
-
-  // keep local state aligned
-  React.useEffect(() => {
-    if (!initial) return;
-    if (activeId !== initial) setActiveId(initial);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initial]);
-
-  // promote legacy query -> path (replace) when we’re not already path-native
-  React.useEffect(() => {
-    if (!initial) return;
-    if (validPath) return;
-    if (!validLegacy) return;
-    router.replace(homePathForTab(validLegacy));
-  }, [initial, validPath, validLegacy, router]);
-
-  const active = React.useMemo(() => {
-    if (!hasTabs) return null;
-    return tabs.find((t) => t.id === activeId) ?? tabs[0] ?? null;
-  }, [hasTabs, tabs, activeId]);
-
-  const wrap: React.CSSProperties = { display: "grid", gap: 12, minWidth: 0 };
 
   // indicator/rail measurement refs
   const rowRef = React.useRef<HTMLDivElement | null>(null);
   const btnRefs = React.useRef<Map<string, HTMLButtonElement>>(new Map());
 
-  const [indicator, setIndicator] = React.useState<{ x: number; w: number } | null>(
-    null,
-  );
+  const [indicator, setIndicator] = React.useState<{
+    x: number;
+    w: number;
+  } | null>(null);
   const [rail, setRail] = React.useState<{ x: number; w: number } | null>(null);
+
+  const active = React.useMemo(() => {
+    if (!hasTabs) return null;
+    return tabs.find((t) => t.id === activeId) ?? tabs[0] ?? null;
+  }, [hasTabs, tabs, activeId]);
 
   const measure = React.useCallback(() => {
     const row = rowRef.current;
@@ -153,6 +126,19 @@ export default function PortalTabs(props: {
     setIndicator({ x: r(x), w: r(w) });
   }, [hasTabs, tabs, active?.id]);
 
+  React.useEffect(() => {
+    // warm RSC cache for sibling routes
+    if (!hasTabs) return;
+    tabs.forEach((t) => router.prefetch(pathForTab(t.id)));
+  }, [router, tabs, hasTabs]);
+
+  // keep local state aligned to resolved route
+  React.useEffect(() => {
+    if (!initial) return;
+    if (activeId !== initial) setActiveId(initial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial]);
+
   React.useLayoutEffect(() => {
     measure();
   }, [measure]);
@@ -162,6 +148,11 @@ export default function PortalTabs(props: {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, [measure]);
+
+  // ✅ early return AFTER hooks
+  if (!hasTabs) return null;
+
+  const wrap: React.CSSProperties = { display: "grid", gap: 12, minWidth: 0 };
 
   const tabRow: React.CSSProperties = {
     position: "relative",
@@ -191,14 +182,9 @@ export default function PortalTabs(props: {
     textDecoration: "none",
   });
 
-  // ✅ now it’s safe to return null (hooks already executed)
-  if (!hasTabs) return null;
-
   return (
     <div style={wrap}>
-      <style>{`
-        .afPortalTabRow::-webkit-scrollbar { display: none; height: 0; }
-      `}</style>
+      <style>{`.afPortalTabRow::-webkit-scrollbar { display:none; height:0; }`}</style>
 
       <div
         ref={rowRef}
@@ -252,7 +238,7 @@ export default function PortalTabs(props: {
               aria-label={t.title}
               onClick={() => {
                 setActiveId(t.id);
-                router.push(homePathForTab(t.id));
+                router.push(pathForTab(t.id));
               }}
               style={tabBtn(isActive)}
               title={t.locked ? (t.lockedHint ?? "Locked") : t.title}
