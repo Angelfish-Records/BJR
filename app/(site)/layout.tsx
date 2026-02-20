@@ -1,5 +1,6 @@
 // web/app/(site)/layout.tsx
 import React from "react";
+import PlayerHost from "./PlayerHost";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { ensureMemberByClerk } from "@/lib/members";
 import { checkAccess } from "@/lib/access";
@@ -40,9 +41,9 @@ export default async function SiteLayout(props: { children: React.ReactNode }) {
   }
 
   return (
-    <>
-      {isAdmin ? <AdminDebugBar isAdmin /> : null}
+     <PlayerHost>
+      {isAdmin ? <AdminDebugBar isAdmin={isAdmin} /> : null}
       {props.children}
-    </>
+    </PlayerHost>
   );
 }
