@@ -150,6 +150,11 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
 
   const themeName: ThemeName = canonicalThemeName(p.current?.visualTheme);
 
+  const themeNameRef = React.useRef<ThemeName>(themeName);
+  React.useEffect(() => {
+    themeNameRef.current = themeName;
+  }, [themeName]);
+
   // Mount engine once per canvas instance.
   React.useEffect(() => {
     const canvas = canvasRef.current;
@@ -175,9 +180,7 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
     // Prime target theme (async, engine-owned)
     let cancelled = false;
     (async () => {
-      const factory = await loadThemeFactory(
-        canonicalThemeName(p.current?.visualTheme),
-      );
+      const factory = await loadThemeFactory(themeNameRef.current);
       if (cancelled) return;
       engine.setTargetTheme(factory());
     })().catch(() => {});
@@ -191,8 +194,7 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
         engineRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [variant]);
+  }, []);
 
   // IMPORTANT: only register the canvas as the visual source when this variant
   // is the authoritative stage. Otherwise samplers may lock onto a blank/stopped canvas.

@@ -6,7 +6,6 @@ import { createPortal } from "react-dom";
 
 import StageInline from "@/app/home/player/StageInline";
 
-// Derive the cue/offset prop types from StageInline itself (future-proof)
 type StageInlineProps = React.ComponentProps<typeof StageInline>;
 type CuesByTrackId = NonNullable<StageInlineProps["cuesByTrackId"]>;
 type OffsetByTrackId = NonNullable<StageInlineProps["offsetByTrackId"]>;
@@ -15,8 +14,10 @@ type SlotConfig = {
   height: number;
   cuesJson: string;
   offsetsJson: string;
-  sig: string; // for cheap change detection only; StageInline doesn't consume it
+  sig: string;
 };
+
+let _hostEl: HTMLDivElement | null = null;
 
 function safeParseHeight(v: string | null | undefined, fallback: number) {
   const n = v ? Number(v) : NaN;
@@ -25,13 +26,12 @@ function safeParseHeight(v: string | null | undefined, fallback: number) {
 
 function readSlotConfig(slot: HTMLElement | null, fallback: SlotConfig): SlotConfig {
   if (!slot) return fallback;
-
-  const height = safeParseHeight(slot.getAttribute("data-height"), fallback.height);
-  const cuesJson = slot.getAttribute("data-cues") ?? fallback.cuesJson;
-  const offsetsJson = slot.getAttribute("data-offsets") ?? fallback.offsetsJson;
-  const sig = slot.getAttribute("data-sig") ?? fallback.sig;
-
-  return { height, cuesJson, offsetsJson, sig };
+  return {
+    height: safeParseHeight(slot.getAttribute("data-height"), fallback.height),
+    cuesJson: slot.getAttribute("data-cues") ?? fallback.cuesJson,
+    offsetsJson: slot.getAttribute("data-offsets") ?? fallback.offsetsJson,
+    sig: slot.getAttribute("data-sig") ?? fallback.sig,
+  };
 }
 
 function ensureOffscreenHost(): HTMLElement {
@@ -52,6 +52,21 @@ function ensureOffscreenHost(): HTMLElement {
   return el;
 }
 
+function getOrCreateHostEl(): HTMLDivElement {
+  if (_hostEl && document.body.contains(_hostEl)) return _hostEl;
+
+  const el = document.createElement("div");
+  el.id = "af-stage-inline-host";
+  el.style.width = "100%";
+  el.style.height = "100%";
+  el.style.borderRadius = "18px";
+  el.style.overflow = "hidden";
+
+  ensureOffscreenHost().appendChild(el);
+  _hostEl = el;
+  return el;
+}
+
 function safeParseJsonObject<T>(json: string, fallback: T): T {
   try {
     const v = JSON.parse(json);
@@ -63,12 +78,10 @@ function safeParseJsonObject<T>(json: string, fallback: T): T {
 }
 
 export default function StageInlineHost(props: {
-  /** Optional defaults; portal layout can override via slot data-* attrs */
   height?: number;
   cuesJson?: string;
   offsetsJson?: string;
   sig?: string;
-  /** Slot id to portal into when present */
   slotId?: string;
 }) {
   const slotId = props.slotId ?? "af-stage-inline-slot";
@@ -83,21 +96,21 @@ export default function StageInlineHost(props: {
     [props.height, props.cuesJson, props.offsetsJson, props.sig],
   );
 
-  // Portal target + config. These only exist client-side.
-  const [container, setContainer] = useState<HTMLElement | null>(null);
   const [cfg, setCfg] = useState<SlotConfig>(fallback);
+  const [ready, setReady] = useState(false);
 
-  // Subscribe to DOM changes (slot appearing/disappearing or data-* updating).
-  // NOTE: any setState happens inside the observer callback (satisfies your eslint rule).
   useEffect(() => {
     const offscreen = ensureOffscreenHost();
 
-    const compute = () => {
+    const apply = () => {
+      const hostEl = getOrCreateHostEl();
       const slot = document.getElementById(slotId) as HTMLElement | null;
-      const nextContainer = (slot ?? offscreen) as HTMLElement;
-      const nextCfg = readSlotConfig(slot, fallback);
 
-      setContainer((prev) => (prev === nextContainer ? prev : nextContainer));
+      // Reparent the SAME hostEl. Portal target stays constant => no remount.
+      const parent = slot ?? offscreen;
+      if (hostEl.parentElement !== parent) parent.appendChild(hostEl);
+
+      const nextCfg = readSlotConfig(slot, fallback);
       setCfg((prev) => {
         if (
           prev.height === nextCfg.height &&
@@ -109,14 +122,13 @@ export default function StageInlineHost(props: {
         }
         return nextCfg;
       });
+
+      setReady(true);
     };
 
-    // Initial compute (still inside effect; but eslint rule you hit was specifically
-    // about "setState synchronously within an effect body". If that rule is strict
-    // enough to flag even this, we can move this call into a microtask.
-    queueMicrotask(compute);
+    queueMicrotask(apply);
 
-    const mo = new MutationObserver(() => compute());
+    const mo = new MutationObserver(() => apply());
     mo.observe(document.body, {
       childList: true,
       subtree: true,
@@ -132,10 +144,15 @@ export default function StageInlineHost(props: {
   }, [cfg.cuesJson]);
 
   const offsetByTrackId = useMemo(() => {
-    return safeParseJsonObject<OffsetByTrackId>(cfg.offsetsJson, {} as OffsetByTrackId);
+    return safeParseJsonObject<OffsetByTrackId>(
+      cfg.offsetsJson,
+      {} as OffsetByTrackId,
+    );
   }, [cfg.offsetsJson]);
 
-  if (!container) return null;
+  if (!ready) return null;
+
+  const hostEl = getOrCreateHostEl();
 
   return createPortal(
     <StageInline
@@ -143,6 +160,6 @@ export default function StageInlineHost(props: {
       cuesByTrackId={cuesByTrackId}
       offsetByTrackId={offsetByTrackId}
     />,
-    container,
+    hostEl,
   );
 }

@@ -357,11 +357,25 @@ export class VisualizerEngine {
   }
 
   start() {
-    if (this.raf != null) return;
-
     const parent = this.canvas.parentElement;
     if (!parent) return;
-    this.parent = parent;
+
+    const parentChanged = this.parent !== parent;
+
+    // If already running and parent hasn't changed, nothing to do.
+    if (this.raf != null && !parentChanged) return;
+
+    // If parent changed while running, rebind sizing observer without restarting RAF.
+    if (parentChanged) {
+      try {
+        this.ro?.disconnect();
+      } catch {}
+      this.ro = null;
+      this.parent = parent;
+      this.cssDirty = true;
+    } else {
+      this.parent = parent;
+    }
 
     const resize = () => {
       if (!this.parent) return;
@@ -394,6 +408,9 @@ export class VisualizerEngine {
     this.ro = new ResizeObserver(resize);
     this.ro.observe(parent);
     resize();
+
+    // If RAF is already running, we only needed to rebind to the new parent.
+    if (this.raf != null) return;
 
     this.lastT = performance.now();
     this.lastDrawMs = 0;
@@ -469,7 +486,7 @@ export class VisualizerEngine {
         gl.clear(gl.COLOR_BUFFER_BIT);
 
         wipe.render(gl, {
-          fromTex: fromFbo.tex, // correct: from is snapshot, to is new
+          fromTex: fromFbo.tex,
           toTex: toFbo.tex,
           width: this.presentFbo!.w,
           height: this.presentFbo!.h,
