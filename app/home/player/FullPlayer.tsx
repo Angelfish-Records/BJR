@@ -13,7 +13,6 @@ import type {
 } from "@/lib/types";
 import { deriveShareContext, shareAlbum, shareTrack } from "./share";
 import { PatternRingGlow } from "./VisualizerPattern";
-import { replaceQuery } from "@/app/home/urlState";
 
 function fmtTime(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -780,14 +779,7 @@ export default function FullPlayer(props: {
   }
 
   const gotoDownload = () => {
-    const patch: Record<string, string | null | undefined> = {
-      p: "download",
-      // keep album pinned if we can
-      album: effAlbumSlug,
-      track: null,
-      t: null,
-    };
-    replaceQuery(patch);
+    router.push("/download");
   };
 
   return (
@@ -1065,18 +1057,7 @@ export default function FullPlayer(props: {
                     contextArtist: effAlbum?.artist ?? undefined,
                   });
 
-                  if (isPublicAlbumRoute) {
-                    // Track selection should be reflected in canonical path.
-                    goCanonicalTrack(t.id, "push");
-                  } else {
-                    // Legacy/query runtime: reflect selection via query for now.
-                    replaceQuery({
-                      p: "player",
-                      album: effAlbumSlug,
-                      track: t.id,
-                      t: null,
-                    });
-                  }
+                  goCanonicalTrack(t.id, "push");
 
                   if (isCoarsePointer) {
                     p.play(t);
@@ -1090,16 +1071,7 @@ export default function FullPlayer(props: {
                   if (isCoarsePointer) return;
                   if (!canPlay) return;
 
-                  if (isPublicAlbumRoute) {
-                    goCanonicalTrack(t.id, "push");
-                  } else {
-                    replaceQuery({
-                      p: "player",
-                      album: effAlbumSlug,
-                      track: t.id,
-                      t: null,
-                    });
-                  }
+                  goCanonicalTrack(t.id, "push");
 
                   p.play(t);
                   window.dispatchEvent(new Event("af:play-intent"));

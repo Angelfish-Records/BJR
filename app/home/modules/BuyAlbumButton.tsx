@@ -1,3 +1,4 @@
+// web/app/home/modules/BuyAlbumButton.tsx
 "use client";
 
 import React from "react";
@@ -48,10 +49,12 @@ export default function BuyAlbumButton(props: Props) {
     setErr(null);
 
     try {
+      const returnTo = `${window.location.pathname}${window.location.search}`;
+
       const res = await fetch("/api/stripe/create-album-checkout-session", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ albumSlug }),
+        body: JSON.stringify({ albumSlug, returnTo }),
       });
 
       const data = (await res

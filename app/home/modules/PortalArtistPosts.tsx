@@ -2,6 +2,7 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 import {
   PortableText,
   type PortableTextComponents,
@@ -10,7 +11,7 @@ import {
 import type { PortableTextBlock } from "@portabletext/types";
 import { usePortalViewer } from "@/app/home/PortalViewerProvider";
 import { useMembershipModal } from "@/app/home/MembershipModalProvider";
-import { useClientSearchParams, replaceQuery } from "@/app/home/urlState";
+import { useClientSearchParams } from "@/app/home/urlState";
 import {
   useShareAction,
   useShareBuilders,
@@ -620,6 +621,7 @@ export default function PortalArtistPosts(props: {
     defaultInlineImageMaxWidthPx,
   } = props;
 
+  const router = useRouter();
   const sp = useClientSearchParams();
   const deepSlug = (sp.get("post") ?? "").trim() || null;
 
@@ -935,18 +937,11 @@ export default function PortalArtistPosts(props: {
         triggerCopiedFeedback(post.slug);
       }
 
-      replaceQuery({
-        p: "posts",
-        post: post.slug,
-        postType: postTypeFilter || null,
-        pt: null,
-        album: null,
-        track: null,
-        t: null,
-        autoplay: null,
-      });
+      // Optional: reflect selection in URL for deep-linking.
+// If you don't need it, delete this whole block and rely on internal state.
+router.replace(`/posts?post=${encodeURIComponent(post.slug)}`);
     },
-    [share, shareBuilders, authorName, postTypeFilter],
+    [share, shareBuilders, authorName, router],
   );
 
   const components: PortableTextComponents = React.useMemo(
@@ -1174,7 +1169,6 @@ export default function PortalArtistPosts(props: {
 
   function onChangeFilter(next: "" | PostType) {
     setPostTypeFilter(next);
-    replaceQuery({ p: "posts", postType: next || null, post: null });
   }
 
   return (

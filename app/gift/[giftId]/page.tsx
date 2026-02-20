@@ -48,12 +48,55 @@ function safeUuid(v: unknown): string {
   return s;
 }
 
+// --- returnTo safety (must be relative + not internal) ---
+function looksLikeSafeRelativePath(s: string): boolean {
+  const t = (s ?? "").trim();
+  if (!t.startsWith("/")) return false;
+  if (t.startsWith("//")) return false;
+  if (t.toLowerCase().includes("://")) return false;
+  return true;
+}
+
+function isDisallowedPath(pathname: string): boolean {
+  return (
+    pathname.startsWith("/api") ||
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/studio") ||
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/trpc")
+  );
+}
+
+function safeReturnToFromDb(raw: unknown, fallbackPath: string): string {
+  const s = (typeof raw === "string" ? raw : "").trim();
+  if (!s) return fallbackPath;
+  if (!looksLikeSafeRelativePath(s)) return fallbackPath;
+
+  try {
+    // Parse relative into a URL so we can validate the pathname.
+    const u = new URL(s, "https://example.invalid");
+    if (isDisallowedPath(u.pathname)) return fallbackPath;
+    // Return normalized path+query only.
+    return u.pathname + (u.search || "");
+  } catch {
+    return fallbackPath;
+  }
+}
+
+function withGiftBanner(returnTo: string, giftValue: string): string {
+  const u = new URL(returnTo, "https://example.invalid");
+  // gift banner wins; remove checkout banner if present to avoid mixed semantics
+  u.searchParams.delete("checkout");
+  u.searchParams.set("gift", giftValue);
+  return u.pathname + "?" + u.searchParams.toString();
+}
+
 export default async function GiftLandingPage(props: {
   params: { giftId: string };
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
   const giftId = safeUuid(props.params?.giftId);
-  if (!giftId) redirect("/home?gift=missing");
+  if (!giftId) redirect("/player?gift=missing");
 
   const claimCodeRaw = props.searchParams?.c;
   const claimCode = Array.isArray(claimCodeRaw)
@@ -63,7 +106,9 @@ export default async function GiftLandingPage(props: {
 
   const { userId } = await auth();
   if (!userId) {
-    const returnTo = `/gift/${giftId}${claimCodeTrimmed ? `?c=${encodeURIComponent(claimCodeTrimmed)}` : ""}`;
+    const returnTo = `/gift/${giftId}${
+      claimCodeTrimmed ? `?c=${encodeURIComponent(claimCodeTrimmed)}` : ""
+    }`;
     redirect(buildSignInRedirect(returnTo));
   }
 
@@ -76,9 +121,9 @@ export default async function GiftLandingPage(props: {
   `;
   const memberId = (m.rows[0]?.id as string | undefined) ?? null;
   const memberEmail = (m.rows[0]?.email as string | undefined) ?? null;
-  if (!memberId) redirect("/home?gift=missing");
+  if (!memberId) redirect("/player?gift=missing");
 
-  // Load gift
+  // Load gift (including return_to if present).
   const g = await sql`
     select
       id,
@@ -86,7 +131,8 @@ export default async function GiftLandingPage(props: {
       entitlement_key,
       recipient_member_id,
       recipient_email,
-      gift_claim_code_hash
+      gift_claim_code_hash,
+      return_to
     from gifts
     where id = ${giftId}::uuid
     limit 1
@@ -99,13 +145,17 @@ export default async function GiftLandingPage(props: {
         recipient_member_id: string | null;
         recipient_email: string | null;
         gift_claim_code_hash: string | null;
+        return_to: string | null;
       }
     | undefined;
 
-  if (!row) redirect("/home?gift=missing");
+  // Determine deterministic landing surface (fallback neutral).
+  const baseReturnTo = safeReturnToFromDb(row?.return_to, "/player");
+
+  if (!row) redirect(withGiftBanner(baseReturnTo, "missing"));
 
   if (row.status === "pending_payment" || row.status === "draft") {
-    redirect("/home?gift=not_paid");
+    redirect(withGiftBanner(baseReturnTo, "not_paid"));
   }
 
   // Intended recipient check (prevents “forward to someone else”)
@@ -118,17 +168,17 @@ export default async function GiftLandingPage(props: {
   const intended = intendedById || intendedByEmail;
 
   if (!intended) {
-    redirect("/home?gift=wrong_account");
+    redirect(withGiftBanner(baseReturnTo, "wrong_account"));
   }
 
   // If claim hash exists, require and validate claim code.
   if (row.gift_claim_code_hash) {
     if (!claimCodeTrimmed) {
-      redirect("/home?gift=claim_code_missing");
+      redirect(withGiftBanner(baseReturnTo, "claim_code_missing"));
     }
     const h = sha256Hex(claimCodeTrimmed);
     if (h !== row.gift_claim_code_hash) {
-      redirect("/home?gift=invalid_claim");
+      redirect(withGiftBanner(baseReturnTo, "invalid_claim"));
     }
   }
 
@@ -143,7 +193,7 @@ export default async function GiftLandingPage(props: {
       and status in ('paid'::gift_status, 'claimed'::gift_status)
   `;
 
-  // Safety: ensure entitlement exists (idempotent on your grantEntitlement path)
+  // Ensure entitlement exists (idempotent on your grantEntitlement path)
   await grantEntitlement({
     memberId,
     entitlementKey: row.entitlement_key,
@@ -156,6 +206,5 @@ export default async function GiftLandingPage(props: {
     eventSource: "server",
   });
 
-  // Land them in the portal tab.
-  redirect("/home?gift=ready&panel=portal");
+  redirect(withGiftBanner(baseReturnTo, "ready"));
 }

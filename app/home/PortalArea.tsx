@@ -708,27 +708,28 @@ export default function PortalArea(props: {
 
   const patchQuery = React.useCallback(
     (patch: Record<string, string | null | undefined>) => {
-      if (!isPublicAlbumRoute) {
-        replaceQuery(patch);
-        return;
-      }
-
-      // On /album/... routes: query params are secondary only.
-      // Allow: st/share, autoplay, utm_*
+      // Query is secondary everywhere.
+      // Allow ONLY: st/share, autoplay, utm_*, plus banner keys if you still use them.
       const filtered: Record<string, string | null | undefined> = {};
+
       for (const [k, v] of Object.entries(patch)) {
         if (
           k === "st" ||
           k === "share" ||
           k === "autoplay" ||
+          k === "gift" ||
+          k === "checkout" ||
+          k === "post" ||
+          k === "pt" ||
           k.startsWith("utm_")
         ) {
           filtered[k] = v;
         }
       }
+
       if (Object.keys(filtered).length) replaceQuery(filtered);
     },
-    [isPublicAlbumRoute],
+    [],
   );
 
   function buildSurfaceHref(

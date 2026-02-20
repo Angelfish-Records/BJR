@@ -83,6 +83,8 @@ export default function GiftAlbumButton(props: Props) {
   };
 
   async function createGift(): Promise<GiftCreateOk> {
+    const returnTo = `${window.location.pathname}${window.location.search}`;
+
     const res = await fetch("/api/gifts/create", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -90,6 +92,7 @@ export default function GiftAlbumButton(props: Props) {
         albumSlug,
         recipientEmail: toEmail.trim(),
         message: note,
+        returnTo,
       }),
     });
 

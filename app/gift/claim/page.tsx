@@ -17,5 +17,6 @@ export default function GiftClaimRedirectPage(props: {
   // Old emails still carry g=...; we ignore c=... entirely now.
   if (giftId) redirect(`/gift/${encodeURIComponent(giftId)}`);
 
-  redirect("/home?gift=missing");
+  // No gift id — go to neutral canonical surface with a banner.
+  redirect("/player?gift=missing");
 }

@@ -5,6 +5,7 @@ import { sql } from "@vercel/postgres";
 import Stripe from "stripe";
 import { auth } from "@clerk/nextjs/server";
 import { normalizeEmail, ensureMemberByEmail } from "../../../../lib/members";
+import { safeReturnToFromBody, buildReturnUrl } from "@/lib/returnTo";
 
 export const runtime = "nodejs";
 
@@ -53,6 +54,7 @@ function sameOriginOrAllowed(req: Request, appUrl: string): boolean {
 type Body = {
   email?: unknown;
   tier?: unknown;
+  returnTo?: unknown;
 };
 
 function pickTier(raw: unknown): "patron" | "partner" {
@@ -157,13 +159,31 @@ export async function POST(req: Request) {
     if (cid) customer = cid;
   }
 
+  const { pathname, params } = safeReturnToFromBody(
+    APP_URL,
+    body.returnTo,
+    "/player",
+  );
+
+  const success_url = buildReturnUrl(APP_URL, pathname, params, {
+    checkout: "success",
+  });
+  const cancel_url = buildReturnUrl(APP_URL, pathname, params, {
+    checkout: "cancel",
+  });
+
+  // billing portal return_url should not carry checkout; just return to the surface
+  const billing_return_url = buildReturnUrl(APP_URL, pathname, params, {
+    checkout: null,
+  });
+
   // If logged-in and already subscribed, send to billing portal to avoid multiple subscriptions.
   if (userId && customer) {
     const hasActive = await customerHasActiveSubscription(stripe, customer);
     if (hasActive) {
       const portal = await stripe.billingPortal.sessions.create({
         customer,
-        return_url: `${APP_URL}/home`,
+        return_url: billing_return_url,
       });
       return NextResponse.json({
         ok: true,
@@ -177,8 +197,8 @@ export async function POST(req: Request) {
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${APP_URL}/home?checkout=success`,
-    cancel_url: `${APP_URL}/home?checkout=cancel`,
+    success_url,
+    cancel_url,
 
     // Logged-in path: webhook can resolve via clerk_user_id
     client_reference_id: userId ?? undefined,

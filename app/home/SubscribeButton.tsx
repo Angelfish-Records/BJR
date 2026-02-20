@@ -1,3 +1,4 @@
+//web/app/home/SubscribeButton.tsx
 "use client";
 
 import React from "react";
@@ -211,10 +212,12 @@ export default function SubscribeButton(props: Props) {
 
   async function go() {
     if (disabled) return;
+    const returnTo = `${window.location.pathname}${window.location.search}`;
+
     const res = await fetch("/api/stripe/create-checkout-session", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ tier }),
+      body: JSON.stringify({ tier, returnTo }),
     });
     const data = (await res.json()) as { url?: string };
     if (data?.url) window.location.assign(data.url);

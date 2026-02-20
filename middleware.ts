@@ -90,7 +90,7 @@ export default clerkMiddleware((_, req) => {
 
   // ---- A) Hard upgrades: legacy /home family -> canonical tabs/player ----
   if (pathname === "/home") {
-    return redirect308(url, "/posts", pickPreservedParams(url));
+    return redirect308(url, "/extras", pickPreservedParams(url));
   }
 
   if (pathname === "/home/player") {
@@ -100,7 +100,7 @@ export default clerkMiddleware((_, req) => {
   if (pathname.startsWith("/home/")) {
     const parts = splitPath(pathname); // ["home", "<tab>", ...]
     const tab = (parts[1] ?? "").trim();
-    return redirect308(url, tab ? `/${encodeURIComponent(tab)}` : "/posts", pickPreservedParams(url));
+    return redirect308(url, tab ? `/${encodeURIComponent(tab)}` : "/extras", pickPreservedParams(url));
   }
 
   // ---- B) Hard upgrades: legacy /albums family -> canonical /album ----

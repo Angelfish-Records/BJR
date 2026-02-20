@@ -7,7 +7,7 @@ import { usePlayer } from "./PlayerState";
 import type { PlayerTrack } from "@/lib/types";
 import { buildShareTarget, performShare, type ShareTarget } from "@/lib/share";
 import { PatternPillUnderlay } from "./VisualizerPattern";
-import { replaceQuery } from "@/app/home/urlState";
+import { useRouter } from "next/navigation";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -347,13 +347,20 @@ export default function MiniPlayer(props: {
 }) {
   const { onExpand, artworkUrl = null } = props;
   const p = usePlayer();
+  const router = useRouter();
 
   const openPlayerToNowPlaying = () => {
-    const patch: Record<string, string | null | undefined> = { p: "player" };
-    if (p.queueContextSlug) patch.album = p.queueContextSlug;
-    if (p.current?.id) patch.track = p.current.id;
-    patch.t = null;
-    replaceQuery(patch);
+    const slug = (p.queueContextSlug ?? "").trim();
+    const tid = (p.current?.id ?? "").trim();
+
+    if (slug && tid) {
+      router.push(`/album/${encodeURIComponent(slug)}/track/${encodeURIComponent(tid)}`);
+    } else if (slug) {
+      router.push(`/album/${encodeURIComponent(slug)}`);
+    } else {
+      router.push("/player");
+    }
+
     onExpand?.();
   };
 
