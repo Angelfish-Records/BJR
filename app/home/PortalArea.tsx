@@ -777,8 +777,8 @@ export default function PortalArea(props: {
           clearPosts: leavingPosts,
           albumSlugForPlayer: playerAlbumSlug,
         });
-        if (mode === "replace") router.replace(href);
-        else router.push(href);
+        if (mode === "replace") router.replace(href, { scroll: false });
+        else router.push(href, { scroll: false });
         return;
       }
 
@@ -793,8 +793,8 @@ export default function PortalArea(props: {
         albumSlugForPlayer: playerAlbumSlug, // unused in this branch, but keeps signature uniform
       });
 
-      if (mode === "replace") router.replace(href);
-      else router.push(href);
+      if (mode === "replace") router.replace(href, { scroll: false });
+      else router.push(href, { scroll: false });
     },
     [router, sp, portalTabId, playerAlbumSlug],
   );
@@ -932,7 +932,9 @@ export default function PortalArea(props: {
       }
 
       const q = out.toString();
-      router.push(`/album/${encodeURIComponent(slug)}${q ? `?${q}` : ""}`);
+      router.push(`/album/${encodeURIComponent(slug)}${q ? `?${q}` : ""}`, {
+        scroll: false,
+      });
     },
     [router],
   );

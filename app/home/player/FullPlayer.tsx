@@ -455,8 +455,8 @@ export default function FullPlayer(props: {
         ? `${base}/track/${encodeURIComponent(trackId)}${qs}`
         : `${base}${qs}`;
 
-      if (mode === "replace") router.replace(href);
-      else router.push(href);
+      if (mode === "replace") router.replace(href, { scroll: false });
+      else router.push(href, { scroll: false });
     },
     [isPublicAlbumRoute, router, effAlbumSlug],
   );
