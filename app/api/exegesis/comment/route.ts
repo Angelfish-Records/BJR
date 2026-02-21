@@ -437,7 +437,7 @@ export async function POST(req: NextRequest) {
 
     const metaRes = await sql<DbMetaRow>`
       select track_id, group_key, pinned_comment_id, locked, comment_count, last_activity_at, created_at, updated_at
-      from exegysis_thread_meta
+      from exegesis_thread_meta
       where track_id = ${trackId}
         and group_key = ${groupKey}
       limit 1
