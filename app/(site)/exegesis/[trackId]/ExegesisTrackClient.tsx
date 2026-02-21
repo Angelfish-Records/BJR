@@ -92,6 +92,10 @@ type VoteOk = {
 };
 type VoteErr = { ok: false; error: string };
 
+function deriveGroupKey(lineKey: string): string {
+  return `lk:${(lineKey ?? "").trim()}`;
+}
+
 export default function ExegesisTrackClient(props: {
   trackId: string;
   lyrics: LyricsApiOk;
@@ -99,11 +103,13 @@ export default function ExegesisTrackClient(props: {
   const trackId = (props.trackId ?? "").trim();
   const lyrics = props.lyrics;
 
-    const [selected, setSelected] = React.useState<{
+  const [selected, setSelected] = React.useState<{
     lineKey: string;
     lineText: string;
     tMs: number;
   } | null>(null);
+
+  const selectedGroupKey = selected ? deriveGroupKey(selected.lineKey) : "";
 
   const [thread, setThread] = React.useState<ThreadApiOk | null>(null);
   const [threadErr, setThreadErr] = React.useState<string>("");
@@ -119,19 +125,19 @@ export default function ExegesisTrackClient(props: {
       lineText: first.text,
       tMs: first.tMs,
     });
-  }, [lyrics.trackId, lyrics.cues]); // stable per track
+  }, [lyrics.trackId, lyrics.cues]);
 
   React.useEffect(() => {
     let alive = true;
 
     async function run() {
-      if (!selected) return;
+      if (!selectedGroupKey) return;
+
       setThreadErr("");
-      setThread(null);
 
       const url =
         `/api/exegesis/thread?trackId=${encodeURIComponent(trackId)}` +
-        `&groupKey=${encodeURIComponent(selected.lineKey)}` +
+        `&groupKey=${encodeURIComponent(selectedGroupKey)}` +
         `&sort=${encodeURIComponent(sort)}`;
 
       const r = await fetch(url, { cache: "no-store" });
@@ -149,7 +155,7 @@ export default function ExegesisTrackClient(props: {
     return () => {
       alive = false;
     };
-  }, [trackId, selected?.lineKey, sort, selected]);
+  }, [trackId, selectedGroupKey, sort]);
 
   async function postComment() {
     if (!selected) return;
@@ -164,9 +170,10 @@ export default function ExegesisTrackClient(props: {
         body: JSON.stringify({
           trackId,
           lineKey: selected.lineKey,
+          groupKey: selectedGroupKey, // IMPORTANT: client-derived groupKey
           parentId: null,
           bodyPlain: text,
-          bodyRich: null, // TipTap later
+          bodyRich: null,
           tMs: selected.tMs,
           lineTextSnapshot: selected.lineText,
           lyricsVersion: lyrics.version ?? null,
@@ -186,7 +193,6 @@ export default function ExegesisTrackClient(props: {
       setThread((prev) => {
         const newRoot = { rootId: j.comment.rootId, comments: [j.comment] };
 
-        // If thread wasn't loaded yet (prev null), bootstrap it so the user sees their post immediately.
         if (!prev) {
           return {
             ok: true,
@@ -196,11 +202,10 @@ export default function ExegesisTrackClient(props: {
             meta: j.meta,
             roots: [newRoot],
             identities: { ...j.identities },
-            viewer: { kind: "member" as const }, // posting implies member
+            viewer: { kind: "member" as const },
           };
         }
 
-        // If thread exists but is for a different selection, don't mutate it.
         if (prev.trackId !== j.trackId || prev.groupKey !== j.groupKey)
           return prev;
 
@@ -212,15 +217,16 @@ export default function ExegesisTrackClient(props: {
         };
       });
 
-      // optional: reconcile with server truth (ordering, vote counts, etc.)
+      // reconcile with server truth
       const url =
         `/api/exegesis/thread?trackId=${encodeURIComponent(trackId)}` +
         `&groupKey=${encodeURIComponent(j.groupKey)}` +
         `&sort=${encodeURIComponent(sort)}`;
+
       fetch(url, { cache: "no-store" })
-        .then((r) => r.json())
-        .then((jj) => {
-          if (jj && jj.ok) setThread(jj);
+        .then((r2) => r2.json())
+        .then((jj: ThreadApiOk | ThreadApiErr) => {
+          if (jj && (jj as ThreadApiOk).ok) setThread(jj as ThreadApiOk);
         })
         .catch(() => {});
     } finally {
@@ -231,7 +237,7 @@ export default function ExegesisTrackClient(props: {
   async function toggleVote(commentId: string) {
     if (!thread) return;
 
-    // optimistic
+    // optimistic update
     setThread((prev) => {
       if (!prev) return prev;
       const roots = prev.roots.map((r) => ({
@@ -260,7 +266,7 @@ export default function ExegesisTrackClient(props: {
       if (selected) {
         const url =
           `/api/exegesis/thread?trackId=${encodeURIComponent(trackId)}` +
-          `&groupKey=${encodeURIComponent(selected.lineKey)}` +
+          `&groupKey=${encodeURIComponent(selectedGroupKey)}` +
           `&sort=${encodeURIComponent(sort)}`;
         const rr = await fetch(url, { cache: "no-store" });
         const jj = (await rr.json()) as ThreadApiOk | ThreadApiErr;
@@ -271,9 +277,9 @@ export default function ExegesisTrackClient(props: {
 
     setThread((prev) => {
       if (!prev) return prev;
-      const roots = prev.roots.map((r) => ({
-        ...r,
-        comments: r.comments.map((c) =>
+      const roots = prev.roots.map((r0) => ({
+        ...r0,
+        comments: r0.comments.map((c) =>
           c.id === j.commentId
             ? { ...c, viewerHasVoted: j.viewerHasVoted, voteCount: j.voteCount }
             : c,
@@ -285,7 +291,6 @@ export default function ExegesisTrackClient(props: {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
-      {/* Keep your scaffold header info */}
       <div className="flex items-end justify-between gap-4">
         <div>
           <div className="text-xs opacity-60 tracking-[0.14em]">EXEGESIS</div>
@@ -311,13 +316,17 @@ export default function ExegesisTrackClient(props: {
 
         <div className="flex items-center gap-2">
           <button
-            className={`rounded-md px-3 py-1.5 text-sm ${sort === "top" ? "bg-white/10" : "bg-white/5"}`}
+            className={`rounded-md px-3 py-1.5 text-sm ${
+              sort === "top" ? "bg-white/10" : "bg-white/5"
+            }`}
             onClick={() => setSort("top")}
           >
             Top
           </button>
           <button
-            className={`rounded-md px-3 py-1.5 text-sm ${sort === "recent" ? "bg-white/10" : "bg-white/5"}`}
+            className={`rounded-md px-3 py-1.5 text-sm ${
+              sort === "recent" ? "bg-white/10" : "bg-white/5"
+            }`}
             onClick={() => setSort("recent")}
           >
             Recent
@@ -326,7 +335,6 @@ export default function ExegesisTrackClient(props: {
       </div>
 
       <div className="mt-6 grid gap-6 md:grid-cols-[1fr_420px]">
-        {/* Lyrics */}
         <div className="rounded-xl bg-white/5 p-4">
           <div className="text-sm opacity-70">Lyrics</div>
           <div className="mt-3 space-y-1">
@@ -356,7 +364,6 @@ export default function ExegesisTrackClient(props: {
           </div>
         </div>
 
-        {/* Thread */}
         <div className="rounded-xl bg-white/5 p-4">
           <div className="text-sm opacity-70">Thread</div>
 
@@ -364,6 +371,9 @@ export default function ExegesisTrackClient(props: {
             <div className="mt-2 rounded-md bg-black/20 p-3 text-sm">
               <div className="opacity-70">Selected line</div>
               <div className="mt-1">{selected.lineText}</div>
+              <div className="mt-1 text-xs opacity-60">
+                GroupKey: <span className="opacity-80">{selectedGroupKey}</span>
+              </div>
             </div>
           ) : null}
 
@@ -406,7 +416,6 @@ export default function ExegesisTrackClient(props: {
             )}
           </div>
 
-          {/* Composer */}
           <div className="mt-4">
             <textarea
               className="min-h-[90px] w-full rounded-md bg-black/20 p-3 text-sm outline-none"
