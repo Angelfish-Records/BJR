@@ -84,7 +84,12 @@ type CommentPostOk = {
   identities: Record<string, IdentityDTO>;
 };
 
-type VoteOk = { ok: true; commentId: string; viewerHasVoted: boolean; voteCount: number };
+type VoteOk = {
+  ok: true;
+  commentId: string;
+  viewerHasVoted: boolean;
+  voteCount: number;
+};
 type VoteErr = { ok: false; error: string };
 
 function deriveGroupKey(lineKey: string): string {
@@ -174,7 +179,9 @@ export default function ExegesisTrackClient(props: {
         }),
       });
 
-      const j = (await r.json()) as CommentPostOk | { ok: false; error: string };
+      const j = (await r.json()) as
+        | CommentPostOk
+        | { ok: false; error: string };
       if (!j.ok) {
         setThreadErr(j.error || "Failed to post comment.");
         return;
@@ -183,8 +190,26 @@ export default function ExegesisTrackClient(props: {
       setDraft("");
 
       setThread((prev) => {
-        if (!prev || prev.trackId !== j.trackId || prev.groupKey !== j.groupKey) return prev;
         const newRoot = { rootId: j.comment.rootId, comments: [j.comment] };
+
+        // If thread wasn't loaded yet (prev null), bootstrap it so the user sees their post immediately.
+        if (!prev) {
+          return {
+            ok: true,
+            trackId: j.trackId,
+            groupKey: j.groupKey,
+            sort,
+            meta: j.meta,
+            roots: [newRoot],
+            identities: { ...j.identities },
+            viewer: { kind: "member" as const }, // posting implies member
+          };
+        }
+
+        // If thread exists but is for a different selection, don't mutate it.
+        if (prev.trackId !== j.trackId || prev.groupKey !== j.groupKey)
+          return prev;
+
         return {
           ...prev,
           meta: j.meta,
@@ -192,6 +217,18 @@ export default function ExegesisTrackClient(props: {
           identities: { ...prev.identities, ...j.identities },
         };
       });
+
+      // optional: reconcile with server truth (ordering, vote counts, etc.)
+      const url =
+        `/api/exegesis/thread?trackId=${encodeURIComponent(trackId)}` +
+        `&groupKey=${encodeURIComponent(j.groupKey)}` +
+        `&sort=${encodeURIComponent(sort)}`;
+      fetch(url, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((jj) => {
+          if (jj && jj.ok) setThread(jj);
+        })
+        .catch(() => {});
     } finally {
       setPosting(false);
     }
@@ -243,7 +280,9 @@ export default function ExegesisTrackClient(props: {
       const roots = prev.roots.map((r) => ({
         ...r,
         comments: r.comments.map((c) =>
-          c.id === j.commentId ? { ...c, viewerHasVoted: j.viewerHasVoted, voteCount: j.voteCount } : c,
+          c.id === j.commentId
+            ? { ...c, viewerHasVoted: j.viewerHasVoted, voteCount: j.voteCount }
+            : c,
         ),
       }));
       return { ...prev, roots };
@@ -335,7 +374,11 @@ export default function ExegesisTrackClient(props: {
             </div>
           ) : null}
 
-          {threadErr ? <div className="mt-3 rounded-md bg-white/5 p-3 text-sm">{threadErr}</div> : null}
+          {threadErr ? (
+            <div className="mt-3 rounded-md bg-white/5 p-3 text-sm">
+              {threadErr}
+            </div>
+          ) : null}
 
           <div className="mt-3 space-y-3">
             {(thread?.roots ?? []).length === 0 ? (
@@ -345,7 +388,8 @@ export default function ExegesisTrackClient(props: {
                 <div key={root.rootId} className="rounded-md bg-black/20 p-3">
                   {root.comments.map((c) => {
                     const ident = thread?.identities?.[c.createdByMemberId];
-                    const name = ident?.publicName || ident?.anonLabel || "Anonymous";
+                    const name =
+                      ident?.publicName || ident?.anonLabel || "Anonymous";
 
                     return (
                       <div key={c.id} className="py-2">
@@ -356,7 +400,8 @@ export default function ExegesisTrackClient(props: {
                             onClick={() => void toggleVote(c.id)}
                             title="Vote"
                           >
-                            {c.viewerHasVoted ? "Voted" : "Vote"} · {c.voteCount}
+                            {c.viewerHasVoted ? "Voted" : "Vote"} ·{" "}
+                            {c.voteCount}
                           </button>
                         </div>
                         <div className="mt-1 text-sm">{c.bodyPlain}</div>
@@ -377,7 +422,9 @@ export default function ExegesisTrackClient(props: {
               onChange={(e) => setDraft(e.target.value)}
             />
             <div className="mt-2 flex items-center justify-between gap-3">
-              <div className="text-xs opacity-60">{draft.trim().length}/5000</div>
+              <div className="text-xs opacity-60">
+                {draft.trim().length}/5000
+              </div>
               <button
                 className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
                 disabled={!selected || !draft.trim() || posting}
@@ -387,7 +434,9 @@ export default function ExegesisTrackClient(props: {
               </button>
             </div>
             {thread?.viewer?.kind === "anon" ? (
-              <div className="mt-2 text-xs opacity-60">Tip: sign in to vote; upgrade to post.</div>
+              <div className="mt-2 text-xs opacity-60">
+                Tip: sign in to vote; upgrade to post.
+              </div>
             ) : null}
           </div>
         </div>
