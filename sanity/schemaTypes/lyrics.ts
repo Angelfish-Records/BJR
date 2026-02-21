@@ -1,3 +1,4 @@
+//web/sanity/schemaTypes/lyrics.ts
 import { defineField, defineType } from "sanity";
 import LyricsImportInput from "../components/LyricsImportInput";
 
@@ -35,6 +36,14 @@ export default defineType({
       title: "Version",
       type: "string",
       initialValue: "v1",
+    }),
+
+    defineField({
+      name: "geniusUrl",
+      title: "Genius URL",
+      type: "url",
+      description:
+        "Optional outbound reference (e.g. Genius page for this track).",
     }),
 
     defineField({

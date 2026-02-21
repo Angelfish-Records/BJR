@@ -4,7 +4,12 @@
 import React from "react";
 import { mediaSurface } from "../mediaSurface";
 
-export type LyricCue = { tMs: number; text: string; endMs?: number };
+export type LyricCue = {
+  lineKey: string;
+  tMs: number;
+  text: string;
+  endMs?: number;
+};
 
 function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n));
@@ -491,7 +496,7 @@ export default function LyricsOverlay(props: {
           })}
         </div>
 
-          <style>{`
+        <style>{`
           @keyframes afLyricsFadeIn {
             from { opacity: 0; transform: translate3d(0, 6px, 0); filter: blur(1.5px); }
             to   { opacity: 1; transform: translate3d(0, 0, 0); filter: blur(0px); }
@@ -507,7 +512,6 @@ export default function LyricsOverlay(props: {
           .af-lyrics-scroll::-webkit-scrollbar { width: 0px; height: 0px; }
           .af-lyrics-scroll::-webkit-scrollbar-thumb { background: transparent; }
         `}</style>
-
       </div>
     </div>
   );
