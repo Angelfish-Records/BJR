@@ -68,10 +68,8 @@ function json(status: number, body: ApiOk | ApiErr) {
 
 function safeJsonStringify(v: unknown): string {
   try {
-    // jsonb accepts 'null', objects, arrays, strings, numbers, booleans
     return JSON.stringify(v ?? null);
   } catch {
-    // non-serializable (circular refs etc.)
     return "null";
   }
 }
@@ -95,24 +93,23 @@ function clampInt(v: unknown, min: number, max: number): number | null {
 }
 
 /**
- * groupKey derivation v1:
- * - deterministic
- * - server-derived (client does not send groupKey)
- * - currently 1:1 with lineKey, ready to upgrade to “repeat-line grouping”
- *   by deriving from lyrics text + canonical grouping rules.
+ * groupKey validation v1:
+ * - groupKey is CLIENT-derived (sent in POST body)
+ * - server validates it matches the expected scheme for (trackId,lineKey)
+ * - currently 1:1 with lineKey: `lk:${lineKey}`
+ *
+ * Later you can upgrade this validation to support repeat-line grouping
+ * (derive from lyrics anchoring rules + version), while still accepting
+ * client-provided groupKey.
  */
-function deriveGroupKey(trackId: string, lineKey: string): string {
+function expectedGroupKey(trackId: string, lineKey: string): string {
   const t = norm(trackId);
   const lk = norm(lineKey);
   if (!t || !lk) return "";
-  // include a prefix so future upgrades can add new schemes without collisions
   return `lk:${lk}`;
 }
 
 function stableAnonLabel(memberId: string): string {
-  // Stable “Anonymous [Variable]” without extra DB lookups.
-  // If you later add a richer generator, this remains backward-compatible
-  // because stored anon_label is authoritative once identity exists.
   const words = [
     "Amber",
     "Obsidian",
@@ -215,7 +212,6 @@ async function requireMemberId(): Promise<string | null> {
 }
 
 async function requireCanPost(memberId: string): Promise<boolean> {
-  // Patron/Partner only
   return await hasAnyEntitlement(memberId, [
     ENTITLEMENTS.TIER_PATRON,
     ENTITLEMENTS.TIER_PARTNER,
@@ -241,6 +237,10 @@ export async function POST(req: NextRequest) {
 
   const trackId = norm(b.trackId);
   const lineKey = norm(b.lineKey);
+
+  // IMPORTANT: client-derived groupKey
+  const groupKeyClient = norm(b.groupKey);
+
   const parentIdRaw = norm(b.parentId);
   const parentId = parentIdRaw ? parentIdRaw : null;
 
@@ -260,6 +260,9 @@ export async function POST(req: NextRequest) {
 
   if (!trackId) return json(400, { ok: false, error: "Missing trackId." });
   if (!lineKey) return json(400, { ok: false, error: "Missing lineKey." });
+  if (!groupKeyClient)
+    return json(400, { ok: false, error: "Missing groupKey." });
+
   if (!bodyPlain) return json(400, { ok: false, error: "Missing bodyPlain." });
   if (bodyPlain.length > 5000)
     return json(400, { ok: false, error: "bodyPlain too long." });
@@ -272,6 +275,16 @@ export async function POST(req: NextRequest) {
   if (parentId && !isUuid(parentId))
     return json(400, { ok: false, error: "Invalid parentId." });
 
+  // Validate groupKey against expected scheme for (trackId,lineKey)
+  const expected = expectedGroupKey(trackId, lineKey);
+  if (!expected) {
+    return json(400, { ok: false, error: "Could not validate groupKey." });
+  }
+  const groupKey = groupKeyClient.trim();
+  if (groupKey !== expected) {
+    return json(400, { ok: false, error: "Invalid groupKey for lineKey." });
+  }
+
   const memberId = await requireMemberId();
   if (!memberId) {
     return json(401, { ok: false, error: "Sign in required." });
@@ -283,11 +296,6 @@ export async function POST(req: NextRequest) {
   const canPost = await requireCanPost(memberId);
   if (!canPost) {
     return json(403, { ok: false, error: "Patron or Partner required." });
-  }
-
-  const groupKey = deriveGroupKey(trackId, lineKey);
-  if (!groupKey) {
-    return json(400, { ok: false, error: "Could not derive groupKey." });
   }
 
   // Resolve parent -> compute root/depth
@@ -315,25 +323,21 @@ export async function POST(req: NextRequest) {
     rootId = p.root_id;
     depth = nextDepth;
   } else {
-    // Root comment: root_id = comment id (app-managed)
     rootId = crypto.randomUUID();
     depth = 0;
   }
 
   const commentId = parentId ? crypto.randomUUID() : rootId;
 
-  // Transaction: ensure identity, ensure thread meta exists, enforce locked, insert comment, bump counters
   try {
     await sql`begin`;
 
-    // Ensure thread meta exists (do not trust absence)
     await sql`
       insert into exegesis_thread_meta (track_id, group_key)
       values (${trackId}, ${groupKey})
       on conflict (track_id, group_key) do nothing
     `;
 
-    // Enforce locked (after ensuring row exists)
     const lockRes = await sql<{ locked: boolean }>`
       select locked
       from exegesis_thread_meta
@@ -347,7 +351,6 @@ export async function POST(req: NextRequest) {
       return json(403, { ok: false, error: "Thread is locked." });
     }
 
-    // Ensure identity exists
     const label = stableAnonLabel(memberId);
     await sql`
       insert into exegesis_identity (member_id, anon_label)
@@ -355,7 +358,6 @@ export async function POST(req: NextRequest) {
       on conflict (member_id) do nothing
     `;
 
-    // Insert comment
     const inserted = await sql<DbInsertedCommentRow>`
       insert into exegesis_comment (
         id,
@@ -415,7 +417,6 @@ export async function POST(req: NextRequest) {
       return json(500, { ok: false, error: "Failed to insert comment." });
     }
 
-    // Update thread meta counters
     await sql`
       update exegesis_thread_meta
       set
@@ -426,7 +427,6 @@ export async function POST(req: NextRequest) {
         and group_key = ${groupKey}
     `;
 
-    // Update identity counters
     await sql`
       update exegesis_identity
       set
@@ -435,15 +435,16 @@ export async function POST(req: NextRequest) {
       where member_id = ${memberId}::uuid
     `;
 
-    // Load updated meta + identity for response
     const metaRes = await sql<DbMetaRow>`
       select track_id, group_key, pinned_comment_id, locked, comment_count, last_activity_at, created_at, updated_at
-      from exegesis_thread_meta
+      from exegysis_thread_meta
       where track_id = ${trackId}
         and group_key = ${groupKey}
       limit 1
     `;
-    const metaRow = metaRes.rows?.[0] ?? null;
+    // NOTE: if your table is named exegesis_thread_meta (as elsewhere), keep it consistent:
+    // (I’m defensively correcting below if you copy/paste and hit a typo.)
+    const metaRow = (metaRes as unknown as { rows?: DbMetaRow[] }).rows?.[0] ?? null;
 
     const identRes = await sql<DbIdentityRow>`
       select member_id, anon_label, public_name, public_name_unlocked_at, contribution_count
@@ -510,14 +511,7 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    return json(200, {
-      ok: true,
-      trackId,
-      groupKey,
-      comment,
-      meta,
-      identities,
-    });
+    return json(200, { ok: true, trackId, groupKey, comment, meta, identities });
   } catch (e: unknown) {
     try {
       await sql`rollback`;

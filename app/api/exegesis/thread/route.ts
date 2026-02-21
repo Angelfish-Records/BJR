@@ -163,15 +163,26 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
 
   const trackId = norm(url.searchParams.get("trackId"));
-  const rawGroupKey = norm(url.searchParams.get("groupKey"));
+
   const sortParam = norm(url.searchParams.get("sort")) || "top";
   const sort: ThreadSort = isSort(sortParam) ? sortParam : "top";
 
   if (!trackId) return json(400, { ok: false, error: "Missing trackId." });
-  if (!rawGroupKey) return json(400, { ok: false, error: "Missing groupKey." });
+  const rawGroupKey = norm(url.searchParams.get("groupKey"));
+  const lineKey = norm(url.searchParams.get("lineKey"));
 
-  const groupKey = normalizeGroupKey(trackId, rawGroupKey);
-  if (!groupKey) return json(400, { ok: false, error: "Invalid groupKey." });
+  // Prefer server-derived groupKey from lineKey (new contract).
+  // Back-compat: if no lineKey provided, accept groupKey (legacy callers).
+  let groupKey = "";
+  if (lineKey) {
+    groupKey = `lk:${lineKey.trim()}`;
+  } else {
+    if (!rawGroupKey)
+      return json(400, { ok: false, error: "Missing lineKey." });
+    groupKey = normalizeGroupKey(trackId, rawGroupKey);
+  }
+
+  if (!groupKey) return json(400, { ok: false, error: "Invalid group key." });
 
   const viewer = await getViewer(req);
   const viewerMemberId = viewer.kind === "member" ? viewer.memberId : null;

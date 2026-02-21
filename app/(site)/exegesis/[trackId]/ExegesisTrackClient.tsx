@@ -92,10 +92,6 @@ type VoteOk = {
 };
 type VoteErr = { ok: false; error: string };
 
-function deriveGroupKey(lineKey: string): string {
-  return `lk:${lineKey.trim()}`;
-}
-
 export default function ExegesisTrackClient(props: {
   trackId: string;
   lyrics: LyricsApiOk;
@@ -103,11 +99,10 @@ export default function ExegesisTrackClient(props: {
   const trackId = (props.trackId ?? "").trim();
   const lyrics = props.lyrics;
 
-  const [selected, setSelected] = React.useState<{
+    const [selected, setSelected] = React.useState<{
     lineKey: string;
     lineText: string;
     tMs: number;
-    groupKey: string;
   } | null>(null);
 
   const [thread, setThread] = React.useState<ThreadApiOk | null>(null);
@@ -123,7 +118,6 @@ export default function ExegesisTrackClient(props: {
       lineKey: first.lineKey,
       lineText: first.text,
       tMs: first.tMs,
-      groupKey: deriveGroupKey(first.lineKey),
     });
   }, [lyrics.trackId, lyrics.cues]); // stable per track
 
@@ -137,7 +131,7 @@ export default function ExegesisTrackClient(props: {
 
       const url =
         `/api/exegesis/thread?trackId=${encodeURIComponent(trackId)}` +
-        `&groupKey=${encodeURIComponent(selected.groupKey)}` +
+        `&groupKey=${encodeURIComponent(selected.lineKey)}` +
         `&sort=${encodeURIComponent(sort)}`;
 
       const r = await fetch(url, { cache: "no-store" });
@@ -155,7 +149,7 @@ export default function ExegesisTrackClient(props: {
     return () => {
       alive = false;
     };
-  }, [trackId, selected?.groupKey, sort, selected]);
+  }, [trackId, selected?.lineKey, sort, selected]);
 
   async function postComment() {
     if (!selected) return;
@@ -266,7 +260,7 @@ export default function ExegesisTrackClient(props: {
       if (selected) {
         const url =
           `/api/exegesis/thread?trackId=${encodeURIComponent(trackId)}` +
-          `&groupKey=${encodeURIComponent(selected.groupKey)}` +
+          `&groupKey=${encodeURIComponent(selected.lineKey)}` +
           `&sort=${encodeURIComponent(sort)}`;
         const rr = await fetch(url, { cache: "no-store" });
         const jj = (await rr.json()) as ThreadApiOk | ThreadApiErr;
@@ -349,7 +343,6 @@ export default function ExegesisTrackClient(props: {
                       lineKey: c.lineKey,
                       lineText: c.text,
                       tMs: c.tMs,
-                      groupKey: deriveGroupKey(c.lineKey),
                     })
                   }
                 >

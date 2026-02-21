@@ -1,6 +1,5 @@
 // web/app/api/exegesis/vote/route.ts
 import "server-only";
-import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { sql } from "@vercel/postgres";
@@ -71,7 +70,9 @@ export async function POST(req: NextRequest) {
   }
 
   const b =
-    typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : null;
+    typeof raw === "object" && raw !== null
+      ? (raw as Record<string, unknown>)
+      : null;
   if (!b) return json(400, { ok: false, error: "Invalid JSON body." });
 
   const commentId = norm(b.commentId);
@@ -138,13 +139,13 @@ export async function POST(req: NextRequest) {
       `;
 
       viewerHasVoted = false;
-      voteCount = Number(upd.rows?.[0]?.vote_count ?? Math.max((c.vote_count ?? 0) - 1, 0));
+      voteCount = Number(
+        upd.rows?.[0]?.vote_count ?? Math.max((c.vote_count ?? 0) - 1, 0),
+      );
     } else {
-      const voteId = crypto.randomUUID();
-
       await sql`
-        insert into exegesis_vote (id, member_id, comment_id)
-        values (${voteId}::uuid, ${memberId}::uuid, ${commentId}::uuid)
+        insert into exegesis_vote (member_id, comment_id)
+        values (${memberId}::uuid, ${commentId}::uuid)
         on conflict (member_id, comment_id) do nothing
       `;
 
@@ -168,7 +169,9 @@ export async function POST(req: NextRequest) {
       // ignore
     }
     const msg =
-      e instanceof Error ? norm(e.message) : norm(typeof e === "string" ? e : "");
+      e instanceof Error
+        ? norm(e.message)
+        : norm(typeof e === "string" ? e : "");
     return json(500, { ok: false, error: msg || "Unknown error." });
   }
 }
