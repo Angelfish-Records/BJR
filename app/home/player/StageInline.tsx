@@ -152,15 +152,23 @@ async function fetchLyricsByTrackId(
     .map((c): LyricCue | null => {
       if (!c || typeof c !== "object") return null;
 
+      const lineKey = (c as { lineKey?: unknown }).lineKey;
       const tMs = (c as { tMs?: unknown }).tMs;
       const text = (c as { text?: unknown }).text;
       const endMs = (c as { endMs?: unknown }).endMs;
+
+      if (typeof lineKey !== "string" || lineKey.trim().length === 0)
+        return null;
 
       if (typeof tMs !== "number" || !Number.isFinite(tMs) || tMs < 0)
         return null;
       if (typeof text !== "string" || text.trim().length === 0) return null;
 
-      const out: LyricCue = { tMs: Math.floor(tMs), text: text.trim() };
+      const out: LyricCue = {
+        lineKey: lineKey.trim(),
+        tMs: Math.floor(tMs),
+        text: text.trim(),
+      };
       if (typeof endMs === "number" && Number.isFinite(endMs) && endMs >= 0) {
         out.endMs = Math.floor(endMs);
       }
