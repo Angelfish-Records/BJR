@@ -40,7 +40,7 @@ type AlbumDoc = {
 type TrackLyricsDoc = {
   trackId?: string; // still legacy for now
   offsetMs?: number;
-  cues?: Array<{ tMs?: number; text?: string; endMs?: number }>;
+  cues?: Array<{ _key?: string; tMs?: number; text?: string; endMs?: number }>;
 };
 
 export async function getFeaturedAlbumSlugFromSanity(): Promise<{
@@ -99,14 +99,24 @@ function normalizeCues(input: TrackLyricsDoc["cues"]): LyricCue[] {
   if (!Array.isArray(input)) return [];
   const out: LyricCue[] = [];
   for (const c of input) {
+    const key = c?._key;
     const tMs = c?.tMs;
     const text = c?.text;
     const endMs = c?.endMs;
+
+    if (typeof key !== "string" || key.trim().length === 0) continue;
     if (typeof tMs !== "number" || !Number.isFinite(tMs) || tMs < 0) continue;
     if (typeof text !== "string" || text.trim().length === 0) continue;
-    const cue: LyricCue = { tMs: Math.floor(tMs), text: text.trim() };
-    if (typeof endMs === "number" && Number.isFinite(endMs) && endMs >= 0)
+
+    const cue: LyricCue = {
+      lineKey: key.trim(),
+      tMs: Math.floor(tMs),
+      text: text.trim(),
+    };
+
+    if (typeof endMs === "number" && Number.isFinite(endMs) && endMs >= 0) {
       cue.endMs = Math.floor(endMs);
+    }
     out.push(cue);
   }
   out.sort((a, b) => a.tMs - b.tMs);
@@ -208,12 +218,11 @@ export async function getAlbumBySlug(slug: string): Promise<{
     artworkUrl: doc.artwork
       ? urlFor(doc.artwork).width(900).height(900).quality(85).url()
       : null,
-        platformLinks: Array.isArray(doc.platformLinks)
+    platformLinks: Array.isArray(doc.platformLinks)
       ? doc.platformLinks
           .filter(
             (p): p is { platform: string; url: string } =>
-              typeof p?.platform === "string" &&
-              typeof p?.url === "string",
+              typeof p?.platform === "string" && typeof p?.url === "string",
           )
           .map((p) => ({
             platform: p.platform,
@@ -266,7 +275,7 @@ export async function getAlbumBySlug(slug: string): Promise<{
     *[_type == "lyrics" && trackId in $trackIds]{
       trackId,
       offsetMs,
-      cues[]{ tMs, text, endMs }
+      cues[]{ _key, tMs, text, endMs }
     }
   `;
 
