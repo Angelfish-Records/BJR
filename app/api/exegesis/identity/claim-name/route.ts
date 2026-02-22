@@ -83,6 +83,13 @@ function validatePublicName(
   return { ok: true, value: s, lowered };
 }
 
+function toIso(v: unknown): string | null {
+  if (!v) return null;
+  if (typeof v === "string") return v; // already serialized by driver
+  if (v instanceof Date) return v.toISOString();
+  return String(v);
+}
+
 const UNLOCK_AT = 5;
 
 async function requireMemberId(): Promise<string | null> {
@@ -122,14 +129,14 @@ export async function POST(req: NextRequest) {
   if (!isUuid(memberId))
     return json(403, { ok: false, error: "Provisioning required." });
 
-    try {
+  try {
     const r = await sql<{
       ok: boolean;
       err: string | null;
       member_id: string | null;
       anon_label: string | null;
       public_name: string | null;
-      public_name_unlocked_at: string | null;
+      public_name_unlocked_at: unknown;
       contribution_count: number | null;
     }>`
       with
@@ -192,7 +199,8 @@ export async function POST(req: NextRequest) {
     `;
 
     const row = r.rows?.[0] ?? null;
-    if (!row) return json(500, { ok: false, error: "Failed to update identity." });
+    if (!row)
+      return json(500, { ok: false, error: "Failed to update identity." });
 
     if (!row.ok) {
       if (row.err === "NO_IDENTITY") {
@@ -220,7 +228,7 @@ export async function POST(req: NextRequest) {
         memberId: String(row.member_id),
         anonLabel: String(row.anon_label ?? ""),
         publicName: row.public_name ?? null,
-        publicNameUnlockedAt: row.public_name_unlocked_at,
+        publicNameUnlockedAt: toIso(row.public_name_unlocked_at),
         contributionCount: Number(row.contribution_count ?? 0),
       },
     });

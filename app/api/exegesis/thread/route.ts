@@ -528,7 +528,7 @@ export async function GET(req: NextRequest) {
     const canClaimName =
       !!me &&
       !me.publicName &&
-      !!me.publicNameUnlockedAt &&
+      typeof me.publicNameUnlockedAt === "string" &&
       me.publicNameUnlockedAt.trim().length > 0;
 
     viewerDto = {
