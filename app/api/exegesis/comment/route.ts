@@ -506,34 +506,91 @@ end as id
 
     // Guard errors that prevented insert (no row returned)
     if (!row) {
-      // Re-run a tiny guard check to return a friendly message.
-      // (Still no transaction; cheap and deterministic.)
-      if (parentId) {
-        const pRes = await sql<DbParentRow>`
-          select id, track_id, group_key, root_id, depth
-          from exegesis_comment
-          where id = ${parentId}::uuid
-          limit 1
-        `;
-        const p = pRes.rows?.[0] ?? null;
-        if (!p) return json(404, { ok: false, error: "Parent not found." });
-        if (p.track_id !== trackId || p.group_key !== groupKey) {
-          return json(400, { ok: false, error: "Parent scope mismatch." });
-        }
-        if ((p.depth ?? 0) + 1 > 6) {
-          return json(400, { ok: false, error: "Thread depth limit reached." });
-        }
-      }
+      console.error("[exegesis/comment] zero-row CTE result", {
+        trackId,
+        groupKey,
+        lineKey,
+        parentId,
+        memberId,
+        tMs: tMsOrNull,
+        bodyPlainLen: bodyPlain.length,
+        bodyRichLen: bodyRichJson.length,
+      });
 
-      const lockRes = await sql<{ locked: boolean }>`
-        select locked
-        from exegesis_thread_meta
-        where track_id = ${trackId}
-          and group_key = ${groupKey}
-        limit 1
-      `;
-      if (lockRes.rows?.[0]?.locked) {
-        return json(403, { ok: false, error: "Thread is locked." });
+      // Run a diagnostic that mirrors the SQL guards and tells us exactly why insert was suppressed.
+      const diag = await sql<{
+        meta_exists: boolean;
+        locked: boolean | null;
+        parent_exists: boolean | null;
+        parent_scope_ok: boolean | null;
+        parent_depth_ok: boolean | null;
+        ident_exists: boolean;
+      }>`
+    with
+    meta as (
+      select locked
+      from exegesis_thread_meta
+      where track_id = ${trackId}
+        and group_key = ${groupKey}
+      limit 1
+    ),
+    parent as (
+      select track_id, group_key, depth
+      from exegesis_comment
+      where id = ${parentId}::uuid
+      limit 1
+    ),
+    ident as (
+      select 1 as ok
+      from exegesis_identity
+      where member_id = ${memberId}::uuid
+      limit 1
+    )
+    select
+      exists(select 1 from meta) as meta_exists,
+      (select locked from meta) as locked,
+      case when ${parentId}::uuid is null then null else exists(select 1 from parent) end as parent_exists,
+      case
+        when ${parentId}::uuid is null then null
+        when not exists(select 1 from parent) then null
+        else ((select track_id from parent) = ${trackId} and (select group_key from parent) = ${groupKey})
+      end as parent_scope_ok,
+      case
+        when ${parentId}::uuid is null then null
+        when not exists(select 1 from parent) then null
+        else (((select depth from parent) + 1) <= 6)
+      end as parent_depth_ok,
+      exists(select 1 from ident) as ident_exists
+  `;
+
+      const d = diag.rows?.[0] ?? null;
+      console.error("[exegesis/comment] diag", d);
+
+      // Return a more specific error for now (temporary, until fixed).
+      if (d) {
+        if (!d.meta_exists) {
+          return json(500, { ok: false, error: "Thread meta missing." });
+        }
+        if (d.locked) {
+          return json(403, { ok: false, error: "Thread is locked." });
+        }
+        if (parentId) {
+          if (d.parent_exists === false) {
+            return json(404, { ok: false, error: "Parent not found." });
+          }
+          if (d.parent_scope_ok === false) {
+            return json(400, { ok: false, error: "Parent scope mismatch." });
+          }
+          if (d.parent_depth_ok === false) {
+            return json(400, {
+              ok: false,
+              error: "Thread depth limit reached.",
+            });
+          }
+        }
+        if (!d.ident_exists) {
+          return json(500, { ok: false, error: "Identity missing." });
+        }
       }
 
       return json(500, { ok: false, error: "Failed to insert comment." });
