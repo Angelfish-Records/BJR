@@ -578,11 +578,33 @@ end as id
       identities,
     });
   } catch (e: unknown) {
-    const msg =
-      e instanceof Error
-        ? norm(e.message)
-        : norm(typeof e === "string" ? e : "");
+    // Make sure it shows up in Vercel logs with details
+    console.error("[exegesis/comment] POST failed", e);
 
-    return json(500, { ok: false, error: msg || "Unknown error." });
+    const errObj = e as {
+      code?: string;
+      message?: string;
+      detail?: string;
+      hint?: string;
+      position?: string;
+    } | null;
+
+    const msg =
+      typeof errObj?.message === "string" && errObj.message.trim()
+        ? errObj.message.trim()
+        : e instanceof Error && e.message.trim()
+          ? e.message.trim()
+          : "";
+
+    // In dev, give yourself enough to debug without guessing.
+    // (If you later want to redact in prod, we can gate on NODE_ENV.)
+    const extra =
+      errObj?.code || errObj?.detail || errObj?.hint
+        ? ` (${[errObj?.code, errObj?.detail, errObj?.hint]
+            .filter(Boolean)
+            .join(" · ")})`
+        : "";
+
+    return json(500, { ok: false, error: (msg || "Unknown error.") + extra });
   }
 }
