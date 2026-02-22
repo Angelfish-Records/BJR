@@ -2,6 +2,7 @@
 "use client";
 
 import React from "react";
+import TipTapEditor from "./TipTapEditor";
 
 type LyricsApiCue = {
   lineKey: string;
@@ -62,6 +63,19 @@ type ThreadMetaDTO = {
   updatedAt: string;
 };
 
+type ViewerDTO =
+  | { kind: "anon" }
+  | {
+      kind: "member";
+      memberId: string;
+      cap: {
+        canVote: boolean;
+        canReport: boolean;
+        canPost: boolean;
+        canClaimName: boolean;
+      };
+    };
+
 type ThreadApiOk = {
   ok: true;
   trackId: string;
@@ -70,10 +84,10 @@ type ThreadApiOk = {
   meta: ThreadMetaDTO | null;
   roots: Array<{ rootId: string; comments: CommentDTO[] }>;
   identities: Record<string, IdentityDTO>;
-  viewer: { kind: "anon" | "member" };
+  viewer: ViewerDTO;
 };
 
-type ThreadApiErr = { ok: false; error: string };
+type ThreadApiErr = { ok: false; error: string; code?: "ANON_LIMIT" | string };
 
 type CommentPostOk = {
   ok: true;
@@ -92,8 +106,65 @@ type VoteOk = {
 };
 type VoteErr = { ok: false; error: string };
 
-function deriveGroupKey(lineKey: string): string {
-  return `lk:${(lineKey ?? "").trim()}`;
+type ReportOk = { ok: true; reportId: string };
+type ReportErr = { ok: false; error: string; code?: string };
+
+const REPORT_CATEGORIES: Array<{ key: string; label: string }> = [
+  { key: "spam", label: "Spam" },
+  { key: "harassment", label: "Harassment" },
+  { key: "hate", label: "Hate" },
+  { key: "sexual", label: "Sexual content" },
+  { key: "self_harm", label: "Self-harm" },
+  { key: "violence", label: "Violence" },
+  { key: "misinfo", label: "Misinformation" },
+  { key: "copyright", label: "Copyright" },
+  { key: "other", label: "Other" },
+];
+
+type ReportDraft = {
+  open: boolean;
+  category: string;
+  reason: string;
+  err: string;
+  done: boolean;
+  busy: boolean;
+};
+
+function reorderRootsPinnedFirst(
+  roots: Array<{ rootId: string; comments: CommentDTO[] }>,
+  pinnedCommentId: string | null,
+) {
+  const pid = (pinnedCommentId ?? "").trim();
+  if (!pid) return roots;
+
+  const idx = roots.findIndex((r) => (r.comments?.[0]?.id ?? "") === pid);
+  if (idx <= 0) return roots;
+
+  const pinned = roots[idx];
+  const rest = roots.slice(0, idx).concat(roots.slice(idx + 1));
+  return [pinned, ...rest];
+}
+
+function parseHash(): { lineKey?: string; commentId?: string } {
+  if (typeof window === "undefined") return {};
+  const raw = (window.location.hash ?? "").replace(/^#/, "").trim();
+  if (!raw) return {};
+  const sp = new URLSearchParams(raw);
+  const lineKey = (sp.get("l") ?? "").trim();
+  const commentId = (sp.get("c") ?? "").trim();
+  return {
+    lineKey: lineKey || undefined,
+    commentId: commentId || undefined,
+  };
+}
+
+function setHash(next: { lineKey?: string; commentId?: string }) {
+  if (typeof window === "undefined") return;
+  const sp = new URLSearchParams();
+  if (next.lineKey) sp.set("l", next.lineKey);
+  if (next.commentId) sp.set("c", next.commentId);
+  const h = sp.toString();
+  window.history.replaceState(null, "", h ? `#${h}` : window.location.pathname);
 }
 
 export default function ExegesisTrackClient(props: {
@@ -109,71 +180,299 @@ export default function ExegesisTrackClient(props: {
     tMs: number;
   } | null>(null);
 
-  const selectedGroupKey = selected ? deriveGroupKey(selected.lineKey) : "";
-
   const [thread, setThread] = React.useState<ThreadApiOk | null>(null);
   const [threadErr, setThreadErr] = React.useState<string>("");
   const [sort, setSort] = React.useState<ThreadSort>("top");
   const [draft, setDraft] = React.useState<string>("");
+  const [draftDoc, setDraftDoc] = React.useState<unknown | null>(null);
   const [posting, setPosting] = React.useState<boolean>(false);
 
-  React.useEffect(() => {
-    const first = lyrics.cues?.[0];
-    if (!first) return;
-    setSelected({
-      lineKey: first.lineKey,
-      lineText: first.text,
-      tMs: first.tMs,
+  const [claimOpen, setClaimOpen] = React.useState(false);
+  const [claimName, setClaimName] = React.useState("");
+  const [claimErr, setClaimErr] = React.useState("");
+  const [claimBusy, setClaimBusy] = React.useState(false);
+
+  const [reportByCommentId, setReportByCommentId] = React.useState<
+    Record<string, ReportDraft>
+  >({});
+
+  const viewerMemberId =
+    thread?.viewer?.kind === "member" ? thread.viewer.memberId : "";
+
+  const viewerIdentity = viewerMemberId
+    ? thread?.identities?.[viewerMemberId]
+    : undefined;
+
+  const meta = thread?.meta ?? null;
+  const isLocked = Boolean(meta?.locked);
+
+  const canVote =
+    thread?.viewer?.kind === "member"
+      ? thread.viewer.cap.canVote && !isLocked
+      : false;
+  const canReport =
+    thread?.viewer?.kind === "member" ? thread.viewer.cap.canReport : false;
+  const canPost =
+    thread?.viewer?.kind === "member" ? thread.viewer.cap.canPost : false;
+  const canClaimName =
+    thread?.viewer?.kind === "member" ? thread.viewer.cap.canClaimName : false;
+
+  function openReport(commentId: string) {
+    if (!canReport) return;
+    setReportByCommentId((prev) => {
+      const cur = prev[commentId];
+      const base: ReportDraft = cur ?? {
+        open: true,
+        category: "spam",
+        reason: "",
+        err: "",
+        done: false,
+        busy: false,
+      };
+      return {
+        ...prev,
+        [commentId]: {
+          ...base,
+          open: true,
+          err: "",
+          done: false,
+          busy: false,
+        },
+      };
     });
+  }
+
+  function closeReport(commentId: string) {
+    setReportByCommentId((prev) => {
+      const cur = prev[commentId];
+      if (!cur) return prev;
+      return { ...prev, [commentId]: { ...cur, open: false, err: "" } };
+    });
+  }
+
+  async function submitReport(commentId: string) {
+    if (!canReport) return;
+
+    const draft = reportByCommentId[commentId];
+    if (!draft) return;
+
+    const category = (draft.category ?? "").trim();
+    const reason = (draft.reason ?? "").trim();
+
+    setReportByCommentId((prev) => ({
+      ...prev,
+      [commentId]: { ...draft, busy: true, err: "" },
+    }));
+
+    try {
+      const r = await fetch("/api/exegesis/report", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ commentId, category, reason }),
+      });
+
+      const j = (await r.json()) as ReportOk | ReportErr;
+
+      if (!j.ok) {
+        setReportByCommentId((prev) => ({
+          ...prev,
+          [commentId]: {
+            ...draft,
+            busy: false,
+            err: j.error || "Report failed.",
+          },
+        }));
+        return;
+      }
+
+      setReportByCommentId((prev) => ({
+        ...prev,
+        [commentId]: { ...draft, busy: false, done: true, err: "" },
+      }));
+    } catch {
+      setReportByCommentId((prev) => ({
+        ...prev,
+        [commentId]: { ...draft, busy: false, err: "Report failed." },
+      }));
+    }
+  }
+
+  async function submitClaimName() {
+    if (!canClaimName) return;
+
+    const name = claimName.trim();
+    if (!name) return;
+
+    setClaimBusy(true);
+    setClaimErr("");
+    try {
+      const r = await fetch("/api/exegesis/identity/claim-name", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ publicName: name }),
+      });
+
+      const j = (await r.json()) as
+        | { ok: true; identity: IdentityDTO }
+        | { ok: false; error: string; code?: string };
+
+      if (!j.ok) {
+        setClaimErr(j.error || "Failed to claim name.");
+        return;
+      }
+
+      setThread((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          identities: {
+            ...prev.identities,
+            [j.identity.memberId]: j.identity,
+          },
+        };
+      });
+
+      setClaimOpen(false);
+      setClaimName("");
+    } finally {
+      setClaimBusy(false);
+    }
+  }
+
+  const threadScrollRef = React.useRef<HTMLDivElement | null>(null);
+  const pendingScrollCommentIdRef = React.useRef<string>("");
+
+  React.useEffect(() => {
+    const cues = lyrics.cues ?? [];
+    if (cues.length === 0) return;
+
+    const h = parseHash();
+    const byLineKey = h.lineKey
+      ? cues.find((c) => c.lineKey === h.lineKey)
+      : null;
+
+    const pick = byLineKey ?? cues[0];
+
+    setSelected({
+      lineKey: pick.lineKey,
+      lineText: pick.text,
+      tMs: pick.tMs,
+    });
+
+    if (h.commentId) pendingScrollCommentIdRef.current = h.commentId;
   }, [lyrics.trackId, lyrics.cues]);
+
+  const threadKey = thread
+    ? `${thread.trackId}::${thread.groupKey}::${thread.roots.length}`
+    : "";
+
+  React.useEffect(() => {
+    const cid = pendingScrollCommentIdRef.current;
+    if (!cid) return;
+    if (!threadKey) return;
+
+    const t = window.setTimeout(() => {
+      const el = document.getElementById(`exegesis-c-${cid}`);
+      if (el) {
+        el.scrollIntoView({ block: "start", behavior: "smooth" });
+        pendingScrollCommentIdRef.current = "";
+      }
+    }, 40);
+
+    return () => window.clearTimeout(t);
+  }, [threadKey]);
 
   React.useEffect(() => {
     let alive = true;
 
     async function run() {
-      if (!selectedGroupKey) return;
-
-      setThreadErr("");
+      if (!selected?.lineKey) return;
 
       const url =
         `/api/exegesis/thread?trackId=${encodeURIComponent(trackId)}` +
-        `&groupKey=${encodeURIComponent(selectedGroupKey)}` +
+        `&lineKey=${encodeURIComponent(selected.lineKey)}` +
         `&sort=${encodeURIComponent(sort)}`;
 
-      const r = await fetch(url, { cache: "no-store" });
-      const j = (await r.json()) as ThreadApiOk | ThreadApiErr;
-      if (!alive) return;
+      try {
+        const r = await fetch(url, { cache: "no-store" });
+        const j = (await r.json()) as ThreadApiOk | ThreadApiErr;
+        if (!alive) return;
 
-      if (!j.ok) {
-        setThreadErr(j.error || "Failed to load thread.");
-        return;
+        if (!j.ok) {
+          if (j.code === "ANON_LIMIT") {
+            setThreadErr(
+              j.error ||
+                "You’ve hit the anon reading limit. Sign in to continue.",
+            );
+          } else {
+            setThreadErr(j.error || "Failed to load thread.");
+          }
+          return;
+        }
+
+        setThread(j);
+        setThreadErr("");
+      } catch {
+        if (!alive) return;
+        setThreadErr("Failed to load thread.");
       }
-      setThread(j);
     }
 
     void run();
     return () => {
       alive = false;
     };
-  }, [trackId, selectedGroupKey, sort]);
+  }, [trackId, selected?.lineKey, sort]);
 
   async function postComment() {
     if (!selected) return;
+    if (!canPost) {
+      setThreadErr("Patron or Partner required to post.");
+      return;
+    }
+
+    if (thread?.meta?.locked) {
+      setThreadErr("Thread is locked.");
+      return;
+    }
+
+    const groupKey = (thread?.groupKey ?? "").trim();
+    if (!groupKey) {
+      setThreadErr("Thread not loaded yet.");
+      return;
+    }
+
     const text = draft.trim();
     if (!text) return;
 
     setPosting(true);
+    setThreadErr("");
+
     try {
+      const doc =
+        draftDoc ??
+        ({
+          type: "doc",
+          content: [
+            {
+              type: "paragraph",
+              content: [{ type: "text", text }],
+            },
+          ],
+        } as const);
       const r = await fetch("/api/exegesis/comment", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           trackId,
           lineKey: selected.lineKey,
-          groupKey: selectedGroupKey, // IMPORTANT: client-derived groupKey
+          groupKey: (thread?.groupKey ?? "").trim(), // server-canonical key for this anchor
           parentId: null,
+
+          // Keep bodyPlain during rollout (server should ignore it when bodyRich is present)
           bodyPlain: text,
-          bodyRich: null,
+          bodyRich: doc,
+
           tMs: selected.tMs,
           lineTextSnapshot: selected.lineText,
           lyricsVersion: lyrics.version ?? null,
@@ -183,32 +482,26 @@ export default function ExegesisTrackClient(props: {
       const j = (await r.json()) as
         | CommentPostOk
         | { ok: false; error: string };
+
       if (!j.ok) {
         setThreadErr(j.error || "Failed to post comment.");
         return;
       }
 
       setDraft("");
+      setDraftDoc(null);
 
+      pendingScrollCommentIdRef.current = j.comment.id;
+      setHash({ lineKey: selected.lineKey, commentId: j.comment.id });
+
+      // If we already have a thread loaded, we can optimistically insert.
+      // If not, do NOT fabricate viewer state; rely on refetch.
       setThread((prev) => {
-        const newRoot = { rootId: j.comment.rootId, comments: [j.comment] };
-
-        if (!prev) {
-          return {
-            ok: true,
-            trackId: j.trackId,
-            groupKey: j.groupKey,
-            sort,
-            meta: j.meta,
-            roots: [newRoot],
-            identities: { ...j.identities },
-            viewer: { kind: "member" as const },
-          };
-        }
-
+        if (!prev) return prev;
         if (prev.trackId !== j.trackId || prev.groupKey !== j.groupKey)
           return prev;
 
+        const newRoot = { rootId: j.comment.rootId, comments: [j.comment] };
         return {
           ...prev,
           meta: j.meta,
@@ -217,16 +510,19 @@ export default function ExegesisTrackClient(props: {
         };
       });
 
-      // reconcile with server truth
+      // Reconcile with server truth
       const url =
         `/api/exegesis/thread?trackId=${encodeURIComponent(trackId)}` +
-        `&groupKey=${encodeURIComponent(j.groupKey)}` +
+        `&groupKey=${encodeURIComponent(groupKey)}` +
         `&sort=${encodeURIComponent(sort)}`;
 
       fetch(url, { cache: "no-store" })
         .then((r2) => r2.json())
         .then((jj: ThreadApiOk | ThreadApiErr) => {
-          if (jj && (jj as ThreadApiOk).ok) setThread(jj as ThreadApiOk);
+          if (jj && (jj as ThreadApiOk).ok) {
+            setThread(jj as ThreadApiOk);
+            setThreadErr("");
+          }
         })
         .catch(() => {});
     } finally {
@@ -236,6 +532,17 @@ export default function ExegesisTrackClient(props: {
 
   async function toggleVote(commentId: string) {
     if (!thread) return;
+
+    if (!canVote) {
+      setThreadErr(
+        thread.viewer.kind === "anon"
+          ? "Sign in to vote."
+          : "Friend tier or higher required to vote.",
+      );
+      return;
+    }
+
+    setThreadErr("");
 
     // optimistic update
     setThread((prev) => {
@@ -264,13 +571,19 @@ export default function ExegesisTrackClient(props: {
 
       // refetch authoritative thread
       if (selected) {
+        const gk = (thread?.groupKey ?? "").trim();
         const url =
           `/api/exegesis/thread?trackId=${encodeURIComponent(trackId)}` +
-          `&groupKey=${encodeURIComponent(selectedGroupKey)}` +
+          (gk
+            ? `&groupKey=${encodeURIComponent(gk)}`
+            : `&lineKey=${encodeURIComponent(selected.lineKey)}`) +
           `&sort=${encodeURIComponent(sort)}`;
         const rr = await fetch(url, { cache: "no-store" });
         const jj = (await rr.json()) as ThreadApiOk | ThreadApiErr;
-        if (jj.ok) setThread(jj);
+        if (jj.ok) {
+          setThread(jj);
+          setThreadErr("");
+        }
       }
       return;
     }
@@ -288,6 +601,18 @@ export default function ExegesisTrackClient(props: {
       return { ...prev, roots };
     });
   }
+
+  const identityLabel =
+    viewerIdentity?.publicName || viewerIdentity?.anonLabel || "";
+
+  const showIdentityPanel =
+    thread?.viewer.kind === "member" && !!viewerMemberId && !!viewerIdentity;
+
+  const rootsForRender = React.useMemo(() => {
+    const roots = thread?.roots ?? [];
+    const pinnedId = meta?.pinnedCommentId ?? null;
+    return reorderRootsPinnedFirst(roots, pinnedId);
+  }, [thread?.roots, meta?.pinnedCommentId]);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
@@ -346,13 +671,14 @@ export default function ExegesisTrackClient(props: {
                   className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
                     active ? "bg-white/10" : "bg-transparent hover:bg-white/5"
                   }`}
-                  onClick={() =>
+                  onClick={() => {
                     setSelected({
                       lineKey: c.lineKey,
                       lineText: c.text,
                       tMs: c.tMs,
-                    })
-                  }
+                    });
+                    setHash({ lineKey: c.lineKey });
+                  }}
                 >
                   <div className="text-[11px] opacity-55">
                     {c.lineKey} · {c.tMs}ms
@@ -366,14 +692,93 @@ export default function ExegesisTrackClient(props: {
 
         <div className="rounded-xl bg-white/5 p-4">
           <div className="text-sm opacity-70">Thread</div>
+          {isLocked ? (
+            <div className="mt-2 rounded-md bg-white/5 p-3 text-sm">
+              <div className="opacity-80">This thread is locked.</div>
+              <div className="mt-1 text-xs opacity-60">
+                You can still read and vote (if enabled), but posting is
+                disabled.
+              </div>
+            </div>
+          ) : null}
 
           {selected ? (
             <div className="mt-2 rounded-md bg-black/20 p-3 text-sm">
               <div className="opacity-70">Selected line</div>
               <div className="mt-1">{selected.lineText}</div>
               <div className="mt-1 text-xs opacity-60">
-                GroupKey: <span className="opacity-80">{selectedGroupKey}</span>
+                GroupKey:{" "}
+                <span className="opacity-80">{thread?.groupKey ?? "—"}</span>
               </div>
+            </div>
+          ) : null}
+
+          {showIdentityPanel ? (
+            <div className="mt-3 rounded-md bg-black/20 p-3 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div className="opacity-70">Your identity</div>
+
+                <button
+                  className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
+                  disabled={!canClaimName}
+                  onClick={() => {
+                    setClaimErr("");
+                    setClaimOpen((v) => !v);
+                  }}
+                  title={
+                    canClaimName
+                      ? "Claim a public name"
+                      : "Claiming unlocks after contributions"
+                  }
+                >
+                  {viewerIdentity?.publicName ? "Edit" : "Claim"} name
+                </button>
+              </div>
+
+              <div className="mt-1 text-sm">
+                Showing as{" "}
+                <span className="font-semibold">{identityLabel}</span>
+              </div>
+
+              {!viewerIdentity?.publicName ? (
+                <div className="mt-1 text-xs opacity-60">
+                  Progress: {viewerIdentity?.contributionCount ?? 0}/5
+                  contributions
+                  {canClaimName ? " · Unlocked" : ""}
+                </div>
+              ) : null}
+
+              {claimOpen ? (
+                <div className="mt-3 space-y-2">
+                  <input
+                    className="w-full rounded-md bg-black/20 px-3 py-2 text-sm outline-none"
+                    placeholder="Choose a public name"
+                    value={claimName}
+                    onChange={(e) => setClaimName(e.target.value)}
+                  />
+                  {claimErr ? (
+                    <div className="text-xs opacity-70">{claimErr}</div>
+                  ) : null}
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      className="rounded-md bg-white/5 px-3 py-1.5 text-sm hover:bg-white/10"
+                      onClick={() => {
+                        setClaimOpen(false);
+                        setClaimErr("");
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
+                      disabled={!canClaimName || !claimName.trim() || claimBusy}
+                      onClick={() => void submitClaimName()}
+                    >
+                      {claimBusy ? "Saving…" : "Claim"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -383,45 +788,202 @@ export default function ExegesisTrackClient(props: {
             </div>
           ) : null}
 
-          <div className="mt-3 space-y-3">
-            {(thread?.roots ?? []).length === 0 ? (
-              <div className="text-sm opacity-60">No comments yet.</div>
-            ) : (
-              (thread?.roots ?? []).map((root) => (
-                <div key={root.rootId} className="rounded-md bg-black/20 p-3">
-                  {root.comments.map((c) => {
-                    const ident = thread?.identities?.[c.createdByMemberId];
-                    const name =
-                      ident?.publicName || ident?.anonLabel || "Anonymous";
+          <div
+            ref={threadScrollRef}
+            className="mt-3 space-y-3"
+            style={{
+              maxHeight: 520,
+              overflowY: "auto",
+              overscrollBehavior: "contain",
+            }}
+          >
+            <div className="mt-3 space-y-3">
+              {(thread?.roots ?? []).length === 0 ? (
+                <div className="text-sm opacity-60">No comments yet.</div>
+              ) : (
+                (rootsForRender ?? []).map((root) => (
+                  <div key={root.rootId} className="rounded-md bg-black/20 p-3">
+                    {root.comments.map((c) => {
+                      const ident = thread?.identities?.[c.createdByMemberId];
+                      const name =
+                        ident?.publicName || ident?.anonLabel || "Anonymous";
 
-                    return (
-                      <div key={c.id} className="py-2">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-xs opacity-70">{name}</div>
-                          <button
-                            className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
-                            onClick={() => void toggleVote(c.id)}
-                            title="Vote"
-                          >
-                            {c.viewerHasVoted ? "Voted" : "Vote"} ·{" "}
-                            {c.voteCount}
-                          </button>
+                      // Phase A safety: respect status
+                      if (c.status === "deleted") return null;
+
+                      return (
+                        <div
+                          id={`exegesis-c-${c.id}`}
+                          key={c.id}
+                          className="py-2 scroll-mt-4"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-xs opacity-70">{name}</div>
+
+                            <div className="flex items-center gap-2">
+                              {canVote ? (
+                                <button
+                                  className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
+                                  onClick={() => void toggleVote(c.id)}
+                                  title="Vote"
+                                >
+                                  {c.viewerHasVoted ? "Voted" : "Vote"} ·{" "}
+                                  {c.voteCount}
+                                </button>
+                              ) : (
+                                <button
+                                  className="rounded-md bg-white/5 px-2 py-1 text-xs opacity-70"
+                                  disabled
+                                  title={
+                                    thread?.viewer.kind === "anon"
+                                      ? "Sign in to vote"
+                                      : "Friend tier or higher required to vote"
+                                  }
+                                >
+                                  Vote · {c.voteCount}
+                                </button>
+                              )}
+
+                              {canReport ? (
+                                <button
+                                  className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
+                                  onClick={() => openReport(c.id)}
+                                  title="Report"
+                                >
+                                  Report
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          {c.status === "hidden" ? (
+                            <div className="mt-1 text-sm opacity-60 italic">
+                              This comment is hidden.
+                            </div>
+                          ) : (
+                            <div className="mt-1 text-sm">{c.bodyPlain}</div>
+                          )}
+
+                          {canReport && reportByCommentId[c.id]?.open ? (
+                            <div className="mt-2 rounded-md bg-black/25 p-3 text-sm">
+                              {reportByCommentId[c.id]?.done ? (
+                                <div className="text-xs opacity-75">
+                                  Report submitted. Thanks — this helps keep the
+                                  discourse usable.
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="text-xs opacity-70">
+                                      Report this comment
+                                    </div>
+                                    <button
+                                      className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
+                                      onClick={() => closeReport(c.id)}
+                                    >
+                                      Close
+                                    </button>
+                                  </div>
+
+                                  <div className="mt-2 grid gap-2">
+                                    <select
+                                      className="w-full rounded-md bg-black/20 px-3 py-2 text-sm outline-none"
+                                      value={
+                                        reportByCommentId[c.id]?.category ??
+                                        "spam"
+                                      }
+                                      onChange={(e) =>
+                                        setReportByCommentId((prev) => ({
+                                          ...prev,
+                                          [c.id]: {
+                                            ...(prev[c.id] as ReportDraft),
+                                            category: e.target.value,
+                                            err: "",
+                                          },
+                                        }))
+                                      }
+                                    >
+                                      {REPORT_CATEGORIES.map((opt) => (
+                                        <option key={opt.key} value={opt.key}>
+                                          {opt.label}
+                                        </option>
+                                      ))}
+                                    </select>
+
+                                    <textarea
+                                      className="min-h-[90px] w-full rounded-md bg-black/20 p-3 text-sm outline-none"
+                                      placeholder="Describe the issue (20–300 chars)."
+                                      value={
+                                        reportByCommentId[c.id]?.reason ?? ""
+                                      }
+                                      onChange={(e) =>
+                                        setReportByCommentId((prev) => ({
+                                          ...prev,
+                                          [c.id]: {
+                                            ...(prev[c.id] as ReportDraft),
+                                            reason: e.target.value,
+                                            err: "",
+                                          },
+                                        }))
+                                      }
+                                    />
+
+                                    {reportByCommentId[c.id]?.err ? (
+                                      <div className="text-xs opacity-75">
+                                        {reportByCommentId[c.id]?.err}
+                                      </div>
+                                    ) : null}
+
+                                    <div className="flex items-center justify-between">
+                                      <div className="text-xs opacity-60">
+                                        {
+                                          (
+                                            reportByCommentId[c.id]?.reason ??
+                                            ""
+                                          ).trim().length
+                                        }
+                                        /300
+                                      </div>
+                                      <button
+                                        className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
+                                        disabled={
+                                          reportByCommentId[c.id]?.busy ||
+                                          (
+                                            reportByCommentId[c.id]?.reason ??
+                                            ""
+                                          ).trim().length < 20 ||
+                                          (
+                                            reportByCommentId[c.id]?.reason ??
+                                            ""
+                                          ).trim().length > 300
+                                        }
+                                        onClick={() => void submitReport(c.id)}
+                                      >
+                                        {reportByCommentId[c.id]?.busy
+                                          ? "Submitting…"
+                                          : "Submit report"}
+                                      </button>
+                                    </div>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          ) : null}
                         </div>
-                        <div className="mt-1 text-sm">{c.bodyPlain}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ))
-            )}
+                      );
+                    })}
+                  </div>
+                ))
+              )}
+            </div>
           </div>
 
           <div className="mt-4">
-            <textarea
-              className="min-h-[90px] w-full rounded-md bg-black/20 p-3 text-sm outline-none"
-              placeholder="Write an interpretation… (Patron/Partner)"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+            <TipTapEditor
+              valuePlain={draft}
+              disabled={!canPost || isLocked}
+              onChangePlain={(plain) => setDraft(plain)}
+              onChangeDoc={(doc) => setDraftDoc(doc)}
             />
             <div className="mt-2 flex items-center justify-between gap-3">
               <div className="text-xs opacity-60">
@@ -429,15 +991,22 @@ export default function ExegesisTrackClient(props: {
               </div>
               <button
                 className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
-                disabled={!selected || !draft.trim() || posting}
+                disabled={
+                  !canPost || isLocked || !selected || !draft.trim() || posting
+                }
                 onClick={() => void postComment()}
               >
                 {posting ? "Posting…" : "Post"}
               </button>
             </div>
-            {thread?.viewer?.kind === "anon" ? (
+
+            {thread?.viewer.kind === "anon" ? (
               <div className="mt-2 text-xs opacity-60">
                 Tip: sign in to vote; upgrade to post.
+              </div>
+            ) : !canPost ? (
+              <div className="mt-2 text-xs opacity-60">
+                Posting requires Patron or Partner.
               </div>
             ) : null}
           </div>

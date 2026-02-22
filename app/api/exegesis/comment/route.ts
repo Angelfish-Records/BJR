@@ -8,6 +8,9 @@ import { sql } from "@vercel/postgres";
 import { hasAnyEntitlement } from "@/lib/entitlements";
 import { ENTITLEMENTS } from "@/lib/vocab";
 
+import { resolveGroupKeyForAnchor } from "@/lib/exegesis/resolveGroupKey";
+import { validateAndSanitizeTipTapDoc } from "@/lib/exegesis/richText";
+
 export const runtime = "nodejs";
 
 type ApiOk = {
@@ -92,23 +95,6 @@ function clampInt(v: unknown, min: number, max: number): number | null {
   return n;
 }
 
-/**
- * groupKey validation v1:
- * - groupKey is CLIENT-derived (sent in POST body)
- * - server validates it matches the expected scheme for (trackId,lineKey)
- * - currently 1:1 with lineKey: `lk:${lineKey}`
- *
- * Later you can upgrade this validation to support repeat-line grouping
- * (derive from lyrics anchoring rules + version), while still accepting
- * client-provided groupKey.
- */
-function expectedGroupKey(trackId: string, lineKey: string): string {
-  const t = norm(trackId);
-  const lk = norm(lineKey);
-  if (!t || !lk) return "";
-  return `lk:${lk}`;
-}
-
 function stableAnonLabel(memberId: string): string {
   const words = [
     "Amber",
@@ -157,46 +143,6 @@ type DbParentRow = {
   depth: number;
 };
 
-type DbIdentityRow = {
-  member_id: string;
-  anon_label: string;
-  public_name: string | null;
-  public_name_unlocked_at: string | null;
-  contribution_count: number;
-};
-
-type DbMetaRow = {
-  track_id: string;
-  group_key: string;
-  pinned_comment_id: string | null;
-  locked: boolean;
-  comment_count: number;
-  last_activity_at: string;
-  created_at: string;
-  updated_at: string;
-};
-
-type DbInsertedCommentRow = {
-  id: string;
-  track_id: string;
-  group_key: string;
-  line_key: string;
-  parent_id: string | null;
-  root_id: string;
-  depth: number;
-  body_rich: unknown;
-  body_plain: string;
-  t_ms: number | null;
-  line_text_snapshot: string;
-  lyrics_version: string | null;
-  created_by_member_id: string;
-  status: "live" | "hidden" | "deleted";
-  created_at: string;
-  edited_at: string | null;
-  edit_count: number;
-  vote_count: number;
-};
-
 async function requireMemberId(): Promise<string | null> {
   const { userId } = await auth();
   if (!userId) return null;
@@ -238,16 +184,35 @@ export async function POST(req: NextRequest) {
   const trackId = norm(b.trackId);
   const lineKey = norm(b.lineKey);
 
-  // IMPORTANT: client-derived groupKey
+  // groupKey becomes optional (client may still send it, but we don't trust it)
   const groupKeyClient = norm(b.groupKey);
 
   const parentIdRaw = norm(b.parentId);
   const parentId = parentIdRaw ? parentIdRaw : null;
 
-  const bodyPlain = norm(b.bodyPlain);
-  const bodyRich: unknown | null =
-    "bodyRich" in b ? (b.bodyRich ?? null) : null;
-  const bodyRichJson = safeJsonStringify(bodyRich);
+  const legacyBodyPlain = norm(b.bodyPlain);
+
+  const hasBodyRich = "bodyRich" in b;
+  const bodyRichInput: unknown = hasBodyRich ? (b.bodyRich ?? null) : null;
+
+  // Phase C: if bodyRich present, it becomes canonical; derive bodyPlain server-side.
+  // If bodyRich missing/null, fall back to legacy plain-only posting.
+  let bodyPlain = legacyBodyPlain;
+  let bodyRichJson = safeJsonStringify(null); // JSON "null" (still a jsonb value)
+
+  if (bodyRichInput !== null && typeof bodyRichInput !== "undefined") {
+    const v = validateAndSanitizeTipTapDoc(bodyRichInput);
+    if (!v.ok) return json(400, { ok: false, error: v.error });
+    bodyPlain = v.plain;
+    bodyRichJson = JSON.stringify(v.doc);
+  } else {
+    // legacy mode
+    if (!bodyPlain)
+      return json(400, { ok: false, error: "Missing bodyPlain." });
+    if (bodyPlain.length > 5000)
+      return json(400, { ok: false, error: "bodyPlain too long." });
+  }
+
   if (bodyRichJson.length > 200_000) {
     return json(400, { ok: false, error: "bodyRich too large." });
   }
@@ -260,8 +225,23 @@ export async function POST(req: NextRequest) {
 
   if (!trackId) return json(400, { ok: false, error: "Missing trackId." });
   if (!lineKey) return json(400, { ok: false, error: "Missing lineKey." });
-  if (!groupKeyClient)
-    return json(400, { ok: false, error: "Missing groupKey." });
+
+  // Resolve canonical group key (map-first, v1 fallback)
+  const resolved = await resolveGroupKeyForAnchor({ trackId, lineKey });
+  const groupKey = resolved.groupKey;
+
+  if (!groupKey) {
+    return json(400, { ok: false, error: "Could not resolve groupKey." });
+  }
+
+  // If the client sent a groupKey, require it to match server resolution.
+  // This prevents “posting into the wrong thread” if mappings changed mid-session.
+  if (groupKeyClient && groupKeyClient !== groupKey) {
+    return json(409, {
+      ok: false,
+      error: "Group key changed. Refresh and try again.",
+    });
+  }
 
   if (!bodyPlain) return json(400, { ok: false, error: "Missing bodyPlain." });
   if (bodyPlain.length > 5000)
@@ -274,16 +254,6 @@ export async function POST(req: NextRequest) {
 
   if (parentId && !isUuid(parentId))
     return json(400, { ok: false, error: "Invalid parentId." });
-
-  // Validate groupKey against expected scheme for (trackId,lineKey)
-  const expected = expectedGroupKey(trackId, lineKey);
-  if (!expected) {
-    return json(400, { ok: false, error: "Could not validate groupKey." });
-  }
-  const groupKey = groupKeyClient.trim();
-  if (groupKey !== expected) {
-    return json(400, { ok: false, error: "Invalid groupKey for lineKey." });
-  }
 
   const memberId = await requireMemberId();
   if (!memberId) {
@@ -298,227 +268,316 @@ export async function POST(req: NextRequest) {
     return json(403, { ok: false, error: "Patron or Partner required." });
   }
 
-  // Resolve parent -> compute root/depth
-  let rootId: string;
-  let depth: number;
-  if (parentId) {
-    const parentRes = await sql<DbParentRow>`
-      select id, track_id, group_key, root_id, depth
-      from exegesis_comment
-      where id = ${parentId}::uuid
-      limit 1
-    `;
-    const p = parentRes.rows?.[0] ?? null;
-    if (!p) return json(404, { ok: false, error: "Parent not found." });
-    if (p.track_id !== trackId || p.group_key !== groupKey) {
-      return json(400, { ok: false, error: "Parent scope mismatch." });
-    }
-
-    const nextDepth = (p.depth ?? 0) + 1;
-    const MAX_DEPTH = 6;
-    if (nextDepth > MAX_DEPTH) {
-      return json(400, { ok: false, error: "Thread depth limit reached." });
-    }
-
-    rootId = p.root_id;
-    depth = nextDepth;
-  } else {
-    rootId = crypto.randomUUID();
-    depth = 0;
-  }
-
-  const commentId = parentId ? crypto.randomUUID() : rootId;
+  const rootIdForRootComment = crypto.randomUUID(); // always generate
+  const commentIdForReply = crypto.randomUUID(); // always generate
 
   try {
-    await sql`begin`;
-
-    await sql`
-      insert into exegesis_thread_meta (track_id, group_key)
-      values (${trackId}, ${groupKey})
-      on conflict (track_id, group_key) do nothing
-    `;
-
-    const lockRes = await sql<{ locked: boolean }>`
-      select locked
-      from exegesis_thread_meta
-      where track_id = ${trackId}
-        and group_key = ${groupKey}
-      limit 1
-    `;
-    const locked = lockRes.rows?.[0]?.locked ?? false;
-    if (locked) {
-      await sql`rollback`;
-      return json(403, { ok: false, error: "Thread is locked." });
-    }
+    // Precompute ids deterministically:
+    // - root comments: id == rootId
+    // - replies: id is a new uuid, rootId inherited from parent
+    // We'll compute final ids inside SQL to avoid mismatches.
 
     const label = stableAnonLabel(memberId);
-    await sql`
-      insert into exegesis_identity (member_id, anon_label)
-      values (${memberId}::uuid, ${label})
-      on conflict (member_id) do nothing
-    `;
 
-    const inserted = await sql<DbInsertedCommentRow>`
-      insert into exegesis_comment (
-        id,
-        track_id,
-        group_key,
-        line_key,
-        parent_id,
-        root_id,
-        depth,
-        body_rich,
-        body_plain,
-        t_ms,
-        line_text_snapshot,
-        lyrics_version,
-        created_by_member_id,
-        status
-      ) values (
-        ${commentId}::uuid,
-        ${trackId},
-        ${groupKey},
-        ${lineKey},
-        ${parentId ? parentId : null}::uuid,
-        ${rootId}::uuid,
-        ${depth}::int,
-        ${bodyRichJson}::jsonb,
-        ${bodyPlain},
-        ${tMsOrNull}::int,
-        ${lineTextSnapshot},
-        ${lyricsVersion},
-        ${memberId}::uuid,
-        'live'
+    const parentUuid = parentId; // string | null
+
+    // Atomic statement: ensure meta, block if locked, ensure identity, resolve parent/root/depth,
+    // insert comment, bump meta + identity, return comment + meta + identity.
+    const q = await sql<{
+      // comment
+      id: string;
+      track_id: string;
+      group_key: string;
+      line_key: string;
+      parent_id: string | null;
+      root_id: string;
+      depth: number;
+      body_rich: unknown;
+      body_plain: string;
+      t_ms: number | null;
+      line_text_snapshot: string;
+      lyrics_version: string | null;
+      created_by_member_id: string;
+      status: "live" | "hidden" | "deleted";
+      created_at: string;
+      edited_at: string | null;
+      edit_count: number;
+      vote_count: number;
+
+      // meta
+      meta_track_id: string;
+      meta_group_key: string;
+      meta_pinned_comment_id: string | null;
+      meta_locked: boolean;
+      meta_comment_count: number;
+      meta_last_activity_at: string;
+      meta_created_at: string;
+      meta_updated_at: string;
+
+      // identity
+      ident_member_id: string;
+      ident_anon_label: string;
+      ident_public_name: string | null;
+      ident_public_name_unlocked_at: string | null;
+      ident_contribution_count: number;
+
+      // guard info
+      guard_err: string | null;
+    }>`
+      with
+      -- ensure thread meta exists
+      meta_ins as (
+        insert into exegesis_thread_meta (track_id, group_key)
+        values (${trackId}, ${groupKey})
+        on conflict (track_id, group_key) do nothing
+        returning track_id, group_key
+      ),
+      meta as (
+        select track_id, group_key, pinned_comment_id, locked, comment_count, last_activity_at, created_at, updated_at
+        from exegesis_thread_meta
+        where track_id = ${trackId}
+          and group_key = ${groupKey}
+        limit 1
+      ),
+      -- lock guard
+      guard as (
+        select
+          case
+            when (select locked from meta) then 'LOCKED'
+            else null
+          end as err
+      ),
+      -- ensure identity exists
+      ident_ins as (
+        insert into exegesis_identity (member_id, anon_label)
+        values (${memberId}::uuid, ${label})
+        on conflict (member_id) do nothing
+        returning member_id
+      ),
+      -- resolve parent (if any)
+      parent as (
+        select id, track_id, group_key, root_id, depth
+        from exegesis_comment
+        where id = ${parentUuid}::uuid
+        limit 1
+      ),
+      parent_guard as (
+        select
+          case
+            when ${parentUuid}::uuid is null then null
+            when (select id from parent) is null then 'PARENT_NOT_FOUND'
+            when (select track_id from parent) <> ${trackId} then 'PARENT_SCOPE'
+            when (select group_key from parent) <> ${groupKey} then 'PARENT_SCOPE'
+            when ((select depth from parent) + 1) > 6 then 'DEPTH'
+            else null
+          end as err
+      ),
+      resolved as (
+        select
+          case
+  when ${parentUuid}::uuid is null then ${rootIdForRootComment}::uuid
+  else (select root_id from parent)
+end as root_id,
+          case
+            when ${parentUuid}::uuid is null then 0::int
+            else ((select depth from parent) + 1)::int
+          end as depth,
+          case
+  when ${parentUuid}::uuid is null then ${rootIdForRootComment}::uuid
+  else ${commentIdForReply}::uuid
+end as id
+      ),
+      inserted as (
+        insert into exegesis_comment (
+          id,
+          track_id,
+          group_key,
+          line_key,
+          parent_id,
+          root_id,
+          depth,
+          body_rich,
+          body_plain,
+          t_ms,
+          line_text_snapshot,
+          lyrics_version,
+          created_by_member_id,
+          status
+        )
+        select
+          (select id from resolved),
+          ${trackId},
+          ${groupKey},
+          ${lineKey},
+          ${parentUuid}::uuid,
+          (select root_id from resolved),
+          (select depth from resolved),
+          ${bodyRichJson}::jsonb,
+          ${bodyPlain},
+          ${tMsOrNull}::int,
+          ${lineTextSnapshot},
+          ${lyricsVersion},
+          ${memberId}::uuid,
+          'live'
+        where (select err from guard) is null
+          and (select err from parent_guard) is null
+        returning
+          id,
+          track_id,
+          group_key,
+          line_key,
+          parent_id,
+          root_id,
+          depth,
+          body_rich,
+          body_plain,
+          t_ms,
+          line_text_snapshot,
+          lyrics_version,
+          created_by_member_id,
+          status::text as status,
+          created_at,
+          edited_at,
+          edit_count,
+          vote_count
+      ),
+      meta_upd as (
+        update exegesis_thread_meta
+        set
+          comment_count = comment_count + 1,
+          last_activity_at = now(),
+          updated_at = now()
+        where track_id = ${trackId}
+          and group_key = ${groupKey}
+          and exists (select 1 from inserted)
+        returning track_id, group_key, pinned_comment_id, locked, comment_count, last_activity_at, created_at, updated_at
+      ),
+      ident_upd as (
+        update exegesis_identity
+        set
+          contribution_count = contribution_count + 1,
+          public_name_unlocked_at = case
+            when public_name_unlocked_at is null and (contribution_count + 1) >= 5 then now()
+            else public_name_unlocked_at
+          end,
+          updated_at = now()
+        where member_id = ${memberId}::uuid
+          and exists (select 1 from inserted)
+        returning member_id, anon_label, public_name, public_name_unlocked_at, contribution_count
       )
-      returning
-        id,
-        track_id,
-        group_key,
-        line_key,
-        parent_id,
-        root_id,
-        depth,
-        body_rich,
-        body_plain,
-        t_ms,
-        line_text_snapshot,
-        lyrics_version,
-        created_by_member_id,
-        status::text as status,
-        created_at,
-        edited_at,
-        edit_count,
-        vote_count
+      select
+        i.*,
+
+        m.track_id as meta_track_id,
+        m.group_key as meta_group_key,
+        m.pinned_comment_id as meta_pinned_comment_id,
+        m.locked as meta_locked,
+        m.comment_count as meta_comment_count,
+        m.last_activity_at as meta_last_activity_at,
+        m.created_at as meta_created_at,
+        m.updated_at as meta_updated_at,
+
+        u.member_id as ident_member_id,
+        u.anon_label as ident_anon_label,
+        u.public_name as ident_public_name,
+        u.public_name_unlocked_at as ident_public_name_unlocked_at,
+        u.contribution_count as ident_contribution_count,
+
+        coalesce((select err from guard), (select err from parent_guard)) as guard_err
+      from inserted i
+      join meta_upd m on true
+      join ident_upd u on true
     `;
 
-    const c = inserted.rows?.[0] ?? null;
-    if (!c) {
-      await sql`rollback`;
+    const row = q.rows?.[0] ?? null;
+
+    // Guard errors that prevented insert (no row returned)
+    if (!row) {
+      // Re-run a tiny guard check to return a friendly message.
+      // (Still no transaction; cheap and deterministic.)
+      if (parentId) {
+        const pRes = await sql<DbParentRow>`
+          select id, track_id, group_key, root_id, depth
+          from exegesis_comment
+          where id = ${parentId}::uuid
+          limit 1
+        `;
+        const p = pRes.rows?.[0] ?? null;
+        if (!p) return json(404, { ok: false, error: "Parent not found." });
+        if (p.track_id !== trackId || p.group_key !== groupKey) {
+          return json(400, { ok: false, error: "Parent scope mismatch." });
+        }
+        if ((p.depth ?? 0) + 1 > 6) {
+          return json(400, { ok: false, error: "Thread depth limit reached." });
+        }
+      }
+
+      const lockRes = await sql<{ locked: boolean }>`
+        select locked
+        from exegesis_thread_meta
+        where track_id = ${trackId}
+          and group_key = ${groupKey}
+        limit 1
+      `;
+      if (lockRes.rows?.[0]?.locked) {
+        return json(403, { ok: false, error: "Thread is locked." });
+      }
+
       return json(500, { ok: false, error: "Failed to insert comment." });
     }
 
-    await sql`
-      update exegesis_thread_meta
-      set
-        comment_count = comment_count + 1,
-        last_activity_at = now(),
-        updated_at = now()
-      where track_id = ${trackId}
-        and group_key = ${groupKey}
-    `;
-
-    await sql`
-      update exegesis_identity
-      set
-        contribution_count = contribution_count + 1,
-        updated_at = now()
-      where member_id = ${memberId}::uuid
-    `;
-
-    const metaRes = await sql<DbMetaRow>`
-      select track_id, group_key, pinned_comment_id, locked, comment_count, last_activity_at, created_at, updated_at
-      from exegesis_thread_meta
-      where track_id = ${trackId}
-        and group_key = ${groupKey}
-      limit 1
-    `;
-    // NOTE: if your table is named exegesis_thread_meta (as elsewhere), keep it consistent:
-    // (I’m defensively correcting below if you copy/paste and hit a typo.)
-    const metaRow = (metaRes as unknown as { rows?: DbMetaRow[] }).rows?.[0] ?? null;
-
-    const identRes = await sql<DbIdentityRow>`
-      select member_id, anon_label, public_name, public_name_unlocked_at, contribution_count
-      from exegesis_identity
-      where member_id = ${memberId}::uuid
-      limit 1
-    `;
-    const identRow = identRes.rows?.[0] ?? null;
-
-    await sql`commit`;
-
     const comment: CommentDTO = {
-      id: c.id,
-      trackId: c.track_id,
-      groupKey: c.group_key,
-      lineKey: c.line_key,
-      parentId: c.parent_id,
-      rootId: c.root_id,
-      depth: c.depth,
-      bodyRich: c.body_rich,
-      bodyPlain: c.body_plain,
-      tMs: c.t_ms,
-      lineTextSnapshot: c.line_text_snapshot,
-      lyricsVersion: c.lyrics_version,
-      createdByMemberId: c.created_by_member_id,
-      status: c.status,
-      createdAt: c.created_at,
-      editedAt: c.edited_at,
-      editCount: c.edit_count,
-      voteCount: c.vote_count,
+      id: row.id,
+      trackId: row.track_id,
+      groupKey: row.group_key,
+      lineKey: row.line_key,
+      parentId: row.parent_id,
+      rootId: row.root_id,
+      depth: row.depth,
+      bodyRich: row.body_rich,
+      bodyPlain: row.body_plain,
+      tMs: row.t_ms,
+      lineTextSnapshot: row.line_text_snapshot,
+      lyricsVersion: row.lyrics_version,
+      createdByMemberId: row.created_by_member_id,
+      status: row.status,
+      createdAt: row.created_at,
+      editedAt: row.edited_at,
+      editCount: row.edit_count,
+      voteCount: row.vote_count,
       viewerHasVoted: false,
     };
 
-    const meta: ThreadMetaDTO = metaRow
-      ? {
-          trackId: metaRow.track_id,
-          groupKey: metaRow.group_key,
-          pinnedCommentId: metaRow.pinned_comment_id,
-          locked: metaRow.locked,
-          commentCount: metaRow.comment_count,
-          lastActivityAt: metaRow.last_activity_at,
-          createdAt: metaRow.created_at,
-          updatedAt: metaRow.updated_at,
-        }
-      : {
-          trackId,
-          groupKey,
-          pinnedCommentId: null,
-          locked: false,
-          commentCount: 1,
-          lastActivityAt: new Date().toISOString(),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
+    const meta: ThreadMetaDTO = {
+      trackId: row.meta_track_id,
+      groupKey: row.meta_group_key,
+      pinnedCommentId: row.meta_pinned_comment_id,
+      locked: row.meta_locked,
+      commentCount: row.meta_comment_count,
+      lastActivityAt: row.meta_last_activity_at,
+      createdAt: row.meta_created_at,
+      updatedAt: row.meta_updated_at,
+    };
 
-    const identities: Record<string, IdentityDTO> = {};
-    if (identRow) {
-      identities[identRow.member_id] = {
-        memberId: identRow.member_id,
-        anonLabel: identRow.anon_label,
-        publicName: identRow.public_name,
-        publicNameUnlockedAt: identRow.public_name_unlocked_at,
-        contributionCount: identRow.contribution_count,
-      };
-    }
+    const identities: Record<string, IdentityDTO> = {
+      [row.ident_member_id]: {
+        memberId: row.ident_member_id,
+        anonLabel: row.ident_anon_label,
+        publicName: row.ident_public_name,
+        publicNameUnlockedAt: row.ident_public_name_unlocked_at,
+        contributionCount: row.ident_contribution_count,
+      },
+    };
 
-    return json(200, { ok: true, trackId, groupKey, comment, meta, identities });
+    return json(200, {
+      ok: true,
+      trackId,
+      groupKey,
+      comment,
+      meta,
+      identities,
+    });
   } catch (e: unknown) {
-    try {
-      await sql`rollback`;
-    } catch {
-      // ignore
-    }
-
     const msg =
       e instanceof Error
         ? norm(e.message)

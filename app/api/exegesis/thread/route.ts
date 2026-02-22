@@ -3,6 +3,17 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { sql } from "@vercel/postgres";
+import { ensureAnonId } from "@/lib/anon";
+import { hasAnyEntitlement } from "@/lib/entitlements";
+import { ENTITLEMENTS } from "@/lib/vocab";
+import crypto from "crypto";
+import {
+  resolveGroupKeyForAnchor,
+  isGroupKeyV1,
+  isKnownCanonicalGroupKey,
+} from "@/lib/exegesis/resolveGroupKey";
+
+export const runtime = "nodejs";
 
 type ThreadSort = "top" | "recent";
 
@@ -51,6 +62,19 @@ type ThreadMetaDTO = {
   updatedAt: string;
 };
 
+type ViewerDTO =
+  | { kind: "anon" }
+  | {
+      kind: "member";
+      memberId: string;
+      cap: {
+        canVote: boolean; // Friend+
+        canReport: boolean; // Friend+
+        canPost: boolean; // Patron/Partner
+        canClaimName: boolean; // server-derived from identity row
+      };
+    };
+
 type ApiOk = {
   ok: true;
   trackId: string;
@@ -62,13 +86,14 @@ type ApiOk = {
     comments: CommentDTO[]; // chronological
   }>;
   identities: Record<string, IdentityDTO>; // keyed by memberId
-  viewer: { kind: Viewer["kind"] };
+  viewer: ViewerDTO;
 };
 
-type ApiErr = { ok: false; error: string };
+type ApiErr = { ok: false; error: string; code?: "ANON_LIMIT" };
 
-function json(status: number, body: ApiOk | ApiErr) {
-  return NextResponse.json(body, { status });
+function json(status: number, body: ApiOk | ApiErr, res?: NextResponse) {
+  const r = res ?? NextResponse.json(body, { status });
+  return r;
 }
 
 function norm(s: string | null): string {
@@ -79,26 +104,56 @@ function isSort(v: string): v is ThreadSort {
   return v === "top" || v === "recent";
 }
 
-/**
- * You said groupKey should be re-derived server-side.
- * For now, we enforce "some stable string" without trusting client:
- * - if client sends groupKey, we require it be non-empty
- * - (in next pass) we’ll derive from lyrics anchoring rules + lyrics_version
- */
-function normalizeGroupKey(trackId: string, rawGroupKey: string): string {
-  const g = norm(rawGroupKey);
-  if (!g) return "";
-  // mild hardening: prevent cross-track reuse by requiring trackId prefix later if you want
-  // For now just return trimmed.
-  return g;
+function isUuid(v: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    v,
+  );
+}
+
+function stableAnonLabel(memberId: string): string {
+  const words = [
+    "Amber",
+    "Obsidian",
+    "Juniper",
+    "Cobalt",
+    "Saffron",
+    "Quartz",
+    "Cedar",
+    "Heliotrope",
+    "Moss",
+    "Ember",
+    "Indigo",
+    "Umber",
+    "Lichen",
+    "Aster",
+    "Onyx",
+    "Kauri",
+    "Dusk",
+    "Nimbus",
+    "Salt",
+    "Foxglove",
+    "Kelp",
+    "Aurora",
+    "Fjord",
+    "Cicada",
+    "Vesper",
+    "Drift",
+    "Sable",
+    "Pollen",
+    "Basalt",
+    "Mirage",
+  ];
+
+  const h = crypto.createHash("sha256").update(memberId).digest();
+  const n = h.readUInt32BE(0);
+  const w = words[n % words.length] ?? "Cipher";
+  return `Anonymous ${w}`;
 }
 
 async function getViewer(req: NextRequest): Promise<Viewer> {
-  // If you already have an anon cookie scheme elsewhere, swap this in.
-  // This route supports anon callers, but anon can't vote or post.
   const { userId } = await auth();
   if (!userId) {
-    const anonId = norm(req.cookies.get("af_anon")?.value ?? "");
+    const anonId = (req.cookies.get("af_anon")?.value ?? "").trim();
     return { kind: "anon", anonId: anonId || "anon_missing" };
   }
 
@@ -109,10 +164,7 @@ async function getViewer(req: NextRequest): Promise<Viewer> {
     limit 1
   `;
   const memberId = r.rows?.[0]?.id ?? "";
-  if (!memberId) {
-    // authenticated in Clerk, but not provisioned into members yet
-    return { kind: "anon", anonId: "anon_provisioning" };
-  }
+  if (!memberId) return { kind: "anon", anonId: "anon_provisioning" };
   return { kind: "member", memberId };
 }
 
@@ -159,6 +211,28 @@ type DbIdentityRow = {
   updated_at: string;
 };
 
+async function capsForMember(memberId: string): Promise<{
+  canVote: boolean;
+  canReport: boolean;
+  canPost: boolean;
+}> {
+  // Keep this aligned with the write routes:
+  // - vote: Friend+ (Friend, Patron, Partner)
+  // - report: Friend+ (per your policy; default signed-in is Friend)
+  // - post: Patron/Partner
+  const canVote = await hasAnyEntitlement(memberId, [
+    ENTITLEMENTS.TIER_FRIEND,
+    ENTITLEMENTS.TIER_PATRON,
+    ENTITLEMENTS.TIER_PARTNER,
+  ]);
+  const canReport = canVote;
+  const canPost = await hasAnyEntitlement(memberId, [
+    ENTITLEMENTS.TIER_PATRON,
+    ENTITLEMENTS.TIER_PARTNER,
+  ]);
+  return { canVote, canReport, canPost };
+}
+
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
 
@@ -168,24 +242,127 @@ export async function GET(req: NextRequest) {
   const sort: ThreadSort = isSort(sortParam) ? sortParam : "top";
 
   if (!trackId) return json(400, { ok: false, error: "Missing trackId." });
+  if (trackId.length > 200)
+    return json(400, { ok: false, error: "Invalid trackId." });
+
   const rawGroupKey = norm(url.searchParams.get("groupKey"));
   const lineKey = norm(url.searchParams.get("lineKey"));
 
-  // Prefer server-derived groupKey from lineKey (new contract).
-  // Back-compat: if no lineKey provided, accept groupKey (legacy callers).
   let groupKey = "";
+
   if (lineKey) {
-    groupKey = `lk:${lineKey.trim()}`;
+    const resolved = await resolveGroupKeyForAnchor({ trackId, lineKey });
+    groupKey = resolved.groupKey;
+
+    // If the client also sent groupKey, require it to match server resolution.
+    // Prevents stale clients reading the wrong thread after mapping changes.
+    if (rawGroupKey && norm(rawGroupKey) !== groupKey) {
+      return json(409, {
+        ok: false,
+        error: "Group key changed. Refresh and try again.",
+      });
+    }
   } else {
-    if (!rawGroupKey)
-      return json(400, { ok: false, error: "Missing lineKey." });
-    groupKey = normalizeGroupKey(trackId, rawGroupKey);
+    if (!rawGroupKey) {
+      return json(400, { ok: false, error: "Missing lineKey (or groupKey)." });
+    }
+
+    const g = norm(rawGroupKey);
+
+    // Back-compat: v1 still allowed as a direct groupKey
+    if (isGroupKeyV1(g)) {
+      groupKey = g;
+    } else {
+      // v2+ group keys only allowed if they are known on this track
+      const ok = await isKnownCanonicalGroupKey({ trackId, groupKey: g });
+      if (!ok) {
+        return json(400, {
+          ok: false,
+          error: "Unknown groupKey.",
+        });
+      }
+      groupKey = g;
+    }
   }
 
   if (!groupKey) return json(400, { ok: false, error: "Invalid group key." });
 
-  const viewer = await getViewer(req);
-  const viewerMemberId = viewer.kind === "member" ? viewer.memberId : null;
+  // Prepare a response so we can persist anon cookie when needed
+  const res = NextResponse.json<ApiOk | ApiErr>(
+    { ok: false, error: "init" },
+    { status: 200 },
+  );
+  const { anonId } = ensureAnonId(req, res);
+
+  const viewer0 = await getViewer(req);
+
+  // If anon, force minted anonId (never operate on "anon_missing")
+  const viewer: Viewer =
+    viewer0.kind === "anon" && viewer0.anonId === "anon_missing"
+      ? { kind: "anon", anonId }
+      : viewer0;
+
+  const viewerMemberId =
+    viewer.kind === "member" && isUuid(viewer.memberId)
+      ? viewer.memberId
+      : null;
+
+  // Ensure viewer identity exists (so we can always show anonLabel even before first post)
+  if (viewerMemberId) {
+    const label = stableAnonLabel(viewerMemberId);
+    await sql`
+    insert into exegesis_identity (member_id, anon_label)
+    values (${viewerMemberId}::uuid, ${label})
+    on conflict (member_id) do nothing
+  `;
+  }
+
+  // ---- anon metering gate (read) ----
+  if (viewer.kind === "anon") {
+    const LIMIT = 8;
+
+    const gate = await sql<{ already: boolean; n: number }>`
+      with
+      already as (
+        select exists(
+          select 1
+          from anon_exegesis_thread_opens
+          where anon_id = ${viewer.anonId}
+            and track_id = ${trackId}
+            and group_key = ${groupKey}
+        ) as already
+      ),
+      cnt as (
+        select count(*)::int as n
+        from anon_exegesis_thread_opens
+        where anon_id = ${viewer.anonId}
+      ),
+      ins as (
+        insert into anon_exegesis_thread_opens (anon_id, track_id, group_key)
+        select ${viewer.anonId}, ${trackId}, ${groupKey}
+        where (select already from already) = false
+          and (select n from cnt) < ${LIMIT}
+        on conflict do nothing
+        returning 1
+      )
+      select (select already from already) as already, (select n from cnt) as n
+    `;
+
+    const alreadyOpened = Boolean(gate.rows?.[0]?.already);
+    const n = Number(gate.rows?.[0]?.n ?? 0);
+
+    if (!alreadyOpened && n >= LIMIT) {
+      return NextResponse.json<ApiErr>(
+        {
+          ok: false,
+          code: "ANON_LIMIT",
+          error:
+            "You’ve hit the anon reading limit. Sign in to keep reading and voting.",
+        },
+        { status: 403, headers: res.headers },
+      );
+    }
+  }
 
   // thread meta (optional row)
   const metaRes = await sql<DbThreadMetaRow>`
@@ -198,8 +375,6 @@ export async function GET(req: NextRequest) {
   const metaRow = metaRes.rows?.[0] ?? null;
 
   // Comments + viewer vote state (single query)
-  // Note: status enum exists; we return all except deleted by default.
-  // If you want “hidden” only for admins later, that’s a separate gate.
   const commentsRes = await sql<DbCommentRow>`
     with base as (
       select
@@ -285,38 +460,38 @@ export async function GET(req: NextRequest) {
     byRoot.set(dto.rootId, arr);
   }
 
-  // Identity hydration (single query)
-  const authorIdList = Array.from(authorIds);
+  // Identity hydration (single query) + always include viewer identity
   const identities: Record<string, IdentityDTO> = {};
+  const wantIds = new Set<string>();
 
-  function isUuid(v: string): boolean {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      v,
-    );
+  for (const id of Array.from(authorIds)) {
+    const s = (id ?? "").trim();
+    if (isUuid(s)) wantIds.add(s);
+  }
+  if (viewer.kind === "member") {
+    const me = (viewer.memberId ?? "").trim();
+    if (isUuid(me)) wantIds.add(me);
   }
 
-  if (authorIdList.length > 0) {
-    const uuids = authorIdList.map((s) => s.trim()).filter(isUuid);
+  const uuids = Array.from(wantIds);
 
-    if (uuids.length > 0) {
-      // Postgres array literal like: {uuid1,uuid2,...}
-      const uuidArrayLiteral = `{${uuids.join(",")}}`;
+  if (uuids.length > 0) {
+    const uuidArrayLiteral = `{${uuids.join(",")}}`;
 
-      const idsRes = await sql<DbIdentityRow>`
+    const idsRes = await sql<DbIdentityRow>`
       select member_id, anon_label, public_name, public_name_unlocked_at, contribution_count, created_at, updated_at
       from exegesis_identity
       where member_id = any(${uuidArrayLiteral}::uuid[])
     `;
 
-      for (const i of idsRes.rows ?? []) {
-        identities[i.member_id] = {
-          memberId: i.member_id,
-          anonLabel: i.anon_label,
-          publicName: i.public_name,
-          publicNameUnlockedAt: i.public_name_unlocked_at,
-          contributionCount: i.contribution_count,
-        };
-      }
+    for (const i of idsRes.rows ?? []) {
+      identities[i.member_id] = {
+        memberId: i.member_id,
+        anonLabel: i.anon_label,
+        publicName: i.public_name,
+        publicNameUnlockedAt: i.public_name_unlocked_at,
+        contributionCount: i.contribution_count,
+      };
     }
   }
 
@@ -338,14 +513,49 @@ export async function GET(req: NextRequest) {
       }
     : null;
 
-  return json(200, {
-    ok: true,
-    trackId,
-    groupKey,
-    sort,
-    meta,
-    roots,
-    identities,
-    viewer: { kind: viewer.kind },
-  });
+  // Viewer DTO (server-authoritative caps)
+  let viewerDto: ViewerDTO;
+
+  if (!viewerMemberId) {
+    viewerDto = { kind: "anon" };
+  } else {
+    const cap0 = await capsForMember(viewerMemberId);
+
+    // Respect thread lock for UI (server-authoritative)
+    const locked = Boolean(metaRow?.locked);
+
+    const me = identities[viewerMemberId];
+    const canClaimName =
+      !!me &&
+      !me.publicName &&
+      !!me.publicNameUnlockedAt &&
+      me.publicNameUnlockedAt.trim().length > 0;
+
+    viewerDto = {
+      kind: "member",
+      memberId: viewerMemberId,
+      cap: {
+        ...cap0,
+        canPost: locked ? false : cap0.canPost,
+        // voting can stay true (your vote route already blocks LOCKED),
+        // but if you want the UI to disable voting as well, uncomment:
+        // canVote: locked ? false : cap0.canVote,
+        canClaimName,
+      },
+    };
+  }
+
+  return NextResponse.json<ApiOk>(
+    {
+      ok: true,
+      trackId,
+      groupKey,
+      sort,
+      meta,
+      roots,
+      identities,
+      viewer: viewerDto,
+    },
+    { status: 200, headers: res.headers },
+  );
 }

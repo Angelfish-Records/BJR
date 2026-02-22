@@ -55,12 +55,6 @@ async function requireCanVote(memberId: string): Promise<boolean> {
   ]);
 }
 
-type DbCommentRow = {
-  id: string;
-  status: "live" | "hidden" | "deleted";
-  vote_count: number;
-};
-
 export async function POST(req: NextRequest) {
   let raw: unknown;
   try {
@@ -91,83 +85,102 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await sql`begin`;
-
-    // Lock comment row so vote_count stays consistent.
-    const cRes = await sql<DbCommentRow>`
-      select id, status::text as status, vote_count
-      from exegesis_comment
-      where id = ${commentId}::uuid
-      for update
-    `;
-    const c = cRes.rows?.[0] ?? null;
-    if (!c) {
-      await sql`rollback`;
-      return json(404, { ok: false, error: "Comment not found." });
-    }
-    if (c.status === "deleted") {
-      await sql`rollback`;
-      return json(400, { ok: false, error: "Cannot vote on deleted comment." });
-    }
-
-    // Check existing vote (member,comment is unique)
-    const existing = await sql<{ exists: boolean }>`
-      select exists(
-        select 1
-        from exegesis_vote
-        where member_id = ${memberId}::uuid
-          and comment_id = ${commentId}::uuid
-      ) as exists
-    `;
-    const has = Boolean(existing.rows?.[0]?.exists);
-
-    let viewerHasVoted: boolean;
-    let voteCount: number;
-
-    if (has) {
-      await sql`
+    const r = await sql<{
+      ok: boolean;
+      viewer_has_voted: boolean;
+      vote_count: number;
+      err: string | null;
+    }>`
+      with
+      c as (
+        select id, status::text as status, track_id, group_key, vote_count
+        from exegesis_comment
+        where id = ${commentId}::uuid
+        limit 1
+      ),
+      m as (
+        select locked
+        from exegesis_thread_meta
+        where track_id = (select track_id from c)
+          and group_key = (select group_key from c)
+        limit 1
+      ),
+      guard as (
+        select
+          case
+            when (select id from c) is null then 'NOT_FOUND'
+            when (select status from c) = 'deleted' then 'DELETED'
+            when (select status from c) = 'hidden' then 'HIDDEN'
+            when coalesce((select locked from m), false) = true then 'LOCKED'
+            else null
+          end as err
+      ),
+      del as (
         delete from exegesis_vote
         where member_id = ${memberId}::uuid
           and comment_id = ${commentId}::uuid
-      `;
-
-      const upd = await sql<{ vote_count: number }>`
-        update exegesis_comment
-        set vote_count = greatest(vote_count - 1, 0)
-        where id = ${commentId}::uuid
-        returning vote_count
-      `;
-
-      viewerHasVoted = false;
-      voteCount = Number(
-        upd.rows?.[0]?.vote_count ?? Math.max((c.vote_count ?? 0) - 1, 0),
-      );
-    } else {
-      await sql`
+          and (select err from guard) is null
+        returning 1 as deleted
+      ),
+      ins as (
         insert into exegesis_vote (member_id, comment_id)
-        values (${memberId}::uuid, ${commentId}::uuid)
+        select ${memberId}::uuid, ${commentId}::uuid
+        where (select err from guard) is null
+          and not exists (select 1 from del)
         on conflict (member_id, comment_id) do nothing
-      `;
-
-      const upd = await sql<{ vote_count: number }>`
+        returning 1 as inserted
+      ),
+      upd as (
         update exegesis_comment
-        set vote_count = vote_count + 1
+        set vote_count = greatest(
+          vote_count + (case when exists (select 1 from ins) then 1 else 0 end)
+                     - (case when exists (select 1 from del) then 1 else 0 end),
+          0
+        )
         where id = ${commentId}::uuid
+          and (select err from guard) is null
         returning vote_count
-      `;
+      )
+      select
+        (select err from guard) is null as ok,
+        case
+          when (select err from guard) is not null then false
+          when exists (select 1 from ins) then true
+          else false
+        end as viewer_has_voted,
+        coalesce((select vote_count from upd), (select vote_count from c), 0)::int as vote_count,
+        (select err from guard) as err
+    `;
 
-      viewerHasVoted = true;
-      voteCount = Number(upd.rows?.[0]?.vote_count ?? (c.vote_count ?? 0) + 1);
+    const row = r.rows?.[0] ?? null;
+    if (!row) return json(500, { ok: false, error: "Vote failed." });
+
+    if (!row.ok) {
+      if (row.err === "NOT_FOUND")
+        return json(404, { ok: false, error: "Comment not found." });
+      if (row.err === "DELETED")
+        return json(400, {
+          ok: false,
+          error: "Cannot vote on deleted comment.",
+        });
+      if (row.err === "HIDDEN")
+        return json(403, {
+          ok: false,
+          error: "Cannot vote on hidden comment.",
+        });
+      if (row.err === "LOCKED")
+        return json(403, { ok: false, error: "Thread is locked." });
+
+      return json(400, { ok: false, error: "Cannot vote on this comment." });
     }
 
-    await sql`commit`;
-    return json(200, { ok: true, commentId, viewerHasVoted, voteCount });
+    return json(200, {
+      ok: true,
+      commentId,
+      viewerHasVoted: row.viewer_has_voted,
+      voteCount: Number(row.vote_count ?? 0),
+    });
   } catch (e: unknown) {
-    try {
-      await sql`rollback`;
-    } catch {
-      // ignore
-    }
     const msg =
       e instanceof Error
         ? norm(e.message)
