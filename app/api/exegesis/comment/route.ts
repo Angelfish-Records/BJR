@@ -373,35 +373,32 @@ export async function POST(req: NextRequest) {
       ident_contribution_count: number;
     }>`
       with
-      -- ensure thread meta exists
-      meta_ins as (
-        insert into exegesis_thread_meta (track_id, group_key)
-        values (${trackId}, ${groupKey})
-        on conflict (track_id, group_key) do nothing
-        returning track_id, group_key
-      ),
-      meta as (
-        select track_id, group_key, pinned_comment_id, locked, comment_count, last_activity_at, created_at, updated_at
-        from exegesis_thread_meta
-        where track_id = ${trackId}
-          and group_key = ${groupKey}
-        limit 1
-      ),
-      -- lock guard
-      guard as (
-        select
-          case
-            when (select locked from meta) then 'LOCKED'
-            else null
-          end as err
-      ),
-      -- ensure identity exists
-      ident_ins as (
-        insert into exegesis_identity (member_id, anon_label)
-        values (${memberId}::uuid, ${label})
-        on conflict (member_id) do nothing
-        returning member_id
-      ),
+      -- ensure thread meta exists (MUST return a row; not optimisable away)
+meta as (
+  insert into exegesis_thread_meta (track_id, group_key)
+  values (${trackId}, ${groupKey})
+  on conflict (track_id, group_key)
+  do update set track_id = exegesis_thread_meta.track_id
+  returning track_id, group_key, pinned_comment_id, locked, comment_count, last_activity_at, created_at, updated_at
+),
+
+-- lock guard
+guard as (
+  select
+    case
+      when (select locked from meta) then 'LOCKED'
+      else null
+    end as err
+),
+
+-- ensure identity exists (MUST return a row; not optimisable away)
+ident as (
+  insert into exegesis_identity (member_id, anon_label)
+  values (${memberId}::uuid, ${label})
+  on conflict (member_id)
+  do update set member_id = exegesis_identity.member_id
+  returning member_id, anon_label, public_name, public_name_unlocked_at, contribution_count
+),
       -- resolve parent (if any)
       parent as (
         select id, track_id, group_key, root_id, depth
@@ -489,96 +486,93 @@ end as id
           edit_count,
           vote_count
       ),
-            meta_upd as (
-        update exegesis_thread_meta
-        set
-          comment_count = comment_count + 1,
-          last_activity_at = now(),
-          updated_at = now()
-        where track_id = ${trackId}
-          and group_key = ${groupKey}
-          and exists (select 1 from inserted)
-        returning track_id
-      ),
-      ident_upd as (
-        update exegesis_identity
-        set
-          contribution_count = contribution_count + 1,
-          public_name_unlocked_at = case
-            when public_name_unlocked_at is null and (contribution_count + 1) >= 5 then now()
-            else public_name_unlocked_at
-          end,
-          updated_at = now()
-        where member_id = ${memberId}::uuid
-          and exists (select 1 from inserted)
-        returning member_id
-      ),
-      meta_final as (
-        select track_id, group_key, pinned_comment_id, locked, comment_count, last_activity_at, created_at, updated_at
-        from exegesis_thread_meta
-        where track_id = ${trackId}
-          and group_key = ${groupKey}
-        limit 1
-      ),
-      ident_final as (
-        select member_id, anon_label, public_name, public_name_unlocked_at, contribution_count
-        from exegesis_identity
-        where member_id = ${memberId}::uuid
-        limit 1
-      ),
-      stats as (
+          meta_upd as (
+  update exegesis_thread_meta
+  set
+    comment_count = comment_count + 1,
+    last_activity_at = now(),
+    updated_at = now()
+  where track_id = ${trackId}
+    and group_key = ${groupKey}
+    and exists (select 1 from inserted)
+  returning track_id, group_key, pinned_comment_id, locked, comment_count, last_activity_at, created_at, updated_at
+),
+
+ident_upd as (
+  update exegesis_identity
+  set
+    contribution_count = contribution_count + 1,
+    public_name_unlocked_at = case
+      when public_name_unlocked_at is null and (contribution_count + 1) >= 5 then now()
+      else public_name_unlocked_at
+    end,
+    updated_at = now()
+  where member_id = ${memberId}::uuid
+    and exists (select 1 from inserted)
+  returning member_id, anon_label, public_name, public_name_unlocked_at, contribution_count
+),
+
+meta_out as (
+  select * from meta_upd
+  union all
+  select * from meta
+  where not exists (select 1 from meta_upd)
+),
+
+ident_out as (
+  select * from ident_upd
+  union all
+  select * from ident
+  where not exists (select 1 from ident_upd)
+),
+
+stats as (
   select
     coalesce((select err from guard), (select err from parent_guard)) as guard_err,
-    (select count(*)::int from inserted) as inserted_count,
-    exists(select 1 from meta_final) as meta_exists,
-    exists(select 1 from ident_final) as ident_exists
+    (select count(*)::int from inserted) as inserted_count
 )
-      select
-        -- diagnostic that exists even when inserted is empty
-        s.inserted_count as inserted_count,
-        s.guard_err as guard_err,
-        s.meta_exists as meta_exists,
-s.ident_exists as ident_exists,
 
-        -- comment fields (nullable if not inserted)
-        i.id,
-        i.track_id,
-        i.group_key,
-        i.line_key,
-        i.parent_id,
-        i.root_id,
-        i.depth,
-        i.body_rich,
-        i.body_plain,
-        i.t_ms,
-        i.line_text_snapshot,
-        i.lyrics_version,
-        i.created_by_member_id,
-        i.status::text as status,
-        i.created_at,
-        i.edited_at,
-        i.edit_count,
-        i.vote_count,
+select
+  s.inserted_count as inserted_count,
+  s.guard_err as guard_err,
 
-        -- meta always present
-        m.track_id as meta_track_id,
-        m.group_key as meta_group_key,
-        m.pinned_comment_id as meta_pinned_comment_id,
-        m.locked as meta_locked,
-        m.comment_count as meta_comment_count,
-        m.last_activity_at as meta_last_activity_at,
-        m.created_at as meta_created_at,
-        m.updated_at as meta_updated_at,
+  i.id,
+  i.track_id,
+  i.group_key,
+  i.line_key,
+  i.parent_id,
+  i.root_id,
+  i.depth,
+  i.body_rich,
+  i.body_plain,
+  i.t_ms,
+  i.line_text_snapshot,
+  i.lyrics_version,
+  i.created_by_member_id,
+  i.status::text as status,
+  i.created_at,
+  i.edited_at,
+  i.edit_count,
+  i.vote_count,
 
-        -- identity always present
-        u.member_id as ident_member_id,
-        u.anon_label as ident_anon_label,
-        u.public_name as ident_public_name,
-        u.public_name_unlocked_at as ident_public_name_unlocked_at,
-        u.contribution_count as ident_contribution_count
-      from stats s
-left join meta_final m on true
-left join ident_final u on true
+  m.track_id as meta_track_id,
+  m.group_key as meta_group_key,
+  m.pinned_comment_id as meta_pinned_comment_id,
+  m.locked as meta_locked,
+  m.comment_count as meta_comment_count,
+  m.last_activity_at as meta_last_activity_at,
+  m.created_at as meta_created_at,
+  m.updated_at as meta_updated_at,
+
+  u.member_id as ident_member_id,
+  u.anon_label as ident_anon_label,
+  u.public_name as ident_public_name,
+  u.public_name_unlocked_at as ident_public_name_unlocked_at,
+  u.contribution_count as ident_contribution_count
+
+from stats s
+join meta_out m on true
+join ident_out u on true
 left join inserted i on true
 limit 1
     `;
