@@ -362,6 +362,8 @@ export async function POST(req: NextRequest) {
       meta_last_activity_at: string;
       meta_created_at: string;
       meta_updated_at: string;
+      meta_exists: boolean;
+      ident_exists: boolean;
 
       // identity (always present)
       ident_member_id: string;
@@ -525,14 +527,18 @@ end as id
         limit 1
       ),
       stats as (
-        select
-          coalesce((select err from guard), (select err from parent_guard)) as guard_err,
-          (select count(*)::int from inserted) as inserted_count
-      )
+  select
+    coalesce((select err from guard), (select err from parent_guard)) as guard_err,
+    (select count(*)::int from inserted) as inserted_count,
+    exists(select 1 from meta_final) as meta_exists,
+    exists(select 1 from ident_final) as ident_exists
+)
       select
         -- diagnostic that exists even when inserted is empty
         s.inserted_count as inserted_count,
         s.guard_err as guard_err,
+        s.meta_exists as meta_exists,
+s.ident_exists as ident_exists,
 
         -- comment fields (nullable if not inserted)
         i.id,
@@ -571,16 +577,28 @@ end as id
         u.public_name_unlocked_at as ident_public_name_unlocked_at,
         u.contribution_count as ident_contribution_count
       from stats s
-      join meta_final m on true
-      join ident_final u on true
-      left join inserted i on true
-      limit 1
+left join meta_final m on true
+left join ident_final u on true
+left join inserted i on true
+limit 1
     `;
 
     const row = q.rows?.[0] ?? null;
 
     if (!row) {
       return json(500, { ok: false, error: "No response row." });
+    }
+
+    if (!row.meta_exists) {
+      console.error("[exegesis/comment] meta_final missing", {
+        trackId,
+        groupKey,
+      });
+      return json(500, { ok: false, error: "Thread meta missing." });
+    }
+    if (!row.ident_exists) {
+      console.error("[exegesis/comment] ident_final missing", { memberId });
+      return json(500, { ok: false, error: "Identity missing." });
     }
 
     if ((row.inserted_count ?? 0) === 0) {
