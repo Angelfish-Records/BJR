@@ -524,12 +524,6 @@ end as id
         where member_id = ${memberId}::uuid
         limit 1
       ),
-            ident_final as (
-        select member_id, anon_label, public_name, public_name_unlocked_at, contribution_count
-        from exegesis_identity
-        where member_id = ${memberId}::uuid
-        limit 1
-      ),
       stats as (
         select
           coalesce((select err from guard), (select err from parent_guard)) as guard_err,
