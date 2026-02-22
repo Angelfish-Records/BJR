@@ -39,10 +39,10 @@ export default function TipTapEditor(props: {
     editable: !disabled,
     extensions: [
       StarterKit.configure({
-        // keep things aligned with your server allowlist
         heading: false,
         codeBlock: false,
         horizontalRule: false,
+        link: false, // IMPORTANT: prevent duplicate 'link' extension name
       }),
       Link.configure({
         openOnClick: true,
