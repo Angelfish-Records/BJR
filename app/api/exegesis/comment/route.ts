@@ -441,7 +441,7 @@ end as id
           edit_count,
           vote_count
       ),
-      meta_upd as (
+            meta_upd as (
         update exegesis_thread_meta
         set
           comment_count = comment_count + 1,
@@ -450,7 +450,7 @@ end as id
         where track_id = ${trackId}
           and group_key = ${groupKey}
           and exists (select 1 from inserted)
-        returning track_id, group_key, pinned_comment_id, locked, comment_count, last_activity_at, created_at, updated_at
+        returning track_id
       ),
       ident_upd as (
         update exegesis_identity
@@ -463,7 +463,20 @@ end as id
           updated_at = now()
         where member_id = ${memberId}::uuid
           and exists (select 1 from inserted)
-        returning member_id, anon_label, public_name, public_name_unlocked_at, contribution_count
+        returning member_id
+      ),
+      meta_final as (
+        select track_id, group_key, pinned_comment_id, locked, comment_count, last_activity_at, created_at, updated_at
+        from exegesis_thread_meta
+        where track_id = ${trackId}
+          and group_key = ${groupKey}
+        limit 1
+      ),
+      ident_final as (
+        select member_id, anon_label, public_name, public_name_unlocked_at, contribution_count
+        from exegesis_identity
+        where member_id = ${memberId}::uuid
+        limit 1
       )
       select
         i.*,
@@ -485,8 +498,8 @@ end as id
 
         coalesce((select err from guard), (select err from parent_guard)) as guard_err
       from inserted i
-      join meta_upd m on true
-      join ident_upd u on true
+      join meta_final m on true
+      join ident_final u on true
     `;
 
     const row = q.rows?.[0] ?? null;
