@@ -373,7 +373,6 @@ export async function POST(req: NextRequest) {
       ident_contribution_count: number;
     }>`
       with
-      with
 -- ensure thread meta exists (insert-if-missing; never double-updates)
 meta_ins as materialized (
   insert into exegesis_thread_meta (track_id, group_key)
