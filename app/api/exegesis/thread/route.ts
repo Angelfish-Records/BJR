@@ -321,32 +321,41 @@ export async function GET(req: NextRequest) {
   if (viewer.kind === "anon") {
     const LIMIT = 8;
 
+    const sessionId = viewer.anonId; // v1: sessionId === anonId cookie value
+
+    // Ensure session row exists (same as mark-opened)
+    await sql`
+  insert into anon_exegesis_sessions (id, anon_id)
+  values (${sessionId}, ${viewer.anonId})
+  on conflict (id) do nothing
+`;
+
     const gate = await sql<{ already: boolean; n: number }>`
-      with
-      already as (
-        select exists(
-          select 1
-          from anon_exegesis_thread_opens
-          where anon_id = ${viewer.anonId}
-            and track_id = ${trackId}
-            and group_key = ${groupKey}
-        ) as already
-      ),
-      cnt as (
-        select count(*)::int as n
-        from anon_exegesis_thread_opens
-        where anon_id = ${viewer.anonId}
-      ),
-      ins as (
-        insert into anon_exegesis_thread_opens (anon_id, track_id, group_key)
-        select ${viewer.anonId}, ${trackId}, ${groupKey}
-        where (select already from already) = false
-          and (select n from cnt) < ${LIMIT}
-        on conflict do nothing
-        returning 1
-      )
-      select (select already from already) as already, (select n from cnt) as n
-    `;
+  with
+  already as (
+    select exists(
+      select 1
+      from anon_exegesis_thread_opens
+      where session_id = ${sessionId}
+        and track_id = ${trackId}
+        and group_key = ${groupKey}
+    ) as already
+  ),
+  cnt as (
+    select count(*)::int as n
+    from anon_exegesis_thread_opens
+    where session_id = ${sessionId}
+  ),
+  ins as (
+    insert into anon_exegesis_thread_opens (session_id, track_id, group_key)
+    select ${sessionId}, ${trackId}, ${groupKey}
+    where (select already from already) = false
+      and (select n from cnt) < ${LIMIT}
+    on conflict (session_id, track_id, group_key) do nothing
+    returning 1
+  )
+  select (select already from already) as already, (select n from cnt) as n
+`;
 
     const alreadyOpened = Boolean(gate.rows?.[0]?.already);
     const n = Number(gate.rows?.[0]?.n ?? 0);

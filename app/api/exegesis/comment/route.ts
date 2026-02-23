@@ -374,7 +374,7 @@ export async function POST(req: NextRequest) {
     }>`
       with
 -- ensure thread meta exists (insert-if-missing; never double-updates)
-meta_ins as materialized (
+meta_ins as (
   insert into exegesis_thread_meta (track_id, group_key)
   values (${trackId}, ${groupKey})
   on conflict (track_id, group_key) do nothing
@@ -394,7 +394,7 @@ meta_guard as (
 ),
 
 -- ensure identity exists (insert-if-missing; never double-updates)
-ident_ins as materialized (
+ident_ins as (
   insert into exegesis_identity (member_id, anon_label)
   values (${memberId}::uuid, ${label})
   on conflict (member_id) do nothing
@@ -549,6 +549,10 @@ ident_out as (
 
 stats as (
   select
+    -- force these CTEs to execute (prevents optimiser dropping them)
+    (select count(*)::int from meta_ins) as _touch_meta_ins,
+    (select count(*)::int from ident_ins) as _touch_ident_ins,
+
     coalesce((select err from guard), (select err from parent_guard)) as guard_err,
     (select count(*)::int from inserted) as inserted_count
 )
