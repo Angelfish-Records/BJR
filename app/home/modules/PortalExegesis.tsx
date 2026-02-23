@@ -4,10 +4,10 @@
 import React from "react";
 import { usePlayer } from "@/app/home/player/PlayerState";
 import ExegesisTrackClient from "@/app/(site)/exegesis/[trackId]/ExegesisTrackClient";
-import {
-  fetchLyricsByTrackId,
-  type LyricsByTrackOk,
-} from "@/lib/lyrics/fetchLyricsByTrackId";
+import { useLyricsSnapshot } from "@/app/home/player/lyrics/useLyricsSurface";
+import { lyricsSurface } from "@/app/home/player/lyrics/lyricsSurface";
+import { ensureLyricsForTrack } from "@/app/home/player/lyrics/ensureLyricsForTrack";
+import type { LyricCue } from "@/app/home/player/stage/LyricsOverlay";
 
 type ExegesisLyricsOk = {
   ok: true;
@@ -15,17 +15,31 @@ type ExegesisLyricsOk = {
   offsetMs: number;
   version: string;
   geniusUrl: string | null;
-  cues: LyricsByTrackOk["cues"];
+  cues: LyricCue[];
 };
 
-function adaptLyricsForExegesis(x: LyricsByTrackOk): ExegesisLyricsOk {
+function buildLyricsFromSurface(
+  trackId: string,
+  snap: ReturnType<typeof useLyricsSnapshot>,
+): ExegesisLyricsOk | null {
+  const cues = snap.cuesByTrackId[trackId];
+  if (!Array.isArray(cues)) return null;
+
+  // We treat "known empty array" as "lyrics known, but none".
+  // Exegesis can decide how to render that.
+  const offsetMsRaw = snap.offsetByTrackId[trackId];
+  const offsetMs =
+    typeof offsetMsRaw === "number" && Number.isFinite(offsetMsRaw)
+      ? offsetMsRaw
+      : 0;
+
   return {
     ok: true,
-    trackId: x.trackId,
-    offsetMs: x.offsetMs,
-    version: (x.version ?? "unknown").toString(),
-    geniusUrl: x.geniusUrl ?? null,
-    cues: x.cues,
+    trackId,
+    offsetMs,
+    version: "unknown",
+    geniusUrl: null,
+    cues,
   };
 }
 
@@ -52,6 +66,7 @@ export default function PortalExegesis(props: {
     initialTrackId = null,
   } = props;
   const p = usePlayer();
+  const snap = useLyricsSnapshot();
 
   const [pinnedTrackId, setPinnedTrackId] = React.useState<string | null>(
     initialTrackId?.trim() || null,
@@ -68,40 +83,49 @@ export default function PortalExegesis(props: {
 
   React.useEffect(() => {
     const tid = (effectiveTrackId ?? "").trim();
-    const ac = new AbortController();
-
-    async function run() {
-      if (!tid) {
-        setLyrics(null);
-        setErr("No track selected yet.");
-        return;
-      }
-
-      setLoading(true);
-      setErr("");
-
-      try {
-        const raw = await fetchLyricsByTrackId(tid, ac.signal);
-        if (!raw) {
-          setLyrics(null);
-          setErr(`Failed to load lyrics for trackId=${tid}.`);
-          return;
-        }
-
-        setLyrics(adaptLyricsForExegesis(raw));
-        setErr("");
-      } catch {
-        if (ac.signal.aborted) return;
-        setLyrics(null);
-        setErr("Failed to load lyrics.");
-      } finally {
-        if (!ac.signal.aborted) setLoading(false);
-      }
+    if (!tid) {
+      setLyrics(null);
+      setErr("No track selected yet.");
+      setLoading(false);
+      return;
     }
 
-    void run();
-    return () => ac.abort();
-  }, [effectiveTrackId]);
+    setErr("");
+    setLoading(true);
+
+    // Kick the fetch (deduped/cached inside ensureLyricsForTrack).
+    void ensureLyricsForTrack(tid)
+      .catch(() => {
+        // We don’t set error here yet; we’ll fall back to a timeout-like UI below.
+      })
+      .finally(() => {
+        // Don’t end loading here; we end loading when snapshot resolves (below).
+      });
+
+    // If surface already has it, commit immediately.
+    const immediate = buildLyricsFromSurface(tid, lyricsSurface.getSnapshot());
+    if (immediate) {
+      setLyrics(immediate);
+      setErr("");
+      setLoading(false);
+      return;
+    }
+
+    // Otherwise: wait for snapshot to update via dependency below.
+    // (No AbortController needed; ensureLyricsForTrack handles cancellation/dedupe.)
+  }, [effectiveTrackId]); // intentionally not depending on snap
+
+  React.useEffect(() => {
+    const tid = (effectiveTrackId ?? "").trim();
+    if (!tid) return;
+
+    const next = buildLyricsFromSurface(tid, snap);
+    if (!next) return;
+
+    setLyrics(next);
+    setErr("");
+    setLoading(false);
+  }, [effectiveTrackId, snap]);
 
   const queue = p.queue ?? [];
   const allowPin = !followPlayer;
@@ -163,7 +187,11 @@ export default function PortalExegesis(props: {
       ) : lyrics ? (
         // IMPORTANT: ExegesisTrackClient is already a self-contained “thread + editor + voting + reporting” UI.
         // We embed it here so it behaves exactly the same as the canonical /exegesis/:trackId page.
-        <ExegesisTrackClient trackId={lyrics.trackId} lyrics={lyrics} />
+        <ExegesisTrackClient
+          trackId={lyrics.trackId}
+          lyrics={lyrics}
+          canonicalPath={`/exegesis/${encodeURIComponent(lyrics.trackId)}`}
+        />
       ) : null}
     </div>
   );

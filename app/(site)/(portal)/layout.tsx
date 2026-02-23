@@ -2,7 +2,6 @@
 import React from "react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { createHash } from "crypto";
 
 import { client } from "@/sanity/lib/client";
 import { urlFor } from "@/sanity/lib/image";
@@ -137,18 +136,6 @@ export default async function PortalLayout(props: {
 
   const albumSlug = featuredAlbumSlug;
   const albumData = await getAlbumBySlug(albumSlug);
-
-  const cuesObj = albumData.lyrics.cuesByTrackId ?? {};
-  const offsetsObj = albumData.lyrics.offsetByTrackId ?? {};
-
-  const cuesJson = JSON.stringify(cuesObj);
-  const offsetsJson = JSON.stringify(offsetsObj);
-
-  const sig = createHash("sha1")
-    .update(cuesJson)
-    .update("|")
-    .update(offsetsJson)
-    .digest("hex");
 
   const browseAlbumsRaw = await listAlbumsForBrowse();
 
@@ -297,9 +284,6 @@ export default async function PortalLayout(props: {
               <div
                 id="af-stage-inline-slot"
                 data-height="560"
-                data-cues={cuesJson}
-                data-offsets={offsetsJson}
-                data-sig={sig}
                 style={{
                   width: "100%",
                   height: 560,

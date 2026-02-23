@@ -5,8 +5,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { usePlayer } from "./PlayerState";
 import StageCore from "./StageCore";
-import type { LyricCue } from "./stage/LyricsOverlay";
-import { lyricsSurface } from "@/app/home/player/lyrics/lyricsSurface";
+import { ensureLyricsForTrack } from "./lyrics/ensureLyricsForTrack";
 
 function lockBodyScroll(lock: boolean) {
   if (typeof document === "undefined") return;
@@ -22,9 +21,6 @@ function lockBodyScroll(lock: boolean) {
     body.style.touchAction = "";
   }
 }
-
-export type CuesByTrackId = Record<string, LyricCue[]>;
-export type OffsetByTrackId = Record<string, number>;
 
 function useIsMobile(breakpointPx = 640) {
   const [isMobile, setIsMobile] = React.useState(false);
@@ -114,114 +110,9 @@ function RoundIconButton(props: {
   );
 }
 
-async function fetchLyricsByTrackId(
-  trackId: string,
-  signal?: AbortSignal,
-): Promise<{ trackId: string; cues: LyricCue[]; offsetMs: number } | null> {
-  const res = await fetch(
-    `/api/lyrics/by-track?trackId=${encodeURIComponent(trackId)}`,
-    { signal, cache: "no-store" },
-  );
-  if (!res.ok) return null;
-
-  const raw: unknown = await res.json();
-
-  if (!raw || typeof raw !== "object") return null;
-  if (!("ok" in raw) || (raw as { ok?: unknown }).ok !== true) return null;
-  if (
-    !("trackId" in raw) ||
-    typeof (raw as { trackId?: unknown }).trackId !== "string"
-  )
-    return null;
-  if (!("cues" in raw) || !Array.isArray((raw as { cues?: unknown }).cues))
-    return null;
-  if (
-    !("offsetMs" in raw) ||
-    typeof (raw as { offsetMs?: unknown }).offsetMs !== "number" ||
-    !Number.isFinite((raw as { offsetMs?: unknown }).offsetMs as number)
-  )
-    return null;
-
-  const obj = raw as {
-    trackId: string;
-    cues: unknown[];
-    offsetMs: number;
-  };
-
-  // Validate cues shape (minimal, but safe)
-  const cues: LyricCue[] = obj.cues
-    .map((c): LyricCue | null => {
-      if (!c || typeof c !== "object") return null;
-
-      const lineKey = (c as { lineKey?: unknown }).lineKey;
-      const tMs = (c as { tMs?: unknown }).tMs;
-      const text = (c as { text?: unknown }).text;
-      const endMs = (c as { endMs?: unknown }).endMs;
-
-      if (typeof lineKey !== "string" || lineKey.trim().length === 0)
-        return null;
-
-      if (typeof tMs !== "number" || !Number.isFinite(tMs) || tMs < 0)
-        return null;
-      if (typeof text !== "string" || text.trim().length === 0) return null;
-
-      const out: LyricCue = {
-        lineKey: lineKey.trim(),
-        tMs: Math.floor(tMs),
-        text: text.trim(),
-      };
-      if (typeof endMs === "number" && Number.isFinite(endMs) && endMs >= 0) {
-        out.endMs = Math.floor(endMs);
-      }
-      return out;
-    })
-    .filter((x): x is LyricCue => x !== null);
-
-  return {
-    trackId: obj.trackId,
-    cues,
-    offsetMs: Math.floor(obj.offsetMs),
-  };
-}
-
-export default function StageInline(props: {
-  height?: number;
-  cuesByTrackId?: CuesByTrackId;
-  offsetByTrackId?: OffsetByTrackId;
-}) {
-  const { height = 300, cuesByTrackId, offsetByTrackId } = props;
+export default function StageInline(props: { height?: number }) {
+  const { height = 300 } = props;
   const p = usePlayer();
-
-  // Local cache that can extend beyond the SSR album bundle.
-  const [cuesMap, setCuesMap] = React.useState<CuesByTrackId>(
-    () => cuesByTrackId ?? {},
-  );
-  const [offsetMap, setOffsetMap] = React.useState<OffsetByTrackId>(
-    () => offsetByTrackId ?? {},
-  );
-
-  // If the SSR-provided bundle changes (e.g. hard nav to a different album), merge it in.
-  React.useEffect(() => {
-    if (cuesByTrackId) {
-      setCuesMap((prev) => ({ ...prev, ...cuesByTrackId }));
-    }
-  }, [cuesByTrackId]);
-
-  React.useEffect(() => {
-    if (offsetByTrackId) {
-      setOffsetMap((prev) => ({ ...prev, ...offsetByTrackId }));
-    }
-  }, [offsetByTrackId]);
-
-  // Publish the evolving lyrics maps to the global surface so LyricsOverlayHost
-  // stays correct even when the inline UI tree changes.
-  React.useEffect(() => {
-    lyricsSurface.setMaps({
-      cuesByTrackId: cuesMap,
-      offsetByTrackId: offsetMap,
-      globalOffsetMs: 0,
-    });
-  }, [cuesMap, offsetMap]);
 
   // Lazy-load lyrics for the currently playing track when missing.
   const currentTrackId = p.current?.id ?? null;
@@ -229,38 +120,12 @@ export default function StageInline(props: {
   React.useEffect(() => {
     if (!currentTrackId) return;
 
-    const existing = cuesMap[currentTrackId];
-    if (Array.isArray(existing) && existing.length) return;
-
+    const trackId = currentTrackId; // stable capture
     const ac = new AbortController();
 
-    (async () => {
-      const r = await fetchLyricsByTrackId(currentTrackId, ac.signal);
-      if (!r) return;
-
-      // Only commit if still relevant; also commit immutably to force React updates.
-      if (r.trackId !== currentTrackId) return;
-
-      if (Array.isArray(r.cues) && r.cues.length) {
-        setCuesMap((prev) => ({ ...prev, [currentTrackId]: r.cues }));
-      } else {
-        // Optional: cache "no lyrics" to avoid refetch loops.
-        setCuesMap((prev) =>
-          prev[currentTrackId] ? prev : { ...prev, [currentTrackId]: [] },
-        );
-      }
-
-      if (typeof r.offsetMs === "number" && Number.isFinite(r.offsetMs)) {
-        setOffsetMap((prev) => ({ ...prev, [currentTrackId]: r.offsetMs }));
-      }
-    })().catch(() => {
-      // ignore
-    });
+    void ensureLyricsForTrack(trackId, { signal: ac.signal });
 
     return () => ac.abort();
-    // Intentionally *not* depending on cuesMap object identity to avoid refetch loops;
-    // we only care about currentTrackId changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTrackId]);
 
   const isMobile = useIsMobile(640);
@@ -317,8 +182,9 @@ export default function StageInline(props: {
     if (typeof document === "undefined") return;
     const el = document.getElementById("af-stage-overlay");
     if (!el) return;
-    if (!("requestFullscreen" in el)) return;
-    const requestFullscreen = (el as Element).requestFullscreen;
+    const requestFullscreen = (
+      el as Element & { requestFullscreen?: () => Promise<void> }
+    ).requestFullscreen;
     if (typeof requestFullscreen !== "function") return;
     try {
       await requestFullscreen.call(el);
@@ -361,12 +227,7 @@ export default function StageInline(props: {
                 minHeight: 0,
               }}
             >
-              <StageCore
-                variant="fullscreen"
-                cuesByTrackId={cuesMap}
-                offsetByTrackId={offsetMap}
-                lyricsMode="embedded"
-              />
+              <StageCore variant="fullscreen" lyricsMode="none" />
 
               <div
                 aria-hidden
@@ -391,7 +252,7 @@ export default function StageInline(props: {
                   alignItems: "center",
                   gap: 10,
                   pointerEvents: "auto",
-                  zIndex: 50, 
+                  zIndex: 50,
                 }}
               >
                 <RoundIconButton
@@ -429,12 +290,7 @@ export default function StageInline(props: {
         }}
       >
         <div style={{ position: "absolute", inset: 0 }}>
-          <StageCore
-            variant="inline"
-            cuesByTrackId={cuesMap}
-            offsetByTrackId={offsetMap}
-            lyricsMode="none"
-          />
+          <StageCore variant="inline" lyricsMode="none" />
         </div>
 
         <div
@@ -456,8 +312,8 @@ export default function StageInline(props: {
             position: "absolute",
             top: 10,
             right: 10,
-            zIndex: 50, 
             pointerEvents: "auto",
+            zIndex: 50,
           }}
         >
           <RoundIconButton

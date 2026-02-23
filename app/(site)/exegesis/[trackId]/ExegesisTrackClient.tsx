@@ -176,27 +176,33 @@ function isTipTapDoc(v: unknown): v is { type: "doc"; content?: unknown[] } {
   return Array.isArray(o.content);
 }
 
-function setHash(next: { lineKey?: string; commentId?: string }) {
-  if (typeof window === "undefined") return;
-
-  const sp = new URLSearchParams();
-  if (next.lineKey) sp.set("l", next.lineKey);
-  if (next.commentId) sp.set("c", next.commentId);
-
-  const h = sp.toString();
-
-  // ✅ Preserve secondary query always.
-  const base = window.location.pathname + window.location.search;
-
-  window.history.replaceState(null, "", h ? `${base}#${h}` : base);
-}
-
 export default function ExegesisTrackClient(props: {
   trackId: string;
   lyrics: LyricsApiOk;
+  /** Optional canonical base path for share links, e.g. `/exegesis/${trackId}` */
+  canonicalPath?: string;
 }) {
   const trackId = (props.trackId ?? "").trim();
   const lyrics = props.lyrics;
+
+  const canonicalPath = (props.canonicalPath ?? "").trim();
+
+  function setHash(next: { lineKey?: string; commentId?: string }) {
+    if (typeof window === "undefined") return;
+
+    const sp = new URLSearchParams();
+    if (next.lineKey) sp.set("l", next.lineKey);
+    if (next.commentId) sp.set("c", next.commentId);
+    const h = sp.toString();
+
+    // If a canonical base is provided, use it (and do NOT inherit portal query params).
+    // Otherwise, preserve the current page's secondary query.
+    const base = canonicalPath
+      ? canonicalPath
+      : window.location.pathname + window.location.search;
+
+    window.history.replaceState(null, "", h ? `${base}#${h}` : base);
+  }
 
   const [selected, setSelected] = React.useState<{
     lineKey: string;

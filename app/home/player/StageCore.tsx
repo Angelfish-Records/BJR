@@ -5,10 +5,9 @@ import React from "react";
 import { usePlayer } from "./PlayerState";
 import VisualizerCanvas from "./VisualizerCanvas";
 import LyricsOverlay, { type LyricCue } from "./stage/LyricsOverlay";
-import StageTransportBar, {
-  STAGE_TRANSPORT_FOOTER_PX,
-} from "./StageTransportBar";
+import StageTransportBar, { STAGE_TRANSPORT_FOOTER_PX } from "./StageTransportBar";
 import { mediaSurface } from "./mediaSurface";
+import { useLyricsSnapshot } from "./lyrics/useLyricsSurface";
 
 type CuesByTrackId = Record<string, LyricCue[]>;
 type OffsetByTrackId = Record<string, number>;
@@ -36,18 +35,22 @@ export default function StageCore(props: {
 }) {
   const {
     variant,
-    cuesByTrackId,
-    offsetByTrackId,
+    cuesByTrackId: cuesByTrackIdProp,
+    offsetByTrackId: offsetByTrackIdProp,
     offsetMs: globalOffsetMs = 0,
     autoResumeOnSeek = false,
     lyricsMode = "embedded",
   } = props;
+
   const p = usePlayer();
+  const snap = useLyricsSnapshot();
+
+  // ✅ prefer props when provided; otherwise use lyricsSurface
+  const cuesByTrackId = cuesByTrackIdProp ?? snap.cuesByTrackId;
+  const offsetByTrackId = offsetByTrackIdProp ?? snap.offsetByTrackId;
 
   // Register stage presence; fullscreen wins if it exists.
-  React.useEffect(() => {
-    return mediaSurface.registerStage(variant);
-  }, [variant]);
+  React.useEffect(() => mediaSurface.registerStage(variant), [variant]);
 
   const [surfaceTrackId, setSurfaceTrackId] = React.useState<string | null>(
     () => mediaSurface.getTrackId(),
@@ -64,11 +67,7 @@ export default function StageCore(props: {
   const playerMuxId = p.current?.muxPlaybackId ?? null;
 
   const trackId = React.useMemo(() => {
-    return pickKeyWithCues(cuesByTrackId, [
-      playerTrackId,
-      surfaceTrackId,
-      playerMuxId,
-    ]);
+    return pickKeyWithCues(cuesByTrackId, [playerTrackId, surfaceTrackId, playerMuxId]);
   }, [cuesByTrackId, playerTrackId, playerMuxId, surfaceTrackId]);
 
   const cues: LyricCue[] | null = React.useMemo(() => {

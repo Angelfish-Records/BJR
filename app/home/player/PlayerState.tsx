@@ -3,6 +3,7 @@
 
 import React from "react";
 import type { PlayerTrack } from "@/lib/types";
+import { ensureLyricsForTrack } from "@/app/home/player/lyrics/ensureLyricsForTrack";
 
 type PlayerStatus = "idle" | "loading" | "playing" | "paused" | "blocked";
 type RepeatMode = "off" | "one" | "all";
@@ -751,6 +752,21 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
           }),
       };
     }, [state]);
+
+  const currentId = state.current?.id ?? null;
+  const pendingId = state.pendingTrackId ?? null;
+
+  React.useEffect(() => {
+    const id = (currentId ?? "").trim();
+    if (!id) return;
+    void ensureLyricsForTrack(id);
+  }, [currentId]);
+
+  React.useEffect(() => {
+    const id = (pendingId ?? "").trim();
+    if (!id) return;
+    void ensureLyricsForTrack(id);
+  }, [pendingId]);
 
   return <PlayerCtx.Provider value={api}>{props.children}</PlayerCtx.Provider>;
 }

@@ -167,9 +167,6 @@ export default async function AlbumLayout(props: {
               <div
                 id="af-stage-inline-slot"
                 data-height="560"
-                data-cues="{}"
-                data-offsets="{}"
-                data-sig="album-default"
                 style={{
                   width: "100%",
                   height: 560,
