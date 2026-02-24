@@ -698,9 +698,75 @@ export default function PortalArea(props: {
   const isPlayer = isPublicAlbumRoute;
   const portalTabId = !isPlayer ? pathTab : null;
 
+  // --- Optimistic surface flip (optional polish) ---
+  const [optimisticSurface, setOptimisticSurface] = React.useState<
+    "player" | "portal" | null
+  >(null);
+
+  // Clear optimistic state once the URL agrees with reality.
+  React.useEffect(() => {
+    if (!optimisticSurface) return;
+    const reality = isPlayer ? "player" : "portal";
+    if (reality === optimisticSurface) setOptimisticSurface(null);
+  }, [optimisticSurface, isPlayer]);
+
+  const effectiveIsPlayer =
+    optimisticSurface != null ? optimisticSurface === "player" : isPlayer;
+
   // Base album slug to use when jumping "to player" from a portal tab.
   // (On portal routes route.albumSlug is null, so we fall back to the shell’s current albumSlug prop.)
   const playerAlbumSlug = route.albumSlug ?? albumSlug;
+
+  // --- Prefetch player/portal surfaces so Player↔Portal flips feel like tab switches ---
+  const buildSecondaryForNav = React.useCallback(() => {
+    // Use the sanitized secondary query from urlState (sp).
+    return new URLSearchParams(sp.toString());
+  }, [sp]);
+
+  const hrefToPlayer = React.useMemo(() => {
+    const secondary = buildSecondaryForNav();
+    return buildSurfaceHref(secondary, {
+      toPlayer: true,
+      clearPosts: false, // prefetch doesn't need exact post-clearing semantics
+      albumSlugForPlayer: playerAlbumSlug,
+    });
+  }, [buildSecondaryForNav, playerAlbumSlug]);
+
+  const hrefToPortal = React.useMemo(() => {
+    const secondary = buildSecondaryForNav();
+    const desired =
+      (getLastPortalTab() ?? portalTabId ?? DEFAULT_PORTAL_TAB) ||
+      DEFAULT_PORTAL_TAB;
+
+    return buildSurfaceHref(secondary, {
+      toPlayer: false,
+      tab: desired,
+      clearPosts: false,
+      albumSlugForPlayer: playerAlbumSlug,
+    });
+  }, [buildSecondaryForNav, portalTabId, playerAlbumSlug]);
+
+  // Prefetch on mount + whenever targets change.
+  React.useEffect(() => {
+    try {
+      router.prefetch(hrefToPlayer);
+      router.prefetch(hrefToPortal);
+    } catch {
+      // ignore
+    }
+  }, [router, hrefToPlayer, hrefToPortal]);
+
+  const prefetchPlayer = React.useCallback(() => {
+    try {
+      router.prefetch(hrefToPlayer);
+    } catch {}
+  }, [router, hrefToPlayer]);
+
+  const prefetchPortal = React.useCallback(() => {
+    try {
+      router.prefetch(hrefToPortal);
+    } catch {}
+  }, [router, hrefToPortal]);
 
   React.useEffect(() => {
     if (!isPlayer && portalTabId) setLastPortalTab(portalTabId);
@@ -1177,7 +1243,7 @@ export default function PortalArea(props: {
               panels={panels}
               defaultPanelId="player"
               syncToQueryParam={false}
-              activePanelId={isPlayer ? "player" : "portal"}
+              activePanelId={effectiveIsPlayer ? "player" : "portal"}
               keepMountedPanelIds={["player"]} // ✅ keep player UI alive under the hood
               onPanelChange={(panelId) => {
                 if (panelId === "player") forceSurface("player");
@@ -1308,17 +1374,22 @@ export default function PortalArea(props: {
                                 type="button"
                                 aria-label="Player"
                                 title="Player"
-                                onClick={() => forceSurface("player")}
+                                onMouseEnter={prefetchPlayer}
+                                onFocus={prefetchPlayer}
+                                onClick={() => {
+                                  setOptimisticSurface("player");
+                                  forceSurface("player");
+                                }}
                                 className="afTopBarBtn"
                                 style={{
                                   ...commonBtn,
-                                  background: isPlayer
+                                  background: effectiveIsPlayer
                                     ? "color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))"
                                     : "rgba(255,255,255,0.04)",
-                                  boxShadow: isPlayer
+                                  boxShadow: effectiveIsPlayer
                                     ? "0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)"
                                     : "0 12px 26px rgba(0,0,0,0.18)",
-                                  opacity: isPlayer ? 0.98 : 0.78,
+                                  opacity: effectiveIsPlayer ? 0.98 : 0.78,
                                 }}
                               >
                                 <IconPlayer />
@@ -1328,17 +1399,22 @@ export default function PortalArea(props: {
                                 type="button"
                                 aria-label="Portal"
                                 title="Portal"
-                                onClick={() => forceSurface("portal")}
+                                onMouseEnter={prefetchPortal}
+                                onFocus={prefetchPortal}
+                                onClick={() => {
+                                  setOptimisticSurface("portal");
+                                  forceSurface("portal");
+                                }}
                                 className="afTopBarBtn"
                                 style={{
                                   ...commonBtn,
-                                  background: !isPlayer
+                                  background: !effectiveIsPlayer
                                     ? "color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))"
                                     : "rgba(255,255,255,0.04)",
-                                  boxShadow: !isPlayer
+                                  boxShadow: !effectiveIsPlayer
                                     ? "0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)"
                                     : "0 12px 26px rgba(0,0,0,0.18)",
-                                  opacity: !isPlayer ? 0.98 : 0.78,
+                                  opacity: !effectiveIsPlayer ? 0.98 : 0.78,
                                 }}
                               >
                                 <IconPortal />
