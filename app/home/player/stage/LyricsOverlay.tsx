@@ -430,6 +430,9 @@ export default function LyricsOverlay(props: {
             const showDiscourse =
               isInline && (idx === hoverIdx || idx === revealIdx);
 
+            const iconSize = 26;
+            const iconGutter = isInline ? iconSize + 14 : 0; // reserve space so text never sits under the icon
+
             return (
               <div
                 key={`${cue.tMs}-${idx}`}
@@ -455,6 +458,7 @@ export default function LyricsOverlay(props: {
                   alignItems: "center",
                   paddingTop: isInline ? 2 : 4,
                   paddingBottom: isInline ? 2 : 4,
+                  paddingRight: iconGutter,
                 }}
               >
                 {/* Discourse icon (hover on desktop, long-press reveal on touch) */}
@@ -473,11 +477,11 @@ export default function LyricsOverlay(props: {
                   }}
                   style={{
                     position: "absolute",
-                    right: 0,
+                    right: 6, // a tiny inset from the scroller edge
                     top: "50%",
                     transform: `translateY(-50%) ${showDiscourse ? "scale(1)" : "scale(0.98)"}`,
-                    width: isInline ? 26 : 30,
-                    height: isInline ? 26 : 30,
+                    width: iconSize,
+                    height: iconSize,
                     borderRadius: 999,
                     border: "1px solid rgba(255,255,255,0.14)",
                     background: "rgba(0,0,0,0.22)",
@@ -485,7 +489,7 @@ export default function LyricsOverlay(props: {
                     placeItems: "center",
                     cursor: trackId ? "pointer" : "default",
                     pointerEvents: trackId ? "auto" : "none",
-
+                    zIndex: 3,
                     opacity: showDiscourse && trackId ? 1 : 0,
                     display: isInline ? "grid" : "none",
                     transition: "opacity 140ms ease, transform 140ms ease",
@@ -535,12 +539,13 @@ export default function LyricsOverlay(props: {
                     background: "transparent",
                     padding: 0,
 
-                    width: "100%",
+                    width: isInline ? `calc(100% - ${iconGutter}px)` : "100%",
                     minWidth: 0,
                     display: "grid",
                     justifyItems: "center",
                     alignItems: "center",
-
+                    position: "relative",
+                    zIndex: 1, // ✅ below the discourse icon
                     color: "rgba(255,255,255,0.94)",
                     fontSize: lineFontSize,
                     lineHeight: lh,
