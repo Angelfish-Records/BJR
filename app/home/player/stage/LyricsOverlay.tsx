@@ -318,15 +318,15 @@ export default function LyricsOverlay(props: {
     ? undefined
     : `linear-gradient(
         to bottom,
-        rgba(0,0,0,0) 0px,
-        rgba(0,0,0,0.60) calc(var(--af-lyrics-fade-top) - var(--af-lyrics-knee)),
-        rgba(0,0,0,0.92) calc(var(--af-lyrics-fade-top) - 8px),
-        rgba(0,0,0,1) var(--af-lyrics-fade-top),
+        rgba(255,255,255,0) 0px,
+        rgba(255,255,255,0.60) calc(var(--af-lyrics-fade-top) - var(--af-lyrics-knee)),
+        rgba(255,255,255,0.92) calc(var(--af-lyrics-fade-top) - 8px),
+        rgba(255,255,255,1) var(--af-lyrics-fade-top),
 
-        rgba(0,0,0,1) calc(${bottomClip} - var(--af-lyrics-fade-bottom)),
-        rgba(0,0,0,0.92) calc(${bottomClip} - calc(var(--af-lyrics-fade-bottom) - 8px)),
-        rgba(0,0,0,0.60) calc(${bottomClip} - calc(var(--af-lyrics-fade-bottom) - var(--af-lyrics-knee))),
-        rgba(0,0,0,0) ${bottomClip}
+        rgba(255,255,255,1) calc(${bottomClip} - var(--af-lyrics-fade-bottom)),
+        rgba(255,255,255,0.92) calc(${bottomClip} - calc(var(--af-lyrics-fade-bottom) - 8px)),
+        rgba(255,255,255,0.60) calc(${bottomClip} - calc(var(--af-lyrics-fade-bottom) - var(--af-lyrics-knee))),
+        rgba(255,255,255,0) ${bottomClip}
       )`;
 
   return (
@@ -434,6 +434,10 @@ export default function LyricsOverlay(props: {
               <div
                 key={`${cue.tMs}-${idx}`}
                 data-lyric-idx={idx}
+                className="af-lyric-row"
+                data-af-inline={isInline ? "1" : "0"}
+                data-af-has-track={trackId ? "1" : "0"}
+                data-af-reveal={idx === revealIdx ? "1" : "0"}
                 onMouseEnter={() => {
                   if (!isInline) return;
                   setHoverIdx(idx);
@@ -455,6 +459,7 @@ export default function LyricsOverlay(props: {
               >
                 {/* Discourse icon (hover on desktop, long-press reveal on touch) */}
                 <button
+                  className="af-discourse-btn"
                   type="button"
                   aria-label="Open exegesis"
                   title="Discuss this line"
@@ -470,7 +475,7 @@ export default function LyricsOverlay(props: {
                     position: "absolute",
                     right: 0,
                     top: "50%",
-                    transform: "translateY(-50%)",
+                    transform: `translateY(-50%) ${showDiscourse ? "scale(1)" : "scale(0.98)"}`,
                     width: isInline ? 26 : 30,
                     height: isInline ? 26 : 30,
                     borderRadius: 999,
@@ -484,8 +489,6 @@ export default function LyricsOverlay(props: {
                     opacity: showDiscourse && trackId ? 1 : 0,
                     display: isInline ? "grid" : "none",
                     transition: "opacity 140ms ease, transform 140ms ease",
-                    // a tiny “pop” when revealed so it reads as an affordance
-                    scale: showDiscourse ? "1" : "0.98",
                   }}
                 >
                   <span aria-hidden style={{ fontSize: isInline ? 14 : 15 }}>
@@ -655,6 +658,18 @@ export default function LyricsOverlay(props: {
 
           .af-lyrics-scroll::-webkit-scrollbar { width: 0px; height: 0px; }
           .af-lyrics-scroll::-webkit-scrollbar-thumb { background: transparent; }
+
+                    /* Inline-only: reveal discourse affordance on hover even if React hover state misses. */
+          .af-lyric-row[data-af-inline="1"][data-af-has-track="1"]:hover .af-discourse-btn {
+            opacity: 1 !important;
+            transform: translateY(-50%) scale(1) !important;
+          }
+
+          /* Touch reveal path: when we set revealIdx, make sure it shows regardless of hover. */
+          .af-lyric-row[data-af-inline="1"][data-af-has-track="1"][data-af-reveal="1"] .af-discourse-btn {
+            opacity: 1 !important;
+            transform: translateY(-50%) scale(1) !important;
+          }
         `}</style>
       </div>
     </div>
