@@ -709,10 +709,36 @@ export default function PortalArtistPosts(props: {
   const seenRef = React.useRef<Set<string>>(new Set());
   const postEls = React.useRef<Map<string, HTMLDivElement>>(new Map());
 
+  const inflightRef = React.useRef<AbortController | null>(null);
+  const inflightKeyRef = React.useRef<string>("");
+
   const fetchPage = React.useCallback(
     async (nextCursor: string | null) => {
-      if (loading) return;
       if (requiresAuth) return;
+
+      const key =
+        JSON.stringify({
+          nextCursor: nextCursor ?? "",
+          pageSize,
+          minVisibility,
+          requireAuthAfter,
+          postTypeFilter: postTypeFilter ?? "",
+        }) || "";
+
+      // If the exact same request is already in-flight, bail immediately.
+      if (inflightRef.current && inflightKeyRef.current === key) return;
+
+      // Cancel any previous in-flight request (filter flip, remount, etc).
+      if (inflightRef.current) {
+        inflightRef.current.abort();
+        inflightRef.current = null;
+        inflightKeyRef.current = "";
+      }
+
+      const ac = new AbortController();
+      inflightRef.current = ac;
+      inflightKeyRef.current = key;
+
       setLoading(true);
       const filterAtCall = postTypeFilter;
       setErr(null);
@@ -725,10 +751,18 @@ export default function PortalArtistPosts(props: {
         if (postTypeFilter) u.searchParams.set("postType", postTypeFilter);
         if (nextCursor) u.searchParams.set("offset", nextCursor);
 
-        const res = await fetch(u.toString(), { method: "GET" });
+        const res = await fetch(u.toString(), {
+          method: "GET",
+          signal: ac.signal,
+          cache: "no-store",
+          headers: { "x-correlation-id": crypto.randomUUID() },
+        });
+
         if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
 
         const j = parsePostsResponse(await res.json());
+
+        // If filter changed while request was in-flight, ignore result.
         if (filterAtCall !== postTypeFilter) return;
 
         if (j.requiresAuth) {
@@ -741,42 +775,47 @@ export default function PortalArtistPosts(props: {
         setPosts((p) => (nextCursor ? [...p, ...nextPosts] : nextPosts));
         setCursor(j.nextCursor);
       } catch (e) {
+        // Ignore aborts cleanly
+        if (e instanceof DOMException && e.name === "AbortError") return;
         const msg = e instanceof Error ? e.message : "Failed to load posts";
         setErr(msg);
       } finally {
+        if (inflightRef.current === ac) {
+          inflightRef.current = null;
+          inflightKeyRef.current = "";
+        }
         setLoading(false);
       }
     },
-    [
-      loading,
-      requiresAuth,
-      pageSize,
-      minVisibility,
-      requireAuthAfter,
-      postTypeFilter,
-    ],
+    [requiresAuth, pageSize, minVisibility, requireAuthAfter, postTypeFilter],
   );
+
+  // optional: abort on unmount
+  React.useEffect(() => {
+    return () => {
+      inflightRef.current?.abort();
+      inflightRef.current = null;
+      inflightKeyRef.current = "";
+    };
+  }, []);
 
   const firstFilterRunRef = React.useRef(true);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // On first run, do NOT “reset then refetch” (state is already clean).
     if (firstFilterRunRef.current) {
       firstFilterRunRef.current = false;
       void fetchPage(null);
       return;
     }
 
-    // On subsequent filter changes, reset then fetch.
     setRequiresAuth(false);
     setCursor(null);
     setPosts([]);
     setErr(null);
     void fetchPage(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [postTypeFilter]);
+  }, [postTypeFilter, fetchPage]);
 
   React.useEffect(() => {
     if (!deepSlug) return;
@@ -793,7 +832,11 @@ export default function PortalArtistPosts(props: {
     try {
       await fetch("/api/artist-posts/seen", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-correlation-id": crypto.randomUUID(),
+        },
+        cache: "no-store",
         body: JSON.stringify({ slug }),
       });
     } catch {

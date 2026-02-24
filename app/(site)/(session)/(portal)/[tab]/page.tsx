@@ -1,6 +1,4 @@
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-export const fetchCache = "force-no-store";
+// web/app/(site)/(session)/(portal)/[tab]/page.tsx
 
 export default function PortalTabCanonicalPage() {
   // Canonical URL surface only.

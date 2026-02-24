@@ -157,7 +157,13 @@ export async function GET(req: NextRequest) {
 
   // Create response early so anon cookie can be persisted if newly minted
   const res = NextResponse.json<OkResponse>(
-    { ok: true, requiresAuth: false, posts: [], nextCursor: null, correlationId },
+    {
+      ok: true,
+      requiresAuth: false,
+      posts: [],
+      nextCursor: null,
+      correlationId,
+    },
     { status: 200 },
   );
 
@@ -177,7 +183,7 @@ export async function GET(req: NextRequest) {
           nextCursor: null,
           correlationId,
         },
-        { status: 200 },
+        { status: 200, headers: res.headers },
       );
     }
   }
@@ -185,7 +191,7 @@ export async function GET(req: NextRequest) {
   // Viewer tier for now: signed-in => friend, otherwise public.
   const viewerTier: Visibility = userId ? "friend" : "public";
 
-  const typeClause = postTypeFilter ? ' && postType == $postType' : "";
+  const typeClause = postTypeFilter ? " && postType == $postType" : "";
 
   const postsQuery = `
     *[_type == "artistPost" && defined(slug.current)${typeClause}]
@@ -228,7 +234,10 @@ export async function GET(req: NextRequest) {
       const maxWidth = clampMaxWidthPx(node["maxWidth"]);
 
       try {
-        const u = urlFor(node as UrlForSource).width(1600).quality(80).url();
+        const u = urlFor(node as UrlForSource)
+          .width(1600)
+          .quality(80)
+          .url();
         const out: ApiImageValue = { _type: "image", url: u, maxWidth };
         return out;
       } catch {
