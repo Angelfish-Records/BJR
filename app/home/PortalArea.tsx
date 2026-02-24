@@ -1244,7 +1244,7 @@ export default function PortalArea(props: {
               defaultPanelId="player"
               syncToQueryParam={false}
               activePanelId={effectiveIsPlayer ? "player" : "portal"}
-              keepMountedPanelIds={["player"]} // ✅ keep player UI alive under the hood
+              keepMountedPanelIds={["player", "portal"]}
               onPanelChange={(panelId) => {
                 if (panelId === "player") forceSurface("player");
                 else forceSurface("portal");
