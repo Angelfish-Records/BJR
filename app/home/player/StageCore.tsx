@@ -5,7 +5,9 @@ import React from "react";
 import { usePlayer } from "./PlayerState";
 import VisualizerCanvas from "./VisualizerCanvas";
 import LyricsOverlay, { type LyricCue } from "./stage/LyricsOverlay";
-import StageTransportBar, { STAGE_TRANSPORT_FOOTER_PX } from "./StageTransportBar";
+import StageTransportBar, {
+  STAGE_TRANSPORT_FOOTER_PX,
+} from "./StageTransportBar";
 import { mediaSurface } from "./mediaSurface";
 import { useLyricsSnapshot } from "./lyrics/useLyricsSurface";
 
@@ -67,7 +69,11 @@ export default function StageCore(props: {
   const playerMuxId = p.current?.muxPlaybackId ?? null;
 
   const trackId = React.useMemo(() => {
-    return pickKeyWithCues(cuesByTrackId, [playerTrackId, surfaceTrackId, playerMuxId]);
+    return pickKeyWithCues(cuesByTrackId, [
+      playerTrackId,
+      surfaceTrackId,
+      playerMuxId,
+    ]);
   }, [cuesByTrackId, playerTrackId, playerMuxId, surfaceTrackId]);
 
   const cues: LyricCue[] | null = React.useMemo(() => {
@@ -135,6 +141,7 @@ export default function StageCore(props: {
       <div style={{ position: "absolute", inset: 0, zIndex: 2 }}>
         {lyricsMode === "embedded" ? (
           <LyricsOverlay
+            trackId={trackId}
             cues={cues}
             offsetMs={effectiveOffsetMs}
             onSeek={onSeek}

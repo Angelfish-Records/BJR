@@ -33,6 +33,7 @@ function findActiveIndex(cues: LyricCue[], tMs: number) {
 }
 
 export default function LyricsOverlay(props: {
+  trackId?: string | null;
   cues: LyricCue[] | null;
   offsetMs?: number;
   onSeek?: (tMs: number) => void;
@@ -41,12 +42,15 @@ export default function LyricsOverlay(props: {
   reservedBottomPx?: number;
 }) {
   const {
+    trackId: trackIdRaw = null,
     cues,
     offsetMs = 0,
     onSeek,
     variant = "stage",
     reservedBottomPx = 0,
   } = props;
+
+  const trackId = (trackIdRaw ?? "").trim() || null;
   const isInline = variant === "inline";
 
   const viewportRef = React.useRef<HTMLDivElement | null>(null);
@@ -67,6 +71,53 @@ export default function LyricsOverlay(props: {
   const isAutoScrollingRef = React.useRef(false);
   const autoScrollClearRef = React.useRef<number | null>(null);
 
+  const [hoverIdx, setHoverIdx] = React.useState<number>(-1);
+  const [revealIdx, setRevealIdx] = React.useState<number>(-1);
+
+  const pressTimerRef = React.useRef<number | null>(null);
+  const pressFiredRef = React.useRef(false);
+  const revealClearRef = React.useRef<number | null>(null);
+
+  function clearPressTimer() {
+    if (pressTimerRef.current != null) {
+      window.clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+  }
+
+  function clearRevealTimer() {
+    if (revealClearRef.current != null) {
+      window.clearTimeout(revealClearRef.current);
+      revealClearRef.current = null;
+    }
+  }
+
+  function revealForTouch(idx: number) {
+    setRevealIdx(idx);
+    clearRevealTimer();
+    // Auto-hide after a short window so it doesn’t linger forever on mobile.
+    revealClearRef.current = window.setTimeout(() => {
+      setRevealIdx((cur) => (cur === idx ? -1 : cur));
+    }, 2200);
+  }
+
+  React.useEffect(() => {
+    return () => {
+      clearPressTimer();
+      clearRevealTimer();
+    };
+  }, []);
+
+  function emitOpenExegesis(cue: LyricCue) {
+    if (!trackId) return;
+    const detail: { trackId: string; lineKey: string; tMs: number } = {
+      trackId,
+      lineKey: cue.lineKey,
+      tMs: cue.tMs,
+    };
+    window.dispatchEvent(new CustomEvent("af:open-exegesis", { detail }));
+  }
+
   // Fade-in whenever a new lyrics set becomes available.
   const [fadeInKey, setFadeInKey] = React.useState(0);
 
@@ -83,6 +134,8 @@ export default function LyricsOverlay(props: {
   // Reset on cue change.
   React.useEffect(() => {
     setActiveIdx(-1);
+    setHoverIdx(-1);
+    setRevealIdx(-1);
     activeIdxRef.current = -1;
     userScrollUntilRef.current = 0;
     lastFocusCenterRef.current = -1;
@@ -374,124 +427,215 @@ export default function LyricsOverlay(props: {
             const lh = isInline ? 1.25 : 1.22;
             const scrimInset = isInline ? "-6px -10px" : "-10px -16px";
             const scrimBgStage = "rgba(0,0,0,0.18)";
+            const showDiscourse =
+              isInline && (idx === hoverIdx || idx === revealIdx);
 
             return (
-              <button
+              <div
                 key={`${cue.tMs}-${idx}`}
-                type="button"
                 data-lyric-idx={idx}
-                onClick={() => {
-                  if (!onSeek) return;
-                  userScrollUntilRef.current = Date.now() + 900;
-                  onSeek(cue.tMs);
+                onMouseEnter={() => {
+                  if (!isInline) return;
+                  setHoverIdx(idx);
                 }}
-                title={isInline ? cue.text : undefined}
+                onMouseLeave={() => {
+                  if (!isInline) return;
+                  setHoverIdx((cur) => (cur === idx ? -1 : cur));
+                }}
                 style={{
-                  border: 0,
-                  background: "transparent",
-                  padding: 0,
-
+                  position: "relative",
                   width: "100%",
                   minWidth: 0,
                   display: "grid",
                   justifyItems: "center",
                   alignItems: "center",
-
                   paddingTop: isInline ? 2 : 4,
                   paddingBottom: isInline ? 2 : 4,
-
-                  color: "rgba(255,255,255,0.94)",
-                  fontSize: lineFontSize,
-                  lineHeight: lh,
-                  letterSpacing: 0.2,
-                  textAlign: "center",
-
-                  opacity:
-                    activeIdx < 0
-                      ? isInline
-                        ? 0.6
-                        : 0.5
-                      : isActive
-                        ? 1
-                        : "calc(0.18 + var(--af-focus, 0) * 0.82)",
-
-                  fontWeight: isActive
-                    ? 780
-                    : "calc(650 + var(--af-focus, 0) * 70)",
-
-                  transition:
-                    "opacity 120ms linear, transform 140ms ease, filter 140ms ease",
-                  transform: isActive
-                    ? `translateZ(0) scale(${isInline ? 1.012 : 1.02})`
-                    : `translateZ(0)
-                       translateY(calc((1 - var(--af-focus, 0)) * ${isInline ? 0.25 : 0.55}px))
-                       scale(calc(1 + var(--af-focus, 0) * ${isInline ? 0.012 : 0.02}))`,
-
-                  willChange: "transform, opacity",
-                  cursor: onSeek ? "pointer" : "default",
-                  userSelect: "none",
                 }}
               >
-                <span
+                {/* Discourse icon (hover on desktop, long-press reveal on touch) */}
+                <button
+                  type="button"
+                  aria-label="Open exegesis"
+                  title="Discuss this line"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    clearPressTimer();
+                    clearRevealTimer();
+                    setRevealIdx(-1);
+                    emitOpenExegesis(cue);
+                  }}
                   style={{
-                    position: "relative",
-                    display: "inline-block",
-                    maxWidth: "100%",
-                    minWidth: 0,
-                    whiteSpace: "normal",
-                    overflowWrap: "anywhere",
-                    wordBreak: "break-word",
+                    position: "absolute",
+                    right: 0,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    width: isInline ? 26 : 30,
+                    height: isInline ? 26 : 30,
+                    borderRadius: 999,
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    background: "rgba(0,0,0,0.22)",
+                    color: "rgba(255,255,255,0.86)",
+                    placeItems: "center",
+                    cursor: trackId ? "pointer" : "default",
+                    pointerEvents: trackId ? "auto" : "none",
+
+                    opacity: showDiscourse && trackId ? 1 : 0,
+                    display: isInline ? "grid" : "none",
+                    transition: "opacity 140ms ease, transform 140ms ease",
+                    // a tiny “pop” when revealed so it reads as an affordance
+                    scale: showDiscourse ? "1" : "0.98",
                   }}
                 >
-                  {/* Local per-line scrim */}
-                  {isInline ? (
-                    <span
-                      aria-hidden
-                      style={{
-                        position: "absolute",
-                        inset: scrimInset,
-                        borderRadius: 999,
-                        pointerEvents: "none",
-                        background: `rgba(0,0,0, calc(0.08 + var(--af-focus, 0) * 0.26))`,
-                        backdropFilter: "blur(10px)",
-                        WebkitBackdropFilter: "blur(10px)",
-                        WebkitMaskImage:
-                          "radial-gradient(closest-side at 50% 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 100%)",
-                        maskImage:
-                          "radial-gradient(closest-side at 50% 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 100%)",
-                        opacity: "calc(var(--af-focus, 0) * 0.98)",
-                      }}
-                    />
-                  ) : isActive ? (
-                    <span
-                      aria-hidden
-                      style={{
-                        position: "absolute",
-                        inset: scrimInset,
-                        borderRadius: 999,
-                        pointerEvents: "none",
-                        background: scrimBgStage,
-                        WebkitMaskImage:
-                          "radial-gradient(closest-side at 50% 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 100%)",
-                        maskImage:
-                          "radial-gradient(closest-side at 50% 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 100%)",
-                        opacity: 0.95,
-                      }}
-                    />
-                  ) : null}
+                  <span aria-hidden style={{ fontSize: isInline ? 14 : 15 }}>
+                    💬
+                  </span>
+                </button>
 
+                {/* The seek button (default interaction) */}
+                <button
+                  type="button"
+                  onPointerDown={() => {
+                    // Touch long-press reveals discourse icon (no seek) — INLINE ONLY
+                    pressFiredRef.current = false;
+                    clearPressTimer();
+
+                    if (!isInline) return; // fullscreen/stage: no discourse affordance at all
+                    if (!trackId) return;
+
+                    pressTimerRef.current = window.setTimeout(() => {
+                      pressFiredRef.current = true;
+                      revealForTouch(idx);
+                    }, 360);
+                  }}
+                  onPointerUp={() => {
+                    clearPressTimer();
+                  }}
+                  onPointerCancel={() => {
+                    clearPressTimer();
+                  }}
+                  onPointerLeave={() => {
+                    clearPressTimer();
+                  }}
+                  onClick={() => {
+                    // If long-press fired, swallow click so it doesn’t seek.
+                    if (pressFiredRef.current) return;
+
+                    if (!onSeek) return;
+                    userScrollUntilRef.current = Date.now() + 900;
+                    onSeek(cue.tMs);
+                  }}
+                  title={isInline ? cue.text : undefined}
+                  style={{
+                    border: 0,
+                    background: "transparent",
+                    padding: 0,
+
+                    width: "100%",
+                    minWidth: 0,
+                    display: "grid",
+                    justifyItems: "center",
+                    alignItems: "center",
+
+                    color: "rgba(255,255,255,0.94)",
+                    fontSize: lineFontSize,
+                    lineHeight: lh,
+                    letterSpacing: 0.2,
+                    textAlign: "center",
+
+                    opacity:
+                      activeIdx < 0
+                        ? isInline
+                          ? 0.6
+                          : 0.5
+                        : isActive
+                          ? 1
+                          : "calc(0.18 + var(--af-focus, 0) * 0.82)",
+
+                    fontWeight: isActive
+                      ? 780
+                      : "calc(650 + var(--af-focus, 0) * 70)",
+
+                    transition:
+                      "opacity 120ms linear, transform 140ms ease, filter 140ms ease",
+                    transform: isActive
+                      ? `translateZ(0) scale(${isInline ? 1.012 : 1.02})`
+                      : `translateZ(0)
+                         translateY(calc((1 - var(--af-focus, 0)) * ${
+                           isInline ? 0.25 : 0.55
+                         }px))
+                         scale(calc(1 + var(--af-focus, 0) * ${
+                           isInline ? 0.012 : 0.02
+                         }))`,
+
+                    willChange: "transform, opacity",
+                    cursor: onSeek ? "pointer" : "default",
+                    userSelect: "none",
+                    WebkitTapHighlightColor: "transparent",
+                  }}
+                >
                   <span
                     style={{
                       position: "relative",
-                      zIndex: 1,
-                      textShadow,
-                      filter: "blur(calc((1 - var(--af-focus, 0)) * 0.15px))",
+                      display: "inline-block",
+                      maxWidth: "100%",
+                      minWidth: 0,
+                      whiteSpace: "normal",
+                      overflowWrap: "anywhere",
+                      wordBreak: "break-word",
                     }}
                   >
-                    {cue.text}
+                    {/* Local per-line scrim (unchanged) */}
+                    {isInline ? (
+                      <span
+                        aria-hidden
+                        style={{
+                          position: "absolute",
+                          inset: scrimInset,
+                          borderRadius: 999,
+                          pointerEvents: "none",
+                          background: `rgba(0,0,0, calc(0.08 + var(--af-focus, 0) * 0.26))`,
+                          backdropFilter: "blur(10px)",
+                          WebkitBackdropFilter: "blur(10px)",
+                          WebkitMaskImage:
+                            "radial-gradient(closest-side at 50% 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 100%)",
+                          maskImage:
+                            "radial-gradient(closest-side at 50% 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 100%)",
+                          opacity: "calc(var(--af-focus, 0) * 0.98)",
+                        }}
+                      />
+                    ) : isActive ? (
+                      <span
+                        aria-hidden
+                        style={{
+                          position: "absolute",
+                          inset: scrimInset,
+                          borderRadius: 999,
+                          pointerEvents: "none",
+                          background: scrimBgStage,
+                          WebkitMaskImage:
+                            "radial-gradient(closest-side at 50% 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 100%)",
+                          maskImage:
+                            "radial-gradient(closest-side at 50% 50%, rgba(0,0,0,1) 62%, rgba(0,0,0,0) 100%)",
+                          opacity: 0.95,
+                        }}
+                      />
+                    ) : null}
+
+                    <span
+                      style={{
+                        position: "relative",
+                        zIndex: 1,
+                        textShadow,
+                        filter: "blur(calc((1 - var(--af-focus, 0)) * 0.15px))",
+                      }}
+                    >
+                      {cue.text}
+                    </span>
                   </span>
-                </span>
-              </button>
+                </button>
+              </div>
             );
           })}
         </div>
