@@ -637,6 +637,24 @@ export default function PortalArtistPosts(props: {
     defaultInlineImageMaxWidthPx,
   } = props;
 
+  // -------------------------
+  // DEBUG: mount/unmount + fetch correlation
+  // Drop-in: place this inside PortalArtistPosts(), immediately after props destructure.
+  // Remove once confirmed.
+  // -------------------------
+  const mountId = React.useId();
+
+  React.useEffect(() => {
+    const tag = `[PortalArtistPosts ${mountId}]`;
+    console.log(`${tag} MOUNT`, {
+      href: typeof window !== "undefined" ? window.location.href : "(ssr)",
+    });
+
+    return () => {
+      console.log(`${tag} UNMOUNT`);
+    };
+  }, [mountId]);
+
   const sp = useClientSearchParams();
   const deepSlug = (sp.get("post") ?? "").trim() || null;
 
@@ -751,6 +769,14 @@ export default function PortalArtistPosts(props: {
         if (postTypeFilter) u.searchParams.set("postType", postTypeFilter);
         if (nextCursor) u.searchParams.set("offset", nextCursor);
 
+        console.log(`[PortalArtistPosts ${mountId}] fetchPage`, {
+          nextCursor,
+          pageSize,
+          minVisibility,
+          requireAuthAfter,
+          postTypeFilter,
+        });
+
         const res = await fetch(u.toString(), {
           method: "GET",
           signal: ac.signal,
@@ -787,7 +813,14 @@ export default function PortalArtistPosts(props: {
         setLoading(false);
       }
     },
-    [requiresAuth, pageSize, minVisibility, requireAuthAfter, postTypeFilter],
+    [
+      requiresAuth,
+      pageSize,
+      minVisibility,
+      requireAuthAfter,
+      postTypeFilter,
+      mountId,
+    ],
   );
 
   // optional: abort on unmount
