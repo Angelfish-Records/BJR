@@ -227,7 +227,7 @@ export default function StageInline(props: { height?: number }) {
                 minHeight: 0,
               }}
             >
-              <StageCore variant="fullscreen" lyricsMode="none" />
+              <StageCore variant="fullscreen" lyricsMode="embedded" />
 
               <div
                 aria-hidden

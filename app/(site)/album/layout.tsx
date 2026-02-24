@@ -181,8 +181,8 @@ export default async function AlbumLayout(props: {
                   style={{
                     position: "absolute",
                     inset: 0,
-                    zIndex: 50,
-                    pointerEvents: "auto",
+                    zIndex: 0,
+                    pointerEvents: "none",
                   }}
                 />
               </div>
