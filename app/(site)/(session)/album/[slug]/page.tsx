@@ -1,4 +1,3 @@
-// web/app/(site)/(session)/album/[slug]/page.tsx
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -10,19 +9,22 @@ export async function generateMetadata(props: {
 }): Promise<Metadata> {
   const { slug } = await props.params;
 
+  const raw = decodeURIComponent(slug ?? "").trim();
+  const safe = raw || slug;
+
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
   const canonical = appUrl
-    ? `${appUrl}/album/${encodeURIComponent(slug)}`
-    : `/album/${encodeURIComponent(slug)}`;
+    ? `${appUrl}/album/${encodeURIComponent(raw || slug)}`
+    : `/album/${encodeURIComponent(raw || slug)}`;
 
   return {
-    title: slug,
+    title: safe,
     alternates: { canonical },
   };
 }
 
 export default async function AlbumCanonicalPage() {
+  // Canonical URL surface only.
   // Render happens in /(session)/@runtime/album/[slug]/page.tsx
-  // This file exists for canonical URL + metadata.
   return null;
 }

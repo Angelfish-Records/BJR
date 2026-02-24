@@ -1,12 +1,29 @@
-// (portal)/exegesis/[trackId]/page.tsx
-import PortalExegesis from "@/app/home/modules/PortalExegesis";
-export default function ExegesisTrackPage({
-  params,
-}: {
-  params: { trackId?: string };
-}) {
-  const trackId = decodeURIComponent(params.trackId ?? "").trim();
-  return (
-    <PortalExegesis followPlayer={false} initialTrackId={trackId || null} />
-  );
+import type { Metadata } from "next";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
+
+export async function generateMetadata(props: {
+  params: Promise<{ trackId: string }>;
+}): Promise<Metadata> {
+  const { trackId } = await props.params;
+
+  const raw = decodeURIComponent(trackId ?? "").trim();
+
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
+  const canonical = appUrl
+    ? `${appUrl}/exegesis/${encodeURIComponent(raw || trackId)}`
+    : `/exegesis/${encodeURIComponent(raw || trackId)}`;
+
+  return {
+    title: raw || trackId,
+    alternates: { canonical },
+  };
+}
+
+export default function ExegesisTrackCanonicalPage() {
+  // Canonical URL surface only.
+  // Render happens in /(session)/@runtime/exegesis/[trackId]/page.tsx
+  return null;
 }
