@@ -11,6 +11,7 @@ import {
   replaceQuery,
   getAutoplayFlag,
 } from "./urlState";
+import { getLastPortalTab } from "./portalLastTab";
 import { usePlayer } from "@/app/home/player/PlayerState";
 import { useGlobalTransportKeys } from "./player/useGlobalTransportKeys";
 import type { PlayerTrack, AlbumInfo, AlbumNavItem, Tier } from "@/lib/types";
@@ -33,20 +34,6 @@ function portalTabFromPathname(pathname: string | null): string | null {
   if (head === "player") return null;
   if (head === "album") return null;
   return decodeURIComponent(head);
-}
-
-function getLastPortalTab(): string | null {
-  try {
-    return (sessionStorage.getItem("af:lastPortalTab") ?? "").trim() || null;
-  } catch {
-    return null;
-  }
-}
-
-function setLastPortalTab(id: string) {
-  try {
-    sessionStorage.setItem("af:lastPortalTab", id);
-  } catch {}
 }
 
 function parsePublicAlbumPath(pathname: string | null): {
@@ -757,10 +744,6 @@ export default function PortalArea(props: {
       router.prefetch(hrefToPortal);
     } catch {}
   }, [router, hrefToPortal]);
-
-  React.useEffect(() => {
-    if (!isPlayer && portalTabId) setLastPortalTab(portalTabId);
-  }, [isPlayer, portalTabId]);
 
   const patchQuery = React.useCallback(
     (patch: Record<string, string | null | undefined>) => {

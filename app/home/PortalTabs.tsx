@@ -1,13 +1,15 @@
-// web/app/home/PortalTabs.tsx
 "use client";
 
 import React from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { setLastPortalTab } from "./portalLastTab";
+
+// Optional: unify with urlState’s QS event pattern
+const PATH_EVENT = "af:path-change";
 
 function getStablePathname(nextPathname: string | null): string | null {
   if (nextPathname) return nextPathname;
   if (typeof window === "undefined") return null;
-  // include search/hash safety: we only care about pathname semantics
   return window.location.pathname || null;
 }
 
@@ -26,23 +28,27 @@ function tabFromPathname(pathname: string | null): string | null {
   const head = (parts[0] ?? "").trim().toLowerCase();
   if (!head) return null;
 
-  // reserved/non-portal surfaces
   if (head === "player") return null;
   if (head === "album") return null;
 
-  // ✅ `/exegesis/:trackId` still resolves to tab = "exegesis"
   return decodeURIComponent(head);
 }
 
 function pathForTab(tabId: string) {
   const t = (tabId || "").trim().toLowerCase();
   if (!t || t === "player") return "/extras";
-
-  // ✅ Tab surface for Exegesis is `/exegesis` (follow-player mode)
-  // Deep links are `/exegesis/:trackId#l=...` and are created elsewhere (event handler).
   if (t === "exegesis") return "/exegesis";
-
   return `/${encodeURIComponent(t)}`;
+}
+
+function pushPathOnly(href: string) {
+  if (typeof window === "undefined") return;
+  const cur = window.location.href;
+  const next = href.startsWith("http") ? href : new URL(href, cur).toString();
+  if (next === cur) return;
+
+  window.history.pushState({}, "", next);
+  window.dispatchEvent(new Event(PATH_EVENT));
 }
 
 export default function PortalTabs(props: {
@@ -51,15 +57,18 @@ export default function PortalTabs(props: {
 }) {
   const { tabs, defaultTabId = null } = props;
 
+  // Keep router only if you still want prefetch warming.
   const router = useRouter();
+
+  // You can keep usePathname for initial server->client consistency,
+  // but post-patch we will NOT rely on it for updates.
   const pathname = usePathname();
   const stablePathname = getStablePathname(pathname);
+
   const didHydrateRef = React.useRef(false);
 
   const hasTabs = tabs.length > 0;
   const firstId = (hasTabs ? tabs[0]?.id : null) ?? null;
-
-  const pathTab = tabFromPathname(stablePathname);
 
   const resolveValid = React.useCallback(
     (candidate: string | null): string | null => {
@@ -70,10 +79,11 @@ export default function PortalTabs(props: {
     [tabs],
   );
 
-  const validPath = resolveValid(pathTab);
-
   const initial = React.useMemo(() => {
     if (!hasTabs) return null;
+
+    const pathTab = tabFromPathname(stablePathname);
+    const validPath = resolveValid(pathTab);
 
     const defaultValid =
       defaultTabId && tabs.some((t) => t.id === defaultTabId)
@@ -81,18 +91,17 @@ export default function PortalTabs(props: {
         : null;
 
     return validPath ?? defaultValid ?? firstId;
-  }, [hasTabs, defaultTabId, tabs, validPath, firstId]);
+  }, [hasTabs, defaultTabId, tabs, stablePathname, resolveValid, firstId]);
 
   const [activeId, setActiveId] = React.useState<string | null>(initial);
 
-  // ✅ mount-once caching per tab id (prevents expensive remount on switch)
   const [mountedIds, setMountedIds] = React.useState<Set<string>>(() => {
     const s = new Set<string>();
     if (initial) s.add(initial);
     return s;
   });
 
-  // ✅ (optional) prewarm all tabs after first paint / idle
+  // ✅ Keep your prewarm-all behavior unchanged
   React.useEffect(() => {
     if (!tabs.length) return;
 
@@ -127,9 +136,7 @@ export default function PortalTabs(props: {
     if (win?.requestIdleCallback) {
       id = win.requestIdleCallback(warmAll);
       return () => {
-        if (win.cancelIdleCallback && id != null) {
-          win.cancelIdleCallback(id);
-        }
+        if (win.cancelIdleCallback && id != null) win.cancelIdleCallback(id);
       };
     }
 
@@ -137,60 +144,12 @@ export default function PortalTabs(props: {
     return () => window.clearTimeout(t);
   }, [tabs]);
 
-  const rowRef = React.useRef<HTMLDivElement | null>(null);
-  const btnRefs = React.useRef<Map<string, HTMLButtonElement>>(new Map());
-
-  const [indicator, setIndicator] = React.useState<{
-    x: number;
-    w: number;
-  } | null>(null);
-  const [rail, setRail] = React.useState<{ x: number; w: number } | null>(null);
-
   const active = React.useMemo(() => {
     if (!hasTabs) return null;
     return tabs.find((t) => t.id === activeId) ?? tabs[0] ?? null;
   }, [hasTabs, tabs, activeId]);
 
-  const measure = React.useCallback(() => {
-    const row = rowRef.current;
-    if (!row) return;
-    if (!hasTabs) return;
-
-    const rowRect = row.getBoundingClientRect();
-
-    const btns = tabs
-      .map((t) => btnRefs.current.get(t.id))
-      .filter(Boolean) as HTMLButtonElement[];
-
-    if (!btns.length) return;
-
-    const first = btns[0];
-    const last = btns[btns.length - 1];
-
-    const firstRect = first.getBoundingClientRect();
-    const lastRect = last.getBoundingClientRect();
-
-    const railX = firstRect.left - rowRect.left + row.scrollLeft;
-    const railW = lastRect.right - firstRect.left;
-
-    const r = (n: number) =>
-      Math.round(n * (window.devicePixelRatio || 1)) /
-      (window.devicePixelRatio || 1);
-
-    setRail({ x: r(railX), w: r(railW) });
-
-    const id = active?.id;
-    if (!id) return;
-    const btn = btnRefs.current.get(id) ?? null;
-    if (!btn) return;
-
-    const b = btn.getBoundingClientRect();
-    const x = b.left - rowRect.left + row.scrollLeft;
-    const w = b.width;
-
-    setIndicator({ x: r(x), w: r(w) });
-  }, [hasTabs, tabs, active?.id]);
-
+  // ✅ Initial hydrate alignment (keep)
   React.useEffect(() => {
     if (!initial) return;
 
@@ -200,44 +159,39 @@ export default function PortalTabs(props: {
       return;
     }
 
-    if (activeId !== initial) {
-      setActiveId(initial);
-    }
+    if (activeId !== initial) setActiveId(initial);
   }, [initial, activeId]);
 
+  // ✅ NEW: listen to real URL changes (back/forward + our PATH_EVENT)
   React.useEffect(() => {
-    console.log("[PortalTabs] pathname", {
-      pathname,
-      href: typeof window !== "undefined" ? window.location.href : "",
-    });
-  }, [pathname]);
+    if (typeof window === "undefined") return;
 
-  React.useLayoutEffect(() => {
-    measure();
-  }, [measure]);
+    const syncFromLocation = () => {
+      const t = tabFromPathname(window.location.pathname);
+      const v = resolveValid(t) ?? initial;
+      if (v && v !== activeId) {
+        setActiveId(v);
+        setMountedIds((prev) => {
+          const next = new Set(prev);
+          next.add(v);
+          return next;
+        });
+      }
+      if (v) setLastPortalTab(v);
+    };
 
-  React.useEffect(() => {
-    const onResize = () => measure();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [measure]);
+    const onPop = () => syncFromLocation();
+    const onCustom = () => syncFromLocation();
+
+    window.addEventListener("popstate", onPop);
+    window.addEventListener(PATH_EVENT, onCustom as EventListener);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      window.removeEventListener(PATH_EVENT, onCustom as EventListener);
+    };
+  }, [activeId, initial, resolveValid]);
 
   if (!hasTabs) return null;
-
-  const wrap: React.CSSProperties = { display: "grid", gap: 12, minWidth: 0 };
-
-  const tabRow: React.CSSProperties = {
-    position: "relative",
-    display: "flex",
-    alignItems: "center",
-    gap: 14,
-    flexWrap: "nowrap",
-    overflowX: "auto",
-    WebkitOverflowScrolling: "touch",
-    padding: "2px 2px 12px",
-    scrollbarWidth: "none",
-    minWidth: 0,
-  };
 
   const tabBtn = (isActive: boolean): React.CSSProperties => ({
     appearance: "none",
@@ -255,69 +209,37 @@ export default function PortalTabs(props: {
   });
 
   return (
-    <div style={wrap}>
-      <style>{`.afPortalTabRow::-webkit-scrollbar { display:none; height:0; }`}</style>
-
+    <div style={{ display: "grid", gap: 12, minWidth: 0 }}>
       <div
-        ref={rowRef}
         className="afPortalTabRow"
-        style={tabRow}
-        onScroll={() => measure()}
+        style={{
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          flexWrap: "nowrap",
+          overflowX: "auto",
+          WebkitOverflowScrolling: "touch",
+          padding: "2px 2px 12px",
+          scrollbarWidth: "none",
+          minWidth: 0,
+        }}
       >
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            bottom: 3,
-            left: rail?.x ?? 0,
-            width: rail?.w ?? 0,
-            height: 1,
-            background: "rgba(255,255,255,0.18)",
-            pointerEvents: "none",
-            opacity: rail ? 1 : 0,
-            transition: "left 220ms ease, width 220ms ease, opacity 120ms ease",
-          }}
-        />
-
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            bottom: 1,
-            height: 2,
-            borderRadius: 999,
-            background: "rgba(255,255,255,0.90)",
-            pointerEvents: "none",
-            transform: `translateX(${indicator?.x ?? 0}px)`,
-            width: indicator?.w ?? 0,
-            transition:
-              "transform 220ms ease, width 220ms ease, opacity 120ms ease",
-            opacity: indicator ? 1 : 0,
-          }}
-        />
-
         {tabs.map((t) => {
           const isActive = t.id === active?.id;
 
           return (
             <button
               key={t.id}
-              ref={(el) => {
-                if (el) btnRefs.current.set(t.id, el);
-                else btnRefs.current.delete(t.id);
-              }}
               type="button"
               aria-current={isActive ? "page" : undefined}
               aria-label={t.title}
               onClick={() => {
                 if (isActive) return;
 
-                const targetPath = pathForTab(t.id);
-                const currentPath =
-                  typeof window !== "undefined"
-                    ? window.location.pathname
-                    : null;
+                setLastPortalTab(t.id);
 
+                const targetPath = pathForTab(t.id);
                 const currentSearch =
                   typeof window !== "undefined" ? window.location.search : "";
 
@@ -328,17 +250,13 @@ export default function PortalTabs(props: {
                   return next;
                 });
 
-                if (currentPath !== targetPath) {
-                  router.prefetch(targetPath);
+                // Optional: still warm Next’s cache for refresh/direct entry
+                try {
+                  router.prefetch(`${targetPath}${currentSearch}`);
+                } catch {}
 
-                  requestAnimationFrame(() => {
-                    React.startTransition(() => {
-                      router.push(`${targetPath}${currentSearch}`, {
-                        scroll: false,
-                      });
-                    });
-                  });
-                }
+                // URL update without Next navigation
+                pushPathOnly(`${targetPath}${currentSearch}`);
               }}
               style={tabBtn(isActive)}
               title={t.locked ? (t.lockedHint ?? "Locked") : t.title}
@@ -357,16 +275,12 @@ export default function PortalTabs(props: {
       <div style={{ minWidth: 0 }}>
         {tabs.map((t) => {
           if (!mountedIds.has(t.id)) return null;
-
           const isActive = t.id === activeId;
 
           return (
             <div
               key={t.id}
-              style={{
-                display: isActive ? "block" : "none",
-                minWidth: 0,
-              }}
+              style={{ display: isActive ? "block" : "none", minWidth: 0 }}
             >
               {t.content}
             </div>
