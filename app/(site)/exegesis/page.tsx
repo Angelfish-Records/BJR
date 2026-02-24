@@ -1,9 +1,8 @@
-// web/app/(site)/exegesis/[trackId]/page.tsx
-
+// web/app/(site)/exegesis/page.tsx
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const fetchCache = "force-no-store";
 
-export default function ExegesisTrackPage() {
+export default function ExegesisIndexPage() {
   return null;
 }

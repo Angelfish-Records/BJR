@@ -5,7 +5,7 @@ import React from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 export type PortalTabSpec = {
-  id: string; // e.g. "extras" | "posts" | "download"
+  id: string;
   title: string;
   locked?: boolean;
   lockedHint?: string | null;
@@ -23,22 +23,28 @@ function tabFromPathname(pathname: string | null): string | null {
   if (head === "player") return null;
   if (head === "album") return null;
 
+  // ✅ `/exegesis/:trackId` still resolves to tab = "exegesis"
   return decodeURIComponent(head);
 }
 
 function pathForTab(tabId: string) {
   const t = (tabId || "").trim().toLowerCase();
   if (!t || t === "player") return "/extras";
+
+  // ✅ Tab surface for Exegesis is `/exegesis` (follow-player mode)
+  // Deep links are `/exegesis/:trackId#l=...` and are created elsewhere (event handler).
+  if (t === "exegesis") return "/exegesis";
+
   return `/${encodeURIComponent(t)}`;
 }
 
 export default function PortalTabs(props: {
   tabs: PortalTabSpec[];
   defaultTabId?: string | null;
+  onSelectTab?: (id: string) => void; // ✅ new
 }) {
-  const { tabs, defaultTabId = null } = props;
+  const { tabs, defaultTabId = null, onSelectTab } = props;
 
-  // ✅ hooks must be unconditional and top-level
   const router = useRouter();
   const pathname = usePathname();
 
@@ -50,7 +56,7 @@ export default function PortalTabs(props: {
   const resolveValid = React.useCallback(
     (candidate: string | null): string | null => {
       if (!candidate) return null;
-      if (candidate === "player") return null; // reserved surface
+      if (candidate === "player") return null;
       return tabs.some((t) => t.id === candidate) ? candidate : null;
     },
     [tabs],
@@ -58,7 +64,7 @@ export default function PortalTabs(props: {
 
   const validPath = resolveValid(pathTab);
 
-    const initial = React.useMemo(() => {
+  const initial = React.useMemo(() => {
     if (!hasTabs) return null;
 
     const defaultValid =
@@ -71,7 +77,6 @@ export default function PortalTabs(props: {
 
   const [activeId, setActiveId] = React.useState<string | null>(initial);
 
-  // indicator/rail measurement refs
   const rowRef = React.useRef<HTMLDivElement | null>(null);
   const btnRefs = React.useRef<Map<string, HTMLButtonElement>>(new Map());
 
@@ -127,12 +132,12 @@ export default function PortalTabs(props: {
   }, [hasTabs, tabs, active?.id]);
 
   React.useEffect(() => {
-    // warm RSC cache for sibling routes
     if (!hasTabs) return;
+
+    // ✅ prefetch tab surfaces; `/exegesis` now exists so this is safe
     tabs.forEach((t) => router.prefetch(pathForTab(t.id)));
   }, [router, tabs, hasTabs]);
 
-  // keep local state aligned to resolved route
   React.useEffect(() => {
     if (!initial) return;
     if (activeId !== initial) setActiveId(initial);
@@ -149,7 +154,6 @@ export default function PortalTabs(props: {
     return () => window.removeEventListener("resize", onResize);
   }, [measure]);
 
-  // ✅ early return AFTER hooks
   if (!hasTabs) return null;
 
   const wrap: React.CSSProperties = { display: "grid", gap: 12, minWidth: 0 };
@@ -226,6 +230,7 @@ export default function PortalTabs(props: {
 
         {tabs.map((t) => {
           const isActive = t.id === active?.id;
+
           return (
             <button
               key={t.id}
@@ -237,8 +242,23 @@ export default function PortalTabs(props: {
               aria-current={isActive ? "page" : undefined}
               aria-label={t.title}
               onClick={() => {
+                if (isActive) return;
+
                 setActiveId(t.id);
-                router.push(pathForTab(t.id));
+
+                // ✅ Delegate navigation upward if provided
+                if (onSelectTab) {
+                  onSelectTab(t.id);
+                  return;
+                }
+
+                // Fallback (should not be used in your app anymore)
+                const currentSearch =
+                  typeof window !== "undefined" ? window.location.search : "";
+
+                router.push(`${pathForTab(t.id)}${currentSearch}`, {
+                  scroll: false,
+                });
               }}
               style={tabBtn(isActive)}
               title={t.locked ? (t.lockedHint ?? "Locked") : t.title}

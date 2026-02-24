@@ -3,6 +3,7 @@
 
 import React from "react";
 import { mediaSurface } from "../mediaSurface";
+import { useRouter } from "next/navigation";
 
 export type LyricCue = {
   lineKey: string;
@@ -49,6 +50,8 @@ export default function LyricsOverlay(props: {
     variant = "stage",
     reservedBottomPx = 0,
   } = props;
+
+  const router = useRouter();
 
   const trackId = (trackIdRaw ?? "").trim() || null;
   const isInline = variant === "inline";
@@ -108,15 +111,15 @@ export default function LyricsOverlay(props: {
     };
   }, []);
 
-  function emitOpenExegesis(cue: LyricCue) {
-    if (!trackId) return;
-    const detail: { trackId: string; lineKey: string; tMs: number } = {
-      trackId,
-      lineKey: cue.lineKey,
-      tMs: cue.tMs,
-    };
-    window.dispatchEvent(new CustomEvent("af:open-exegesis", { detail }));
-  }
+  function openExegesis(cue: LyricCue) {
+  if (!trackId) return;
+
+  const path =
+    `/exegesis/${encodeURIComponent(trackId)}` +
+    `#l=${encodeURIComponent(cue.lineKey)}`;
+
+  router.push(path, { scroll: false });
+}
 
   // Fade-in whenever a new lyrics set becomes available.
   const [fadeInKey, setFadeInKey] = React.useState(0);
@@ -473,7 +476,7 @@ export default function LyricsOverlay(props: {
                     clearPressTimer();
                     clearRevealTimer();
                     setRevealIdx(-1);
-                    emitOpenExegesis(cue);
+                    openExegesis(cue);
                   }}
                   style={{
                     position: "absolute",

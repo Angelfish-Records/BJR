@@ -20,7 +20,6 @@ import ActivationGate from "@/app/home/ActivationGate";
 import { PortalViewerProvider } from "@/app/home/PortalViewerProvider";
 import { MembershipModalProvider } from "@/app/home/MembershipModalProvider";
 import Image from "next/image";
-import ExegesisOverlayHost from "@/app/home/exegesis/ExegesisOverlayHost";
 
 // --- SURFACE: path-only (NO ?p= fallback) ---
 
@@ -1380,7 +1379,6 @@ export default function PortalArea(props: {
           </PortalViewerProvider>
         </MembershipModalProvider>
         <MiniPlayerHost onExpand={() => forceSurface("player")} />
-        <ExegesisOverlayHost />
       </div>
     </>
   );
