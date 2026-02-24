@@ -9,7 +9,6 @@ const PRESERVE_KEYS = new Set<string>([
   "st",
   "share",
   "autoplay",
-  // portal deep-linking / secondary concerns (keep if you use them)
   "post",
   "pt",
   "gift",
@@ -75,7 +74,6 @@ function filteredCanonicalParams(url: URL): URLSearchParams {
 
 function sameParams(a: URLSearchParams, b: URLSearchParams): boolean {
   if (a.toString() === b.toString()) return true;
-  // (toString order can vary; do a stable compare)
   if (a.size !== b.size) return false;
   for (const [k, v] of a.entries()) {
     if (b.get(k) !== v) return false;
@@ -88,12 +86,15 @@ function redirect308(reqUrl: URL, pathname: string, qp: URLSearchParams) {
   for (const [k, v] of qp.entries()) dest.searchParams.set(k, v);
 
   const res = NextResponse.redirect(dest, 308);
-  // Debug header: lets you confirm redirect source in prod via Network panel
   res.headers.set("x-af-mw-redirect", `${reqUrl.pathname} -> ${dest.pathname}`);
   return res;
 }
 
-export default clerkMiddleware((_, req) => {
+export default clerkMiddleware((auth, req) => {
+  // IMPORTANT: keep auth param in signature so Clerk can reliably detect middleware.
+  // (We don't need to call auth() here; just having clerkMiddleware applied is the key.)
+  void auth;
+
   const url = new URL(req.url);
   const pathname = url.pathname;
 
@@ -148,7 +149,6 @@ export default clerkMiddleware((_, req) => {
   }
 
   // ---- C) Legacy query-world: /home?p=... -> new paths ----
-  // NOTE: This still matters for external links.
   if (pathname === "/home" || pathname.startsWith("/home/")) {
     const p = (url.searchParams.get("p") ?? "").trim().toLowerCase();
     const album = (url.searchParams.get("album") ?? "").trim();
@@ -184,7 +184,6 @@ export default clerkMiddleware((_, req) => {
   }
 
   // ---- D) On canonical routes, strip legacy UI-surface params if present ----
-  // This prevents old links from “dirtying” your canonical universe.
   if (url.searchParams.size > 0) {
     let hasLegacy = false;
     for (const k of url.searchParams.keys()) {
@@ -197,7 +196,6 @@ export default clerkMiddleware((_, req) => {
     if (hasLegacy) {
       const filtered = filteredCanonicalParams(url);
       const current = new URLSearchParams(url.searchParams.toString());
-      // If the filtered params differ, redirect to cleaned URL.
       if (!sameParams(filtered, current)) {
         return redirect308(url, pathname, filtered);
       }
@@ -208,5 +206,12 @@ export default clerkMiddleware((_, req) => {
 });
 
 export const config = {
-  matcher: ["/((?!.*\\..*|_next).*)", "/", "/(api|trpc)(.*)"],
+  matcher: [
+    // App Router pages (everything except _next and static files)
+    "/((?!_next|.*\\..*).*)",
+    // Always include API routes (if any route.ts calls auth())
+    "/api/(.*)",
+    // If you use tRPC, keep it explicit
+    "/trpc/(.*)",
+  ],
 };
