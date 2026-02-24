@@ -48,9 +48,8 @@ function pathForTab(tabId: string) {
 export default function PortalTabs(props: {
   tabs: PortalTabSpec[];
   defaultTabId?: string | null;
-  onSelectTab?: (id: string) => void; // ✅ new
 }) {
-  const { tabs, defaultTabId = null, onSelectTab } = props;
+  const { tabs, defaultTabId = null } = props;
 
   const router = useRouter();
   const pathname = usePathname();
@@ -261,34 +260,24 @@ export default function PortalTabs(props: {
               onClick={() => {
                 if (isActive) return;
 
-                setActiveId(t.id);
-
-                // ✅ Delegate navigation upward if provided
-                if (onSelectTab) {
-                  onSelectTab(t.id);
-                  return;
-                }
-
-                // Fallback (should not be used in your app anymore)
-                const currentSearch =
-                  typeof window !== "undefined" ? window.location.search : "";
-
-                console.log("[PortalTabs] push", {
-                  from:
-                    typeof window !== "undefined" ? window.location.href : "",
-                  to: `${pathForTab(t.id)}${currentSearch}`,
-                  tabId: t.id,
-                });
-
                 const targetPath = pathForTab(t.id);
                 const currentPath =
                   typeof window !== "undefined"
                     ? window.location.pathname
                     : null;
 
+                const currentSearch =
+                  typeof window !== "undefined" ? window.location.search : "";
+
+                setActiveId(t.id);
+
                 if (currentPath !== targetPath) {
-                  router.push(`${targetPath}${currentSearch}`, {
-                    scroll: false,
+                  router.prefetch(targetPath);
+
+                  React.startTransition(() => {
+                    router.push(`${targetPath}${currentSearch}`, {
+                      scroll: false,
+                    });
                   });
                 }
               }}
