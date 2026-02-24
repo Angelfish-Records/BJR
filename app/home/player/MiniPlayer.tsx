@@ -8,6 +8,7 @@ import type { PlayerTrack } from "@/lib/types";
 import { buildShareTarget, performShare, type ShareTarget } from "@/lib/share";
 import { PatternPillUnderlay } from "./VisualizerPattern";
 import { useRouter } from "next/navigation";
+import { preservedQueryFromLocation } from "@/lib/nav/preservedQuery";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -353,12 +354,18 @@ export default function MiniPlayer(props: {
     const slug = (p.queueContextSlug ?? "").trim();
     const tid = (p.current?.id ?? "").trim();
 
+    const qs = preservedQueryFromLocation();
+
     if (slug && tid) {
-      router.push(`/album/${encodeURIComponent(slug)}/track/${encodeURIComponent(tid)}`);
+      router.push(
+        `/album/${encodeURIComponent(slug)}/track/${encodeURIComponent(tid)}${qs}`,
+        { scroll: false },
+      );
     } else if (slug) {
-      router.push(`/album/${encodeURIComponent(slug)}`);
+      router.push(`/album/${encodeURIComponent(slug)}${qs}`, { scroll: false });
     } else {
-      router.push("/player");
+      // Fallback: go to featured album directly (no more /player alias hop)
+      router.push(`/album${qs}`, { scroll: false });
     }
 
     onExpand?.();

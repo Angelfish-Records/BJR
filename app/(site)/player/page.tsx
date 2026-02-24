@@ -1,6 +1,7 @@
 // web/app/(site)/player/page.tsx
 import { redirect } from "next/navigation";
 import { getFeaturedAlbumSlugFromSanity } from "@/lib/albums";
+import { preservedQueryFromSearchParams } from "@/lib/nav/preservedQuery";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -52,6 +53,9 @@ export default async function PlayerAlias(props: {
 
   const featured = await getFeaturedAlbumSlugFromSanity();
   const slug = featured.slug ?? featured.fallbackSlug ?? "consolers";
+  redirect(
+    `/album/${encodeURIComponent(slug)}${preservedQueryFromSearchParams(sp)}`,
+  );
 
   redirect(`/album/${encodeURIComponent(slug)}${preservedQuery(sp)}`);
 }
