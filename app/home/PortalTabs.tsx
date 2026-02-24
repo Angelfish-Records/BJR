@@ -4,6 +4,13 @@
 import React from "react";
 import { usePathname, useRouter } from "next/navigation";
 
+function getStablePathname(nextPathname: string | null): string | null {
+  if (nextPathname) return nextPathname;
+  if (typeof window === "undefined") return null;
+  // include search/hash safety: we only care about pathname semantics
+  return window.location.pathname || null;
+}
+
 export type PortalTabSpec = {
   id: string;
   title: string;
@@ -47,11 +54,12 @@ export default function PortalTabs(props: {
 
   const router = useRouter();
   const pathname = usePathname();
+  const stablePathname = getStablePathname(pathname);
 
   const hasTabs = tabs.length > 0;
   const firstId = (hasTabs ? tabs[0]?.id : null) ?? null;
 
-  const pathTab = tabFromPathname(pathname);
+  const pathTab = tabFromPathname(stablePathname);
 
   const resolveValid = React.useCallback(
     (candidate: string | null): string | null => {
