@@ -3,7 +3,7 @@ import React from "react";
 import FooterDrawer from "@/app/home/FooterDrawer";
 import { client } from "@/sanity/lib/client";
 import { urlFor } from "@/sanity/lib/image";
-
+import PlayerHost from "../PlayerHost";
 export const revalidate = 0;
 export const fetchCache = "force-no-store";
 
@@ -22,6 +22,7 @@ export default async function SessionLayout(props: {
   // we render ALL “player vs portal” runtime inside this slot.
   runtime: React.ReactNode;
 }) {
+
   const page = await client.fetch<ShadowHomeDoc>(
     shadowHomeQuery,
     { slug: "home" },
@@ -40,6 +41,7 @@ export default async function SessionLayout(props: {
   };
 
   return (
+    <PlayerHost>
     <main style={mainStyle}>
       <style>{`
         .shadowHomeGrid {
@@ -125,10 +127,7 @@ export default async function SessionLayout(props: {
               <div id="af-portal-topbar-slot" />
             </div>
 
-            <div
-              className="shadowHomeMain"
-              style={{ display: "grid", gap: 18 }}
-            >
+            <div className="shadowHomeMain" style={{ display: "grid", gap: 18 }}>
               {props.runtime}
             </div>
 
@@ -143,6 +142,8 @@ export default async function SessionLayout(props: {
               }}
             >
               <div
+                id="af-stage-inline-slot"
+                data-height="560"
                 style={{
                   width: "100%",
                   height: 560,
@@ -152,16 +153,6 @@ export default async function SessionLayout(props: {
                   isolation: "isolate",
                 }}
               >
-                <div
-                  id="af-stage-inline-slot"
-                  data-height="560"
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    zIndex: 1,
-                  }}
-                />
-
                 <div
                   id="af-lyrics-overlay-slot"
                   style={{
@@ -185,5 +176,6 @@ export default async function SessionLayout(props: {
         </section>
       </div>
     </main>
+    </PlayerHost>
   );
 }
