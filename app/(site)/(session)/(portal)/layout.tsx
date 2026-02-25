@@ -170,7 +170,7 @@ export default async function PortalLayout(props: {
                     position: "absolute",
                     inset: 0,
                     zIndex: 50,
-                    pointerEvents: "auto",
+                    pointerEvents: "none",
                   }}
                 />
               </div>

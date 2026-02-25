@@ -3,7 +3,7 @@ import React from "react";
 import FooterDrawer from "@/app/home/FooterDrawer";
 import { client } from "@/sanity/lib/client";
 import { urlFor } from "@/sanity/lib/image";
-import PlayerHost from "../PlayerHost";
+
 export const revalidate = 0;
 export const fetchCache = "force-no-store";
 
@@ -41,7 +41,6 @@ export default async function SessionLayout(props: {
   };
 
   return (
-    <PlayerHost>
     <main style={mainStyle}>
       <style>{`
         .shadowHomeGrid {
@@ -159,7 +158,7 @@ export default async function SessionLayout(props: {
                     position: "absolute",
                     inset: 0,
                     zIndex: 50,
-                    pointerEvents: "auto",
+                    pointerEvents: "none",
                   }}
                 />
               </div>
@@ -176,6 +175,5 @@ export default async function SessionLayout(props: {
         </section>
       </div>
     </main>
-    </PlayerHost>
   );
 }
