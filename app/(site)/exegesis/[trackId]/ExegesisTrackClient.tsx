@@ -992,9 +992,7 @@ export default function ExegesisTrackClient(props: {
     <div className="mx-auto max-w-5xl px-4 py-6">
       <div className="flex items-end justify-between gap-4">
         <div>
-          <div className="text-xs opacity-60 tracking-[0.14em]">EXEGESIS</div>
           <h1 className="mt-1 text-xl font-semibold">
-            Track:{" "}
             <span className="opacity-90">
               {(props.trackTitle ?? "").trim() || lyrics.trackId}
             </span>
@@ -1002,9 +1000,6 @@ export default function ExegesisTrackClient(props: {
           {(props.trackArtist ?? "").trim() ? (
             <div className="mt-1 text-sm opacity-70">{props.trackArtist}</div>
           ) : null}
-          <div className="mt-1 text-sm opacity-70">
-            Lyrics version: {lyrics.version} · Offset: {lyrics.offsetMs}ms
-          </div>
           {lyrics.geniusUrl ? (
             <div className="mt-1 text-sm opacity-75">
               <a
@@ -1060,9 +1055,6 @@ export default function ExegesisTrackClient(props: {
                     setHash({ lineKey: c.lineKey });
                   }}
                 >
-                  <div className="text-[11px] opacity-55">
-                    {c.lineKey} · {c.tMs}ms
-                  </div>
                   <div className="mt-0.5 opacity-90">{c.text}</div>
                 </button>
               );
