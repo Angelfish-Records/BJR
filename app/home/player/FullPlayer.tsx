@@ -588,6 +588,46 @@ export default function FullPlayer(props: {
     effAlbum?.description ??
     "This is placeholder copy. Soon: pull album description from Sanity.";
 
+  // ---- browser tab title (client-side) ----
+  // We set this here because in portal surfaces we may not actually navigate routes
+  // (and therefore server metadata won't rerun).
+  React.useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const prev = document.title;
+
+    const cur = p.current;
+    const curInThisAlbum = Boolean(
+      cur?.id && effTracks.some((t) => t.id === cur.id),
+    );
+    const trackTitle = curInThisAlbum
+      ? cur?.title?.trim() || cur?.id || ""
+      : "";
+
+    const aTitle = (effAlbum?.title?.trim() || "").trim();
+    const artist = (effAlbum?.artist?.trim() || "").trim();
+
+    // Format: "Track — Album — Artist" (falls back gracefully)
+    const next = trackTitle
+      ? [trackTitle, aTitle, artist].filter(Boolean).join(" — ")
+      : [aTitle, artist].filter(Boolean).join(" — ");
+
+    if (next) document.title = next;
+
+    return () => {
+      // Don't leave a stale player title behind if the component unmounts
+      document.title = prev;
+    };
+    // Intentionally depend on the minimal fields that affect the title.
+  }, [
+    p.current?.id,
+    p.current?.title,
+    effAlbum?.title,
+    effAlbum?.artist,
+    effTracks,
+    p
+  ]);
+
   const platformLinks = React.useMemo(
     () => normalizePlatformLinks(effAlbum?.platformLinks),
     [effAlbum?.platformLinks],
