@@ -178,10 +178,10 @@ function isTipTapDoc(v: unknown): v is { type: "doc"; content?: unknown[] } {
 
 export default function ExegesisTrackClient(props: {
   trackId: string;
-  trackTitle?: string | null;
-  trackArtist?: string | null;
   lyrics: LyricsApiOk;
   canonicalPath?: string;
+  trackTitle?: string | null;
+  trackArtist?: string | null;
 }) {
   const trackId = (props.trackId ?? "").trim();
   const lyrics = props.lyrics;
@@ -999,7 +999,6 @@ export default function ExegesisTrackClient(props: {
               {(props.trackTitle ?? "").trim() || lyrics.trackId}
             </span>
           </h1>
-
           {(props.trackArtist ?? "").trim() ? (
             <div className="mt-1 text-sm opacity-70">{props.trackArtist}</div>
           ) : null}

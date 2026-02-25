@@ -12,12 +12,12 @@ type CatalogueOk = {
     albumId: string;
     albumSlug: string | null;
     albumTitle: string | null;
-    tracks: Array<{
+    trackIds: string[]; // legacy
+    tracks?: Array<{
       trackId: string;
       title: string | null;
-      artist?: string | null;
+      artist: string | null;
     }>;
-    trackIds?: string[]; // legacy fallback if ever present
   }>;
 };
 type CatalogueErr = { ok: false; error: string };
@@ -54,20 +54,15 @@ function extractTrackIdFromPath(pathname: string): string | null {
 }
 
 function getTrackMeta(
-  catalogue: CatalogueOk | null,
-  trackId: string | null,
+  cat: CatalogueOk | null,
+  tid: string,
 ): { title: string | null; artist: string | null } {
-  const tid = (trackId ?? "").trim();
-  if (!catalogue || !tid) return { title: null, artist: null };
-
-  for (const a of catalogue.albums ?? []) {
-    for (const t of a.tracks ?? []) {
-      if ((t.trackId ?? "").trim() === tid) {
-        return {
-          title: (t.title ?? "").trim() || null,
-          artist: (t.artist ?? "").trim() || null,
-        };
-      }
+  const t = (tid ?? "").trim();
+  if (!cat || !t) return { title: null, artist: null };
+  for (const a of cat.albums ?? []) {
+    for (const tr of a.tracks ?? []) {
+      if ((tr.trackId ?? "").trim() === t)
+        return { title: tr.title ?? null, artist: tr.artist ?? null };
     }
   }
   return { title: null, artist: null };
@@ -119,12 +114,13 @@ export default function PortalExegesis(props: { title?: string }) {
       }
     }
 
-    if (!trackId) void loadIndex();
+    // load once (or after hard reset), regardless of trackId
+    if (!catalogue && !catalogueLoading) void loadIndex();
 
     return () => {
       alive = false;
     };
-  }, [trackId]);
+  }, [catalogue, catalogueLoading]);
 
   React.useEffect(() => {
     let alive = true;
@@ -224,7 +220,14 @@ export default function PortalExegesis(props: { title?: string }) {
               <div key={a.albumId} className="rounded-xl bg-white/5 p-4">
                 <div className="text-sm font-semibold opacity-90">{label}</div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {(a.tracks ?? []).map((t) => {
+                  {(a.tracks && a.tracks.length
+                    ? a.tracks
+                    : (a.trackIds ?? []).map((tid) => ({
+                        trackId: tid,
+                        title: null,
+                        artist: null,
+                      }))
+                  ).map((t) => {
                     const tid = (t.trackId ?? "").trim();
                     if (!tid) return null;
 
