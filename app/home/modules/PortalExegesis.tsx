@@ -160,40 +160,48 @@ export default function PortalExegesis(props: { title?: string }) {
 
   // -------- render --------
   if (trackId) {
-    const meta = getTrackMeta(catalogue, trackId);
-    const trackTitle = meta.title;
-    const trackArtist = meta.artist;
-    return (
-      <div style={{ minWidth: 0 }}>
-        <div className="mx-auto max-w-5xl px-4 pt-6">
-          <button
-            className="text-sm opacity-70 hover:opacity-100 underline underline-offset-4"
-            onClick={() => router.push(`/exegesis${search}`)}
-          >
-            ← Back to all tracks
-          </button>
-        </div>
+  const meta = getTrackMeta(catalogue, trackId);
 
-        {lyricsLoading ? (
-          <div className="mx-auto max-w-5xl px-4 py-6 text-sm opacity-75">
-            Loading…
-          </div>
-        ) : lyricsErr ? (
+  const noCatalogueYet = !catalogue && catalogueLoading; // still fetching
+  const resolvedTitle = (meta.title ?? "").trim();
+
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div className="mx-auto max-w-5xl px-4 pt-6">
+        <button
+          className="text-sm opacity-70 hover:opacity-100 underline underline-offset-4"
+          onClick={() => router.push(`/exegesis${search}`)}
+        >
+          ← Back to all tracks
+        </button>
+      </div>
+
+      {lyricsLoading ? (
+        <div className="mx-auto max-w-5xl px-4 py-6 text-sm opacity-75">Loading…</div>
+      ) : lyricsErr ? (
+        <div className="mx-auto max-w-5xl px-4 py-6">
+          <div className="rounded-md bg-white/5 p-3 text-sm">{lyricsErr}</div>
+        </div>
+      ) : lyrics ? (
+        // ✅ Gate: if catalogue is still loading, show a tiny header skeleton instead of flashing trackId
+        noCatalogueYet ? (
           <div className="mx-auto max-w-5xl px-4 py-6">
-            <div className="rounded-md bg-white/5 p-3 text-sm">{lyricsErr}</div>
+            <div className="h-6 w-72 rounded bg-white/10 animate-pulse" />
+            <div className="mt-2 h-4 w-40 rounded bg-white/5 animate-pulse" />
           </div>
-        ) : lyrics ? (
+        ) : (
           <ExegesisTrackClient
             trackId={lyrics.trackId}
-            trackTitle={trackTitle}
-            trackArtist={trackArtist}
+            trackTitle={resolvedTitle || null}
+            trackArtist={meta.artist}
             lyrics={lyrics}
             canonicalPath={`/exegesis/${encodeURIComponent(lyrics.trackId)}`}
           />
-        ) : null}
-      </div>
-    );
-  }
+        )
+      ) : null}
+    </div>
+  );
+}
 
   // index
   return (
