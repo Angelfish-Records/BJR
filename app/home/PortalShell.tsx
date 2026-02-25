@@ -139,6 +139,7 @@ export default function PortalShell(props: Props) {
 
       <div style={{ display: "grid", minWidth: 0, justifyItems: "center" }}>
         <div
+          className="portalShellInner"
           style={{
             width: "100%",
             maxWidth: "min(100%, 720px)",

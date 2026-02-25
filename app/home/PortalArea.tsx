@@ -700,6 +700,20 @@ export default function PortalArea(props: {
   const effectiveIsPlayer =
     optimisticSurface != null ? optimisticSurface === "player" : isPlayer;
 
+  // --- two-signal model for differential Exegesis portal styling ---
+
+  React.useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const root = document.documentElement;
+    root.dataset.afSurface = effectiveIsPlayer ? "player" : "portal";
+
+    return () => {
+      // cleanup on unmount
+      delete root.dataset.afSurface;
+    };
+  }, [effectiveIsPlayer]);
+
   // Base album slug to use when jumping "to player" from a portal tab.
   // (On portal routes route.albumSlug is null, so we fall back to the shell’s current albumSlug prop.)
   const playerAlbumSlug = route.albumSlug ?? albumSlug;

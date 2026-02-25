@@ -101,6 +101,22 @@ export default function PortalTabs(props: {
     return s;
   });
 
+  // --- two-signal model for differential Exegesis portal styling ---
+
+  React.useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const root = document.documentElement;
+    const v = (activeId ?? "").trim();
+
+    if (v) root.dataset.afPortalTab = v;
+    else delete root.dataset.afPortalTab;
+
+    return () => {
+      delete root.dataset.afPortalTab;
+    };
+  }, [activeId]);
+
   // --- underline indicator (rail + sliding pill) ---
   const rowRef = React.useRef<HTMLDivElement | null>(null);
   const btnRefs = React.useRef<Map<string, HTMLButtonElement>>(new Map());

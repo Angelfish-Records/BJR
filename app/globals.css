@@ -82,6 +82,28 @@ body {
   }
 }
 
+/* --- Exegesis focus mode: force sidebar below + allow full-width portal content --- */
+html[data-af-surface="portal"][data-af-portal-tab="exegesis"] .shadowHomeGrid {
+  grid-template-columns: 1fr !important;
+}
+
+html[data-af-surface="portal"][data-af-portal-tab="exegesis"] .shadowHomeMain {
+  order: 0 !important;
+}
+
+html[data-af-surface="portal"][data-af-portal-tab="exegesis"]
+  .shadowHomeSidebar {
+  order: 1 !important; /* below main */
+  position: static !important; /* disable sticky */
+  top: auto !important;
+}
+
+/* Let Exegesis break out of PortalShell's 720px clamp */
+html[data-af-surface="portal"][data-af-portal-tab="exegesis"]
+  .portalShellInner {
+  max-width: 100% !important;
+}
+
 /* PortalShell should behave like a stable-height frame so parent layouts don't re-center it */
 .portalShell {
   min-height: 0;
