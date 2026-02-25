@@ -178,8 +178,9 @@ function isTipTapDoc(v: unknown): v is { type: "doc"; content?: unknown[] } {
 
 export default function ExegesisTrackClient(props: {
   trackId: string;
+  trackTitle?: string | null;
+  trackArtist?: string | null;
   lyrics: LyricsApiOk;
-  /** Optional canonical base path for share links, e.g. `/exegesis/${trackId}` */
   canonicalPath?: string;
 }) {
   const trackId = (props.trackId ?? "").trim();
@@ -993,8 +994,15 @@ export default function ExegesisTrackClient(props: {
         <div>
           <div className="text-xs opacity-60 tracking-[0.14em]">EXEGESIS</div>
           <h1 className="mt-1 text-xl font-semibold">
-            Track: <span className="opacity-90">{lyrics.trackId}</span>
+            Track:{" "}
+            <span className="opacity-90">
+              {(props.trackTitle ?? "").trim() || lyrics.trackId}
+            </span>
           </h1>
+
+          {(props.trackArtist ?? "").trim() ? (
+            <div className="mt-1 text-sm opacity-70">{props.trackArtist}</div>
+          ) : null}
           <div className="mt-1 text-sm opacity-70">
             Lyrics version: {lyrics.version} · Offset: {lyrics.offsetMs}ms
           </div>

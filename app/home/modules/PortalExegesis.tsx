@@ -12,12 +12,22 @@ type CatalogueOk = {
     albumId: string;
     albumSlug: string | null;
     albumTitle: string | null;
-    trackIds: string[];
+    tracks: Array<{
+      trackId: string;
+      title: string | null;
+      artist?: string | null;
+    }>;
+    trackIds?: string[]; // legacy fallback if ever present
   }>;
 };
 type CatalogueErr = { ok: false; error: string };
 
-type LyricsApiCue = { lineKey: string; tMs: number; text: string; endMs?: number };
+type LyricsApiCue = {
+  lineKey: string;
+  tMs: number;
+  text: string;
+  endMs?: number;
+};
 type LyricsOk = {
   ok: true;
   trackId: string;
@@ -31,12 +41,36 @@ type LyricsErr = { ok: false; error: string };
 function extractTrackIdFromPath(pathname: string): string | null {
   // We only care about the canonical path segment, query is separate.
   // Expected: /exegesis or /exegesis/<trackId>
-  const parts = (pathname ?? "").split("?")[0].split("#")[0].split("/").filter(Boolean);
+  const parts = (pathname ?? "")
+    .split("?")[0]
+    .split("#")[0]
+    .split("/")
+    .filter(Boolean);
   const idx = parts.indexOf("exegesis");
   if (idx < 0) return null;
   const next = parts[idx + 1] ?? "";
   const raw = decodeURIComponent(next).trim();
   return raw ? raw : null;
+}
+
+function getTrackMeta(
+  catalogue: CatalogueOk | null,
+  trackId: string | null,
+): { title: string | null; artist: string | null } {
+  const tid = (trackId ?? "").trim();
+  if (!catalogue || !tid) return { title: null, artist: null };
+
+  for (const a of catalogue.albums ?? []) {
+    for (const t of a.tracks ?? []) {
+      if ((t.trackId ?? "").trim() === tid) {
+        return {
+          title: (t.title ?? "").trim() || null,
+          artist: (t.artist ?? "").trim() || null,
+        };
+      }
+    }
+  }
+  return { title: null, artist: null };
 }
 
 export default function PortalExegesis(props: { title?: string }) {
@@ -130,6 +164,9 @@ export default function PortalExegesis(props: { title?: string }) {
 
   // -------- render --------
   if (trackId) {
+    const meta = getTrackMeta(catalogue, trackId);
+    const trackTitle = meta.title;
+    const trackArtist = meta.artist;
     return (
       <div style={{ minWidth: 0 }}>
         <div className="mx-auto max-w-5xl px-4 pt-6">
@@ -152,6 +189,8 @@ export default function PortalExegesis(props: { title?: string }) {
         ) : lyrics ? (
           <ExegesisTrackClient
             trackId={lyrics.trackId}
+            trackTitle={trackTitle}
+            trackArtist={trackArtist}
             lyrics={lyrics}
             canonicalPath={`/exegesis/${encodeURIComponent(lyrics.trackId)}`}
           />
@@ -172,7 +211,9 @@ export default function PortalExegesis(props: { title?: string }) {
       {catalogueLoading ? (
         <div className="mt-6 text-sm opacity-75">Loading…</div>
       ) : catalogueErr ? (
-        <div className="mt-6 rounded-md bg-white/5 p-3 text-sm">{catalogueErr}</div>
+        <div className="mt-6 rounded-md bg-white/5 p-3 text-sm">
+          {catalogueErr}
+        </div>
       ) : !catalogue || (catalogue.albums ?? []).length === 0 ? (
         <div className="mt-6 text-sm opacity-60">No lyrics found.</div>
       ) : (
@@ -183,15 +224,23 @@ export default function PortalExegesis(props: { title?: string }) {
               <div key={a.albumId} className="rounded-xl bg-white/5 p-4">
                 <div className="text-sm font-semibold opacity-90">{label}</div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {a.trackIds.map((tid) => (
-                    <Link
-                      key={tid}
-                      href={`/exegesis/${encodeURIComponent(tid)}${search}`}
-                      className="rounded-md bg-black/20 px-3 py-2 text-sm hover:bg-white/10"
-                    >
-                      {tid}
-                    </Link>
-                  ))}
+                  {(a.tracks ?? []).map((t) => {
+                    const tid = (t.trackId ?? "").trim();
+                    if (!tid) return null;
+
+                    const label = (t.title ?? "").trim() || tid;
+
+                    return (
+                      <Link
+                        key={tid}
+                        href={`/exegesis/${encodeURIComponent(tid)}${search}`}
+                        className="rounded-md bg-black/20 px-3 py-2 text-sm hover:bg-white/10"
+                        title={tid}
+                      >
+                        {label}
+                      </Link>
+                    );
+                  })}
                 </div>
               </div>
             );
