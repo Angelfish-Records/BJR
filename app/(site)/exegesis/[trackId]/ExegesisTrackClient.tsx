@@ -320,6 +320,7 @@ export default function ExegesisTrackClient(props: {
   };
 
   const [selected, setSelected] = React.useState<SelectedLine | null>(null);
+  const [hoverGroupKey, setHoverGroupKey] = React.useState<string>("");
 
   const [thread, setThread] = React.useState<ThreadApiOk | null>(null);
   const [threadErr, setThreadErr] = React.useState<string>("");
@@ -1210,13 +1211,24 @@ export default function ExegesisTrackClient(props: {
                 ""
               ).trim();
               const selectedGk = (selected?.groupKey ?? "").trim();
+              const hoverGk = (hoverGroupKey ?? "").trim();
+
               const inSelectedGroup = isSameGroup(gk, selectedGk);
+              const inHoverGroup = isSameGroup(gk, hoverGk);
+              const inPreviewGroup =
+                inSelectedGroup ||
+                (!selectedGk && inHoverGroup) ||
+                inHoverGroup;
 
               return (
                 <button
                   key={c.lineKey}
                   type="button"
                   className="block w-full text-left"
+                  onMouseEnter={() => setHoverGroupKey(gk)}
+                  onMouseLeave={() => setHoverGroupKey("")}
+                  onFocus={() => setHoverGroupKey(gk)}
+                  onBlur={() => setHoverGroupKey("")}
                   onClick={() => {
                     const nextGroupKey = (
                       c.canonicalGroupKey ??
@@ -1231,7 +1243,6 @@ export default function ExegesisTrackClient(props: {
                       groupKey: nextGroupKey || undefined,
                     });
 
-                    // hash remains lineKey-based (stable, human-shareable)
                     setHash({ lineKey: c.lineKey });
                   }}
                 >
@@ -1239,10 +1250,10 @@ export default function ExegesisTrackClient(props: {
                     className={[
                       "inline-block rounded px-1.5 py-0.5 text-sm leading-snug transition",
                       active
-                        ? "bg-white/18"
-                        : inSelectedGroup
-                          ? "bg-white/10 hover:bg-white/12"
-                          : "bg-transparent hover:bg-white/8",
+                        ? "bg-violet-700/60"
+                        : inPreviewGroup
+                          ? "bg-violet-900/50 hover:bg-violet-900/60"
+                          : "bg-transparent hover:bg-violet-900/40",
                     ].join(" ")}
                   >
                     <span className="opacity-90">{c.text}</span>
