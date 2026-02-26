@@ -2,6 +2,7 @@
 "use client";
 
 import React from "react";
+import { useAuth } from "@clerk/nextjs";
 import { useMembershipModal } from "@/app/home/MembershipModalProvider";
 import TipTapEditor from "./TipTapEditor";
 import TipTapReadOnly from "./TipTapReadOnly";
@@ -436,13 +437,19 @@ export default function ExegesisTrackClient(props: {
   const [threadLoading, setThreadLoading] = React.useState<boolean>(false);
   const [threadLoadedKey, setThreadLoadedKey] = React.useState<string>("");
 
-  // unique “what the panel is trying to show”
+  const { userId, isLoaded: authLoaded } = useAuth();
+
+  // anon = not signed-in (but wait until Clerk has loaded to avoid a brief flicker)
+  const isAnon = authLoaded ? !userId : false;
+
+  const viewerKey = authLoaded ? (userId ?? "anon") : "loading";
+
   const threadWantedKey = React.useMemo(() => {
     const lk = (selected?.lineKey ?? "").trim();
     const gk = (selected?.groupKey ?? "").trim();
     if (!trackId || !lk) return "";
-    return `${trackId}::${lk}::${gk}::${sort}`;
-  }, [trackId, selected?.lineKey, selected?.groupKey, sort]);
+    return `${trackId}::${lk}::${gk}::${sort}::${viewerKey}`;
+  }, [trackId, selected?.lineKey, selected?.groupKey, sort, viewerKey]);
 
   const panelReady =
     !!threadWantedKey && !threadLoading && threadLoadedKey === threadWantedKey;
@@ -583,17 +590,28 @@ export default function ExegesisTrackClient(props: {
           type="button"
           className="mt-2 w-full rounded-md border border-white/10 bg-black/20 px-3 py-2 text-left text-sm text-white/50 hover:bg-black/25"
           onClick={() => {
-            if (!canPost) {
-              openMembershipModal();
+            if (isLocked) return;
+
+            if (canPost) {
+              openComposer("basic");
               return;
             }
-            if (isLocked) return;
-            openComposer("basic");
+
+            if (isAnon) {
+              // TODO(BJR): anon login UX — replace with auth modal when available
+              // For now: anon users can't open membership modal, so do nothing.
+              return;
+            }
+
+            // signed-in but non-paying
+            openMembershipModal();
           }}
         >
           {canPost
             ? "Join the conversation"
-            : "Become a Patron to join the discussion"}
+            : isAnon
+              ? "Become a member to find out how to join the discussion"
+              : "Become a Patron to join the discussion"}
         </button>
       ) : null}
 
@@ -863,6 +881,15 @@ export default function ExegesisTrackClient(props: {
   }
 
   React.useEffect(() => {
+    // Auth changed while on-page: force a refetch by invalidating the "loaded" marker.
+    setThreadLoadedKey("");
+    setThreadErr("");
+
+    // Optional but usually nicer: prevents showing stale anon thread while loading the member thread.
+    setThread(null);
+  }, [viewerKey]);
+
+  React.useEffect(() => {
     function onMouseDown(e: MouseEvent) {
       const t = e.target as Node | null;
       if (!t) return;
@@ -1124,7 +1151,14 @@ export default function ExegesisTrackClient(props: {
     return () => {
       alive = false;
     };
-  }, [trackId, selected?.lineKey, selected?.groupKey, sort, threadWantedKey]);
+  }, [
+    trackId,
+    selected?.lineKey,
+    selected?.groupKey,
+    sort,
+    threadWantedKey,
+    viewerKey,
+  ]);
 
   async function postComment() {
     if (!selected) return;
