@@ -520,7 +520,6 @@ export default function ExegesisTrackClient(props: {
     editDraftsRef.current = editByCommentId;
   }, [editByCommentId]);
 
-
   function openReport(commentId: string) {
     if (!canReport) return;
     setReportByCommentId((prev) => {
@@ -565,7 +564,7 @@ export default function ExegesisTrackClient(props: {
       };
     });
   }
-  
+
   function openEdit(c: CommentDTO) {
     if (!canPost || isLocked) return;
     if (!viewerMemberId) return;
@@ -1287,7 +1286,16 @@ export default function ExegesisTrackClient(props: {
   }, [thread?.roots, meta?.pinnedCommentId]);
 
   return (
-    <div className="w-full max-w-none px-4 py-6">
+    <div
+      className="w-full max-w-none px-4 py-6"
+      style={
+        {
+          "--lxRow": "#3B1A63", // default
+          "--lxHover": "#4B1F7A", // hover / group preview
+          "--lxSelected": "#6A2FB0", // selected
+        } as React.CSSProperties
+      }
+    >
       <div>
         <h1 className="mt-1 text-xl font-semibold">
           <span className="opacity-90">
@@ -1315,11 +1323,14 @@ export default function ExegesisTrackClient(props: {
         <div className="rounded-xl bg-white/5 p-4">
           <div className="mt-3 space-y-0.5">
             {(lyrics.cues ?? []).map((c) => {
+              const isSelected = selected?.lineKey === c.lineKey;
+
               const gk = (
                 c.canonicalGroupKey ??
                 cueGroupKey(lyrics, c.lineKey) ??
                 ""
               ).trim();
+
               const selectedGk = (selected?.groupKey ?? "").trim();
               const hoverGk = (hoverGroupKey ?? "").trim();
 
@@ -1357,12 +1368,14 @@ export default function ExegesisTrackClient(props: {
                   }}
                 >
                   <span
-                    className={[
-                      "inline-block rounded px-1.5 py-0.5 text-sm leading-snug transition",
-                      inPreviewGroup
-                        ? "bg-violet-900/50 hover:bg-violet-900/60"
-                        : "bg-transparent hover:bg-violet-900/40",
-                    ].join(" ")}
+                    className="inline-block rounded px-1.5 py-0.5 text-sm leading-snug transition"
+                    style={{
+                      backgroundColor: isSelected
+                        ? "var(--lxSelected)"
+                        : inPreviewGroup
+                          ? "var(--lxHover)"
+                          : "var(--lxRow)",
+                    }}
                   >
                     <span className="opacity-90">{c.text}</span>
                   </span>
