@@ -2,6 +2,7 @@
 "use client";
 
 import React from "react";
+import { useMembershipModal } from "@/app/home/MembershipModalProvider";
 import TipTapEditor from "./TipTapEditor";
 import TipTapReadOnly from "./TipTapReadOnly";
 
@@ -379,6 +380,8 @@ export default function ExegesisTrackClient(props: {
   trackTitle?: string | null;
   trackArtist?: string | null;
 }) {
+  const { openMembershipModal } = useMembershipModal();
+
   const trackId = (props.trackId ?? "").trim();
   const lyrics = props.lyrics;
   const { trackId: lyricsTrackId, cues, groupMap } = lyrics;
@@ -574,30 +577,28 @@ export default function ExegesisTrackClient(props: {
       ref={composerWrapRef}
       className="mt-3 rounded-lg border border-white/10 bg-white/6 p-3"
     >
-      <div className="flex items-center justify-between gap-3">
-        {!canPost ? (
-          <div className="text-xs opacity-60">
-            Posting exclusive to Patrons.
-          </div>
-        ) : isLocked ? (
-          <div className="text-xs opacity-60">Locked</div>
-        ) : null}
-      </div>
-
-      {/* Stage 1: collapsed single-line affordance */}
+      {/* Stage 1: collapsed single-line affordance (gated users click-to-upgrade) */}
       {composerStage === "collapsed" ? (
         <button
           type="button"
-          className="mt-2 w-full rounded-md border border-white/10 bg-black/20 px-3 py-2 text-left text-sm text-white/50 hover:bg-black/25 disabled:opacity-40"
-          disabled={!canPost || isLocked}
-          onClick={() => openComposer("basic")}
+          className="mt-2 w-full rounded-md border border-white/10 bg-black/20 px-3 py-2 text-left text-sm text-white/50 hover:bg-black/25"
+          onClick={() => {
+            if (!canPost) {
+              openMembershipModal();
+              return;
+            }
+            if (isLocked) return;
+            openComposer("basic");
+          }}
         >
-          Join the conversation
+          {canPost
+            ? "Join the conversation"
+            : "Become a Patron to join the discussion"}
         </button>
       ) : null}
 
       {/* Stage 2/3: editor + bottom mini ribbon (two buttons) */}
-      {composerStage !== "collapsed" ? (
+      {composerStage !== "collapsed" && canPost ? (
         <>
           <div className="mt-2">
             <TipTapEditor
@@ -1014,11 +1015,19 @@ export default function ExegesisTrackClient(props: {
     if (!cues || cues.length === 0) return;
 
     const h = parseHash();
-    const byLineKey = h.lineKey
-      ? cues.find((c) => c.lineKey === h.lineKey)
-      : null;
 
-    const pick = byLineKey ?? cues[0];
+    // No default selection on arrival.
+    // Only select when the URL explicitly deep-links to a line.
+    if (!h.lineKey) {
+      setSelected(null);
+      return;
+    }
+
+    const pick = cues.find((c) => c.lineKey === h.lineKey);
+    if (!pick) {
+      setSelected(null);
+      return;
+    }
 
     setSelected({
       lineKey: pick.lineKey,
@@ -1033,9 +1042,8 @@ export default function ExegesisTrackClient(props: {
 
     if (h.commentId) pendingScrollCommentIdRef.current = h.commentId;
 
-    if (h.lineKey || h.commentId) {
-      openFromHashRef.current = true;
-    }
+    // Mark as deep-link so mobile drawer opens (but only if selection exists).
+    openFromHashRef.current = true;
   }, [lyricsTrackId, cues, groupMap]);
 
   const threadKey = thread
@@ -1462,6 +1470,14 @@ export default function ExegesisTrackClient(props: {
   const showIdentityPanel =
     thread?.viewer.kind === "member" && !!viewerMemberId && !!viewerIdentity;
 
+  React.useEffect(() => {
+    if (viewerIdentity?.publicName) {
+      setClaimOpen(false);
+      setClaimErr("");
+      setClaimName("");
+    }
+  }, [viewerIdentity?.publicName]);
+
   const rootsForRender = React.useMemo(() => {
     const roots = thread?.roots ?? [];
     const pinnedId = meta?.pinnedCommentId ?? null;
@@ -1473,6 +1489,7 @@ export default function ExegesisTrackClient(props: {
     if (!isMobile) return;
     if (!selected?.lineKey) return;
     if (!openFromHashRef.current) return;
+
     setDrawerOpen(true);
     openFromHashRef.current = false;
   }, [isMobile, selected?.lineKey]);
@@ -1707,7 +1724,13 @@ export default function ExegesisTrackClient(props: {
                   : "rounded-xl bg-white/5 p-4" // existing desktop look
               }
             >
-              {!panelReady ? (
+              {!selected ? (
+                <div className="rounded-xl bg-white/5 p-4">
+                  <div className="text-sm opacity-70">
+                    Select a line to view the discussion.
+                  </div>
+                </div>
+              ) : !panelReady ? (
                 <DiscourseShimmer />
               ) : (
                 <>
@@ -1751,23 +1774,20 @@ export default function ExegesisTrackClient(props: {
 
                   {showIdentityPanel ? (
                     <div className="mt-3 rounded-md bg-black/20 p-3 text-sm">
-                      <div className="flex items-center justify-between gap-3">
-                        <button
-                          className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
-                          disabled={!canClaimName}
-                          onClick={() => {
-                            setClaimErr("");
-                            setClaimOpen((v) => !v);
-                          }}
-                          title={
-                            canClaimName
-                              ? "Claim a public name"
-                              : "Claiming unlocks after contributions"
-                          }
-                        >
-                          {viewerIdentity?.publicName ? "Edit" : "Claim"} name
-                        </button>
-                      </div>
+                      {canClaimName && !viewerIdentity?.publicName ? (
+                        <div className="flex items-center justify-between gap-3">
+                          <button
+                            className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
+                            onClick={() => {
+                              setClaimErr("");
+                              setClaimOpen((v) => !v);
+                            }}
+                            title="Claim a public name"
+                          >
+                            Claim name
+                          </button>
+                        </div>
+                      ) : null}
 
                       <div className="mt-1 text-sm">
                         Commenting as{" "}

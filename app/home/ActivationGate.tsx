@@ -954,7 +954,8 @@ export default function ActivationGate(props: Props) {
                   bullets: [
                     "All downloads",
                     "First listener access",
-                    "Artist posts and Q&A",
+                    "Mailbag Q&A",
+                    "Lyrics discussion"
                   ],
                 }}
               />
@@ -970,6 +971,7 @@ export default function ActivationGate(props: Props) {
                   title: "Partner",
                   price: "$299 / year",
                   bullets: [
+                    "All Patron benefits",
                     "Release credits",
                     "Creative livestreams",
                     "Something else",
