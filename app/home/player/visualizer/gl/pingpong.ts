@@ -88,7 +88,7 @@ export function createPingPong(
 ): PingPong {
   const hasFloat = !!gl.getExtension("EXT_color_buffer_float");
   // Note: OES_texture_float_linear is not required for HALF_FLOAT linear filtering in WebGL2;
-  // but some drivers can be picky. If you see artifacts, force fallback by setting hasFloat=false.
+  // but some drivers can be picky. If we see artifacts, force fallback by setting hasFloat=false.
   const useFloat = hasFloat;
 
   let texA = createTex(gl, w, h, useFloat);

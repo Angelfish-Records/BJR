@@ -728,7 +728,7 @@ export default function CampaignComposerClient() {
   const drainAbortRef = useRef<AbortController | null>(null);
   const cancelSeqRef = useRef(0);
 
-  // Optional: tune these defaults as you like
+  // Optional: tune these defaults as needed
   const previewBrandName = "Angelfish Records MMXXVI";
   const previewUnsubscribeUrl = "";
 
@@ -956,7 +956,7 @@ export default function CampaignComposerClient() {
           maxWidthPx: 520, // "M" preset
         });
 
-        // Select the alt text so you can quickly rename if you want.
+        // Select the alt text so we can quickly rename if we want.
         const altStart = block.indexOf(`alt="`) + `alt="`.length;
         const altEnd = block.indexOf(`"`, altStart);
 

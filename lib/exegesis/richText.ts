@@ -23,8 +23,6 @@ const ALLOWED_NODE_TYPES = new Set([
   "listItem",
   "blockquote",
   "hardBreak",
-  // Optional (keep if you want):
-  // "heading",
 ]);
 
 const ALLOWED_MARK_TYPES = new Set([
@@ -129,7 +127,7 @@ function sanitizeNode(node: PMNode, errors: string[]): PMNode | null {
     if (marksOut.length) out.marks = marksOut;
   }
 
-  // attrs (only if you later allow headings, etc.)
+  // attrs (only if we later allow headings, etc.)
   // For now: drop attrs except link marks (handled above)
 
   // children
@@ -213,7 +211,7 @@ export function validateAndSanitizeTipTapDoc(input: unknown):
   }
 
   // Optional strictness: reject if we had disallowed types (instead of just stripping)
-  // For now, we strip and continue; if you want strict reject:
+  // For now, we strip and continue; if we want strict reject:
   // if (errors.length) return { ok: false, error: errors[0] };
 
   return { ok: true, doc: root as TipTapDoc, plain };

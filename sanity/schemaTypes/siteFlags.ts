@@ -19,7 +19,7 @@ export const siteFlags = defineType({
       type: "string",
       initialValue: "/home",
       description:
-        'Where the shadow homepage lives today. Later you can swap this to "/".',
+        ' LIVE SWITCH - Where the shadow homepage lives today. Later we can swap this to "/".',
       validation: (Rule) => Rule.required(),
     }),
     defineField({

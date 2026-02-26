@@ -83,7 +83,7 @@ export const artistPost = defineType({
         },
       ],
       description:
-        "If you prefer images separate from body, use this. Otherwise embed images inside Body.",
+        "If we prefer images separate from body, use this. Otherwise embed images inside Body.",
     }),
 
     defineField({

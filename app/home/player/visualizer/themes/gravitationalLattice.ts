@@ -177,7 +177,7 @@ void main(){
 
   vec3 col = colA;
 
-  // render modest particle count (we assume texRes sized accordingly; if you use 8x8 we’ll take first 36)
+  // render modest particle count (we assume texRes sized accordingly; if we use 8x8 we’ll take first 36)
   float count = min(N, 36.0);
 
   // glow radii (almost constant; structure does the work)

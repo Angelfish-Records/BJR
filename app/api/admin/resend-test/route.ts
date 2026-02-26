@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   const to = body?.to ? lowerEmail(body.to) : "";
   if (!to) return new NextResponse('Missing "to"', { status: 400 });
 
-  // Pick a real sending identity you have verified in the BJR Resend account.
+  // Pick a real sending identity we have verified in the BJR Resend account.
   // This does NOT require the inbox to exist; only DNS domain verification matters.
   const from =
     (body?.from && body.from.trim()) ||

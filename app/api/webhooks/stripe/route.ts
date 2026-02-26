@@ -526,7 +526,7 @@ export async function POST(req: Request) {
       type: event.type,
       message: safeErrMessage(err),
     });
-    // Avoid Stripe retry storms while you inspect logs.
+    // Avoid Stripe retry storms while we inspect logs.
     return NextResponse.json({ ok: true });
   }
 }

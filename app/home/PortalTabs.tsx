@@ -57,10 +57,10 @@ export default function PortalTabs(props: {
 }) {
   const { tabs, defaultTabId = null } = props;
 
-  // Keep router only if you still want prefetch warming.
+  // Keep router only if we still want prefetch warming.
   const router = useRouter();
 
-  // You can keep usePathname for initial server->client consistency,
+  // We can keep usePathname for initial server->client consistency,
   // but post-patch we will NOT rely on it for updates.
   const pathname = usePathname();
   const stablePathname = getStablePathname(pathname);

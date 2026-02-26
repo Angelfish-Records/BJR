@@ -403,7 +403,7 @@ export async function redeemShareTokenForMember(params: {
       return { ok: false, code: "INVALID" };
     }
 
-    const capBucket = "*"; // you explicitly want cross-action caps by default
+    const capBucket = "*"; // we explicitly want cross-action caps by default
     const cap = await enforceDistinctConsumerCap({
       tokenId: row.id,
       max: row.max_redemptions,

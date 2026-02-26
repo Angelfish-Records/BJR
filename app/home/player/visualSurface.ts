@@ -35,7 +35,7 @@ class VisualSurface {
   // Your probes show the sampled pixels are overwhelmingly transparent; forcing an opaque base
   // makes “sipped” UI textures visible and stable.
   private snapshotOpaqueBase = true;
-  private snapshotBaseFill: string = "rgba(0,0,0,1)"; // tweak if you want a different tint
+  private snapshotBaseFill: string = "rgba(0,0,0,1)"; // tweak if we want a different tint
 
   private ensureSnapshotCanvas() {
     if (this.snapshotCanvas) return;
@@ -165,7 +165,7 @@ class VisualSurface {
         ctx.fillStyle = this.snapshotBaseFill;
         ctx.fillRect(0, 0, w, h);
       } else {
-        // If you ever disable opaque base, preserve prior behavior: hard overwrite.
+        // If we ever disable opaque base, preserve prior behavior: hard overwrite.
         ctx.globalCompositeOperation = "copy";
         ctx.globalAlpha = 1;
         ctx.clearRect(0, 0, w, h);

@@ -53,7 +53,7 @@ export function musicAlbumJsonLd(args: {
                 }
               : undefined,
             duration: dur ?? undefined,
-            // Optional: mark explicit content if you want machines to know (kept simple)
+            // Optional: mark explicit content if we want machines to know (kept simple)
             // contentRating: t.explicit ? "Explicit" : undefined,
           };
 
@@ -70,7 +70,7 @@ export function musicAlbumJsonLd(args: {
       ? album.artworkUrl
       : undefined;
 
-  // Prefer embargo/public releaseAt if you store it in policy, else year
+  // Prefer embargo/public releaseAt if we store it in policy, else year
   const datePublished =
     (album.policy?.releaseAt && typeof album.policy.releaseAt === "string" && album.policy.releaseAt.trim())
       ? album.policy.releaseAt

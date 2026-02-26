@@ -551,8 +551,8 @@ export async function GET(req: NextRequest) {
       cap: {
         ...cap0,
         canPost: locked ? false : cap0.canPost,
-        // voting can stay true (your vote route already blocks LOCKED),
-        // but if you want the UI to disable voting as well, uncomment:
+        // voting can stay true (our vote route already blocks LOCKED),
+        // but if we want the UI to disable voting as well, uncomment:
         // canVote: locked ? false : cap0.canVote,
         canClaimName,
       },

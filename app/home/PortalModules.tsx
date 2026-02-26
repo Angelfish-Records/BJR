@@ -363,7 +363,7 @@ function DownloadOfferCard(props: {
         </div>
       </div>
 
-      {/* Optional highlights you already support */}
+      {/* Optional highlights we already support */}
       {highlights && highlights.length > 0 ? (
         <div
           style={{

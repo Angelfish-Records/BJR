@@ -750,7 +750,7 @@ limit 1
           : "";
 
     // In dev, give yourself enough to debug without guessing.
-    // (If you later want to redact in prod, we can gate on NODE_ENV.)
+    // (If we later want to redact in prod, we can gate on NODE_ENV.)
     const extra =
       errObj?.code || errObj?.detail || errObj?.hint
         ? ` (${[errObj?.code, errObj?.detail, errObj?.hint]

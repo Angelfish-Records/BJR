@@ -37,7 +37,7 @@ function pickPreservedParams(url: URL): URLSearchParams {
   const autoplay = (url.searchParams.get("autoplay") ?? "").trim();
   if (autoplay) out.set("autoplay", autoplay);
 
-  // preserve secondary keys you actively use
+  // preserve secondary keys we actively use
   for (const k of ["post", "pt", "gift", "checkout"] as const) {
     const v = (url.searchParams.get(k) ?? "").trim();
     if (v) out.set(k, v);

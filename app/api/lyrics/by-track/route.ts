@@ -22,6 +22,22 @@ type TrackLyricsDoc = {
   cues?: Array<{ _key?: string; tMs?: number; text?: string; endMs?: number }>;
 };
 
+type TrackMetaBundle = {
+  albumTitle?: string | null;
+  albumSlug?: string | null;
+  albumCatalogueId?: string | null;
+  track?: {
+    title?: string | null;
+    artist?: string | null;
+    trackCatalogueId?: string | null;
+  } | null;
+};
+
+type LyricsQueryResult = {
+  lyrics?: TrackLyricsDoc | null;
+  meta?: TrackMetaBundle | null;
+};
+
 function normalizeCues(input: TrackLyricsDoc["cues"]): LyricCue[] {
   if (!Array.isArray(input)) return [];
   const out: LyricCue[] = [];
@@ -104,19 +120,67 @@ export async function GET(req: Request) {
   }
 
   const q = `
-    *[_type == "lyrics" && trackId == $trackId][0]{
-      trackId,
-      offsetMs,
-      version,
-      geniusUrl,
-      cues[]{ _key, tMs, text, endMs }
+    {
+      "lyrics": *[_type == "lyrics" && trackId == $trackId][0]{
+        trackId,
+        offsetMs,
+        version,
+        geniusUrl,
+        cues[]{ _key, tMs, text, endMs }
+      },
+      "meta": *[_type == "album" && $trackId in tracks[].id][0]{
+        "albumTitle": title,
+        "albumSlug": slug.current,
+        "albumCatalogueId": catalogueId,
+        "track": tracks[id == $trackId][0]{
+          title,
+          artist,
+          "trackCatalogueId": catalogueId
+        }
+      }
     }
   `;
 
-  const doc = await client.fetch<TrackLyricsDoc | null>(q, { trackId });
+  const bundle = await client.fetch<LyricsQueryResult | null>(q, {
+    trackId,
+  });
+
+  const doc = bundle?.lyrics ?? null;
+  const metaRaw = bundle?.meta ?? null;
+
+  const trackTitle =
+    typeof metaRaw?.track?.title === "string" && metaRaw.track.title.trim()
+      ? metaRaw.track.title.trim()
+      : null;
+
+  const trackArtist =
+    typeof metaRaw?.track?.artist === "string" && metaRaw.track.artist.trim()
+      ? metaRaw.track.artist.trim()
+      : null;
+
+  const albumTitle =
+    typeof metaRaw?.albumTitle === "string" && metaRaw.albumTitle.trim()
+      ? metaRaw.albumTitle.trim()
+      : null;
+
+  const albumSlug =
+    typeof metaRaw?.albumSlug === "string" && metaRaw.albumSlug.trim()
+      ? metaRaw.albumSlug.trim()
+      : null;
+
+  const albumCatalogueId =
+    typeof metaRaw?.albumCatalogueId === "string" &&
+    metaRaw.albumCatalogueId.trim()
+      ? metaRaw.albumCatalogueId.trim()
+      : null;
+
+  const trackCatalogueId =
+    typeof metaRaw?.track?.trackCatalogueId === "string" &&
+    metaRaw.track.trackCatalogueId.trim()
+      ? metaRaw.track.trackCatalogueId.trim()
+      : null;
 
   const cues = normalizeCues(doc?.cues);
-
   const offsetMs =
     typeof doc?.offsetMs === "number" && Number.isFinite(doc.offsetMs)
       ? Math.floor(doc.offsetMs)
@@ -143,6 +207,15 @@ export async function GET(req: Request) {
     {
       ok: true,
       trackId,
+
+      // ✅ new meta (all nullable)
+      trackTitle,
+      trackArtist,
+      trackCatalogueId,
+      albumTitle,
+      albumSlug,
+      albumCatalogueId,
+
       cues: cuesWithGroups,
       offsetMs,
       version,

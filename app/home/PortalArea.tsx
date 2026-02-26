@@ -764,7 +764,7 @@ export default function PortalArea(props: {
   const patchQuery = React.useCallback(
     (patch: Record<string, string | null | undefined>) => {
       // Query is secondary everywhere.
-      // Allow ONLY: st/share, autoplay, utm_*, plus banner keys if you still use them.
+      // Allow ONLY: st/share, autoplay, utm_*, plus banner keys if we still use them.
       const filtered: Record<string, string | null | undefined> = {};
 
       for (const [k, v] of Object.entries(patch)) {

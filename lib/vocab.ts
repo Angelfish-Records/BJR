@@ -88,12 +88,12 @@ export function entKey(obj: Record<string, unknown>): StructuredEntitlementKey {
  */
 export const ENT = {
   pageView: (page: string) => entKey({ kind: "page_view", page }),
-  theme: (name: string) => entKey({ kind: "theme", name }), // keep only if you still want structured themes later
+  theme: (name: string) => entKey({ kind: "theme", name }), // keep only if we still want structured themes later
   mediaPlay: (trackId: string) => entKey({ kind: "media_play", trackId }),
   download: (assetId: string) => entKey({ kind: "download", assetId }),
   downloadAlbum: (slug: string) => `download_album_${slug}`,
 
-  // optional: if you still want a helper for the new tiers
+  // optional: if we still want a helper for the new tiers
   tier: (name: "friend" | "patron" | "partner") => `tier_${name}`,
 } as const;
 

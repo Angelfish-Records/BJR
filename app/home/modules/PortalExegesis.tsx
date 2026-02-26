@@ -36,7 +36,15 @@ type LyricsOk = {
   version: string;
   geniusUrl: string | null;
   cues: LyricsApiCue[];
+
+  trackTitle?: string | null;
+  trackArtist?: string | null;
+  trackCatalogueId?: string | null;
+  albumTitle?: string | null;
+  albumSlug?: string | null;
+  albumCatalogueId?: string | null;
 };
+
 type LyricsErr = { ok: false; error: string };
 
 function extractTrackIdFromPath(pathname: string): string | null {
@@ -67,6 +75,61 @@ function getTrackMeta(
     }
   }
   return { title: null, artist: null };
+}
+
+// ---- module-level caches (persist across route transitions) ----
+let CATALOGUE_CACHE: CatalogueOk | null = null;
+let CATALOGUE_PROMISE: Promise<CatalogueOk> | null = null;
+
+function loadCatalogueCached(signal?: AbortSignal): Promise<CatalogueOk> {
+  if (CATALOGUE_CACHE) return Promise.resolve(CATALOGUE_CACHE);
+  if (CATALOGUE_PROMISE) return CATALOGUE_PROMISE;
+
+  CATALOGUE_PROMISE = (async () => {
+    const r = await fetch("/api/lyrics/catalogue", { signal });
+    const j = (await r.json()) as CatalogueOk | CatalogueErr;
+    if (!j.ok) throw new Error(j.error || "Failed to load catalogue.");
+    CATALOGUE_CACHE = j;
+    return j;
+  })().finally(() => {
+    // keep cache, clear in-flight
+    CATALOGUE_PROMISE = null;
+  });
+
+  return CATALOGUE_PROMISE;
+}
+
+const TRACK_CACHE = new Map<string, LyricsOk>();
+const TRACK_PROMISES = new Map<string, Promise<LyricsOk>>();
+
+function loadTrackCached(tid: string, signal?: AbortSignal): Promise<LyricsOk> {
+  const key = tid.trim();
+  if (!key) return Promise.reject(new Error("Missing trackId"));
+
+  const hit = TRACK_CACHE.get(key);
+  if (hit) return Promise.resolve(hit);
+
+  const inflight = TRACK_PROMISES.get(key);
+  if (inflight) return inflight;
+
+  const p = (async () => {
+    const url = `/api/lyrics/by-track?trackId=${encodeURIComponent(key)}`;
+    const r = await fetch(url, { cache: "no-store", signal });
+    const j = (await r.json()) as LyricsOk | LyricsErr;
+    if (!j.ok) throw new Error(j.error || "Failed to load lyrics.");
+    TRACK_CACHE.set(key, j);
+    return j;
+  })().finally(() => {
+    TRACK_PROMISES.delete(key);
+  });
+
+  TRACK_PROMISES.set(key, p);
+  return p;
+}
+
+function prefetchTrack(tid: string) {
+  // Fire-and-forget warm-up
+  void loadTrackCached(tid).catch(() => {});
 }
 
 export default function PortalExegesis(props: { title?: string }) {
@@ -101,33 +164,26 @@ export default function PortalExegesis(props: { title?: string }) {
   React.useEffect(() => {
     const ac = new AbortController();
 
-    async function loadIndex() {
-      setCatalogueLoading(true);
-      setCatalogueErr("");
-      try {
-        const r = await fetch("/api/lyrics/catalogue", {
-          cache: "no-store",
-          signal: ac.signal,
-        });
-        const j = (await r.json()) as CatalogueOk | CatalogueErr;
+    setCatalogueErr("");
 
-        if (!j.ok) {
-          setCatalogueErr(j.error || "Failed to load catalogue.");
-          setCatalogue(null);
-          return;
-        }
-
-        setCatalogue(j);
-      } catch (e: unknown) {
-        if (e instanceof DOMException && e.name === "AbortError") return;
-        setCatalogueErr("Failed to load catalogue.");
-        setCatalogue(null);
-      } finally {
-        setCatalogueLoading(false);
-      }
+    // If already cached, set synchronously-ish and avoid a “loading” flash
+    if (CATALOGUE_CACHE) {
+      setCatalogue(CATALOGUE_CACHE);
+      setCatalogueLoading(false);
+      return;
     }
 
-    void loadIndex();
+    setCatalogueLoading(true);
+
+    loadCatalogueCached(ac.signal)
+      .then((j) => setCatalogue(j))
+      .catch((e: unknown) => {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        setCatalogue(null);
+        setCatalogueErr("Failed to load catalogue.");
+      })
+      .finally(() => setCatalogueLoading(false));
+
     return () => ac.abort();
   }, []);
 
@@ -140,31 +196,29 @@ export default function PortalExegesis(props: { title?: string }) {
     }
 
     const ac = new AbortController();
+    const tid = trackId;
 
-    async function loadTrack(tid: string) {
-      setLyricsLoading(true);
-      setLyricsErr("");
-      setLyrics(null);
+    setLyricsErr("");
 
-      try {
-        const url = `/api/lyrics/by-track?trackId=${encodeURIComponent(tid)}`;
-        const r = await fetch(url, { cache: "no-store", signal: ac.signal });
-        const j = (await r.json()) as LyricsOk | LyricsErr;
-
-        if (!j.ok) {
-          setLyricsErr(j.error || "Failed to load lyrics.");
-          return;
-        }
-        setLyrics(j);
-      } catch (e: unknown) {
-        if (e instanceof DOMException && e.name === "AbortError") return;
-        setLyricsErr("Failed to load lyrics.");
-      } finally {
-        setLyricsLoading(false);
-      }
+    // If cached, render immediately with zero spinner
+    const cached = TRACK_CACHE.get(tid);
+    if (cached) {
+      setLyrics(cached);
+      setLyricsLoading(false);
+      return () => ac.abort();
     }
 
-    void loadTrack(trackId);
+    setLyricsLoading(true);
+    setLyrics(null);
+
+    loadTrackCached(tid, ac.signal)
+      .then((j) => setLyrics(j))
+      .catch((e: unknown) => {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        setLyricsErr("Failed to load lyrics.");
+      })
+      .finally(() => setLyricsLoading(false));
+
     return () => ac.abort();
   }, [trackId]);
 
@@ -172,8 +226,13 @@ export default function PortalExegesis(props: { title?: string }) {
   if (trackId) {
     const meta = getTrackMeta(catalogue, trackId);
 
+    const resolvedTitle =
+      (lyrics?.trackTitle ?? meta.title ?? "").trim() || null;
+
+    const resolvedArtist =
+      (lyrics?.trackArtist ?? meta.artist ?? "").trim() || null;
+
     const noCatalogueYet = !catalogue && catalogueLoading; // still fetching
-    const resolvedTitle = (meta.title ?? "").trim();
 
     return (
       <div style={{ minWidth: 0 }}>
@@ -207,8 +266,8 @@ export default function PortalExegesis(props: { title?: string }) {
           ) : (
             <ExegesisTrackClient
               trackId={lyrics.trackId}
-              trackTitle={resolvedTitle || null}
-              trackArtist={meta.artist}
+              trackTitle={resolvedTitle}
+              trackArtist={resolvedArtist}
               lyrics={lyrics}
               canonicalPath={`/exegesis/${encodeURIComponent(lyrics.trackId)}`}
             />
@@ -259,6 +318,8 @@ export default function PortalExegesis(props: { title?: string }) {
                       <Link
                         key={tid}
                         href={`/exegesis/${encodeURIComponent(tid)}${search}`}
+                        onMouseEnter={() => prefetchTrack(tid)}
+                        onFocus={() => prefetchTrack(tid)}
                         className="rounded-md bg-black/20 px-3 py-2 text-sm hover:bg-white/10"
                         title={tid}
                       >

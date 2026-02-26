@@ -23,7 +23,7 @@ type AudienceOptionsErr = { ok?: false; error: string; message?: string };
 export async function GET() {
   await requireAdminMemberId();
 
-  // Keep these conservative; you can bump later.
+  // Keep these conservative; we can bump later.
   const SOURCES_LIMIT = 200;
   const ENTITLEMENTS_LIMIT = 400;
   const EVENT_TYPES_LIMIT = 200;

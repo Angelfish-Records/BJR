@@ -1035,7 +1035,7 @@ export default function PortalArtistPosts(props: {
       }
 
       // Optional: reflect selection in URL for deep-linking.
-      // If you don't need it, delete this whole block and rely on internal state.
+      // If we don't need it, delete this whole block and rely on internal state.
       replaceQuery({ post: post.slug, pt: null });
     },
     [share, shareBuilders, authorName],

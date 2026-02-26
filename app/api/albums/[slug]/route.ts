@@ -18,7 +18,7 @@ async function getMemberTier(userId: string | null) {
   return deriveTier(r.rows.map((x) => x.entitlement_key));
 }
 
-// Small, explicit ordering (adjust if you add tiers later)
+// Small, explicit ordering (adjust if we add tiers later)
 function tierAtLeast(actual: string, required: string) {
   if (!required) return true;
   const order = ["none", "friend", "patron", "partner"];

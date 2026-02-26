@@ -214,7 +214,7 @@ export default function LyricsImportInput(props: ArrayOfObjectsInputProps) {
         </Stack>
       </Card>
 
-      {/* Keep default editor so you can manually tweak after import */}
+      {/* Keep default editor so we can manually tweak after import */}
       {props.renderDefault(props)}
     </Stack>
   );

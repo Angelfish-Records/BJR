@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Transitional: allow lookup by catalogueId OR by _id so you can use test IDs immediately.
+  // Transitional: allow lookup by catalogueId OR by _id so we can use test IDs immediately.
   const q = `
     *[_type == "album" && (catalogueId == $albumId || _id == $albumId)][0]{
       _id,

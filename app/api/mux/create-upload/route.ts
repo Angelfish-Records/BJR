@@ -9,7 +9,7 @@ const mux = new Mux({
 });
 
 export async function POST() {
-  // audio-only: keep it simple; you can tweak later
+  // audio-only: keep it simple; we can tweak later
   const upload = await mux.video.uploads.create({
     new_asset_settings: {
       playback_policy: ["signed"], // matches your tokenized playback flow

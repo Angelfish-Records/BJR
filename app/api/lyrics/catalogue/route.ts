@@ -1,15 +1,53 @@
 // web/app/api/lyrics/catalogue/route.ts
+import "server-only";
 import { NextResponse } from "next/server";
 import { client } from "@/sanity/lib/client";
 
-type LyricsIdDoc = { trackId?: string };
+// If you want this to be extremely fast in prod, you want CDN caching.
+// This route is “browse metadata”, not per-user, not sensitive.
+export const runtime = "nodejs";
 
-type AlbumDoc = {
-  _id: string;
-  title?: string;
-  slug?: string;
-  tracks?: Array<{ id?: string; title?: string; artist?: string }>;
+// Optional: helps Next understand it can cache.
+// (Even with explicit Cache-Control below, this is still useful metadata.)
+export const revalidate = 300;
+
+type CatalogueTrack = {
+  trackId: string;
+  title: string | null;
+  artist: string | null;
+  trackCatalogueId: string | null;
 };
+
+type CatalogueAlbum = {
+  albumId: string;
+  albumSlug: string | null;
+  albumTitle: string | null;
+  albumCatalogueId: string | null;
+  tracks: CatalogueTrack[];
+  trackIds: string[]; // legacy
+};
+
+type CatalogueOk = { ok: true; albums: CatalogueAlbum[] };
+type CatalogueErr = { ok: false; error: string };
+
+type CatalogueQueryResult = {
+  albums?: Array<{
+    albumId?: string;
+    albumSlug?: string | null;
+    albumTitle?: string | null;
+    albumCatalogueId?: string | null;
+    tracks?: Array<{
+      trackId?: string;
+      title?: string | null;
+      artist?: string | null;
+      trackCatalogueId?: string | null;
+    }>;
+  }>;
+};
+
+function asTrimmedString(v: unknown): string {
+  return typeof v === "string" ? v.trim() : "";
+}
 
 function uniqNonEmpty(ids: string[]): string[] {
   const out: string[] = [];
@@ -25,58 +63,87 @@ function uniqNonEmpty(ids: string[]): string[] {
 }
 
 export async function GET() {
-  const qLyrics = `*[_type == "lyrics" && defined(trackId)]{ trackId }`;
+  try {
+    // One fetch:
+    // - Build lyric track ids
+    // - Pull albums
+    // - Filter tracks to only those with lyrics
+    // - Drop albums with zero eligible tracks
+    const q = `
+      {
+        "lyricIds": *[_type == "lyrics" && defined(trackId)].trackId,
+        "albums": *[_type == "album" && publicPageVisible != false]
+          | order(year desc, title asc) {
+            "albumId": _id,
+            "albumTitle": title,
+            "albumSlug": slug.current,
+            "albumCatalogueId": catalogueId,
+            "tracks": tracks[id in ^.^.lyricIds]{
+              "trackId": id,
+              title,
+              artist,
+              "trackCatalogueId": catalogueId
+            }
+          }[count(tracks) > 0]
+      }
+    `;
 
-  const qAlbums = `
-  *[_type == "album" && publicPageVisible != false] | order(year desc, title asc) {
-    _id,
-    title,
-    "slug": slug.current,
-    tracks[]{ id, title, artist }
-  }
-`;
+    const bundle = await client.fetch<CatalogueQueryResult | null>(q);
 
-  const [lyricsDocs, albums] = await Promise.all([
-    client.fetch<LyricsIdDoc[]>(qLyrics),
-    client.fetch<AlbumDoc[]>(qAlbums),
-  ]);
+    const albumsRaw = bundle?.albums ?? [];
 
-  const lyricTrackIds = new Set(
-    uniqNonEmpty((lyricsDocs ?? []).map((d) => String(d.trackId ?? ""))),
-  );
+    const albums: CatalogueAlbum[] = albumsRaw.map((a) => {
+      const tracksRaw = Array.isArray(a.tracks) ? a.tracks : [];
 
-  const albumGroups = (albums ?? [])
-    .map((a) => {
-      const albumTracksRaw = (a.tracks ?? []).map((t) => ({
-        trackId: String(t?.id ?? "").trim(),
-        title: String(t?.title ?? "").trim() || null,
-        artist: String(t?.artist ?? "").trim() || null,
-      }));
+      // Normalize + de-dupe by trackId (preserve order)
+      const normTracks: CatalogueTrack[] = [];
+      const seen = new Set<string>();
 
-      const albumTrackIds = uniqNonEmpty(albumTracksRaw.map((t) => t.trackId));
-      const withLyricsIds = albumTrackIds.filter((tid) =>
-        lyricTrackIds.has(tid),
-      );
+      for (const t of tracksRaw) {
+        const tid = asTrimmedString(t?.trackId);
+        if (!tid || seen.has(tid)) continue;
+        seen.add(tid);
 
-      const tracks = albumTracksRaw
-        .filter((t) => t.trackId && lyricTrackIds.has(t.trackId))
-        // preserve album order but de-dupe by trackId
-        .filter(
-          (t, i, arr) => arr.findIndex((x) => x.trackId === t.trackId) === i,
-        );
+        normTracks.push({
+          trackId: tid,
+          title: asTrimmedString(t?.title) || null,
+          artist: asTrimmedString(t?.artist) || null,
+          trackCatalogueId: asTrimmedString(t?.trackCatalogueId) || null,
+        });
+      }
+
+      const legacyTrackIds = uniqNonEmpty(normTracks.map((t) => t.trackId));
 
       return {
-        albumId: a._id,
-        albumSlug: (a.slug ?? "").trim() || null,
-        albumTitle: (a.title ?? "").trim() || null,
-        tracks, // ✅ new
-        trackIds: withLyricsIds, // keep legacy if you still use it elsewhere
+        albumId: asTrimmedString(a?.albumId),
+        albumSlug: asTrimmedString(a?.albumSlug) || null,
+        albumTitle: asTrimmedString(a?.albumTitle) || null,
+        albumCatalogueId: asTrimmedString(a?.albumCatalogueId) || null,
+        tracks: normTracks,
+        trackIds: legacyTrackIds, // keep legacy surface if anything still reads it
       };
-    })
-    .filter((g) => g.trackIds.length > 0);
+    });
 
-  return NextResponse.json(
-    { ok: true, albums: albumGroups },
-    { headers: { "Cache-Control": "no-store, max-age=0" } },
-  );
+    // ✅ Cache: fast “browse” endpoint.
+    // - s-maxage: CDN cache
+    // - stale-while-revalidate: serve instantly while refreshing in background
+    return NextResponse.json<CatalogueOk>(
+      { ok: true, albums },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=300, stale-while-revalidate=86400",
+        },
+      },
+    );
+  } catch {
+    return NextResponse.json<CatalogueErr>(
+      { ok: false, error: "catalogue_failed" },
+      {
+        status: 500,
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+        },
+      },
+    );
+  }
 }

@@ -100,9 +100,9 @@ export async function POST(req: Request) {
   // Albums
   if (docType === "album") {
     tags.push("albums");
-    revalidatePath("/albums"); // if you have an index route
+    revalidatePath("/albums"); // if we have an index route
     // If your album pages depend on tags, also tag them:
-    // tags.push(`album:${docId ?? ''}`) // optional if you tag-fetch by id
+    // tags.push(`album:${docId ?? ''}`) // optional if we tag-fetch by id
   }
 
   // Lyrics / tracks docs can affect album pages too (depending on your query model)
