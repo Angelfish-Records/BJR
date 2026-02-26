@@ -371,6 +371,21 @@ export default function ExegesisTrackClient(props: {
   const [thread, setThread] = React.useState<ThreadApiOk | null>(null);
   const [threadErr, setThreadErr] = React.useState<string>("");
   const [sort, setSort] = React.useState<ThreadSort>("top");
+
+  const [threadLoading, setThreadLoading] = React.useState<boolean>(false);
+  const [threadLoadedKey, setThreadLoadedKey] = React.useState<string>("");
+
+  // unique “what the panel is trying to show”
+  const threadWantedKey = React.useMemo(() => {
+    const lk = (selected?.lineKey ?? "").trim();
+    const gk = (selected?.groupKey ?? "").trim();
+    if (!trackId || !lk) return "";
+    return `${trackId}::${lk}::${gk}::${sort}`;
+  }, [trackId, selected?.lineKey, selected?.groupKey, sort]);
+
+  const panelReady =
+    !!threadWantedKey && !threadLoading && threadLoadedKey === threadWantedKey;
+
   const [draft, setDraft] = React.useState<string>("");
   const [draftDoc, setDraftDoc] = React.useState<unknown | null>(null);
   const [posting, setPosting] = React.useState<boolean>(false);
@@ -388,6 +403,50 @@ export default function ExegesisTrackClient(props: {
     if (!canPost || isLocked) return;
     setComposerStage(stage);
     setComposerMountKey((n) => n + 1);
+  }
+
+  function DiscourseShimmer(props: { title?: string }) {
+    return (
+      <div className="rounded-xl bg-white/5 p-4">
+        <div className="text-sm opacity-70">
+          <span className="afShimmerText">{props.title ?? "Loading…"}</span>
+        </div>
+
+        <div className="mt-3 space-y-2">
+          <div className="afShimmerBlock h-4 w-[85%] rounded" />
+          <div className="afShimmerBlock h-4 w-[70%] rounded" />
+          <div className="afShimmerBlock h-4 w-[78%] rounded" />
+        </div>
+
+        <div className="mt-4 rounded-lg border border-white/10 bg-white/6 p-3">
+          <div className="afShimmerBlock h-9 w-full rounded-md" />
+          <div className="mt-2 flex items-center justify-between">
+            <div className="afShimmerBlock h-5 w-10 rounded-md" />
+            <div className="afShimmerBlock h-4 w-16 rounded" />
+          </div>
+          <div className="mt-2 flex justify-end">
+            <div className="afShimmerBlock h-8 w-20 rounded-md" />
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          <div className="rounded-md bg-black/20 p-3">
+            <div className="afShimmerBlock h-3 w-24 rounded" />
+            <div className="mt-2 space-y-2">
+              <div className="afShimmerBlock h-4 w-[92%] rounded" />
+              <div className="afShimmerBlock h-4 w-[76%] rounded" />
+            </div>
+          </div>
+          <div className="rounded-md bg-black/20 p-3">
+            <div className="afShimmerBlock h-3 w-20 rounded" />
+            <div className="mt-2 space-y-2">
+              <div className="afShimmerBlock h-4 w-[88%] rounded" />
+              <div className="afShimmerBlock h-4 w-[66%] rounded" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   type MiniStage = "basic" | "full";
@@ -946,6 +1005,12 @@ export default function ExegesisTrackClient(props: {
     async function run() {
       if (!selected?.lineKey) return;
 
+      const wanted = threadWantedKey;
+      if (!wanted) return;
+
+      setThreadLoading(true);
+      setThreadErr("");
+
       const gk = (selected.groupKey ?? "").trim();
 
       const url =
@@ -953,7 +1018,7 @@ export default function ExegesisTrackClient(props: {
         (gk
           ? `&groupKey=${encodeURIComponent(gk)}&lineKey=${encodeURIComponent(
               selected.lineKey,
-            )}` // include anchor for nicer server-side semantics + optional drift guard later
+            )}`
           : `&lineKey=${encodeURIComponent(selected.lineKey)}`) +
         `&sort=${encodeURIComponent(sort)}`;
 
@@ -963,22 +1028,28 @@ export default function ExegesisTrackClient(props: {
         if (!alive) return;
 
         if (!j.ok) {
-          if (j.code === "ANON_LIMIT") {
-            setThreadErr(
-              j.error ||
-                "You’ve hit the anon reading limit. Sign in to continue.",
-            );
-          } else {
-            setThreadErr(j.error || "Failed to load thread.");
-          }
+          setThread(null);
+          setThreadErr(
+            j.code === "ANON_LIMIT"
+              ? j.error ||
+                  "You’ve hit the anon reading limit. Sign in to continue."
+              : j.error || "Failed to load thread.",
+          );
+          setThreadLoadedKey(wanted);
           return;
         }
 
         setThread(j);
         setThreadErr("");
+        setThreadLoadedKey(wanted);
       } catch {
         if (!alive) return;
+        setThread(null);
         setThreadErr("Failed to load thread.");
+        setThreadLoadedKey(wanted);
+      } finally {
+        if (!alive) return;
+        setThreadLoading(false);
       }
     }
 
@@ -986,7 +1057,7 @@ export default function ExegesisTrackClient(props: {
     return () => {
       alive = false;
     };
-  }, [trackId, selected?.lineKey, sort, selected?.groupKey]);
+  }, [trackId, selected?.lineKey, selected?.groupKey, sort, threadWantedKey]);
 
   async function postComment() {
     if (!selected) return;
@@ -1419,6 +1490,46 @@ export default function ExegesisTrackClient(props: {
         } as React.CSSProperties
       }
     >
+      <style jsx global>{`
+  @keyframes afShimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  .afShimmerText {
+    background: linear-gradient(
+      90deg,
+      rgba(255,255,255,0.55) 0%,
+      rgba(255,255,255,0.95) 45%,
+      rgba(255,255,255,0.55) 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: afShimmer 1.1s linear infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .afShimmerText {
+      animation: none;
+      color: rgba(255,255,255,0.92);
+      background: none;
+    }
+  }
+  .afShimmerBlock {
+    background: linear-gradient(
+      90deg,
+      rgba(255,255,255,0.06) 0%,
+      rgba(255,255,255,0.16) 45%,
+      rgba(255,255,255,0.06) 100%
+    );
+    background-size: 200% 100%;
+    animation: afShimmer 1.05s linear infinite;
+    mix-blend-mode: screen;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .afShimmerBlock { animation: none; }
+  }
+`}</style>
       <div>
         <h1 className="mt-1 text-xl font-semibold">
           <span className="opacity-90">
@@ -1532,633 +1643,665 @@ export default function ExegesisTrackClient(props: {
                   : "rounded-xl bg-white/5 p-4" // existing desktop look
               }
             >
-              {isLocked ? (
-                <div className="mt-2 rounded-md bg-white/5 p-3 text-sm">
-                  <div className="opacity-80">This thread is locked.</div>
-                  <div className="mt-1 text-xs opacity-60">
-                    You can still read, but posting is disabled.
-                  </div>
-                </div>
-              ) : null}
-
-              {selected ? (
-                <div className="mt-2 rounded-md bg-black/20 p-3 text-sm">
-                  {(() => {
-                    const gk = (selected.groupKey ?? "").trim();
-                    if (!gk)
-                      return <div className="mt-1">{selected.lineText}</div>;
-
-                    const lines = (lyrics.cues ?? [])
-                      .filter((c) =>
-                        isSameGroup(cueCanonicalGroupKey(lyrics, c), gk),
-                      )
-                      .map((c) => c.text);
-
-                    const safe = lines.length > 0 ? lines : [selected.lineText];
-
-                    return (
-                      <div className="mt-1 space-y-1">
-                        {safe.map((t, i) => (
-                          <div key={i}>{t}</div>
-                        ))}
+              {!panelReady ? (
+                <DiscourseShimmer title="Loading discourse…" />
+              ) : (
+                <>
+                  {isLocked ? (
+                    <div className="mt-2 rounded-md bg-white/5 p-3 text-sm">
+                      <div className="opacity-80">This thread is locked.</div>
+                      <div className="mt-1 text-xs opacity-60">
+                        You can still read, but posting is disabled.
                       </div>
-                    );
-                  })()}
-                </div>
-              ) : null}
+                    </div>
+                  ) : null}
 
-              {showIdentityPanel ? (
-                <div className="mt-3 rounded-md bg-black/20 p-3 text-sm">
-                  <div className="flex items-center justify-between gap-3">
+                  {selected ? (
+                    <div className="mt-2 rounded-md bg-black/20 p-3 text-sm">
+                      {(() => {
+                        const gk = (selected.groupKey ?? "").trim();
+                        if (!gk)
+                          return (
+                            <div className="mt-1">{selected.lineText}</div>
+                          );
+
+                        const lines = (lyrics.cues ?? [])
+                          .filter((c) =>
+                            isSameGroup(cueCanonicalGroupKey(lyrics, c), gk),
+                          )
+                          .map((c) => c.text);
+
+                        const safe =
+                          lines.length > 0 ? lines : [selected.lineText];
+
+                        return (
+                          <div className="mt-1 space-y-1">
+                            {safe.map((t, i) => (
+                              <div key={i}>{t}</div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : null}
+
+                  {showIdentityPanel ? (
+                    <div className="mt-3 rounded-md bg-black/20 p-3 text-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <button
+                          className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
+                          disabled={!canClaimName}
+                          onClick={() => {
+                            setClaimErr("");
+                            setClaimOpen((v) => !v);
+                          }}
+                          title={
+                            canClaimName
+                              ? "Claim a public name"
+                              : "Claiming unlocks after contributions"
+                          }
+                        >
+                          {viewerIdentity?.publicName ? "Edit" : "Claim"} name
+                        </button>
+                      </div>
+
+                      <div className="mt-1 text-sm">
+                        Commenting as{" "}
+                        <span className="font-semibold">{identityLabel}</span>
+                      </div>
+
+                      {!viewerIdentity?.publicName ? (
+                        <div className="mt-1 text-xs opacity-60">
+                          Progress: {viewerIdentity?.contributionCount ?? 0}/5
+                          contributions
+                          {canClaimName ? " · Unlocked" : ""}
+                        </div>
+                      ) : null}
+
+                      {claimOpen ? (
+                        <div className="mt-3 space-y-2">
+                          <input
+                            className="w-full rounded-md bg-black/20 px-3 py-2 text-sm outline-none"
+                            placeholder="Choose a public name"
+                            value={claimName}
+                            onChange={(e) => setClaimName(e.target.value)}
+                          />
+                          {claimErr ? (
+                            <div className="text-xs opacity-70">{claimErr}</div>
+                          ) : null}
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              className="rounded-md bg-white/5 px-3 py-1.5 text-sm hover:bg-white/10"
+                              onClick={() => {
+                                setClaimOpen(false);
+                                setClaimErr("");
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
+                              disabled={
+                                !canClaimName || !claimName.trim() || claimBusy
+                              }
+                              onClick={() => void submitClaimName()}
+                            >
+                              {claimBusy ? "Saving…" : "Claim"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {threadErr ? (
+                    <div className="mt-3 rounded-md bg-white/5 p-3 text-sm">
+                      {threadErr}
+                    </div>
+                  ) : null}
+
+                  {Composer}
+
+                  <div className="mt-3 flex items-center justify-end gap-2">
                     <button
-                      className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
-                      disabled={!canClaimName}
-                      onClick={() => {
-                        setClaimErr("");
-                        setClaimOpen((v) => !v);
-                      }}
-                      title={
-                        canClaimName
-                          ? "Claim a public name"
-                          : "Claiming unlocks after contributions"
-                      }
+                      className={`rounded-md px-3 py-1.5 text-sm ${
+                        sort === "top" ? "bg-white/10" : "bg-white/5"
+                      }`}
+                      onClick={() => setSort("top")}
                     >
-                      {viewerIdentity?.publicName ? "Edit" : "Claim"} name
+                      Top
+                    </button>
+                    <button
+                      className={`rounded-md px-3 py-1.5 text-sm ${
+                        sort === "recent" ? "bg-white/10" : "bg-white/5"
+                      }`}
+                      onClick={() => setSort("recent")}
+                    >
+                      Recent
                     </button>
                   </div>
 
-                  <div className="mt-1 text-sm">
-                    Commenting as{" "}
-                    <span className="font-semibold">{identityLabel}</span>
-                  </div>
+                  <div
+                    ref={threadScrollRef}
+                    className="mt-3 space-y-3"
+                    style={{
+                      maxHeight: 520,
+                      overflowY: "auto",
+                      overscrollBehavior: "contain",
+                    }}
+                  >
+                    <div className="mt-3 space-y-3">
+                      {(rootsForRender ?? []).length === 0 ? (
+                        <div className="text-sm opacity-60">
+                          Be the first to comment.
+                        </div>
+                      ) : (
+                        (rootsForRender ?? []).map((root) => (
+                          <div
+                            key={root.rootId}
+                            className="rounded-md bg-black/20 p-3"
+                          >
+                            {root.comments.map((c) => {
+                              const ident =
+                                thread?.identities?.[c.createdByMemberId];
+                              const name =
+                                ident?.publicName ||
+                                ident?.anonLabel ||
+                                "Anonymous";
+                              const replyBusy = Boolean(
+                                replyByCommentId[c.id]?.posting,
+                              );
+                              const isAuthor =
+                                !!viewerMemberId &&
+                                c.createdByMemberId === viewerMemberId;
+                              const canEdit =
+                                canPost &&
+                                !isLocked &&
+                                isAuthor &&
+                                c.status === "live";
 
-                  {!viewerIdentity?.publicName ? (
-                    <div className="mt-1 text-xs opacity-60">
-                      Progress: {viewerIdentity?.contributionCount ?? 0}/5
-                      contributions
-                      {canClaimName ? " · Unlocked" : ""}
-                    </div>
-                  ) : null}
+                              const editBusy = Boolean(
+                                editByCommentId[c.id]?.posting,
+                              );
 
-                  {claimOpen ? (
-                    <div className="mt-3 space-y-2">
-                      <input
-                        className="w-full rounded-md bg-black/20 px-3 py-2 text-sm outline-none"
-                        placeholder="Choose a public name"
-                        value={claimName}
-                        onChange={(e) => setClaimName(e.target.value)}
-                      />
-                      {claimErr ? (
-                        <div className="text-xs opacity-70">{claimErr}</div>
-                      ) : null}
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          className="rounded-md bg-white/5 px-3 py-1.5 text-sm hover:bg-white/10"
-                          onClick={() => {
-                            setClaimOpen(false);
-                            setClaimErr("");
-                          }}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
-                          disabled={
-                            !canClaimName || !claimName.trim() || claimBusy
-                          }
-                          onClick={() => void submitClaimName()}
-                        >
-                          {claimBusy ? "Saving…" : "Claim"}
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
+                              if (c.status === "deleted") return null;
 
-              {threadErr ? (
-                <div className="mt-3 rounded-md bg-white/5 p-3 text-sm">
-                  {threadErr}
-                </div>
-              ) : null}
-
-              {Composer}
-
-              <div className="mt-3 flex items-center justify-end gap-2">
-                <button
-                  className={`rounded-md px-3 py-1.5 text-sm ${
-                    sort === "top" ? "bg-white/10" : "bg-white/5"
-                  }`}
-                  onClick={() => setSort("top")}
-                >
-                  Top
-                </button>
-                <button
-                  className={`rounded-md px-3 py-1.5 text-sm ${
-                    sort === "recent" ? "bg-white/10" : "bg-white/5"
-                  }`}
-                  onClick={() => setSort("recent")}
-                >
-                  Recent
-                </button>
-              </div>
-
-              <div
-                ref={threadScrollRef}
-                className="mt-3 space-y-3"
-                style={{
-                  maxHeight: 520,
-                  overflowY: "auto",
-                  overscrollBehavior: "contain",
-                }}
-              >
-                <div className="mt-3 space-y-3">
-                  {(rootsForRender ?? []).length === 0 ? (
-                    <div className="text-sm opacity-60">
-                      Be the first to comment.
-                    </div>
-                  ) : (
-                    (rootsForRender ?? []).map((root) => (
-                      <div
-                        key={root.rootId}
-                        className="rounded-md bg-black/20 p-3"
-                      >
-                        {root.comments.map((c) => {
-                          const ident =
-                            thread?.identities?.[c.createdByMemberId];
-                          const name =
-                            ident?.publicName ||
-                            ident?.anonLabel ||
-                            "Anonymous";
-                          const replyBusy = Boolean(
-                            replyByCommentId[c.id]?.posting,
-                          );
-                          const isAuthor =
-                            !!viewerMemberId &&
-                            c.createdByMemberId === viewerMemberId;
-                          const canEdit =
-                            canPost &&
-                            !isLocked &&
-                            isAuthor &&
-                            c.status === "live";
-
-                          const editBusy = Boolean(
-                            editByCommentId[c.id]?.posting,
-                          );
-
-                          if (c.status === "deleted") return null;
-
-                          return (
-                            <div
-                              id={`exegesis-c-${c.id}`}
-                              key={c.id}
-                              className="py-2 scroll-mt-4"
-                              style={{
-                                paddingLeft: Math.min(24, (c.depth ?? 0) * 12),
-                              }}
-                            >
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-2">
-                                  <div className="text-xs opacity-70">
-                                    {name}
-                                  </div>
-                                  {c.editedAt || (c.editCount ?? 0) > 0 ? (
-                                    <div className="text-[11px] opacity-50">
-                                      edited
-                                    </div>
-                                  ) : null}
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                  {canVote ? (
-                                    <button
-                                      className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
-                                      onClick={() => void toggleVote(c.id)}
-                                      title="Vote"
-                                    >
-                                      {c.viewerHasVoted ? "Voted" : "Vote"} ·{" "}
-                                      {c.voteCount}
-                                    </button>
-                                  ) : (
-                                    <button
-                                      className="rounded-md bg-white/5 px-2 py-1 text-xs opacity-70"
-                                      disabled
-                                      title={
-                                        thread?.viewer.kind === "anon"
-                                          ? "Sign in to vote"
-                                          : "Friend tier or higher required to vote"
-                                      }
-                                    >
-                                      Vote · {c.voteCount}
-                                    </button>
-                                  )}
-
-                                  {canReport ? (
-                                    <button
-                                      className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
-                                      onClick={() => openReport(c.id)}
-                                      title="Report"
-                                    >
-                                      Report
-                                    </button>
-                                  ) : null}
-
-                                  {canEdit ? (
-                                    <button
-                                      className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
-                                      disabled={editBusy || replyBusy}
-                                      onClick={() => openEdit(c)}
-                                      title="Edit"
-                                    >
-                                      Edit
-                                    </button>
-                                  ) : null}
-
-                                  {canPost && !isLocked ? (
-                                    <button
-                                      className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
-                                      disabled={
-                                        replyBusy ||
-                                        c.status !== "live" ||
-                                        c.depth >= 6
-                                      }
-                                      onClick={() => openReply(c.id)}
-                                      title={
-                                        c.depth >= 6
-                                          ? "Max thread depth reached"
-                                          : "Reply"
-                                      }
-                                    >
-                                      Reply
-                                    </button>
-                                  ) : null}
-                                </div>
-                              </div>
-
-                              {c.status === "hidden" ? (
-                                <div className="mt-1 text-sm opacity-60 italic">
-                                  This comment is hidden.
-                                </div>
-                              ) : (
-                                <div className="mt-1">
-                                  {isTipTapDoc(c.bodyRich) ? (
-                                    <TipTapReadOnly doc={c.bodyRich} />
-                                  ) : (
-                                    <div className="text-sm whitespace-pre-wrap">
-                                      {c.bodyPlain}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-
-                              {canPost &&
-                              !isLocked &&
-                              canEdit &&
-                              editByCommentId[c.id]?.open ? (
+                              return (
                                 <div
-                                  ref={(el) => {
-                                    editWrapByIdRef.current[c.id] = el;
+                                  id={`exegesis-c-${c.id}`}
+                                  key={c.id}
+                                  className="py-2 scroll-mt-4"
+                                  style={{
+                                    paddingLeft: Math.min(
+                                      24,
+                                      (c.depth ?? 0) * 12,
+                                    ),
                                   }}
-                                  className="mt-2 rounded-md bg-black/25 p-3"
                                 >
                                   <div className="flex items-center justify-between gap-3">
-                                    <div className="text-xs opacity-70">
-                                      Edit
+                                    <div className="flex items-center gap-2">
+                                      <div className="text-xs opacity-70">
+                                        {name}
+                                      </div>
+                                      {c.editedAt || (c.editCount ?? 0) > 0 ? (
+                                        <div className="text-[11px] opacity-50">
+                                          edited
+                                        </div>
+                                      ) : null}
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                      {canVote ? (
+                                        <button
+                                          className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
+                                          onClick={() => void toggleVote(c.id)}
+                                          title="Vote"
+                                        >
+                                          {c.viewerHasVoted ? "Voted" : "Vote"}{" "}
+                                          · {c.voteCount}
+                                        </button>
+                                      ) : (
+                                        <button
+                                          className="rounded-md bg-white/5 px-2 py-1 text-xs opacity-70"
+                                          disabled
+                                          title={
+                                            thread?.viewer.kind === "anon"
+                                              ? "Sign in to vote"
+                                              : "Friend tier or higher required to vote"
+                                          }
+                                        >
+                                          Vote · {c.voteCount}
+                                        </button>
+                                      )}
+
+                                      {canReport ? (
+                                        <button
+                                          className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
+                                          onClick={() => openReport(c.id)}
+                                          title="Report"
+                                        >
+                                          Report
+                                        </button>
+                                      ) : null}
+
+                                      {canEdit ? (
+                                        <button
+                                          className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
+                                          disabled={editBusy || replyBusy}
+                                          onClick={() => openEdit(c)}
+                                          title="Edit"
+                                        >
+                                          Edit
+                                        </button>
+                                      ) : null}
+
+                                      {canPost && !isLocked ? (
+                                        <button
+                                          className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
+                                          disabled={
+                                            replyBusy ||
+                                            c.status !== "live" ||
+                                            c.depth >= 6
+                                          }
+                                          onClick={() => openReply(c.id)}
+                                          title={
+                                            c.depth >= 6
+                                              ? "Max thread depth reached"
+                                              : "Reply"
+                                          }
+                                        >
+                                          Reply
+                                        </button>
+                                      ) : null}
                                     </div>
                                   </div>
 
-                                  <div className="mt-2">
-                                    <TipTapEditor
-                                      key={`edit-${c.id}-${editMountKey}-${editByCommentId[c.id]?.ui ?? "basic"}`}
-                                      valuePlain={
-                                        editByCommentId[c.id]?.plain ?? ""
-                                      }
-                                      valueDoc={
-                                        editByCommentId[c.id]?.doc ?? null
-                                      }
-                                      disabled={editByCommentId[c.id]?.posting}
-                                      showToolbar={
-                                        (editByCommentId[c.id]?.ui ??
-                                          "basic") === "full"
-                                      }
-                                      autofocus
-                                      placeholder="Edit your comment…"
-                                      onChangePlain={(plain) =>
-                                        setEditByCommentId((prev) => ({
-                                          ...prev,
-                                          [c.id]: {
-                                            ...(prev[c.id] as EditDraft),
-                                            plain,
-                                            err: "",
-                                          },
-                                        }))
-                                      }
-                                      onChangeDoc={(doc) =>
-                                        setEditByCommentId((prev) => ({
-                                          ...prev,
-                                          [c.id]: {
-                                            ...(prev[c.id] as EditDraft),
-                                            doc,
-                                            err: "",
-                                          },
-                                        }))
-                                      }
-                                    />
-                                  </div>
-
-                                  <div className="mt-2 flex items-center justify-between gap-3">
-                                    <button
-                                      type="button"
-                                      className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
-                                      disabled={editByCommentId[c.id]?.posting}
-                                      onClick={() =>
-                                        setEditByCommentId((prev) => ({
-                                          ...prev,
-                                          [c.id]: {
-                                            ...(prev[c.id] as EditDraft),
-                                            ui:
-                                              (prev[c.id]?.ui ?? "basic") ===
-                                              "full"
-                                                ? "basic"
-                                                : "full",
-                                          },
-                                        }))
-                                      }
-                                      title={
-                                        (editByCommentId[c.id]?.ui ??
-                                          "basic") === "full"
-                                          ? "Hide formatting"
-                                          : "Formatting"
-                                      }
-                                    >
-                                      Aa
-                                    </button>
-
-                                    <div className="text-xs opacity-60">
-                                      {
-                                        (
-                                          editByCommentId[c.id]?.plain ?? ""
-                                        ).trim().length
-                                      }
-                                      /5000
-                                    </div>
-                                  </div>
-
-                                  {editByCommentId[c.id]?.err ? (
-                                    <div className="mt-2 text-xs opacity-75">
-                                      {editByCommentId[c.id]?.err}
-                                    </div>
-                                  ) : null}
-
-                                  <div className="mt-2 flex items-center justify-between">
-                                    <button
-                                      className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
-                                      disabled={
-                                        editByCommentId[c.id]?.posting ||
-                                        !(
-                                          editByCommentId[c.id]?.plain ?? ""
-                                        ).trim()
-                                      }
-                                      onClick={() => void submitEdit(c)}
-                                    >
-                                      {editByCommentId[c.id]?.posting
-                                        ? "Saving…"
-                                        : "Save edit"}
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : null}
-
-                              {canPost &&
-                              !isLocked &&
-                              replyByCommentId[c.id]?.open ? (
-                                <div
-                                  ref={(el) => {
-                                    replyWrapByIdRef.current[c.id] = el;
-                                  }}
-                                  className="mt-2 rounded-md bg-black/25 p-3"
-                                >
-                                  <div className="flex items-center justify-between gap-3">
-                                    <div className="text-xs opacity-70">
-                                      Reply
-                                    </div>
-                                  </div>
-
-                                  <div className="mt-2">
-                                    <TipTapEditor
-                                      key={`reply-${c.id}-${replyMountKey}-${replyByCommentId[c.id]?.ui ?? "basic"}`}
-                                      valuePlain={
-                                        replyByCommentId[c.id]?.plain ?? ""
-                                      }
-                                      valueDoc={
-                                        replyByCommentId[c.id]?.doc ?? null
-                                      }
-                                      disabled={replyByCommentId[c.id]?.posting}
-                                      showToolbar={
-                                        (replyByCommentId[c.id]?.ui ??
-                                          "basic") === "full"
-                                      }
-                                      autofocus
-                                      placeholder="Write a reply…"
-                                      onChangePlain={(plain) =>
-                                        setReplyByCommentId((prev) => ({
-                                          ...prev,
-                                          [c.id]: {
-                                            ...(prev[c.id] as ReplyDraft),
-                                            plain,
-                                            err: "",
-                                          },
-                                        }))
-                                      }
-                                      onChangeDoc={(doc) =>
-                                        setReplyByCommentId((prev) => ({
-                                          ...prev,
-                                          [c.id]: {
-                                            ...(prev[c.id] as ReplyDraft),
-                                            doc,
-                                            err: "",
-                                          },
-                                        }))
-                                      }
-                                    />
-                                  </div>
-
-                                  <div className="mt-2 flex items-center justify-between gap-3">
-                                    <button
-                                      type="button"
-                                      className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
-                                      disabled={replyByCommentId[c.id]?.posting}
-                                      onClick={() =>
-                                        setReplyByCommentId((prev) => ({
-                                          ...prev,
-                                          [c.id]: {
-                                            ...(prev[c.id] as ReplyDraft),
-                                            ui:
-                                              (prev[c.id]?.ui ?? "basic") ===
-                                              "full"
-                                                ? "basic"
-                                                : "full",
-                                          },
-                                        }))
-                                      }
-                                      title={
-                                        (replyByCommentId[c.id]?.ui ??
-                                          "basic") === "full"
-                                          ? "Hide formatting"
-                                          : "Formatting"
-                                      }
-                                    >
-                                      Aa
-                                    </button>
-
-                                    <div className="text-xs opacity-60">
-                                      {
-                                        (
-                                          replyByCommentId[c.id]?.plain ?? ""
-                                        ).trim().length
-                                      }
-                                      /5000
-                                    </div>
-                                  </div>
-
-                                  {replyByCommentId[c.id]?.err ? (
-                                    <div className="mt-2 text-xs opacity-75">
-                                      {replyByCommentId[c.id]?.err}
-                                    </div>
-                                  ) : null}
-
-                                  <div className="mt-2 flex items-center justify-between">
-                                    <button
-                                      className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
-                                      disabled={
-                                        replyByCommentId[c.id]?.posting ||
-                                        !(
-                                          replyByCommentId[c.id]?.plain ?? ""
-                                        ).trim()
-                                      }
-                                      onClick={() => void postReply(c)}
-                                    >
-                                      {replyByCommentId[c.id]?.posting
-                                        ? "Posting…"
-                                        : "Post reply"}
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : null}
-
-                              {canReport && reportByCommentId[c.id]?.open ? (
-                                <div className="mt-2 rounded-md bg-black/25 p-3 text-sm">
-                                  {reportByCommentId[c.id]?.done ? (
-                                    <div className="text-xs opacity-75">
-                                      Report submitted. Thanks — this helps keep
-                                      the discourse usable.
+                                  {c.status === "hidden" ? (
+                                    <div className="mt-1 text-sm opacity-60 italic">
+                                      This comment is hidden.
                                     </div>
                                   ) : (
-                                    <>
+                                    <div className="mt-1">
+                                      {isTipTapDoc(c.bodyRich) ? (
+                                        <TipTapReadOnly doc={c.bodyRich} />
+                                      ) : (
+                                        <div className="text-sm whitespace-pre-wrap">
+                                          {c.bodyPlain}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {canPost &&
+                                  !isLocked &&
+                                  canEdit &&
+                                  editByCommentId[c.id]?.open ? (
+                                    <div
+                                      ref={(el) => {
+                                        editWrapByIdRef.current[c.id] = el;
+                                      }}
+                                      className="mt-2 rounded-md bg-black/25 p-3"
+                                    >
                                       <div className="flex items-center justify-between gap-3">
                                         <div className="text-xs opacity-70">
-                                          Report this comment
+                                          Edit
                                         </div>
                                       </div>
 
-                                      <div className="mt-2 grid gap-2">
-                                        <select
-                                          className="w-full rounded-md bg-black/20 px-3 py-2 text-sm outline-none"
-                                          value={
-                                            reportByCommentId[c.id]?.category ??
-                                            "spam"
+                                      <div className="mt-2">
+                                        <TipTapEditor
+                                          key={`edit-${c.id}-${editMountKey}-${editByCommentId[c.id]?.ui ?? "basic"}`}
+                                          valuePlain={
+                                            editByCommentId[c.id]?.plain ?? ""
                                           }
-                                          onChange={(e) =>
-                                            setReportByCommentId((prev) => ({
+                                          valueDoc={
+                                            editByCommentId[c.id]?.doc ?? null
+                                          }
+                                          disabled={
+                                            editByCommentId[c.id]?.posting
+                                          }
+                                          showToolbar={
+                                            (editByCommentId[c.id]?.ui ??
+                                              "basic") === "full"
+                                          }
+                                          autofocus
+                                          placeholder="Edit your comment…"
+                                          onChangePlain={(plain) =>
+                                            setEditByCommentId((prev) => ({
                                               ...prev,
                                               [c.id]: {
-                                                ...(prev[c.id] as ReportDraft),
-                                                category: e.target.value,
+                                                ...(prev[c.id] as EditDraft),
+                                                plain,
                                                 err: "",
                                               },
                                             }))
                                           }
-                                        >
-                                          {REPORT_CATEGORIES.map((opt) => (
-                                            <option
-                                              key={opt.key}
-                                              value={opt.key}
-                                            >
-                                              {opt.label}
-                                            </option>
-                                          ))}
-                                        </select>
-
-                                        <textarea
-                                          className="min-h-[90px] w-full rounded-md bg-black/20 p-3 text-sm outline-none"
-                                          placeholder="Describe the issue (20–300 chars)."
-                                          value={
-                                            reportByCommentId[c.id]?.reason ??
-                                            ""
-                                          }
-                                          onChange={(e) =>
-                                            setReportByCommentId((prev) => ({
+                                          onChangeDoc={(doc) =>
+                                            setEditByCommentId((prev) => ({
                                               ...prev,
                                               [c.id]: {
-                                                ...(prev[c.id] as ReportDraft),
-                                                reason: e.target.value,
+                                                ...(prev[c.id] as EditDraft),
+                                                doc,
                                                 err: "",
                                               },
                                             }))
                                           }
                                         />
+                                      </div>
 
-                                        {reportByCommentId[c.id]?.err ? (
-                                          <div className="text-xs opacity-75">
-                                            {reportByCommentId[c.id]?.err}
-                                          </div>
-                                        ) : null}
+                                      <div className="mt-2 flex items-center justify-between gap-3">
+                                        <button
+                                          type="button"
+                                          className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
+                                          disabled={
+                                            editByCommentId[c.id]?.posting
+                                          }
+                                          onClick={() =>
+                                            setEditByCommentId((prev) => ({
+                                              ...prev,
+                                              [c.id]: {
+                                                ...(prev[c.id] as EditDraft),
+                                                ui:
+                                                  (prev[c.id]?.ui ??
+                                                    "basic") === "full"
+                                                    ? "basic"
+                                                    : "full",
+                                              },
+                                            }))
+                                          }
+                                          title={
+                                            (editByCommentId[c.id]?.ui ??
+                                              "basic") === "full"
+                                              ? "Hide formatting"
+                                              : "Formatting"
+                                          }
+                                        >
+                                          Aa
+                                        </button>
 
-                                        <div className="flex items-center justify-between">
-                                          <div className="text-xs opacity-60">
-                                            {
-                                              (
-                                                reportByCommentId[c.id]
-                                                  ?.reason ?? ""
-                                              ).trim().length
-                                            }
-                                            /300
-                                          </div>
-                                          <button
-                                            className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
-                                            disabled={
-                                              reportByCommentId[c.id]?.busy ||
-                                              (
-                                                reportByCommentId[c.id]
-                                                  ?.reason ?? ""
-                                              ).trim().length < 20 ||
-                                              (
-                                                reportByCommentId[c.id]
-                                                  ?.reason ?? ""
-                                              ).trim().length > 300
-                                            }
-                                            onClick={() =>
-                                              void submitReport(c.id)
-                                            }
-                                          >
-                                            {reportByCommentId[c.id]?.busy
-                                              ? "Submitting…"
-                                              : "Submit report"}
-                                          </button>
+                                        <div className="text-xs opacity-60">
+                                          {
+                                            (
+                                              editByCommentId[c.id]?.plain ?? ""
+                                            ).trim().length
+                                          }
+                                          /5000
                                         </div>
                                       </div>
-                                    </>
-                                  )}
+
+                                      {editByCommentId[c.id]?.err ? (
+                                        <div className="mt-2 text-xs opacity-75">
+                                          {editByCommentId[c.id]?.err}
+                                        </div>
+                                      ) : null}
+
+                                      <div className="mt-2 flex items-center justify-between">
+                                        <button
+                                          className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
+                                          disabled={
+                                            editByCommentId[c.id]?.posting ||
+                                            !(
+                                              editByCommentId[c.id]?.plain ?? ""
+                                            ).trim()
+                                          }
+                                          onClick={() => void submitEdit(c)}
+                                        >
+                                          {editByCommentId[c.id]?.posting
+                                            ? "Saving…"
+                                            : "Save edit"}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : null}
+
+                                  {canPost &&
+                                  !isLocked &&
+                                  replyByCommentId[c.id]?.open ? (
+                                    <div
+                                      ref={(el) => {
+                                        replyWrapByIdRef.current[c.id] = el;
+                                      }}
+                                      className="mt-2 rounded-md bg-black/25 p-3"
+                                    >
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div className="text-xs opacity-70">
+                                          Reply
+                                        </div>
+                                      </div>
+
+                                      <div className="mt-2">
+                                        <TipTapEditor
+                                          key={`reply-${c.id}-${replyMountKey}-${replyByCommentId[c.id]?.ui ?? "basic"}`}
+                                          valuePlain={
+                                            replyByCommentId[c.id]?.plain ?? ""
+                                          }
+                                          valueDoc={
+                                            replyByCommentId[c.id]?.doc ?? null
+                                          }
+                                          disabled={
+                                            replyByCommentId[c.id]?.posting
+                                          }
+                                          showToolbar={
+                                            (replyByCommentId[c.id]?.ui ??
+                                              "basic") === "full"
+                                          }
+                                          autofocus
+                                          placeholder="Write a reply…"
+                                          onChangePlain={(plain) =>
+                                            setReplyByCommentId((prev) => ({
+                                              ...prev,
+                                              [c.id]: {
+                                                ...(prev[c.id] as ReplyDraft),
+                                                plain,
+                                                err: "",
+                                              },
+                                            }))
+                                          }
+                                          onChangeDoc={(doc) =>
+                                            setReplyByCommentId((prev) => ({
+                                              ...prev,
+                                              [c.id]: {
+                                                ...(prev[c.id] as ReplyDraft),
+                                                doc,
+                                                err: "",
+                                              },
+                                            }))
+                                          }
+                                        />
+                                      </div>
+
+                                      <div className="mt-2 flex items-center justify-between gap-3">
+                                        <button
+                                          type="button"
+                                          className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
+                                          disabled={
+                                            replyByCommentId[c.id]?.posting
+                                          }
+                                          onClick={() =>
+                                            setReplyByCommentId((prev) => ({
+                                              ...prev,
+                                              [c.id]: {
+                                                ...(prev[c.id] as ReplyDraft),
+                                                ui:
+                                                  (prev[c.id]?.ui ??
+                                                    "basic") === "full"
+                                                    ? "basic"
+                                                    : "full",
+                                              },
+                                            }))
+                                          }
+                                          title={
+                                            (replyByCommentId[c.id]?.ui ??
+                                              "basic") === "full"
+                                              ? "Hide formatting"
+                                              : "Formatting"
+                                          }
+                                        >
+                                          Aa
+                                        </button>
+
+                                        <div className="text-xs opacity-60">
+                                          {
+                                            (
+                                              replyByCommentId[c.id]?.plain ??
+                                              ""
+                                            ).trim().length
+                                          }
+                                          /5000
+                                        </div>
+                                      </div>
+
+                                      {replyByCommentId[c.id]?.err ? (
+                                        <div className="mt-2 text-xs opacity-75">
+                                          {replyByCommentId[c.id]?.err}
+                                        </div>
+                                      ) : null}
+
+                                      <div className="mt-2 flex items-center justify-between">
+                                        <button
+                                          className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
+                                          disabled={
+                                            replyByCommentId[c.id]?.posting ||
+                                            !(
+                                              replyByCommentId[c.id]?.plain ??
+                                              ""
+                                            ).trim()
+                                          }
+                                          onClick={() => void postReply(c)}
+                                        >
+                                          {replyByCommentId[c.id]?.posting
+                                            ? "Posting…"
+                                            : "Post reply"}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : null}
+
+                                  {canReport &&
+                                  reportByCommentId[c.id]?.open ? (
+                                    <div className="mt-2 rounded-md bg-black/25 p-3 text-sm">
+                                      {reportByCommentId[c.id]?.done ? (
+                                        <div className="text-xs opacity-75">
+                                          Report submitted. Thanks — this helps
+                                          keep the discourse usable.
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <div className="flex items-center justify-between gap-3">
+                                            <div className="text-xs opacity-70">
+                                              Report this comment
+                                            </div>
+                                          </div>
+
+                                          <div className="mt-2 grid gap-2">
+                                            <select
+                                              className="w-full rounded-md bg-black/20 px-3 py-2 text-sm outline-none"
+                                              value={
+                                                reportByCommentId[c.id]
+                                                  ?.category ?? "spam"
+                                              }
+                                              onChange={(e) =>
+                                                setReportByCommentId(
+                                                  (prev) => ({
+                                                    ...prev,
+                                                    [c.id]: {
+                                                      ...(prev[
+                                                        c.id
+                                                      ] as ReportDraft),
+                                                      category: e.target.value,
+                                                      err: "",
+                                                    },
+                                                  }),
+                                                )
+                                              }
+                                            >
+                                              {REPORT_CATEGORIES.map((opt) => (
+                                                <option
+                                                  key={opt.key}
+                                                  value={opt.key}
+                                                >
+                                                  {opt.label}
+                                                </option>
+                                              ))}
+                                            </select>
+
+                                            <textarea
+                                              className="min-h-[90px] w-full rounded-md bg-black/20 p-3 text-sm outline-none"
+                                              placeholder="Describe the issue (20–300 chars)."
+                                              value={
+                                                reportByCommentId[c.id]
+                                                  ?.reason ?? ""
+                                              }
+                                              onChange={(e) =>
+                                                setReportByCommentId(
+                                                  (prev) => ({
+                                                    ...prev,
+                                                    [c.id]: {
+                                                      ...(prev[
+                                                        c.id
+                                                      ] as ReportDraft),
+                                                      reason: e.target.value,
+                                                      err: "",
+                                                    },
+                                                  }),
+                                                )
+                                              }
+                                            />
+
+                                            {reportByCommentId[c.id]?.err ? (
+                                              <div className="text-xs opacity-75">
+                                                {reportByCommentId[c.id]?.err}
+                                              </div>
+                                            ) : null}
+
+                                            <div className="flex items-center justify-between">
+                                              <div className="text-xs opacity-60">
+                                                {
+                                                  (
+                                                    reportByCommentId[c.id]
+                                                      ?.reason ?? ""
+                                                  ).trim().length
+                                                }
+                                                /300
+                                              </div>
+                                              <button
+                                                className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
+                                                disabled={
+                                                  reportByCommentId[c.id]
+                                                    ?.busy ||
+                                                  (
+                                                    reportByCommentId[c.id]
+                                                      ?.reason ?? ""
+                                                  ).trim().length < 20 ||
+                                                  (
+                                                    reportByCommentId[c.id]
+                                                      ?.reason ?? ""
+                                                  ).trim().length > 300
+                                                }
+                                                onClick={() =>
+                                                  void submitReport(c.id)
+                                                }
+                                              >
+                                                {reportByCommentId[c.id]?.busy
+                                                  ? "Submitting…"
+                                                  : "Submit report"}
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
+                                  ) : null}
                                 </div>
-                              ) : null}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
+                              );
+                            })}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           );
 
