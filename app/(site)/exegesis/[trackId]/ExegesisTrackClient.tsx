@@ -314,6 +314,64 @@ function GeniusIcon(props: { className?: string }) {
   );
 }
 
+function MedalIcon(props: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+      className={props.className}
+    >
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M12 16C15.866 16 19 12.866 19 9C19 5.13401 15.866 2 12 2C8.13401 2 5 5.13401 5 9C5 12.866 8.13401 16 12 16ZM12 6C11.7159 6 11.5259 6.34084 11.1459 7.02251L11.0476 7.19887C10.9397 7.39258 10.8857 7.48944 10.8015 7.55334C10.7173 7.61725 10.6125 7.64097 10.4028 7.68841L10.2119 7.73161C9.47396 7.89857 9.10501 7.98205 9.01723 8.26432C8.92945 8.54659 9.18097 8.84072 9.68403 9.42898L9.81418 9.58117C9.95713 9.74833 10.0286 9.83191 10.0608 9.93531C10.0929 10.0387 10.0821 10.1502 10.0605 10.3733L10.0408 10.5763C9.96476 11.3612 9.92674 11.7536 10.1565 11.9281C10.3864 12.1025 10.7318 11.9435 11.4227 11.6254L11.6014 11.5431C11.7978 11.4527 11.8959 11.4075 12 11.4075C12.1041 11.4075 12.2022 11.4527 12.3986 11.5431L12.5773 11.6254C13.2682 11.9435 13.6136 12.1025 13.8435 11.9281C14.0733 11.7536 14.0352 11.3612 13.9592 10.5763L13.9395 10.3733C13.9179 10.1502 13.9071 10.0387 13.9392 9.93531C13.9714 9.83191 14.0429 9.74833 14.1858 9.58118L14.316 9.42898C14.819 8.84072 15.0706 8.54659 14.9828 8.26432C14.895 7.98205 14.526 7.89857 13.7881 7.73161L13.5972 7.68841C13.3875 7.64097 13.2827 7.61725 13.1985 7.55334C13.1143 7.48944 13.0603 7.39258 12.9524 7.19887L12.8541 7.02251C12.4741 6.34084 12.2841 6 12 6Z"
+      />
+      <path
+        fill="currentColor"
+        d="M4.49517 12.9946L2.99206 14.551C2.45194 15.1102 2.18188 15.3898 2.08843 15.6266C1.87548 16.1662 2.05772 16.7648 2.52138 17.0486C2.72486 17.1732 3.09187 17.212 3.82589 17.2897C4.2403 17.3335 4.44755 17.3554 4.6211 17.4219C5.00966 17.5709 5.31191 17.8838 5.45575 18.2861C5.52 18.4658 5.54117 18.6804 5.5835 19.1095C5.65848 19.8695 5.69597 20.2495 5.81628 20.4602C6.09042 20.9403 6.66852 21.129 7.18967 20.9085C7.41837 20.8117 7.68843 20.5321 8.22855 19.9729L10.7106 17.4029C8.01306 16.9924 5.73225 15.314 4.49517 12.9946Z"
+      />
+      <path
+        fill="currentColor"
+        d="M13.2894 17.4029L15.7715 19.9729C16.3116 20.5321 16.5816 20.8117 16.8103 20.9085C17.3315 21.129 17.9096 20.9403 18.1837 20.4602C18.304 20.2495 18.3415 19.8695 18.4165 19.1095C18.4588 18.6804 18.48 18.4658 18.5442 18.2861C18.6881 17.8838 18.9903 17.5709 19.3789 17.4219C19.5525 17.3554 19.7597 17.3335 20.1741 17.2897C20.9081 17.212 21.2751 17.1732 21.4786 17.0486C21.9423 16.7648 22.1245 16.1662 21.9116 15.6266C21.8181 15.3898 21.5481 15.1102 21.0079 14.551L19.5048 12.9946C18.2677 15.314 15.9869 16.9924 13.2894 17.4029Z"
+      />
+    </svg>
+  );
+}
+
+function ReplyIcon(props: { className?: string }) {
+  return (
+    <svg
+      viewBox="-0.5 0 28 28"
+      aria-hidden="true"
+      focusable="false"
+      className={props.className}
+    >
+      <path
+        fill="currentColor"
+        d="M11.983 7.01V1.11c.034-.3-.047-.6-.275-.83a1.003 1.003 0 0 0-1.434 0L.285 11.24c-.211.21-.301.48-.287.76-.014.27.076.55.287.76l9.934 10.89c.371.32 1.052.5 1.489.06.227-.22.327-.42.292-.71V17c6.6 0 12.569 4.75 13.754 11.01.798-1.84 1.246-3.86 1.246-5.99C27 13.73 20.276 7.01 11.983 7.01Z"
+      />
+    </svg>
+  );
+}
+
+function ShieldAlertIcon(props: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 256 256"
+      aria-hidden="true"
+      focusable="false"
+      className={props.className}
+    >
+      <path
+        fill="currentColor"
+        d="M208 40H48a16.018 16.018 0 0 0-16 16v58.667c0 89.453 75.826 119.124 91.026 124.164a15.488 15.488 0 0 0 9.947 0C148.174 233.791 224 204.12 224 114.667V56a16.018 16.018 0 0 0-16-16ZM120 96a8 8 0 1 1 16 0v40a8 8 0 0 1-16 0Zm8 88a12 12 0 1 1 12-12 12 12 0 0 1-12 12Z"
+      />
+    </svg>
+  );
+}
+
 export default function ExegesisTrackClient(props: {
   trackId: string;
   lyrics: LyricsApiOk;
@@ -405,43 +463,44 @@ export default function ExegesisTrackClient(props: {
     setComposerMountKey((n) => n + 1);
   }
 
-  function DiscourseShimmer(props: { title?: string }) {
+  function DiscourseShimmer() {
     return (
       <div className="rounded-xl bg-white/5 p-4">
-        <div className="text-sm opacity-70">
-          <span className="afShimmerText">{props.title ?? "Loading…"}</span>
+        {/* Selected lyric preview block */}
+        <div className="mt-2 rounded-md bg-black/20 p-3">
+          <div className="space-y-2">
+            <div className="afShimmerBlock h-4 w-[90%] rounded bg-white/5" />
+            <div className="afShimmerBlock h-4 w-[72%] rounded bg-white/5" />
+          </div>
         </div>
 
-        <div className="mt-3 space-y-2">
-          <div className="afShimmerBlock h-4 w-[85%] rounded" />
-          <div className="afShimmerBlock h-4 w-[70%] rounded" />
-          <div className="afShimmerBlock h-4 w-[78%] rounded" />
-        </div>
-
-        <div className="mt-4 rounded-lg border border-white/10 bg-white/6 p-3">
-          <div className="afShimmerBlock h-9 w-full rounded-md" />
+        {/* Composer */}
+        <div className="mt-3 rounded-lg border border-white/10 bg-white/6 p-3">
+          <div className="afShimmerBlock h-9 w-full rounded-md bg-white/5" />
           <div className="mt-2 flex items-center justify-between">
-            <div className="afShimmerBlock h-5 w-10 rounded-md" />
-            <div className="afShimmerBlock h-4 w-16 rounded" />
+            <div className="afShimmerBlock h-5 w-10 rounded-md bg-white/5" />
+            <div className="afShimmerBlock h-4 w-16 rounded bg-white/5" />
           </div>
           <div className="mt-2 flex justify-end">
-            <div className="afShimmerBlock h-8 w-20 rounded-md" />
+            <div className="afShimmerBlock h-8 w-20 rounded-md bg-white/5" />
           </div>
         </div>
 
+        {/* Comments skeleton */}
         <div className="mt-4 space-y-3">
           <div className="rounded-md bg-black/20 p-3">
-            <div className="afShimmerBlock h-3 w-24 rounded" />
+            <div className="afShimmerBlock h-3 w-24 rounded bg-white/5" />
             <div className="mt-2 space-y-2">
-              <div className="afShimmerBlock h-4 w-[92%] rounded" />
-              <div className="afShimmerBlock h-4 w-[76%] rounded" />
+              <div className="afShimmerBlock h-4 w-[92%] rounded bg-white/5" />
+              <div className="afShimmerBlock h-4 w-[76%] rounded bg-white/5" />
             </div>
           </div>
+
           <div className="rounded-md bg-black/20 p-3">
-            <div className="afShimmerBlock h-3 w-20 rounded" />
+            <div className="afShimmerBlock h-3 w-20 rounded bg-white/5" />
             <div className="mt-2 space-y-2">
-              <div className="afShimmerBlock h-4 w-[88%] rounded" />
-              <div className="afShimmerBlock h-4 w-[66%] rounded" />
+              <div className="afShimmerBlock h-4 w-[88%] rounded bg-white/5" />
+              <div className="afShimmerBlock h-4 w-[66%] rounded bg-white/5" />
             </div>
           </div>
         </div>
@@ -1484,52 +1543,57 @@ export default function ExegesisTrackClient(props: {
       className="w-full max-w-none px-4 py-6"
       style={
         {
-          "--lxRow": "#372d3e",
+          "--lxRow": "#2c2431",
           "--lxHover": "#564263",
           "--lxSelected": "#624e71",
         } as React.CSSProperties
       }
     >
       <style jsx global>{`
-  @keyframes afShimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
-  .afShimmerText {
-    background: linear-gradient(
-      90deg,
-      rgba(255,255,255,0.55) 0%,
-      rgba(255,255,255,0.95) 45%,
-      rgba(255,255,255,0.55) 100%
-    );
-    background-size: 200% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    animation: afShimmer 1.1s linear infinite;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .afShimmerText {
-      animation: none;
-      color: rgba(255,255,255,0.92);
-      background: none;
-    }
-  }
-  .afShimmerBlock {
-    background: linear-gradient(
-      90deg,
-      rgba(255,255,255,0.06) 0%,
-      rgba(255,255,255,0.16) 45%,
-      rgba(255,255,255,0.06) 100%
-    );
-    background-size: 200% 100%;
-    animation: afShimmer 1.05s linear infinite;
-    mix-blend-mode: screen;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .afShimmerBlock { animation: none; }
-  }
-`}</style>
+        @keyframes afShimmer {
+          0% {
+            background-position: 200% 0;
+          }
+          100% {
+            background-position: -200% 0;
+          }
+        }
+        .afShimmerText {
+          background: linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0.55) 0%,
+            rgba(255, 255, 255, 0.95) 45%,
+            rgba(255, 255, 255, 0.55) 100%
+          );
+          background-size: 200% 100%;
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+          animation: afShimmer 1.1s linear infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .afShimmerText {
+            animation: none;
+            color: rgba(255, 255, 255, 0.92);
+            background: none;
+          }
+        }
+        .afShimmerBlock {
+          background: linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0.03) 0%,
+            rgba(255, 255, 255, 0.08) 45%,
+            rgba(255, 255, 255, 0.03) 100%
+          );
+          background-size: 200% 100%;
+          animation: afShimmer 1.05s linear infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .afShimmerBlock {
+            animation: none;
+          }
+        }
+      `}</style>
       <div>
         <h1 className="mt-1 text-xl font-semibold">
           <span className="opacity-90">
@@ -1644,7 +1708,7 @@ export default function ExegesisTrackClient(props: {
               }
             >
               {!panelReady ? (
-                <DiscourseShimmer title="Loading discourse…" />
+                <DiscourseShimmer />
               ) : (
                 <>
                   {isLocked ? (
@@ -1830,7 +1894,7 @@ export default function ExegesisTrackClient(props: {
                                 <div
                                   id={`exegesis-c-${c.id}`}
                                   key={c.id}
-                                  className="py-2 scroll-mt-4"
+                                  className="group py-2 scroll-mt-4"
                                   style={{
                                     paddingLeft: Math.min(
                                       24,
@@ -1851,39 +1915,41 @@ export default function ExegesisTrackClient(props: {
                                     </div>
 
                                     <div className="flex items-center gap-2">
-                                      {canVote ? (
-                                        <button
-                                          className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
-                                          onClick={() => void toggleVote(c.id)}
-                                          title="Vote"
-                                        >
-                                          {c.viewerHasVoted ? "Voted" : "Vote"}{" "}
-                                          · {c.voteCount}
-                                        </button>
-                                      ) : (
-                                        <button
-                                          className="rounded-md bg-white/5 px-2 py-1 text-xs opacity-70"
-                                          disabled
-                                          title={
-                                            thread?.viewer.kind === "anon"
-                                              ? "Sign in to vote"
-                                              : "Friend tier or higher required to vote"
-                                          }
-                                        >
-                                          Vote · {c.voteCount}
-                                        </button>
-                                      )}
+                                      {/* Hover-only actions (reply + report) */}
+                                      <div className="flex items-center gap-2 md:opacity-0 transition-opacity duration-150 ease-out md:group-hover:opacity-100 group-focus-within:opacity-100">
+                                        {canPost && !isLocked ? (
+                                          <button
+                                            className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
+                                            disabled={
+                                              replyBusy ||
+                                              c.status !== "live" ||
+                                              c.depth >= 6
+                                            }
+                                            onClick={() => openReply(c.id)}
+                                            title={
+                                              c.depth >= 6
+                                                ? "Max thread depth reached"
+                                                : "Reply"
+                                            }
+                                            aria-label="Reply"
+                                          >
+                                            <ReplyIcon className="h-4 w-4" />
+                                          </button>
+                                        ) : null}
 
-                                      {canReport ? (
-                                        <button
-                                          className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
-                                          onClick={() => openReport(c.id)}
-                                          title="Report"
-                                        >
-                                          Report
-                                        </button>
-                                      ) : null}
+                                        {canReport ? (
+                                          <button
+                                            className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
+                                            onClick={() => openReport(c.id)}
+                                            title="Report"
+                                            aria-label="Report"
+                                          >
+                                            <ShieldAlertIcon className="h-4 w-4" />
+                                          </button>
+                                        ) : null}
+                                      </div>
 
+                                      {/* Keep Edit where it is (unchanged) */}
                                       {canEdit ? (
                                         <button
                                           className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
@@ -1895,24 +1961,38 @@ export default function ExegesisTrackClient(props: {
                                         </button>
                                       ) : null}
 
-                                      {canPost && !isLocked ? (
+                                      {/* Vote always visible, far right */}
+                                      {canVote ? (
                                         <button
-                                          className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
-                                          disabled={
-                                            replyBusy ||
-                                            c.status !== "live" ||
-                                            c.depth >= 6
-                                          }
-                                          onClick={() => openReply(c.id)}
-                                          title={
-                                            c.depth >= 6
-                                              ? "Max thread depth reached"
-                                              : "Reply"
-                                          }
+                                          className={`inline-flex items-center gap-1.5 rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 ${
+                                            c.viewerHasVoted ? "" : "opacity-80"
+                                          }`}
+                                          onClick={() => void toggleVote(c.id)}
+                                          title="Vote"
+                                          aria-label="Vote"
                                         >
-                                          Reply
+                                          <MedalIcon className="h-4 w-4" />
+                                          <span className="tabular-nums">
+                                            {c.voteCount}
+                                          </span>
                                         </button>
-                                      ) : null}
+                                      ) : (
+                                        <button
+                                          className="inline-flex items-center gap-1.5 rounded-md bg-white/5 px-2 py-1 text-xs opacity-70"
+                                          disabled
+                                          title={
+                                            thread?.viewer.kind === "anon"
+                                              ? "Sign in to vote"
+                                              : "Friend tier or higher required to vote"
+                                          }
+                                          aria-label="Vote"
+                                        >
+                                          <MedalIcon className="h-4 w-4" />
+                                          <span className="tabular-nums">
+                                            {c.voteCount}
+                                          </span>
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
 
