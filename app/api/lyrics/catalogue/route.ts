@@ -2,6 +2,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { client } from "@/sanity/lib/client";
+import { urlFor } from "@/sanity/lib/image";
 
 export const runtime = "nodejs";
 export const revalidate = 300;
@@ -11,6 +12,7 @@ type CatalogueTrack = {
   title: string | null;
   artist: string | null;
   trackCatalogueId: string | null;
+  trackNo: number; // ✅ ordinal in the album tracklist (1-based)
 };
 
 type CatalogueAlbum = {
@@ -18,6 +20,7 @@ type CatalogueAlbum = {
   albumSlug: string | null;
   albumTitle: string | null;
   albumCatalogueId: string | null;
+  coverUrl: string | null; // ✅ album artwork URL (same idea as FullPlayer)
   tracks: CatalogueTrack[];
   trackIds: string[]; // legacy-ish surface: list of returned trackId values
 };
@@ -32,6 +35,7 @@ type CatalogueQueryResult = {
     albumSlug?: string | null;
     albumTitle?: string | null;
     albumCatalogueId?: string | null;
+    artwork?: unknown; // ✅
     tracks?: Array<{
       id?: string | null; // legacy
       catalogueId?: string | null; // canonical
@@ -68,7 +72,8 @@ export async function GET() {
             "albumId": _id,
             "albumTitle": title,
             "albumSlug": slug.current,
-            "albumCatalogueId": catalogueId,
+                        "albumCatalogueId": catalogueId,
+            artwork,
             "tracks": tracks[]{
               id,
               catalogueId,
@@ -92,13 +97,20 @@ export async function GET() {
     const albumsRaw = Array.isArray(bundle?.albums) ? bundle!.albums! : [];
 
     const albums: CatalogueAlbum[] = albumsRaw
-      .map((a) => {
+            .map((a) => {
         const tracksRaw = Array.isArray(a.tracks) ? a.tracks : [];
+
+        const coverUrl =
+          a?.artwork
+            ? urlFor(a.artwork).width(300).height(300).quality(80).url()
+            : null;
 
         const normTracks: CatalogueTrack[] = [];
         const seen = new Set<string>();
 
-        for (const t of tracksRaw) {
+        // ✅ preserve album tracklist ordinals even if some tracks are skipped
+        for (let idx = 0; idx < tracksRaw.length; idx++) {
+          const t = tracksRaw[idx];
           const legacyId = asTrimmedString(t?.id);
           const catId = asTrimmedString(t?.catalogueId);
 
@@ -116,6 +128,7 @@ export async function GET() {
             title: asTrimmedString(t?.title) || null,
             artist: asTrimmedString(t?.artist) || null,
             trackCatalogueId: catId || null,
+            trackNo: idx + 1,
           });
         }
 
@@ -126,6 +139,7 @@ export async function GET() {
           albumSlug: asTrimmedString(a?.albumSlug) || null,
           albumTitle: asTrimmedString(a?.albumTitle) || null,
           albumCatalogueId: asTrimmedString(a?.albumCatalogueId) || null,
+          coverUrl,
           tracks: normTracks,
           trackIds,
         };

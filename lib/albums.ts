@@ -332,8 +332,6 @@ export async function listAlbumsForBrowse(): Promise<AlbumBrowseItem[]> {
   }));
 }
 
-// web/lib/albums.ts
-
 export type AlbumEmailMeta = {
   slug: string;
   title: string;
