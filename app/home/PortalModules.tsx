@@ -569,7 +569,7 @@ function renderModule(m: PortalModule, entitlementKeys: string[]) {
     return (
       <PortalArtistPosts
         key={m._key}
-        title={m.title ?? "Posts"}
+        title={m.title ?? "Journal"}
         pageSize={m.pageSize ?? 10}
         requireAuthAfter={m.requireAuthAfter ?? 3}
         minVisibility={m.minVisibility ?? "public"}

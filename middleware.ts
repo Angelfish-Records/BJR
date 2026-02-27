@@ -99,7 +99,7 @@ export default clerkMiddleware((auth, req) => {
 
   // ---- A) Hard upgrades: legacy /home family -> canonical tabs/player ----
   if (pathname === "/home") {
-    return redirect308(url, "/extras", pickPreservedParams(url));
+    return redirect308(url, "/portal", pickPreservedParams(url));
   }
 
   if (pathname === "/home/player") {
@@ -111,7 +111,7 @@ export default clerkMiddleware((auth, req) => {
     const tab = (parts[1] ?? "").trim();
     return redirect308(
       url,
-      tab ? `/${encodeURIComponent(tab)}` : "/extras",
+      tab ? `/${encodeURIComponent(tab)}` : "/portal",
       pickPreservedParams(url),
     );
   }
@@ -167,7 +167,7 @@ export default clerkMiddleware((auth, req) => {
 
     // /home?p=<tab> -> /<tab>
     if (p && p !== "player") {
-      if (p === "posts") {
+      if (p === "journal") {
         if (post) preserved.set("post", post);
         if (pt) preserved.set("pt", pt);
       }
@@ -176,7 +176,7 @@ export default clerkMiddleware((auth, req) => {
 
     // pt-only -> /<pt>
     if (!p && pt) {
-      if (post && pt === "posts") preserved.set("post", post);
+      if (post && pt === "journal") preserved.set("post", post);
       preserved.set("pt", pt);
       return redirect308(url, `/${encodeURIComponent(pt)}`, preserved);
     }

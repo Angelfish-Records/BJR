@@ -137,7 +137,7 @@ function shareUrlFor(slug: string) {
 
   // canonical portal tab route
   const next = new URL(window.location.origin);
-  next.pathname = "/posts";
+  next.pathname = "/journal";
 
   // preserve allowed “secondary” params
   const keep = new URLSearchParams();

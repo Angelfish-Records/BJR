@@ -7,9 +7,12 @@ import AudioEngine from "@/app/home/player/AudioEngine";
 import TrackTitleSync from "@/app/home/player/TrackTitleSync";
 import StageInlineHost from "@/app/home/player/StageInlineHost";
 
-export default function PlayerHost({ children }: { children: React.ReactNode }) {
-  
-    React.useEffect(() => {
+export default function PlayerHost({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  React.useEffect(() => {
     if (typeof window === "undefined") return;
 
     const tag = "[NAV]";
@@ -29,7 +32,10 @@ export default function PlayerHost({ children }: { children: React.ReactNode }) 
           : (href.split("?")[0] || "").trim();
 
         if (
-          (from === "/extras" && toPath === "/posts") ||
+          (from === "/portal" && toPath === "/journal") ||
+          href.includes("/journal") ||
+          href.includes("/portal") ||
+          // legacy (avoid breaking old in-flight links/history)
           href.includes("/posts") ||
           href.includes("/extras")
         ) {
@@ -69,7 +75,7 @@ export default function PlayerHost({ children }: { children: React.ReactNode }) 
       window.removeEventListener("popstate", onPop);
     };
   }, []);
-  
+
   return (
     <PlayerStateProvider>
       <AudioEngine />

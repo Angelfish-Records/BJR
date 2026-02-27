@@ -24,7 +24,7 @@ import Image from "next/image";
 
 // --- SURFACE: path-only (NO ?p= fallback) ---
 
-const DEFAULT_PORTAL_TAB = "extras";
+const DEFAULT_PORTAL_TAB = "portal";
 
 function portalTabFromPathname(pathname: string | null): string | null {
   const p = (pathname ?? "").split("?")[0] ?? "";
@@ -261,11 +261,9 @@ function FullWidthBanner(props: {
   if (kind === "checkout") {
     if (code === "success") {
       tone = "success";
-      icon = <span aria-hidden>✅</span>;
       text = (
         <>
-          Checkout completed. If your access hasn&apos;t appeared yet, refresh
-          once (webhooks can be a beat behind).
+          Your account has been updated. Thank you for supporting future work on this independent platform.
         </>
       );
     } else if (code === "cancel") {
@@ -821,7 +819,7 @@ export default function PortalArea(props: {
       tabId?: string | null,
       mode: "push" | "replace" = "push",
     ) => {
-      const leavingPosts = (portalTabId ?? "").toLowerCase() === "posts";
+      const leavingPosts = (portalTabId ?? "").toLowerCase() === "journal";
 
       // Use the sanitized secondary query from urlState.
       const secondary = new URLSearchParams(sp.toString());
@@ -844,7 +842,7 @@ export default function PortalArea(props: {
       const href = buildSurfaceHref(secondary, {
         toPlayer: false,
         tab: desired,
-        clearPosts: leavingPosts && desired !== "posts",
+        clearPosts: leavingPosts && desired !== "journal",
         albumSlugForPlayer: playerAlbumSlug, // unused in this branch, but keeps signature uniform
       });
 

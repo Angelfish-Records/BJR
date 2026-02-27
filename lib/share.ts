@@ -105,7 +105,7 @@ export function buildShareTarget(
 
   if (input.type === "post") {
     const postTitle = input.post.title?.trim() || "Post";
-    const basePath = `/posts/${encodePathSeg(input.post.slug)}`;
+    const basePath = `/journal?post=${encodePathSeg(input.post.slug)}`;
     const baseAbs = origin ? `${origin}${basePath}` : basePath;
 
     const abs = origin ? new URL(baseAbs) : null;

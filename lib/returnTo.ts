@@ -2,7 +2,14 @@
 import "server-only";
 
 const PRESERVE_PREFIXES = ["utm_"];
-const PRESERVE_KEYS = new Set(["st", "autoplay", "post", "pt", "gift", "checkout"]);
+const PRESERVE_KEYS = new Set([
+  "st",
+  "autoplay",
+  "post",
+  "pt",
+  "gift",
+  "checkout",
+]);
 const STRIP_KEYS = new Set(["p", "panel", "album", "track", "t", "share"]);
 
 function splitPath(pathname: string): string[] {
@@ -12,7 +19,15 @@ function splitPath(pathname: string): string[] {
 // Keep this conservative: only allow your canonical surfaces.
 function isAllowedPath(pathname: string): boolean {
   if (pathname === "/" || pathname === "/player") return true;
-  if (pathname === "/posts" || pathname === "/extras" || pathname === "/download") return true; // extend to your real tab ids
+  // Accept both new canonical paths and legacy ones (so old links/bookmarks don't break auth flows).
+  if (
+    pathname === "/journal" ||
+    pathname === "/portal" ||
+    pathname === "/posts" || // legacy
+    pathname === "/extras" || // legacy
+    pathname === "/download"
+  )
+    return true; // extend to your real tab ids
   if (pathname.startsWith("/album/")) return true;
   // allow generic tab root-level pages: "/<tab>"
   const parts = splitPath(pathname);
@@ -26,7 +41,11 @@ function sanitizeParams(u: URL): URLSearchParams {
   const out = new URLSearchParams();
 
   // normalize share -> st
-  const st = (u.searchParams.get("st") ?? u.searchParams.get("share") ?? "").trim();
+  const st = (
+    u.searchParams.get("st") ??
+    u.searchParams.get("share") ??
+    ""
+  ).trim();
   if (st) out.set("st", st);
 
   const autoplay = (u.searchParams.get("autoplay") ?? "").trim();

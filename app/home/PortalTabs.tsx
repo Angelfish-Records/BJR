@@ -36,7 +36,8 @@ function tabFromPathname(pathname: string | null): string | null {
 
 function pathForTab(tabId: string) {
   const t = (tabId || "").trim().toLowerCase();
-  if (!t || t === "player") return "/extras";
+  // Default surface for "no tab" is now /portal (was /extras)
+  if (!t || t === "player") return "/portal";
   if (t === "exegesis") return "/exegesis";
   return `/${encodeURIComponent(t)}`;
 }
