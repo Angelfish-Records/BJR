@@ -109,7 +109,7 @@ export default function CancelSubscriptionButton({
   const text = busy
     ? "Cancelling…"
     : confirming
-      ? "Click again to confirm cancellation"
+      ? "Confirm cancellation"
       : (label ??
         (variant === "link"
           ? "Cancel subscription"

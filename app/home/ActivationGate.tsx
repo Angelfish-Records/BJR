@@ -1278,7 +1278,7 @@ export default function ActivationGate(props: Props) {
                           border: "none",
                           boxShadow: "none",
                           flex: "0 0 auto",
-                          transform: "translateY(2px)", // drop the whole badge slightly
+                          transform: "translateY(2px)",
                         }}
                       >
                         <svg
@@ -1294,7 +1294,7 @@ export default function ActivationGate(props: Props) {
                           <path
                             d="M20 6L9 17l-5-5"
                             stroke="rgba(0,0,0,0.92)"
-                            strokeWidth="3.2" // thicker stroke
+                            strokeWidth="3.2"
                             strokeLinecap="round"
                             strokeLinejoin="round"
                           />

@@ -254,7 +254,7 @@ export default function SubscribeButton(props: Props) {
     const spec: CardSpec = card ?? {
       title: tier === "partner" ? "Partner" : "Patron",
       price: tier === "partner" ? "$20 / mo" : "$5 / mo",
-      bullets: ["Benefit 1", "Benefit 2", "Benefit 3"],
+      bullets: ["Benefit 1", "Benefit 2", "Benefit 3", "Benefit 4"],
     };
 
     const isHovering = hover && !disabled;

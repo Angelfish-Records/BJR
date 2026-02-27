@@ -227,24 +227,6 @@ function ModalAttentionMessage(props: { attentionMessage: string | null }) {
 
 type BannerTone = "success" | "neutral" | "warn";
 
-function bannerStyle(tone: BannerTone) {
-  const border =
-    tone === "success"
-      ? "color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.14))"
-      : tone === "warn"
-        ? "rgba(255,255,255,0.18)"
-        : "rgba(255,255,255,0.14)";
-
-  const bg =
-    tone === "success"
-      ? "color-mix(in srgb, var(--accent) 10%, rgba(0,0,0,0.22))"
-      : tone === "warn"
-        ? "rgba(0,0,0,0.28)"
-        : "rgba(0,0,0,0.22)";
-
-  return { border, bg };
-}
-
 /** Full-width banner under topbar: non-auth flow messages. */
 function FullWidthBanner(props: {
   kind: "gift" | "checkout" | null;
@@ -255,20 +237,16 @@ function FullWidthBanner(props: {
   if (!kind || !code) return null;
 
   let tone: BannerTone = "neutral";
-  let icon: React.ReactNode = null;
   let text: React.ReactNode = null;
 
   if (kind === "checkout") {
     if (code === "success") {
       tone = "success";
       text = (
-        <>
-          Your account has been updated. Thank you for supporting future work on this independent platform.
-        </>
+        <>Your account has been updated. Thank you for supporting future work on this independent platform.</>
       );
     } else if (code === "cancel") {
       tone = "neutral";
-      icon = <span aria-hidden>⤺</span>;
       text = <>Checkout cancelled.</>;
     } else return null;
   }
@@ -276,11 +254,9 @@ function FullWidthBanner(props: {
   if (kind === "gift") {
     if (code === "ready") {
       tone = "success";
-      icon = <span aria-hidden>🎁</span>;
       text = <>Gift activated. Your content is now available.</>;
     } else if (code === "not_paid") {
       tone = "neutral";
-      icon = <span aria-hidden>⏳</span>;
       text = (
         <>
           This gift hasn&apos;t completed payment yet. If you just paid, refresh
@@ -289,7 +265,6 @@ function FullWidthBanner(props: {
       );
     } else if (code === "wrong_account") {
       tone = "warn";
-      icon = <span aria-hidden>⚠️</span>;
       text = (
         <>
           This gift was sent to a different email. Sign in with the recipient
@@ -298,7 +273,6 @@ function FullWidthBanner(props: {
       );
     } else if (code === "claim_code_missing") {
       tone = "warn";
-      icon = <span aria-hidden>⚠️</span>;
       text = (
         <>
           That link is missing its claim code. Open the exact link from the
@@ -307,7 +281,6 @@ function FullWidthBanner(props: {
       );
     } else if (code === "invalid_claim") {
       tone = "warn";
-      icon = <span aria-hidden>⚠️</span>;
       text = (
         <>
           That claim code doesn&apos;t match this gift. Open the exact link from
@@ -316,75 +289,40 @@ function FullWidthBanner(props: {
       );
     } else if (code === "missing") {
       tone = "warn";
-      icon = <span aria-hidden>⚠️</span>;
       text = <>That gift link looks invalid.</>;
     } else return null;
   }
 
-  const { border, bg } = bannerStyle(tone);
+  const toneClasses =
+    tone === "success"
+      ? "border-emerald-400/30 bg-white/5"
+      : tone === "warn"
+      ? "border-amber-400/30 bg-white/5"
+      : "border-white/10 bg-white/5";
 
   return (
     <div
       role="status"
       aria-live="polite"
-      style={{
-        marginTop: 10,
-        borderRadius: 16,
-        border: `1px solid ${border}`,
-        background: bg,
-        padding: "12px 14px",
-        fontSize: 13,
-        opacity: 0.96,
-        lineHeight: 1.45,
-        textAlign: "left",
-        width: "100%",
-        display: "flex",
-        gap: 10,
-        alignItems: "flex-start",
-        boxShadow: "0 18px 44px rgba(0,0,0,0.22)",
-        position: "relative",
-      }}
+      className={[
+        "mt-3 w-full rounded-xl border p-4 shadow-[0_18px_44px_rgba(0,0,0,0.22)]",
+        "text-sm leading-relaxed text-white/85",
+        "relative",
+        toneClasses,
+      ].join(" ")}
     >
-      <div
-        aria-hidden
-        style={{
-          width: 20,
-          height: 20,
-          borderRadius: 999,
-          display: "grid",
-          placeItems: "center",
-          marginTop: 1,
-          background: "rgba(255,255,255,0.08)",
-          border: "1px solid rgba(255,255,255,0.14)",
-          flex: "0 0 auto",
-        }}
-      >
-        {icon}
-      </div>
-
-      <div style={{ minWidth: 0, paddingRight: 26 }}>{text}</div>
+      <div className="pr-10">{text}</div>
 
       <button
         type="button"
         aria-label="Dismiss message"
         onClick={onDismiss}
-        style={{
-          position: "absolute",
-          top: 8,
-          right: 8,
-          width: 28,
-          height: 28,
-          borderRadius: 999,
-          border: "1px solid rgba(255,255,255,0.14)",
-          background: "rgba(255,255,255,0.06)",
-          color: "rgba(255,255,255,0.88)",
-          cursor: "pointer",
-          display: "grid",
-          placeItems: "center",
-          lineHeight: 1,
-          fontSize: 16,
-          userSelect: "none",
-        }}
+        className={[
+          "absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full",
+          "border border-white/10 bg-white/5 text-white/70",
+          "hover:bg-white/10 hover:text-white/85",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20",
+        ].join(" ")}
       >
         ×
       </button>
