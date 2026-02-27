@@ -247,5 +247,17 @@ export async function POST(req: Request) {
 
   // IMPORTANT: do not mutate entitlements here.
   // Webhook (subscription.updated/deleted) will reconcile into entitlement_grants.
-  return NextResponse.json({ ok: true, updated });
+  const maxEndMs = updated.reduce<number | null>((acc, u) => {
+    if (typeof u.current_period_end !== "number") return acc;
+    const ms = u.current_period_end * 1000;
+    if (acc === null) return ms;
+    return Math.max(acc, ms);
+  }, null);
+
+  return NextResponse.json({
+    ok: true,
+    updated,
+    cancelAtPeriodEnd: true,
+    accessUntil: maxEndMs ? new Date(maxEndMs).toISOString() : null,
+  });
 }

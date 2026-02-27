@@ -271,6 +271,34 @@ function normalizeDigits(raw: string): string {
   return raw.replace(/\D/g, "").slice(0, 6);
 }
 
+function ClockIcon(props: { size?: number }) {
+  const { size = 12 } = props;
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+      style={{ display: "block" }}
+    >
+      <path
+        d="M12 22a10 10 0 1 0-10-10 10 10 0 0 0 10 10Z"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
+      <path
+        d="M12 6v6l4 2"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function LockIcon(props: { size?: number }) {
   const { size = 12 } = props;
   return (
@@ -511,6 +539,59 @@ export default function ActivationGate(props: Props) {
   const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isActive = !!isSignedIn;
+  const clerkLoaded = signInLoaded && signUpLoaded;
+
+  const [subStatus, setSubStatus] = useState<{
+    cancelAtPeriodEnd: boolean;
+    accessUntil: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!isActive) {
+      setSubStatus(null);
+      return;
+    }
+    // Only matters for paying tiers; also only show if the user can manage billing
+    if (!canManageBilling) return;
+    if (!isPatron && !(tier ?? "").toLowerCase().includes("partner")) return;
+
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/stripe/subscription-status", {
+          method: "GET",
+          credentials: "include",
+        });
+        const data = (await res.json().catch(() => null)) as {
+          ok?: boolean;
+          hasSubscription?: boolean;
+          cancelAtPeriodEnd?: boolean;
+          accessUntil?: string | null;
+        } | null;
+
+        if (!alive) return;
+        if (!res.ok || !data?.ok || !data?.hasSubscription) {
+          setSubStatus(null);
+          return;
+        }
+
+        setSubStatus({
+          cancelAtPeriodEnd: !!data.cancelAtPeriodEnd,
+          accessUntil:
+            typeof data.accessUntil === "string" ? data.accessUntil : null,
+        });
+      } catch {
+        if (!alive) return;
+        setSubStatus(null);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [isActive, canManageBilling, isPatron, tier]);
+
   const { isMembershipOpen, openMembershipModal, closeMembershipModal } =
     useMembershipModal();
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -519,9 +600,6 @@ export default function ActivationGate(props: Props) {
   // “briefly while typing” privacy notice timer
   const [isTypingEmail, setIsTypingEmail] = useState(false);
   const typingTimerRef = useRef<number | null>(null);
-
-  const isActive = !!isSignedIn;
-  const clerkLoaded = signInLoaded && signUpLoaded;
 
   const emailValid = useMemo(
     () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),
@@ -955,7 +1033,7 @@ export default function ActivationGate(props: Props) {
                     "All downloads",
                     "First listener access",
                     "Mailbag Q&A",
-                    "Lyrics discussion"
+                    "Lyrics discussion",
                   ],
                 }}
               />
@@ -1209,6 +1287,46 @@ export default function ActivationGate(props: Props) {
                           <span style={{ opacity: 0.72 }} title={tier}>
                             {tier}
                           </span>
+
+                          {subStatus?.cancelAtPeriodEnd
+                            ? (() => {
+                                const until = subStatus.accessUntil;
+                                const untilLabel = until
+                                  ? new Intl.DateTimeFormat(undefined, {
+                                      year: "numeric",
+                                      month: "long",
+                                      day: "numeric",
+                                    }).format(new Date(until))
+                                  : null;
+
+                                const tip = untilLabel
+                                  ? `Cancellation scheduled — access until ${untilLabel}.`
+                                  : "Cancellation scheduled — access until the end of your billing period.";
+
+                                return (
+                                  <span
+                                    title={tip}
+                                    aria-label={tip}
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      width: 18,
+                                      height: 18,
+                                      borderRadius: 999,
+                                      border:
+                                        "1px solid rgba(255,255,255,0.16)",
+                                      background: "rgba(255,255,255,0.06)",
+                                      color: "rgba(255,255,255,0.82)",
+                                      transform: "translateY(1px)",
+                                    }}
+                                  >
+                                    <ClockIcon size={12} />
+                                  </span>
+                                );
+                              })()
+                            : null}
+
                           <span aria-hidden style={{ opacity: 0.35 }}>
                             |
                           </span>
