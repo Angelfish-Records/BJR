@@ -300,7 +300,7 @@ function AlbumCard(props: {
         }}
       />
       {/* Album hero (full-bleed to card edges despite card padding) */}
-      <div className="relative overflow-hidden rounded-t-xl -mx-4 -mt-4 mb-4">
+      <div className="relative overflow-hidden rounded-t-[11px] -mx-4 -mt-4 mb-4 m-[1px]">
         {/* Background texture */}
         {a.coverUrl ? (
           <div
@@ -309,8 +309,8 @@ function AlbumCard(props: {
               backgroundImage: `url(${a.coverUrl})`,
               backgroundPosition: "center",
               backgroundSize: "cover",
-              filter: "blur(22px)",
-              opacity: 0.55,
+              filter: "blur(12px)",
+              opacity: 0.25,
             }}
             aria-hidden="true"
           />
@@ -321,7 +321,7 @@ function AlbumCard(props: {
           className="absolute inset-0"
           style={{
             background:
-              "linear-gradient(to bottom, rgba(0,0,0,0.25), rgba(0,0,0,0.78))",
+              "linear-gradient(to bottom, rgba(0,0,0,0.14), rgba(0,0,0,0.46))",
           }}
           aria-hidden="true"
         />
