@@ -3,6 +3,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { auth, currentUser } from "@clerk/nextjs/server";
+import { ensureStripeCustomerForClerkUser } from "@/lib/stripeCustomer";
 import { sql } from "@vercel/postgres";
 import { getAlbumOffer } from "../../../../lib/albumOffers";
 import { normalizeEmail, ensureMemberByEmail } from "../../../../lib/members";
@@ -74,8 +75,11 @@ function isDisallowedPath(pathname: string): boolean {
 function pickPreservedParams(u: URL): URLSearchParams {
   const out = new URLSearchParams();
 
-  const st = (u.searchParams.get("st") ?? u.searchParams.get("share") ?? "")
-    .trim();
+  const st = (
+    u.searchParams.get("st") ??
+    u.searchParams.get("share") ??
+    ""
+  ).trim();
   if (st) out.set("st", st);
 
   const autoplay = (u.searchParams.get("autoplay") ?? "").trim();
@@ -119,7 +123,10 @@ function safeReturnTo(
 
   for (const [k, v] of preserved.entries()) {
     if (STRIP_KEYS.has(k)) continue;
-    if (PRESERVE_KEYS.has(k) || PRESERVE_PREFIXES.some((p) => k.startsWith(p))) {
+    if (
+      PRESERVE_KEYS.has(k) ||
+      PRESERVE_PREFIXES.some((p) => k.startsWith(p))
+    ) {
       const vv = (v ?? "").trim();
       if (vv) out.set(k, vv);
     }
@@ -224,18 +231,22 @@ export async function POST(req: Request) {
     });
   }
 
-  // Logged-in: reuse existing customer if linked to avoid duplicate Stripe customers
+  // Logged-in: ensure we have a Stripe customer (prevents dupes + prefilled Checkout)
   let customer: string | undefined;
   if (userId) {
-    const r = await sql`
-      select stripe_customer_id
-      from members
-      where clerk_user_id = ${userId}
-      limit 1
-    `;
-    const cid =
-      (r.rows[0]?.stripe_customer_id as string | null | undefined) ?? null;
-    if (cid) customer = cid;
+    if (!email) {
+      return NextResponse.json(
+        { ok: false, error: "Missing email for signed-in user" },
+        { status: 500 },
+      );
+    }
+
+    const { customerId } = await ensureStripeCustomerForClerkUser({
+      stripe,
+      clerkUserId: userId,
+      email,
+    });
+    customer = customerId;
   }
 
   // returnTo drives everything; fallback is neutral canonical surface.
@@ -261,7 +272,7 @@ export async function POST(req: Request) {
 
     client_reference_id: userId ?? undefined,
     customer,
-    customer_email: !userId && email ? email : undefined,
+    customer_email: !customer && email ? email : undefined,
 
     metadata: { albumSlug: offer.albumSlug, offer: "digital_album" },
   });

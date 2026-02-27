@@ -3,8 +3,9 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import Stripe from "stripe";
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { normalizeEmail, ensureMemberByEmail } from "../../../../lib/members";
+import { ensureStripeCustomerForClerkUser } from "@/lib/stripeCustomer";
 import { safeReturnToFromBody, buildReturnUrl } from "@/lib/returnTo";
 
 export const runtime = "nodejs";
@@ -128,8 +129,14 @@ export async function POST(req: Request) {
 
   const body = (await req.json().catch(() => ({}))) as Body;
 
+  const user = userId ? await currentUser() : null;
+  const emailFromClerk =
+    user?.primaryEmailAddress?.emailAddress ??
+    user?.emailAddresses?.[0]?.emailAddress ??
+    "";
   const emailFromBody = typeof body.email === "string" ? body.email : "";
-  const email = normalizeEmail(emailFromBody);
+
+  const email = normalizeEmail(emailFromClerk || emailFromBody);
 
   const tier = pickTier(body.tier);
   const priceId = priceForTier(tier);
@@ -166,11 +173,22 @@ export async function POST(req: Request) {
     });
   }
 
-  // Logged-in: reuse existing customer if linked (prevents duplicate customers)
+  // Logged-in: ensure we have a Stripe customer (prevents duplicate customers + prefilled Checkout)
   let customer: string | undefined;
   if (userId) {
-    const cid = await lookupStripeCustomerIdByClerkUserId(userId);
-    if (cid) customer = cid;
+    if (!email) {
+      return NextResponse.json(
+        { ok: false, error: "Missing email for signed-in user" },
+        { status: 500 },
+      );
+    }
+
+    const { customerId } = await ensureStripeCustomerForClerkUser({
+      stripe,
+      clerkUserId: userId,
+      email,
+    });
+    customer = customerId;
   }
 
   const { pathname, params } = safeReturnToFromBody(
@@ -220,8 +238,9 @@ export async function POST(req: Request) {
     // Reuse if known
     customer,
 
-    // Logged-out path: let Stripe attach/collect email
-    customer_email: !userId && email ? email : undefined,
+    // Prefill email when we don't yet know the Stripe customer (logged-in or logged-out).
+    // If `customer` is set, Stripe already knows the email and won't need this.
+    customer_email: !customer && email ? email : undefined,
 
     allow_promotion_codes: true,
 
