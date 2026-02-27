@@ -563,8 +563,8 @@ export default function ActivationGate(props: Props) {
   function buildCancelTipText(): string {
     const untilLabel = formatAccessUntil(subStatus?.accessUntil ?? null);
     return untilLabel
-      ? `Cancellation scheduled — access until ${untilLabel}.`
-      : "Cancellation scheduled — access until the end of your billing period.";
+      ? `You have cancelled your membership and this will take effect on ${untilLabel}.`
+      : "You have cancelled your membership and this will take effect at the end of your billing period.";
   }
 
   useEffect(() => {
