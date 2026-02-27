@@ -30,6 +30,8 @@ export default function CancelSubscriptionButton({
     return () => clearConfirmTimer();
   }, []);
 
+  const CONFIRM_MS = 6500;
+
   async function onCancel() {
     // Step 1: arm confirmation
     if (!confirming) {
@@ -39,7 +41,7 @@ export default function CancelSubscriptionButton({
       confirmTimerRef.current = window.setTimeout(() => {
         setConfirming(false);
         confirmTimerRef.current = null;
-      }, 6500);
+      }, CONFIRM_MS);
       return;
     }
 
@@ -125,44 +127,150 @@ export default function CancelSubscriptionButton({
         justifyItems: variant === "link" ? "start" : "center",
       }}
     >
+      <style jsx>{`
+        .confirmPill {
+          -webkit-tap-highlight-color: transparent;
+        }
+        .confirmDrain {
+          position: absolute;
+          inset: 0;
+          z-index: 1;
+          background: rgba(0, 0, 0, 0.16);
+          transform: translateX(0%);
+          animation-name: drainLeftToRight;
+          animation-timing-function: linear;
+          animation-fill-mode: forwards;
+        }
+        .confirmSheen {
+          position: absolute;
+          inset: -40% -40%;
+          z-index: 1;
+          background: linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0) 0%,
+            rgba(255, 255, 255, 0.12) 45%,
+            rgba(255, 255, 255, 0) 70%
+          );
+          transform: translateX(-35%);
+          mix-blend-mode: screen;
+          animation-name: sheenSweep;
+          animation-timing-function: linear;
+          animation-fill-mode: forwards;
+          pointer-events: none;
+        }
+
+        @keyframes drainLeftToRight {
+          from {
+            transform: translateX(0%);
+          }
+          to {
+            transform: translateX(100%);
+          }
+        }
+
+        @keyframes sheenSweep {
+          from {
+            transform: translateX(-35%);
+            opacity: 0.9;
+          }
+          to {
+            transform: translateX(35%);
+            opacity: 0.25;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .confirmDrain,
+          .confirmSheen {
+            animation: none !important;
+          }
+        }
+      `}</style>
       <button
         onClick={onCancel}
         disabled={isDisabled}
+        className={confirming ? "confirmPill" : undefined}
         style={
-          variant === "link"
+          confirming
             ? {
-                padding: 0,
-                margin: 0,
-                border: "none",
-                background: "transparent",
-                color:
-                  "color-mix(in srgb, var(--accent) 70%, rgba(255,255,255,0.88))",
-                fontSize: 12,
-                lineHeight: "16px",
-                fontWeight: 600,
-                cursor: isDisabled ? "not-allowed" : "pointer",
-                opacity: isDisabled ? 0.6 : confirming ? 0.98 : 0.95,
-                textAlign: "left",
-                justifySelf: "start",
-              }
-            : {
-                padding: "11px 16px",
+                // one “final stage” container (no “original cancel” styling shown here)
+                width: "max-content",
+                maxWidth: "min(92vw, 520px)",
+                justifySelf: "center",
+                padding: "10px 14px",
                 borderRadius: 999,
-                border: "1px solid rgba(255,255,255,0.22)",
-                background: confirming
-                  ? "color-mix(in srgb, rgba(255,255,255,0.06) 55%, rgba(255,120,120,0.22))"
-                  : "rgba(255,255,255,0.06)",
-                color: "rgba(255,255,255,0.90)",
+                border: "1px solid rgba(255,90,90,0.35)",
+                background:
+                  "linear-gradient(180deg, rgba(255,80,80,0.26), rgba(255,35,35,0.18))",
+                color: "rgba(255,255,255,0.92)",
                 cursor: isDisabled ? "not-allowed" : "pointer",
-                fontSize: 14,
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: "0.01em",
                 opacity: isDisabled ? 0.6 : 1,
+                position: "relative",
+                overflow: "hidden",
+                textAlign: "left",
+                boxShadow:
+                  "0 16px 44px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.12)",
               }
+            : variant === "link"
+              ? {
+                  padding: 0,
+                  margin: 0,
+                  border: "none",
+                  background: "transparent",
+                  color:
+                    "color-mix(in srgb, var(--accent) 70%, rgba(255,255,255,0.88))",
+                  fontSize: 12,
+                  lineHeight: "16px",
+                  fontWeight: 600,
+                  cursor: isDisabled ? "not-allowed" : "pointer",
+                  opacity: isDisabled ? 0.6 : 0.95,
+                  textAlign: "left",
+                  justifySelf: "start",
+                }
+              : {
+                  padding: "11px 16px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(255,255,255,0.22)",
+                  background: "rgba(255,255,255,0.06)",
+                  color: "rgba(255,255,255,0.90)",
+                  cursor: isDisabled ? "not-allowed" : "pointer",
+                  fontSize: 14,
+                  opacity: isDisabled ? 0.6 : 1,
+                }
         }
         onMouseDown={(e) => {
           if (variant === "link") e.preventDefault();
         }}
       >
-        {text}
+        {confirming ? (
+          <>
+            {/* timer visual: drain + shimmer runs for CONFIRM_MS then disappears */}
+            <span
+              aria-hidden
+              className="confirmDrain"
+              style={{ animationDuration: `${CONFIRM_MS}ms` }}
+            />
+            <span
+              aria-hidden
+              className="confirmSheen"
+              style={{ animationDuration: `${CONFIRM_MS}ms` }}
+            />
+            <span
+              style={{
+                position: "relative",
+                zIndex: 2,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Confirm cancellation
+            </span>
+          </>
+        ) : (
+          text
+        )}
       </button>
 
       {msg ? (

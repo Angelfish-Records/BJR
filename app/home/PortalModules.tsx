@@ -123,6 +123,28 @@ function hasKey(
   return entitlementKeys.includes(key);
 }
 
+/**
+ * Tier ladder: higher tiers imply lower tiers.
+ * Keep this explicit so it stays readable and hard to misconfigure.
+ */
+function expandEntitlementKeys(keys: string[]): string[] {
+  if (!Array.isArray(keys) || keys.length === 0) return [];
+
+  const set = new Set(keys);
+
+  // Adjust to match your real tier keys
+  if (set.has("tier_partner")) {
+    set.add("tier_patron");
+    set.add("tier_friend");
+  }
+
+  if (set.has("tier_patron")) {
+    set.add("tier_friend");
+  }
+
+  return Array.from(set);
+}
+
 function slugify(s: string): string {
   return s
     .toLowerCase()
@@ -660,9 +682,11 @@ function inferTabs(
 
 export default async function PortalModules(props: Props) {
   const { modules, memberId } = props;
-  const entitlementKeys = memberId
+  const entitlementKeysRaw = memberId
     ? await listCurrentEntitlementKeys(memberId)
     : [];
+
+  const entitlementKeys = expandEntitlementKeys(entitlementKeysRaw);
 
   const tabsBuilt = inferTabs(modules, entitlementKeys);
 

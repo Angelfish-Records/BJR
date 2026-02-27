@@ -378,7 +378,7 @@ export default function SubscribeButton(props: Props) {
             </div>
 
             {Array.isArray(spec.bullets) && spec.bullets.length > 0 ? (
-              <FeatureRows items={spec.bullets.slice(0, 3)} />
+              <FeatureRows items={spec.bullets.slice(0, 5)} />
             ) : null}
           </div>
 
