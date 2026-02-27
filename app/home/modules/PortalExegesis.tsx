@@ -304,24 +304,23 @@ function AlbumCard(props: {
         {/* Background texture */}
         {a.coverUrl ? (
           <div
-            className="absolute inset-0 scale-125"
+            className="absolute inset-0 scale-110"
             style={{
               backgroundImage: `url(${a.coverUrl})`,
               backgroundPosition: "center",
               backgroundSize: "cover",
-              filter: "blur(12px)",
-              opacity: 0.25,
+              opacity: 0.22, // <-- tweak 0.14–0.30
             }}
             aria-hidden="true"
           />
         ) : null}
 
-        {/* Legibility overlay (gradient, not a flat blackout) */}
+        {/* Optional: extremely subtle legibility wash (remove entirely if you want pure artwork) */}
         <div
           className="absolute inset-0"
           style={{
             background:
-              "linear-gradient(to bottom, rgba(0,0,0,0.14), rgba(0,0,0,0.46))",
+              "linear-gradient(to bottom, rgba(0,0,0,0.10), rgba(0,0,0,0.35))", // <-- tweak 0.00–0.18 and 0.20–0.45
           }}
           aria-hidden="true"
         />
