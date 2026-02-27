@@ -1668,7 +1668,7 @@ export default function ExegesisTrackClient(props: {
         ) : null}
       </div>
 
-      <div className="mt-6 grid gap-6 md:grid-cols-[1fr_520px]">
+      <div className="mt-6 grid gap-6 md:grid-cols-[1fr_570px]">
         <div ref={lyricsWrapRef} className="rounded-xl bg-white/5 p-4">
           <div className="mt-3 space-y-0.5">
             {(lyrics.cues ?? []).map((c) => {

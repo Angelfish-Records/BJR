@@ -134,6 +134,246 @@ function prefetchTrack(tid: string) {
   void loadTrackCached(tid).catch(() => {});
 }
 
+// ---- cover tint cache (module scope) ----
+const COVER_TINT_CACHE = new Map<string, string>(); // url -> "rgba(r,g,b,a)"
+const COVER_TINT_INFLIGHT = new Map<string, Promise<string | null>>();
+
+function clamp255(n: number) {
+  return Math.max(0, Math.min(255, Math.round(n)));
+}
+
+function computeAverageRgb(data: Uint8ClampedArray) {
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let count = 0;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3] ?? 0;
+    if (a < 16) continue;
+
+    const rr = data[i] ?? 0;
+    const gg = data[i + 1] ?? 0;
+    const bb = data[i + 2] ?? 0;
+
+    if (rr + gg + bb < 36) continue;
+
+    r += rr;
+    g += gg;
+    b += bb;
+    count++;
+  }
+
+  if (!count) return null;
+
+  r /= count;
+  g /= count;
+  b /= count;
+
+  // lift slightly for visibility
+  const base = {
+    r: clamp255(r + 18),
+    g: clamp255(g + 18),
+    b: clamp255(b + 18),
+  };
+
+  // darker companion tone
+  const dark = {
+    r: clamp255(base.r * 0.65),
+    g: clamp255(base.g * 0.65),
+    b: clamp255(base.b * 0.65),
+  };
+
+  return { base, dark };
+}
+
+async function extractCoverTint(url: string): Promise<string | null> {
+  const key = (url ?? "").trim();
+  if (!key) return null;
+
+  const cached = COVER_TINT_CACHE.get(key);
+  if (cached) return cached;
+
+  const inflight = COVER_TINT_INFLIGHT.get(key);
+  if (inflight) return inflight;
+
+  const p = (async () => {
+    try {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.decoding = "async";
+
+      const loaded = new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("img_load_failed"));
+      });
+
+      img.src = key;
+      await loaded;
+
+      // downsample hard for speed
+      const size = 36;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return null;
+
+      ctx.drawImage(img, 0, 0, size, size);
+      const { data } = ctx.getImageData(0, 0, size, size);
+
+      const avg = computeAverageRgb(data);
+      if (!avg) return null;
+
+      const base = `rgba(${avg.base.r}, ${avg.base.g}, ${avg.base.b}, 0.45)`;
+      const dark = `rgba(${avg.dark.r}, ${avg.dark.g}, ${avg.dark.b}, 0.45)`;
+
+      const gradient = `linear-gradient(135deg, ${base}, ${dark})`;
+      COVER_TINT_CACHE.set(key, gradient);
+      return gradient;
+    } catch {
+      return null;
+    } finally {
+      COVER_TINT_INFLIGHT.delete(key);
+    }
+  })();
+
+  COVER_TINT_INFLIGHT.set(key, p);
+  const out = await p;
+  return out;
+}
+
+function AlbumCard(props: {
+  a: CatalogueOk["albums"][number];
+  label: string;
+  search: string;
+}) {
+  const { a, label, search } = props;
+
+  const [tint, setTint] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const url = (a.coverUrl ?? "").trim();
+    if (!url) {
+      setTint(null);
+      return;
+    }
+
+    let alive = true;
+
+    void extractCoverTint(url).then((c) => {
+      if (!alive) return;
+      setTint(c);
+    });
+
+    return () => {
+      alive = false;
+    };
+  }, [a.coverUrl]);
+
+  // Use tint as border + subtle glow
+  const borderGradient = tint ?? "rgba(255,255,255,0.10)";
+  const glowCol = tint
+    ? borderGradient.replace(/0\.45/g, "0.18")
+    : "rgba(255,255,255,0.06)";
+
+  return (
+    <div
+      className="rounded-xl bg-white/5 p-4"
+      style={{
+        border: "1px solid transparent",
+        backgroundClip: "padding-box",
+        boxShadow: `0 18px 50px rgba(0,0,0,0.22), 0 0 0 1px ${glowCol}`,
+        position: "relative",
+      }}
+    >
+      <div
+        className="absolute inset-0 rounded-xl pointer-events-none"
+        style={{
+          padding: 1,
+          background: borderGradient,
+          WebkitMask:
+            "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
+          WebkitMaskComposite: "xor",
+          maskComposite: "exclude",
+        }}
+      />
+      {/* Album hero */}
+      <div className="relative overflow-hidden rounded-lg mb-4">
+        {/* Background texture (full-bleed, oversized artwork) */}
+        {a.coverUrl ? (
+          <div
+            className="absolute inset-0 scale-150"
+            style={{
+              background: `url(${a.coverUrl}) center/cover no-repeat`,
+              filter: "blur(18px)",
+              opacity: 0.35,
+            }}
+            aria-hidden="true"
+          />
+        ) : null}
+
+        {/* Dark overlay for legibility */}
+        <div className="absolute inset-0 bg-black/60" aria-hidden="true" />
+
+        {/* Foreground content */}
+        <div className="relative flex items-center gap-5 p-5">
+          {/* Large artwork */}
+          <div
+            className="w-1/3 aspect-square shrink-0 rounded-md shadow-lg"
+            style={{
+              border: "1px solid rgba(255,255,255,0.10)",
+              background: a.coverUrl
+                ? `url(${a.coverUrl}) center/cover no-repeat`
+                : undefined,
+            }}
+            aria-hidden="true"
+          />
+
+          {/* Title */}
+          <div className="min-w-0">
+            <div className="text-xl font-extrabold tracking-tight text-white leading-tight">
+              {label}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-2">
+        {(a.tracks ?? []).map((t, i) => {
+          const tid = (t.trackId ?? "").trim();
+          if (!tid) return null;
+
+          const trackLabel = (t.title ?? "").trim() || tid;
+          const n =
+            typeof t.trackNo === "number" && t.trackNo > 0 ? t.trackNo : i + 1;
+
+          return (
+            <Link
+              key={tid}
+              href={`/exegesis/${encodeURIComponent(tid)}${search}`}
+              onMouseEnter={() => prefetchTrack(tid)}
+              onFocus={() => prefetchTrack(tid)}
+              className="flex items-baseline justify-between rounded-md bg-black/20 px-3 py-2 text-sm hover:bg-white/10"
+              title={tid}
+            >
+              <span className="min-w-0 flex items-baseline gap-2">
+                <span className="w-6 shrink-0 text-[11px] opacity-40 tabular-nums">
+                  {n}
+                </span>
+                <span className="truncate">{trackLabel}</span>
+              </span>
+
+              <span className="text-xs opacity-45">Lyrics</span>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function PortalExegesis(props: { title?: string }) {
   const pathname = usePathname() ?? "";
   const router = useRouter();
@@ -295,7 +535,6 @@ export default function PortalExegesis(props: { title?: string }) {
   // index
   return (
     <div className="w-full px-4 py-6">
-      <div className="text-xs opacity-60 tracking-[0.14em]">EXEGESIS</div>
       <div className="mt-1 text-sm opacity-70">
         Choose a track to read and discuss lyrics.
       </div>
@@ -313,58 +552,7 @@ export default function PortalExegesis(props: { title?: string }) {
           {catalogue.albums.map((a) => {
             const label = a.albumTitle || a.albumSlug || a.albumId || "Album";
             return (
-              <div key={a.albumId} className="rounded-xl bg-white/5 p-4">
-                {/* Album hero */}
-                <div className="flex items-center gap-3">
-                  <div
-                    className="h-14 w-14 shrink-0 rounded-md border border-white/10 bg-white/5"
-                    style={{
-                      background: a.coverUrl
-                        ? `url(${a.coverUrl}) center/cover no-repeat`
-                        : undefined,
-                    }}
-                    aria-hidden="true"
-                  />
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold opacity-90 truncate">
-                      {label}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4 space-y-2">
-                  {(a.tracks ?? []).map((t, i) => {
-                    const tid = (t.trackId ?? "").trim();
-                    if (!tid) return null;
-
-                    const label = (t.title ?? "").trim() || tid;
-                    const n =
-                      typeof t.trackNo === "number" && t.trackNo > 0
-                        ? t.trackNo
-                        : i + 1;
-
-                    return (
-                      <Link
-                        key={tid}
-                        href={`/exegesis/${encodeURIComponent(tid)}${search}`}
-                        onMouseEnter={() => prefetchTrack(tid)}
-                        onFocus={() => prefetchTrack(tid)}
-                        className="flex items-baseline justify-between rounded-md bg-black/20 px-3 py-2 text-sm hover:bg-white/10"
-                        title={tid}
-                      >
-                        <span className="min-w-0 flex items-baseline gap-2">
-                          <span className="w-6 shrink-0 text-[11px] opacity-40 tabular-nums">
-                            {n}
-                          </span>
-                          <span className="truncate">{label}</span>
-                        </span>
-
-                        <span className="text-xs opacity-45">Lyrics</span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
+              <AlbumCard key={a.albumId} a={a} label={label} search={search} />
             );
           })}
         </div>
