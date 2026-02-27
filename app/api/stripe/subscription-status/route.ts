@@ -5,8 +5,8 @@ import { sql } from "@vercel/postgres";
 import Stripe from "stripe";
 import { auth } from "@clerk/nextjs/server";
 
-export const runtime = "nodejs" as const;
-export const dynamic = "force-dynamic" as const;
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY ?? "";
 
