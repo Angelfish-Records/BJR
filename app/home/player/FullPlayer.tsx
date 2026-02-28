@@ -2,7 +2,7 @@
 "use client";
 
 import React from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { usePlayer } from "./PlayerState";
 import type {
   AlbumInfo,
@@ -193,17 +193,6 @@ type AccessState = {
 
 const accessResultCache = new Map<string, AccessState>();
 const accessInFlight = new Map<string, Promise<AccessState>>();
-
-function readShareTokenFromLocation(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const sp = new URLSearchParams(window.location.search);
-    const st = (sp.get("st") ?? sp.get("share") ?? "").trim();
-    return st || null;
-  } catch {
-    return null;
-  }
-}
 
 function accessKey(catalogueId: string, st: string | null) {
   // include st because it can change entitlement decision
@@ -501,6 +490,12 @@ export default function FullPlayer(props: {
 }) {
   const p = usePlayer();
 
+  // near your other hooks
+  const searchParams = useSearchParams();
+  const stParam =
+    (searchParams?.get("st") ?? searchParams?.get("share") ?? "").trim() ||
+    null;
+
   const pRef = React.useRef(p);
   React.useEffect(() => {
     pRef.current = p;
@@ -625,7 +620,7 @@ export default function FullPlayer(props: {
     effAlbum?.title,
     effAlbum?.artist,
     effTracks,
-    p
+    p,
   ]);
 
   const platformLinks = React.useMemo(
@@ -662,7 +657,7 @@ export default function FullPlayer(props: {
 
     const ac = new AbortController();
 
-    const st = readShareTokenFromLocation();
+    const st = stParam;
     const key = accessKey(catalogueId, st);
 
     // hydrate from module cache instantly (no component-instance cache)
@@ -743,7 +738,7 @@ export default function FullPlayer(props: {
     return () => {
       ac.abort();
     };
-  }, [catalogueId, albumKey]);
+  }, [catalogueId, albumKey, stParam]);
 
   // ✅ “unknown access” disables play/glow until check resolves (prevents stale UI)
   const canPlay =

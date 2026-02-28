@@ -2014,6 +2014,11 @@ export default function ExegesisTrackClient(props: {
         </div>
 
         {(() => {
+          // Mobile-only: reserve space for the ever-present MiniPlayer dock.
+          // Keep this aligned with other pages that assume ~80px dock height.
+          const DOCK_H = 80;
+          const mobilePadBottom = DOCK_H + 16; // + a little breathing room
+
           const DiscoursePanel = (
             <div
               className={
@@ -2023,7 +2028,7 @@ export default function ExegesisTrackClient(props: {
               }
               style={
                 isMobile
-                  ? undefined
+                  ? { paddingBottom: mobilePadBottom }
                   : desktopPanelH
                     ? { height: desktopPanelH }
                     : undefined
@@ -2149,18 +2154,22 @@ export default function ExegesisTrackClient(props: {
 
                   {Composer}
 
-                  <div className="mt-3 flex items-center justify-end gap-2">
+                  <div className="mt-3 flex items-center justify-end gap-1.5">
                     <button
-                      className={`rounded-md px-3 py-1.5 text-sm ${
-                        sort === "top" ? "bg-white/10" : "bg-white/5"
+                      className={`rounded-md px-2 py-1 text-xs transition ${
+                        sort === "top"
+                          ? "bg-white/10 opacity-100"
+                          : "bg-white/5 opacity-70 hover:opacity-100"
                       }`}
                       onClick={() => setSortWithFlip("top")}
                     >
                       Top
                     </button>
                     <button
-                      className={`rounded-md px-3 py-1.5 text-sm ${
-                        sort === "recent" ? "bg-white/10" : "bg-white/5"
+                      className={`rounded-md px-2 py-1 text-xs transition ${
+                        sort === "recent"
+                          ? "bg-white/10 opacity-100"
+                          : "bg-white/5 opacity-70 hover:opacity-100"
                       }`}
                       onClick={() => setSortWithFlip("recent")}
                     >
@@ -2317,18 +2326,6 @@ export default function ExegesisTrackClient(props: {
                                           ) : null}
                                         </div>
 
-                                        {/* Keep Edit where it is (unchanged) */}
-                                        {canEdit ? (
-                                          <button
-                                            className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
-                                            disabled={editBusy || replyBusy}
-                                            onClick={() => openEdit(c)}
-                                            title="Edit"
-                                          >
-                                            Edit
-                                          </button>
-                                        ) : null}
-
                                         {/* Vote always visible, far right (badge hides at 0, tier tint only after viewer votes) */}
                                         {(() => {
                                           const votes = Math.max(
@@ -2337,11 +2334,11 @@ export default function ExegesisTrackClient(props: {
                                           );
                                           const showBadge = votes > 0;
 
-                                          // Default (pre-click): neutral. After vote: tier tint by vote quantum.
                                           const tier = medalTier(votes);
-                                          const tint = c.viewerHasVoted
-                                            ? medalClassForTier(tier)
-                                            : "text-white/80";
+                                          const tint =
+                                            votes > 0
+                                              ? medalClassForTier(tier)
+                                              : "text-white/80";
 
                                           const disabled = !canVote;
 
@@ -2368,13 +2365,17 @@ export default function ExegesisTrackClient(props: {
                                             >
                                               <MedalIcon className="h-4 w-4" />
 
-                                              {/* superscript badge (slightly touching top-right) */}
+                                              {/* superscript badge: tight, no fill, stroked to match button bg */}
                                               {showBadge ? (
                                                 <span
-                                                  className="absolute right-0 top-0 rounded-full bg-black/60 px-1 text-[10px] leading-[13px] tabular-nums text-current"
+                                                  className="absolute right-0 top-0 rounded-sm px-[3px] text-[9px] font-semibold leading-[11px] tabular-nums text-current"
                                                   style={{
+                                                    // pull it closer so it *touches* the medal glyph
                                                     transform:
-                                                      "translate(25%,-25%)",
+                                                      "translate(10%,-45%)",
+                                                    // stroke colour ~= bg-white/5 to visually “cut” it out
+                                                    boxShadow:
+                                                      "0 0 0 1px rgba(255,255,255,0.05)",
                                                   }}
                                                 >
                                                   {votes}
@@ -2399,6 +2400,20 @@ export default function ExegesisTrackClient(props: {
                                             {c.bodyPlain}
                                           </div>
                                         )}
+
+                                        {/* Edit: small, under text, left-aligned */}
+                                        {canEdit ? (
+                                          <div className="mt-1 flex items-center">
+                                            <button
+                                              className="rounded bg-white/0 px-1 py-0.5 text-[11px] opacity-70 hover:bg-white/5 hover:opacity-100 disabled:opacity-40"
+                                              disabled={editBusy || replyBusy}
+                                              onClick={() => openEdit(c)}
+                                              title="Edit"
+                                            >
+                                              Edit
+                                            </button>
+                                          </div>
+                                        ) : null}
                                       </div>
                                     )}
 
