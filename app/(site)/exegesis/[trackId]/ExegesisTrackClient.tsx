@@ -1903,6 +1903,43 @@ export default function ExegesisTrackClient(props: {
           background-size: 200% 100%;
           animation: afShimmer 1.05s linear infinite;
         }
+
+        /* Count badge "cutout" stroke (matches bg-white/5 vibe). No circle, no fill. */
+        .afBadgeStroke {
+          text-shadow:
+            -1px 0 rgba(255, 255, 255, 0.05),
+            1px 0 rgba(255, 255, 255, 0.05),
+            0 -1px rgba(255, 255, 255, 0.05),
+            0 1px rgba(255, 255, 255, 0.05),
+            -1px -1px rgba(255, 255, 255, 0.05),
+            1px 1px rgba(255, 255, 255, 0.05),
+            -1px 1px rgba(255, 255, 255, 0.05),
+            1px -1px rgba(255, 255, 255, 0.05);
+        }
+
+        /* Scroll fade for mobile drawer scroll area (soft top/bottom edges). */
+        .afFadeScroll {
+          -webkit-mask-image: linear-gradient(
+            to bottom,
+            transparent 0%,
+            rgba(0, 0, 0, 1) 12px,
+            rgba(0, 0, 0, 1) calc(100% - 12px),
+            transparent 100%
+          );
+          mask-image: linear-gradient(
+            to bottom,
+            transparent 0%,
+            rgba(0, 0, 0, 1) 12px,
+            rgba(0, 0, 0, 1) calc(100% - 12px),
+            transparent 100%
+          );
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .afFadeScroll {
+            -webkit-mask-image: none;
+            mask-image: none;
+          }
+        }
         @media (prefers-reduced-motion: reduce) {
           .afShimmerBlock {
             animation: none;
@@ -2154,32 +2191,47 @@ export default function ExegesisTrackClient(props: {
 
                   {Composer}
 
-                  <div className="mt-3 flex items-center justify-end gap-1.5">
-                    <button
-                      className={`rounded-md px-2 py-1 text-xs transition ${
-                        sort === "top"
-                          ? "bg-white/10 opacity-100"
-                          : "bg-white/5 opacity-70 hover:opacity-100"
-                      }`}
-                      onClick={() => setSortWithFlip("top")}
-                    >
-                      Top
-                    </button>
-                    <button
-                      className={`rounded-md px-2 py-1 text-xs transition ${
-                        sort === "recent"
-                          ? "bg-white/10 opacity-100"
-                          : "bg-white/5 opacity-70 hover:opacity-100"
-                      }`}
-                      onClick={() => setSortWithFlip("recent")}
-                    >
-                      Recent
-                    </button>
+                  {/* Header controls: sort when browsing all; Back when focused */}
+                  <div className="mt-3 flex items-center justify-end">
+                    {focusedRootId ? (
+                      <div className="w-full">
+                        <button
+                          type="button"
+                          className="w-full rounded-md bg-white/5 px-2 py-1 text-xs text-left opacity-80 hover:bg-white/10 hover:opacity-100"
+                          onClick={clearRootFocus}
+                        >
+                          ← Back to all threads
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          className={`rounded-md px-2 py-1 text-xs transition ${
+                            sort === "top"
+                              ? "bg-white/10 opacity-100"
+                              : "bg-white/5 opacity-70 hover:opacity-100"
+                          }`}
+                          onClick={() => setSortWithFlip("top")}
+                        >
+                          Top
+                        </button>
+                        <button
+                          className={`rounded-md px-2 py-1 text-xs transition ${
+                            sort === "recent"
+                              ? "bg-white/10 opacity-100"
+                              : "bg-white/5 opacity-70 hover:opacity-100"
+                          }`}
+                          onClick={() => setSortWithFlip("recent")}
+                        >
+                          Recent
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div
                     ref={threadScrollRef}
-                    className="mt-3 space-y-3 flex-1"
+                    className={`mt-3 space-y-3 flex-1 ${isMobile ? "afFadeScroll" : ""}`}
                     style={{
                       overflowY: "auto",
                       // Allow scroll chaining to the page when the panel hits top/bottom.
@@ -2224,19 +2276,6 @@ export default function ExegesisTrackClient(props: {
                               }}
                               className="rounded-md bg-black/20 p-3"
                             >
-                              {/* Root-level affordance (only show "Back" when focused) */}
-                              {focusedRootId ? (
-                                <div className="mb-2">
-                                  <button
-                                    type="button"
-                                    className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
-                                    onClick={clearRootFocus}
-                                  >
-                                    ← Back to all threads
-                                  </button>
-                                </div>
-                              ) : null}
-
                               {visibleComments.map((c) => {
                                 const ident =
                                   thread?.identities?.[c.createdByMemberId];
@@ -2363,24 +2402,25 @@ export default function ExegesisTrackClient(props: {
                                               }
                                               aria-label="Vote"
                                             >
-                                              <MedalIcon className="h-4 w-4" />
+                                              <span className="relative inline-flex items-center justify-center">
+                                                <MedalIcon className="h-4 w-4" />
 
-                                              {/* superscript badge: tight, no fill, stroked to match button bg */}
-                                              {showBadge ? (
-                                                <span
-                                                  className="absolute right-0 top-0 rounded-sm px-[3px] text-[9px] font-semibold leading-[11px] tabular-nums text-current"
-                                                  style={{
-                                                    // pull it closer so it *touches* the medal glyph
-                                                    transform:
-                                                      "translate(10%,-45%)",
-                                                    // stroke colour ~= bg-white/5 to visually “cut” it out
-                                                    boxShadow:
-                                                      "0 0 0 1px rgba(255,255,255,0.05)",
-                                                  }}
-                                                >
-                                                  {votes}
-                                                </span>
-                                              ) : null}
+                                                {/* count: no circle, overlaps the *icon* (not the button corner) */}
+                                                {showBadge ? (
+                                                  <span
+                                                    className="afBadgeStroke absolute text-[9px] font-black leading-[9px] tabular-nums text-current"
+                                                    style={{
+                                                      // anchor to the medal glyph, slightly over it
+                                                      right: -2,
+                                                      top: -2,
+                                                      transform:
+                                                        "translate(35%,-35%)",
+                                                    }}
+                                                  >
+                                                    {votes}
+                                                  </span>
+                                                ) : null}
+                                              </span>
                                             </button>
                                           );
                                         })()}
