@@ -1752,6 +1752,25 @@ export default function ExegesisTrackClient(props: {
     return best;
   }
 
+  function formatAgo(iso: string | null | undefined): string {
+    const t = Date.parse((iso ?? "") as string);
+    if (!Number.isFinite(t)) return "";
+    const now = Date.now();
+    const s = Math.max(0, Math.floor((now - t) / 1000));
+
+    if (s < 60) return "just now";
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    if (d < 7) return `${d}d ago`;
+    const w = Math.floor(d / 7);
+    if (w < 52) return `${w}w ago`;
+    const y = Math.floor(d / 365);
+    return `${Math.max(1, y)}y ago`;
+  }
+
   // If the page loads with a deep-link (#l / #c), open drawer on mobile.
   React.useEffect(() => {
     if (!isMobile) return;
@@ -2054,7 +2073,7 @@ export default function ExegesisTrackClient(props: {
           // Mobile-only: reserve space for the ever-present MiniPlayer dock.
           // Keep this aligned with other pages that assume ~80px dock height.
           const DOCK_H = 80;
-          const mobilePadBottom = DOCK_H + 16; // + a little breathing room
+          const mobilePadBottom = DOCK_H; // + a little breathing room
 
           const DiscoursePanel = (
             <div
@@ -2322,6 +2341,16 @@ export default function ExegesisTrackClient(props: {
                                         <div className="text-xs opacity-70">
                                           {name}
                                         </div>
+
+                                        {(() => {
+                                          const ago = formatAgo(c.createdAt);
+                                          return ago ? (
+                                            <div className="text-[11px] opacity-45">
+                                              · {ago}
+                                            </div>
+                                          ) : null;
+                                        })()}
+
                                         {c.editedAt ||
                                         (c.editCount ?? 0) > 0 ? (
                                           <div className="text-[11px] opacity-50">
@@ -2402,19 +2431,20 @@ export default function ExegesisTrackClient(props: {
                                               }
                                               aria-label="Vote"
                                             >
-                                              <span className="relative inline-flex items-center justify-center">
+                                              {/* Anchor to the icon's own 16×16 box */}
+                                              <span className="relative inline-flex h-4 w-4 items-center justify-center">
                                                 <MedalIcon className="h-4 w-4" />
 
-                                                {/* count: no circle, overlaps the *icon* (not the button corner) */}
+                                                {/* count: NO circle; overlaps the medal itself */}
                                                 {showBadge ? (
                                                   <span
                                                     className="afBadgeStroke absolute text-[9px] font-black leading-[9px] tabular-nums text-current"
                                                     style={{
-                                                      // anchor to the medal glyph, slightly over it
-                                                      right: -2,
-                                                      top: -2,
+                                                      // place inside the icon box, slightly above/right so it overlaps the medal
+                                                      left: "72%",
+                                                      top: "18%",
                                                       transform:
-                                                        "translate(35%,-35%)",
+                                                        "translate(-50%,-50%)",
                                                     }}
                                                   >
                                                     {votes}

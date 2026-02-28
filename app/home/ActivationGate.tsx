@@ -1244,63 +1244,94 @@ export default function ActivationGate(props: Props) {
                     style={{
                       width: "100%",
                       minWidth: 0,
+
+                      // Keep the overall block height stable, but let the icon
+                      // center itself between the two text rows.
                       height: 32,
+
                       display: "grid",
+                      gridTemplateColumns: "18px 1fr",
                       gridTemplateRows: "1fr 1fr",
-                      alignItems: "center",
-                      justifyItems: modalCentered ? "center" : "end",
+                      columnGap: 8,
                       rowGap: 0,
+                      alignItems: "center",
+                      justifyItems: "stretch",
                     }}
                   >
+                    {/* Verified badge: spans both rows and vertically centers */}
+                    <span
+                      aria-hidden
+                      style={{
+                        gridColumn: 1,
+                        gridRow: "1 / 3",
+                        alignSelf: "center",
+                        justifySelf: modalCentered ? "center" : "end",
+                        width: 18,
+                        height: 18,
+                        display: "inline-block",
+                        flex: "0 0 auto",
+
+                        // subtle lift to match your UI language
+                        filter:
+                          "drop-shadow(0 10px 18px rgba(0,0,0,0.35)) drop-shadow(0 0 0 rgba(0,0,0,0))",
+                      }}
+                    >
+                      {/* Masked fill using the same PatternPillUnderlay as Toggle */}
+                      <span
+                        aria-hidden
+                        style={{
+                          position: "relative",
+                          width: 18,
+                          height: 18,
+                          display: "block",
+                          overflow: "hidden",
+
+                          WebkitMaskImage: `url("data:image/svg+xml;utf8,${encodeURIComponent(
+                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill-rule='evenodd' clip-rule='evenodd' d='M14.6563 5.24291C15.4743 5.88358 16 6.8804 16 8C16 9.11964 15.4743 10.1165 14.6562 10.7572C14.7816 11.7886 14.4485 12.8652 13.6568 13.6569C12.8651 14.4486 11.7885 14.7817 10.7571 14.6563C10.1164 15.4743 9.1196 16 8 16C6.88038 16 5.88354 15.4743 5.24288 14.6562C4.21141 14.7817 3.13481 14.4485 2.34312 13.6568C1.55143 12.8652 1.2183 11.7886 1.34372 10.7571C0.525698 10.1164 0 9.1196 0 8C0 6.88038 0.525715 5.88354 1.34376 5.24288C1.21834 4.21141 1.55147 3.13481 2.34316 2.34312C3.13485 1.55143 4.21145 1.2183 5.24291 1.34372C5.88358 0.525698 6.8804 0 8 0C9.11964 0 10.1165 0.525732 10.7572 1.3438C11.7886 1.21838 12.8652 1.55152 13.6569 2.3432C14.4486 3.13488 14.7817 4.21146 14.6563 5.24291ZM12.2071 6.20711L10.7929 4.79289L7 8.58579L5.20711 6.79289L3.79289 8.20711L7 11.4142L12.2071 6.20711Z'/></svg>`,
+                          )}")`,
+                          WebkitMaskRepeat: "no-repeat",
+                          WebkitMaskPosition: "center",
+                          WebkitMaskSize: "contain",
+
+                          maskImage: `url("data:image/svg+xml;utf8,${encodeURIComponent(
+                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill-rule='evenodd' clip-rule='evenodd' d='M14.6563 5.24291C15.4743 5.88358 16 6.8804 16 8C16 9.11964 15.4743 10.1165 14.6562 10.7572C14.7816 11.7886 14.4485 12.8652 13.6568 13.6569C12.8651 14.4486 11.7885 14.7817 10.7571 14.6563C10.1164 15.4743 9.1196 16 8 16C6.88038 16 5.88354 15.4743 5.24288 14.6562C4.21141 14.7817 3.13481 14.4485 2.34312 13.6568C1.55143 12.8652 1.2183 11.7886 1.34372 10.7571C0.525698 10.1164 0 9.1196 0 8C0 6.88038 0.525715 5.88354 1.34376 5.24288C1.21834 4.21141 1.55147 3.13481 2.34316 2.34312C3.13485 1.55143 4.21145 1.2183 5.24291 1.34372C5.88358 0.525698 6.8804 0 8 0C9.11964 0 10.1165 0.525732 10.7572 1.3438C11.7886 1.21838 12.8652 1.55152 13.6569 2.3432C14.4486 3.13488 14.7817 4.21146 14.6563 5.24291ZM12.2071 6.20711L10.7929 4.79289L7 8.58579L5.20711 6.79289L3.79289 8.20711L7 11.4142L12.2071 6.20711Z'/></svg>`,
+                          )}")`,
+                          maskRepeat: "no-repeat",
+                          maskPosition: "center",
+                          maskSize: "contain",
+                        }}
+                      >
+                        <PatternPillUnderlay active opacity={0.74} seed={777} />
+                        <span
+                          aria-hidden
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            background:
+                              "linear-gradient(180deg, rgba(255,255,255,0.26), rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.00))",
+                            opacity: 0.62,
+                            pointerEvents: "none",
+                          }}
+                        />
+                      </span>
+                    </span>
+
+                    {/* Row 1: email */}
                     <div
                       style={{
+                        gridColumn: 2,
+                        gridRow: 1,
                         minWidth: 0,
                         width: "100%",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: modalCentered ? "center" : "flex-end",
-                        gap: 8,
                         color: "rgba(255,255,255,0.82)",
                         fontSize: 12,
                         lineHeight: "16px",
                         letterSpacing: "0.01em",
                       }}
                     >
-                      <span
-                        aria-hidden
-                        style={{
-                          width: 16,
-                          height: 16,
-                          borderRadius: 999,
-                          display: "grid",
-                          placeItems: "center",
-                          background: "rgba(255,255,255,0.31)",
-                          border: "none",
-                          boxShadow: "none",
-                          flex: "0 0 auto",
-                          transform: "translateY(2px)",
-                        }}
-                      >
-                        <svg
-                          width="12"
-                          height="12"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          aria-hidden="true"
-                          style={{
-                            display: "block",
-                          }}
-                        >
-                          <path
-                            d="M20 6L9 17l-5-5"
-                            stroke="rgba(0,0,0,0.92)"
-                            strokeWidth="3.2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </span>
-
                       <span
                         style={{
                           minWidth: 0,
@@ -1316,8 +1347,11 @@ export default function ActivationGate(props: Props) {
                       </span>
                     </div>
 
+                    {/* Row 2: tier + actions */}
                     <div
                       style={{
+                        gridColumn: 2,
+                        gridRow: 2,
                         width: "100%",
                         display: "flex",
                         alignItems: "center",
