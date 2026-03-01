@@ -34,6 +34,7 @@ type ModulePanels = {
     teaser?: import("@portabletext/types").PortableTextBlock[];
     full?: import("@portabletext/types").PortableTextBlock[];
     requiresEntitlement?: string | null;
+    styleVariant?: "default" | "gold" | "patternPill";
   }>;
 };
 
@@ -204,19 +205,45 @@ function portableTextHasContent(
   return false;
 }
 
+type PanelVariant = "default" | "gold" | "patternPill";
+
+function PanelShell(props: {
+  variant: PanelVariant;
+  children: React.ReactNode;
+}) {
+  const { variant, children } = props;
+
+  if (variant !== "gold") return <>{children}</>;
+
+  // Gradient border frame (MembershipModal style)
+  return (
+    <div
+      className="portalPanelFrame portalPanelFrame--gold"
+      style={{
+        borderRadius: 18,
+        padding: 1, // gradient thickness
+        transform: "translateZ(0)",
+      }}
+    >
+      <div style={{ borderRadius: 17 }}>{children}</div>
+    </div>
+  );
+}
+
 function Panel(props: {
   title: string;
   blocks: PortableTextBlock[];
   locked?: boolean;
+  variant?: "default" | "gold" | "patternPill";
 }) {
-  const { title, blocks, locked } = props;
+  const { title, blocks, locked, variant = "default" } = props;
 
   return (
     <div
+      data-variant={variant}
+      className={`portalPanel portalPanel--${variant}`}
       style={{
         borderRadius: 16,
-        border: "1px solid rgba(255,255,255,0.10)",
-        background: "rgba(255,255,255,0.04)",
         padding: 14,
         minWidth: 0,
       }}
@@ -568,14 +595,26 @@ function renderModule(m: PortalModule, entitlementKeys: string[]) {
       if (locked) {
         if (!portableTextHasContent(p.teaser)) return [];
         return [
-          { key: p._key, title: p.title, blocks: p.teaser ?? [], locked: true },
+          {
+            key: p._key,
+            title: p.title,
+            blocks: p.teaser ?? [],
+            locked: true,
+            variant: p.styleVariant ?? "default",
+          },
         ];
       }
 
       // Entitled (or ungated): show full if it has content; if it doesn't, skip quietly
       if (!portableTextHasContent(p.full)) return [];
       return [
-        { key: p._key, title: p.title, blocks: p.full ?? [], locked: false },
+        {
+          key: p._key,
+          title: p.title,
+          blocks: p.full ?? [],
+          locked: false,
+          variant: p.styleVariant ?? "default",
+        },
       ];
     });
 
@@ -591,12 +630,14 @@ function renderModule(m: PortalModule, entitlementKeys: string[]) {
 
         <div className={gridClass}>
           {visiblePanels.map((p) => (
-            <Panel
-              key={p.key}
-              title={p.title}
-              blocks={p.blocks}
-              locked={p.locked}
-            />
+            <PanelShell key={p.key} variant={p.variant}>
+              <Panel
+                title={p.title}
+                blocks={p.blocks}
+                locked={p.locked}
+                variant={p.variant}
+              />
+            </PanelShell>
           ))}
         </div>
       </div>

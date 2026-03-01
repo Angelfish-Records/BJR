@@ -70,9 +70,26 @@ export const modulePanels = defineType({
               description:
                 "Optional entitlement required to reveal full content of this panel",
             }),
+
+            defineField({
+              name: "styleVariant",
+              title: "Border style",
+              type: "string",
+              initialValue: "default",
+              options: {
+                list: [
+                  { title: "Default", value: "default" },
+                  { title: "Gold", value: "gold" },
+                  { title: "PatternPill", value: "patternPill" },
+                ],
+              },
+            }),
           ],
           preview: {
-            select: { title: "title", requiresEntitlement: "requiresEntitlement" },
+            select: {
+              title: "title",
+              requiresEntitlement: "requiresEntitlement",
+            },
             prepare({ title, requiresEntitlement }) {
               return {
                 title: title ?? "Panel",
@@ -91,7 +108,13 @@ export const modulePanels = defineType({
     prepare({ title, panels, layout }) {
       const count = Array.isArray(panels) ? panels.length : 0;
       const cols =
-        layout === 1 ? "1-up" : layout === 2 ? "2-up" : layout === 3 ? "3-up" : "?";
+        layout === 1
+          ? "1-up"
+          : layout === 2
+            ? "2-up"
+            : layout === 3
+              ? "3-up"
+              : "?";
       return {
         title: title ?? "Panels",
         subtitle: `${cols} · ${count} panel${count === 1 ? "" : "s"}`,

@@ -9,12 +9,15 @@ export type PortalModuleHeading = {
   blurb?: string;
 };
 
+export type PanelStyleVariant = "default" | "gold" | "patternPill";
+
 export type PortalModulePanel = {
   _key: string;
   title: string;
   teaser?: PortableTextBlock[];
   full?: PortableTextBlock[];
   requiresEntitlement?: string;
+  styleVariant?: PanelStyleVariant;
 };
 
 export type PortalModulePanels = {
@@ -104,6 +107,7 @@ const portalPageQuery = `
         teaser,
         full,
         requiresEntitlement
+        styleVariant
       },
 
       // moduleDownloads

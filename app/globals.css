@@ -135,6 +135,35 @@ html[data-af-surface="portal"][data-af-portal-tab="exegesis"]
   }
 }
 
+.portalPanel {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.portalPanel--gold {
+  border: 1px solid rgba(212, 175, 55, 0.9);
+  background: rgba(212, 175, 55, 0.06);
+}
+
+.portalPanelFrame--gold {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 215, 130, 0.62),
+    rgba(255, 234, 170, 0.18) 38%,
+    rgba(255, 215, 130, 0.46) 65%,
+    rgba(255, 255, 255, 0.1)
+  );
+  box-shadow:
+    0 30px 90px rgba(0, 0, 0, 0.55),
+    0 60px 160px rgba(0, 0, 0, 0.55);
+}
+
+.portalPanel--patternPill {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.04);
+  /* styling placeholder */
+}
+
 /* Always 2-up on desktop, even if only one offer is present */
 .portalDownloadGrid2up {
   display: grid;
