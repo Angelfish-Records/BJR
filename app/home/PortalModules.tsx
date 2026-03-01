@@ -1,8 +1,8 @@
 // web/app/home/PortalModules.tsx
 import React from "react";
+import { PortableText } from "@portabletext/react";
 import type { PortableTextBlock } from "@portabletext/types";
 import { listCurrentEntitlementKeys } from "../../lib/entitlements";
-import PortalRichText from "./modules/PortalRichText";
 import { getAlbumOffer, type AlbumOfferAsset } from "../../lib/albumOffers";
 import { urlFor } from "../../sanity/lib/image";
 import BuyAlbumButton from "./modules/BuyAlbumButton";
@@ -41,6 +41,20 @@ type ModuleCardGrid = {
     title: string;
     body?: string;
     requiresEntitlement?: string;
+  }>;
+};
+
+type ModulePanels = {
+  _key: string;
+  _type: "modulePanels";
+  title?: string;
+  layout?: 1 | 2 | 3;
+  panels: Array<{
+    _key: string;
+    title: string;
+    teaser?: import("@portabletext/types").PortableTextBlock[];
+    full?: import("@portabletext/types").PortableTextBlock[];
+    requiresEntitlement?: string | null;
   }>;
 };
 
@@ -102,6 +116,7 @@ type PortalModule =
   | ModuleHeading
   | ModuleRichText
   | ModuleCardGrid
+  | ModulePanels
   | ModuleDownloads
   | ModuleDownloadGrid
   | ModuleArtistPosts
@@ -212,8 +227,13 @@ function portableTextHasContent(
   return false;
 }
 
-function PanelCard(props: { title: string; body?: string; locked?: boolean }) {
-  const { title, body, locked } = props;
+function Panel(props: {
+  title: string;
+  blocks: PortableTextBlock[];
+  locked?: boolean;
+}) {
+  const { title, blocks, locked } = props;
+
   return (
     <div
       style={{
@@ -231,18 +251,16 @@ function PanelCard(props: { title: string; body?: string; locked?: boolean }) {
         ) : null}
       </div>
 
-      {body ? (
-        <div
-          style={{
-            marginTop: 8,
-            fontSize: 13,
-            opacity: locked ? 0.55 : 0.8,
-            lineHeight: 1.55,
-          }}
-        >
-          {body}
-        </div>
-      ) : null}
+      <div
+        style={{
+          marginTop: 8,
+          fontSize: 13,
+          opacity: locked ? 0.62 : 0.82,
+          lineHeight: 1.6,
+        }}
+      >
+        <PortableText value={blocks} />
+      </div>
     </div>
   );
 }
@@ -553,58 +571,56 @@ function DownloadOfferCard(props: {
 function renderModule(m: PortalModule, entitlementKeys: string[]) {
   if (m._type === "moduleHeading") return null;
 
-  if (m._type === "moduleRichText") {
-    const locked =
-      !!m.requiresEntitlement &&
-      !hasKey(entitlementKeys, m.requiresEntitlement);
+  if (m._type === "modulePanels") {
+    const cols: 1 | 2 | 3 =
+      m.layout === 1 || m.layout === 2 || m.layout === 3 ? m.layout : 2;
 
-    // If gated + not entitled, only render if teaser has real content.
-    if (locked && !portableTextHasContent(m.teaser)) return null;
+    const gridClass =
+      cols === 1
+        ? "grid gap-3"
+        : cols === 2
+          ? "grid gap-3 grid-cols-1 sm:grid-cols-2"
+          : "grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
 
-    const blocks = locked ? (m.teaser ?? []) : (m.full ?? []);
-
-    return (
-      <PortalRichText
-        key={m._key}
-        title={m.title}
-        blocks={blocks}
-        locked={locked}
-      />
-    );
-  }
-
-  if (m._type === "moduleCardGrid") {
-    const visibleCards = m.cards.filter((c) => {
+    const visiblePanels = (m.panels ?? []).flatMap((p) => {
       const locked =
-        !!c.requiresEntitlement &&
-        !hasKey(entitlementKeys, c.requiresEntitlement);
+        !!p.requiresEntitlement &&
+        !hasKey(entitlementKeys, p.requiresEntitlement);
 
-      // If locked, only render the card if there's teaser copy (we use `body` as the teaser).
-      if (locked) return (c.body ?? "").trim().length > 0;
+      // Locked viewers: only show if teaser has real content
+      if (locked) {
+        if (!portableTextHasContent(p.teaser)) return [];
+        return [
+          { key: p._key, title: p.title, blocks: p.teaser ?? [], locked: true },
+        ];
+      }
 
-      return true;
+      // Entitled (or ungated): show full if it has content; if it doesn't, skip quietly
+      if (!portableTextHasContent(p.full)) return [];
+      return [
+        { key: p._key, title: p.title, blocks: p.full ?? [], locked: false },
+      ];
     });
 
-    // If nothing survives filtering, don't render the module at all.
-    if (visibleCards.length === 0) return null;
+    if (visiblePanels.length === 0) return null;
 
     return (
       <div key={m._key} style={{ borderRadius: 18, padding: 16 }}>
-        <div className="portalCardGrid2up">
-          {visibleCards.map((c) => {
-            const locked =
-              !!c.requiresEntitlement &&
-              !hasKey(entitlementKeys, c.requiresEntitlement);
+        {m.title ? (
+          <div style={{ fontSize: 15, opacity: 0.92, marginBottom: 10 }}>
+            {m.title}
+          </div>
+        ) : null}
 
-            return (
-              <PanelCard
-                key={c._key}
-                title={c.title}
-                body={c.body}
-                locked={locked}
-              />
-            );
-          })}
+        <div className={gridClass}>
+          {visiblePanels.map((p) => (
+            <Panel
+              key={p.key}
+              title={p.title}
+              blocks={p.blocks}
+              locked={p.locked}
+            />
+          ))}
         </div>
       </div>
     );

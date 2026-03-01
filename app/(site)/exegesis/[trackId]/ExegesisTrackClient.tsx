@@ -2405,9 +2405,11 @@ export default function ExegesisTrackClient(props: {
 
                                           return (
                                             <button
-                                              className={`group relative inline-flex items-center justify-center rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 ${
+                                              className={`group relative inline-flex items-center justify-center rounded-md px-2 py-1 text-xs ${
                                                 disabled ? "opacity-70" : ""
-                                              } ${tint} [--badgeStroke:rgba(255,255,255,0.05)] hover:[--badgeStroke:rgba(255,255,255,0.10)]`}
+                                              } ${tint}
+  [--voteBg:rgba(255,255,255,0.05)] hover:[--voteBg:rgba(255,255,255,0.10)]
+  bg-[var(--voteBg)] hover:bg-[var(--voteBg)]`}
                                               disabled={disabled}
                                               onClick={
                                                 disabled
@@ -2428,7 +2430,6 @@ export default function ExegesisTrackClient(props: {
                                               <span className="relative inline-flex h-4 w-4 items-center justify-center">
                                                 <MedalIcon className="h-4 w-4" />
 
-                                                {/* count: overlaps medal, with stroke that matches the button bg */}
                                                 {showBadge ? (
                                                   <span
                                                     className="absolute text-[9px] font-black leading-[9px] tabular-nums text-current"
@@ -2438,11 +2439,9 @@ export default function ExegesisTrackClient(props: {
                                                       transform:
                                                         "translate(-50%,-50%)",
                                                       WebkitTextStroke:
-                                                        "2px var(--badgeStroke)",
-                                                      // ensure fill stays crisp + on top of the stroke
+                                                        "2px var(--voteBg)",
                                                       WebkitTextFillColor:
                                                         "currentColor",
-                                                      paintOrder: "stroke fill",
                                                     }}
                                                   >
                                                     {votes}
