@@ -1,5 +1,6 @@
 // web/app/home/PortalModules.tsx
 import React from "react";
+import type { PortableTextBlock } from "@portabletext/types";
 import { listCurrentEntitlementKeys } from "../../lib/entitlements";
 import PortalRichText from "./modules/PortalRichText";
 import { getAlbumOffer, type AlbumOfferAsset } from "../../lib/albumOffers";
@@ -155,6 +156,62 @@ function slugify(s: string): string {
     .replace(/^-|-$/g, "");
 }
 
+type PTSpan = { _type: "span"; text: string };
+type PTNode = PortableTextBlock | { _type: string };
+
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === "object" && x !== null;
+}
+
+function hasType(x: unknown): x is { _type: string } {
+  return isRecord(x) && typeof x._type === "string";
+}
+
+function isSpan(x: unknown): x is PTSpan {
+  if (!hasType(x) || x._type !== "span") return false;
+  if (!isRecord(x)) return false;
+
+  const rec: Record<string, unknown> = x;
+  return typeof rec["text"] === "string";
+}
+
+function getChildren(x: unknown): readonly unknown[] {
+  if (!isRecord(x)) return [];
+  const kids = x.children;
+  return Array.isArray(kids) ? kids : [];
+}
+
+/**
+ * Treat PortableText as "present" only if:
+ * - any non-block node exists (image/custom object), OR
+ * - any span contains non-whitespace text.
+ *
+ * No `any`, and no reliance on non-exported portabletext types.
+ */
+function portableTextHasContent(
+  blocks: readonly PTNode[] | null | undefined,
+): boolean {
+  if (!Array.isArray(blocks) || blocks.length === 0) return false;
+
+  for (const b of blocks as readonly unknown[]) {
+    if (!hasType(b)) continue;
+
+    // Non-block nodes count as content
+    if (b._type !== "block") return true;
+
+    // Block: scan children for text spans
+    for (const ch of getChildren(b)) {
+      if (isSpan(ch) && ch.text.trim()) return true;
+
+      // Optional: if you want inline non-span children (e.g. inline objects)
+      // to also count as content, uncomment:
+      // if (hasType(ch) && ch._type !== "span") return true;
+    }
+  }
+
+  return false;
+}
+
 function PanelCard(props: { title: string; body?: string; locked?: boolean }) {
   const { title, body, locked } = props;
   return (
@@ -183,7 +240,7 @@ function PanelCard(props: { title: string; body?: string; locked?: boolean }) {
             lineHeight: 1.55,
           }}
         >
-          {locked ? "Locked." : body}
+          {body}
         </div>
       ) : null}
     </div>
@@ -497,36 +554,57 @@ function renderModule(m: PortalModule, entitlementKeys: string[]) {
   if (m._type === "moduleHeading") return null;
 
   if (m._type === "moduleRichText") {
-    const entitled = hasKey(entitlementKeys, m.requiresEntitlement);
+    const locked =
+      !!m.requiresEntitlement &&
+      !hasKey(entitlementKeys, m.requiresEntitlement);
 
-    const blocks =
-      !m.requiresEntitlement || entitled ? (m.full ?? []) : (m.teaser ?? []);
+    // If gated + not entitled, only render if teaser has real content.
+    if (locked && !portableTextHasContent(m.teaser)) return null;
+
+    const blocks = locked ? (m.teaser ?? []) : (m.full ?? []);
 
     return (
       <PortalRichText
         key={m._key}
         title={m.title}
         blocks={blocks}
-        locked={!!m.requiresEntitlement && !entitled}
+        locked={locked}
       />
     );
   }
 
   if (m._type === "moduleCardGrid") {
+    const visibleCards = m.cards.filter((c) => {
+      const locked =
+        !!c.requiresEntitlement &&
+        !hasKey(entitlementKeys, c.requiresEntitlement);
+
+      // If locked, only render the card if there's teaser copy (we use `body` as the teaser).
+      if (locked) return (c.body ?? "").trim().length > 0;
+
+      return true;
+    });
+
+    // If nothing survives filtering, don't render the module at all.
+    if (visibleCards.length === 0) return null;
+
     return (
       <div key={m._key} style={{ borderRadius: 18, padding: 16 }}>
         <div className="portalCardGrid2up">
-          {m.cards.map((c) => (
-            <PanelCard
-              key={c._key}
-              title={c.title}
-              body={c.body}
-              locked={
-                !!c.requiresEntitlement &&
-                !hasKey(entitlementKeys, c.requiresEntitlement)
-              }
-            />
-          ))}
+          {visibleCards.map((c) => {
+            const locked =
+              !!c.requiresEntitlement &&
+              !hasKey(entitlementKeys, c.requiresEntitlement);
+
+            return (
+              <PanelCard
+                key={c._key}
+                title={c.title}
+                body={c.body}
+                locked={locked}
+              />
+            );
+          })}
         </div>
       </div>
     );

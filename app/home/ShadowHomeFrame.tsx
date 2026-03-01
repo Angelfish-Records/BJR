@@ -71,13 +71,29 @@ export default async function ShadowHomeFrame(props: {
         .shadowHomeGrid > * { min-width: 0; }
         .shadowHomeSidebar > * { width: 100%; }
 
+        /* Stage sizing: default is a fixed desktop height, but becomes responsive once the grid collapses. */
+        .shadowHomeStageSlot { height: var(--af-stage-h, 560px); }
+
         @media (max-width: 1060px) {
           .shadowHomeGrid { grid-template-columns: 1fr; }
           .shadowHomeSidebar { order: 1; position: static !important; top: auto !important; }
           .shadowHomeMain { order: 0; }
+
+          /* On single-column (mobile/tablet), don't reserve a huge fixed block.
+             Clamp stage height to viewport so the footer doesn't get pushed miles down. */
+          .shadowHomeStageSlot {
+            height: min(var(--af-stage-h, 560px), 56svh);
+          }
         }
+
         @media (max-width: 520px) {
           .shadowHomeOuter { padding-left: 14px !important; padding-right: 14px !important; }
+
+          /* Even tighter on small phones. */
+          .shadowHomeStageSlot {
+            height: min(var(--af-stage-h, 560px), 48svh);
+          }
+
           @media (max-width: 1060px) {
             .shadowHomeSidebar { position: static !important; }
           }
@@ -145,7 +161,10 @@ export default async function ShadowHomeFrame(props: {
             </div>
 
             {/* LEFT: page content */}
-            <div className="shadowHomeMain" style={{ display: "grid", gap: 18 }}>
+            <div
+              className="shadowHomeMain"
+              style={{ display: "grid", gap: 18 }}
+            >
               {children}
             </div>
 
@@ -163,14 +182,17 @@ export default async function ShadowHomeFrame(props: {
               <div
                 id="af-stage-inline-slot"
                 data-height={String(stageHeight)}
-                style={{
-                  width: "100%",
-                  height: stageHeight,
-                  borderRadius: 18,
-                  overflow: "hidden",
-                  position: "relative",
-                  isolation: "isolate",
-                }}
+                className="shadowHomeStageSlot"
+                style={
+                  {
+                    width: "100%",
+                    "--af-stage-h": `${stageHeight}px`,
+                    borderRadius: 18,
+                    overflow: "hidden",
+                    position: "relative",
+                    isolation: "isolate",
+                  } as React.CSSProperties & Record<"--af-stage-h", string>
+                }
               >
                 <div
                   id="af-lyrics-overlay-slot"
