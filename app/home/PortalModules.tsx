@@ -257,11 +257,9 @@ function Panel(props: {
         minWidth: 0,
       }}
     >
-   
-
       <div
         style={{
-          marginTop: 8,
+
           fontSize: 13,
           opacity: locked ? 0.62 : 0.82,
           lineHeight: 1.6,
