@@ -1920,7 +1920,7 @@ export default function ExegesisTrackClient(props: {
                     lineBtnByKeyRef.current[c.lineKey] = el;
                   }}
                   type="button"
-                  className="block w-full py-1 text-left"
+                  className="block w-full py-0.5 text-left"
                   data-linekey={c.lineKey}
                   data-groupkey={gk}
                   onFocus={() => scheduleHover({ gk, lk: c.lineKey })}
@@ -2187,7 +2187,7 @@ export default function ExegesisTrackClient(props: {
                               ref={(el) => {
                                 rootElByIdRef.current[root.rootId] = el;
                               }}
-                              className="rounded-md bg-black/20 p-3"
+                              className="rounded-md bg-black/20"
                             >
                               {visibleComments.map((c) => {
                                 const ident =
