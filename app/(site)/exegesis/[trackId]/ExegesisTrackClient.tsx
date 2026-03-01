@@ -440,6 +440,59 @@ export default function ExegesisTrackClient(props: {
   const [hoverGroupKey, setHoverGroupKey] = React.useState<string>("");
   const [hoverLineKey, setHoverLineKey] = React.useState<string>("");
 
+  // rAF-throttled hover tracking (prevents missed rows + avoids re-render storms)
+  const hoverRafRef = React.useRef<number | null>(null);
+  const hoverNextRef = React.useRef<{ gk: string; lk: string } | null>(null);
+
+  function commitHover(next: { gk: string; lk: string }) {
+    // Avoid pointless state churn.
+    if (next.gk === hoverGroupKey && next.lk === hoverLineKey) return;
+    setHoverGroupKey(next.gk);
+    setHoverLineKey(next.lk);
+  }
+
+  function scheduleHover(next: { gk: string; lk: string }) {
+    hoverNextRef.current = next;
+    if (hoverRafRef.current != null) return;
+
+    hoverRafRef.current = window.requestAnimationFrame(() => {
+      hoverRafRef.current = null;
+      const v = hoverNextRef.current;
+      hoverNextRef.current = null;
+      if (!v) return;
+      commitHover(v);
+    });
+  }
+
+  React.useEffect(() => {
+    return () => {
+      if (hoverRafRef.current != null) {
+        window.cancelAnimationFrame(hoverRafRef.current);
+      }
+      hoverRafRef.current = null;
+      hoverNextRef.current = null;
+    };
+  }, []);
+
+  function clearHover() {
+    scheduleHover({ gk: "", lk: "" });
+  }
+
+  function onLyricsPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const tgt = e.target;
+    if (!(tgt instanceof Element)) return;
+
+    const btn = tgt.closest("button[data-linekey]");
+    if (!(btn instanceof HTMLButtonElement)) {
+      clearHover();
+      return;
+    }
+
+    const lk = (btn.dataset.linekey ?? "").trim();
+    const gk = (btn.dataset.groupkey ?? "").trim();
+    scheduleHover({ gk, lk });
+  }
+
   // --- layout: mobile drawer + desktop anchored panel ---
   const isMobile = useMediaQuery("(max-width: 767px)"); // Tailwind md breakpoint
   const [drawerOpen, setDrawerOpen] = React.useState(false);
@@ -1983,7 +2036,11 @@ export default function ExegesisTrackClient(props: {
 
       <div className="mt-6 grid gap-6 md:grid-cols-[1fr_570px]">
         <div ref={lyricsWrapRef} className="rounded-xl bg-white/5 p-4">
-          <div className="mt-3 space-y-0.5">
+          <div
+            className="mt-3 flex flex-col" // IMPORTANT: remove dead hover gaps from space-y-0.5
+            onPointerMove={onLyricsPointerMove}
+            onPointerLeave={clearHover}
+          >
             {(lyrics.cues ?? []).map((c) => {
               const isSelected = selected?.lineKey === c.lineKey;
 
@@ -2012,22 +2069,10 @@ export default function ExegesisTrackClient(props: {
                   }}
                   type="button"
                   className="block w-full text-left"
-                  onMouseEnter={() => {
-                    setHoverGroupKey(gk);
-                    setHoverLineKey(c.lineKey);
-                  }}
-                  onMouseLeave={() => {
-                    setHoverGroupKey("");
-                    setHoverLineKey("");
-                  }}
-                  onFocus={() => {
-                    setHoverGroupKey(gk);
-                    setHoverLineKey(c.lineKey);
-                  }}
-                  onBlur={() => {
-                    setHoverGroupKey("");
-                    setHoverLineKey("");
-                  }}
+                  data-linekey={c.lineKey}
+                  data-groupkey={gk}
+                  onFocus={() => scheduleHover({ gk, lk: c.lineKey })}
+                  onBlur={clearHover}
                   onClick={() => {
                     const nextGroupKey = cueCanonicalGroupKey(lyrics, c);
 
@@ -2045,7 +2090,7 @@ export default function ExegesisTrackClient(props: {
                   }}
                 >
                   <span
-                    className="inline-block rounded px-1.5 py-0.5 text-sm leading-snug transition"
+                    className="inline-block rounded px-1.5 py-0.5 text-sm leading-snug transition-colors duration-75"
                     style={{
                       backgroundColor: isSelected
                         ? "var(--lxSelected)"
