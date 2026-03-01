@@ -621,9 +621,16 @@ function renderModule(m: PortalModule, entitlementKeys: string[]) {
     if (visiblePanels.length === 0) return null;
 
     return (
-      <div key={m._key} style={{ borderRadius: 18, padding: 16 }}>
+      <div key={m._key} style={{ width: "100%", minWidth: 0 }}>
         {m.title ? (
-          <div style={{ fontSize: 15, opacity: 0.92, marginBottom: 10 }}>
+          <div
+            style={{
+              fontSize: 15,
+              opacity: 0.92,
+              marginBottom: 10,
+              padding: "0 2px", // tiny optical alignment
+            }}
+          >
             {m.title}
           </div>
         ) : null}

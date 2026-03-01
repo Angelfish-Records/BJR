@@ -142,7 +142,8 @@ html[data-af-surface="portal"][data-af-portal-tab="exegesis"]
 
 .portalPanel--gold {
   border: none;
-  background: rgba(255, 255, 255, 0.04);
+  /* Opaque-ish surface so the gradient frame doesn't tint the whole card */
+  background: rgba(0, 0, 0, 0.35);
 }
 
 .portalPanelFrame--gold {
