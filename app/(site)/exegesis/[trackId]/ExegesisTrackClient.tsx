@@ -1920,7 +1920,7 @@ export default function ExegesisTrackClient(props: {
                     lineBtnByKeyRef.current[c.lineKey] = el;
                   }}
                   type="button"
-                  className="block w-full text-left"
+                  className="block w-full py-1 text-left"
                   data-linekey={c.lineKey}
                   data-groupkey={gk}
                   onFocus={() => scheduleHover({ gk, lk: c.lineKey })}
@@ -1963,7 +1963,6 @@ export default function ExegesisTrackClient(props: {
           // Mobile-only: reserve space for the ever-present MiniPlayer dock.
           // Keep this aligned with other pages that assume ~80px dock height.
           const DOCK_H = 80;
-          const mobilePadBottom = DOCK_H; // + a little breathing room
 
           const DiscoursePanel = (
             <div
@@ -2151,7 +2150,7 @@ export default function ExegesisTrackClient(props: {
                       minHeight: 0, // critical for flex scroll containers
                       // Reserve space for the MiniPlayer dock *inside* the scroll region (mobile only),
                       // instead of creating dead space in the overall panel layout.
-                      paddingBottom: isMobile ? mobilePadBottom : 0,
+                      paddingBottom: isMobile ? DOCK_H : 0,
                     }}
                   >
                     <div className="mt-3 space-y-3">
@@ -2337,10 +2336,11 @@ export default function ExegesisTrackClient(props: {
                                                     style={{
                                                       left: "74%",
                                                       top: "18%",
+                                                      // 1px nudge to the right
                                                       transform:
-                                                        "translate(-50%,-50%)",
-                                                      // solid matte outline (no copper bleed like -webkit-text-stroke)
+                                                        "translate(calc(-50% + 1px), -50%)",
                                                       textShadow: [
+                                                        // inner ring (1px)
                                                         "1px 0 rgb(var(--voteBgRgb) / 1)",
                                                         "-1px 0 rgb(var(--voteBgRgb) / 1)",
                                                         "0 1px rgb(var(--voteBgRgb) / 1)",
@@ -2349,6 +2349,16 @@ export default function ExegesisTrackClient(props: {
                                                         "1px -1px rgb(var(--voteBgRgb) / 1)",
                                                         "-1px 1px rgb(var(--voteBgRgb) / 1)",
                                                         "-1px -1px rgb(var(--voteBgRgb) / 1)",
+
+                                                        // outer ring (2px) — makes it fatter without glow
+                                                        "2px 0 rgb(var(--voteBgRgb) / 1)",
+                                                        "-2px 0 rgb(var(--voteBgRgb) / 1)",
+                                                        "0 2px rgb(var(--voteBgRgb) / 1)",
+                                                        "0 -2px rgb(var(--voteBgRgb) / 1)",
+                                                        "2px 2px rgb(var(--voteBgRgb) / 1)",
+                                                        "2px -2px rgb(var(--voteBgRgb) / 1)",
+                                                        "-2px 2px rgb(var(--voteBgRgb) / 1)",
+                                                        "-2px -2px rgb(var(--voteBgRgb) / 1)",
                                                       ].join(","),
                                                     }}
                                                   >
