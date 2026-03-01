@@ -14,7 +14,13 @@ import {
 import { getLastPortalTab } from "./portalLastTab";
 import { usePlayer } from "@/app/home/player/PlayerState";
 import { useGlobalTransportKeys } from "./player/useGlobalTransportKeys";
-import type { PlayerTrack, AlbumInfo, AlbumNavItem, Tier } from "@/lib/types";
+import type {
+  PlayerTrack,
+  AlbumInfo,
+  AlbumNavItem,
+  Tier,
+  AlbumLyricsBundle,
+} from "@/lib/types";
 import PlayerController from "./player/PlayerController";
 import MiniPlayer from "./player/MiniPlayer";
 import ActivationGate from "@/app/home/ActivationGate";
@@ -243,7 +249,10 @@ function FullWidthBanner(props: {
     if (code === "success") {
       tone = "success";
       text = (
-        <>Your account has been updated. Thank you for supporting future work on this independent platform.</>
+        <>
+          Your account has been updated. Thank you for supporting future work on
+          this independent platform.
+        </>
       );
     } else if (code === "cancel") {
       tone = "neutral";
@@ -297,8 +306,8 @@ function FullWidthBanner(props: {
     tone === "success"
       ? "border-emerald-400/30 bg-white/5"
       : tone === "warn"
-      ? "border-amber-400/30 bg-white/5"
-      : "border-white/10 bg-white/5";
+        ? "border-amber-400/30 bg-white/5"
+        : "border-white/10 bg-white/5";
 
   return (
     <div
@@ -582,6 +591,7 @@ export default function PortalArea(props: {
   albumSlug: string;
   album: AlbumInfo | null;
   tracks: PlayerTrack[];
+  albumLyrics?: AlbumLyricsBundle | null;
   albums: AlbumNavItem[];
   attentionMessage?: string | null;
   tier?: string | null;
@@ -595,6 +605,7 @@ export default function PortalArea(props: {
     albumSlug,
     album: initialAlbum,
     tracks: initialTracks,
+    albumLyrics,
     albums,
     attentionMessage = null,
     tier = null,
@@ -1077,6 +1088,7 @@ export default function PortalArea(props: {
             albumSlug={currentAlbumSlug}
             album={album}
             tracks={tracks}
+            albumLyrics={albumLyrics}
             albums={albums}
             onSelectAlbum={onSelectAlbum}
             isBrowsingAlbum={isBrowsingAlbum}
@@ -1092,6 +1104,7 @@ export default function PortalArea(props: {
       currentAlbumSlug,
       album,
       tracks,
+      albumLyrics,
       albums,
       forceSurface,
       isBrowsingAlbum,

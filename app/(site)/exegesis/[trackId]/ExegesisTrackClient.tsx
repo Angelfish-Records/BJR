@@ -6,14 +6,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useMembershipModal } from "@/app/home/MembershipModalProvider";
 import TipTapEditor from "./TipTapEditor";
 import TipTapReadOnly from "./TipTapReadOnly";
-
-type LyricsApiCue = {
-  lineKey: string;
-  tMs: number;
-  text: string;
-  endMs?: number;
-  canonicalGroupKey?: string;
-};
+import type { LyricCue, LyricGroupMap } from "@/lib/types";
 
 type LyricsApiOk = {
   ok: true;
@@ -21,8 +14,8 @@ type LyricsApiOk = {
   offsetMs: number;
   version: string;
   geniusUrl: string | null;
-  cues: LyricsApiCue[];
-  groupMap?: Record<string, { canonicalGroupKey: string; updatedAt: string }>;
+  cues: LyricCue[];
+  groupMap?: LyricGroupMap;
 };
 
 type ThreadSort = "top" | "recent";
@@ -196,7 +189,7 @@ function isSameGroup(a: string, b: string): boolean {
   return !!aa && !!bb && aa === bb;
 }
 
-function cueCanonicalGroupKey(lyrics: LyricsApiOk, c: LyricsApiCue): string {
+function cueCanonicalGroupKey(lyrics: LyricsApiOk, c: LyricCue): string {
   return (c.canonicalGroupKey ?? cueGroupKey(lyrics, c.lineKey) ?? "").trim();
 }
 

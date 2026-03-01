@@ -4,13 +4,7 @@
 import React from "react";
 import { mediaSurface } from "../mediaSurface";
 import { useRouter } from "next/navigation";
-
-export type LyricCue = {
-  lineKey: string;
-  tMs: number;
-  text: string;
-  endMs?: number;
-};
+import type { LyricCue } from "@/lib/types";
 
 function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n));

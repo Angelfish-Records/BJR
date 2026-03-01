@@ -3,12 +3,67 @@
 
 import { lyricsSurface } from "./lyricsSurface";
 import { fetchLyricsByTrackId } from "./fetchLyricsByTrackId";
+import type { AlbumLyricsBundle } from "@/lib/types";
 
 // Module-scope in-flight map so *any* caller (any surface) dedupes fetches.
 const inFlight = new Map<string, AbortController>();
 
 function hasOwn(obj: object, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+/**
+ * Prime lyricsSurface from an album-provided bundle.
+ * - Merges without clobbering existing per-track entries (unless missing).
+ * - Ensures we still preserve "known no lyrics" as [] if already present.
+ * - No network; safe to call repeatedly (idempotent-ish).
+ */
+export function primeLyricsFromAlbumBundle(
+  bundle: AlbumLyricsBundle | null | undefined,
+) {
+  if (!bundle) return;
+
+  const snap = lyricsSurface.getSnapshot();
+
+  const cuesIn = bundle.cuesByTrackId ?? {};
+  const offIn = bundle.offsetByTrackId ?? {};
+
+  // Build merged maps but only add keys that are currently unknown.
+  let cuesOut = snap.cuesByTrackId;
+  let offOut = snap.offsetByTrackId;
+
+  for (const [trackIdRaw, cuesRaw] of Object.entries(cuesIn)) {
+    const id = (trackIdRaw ?? "").trim();
+    if (!id) continue;
+
+    if (hasOwn(cuesOut, id)) continue; // don't overwrite existing (including [] known-no-lyrics)
+
+    const cues = Array.isArray(cuesRaw) ? cuesRaw : [];
+    cuesOut = { ...cuesOut, [id]: cues };
+  }
+
+  for (const [trackIdRaw, offRaw] of Object.entries(offIn)) {
+    const id = (trackIdRaw ?? "").trim();
+    if (!id) continue;
+
+    if (hasOwn(offOut, id)) continue; // don't overwrite existing
+
+    const n =
+      typeof offRaw === "number" && Number.isFinite(offRaw)
+        ? Math.floor(offRaw)
+        : 0;
+
+    offOut = { ...offOut, [id]: n };
+  }
+
+  // Only write if something changed (cheap reference check).
+  if (cuesOut === snap.cuesByTrackId && offOut === snap.offsetByTrackId) return;
+
+  lyricsSurface.setMaps({
+    cuesByTrackId: cuesOut,
+    offsetByTrackId: offOut,
+    globalOffsetMs: snap.globalOffsetMs,
+  });
 }
 
 /**
@@ -29,7 +84,8 @@ export async function ensureLyricsForTrack(
 
   const knownKey = hasOwn(snap.cuesByTrackId, id);
   const hasCues = Array.isArray(existing) && existing.length > 0;
-  const knownNoLyrics = knownKey && Array.isArray(existing) && existing.length === 0;
+  const knownNoLyrics =
+    knownKey && Array.isArray(existing) && existing.length === 0;
 
   if (hasCues || knownNoLyrics) return;
 
@@ -39,18 +95,13 @@ export async function ensureLyricsForTrack(
   const ac = new AbortController();
   inFlight.set(id, ac);
 
-  // If caller aborts, abort our fetch too.
+  // Caller abort should NOT abort the shared in-flight request.
+  // It only means "this caller no longer cares". The module-scope fetch may be
+  // servicing other callers (PlayerState, StageInline, etc).
   const outerSignal = opts?.signal;
-  let onAbort: (() => void) | null = null;
-
-  if (outerSignal) {
-    if (outerSignal.aborted) {
-      inFlight.delete(id);
-      ac.abort();
-      return;
-    }
-    onAbort = () => ac.abort();
-    outerSignal.addEventListener("abort", onAbort, { once: true });
+  if (outerSignal?.aborted) {
+    inFlight.delete(id);
+    return;
   }
 
   try {
@@ -80,6 +131,5 @@ export async function ensureLyricsForTrack(
     });
   } finally {
     inFlight.delete(id);
-    if (outerSignal && onAbort) outerSignal.removeEventListener("abort", onAbort);
   }
 }

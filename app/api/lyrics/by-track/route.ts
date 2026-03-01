@@ -3,16 +3,10 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { client } from "@/sanity/lib/client";
 import { sql } from "@vercel/postgres";
+import { normalizeLyricCuesFromSanity } from "@/lib/types";
+import type { LyricCue, LyricGroupMap } from "@/lib/types";
 
 export const runtime = "nodejs";
-
-export type LyricCue = {
-  lineKey: string;
-  tMs: number;
-  text: string;
-  endMs?: number;
-  canonicalGroupKey?: string;
-};
 
 type TrackLyricsDoc = {
   trackId?: string;
@@ -38,37 +32,6 @@ type LyricsQueryResult = {
   meta?: TrackMetaBundle | null;
 };
 
-function normalizeCues(input: TrackLyricsDoc["cues"]): LyricCue[] {
-  if (!Array.isArray(input)) return [];
-  const out: LyricCue[] = [];
-
-  for (const c of input) {
-    const lineKey = typeof c?._key === "string" ? c._key.trim() : "";
-    const tMs = c?.tMs;
-    const text = c?.text;
-    const endMs = c?.endMs;
-
-    if (!lineKey) continue;
-    if (typeof tMs !== "number" || !Number.isFinite(tMs) || tMs < 0) continue;
-    if (typeof text !== "string" || text.trim().length === 0) continue;
-
-    const cue: LyricCue = {
-      lineKey,
-      tMs: Math.floor(tMs),
-      text: text.trim(),
-    };
-
-    if (typeof endMs === "number" && Number.isFinite(endMs) && endMs >= 0) {
-      cue.endMs = Math.floor(endMs);
-    }
-
-    out.push(cue);
-  }
-
-  out.sort((a, b) => a.tMs - b.tMs);
-  return out;
-}
-
 function safeUrl(raw: unknown): string | null {
   const s = typeof raw === "string" ? raw.trim() : "";
   if (!s) return null;
@@ -81,9 +44,7 @@ function safeUrl(raw: unknown): string | null {
   }
 }
 
-async function fetchGroupMap(
-  trackId: string,
-): Promise<Record<string, { canonicalGroupKey: string; updatedAt: string }>> {
+async function fetchGroupMap(trackId: string): Promise<LyricGroupMap> {
   const r = await sql<{
     anchor_line_key: string;
     canonical_group_key: string;
@@ -94,8 +55,9 @@ async function fetchGroupMap(
     where track_id = ${trackId}
   `;
 
-  const map: Record<string, { canonicalGroupKey: string; updatedAt: string }> =
-    {};
+  const map: LyricGroupMap = {};
+  {
+  }
 
   for (const row of r.rows ?? []) {
     const lk = (row.anchor_line_key ?? "").trim();
@@ -180,7 +142,7 @@ export async function GET(req: Request) {
       ? metaRaw.track.trackCatalogueId.trim()
       : null;
 
-  const cues = normalizeCues(doc?.cues);
+  const cues = normalizeLyricCuesFromSanity(doc?.cues);
   const offsetMs =
     typeof doc?.offsetMs === "number" && Number.isFinite(doc.offsetMs)
       ? Math.floor(doc.offsetMs)

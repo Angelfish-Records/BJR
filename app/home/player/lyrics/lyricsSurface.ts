@@ -1,7 +1,7 @@
 // web/app/home/player/lyrics/lyricsSurface.ts
 "use client";
 
-import type { LyricCue } from "@/app/home/player/stage/LyricsOverlay";
+import type { LyricCue } from "@/lib/types";
 
 export type CuesByTrackId = Record<string, LyricCue[]>;
 export type OffsetByTrackId = Record<string, number>;

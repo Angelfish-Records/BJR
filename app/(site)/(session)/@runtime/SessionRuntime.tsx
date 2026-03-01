@@ -142,6 +142,7 @@ export default async function SessionRuntime(props: {
       albumSlug={albumSlug}
       album={albumData.album}
       tracks={albumData.tracks}
+      albumLyrics={albumData.lyrics}
       albums={browseAlbums}
       attentionMessage={null}
       tier={tier}

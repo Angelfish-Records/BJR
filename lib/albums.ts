@@ -1,8 +1,14 @@
 // web/lib/albums.ts
 import { client } from "@/sanity/lib/client";
 import { urlFor } from "@/sanity/lib/image";
-import type { AlbumInfo, PlayerTrack, TierName } from "@/lib/types";
-import type { LyricCue } from "@/app/home/player/stage/LyricsOverlay";
+import { normalizeLyricCuesFromSanity } from "@/lib/types";
+import type {
+  AlbumInfo,
+  PlayerTrack,
+  TierName,
+  LyricCue,
+  AlbumLyricsBundle,
+} from "@/lib/types";
 
 type AlbumDoc = {
   _id?: string;
@@ -89,39 +95,6 @@ export type AlbumBrowseItem = {
     minTierToLoad?: string | null;
   };
 };
-
-export type AlbumLyricsBundle = {
-  cuesByTrackId: Record<string, LyricCue[]>;
-  offsetByTrackId: Record<string, number>;
-};
-
-function normalizeCues(input: TrackLyricsDoc["cues"]): LyricCue[] {
-  if (!Array.isArray(input)) return [];
-  const out: LyricCue[] = [];
-  for (const c of input) {
-    const key = c?._key;
-    const tMs = c?.tMs;
-    const text = c?.text;
-    const endMs = c?.endMs;
-
-    if (typeof key !== "string" || key.trim().length === 0) continue;
-    if (typeof tMs !== "number" || !Number.isFinite(tMs) || tMs < 0) continue;
-    if (typeof text !== "string" || text.trim().length === 0) continue;
-
-    const cue: LyricCue = {
-      lineKey: key.trim(),
-      tMs: Math.floor(tMs),
-      text: text.trim(),
-    };
-
-    if (typeof endMs === "number" && Number.isFinite(endMs) && endMs >= 0) {
-      cue.endMs = Math.floor(endMs);
-    }
-    out.push(cue);
-  }
-  out.sort((a, b) => a.tMs - b.tMs);
-  return out;
-}
 
 function normStr(v: unknown): string | undefined {
   if (typeof v !== "string") return undefined;
@@ -289,7 +262,7 @@ export async function getAlbumBySlug(slug: string): Promise<{
   for (const d of Array.isArray(lyricDocs) ? lyricDocs : []) {
     const id = d?.trackId;
     if (!id) continue;
-    cuesByTrackId[id] = normalizeCues(d.cues);
+    cuesByTrackId[id] = normalizeLyricCuesFromSanity(d.cues);
     offsetByTrackId[id] =
       typeof d.offsetMs === "number" && Number.isFinite(d.offsetMs)
         ? Math.floor(d.offsetMs)

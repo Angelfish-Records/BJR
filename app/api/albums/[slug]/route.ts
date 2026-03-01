@@ -29,10 +29,14 @@ function tierAtLeast(actual: string, required: string) {
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   context: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await context.params;
+
+  const { searchParams } = new URL(req.url);
+  const includeLyrics =
+    (searchParams.get("includeLyrics") ?? "").trim() === "1";
 
   const { userId } = await auth();
   const tier = await getMemberTier(userId ?? null);
@@ -65,5 +69,6 @@ export async function GET(
     ok: true,
     album: data.album,
     tracks: data.tracks,
+    ...(includeLyrics ? { lyrics: data.lyrics } : {}),
   });
 }

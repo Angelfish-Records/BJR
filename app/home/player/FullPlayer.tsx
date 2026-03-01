@@ -6,11 +6,13 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { usePlayer } from "./PlayerState";
 import type {
   AlbumInfo,
+  AlbumLyricsBundle,
   AlbumNavItem,
   PlayerTrack,
   Tier,
   TierName,
 } from "@/lib/types";
+import { primeLyricsFromAlbumBundle } from "./lyrics/ensureLyricsForTrack";
 import { deriveShareContext, shareAlbum, shareTrack } from "./share";
 import { PatternRingGlow } from "./VisualizerPattern";
 
@@ -266,6 +268,7 @@ type StableView = {
   albumSlug: string;
   album: AlbumInfo | null;
   tracks: PlayerTrack[];
+  albumLyrics?: AlbumLyricsBundle | null;
 };
 
 type StreamingPlatform =
@@ -483,6 +486,7 @@ export default function FullPlayer(props: {
   albumSlug: string;
   album: AlbumInfo | null;
   tracks: PlayerTrack[];
+  albumLyrics?: AlbumLyricsBundle | null;
   albums: AlbumNavItem[];
   onSelectAlbum?: (slug: string) => void;
   isBrowsingAlbum?: boolean;
@@ -506,6 +510,7 @@ export default function FullPlayer(props: {
     album,
     tracks,
     albums,
+    albumLyrics,
     onSelectAlbum,
     isBrowsingAlbum = false,
     viewerTier = "none",
@@ -515,10 +520,11 @@ export default function FullPlayer(props: {
   const [stableView, setStableView] = React.useState<StableView | null>(null);
 
   React.useEffect(() => {
-    if (album && tracks && tracks.length) {
-      setStableView({ albumSlug, album, tracks });
-    }
-  }, [albumSlug, album, tracks]);
+    if (!album || !Array.isArray(tracks) || tracks.length === 0) return;
+
+    setStableView({ albumSlug, album, tracks, albumLyrics });
+    primeLyricsFromAlbumBundle(albumLyrics ?? null);
+  }, [albumSlug, album, tracks, albumLyrics]);
 
   const showCached = Boolean(
     isBrowsingAlbum && stableView?.album && (!album || !tracks?.length),

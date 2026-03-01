@@ -4,8 +4,8 @@ import { Stack, Card, Text, Button, Flex } from "@sanity/ui";
 import { set, unset, useFormValue, PatchEvent } from "sanity";
 import type { ArrayOfObjectsInputProps, FormPatch } from "sanity";
 
-type LyricCue = { tMs: number; text: string; endMs?: number };
-type ImportPayload = { offsetMs?: number; cues: LyricCue[] };
+type ImportLyricCue = { tMs: number; text: string; endMs?: number };
+type ImportPayload = { offsetMs?: number; cues: ImportLyricCue[] };
 
 function parseTimestampToMs(ts: string): number | null {
   // supports mm:ss.xx , mm:ss.xxx , hh:mm:ss.xx
@@ -34,9 +34,9 @@ function parseTimestampToMs(ts: string): number | null {
   return ms >= 0 ? ms : null;
 }
 
-function parseLrc(text: string): { cues: LyricCue[]; offsetMs?: number } {
+function parseLrc(text: string): { cues: ImportLyricCue[]; offsetMs?: number } {
   const lines = text.split(/\r?\n/);
-  const cues: LyricCue[] = [];
+  const cues: ImportLyricCue[] = [];
 
   // matches [mm:ss.xx]text (can be multiple timestamps per line)
   const timeTag =
@@ -89,7 +89,7 @@ function tryParseJson(text: string): ImportPayload | null {
     const cuesVal = obj.cues;
     if (!Array.isArray(cuesVal)) return null;
 
-    const out: LyricCue[] = [];
+    const out: ImportLyricCue[] = [];
     for (const c of cuesVal) {
       if (!c || typeof c !== "object") return null;
       const cc = c as Record<string, unknown>;
@@ -100,7 +100,7 @@ function tryParseJson(text: string): ImportPayload | null {
       if (typeof tMs !== "number" || !Number.isFinite(tMs)) return null;
       if (typeof textVal !== "string") return null;
 
-      const cue: LyricCue = { tMs: Math.floor(tMs), text: textVal };
+      const cue: ImportLyricCue = { tMs: Math.floor(tMs), text: textVal };
       if (typeof endMs === "number" && Number.isFinite(endMs))
         cue.endMs = Math.floor(endMs);
       out.push(cue);
@@ -139,7 +139,7 @@ export default function LyricsImportInput(props: ArrayOfObjectsInputProps) {
 
     const asJson = tryParseJson(src);
 
-    let cues: LyricCue[] = [];
+    let cues: ImportLyricCue[] = [];
     let offsetFromLrc: number | undefined;
 
     if (asJson) {

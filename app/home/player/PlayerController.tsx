@@ -3,7 +3,7 @@
 
 import React from "react";
 import FullPlayer from "./FullPlayer";
-import type { AlbumInfo, AlbumNavItem, PlayerTrack, Tier } from "@/lib/types";
+import type { AlbumInfo, AlbumNavItem, PlayerTrack, Tier, AlbumLyricsBundle } from "@/lib/types";
 import StageOverlay from "./stage/StageOverlay";
 
 export default function PlayerController(props: {
@@ -11,6 +11,7 @@ export default function PlayerController(props: {
   openPlayerPanel: () => void;
   album: AlbumInfo | null;
   tracks: PlayerTrack[];
+  albumLyrics?: AlbumLyricsBundle | null;
   albums: AlbumNavItem[];
   onSelectAlbum: (slug: string) => void;
   isBrowsingAlbum: boolean;
@@ -20,6 +21,7 @@ export default function PlayerController(props: {
     albumSlug,
     album,
     tracks,
+    albumLyrics,
     albums,
     onSelectAlbum,
     isBrowsingAlbum,
@@ -27,7 +29,6 @@ export default function PlayerController(props: {
   } = props;
 
   const [stageOpen, setStageOpen] = React.useState(false);
-  const openStage = React.useCallback(() => setStageOpen(true), []);
   const closeStage = React.useCallback(() => setStageOpen(false), []);
 
   return (
@@ -36,13 +37,11 @@ export default function PlayerController(props: {
         albumSlug={albumSlug}
         album={album}
         tracks={tracks}
+        albumLyrics={albumLyrics}
         albums={albums}
         onSelectAlbum={onSelectAlbum}
         isBrowsingAlbum={isBrowsingAlbum}
         viewerTier={viewerTier}
-        // If FullPlayer doesn't declare this prop, either remove it or add it to FullPlayer's prop types.
-        // @ts-expect-error intentional opt-in prop
-        onOpenStage={openStage}
       />
 
       <StageOverlay

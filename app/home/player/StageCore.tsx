@@ -4,7 +4,8 @@
 import React from "react";
 import { usePlayer } from "./PlayerState";
 import VisualizerCanvas from "./VisualizerCanvas";
-import LyricsOverlay, { type LyricCue } from "./stage/LyricsOverlay";
+import LyricsOverlay from "./stage/LyricsOverlay";
+import type { LyricCue } from "@/lib/types";
 import StageTransportBar, {
   STAGE_TRANSPORT_FOOTER_PX,
 } from "./StageTransportBar";

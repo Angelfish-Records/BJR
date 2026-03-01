@@ -5,7 +5,8 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { usePlayer } from "../PlayerState";
 import { mediaSurface } from "../mediaSurface";
-import LyricsOverlay, { type LyricCue } from "./LyricsOverlay";
+import LyricsOverlay from "./LyricsOverlay";
+import type { LyricCue } from "@/lib/types";
 import { useLyricsSnapshot } from "../lyrics/useLyricsSurface";
 import StageTransportBar, {
   STAGE_TRANSPORT_FOOTER_PX,
