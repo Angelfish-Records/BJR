@@ -1646,6 +1646,7 @@ export default function FullPlayer(props: {
 
        .afAvailWrap{
   margin-top: 18px;
+  margin-bottom: 10px;
   display: flex;
   flex-direction: column;
   align-items: center;

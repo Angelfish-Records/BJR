@@ -257,12 +257,7 @@ function Panel(props: {
         minWidth: 0,
       }}
     >
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-        <div style={{ fontSize: 14, opacity: 0.92 }}>{title}</div>
-        {locked ? (
-          <div style={{ fontSize: 12, opacity: 0.6 }}>locked</div>
-        ) : null}
-      </div>
+   
 
       <div
         style={{
