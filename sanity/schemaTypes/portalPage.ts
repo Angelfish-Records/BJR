@@ -25,8 +25,6 @@ export const portalPage = defineType({
       of: [
         { type: "moduleHeading" },
         { type: "modulePanels"},
-        { type: "moduleRichText" },
-        { type: "moduleCardGrid" },
         { type: "moduleDownloads" },
         { type: "moduleArtistPosts" },
         { type: "moduleExegesis"},

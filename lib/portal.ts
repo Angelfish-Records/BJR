@@ -9,27 +9,20 @@ export type PortalModuleHeading = {
   blurb?: string;
 };
 
-export type PortalModuleRichText = {
+export type PortalModulePanel = {
   _key: string;
-  _type: "moduleRichText";
-  title?: string;
+  title: string;
   teaser?: PortableTextBlock[];
   full?: PortableTextBlock[];
   requiresEntitlement?: string;
 };
 
-export type PortalModuleCard = {
+export type PortalModulePanels = {
   _key: string;
-  title: string;
-  body?: string;
-  requiresEntitlement?: string;
-};
-
-export type PortalModuleCardGrid = {
-  _key: string;
-  _type: "moduleCardGrid";
+  _type: "modulePanels";
   title?: string;
-  cards: PortalModuleCard[];
+  layout?: 1 | 2 | 3;
+  panels: PortalModulePanel[];
 };
 
 export type SanityImage = {
@@ -82,8 +75,7 @@ export type PortalModuleArtistPosts = {
 
 export type PortalModule =
   | PortalModuleHeading
-  | PortalModuleRichText
-  | PortalModuleCardGrid
+  | PortalModulePanels
   | PortalModuleDownloads
   | PortalModuleDownloadGrid
   | PortalModuleArtistPosts;
@@ -104,16 +96,13 @@ const portalPageQuery = `
       title,
       blurb,
 
-      // moduleRichText
-      teaser,
-      full,
-      requiresEntitlement,
-
-      // moduleCardGrid
-      cards[]{
+      // modulePanels
+      layout,
+      panels[]{
         _key,
         title,
-        body,
+        teaser,
+        full,
         requiresEntitlement
       },
 

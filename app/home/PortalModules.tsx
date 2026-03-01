@@ -3,7 +3,6 @@ import React from "react";
 import { PortableText } from "@portabletext/react";
 import type { PortableTextBlock } from "@portabletext/types";
 import { listCurrentEntitlementKeys } from "../../lib/entitlements";
-import PortalRichText from "./modules/PortalRichText";
 import { getAlbumOffer, type AlbumOfferAsset } from "../../lib/albumOffers";
 import { urlFor } from "../../sanity/lib/image";
 import BuyAlbumButton from "./modules/BuyAlbumButton";
@@ -22,27 +21,6 @@ type ModuleHeading = {
   _type: "moduleHeading";
   title?: string;
   blurb?: string;
-};
-
-type ModuleRichText = {
-  _key: string;
-  _type: "moduleRichText";
-  title?: string;
-  teaser?: import("@portabletext/types").PortableTextBlock[];
-  full?: import("@portabletext/types").PortableTextBlock[];
-  requiresEntitlement?: string | null;
-};
-
-type ModuleCardGrid = {
-  _key: string;
-  _type: "moduleCardGrid";
-  title?: string;
-  cards: Array<{
-    _key: string;
-    title: string;
-    body?: string;
-    requiresEntitlement?: string;
-  }>;
 };
 
 type ModulePanels = {
@@ -115,8 +93,6 @@ type ModuleExegesis = {
 
 type PortalModule =
   | ModuleHeading
-  | ModuleRichText
-  | ModuleCardGrid
   | ModulePanels
   | ModuleDownloads
   | ModuleDownloadGrid
@@ -262,47 +238,6 @@ function Panel(props: {
       >
         <PortableText value={blocks} />
       </div>
-    </div>
-  );
-}
-
-/**
- * Legacy CardGrid card: plain-text body, not PortableText.
- * Keep this so old `moduleCardGrid` continues to work unchanged.
- */
-function PanelCard(props: { title: string; body?: string; locked?: boolean }) {
-  const { title, body, locked } = props;
-
-  return (
-    <div
-      style={{
-        borderRadius: 16,
-        border: "1px solid rgba(255,255,255,0.10)",
-        background: "rgba(255,255,255,0.04)",
-        padding: 14,
-        minWidth: 0,
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-        <div style={{ fontSize: 14, opacity: 0.92 }}>{title}</div>
-        {locked ? (
-          <div style={{ fontSize: 12, opacity: 0.6 }}>locked</div>
-        ) : null}
-      </div>
-
-      {body ? (
-        <div
-          style={{
-            marginTop: 8,
-            fontSize: 13,
-            opacity: locked ? 0.62 : 0.82,
-            lineHeight: 1.6,
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {body}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -613,63 +548,6 @@ function DownloadOfferCard(props: {
 function renderModule(m: PortalModule, entitlementKeys: string[]) {
   if (m._type === "moduleHeading") return null;
 
-  if (m._type === "moduleRichText") {
-    const locked =
-      !!m.requiresEntitlement &&
-      !hasKey(entitlementKeys, m.requiresEntitlement);
-
-    // If gated + not entitled, only render if teaser has real content.
-    if (locked && !portableTextHasContent(m.teaser)) return null;
-
-    const blocks = locked ? (m.teaser ?? []) : (m.full ?? []);
-
-    return (
-      <PortalRichText
-        key={m._key}
-        title={m.title}
-        blocks={blocks}
-        locked={locked}
-      />
-    );
-  }
-
-  if (m._type === "moduleCardGrid") {
-    const visibleCards = m.cards.filter((c) => {
-      const locked =
-        !!c.requiresEntitlement &&
-        !hasKey(entitlementKeys, c.requiresEntitlement);
-
-      // If locked, only render the card if there's teaser copy (we use `body` as the teaser).
-      if (locked) return (c.body ?? "").trim().length > 0;
-
-      return true;
-    });
-
-    // If nothing survives filtering, don't render the module at all.
-    if (visibleCards.length === 0) return null;
-
-    return (
-      <div key={m._key} style={{ borderRadius: 18, padding: 16 }}>
-        <div className="portalCardGrid2up">
-          {visibleCards.map((c) => {
-            const locked =
-              !!c.requiresEntitlement &&
-              !hasKey(entitlementKeys, c.requiresEntitlement);
-
-            return (
-              <PanelCard
-                key={c._key}
-                title={c.title}
-                body={c.body}
-                locked={locked}
-              />
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
   if (m._type === "modulePanels") {
     const cols: 1 | 2 | 3 =
       m.layout === 1 || m.layout === 2 || m.layout === 3 ? m.layout : 2;
@@ -852,14 +730,22 @@ function inferTabs(
   pushCurrent();
 
   for (const t of out) {
-    const first = t.modules.find((x) => x._type !== "moduleHeading") ?? null;
-    if (
-      first &&
-      first._type === "moduleRichText" &&
-      first.requiresEntitlement
-    ) {
-      const entitled = hasKey(entitlementKeys, first.requiresEntitlement);
-      if (!entitled) {
+    const first = t.modules[0] ?? null;
+    if (!first) continue;
+
+    // Optional: mark a tab "locked" if its first module is Panels and *all* panels are gated
+    // and the viewer is not entitled to any of them.
+    if (first._type === "modulePanels") {
+      const panels = first.panels ?? [];
+      if (panels.length === 0) continue;
+
+      const entitledToAtLeastOne = panels.some((p) =>
+        hasKey(entitlementKeys, p.requiresEntitlement),
+      );
+
+      const allAreGated = panels.every((p) => !!p.requiresEntitlement);
+
+      if (allAreGated && !entitledToAtLeastOne) {
         t.locked = true;
         t.lockedHint = "Locked";
       }
