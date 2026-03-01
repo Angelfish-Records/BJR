@@ -2405,9 +2405,9 @@ export default function ExegesisTrackClient(props: {
 
                                           return (
                                             <button
-                                              className={`relative inline-flex items-center justify-center rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 ${
+                                              className={`group relative inline-flex items-center justify-center rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 ${
                                                 disabled ? "opacity-70" : ""
-                                              } ${tint}`}
+                                              } ${tint} [--badgeStroke:rgba(255,255,255,0.05)] hover:[--badgeStroke:rgba(255,255,255,0.10)]`}
                                               disabled={disabled}
                                               onClick={
                                                 disabled
@@ -2428,16 +2428,21 @@ export default function ExegesisTrackClient(props: {
                                               <span className="relative inline-flex h-4 w-4 items-center justify-center">
                                                 <MedalIcon className="h-4 w-4" />
 
-                                                {/* count: NO circle; overlaps the medal itself */}
+                                                {/* count: overlaps medal, with stroke that matches the button bg */}
                                                 {showBadge ? (
                                                   <span
-                                                    className="afBadgeStroke absolute text-[9px] font-black leading-[9px] tabular-nums text-current"
+                                                    className="absolute text-[9px] font-black leading-[9px] tabular-nums text-current"
                                                     style={{
-                                                      // place inside the icon box, slightly above/right so it overlaps the medal
-                                                      left: "72%",
+                                                      left: "74%",
                                                       top: "18%",
                                                       transform:
                                                         "translate(-50%,-50%)",
+                                                      WebkitTextStroke:
+                                                        "2px var(--badgeStroke)",
+                                                      // ensure fill stays crisp + on top of the stroke
+                                                      WebkitTextFillColor:
+                                                        "currentColor",
+                                                      paintOrder: "stroke fill",
                                                     }}
                                                   >
                                                     {votes}
