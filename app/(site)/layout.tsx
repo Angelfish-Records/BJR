@@ -6,6 +6,7 @@ import { ensureMemberByClerk } from "@/lib/members";
 import { checkAccess } from "@/lib/access";
 import { ENTITLEMENTS } from "@/lib/vocab";
 import AdminDebugBar from "@/app/home/AdminDebugBar";
+import { MembershipModalProvider } from "@/app/home/MembershipModalProvider";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -41,9 +42,11 @@ export default async function SiteLayout(props: { children: React.ReactNode }) {
   }
 
   return (
-     <PlayerHost>
-      {isAdmin ? <AdminDebugBar isAdmin={isAdmin} /> : null}
-      {props.children}
+    <PlayerHost>
+      <MembershipModalProvider>
+        {isAdmin ? <AdminDebugBar isAdmin={isAdmin} /> : null}
+        {props.children}
+      </MembershipModalProvider>
     </PlayerHost>
   );
 }

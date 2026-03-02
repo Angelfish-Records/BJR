@@ -1920,7 +1920,7 @@ export default function ExegesisTrackClient(props: {
                     lineBtnByKeyRef.current[c.lineKey] = el;
                   }}
                   type="button"
-                  className="block w-full py-0.25 text-left"
+                  className="block w-full py-0.5 text-left"
                   data-linekey={c.lineKey}
                   data-groupkey={gk}
                   onFocus={() => scheduleHover({ gk, lk: c.lineKey })}

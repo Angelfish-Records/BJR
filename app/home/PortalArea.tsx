@@ -23,7 +23,6 @@ import PlayerController from "./player/PlayerController";
 import MiniPlayer from "./player/MiniPlayer";
 import ActivationGate from "@/app/home/ActivationGate";
 import { PortalViewerProvider } from "@/app/home/PortalViewerProvider";
-import { MembershipModalProvider } from "@/app/home/MembershipModalProvider";
 import Image from "next/image";
 
 // --- SURFACE: path-only (NO ?p= fallback) ---
@@ -1146,7 +1145,6 @@ export default function PortalArea(props: {
       <div
         style={{ height: "100%", minHeight: 0, minWidth: 0, display: "grid" }}
       >
-        <MembershipModalProvider>
           <PortalViewerProvider
             initialPortalTabId={props.initialPortalTabId ?? null}
             initialExegesisTrackId={props.initialExegesisTrackId ?? null}
@@ -1377,7 +1375,6 @@ export default function PortalArea(props: {
               )}
             />
           </PortalViewerProvider>
-        </MembershipModalProvider>
         <MiniPlayerHost onExpand={() => forceSurface("player")} />
       </div>
     </>
