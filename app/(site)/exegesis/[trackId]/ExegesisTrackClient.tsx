@@ -2334,10 +2334,9 @@ export default function ExegesisTrackClient(props: {
                                                   <span
                                                     className="absolute text-[9px] font-black leading-[9px] tabular-nums text-current"
                                                     style={{
-                                                      left: "calc(74% + 1px)",
-                                                      top: "18%",
-                                                      transform:
-                                                        "translate(-50%,-50%)",
+                                                      right: "-1px",
+                                                      top: "-1px",
+                                                      transform: "none",
                                                       textShadow: [
                                                         // inner ring (1px)
                                                         "1px 0 rgb(var(--voteBgRgb) / 1)",
