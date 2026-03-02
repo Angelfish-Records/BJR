@@ -1920,7 +1920,7 @@ export default function ExegesisTrackClient(props: {
                     lineBtnByKeyRef.current[c.lineKey] = el;
                   }}
                   type="button"
-                  className="block w-full py-0.5 text-left"
+                  className="block w-full py-0.25 text-left"
                   data-linekey={c.lineKey}
                   data-groupkey={gk}
                   onFocus={() => scheduleHover({ gk, lk: c.lineKey })}
@@ -2334,11 +2334,10 @@ export default function ExegesisTrackClient(props: {
                                                   <span
                                                     className="absolute text-[9px] font-black leading-[9px] tabular-nums text-current"
                                                     style={{
-                                                      left: "74%",
+                                                      left: "calc(74% + 1px)",
                                                       top: "18%",
-                                                      // 1px nudge to the right
                                                       transform:
-                                                        "translate(calc(-50% + 1px), -50%)",
+                                                        "translate(-50%,-50%)",
                                                       textShadow: [
                                                         // inner ring (1px)
                                                         "1px 0 rgb(var(--voteBgRgb) / 1)",
