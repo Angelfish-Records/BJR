@@ -20,12 +20,6 @@ import MiniPlayer from "./player/MiniPlayer";
 import ActivationGate from "@/app/home/ActivationGate";
 import { PortalViewerProvider } from "@/app/home/PortalViewerProvider";
 import { useGateBroker } from "@/app/home/gating/GateBroker";
-import type { GateAction } from "@/app/home/gating/gateTypes";
-import {
-  parseGateCodeRaw,
-  canonicalizeLegacyCapCode,
-} from "@/app/home/gating/gateTypes";
-import { gate } from "@/app/home/gating/gate";
 import Image from "next/image";
 
 // --- SURFACE: path-only (NO ?p= fallback) ---
@@ -582,65 +576,6 @@ function SpotlightModal(props: {
   );
 }
 
-function GateMirrorFromPlayer(props: {
-  isSignedIn: boolean;
-  explicitIntent: boolean;
-}) {
-  const { isSignedIn, explicitIntent } = props;
-
-  const p = usePlayer();
-  const { reportGate, clearGate } = useGateBroker();
-
-  React.useEffect(() => {
-    // Only mirror when PlayerState is actually in blocked state
-    if (p.status !== "blocked") {
-      clearGate({ domain: "playback" });
-      return;
-    }
-
-    const raw = parseGateCodeRaw(p.blockedCode ?? null);
-    if (!raw) return;
-
-    const action: GateAction =
-      p.blockedAction ?? (raw === "AUTH_REQUIRED" ? "login" : "subscribe");
-
-    const normalized = canonicalizeLegacyCapCode(raw, "playback");
-
-    // Ask the engine what UI mode this block should use.
-    const res = gate(
-      { verb: "play", domain: "playback" },
-      {
-        isSignedIn,
-        intent: explicitIntent ? "explicit" : "passive",
-        playbackCapReached: normalized === "PLAYBACK_CAP_REACHED",
-      },
-    );
-
-    const uiMode = res.ok ? undefined : res.uiMode;
-
-    reportGate({
-      code: normalized,
-      action,
-      message: (p.lastError ?? "Playback blocked.").trim(),
-      correlationId: p.blockedCorrelationId ?? null,
-      domain: "playback",
-      uiMode,
-    });
-  }, [
-    p.status,
-    p.blockedCode,
-    p.blockedAction,
-    p.blockedCorrelationId,
-    p.lastError,
-    isSignedIn,
-    explicitIntent,
-    reportGate,
-    clearGate,
-  ]);
-
-  return null;
-}
-
 export default function PortalArea(props: {
   portalPanel: React.ReactNode;
   topLogoUrl?: string | null;
@@ -920,21 +855,6 @@ export default function PortalArea(props: {
   const qAutoplay = getAutoplayFlag(sp);
   const qShareToken = (sp.get("st") ?? sp.get("share") ?? "").trim() || null;
   const hasSt = Boolean(qShareToken);
-
-  // Spotlight should only be possible after an explicit play attempt (or autoplay deep link).
-  // Note: PortalArea primes queue/current on load, so `p.current` is NOT a valid signal here.
-  const spotlightArmed =
-    p.intent === "play" ||
-    p.status === "loading" ||
-    p.status === "playing" ||
-    p.status === "paused" ||
-    Boolean(qTrack) ||
-    Boolean(qAutoplay);
-
-  const recentlyTriedToPlay =
-    typeof p.lastPlayAttemptAtMs === "number" &&
-    Number.isFinite(p.lastPlayAttemptAtMs) &&
-    Date.now() - p.lastPlayAttemptAtMs < 12_000;
 
   const effectiveUiMode =
     brokerGate.uiMode !== "none" ? brokerGate.uiMode : p.blockUiMode;
@@ -1216,10 +1136,6 @@ export default function PortalArea(props: {
 
   return (
     <>
-      <GateMirrorFromPlayer
-        isSignedIn={isSignedIn}
-        explicitIntent={spotlightArmed || recentlyTriedToPlay}
-      />
       <SpotlightVeil active={spotlightAttention} />
       <SpotlightModal
         active={spotlightAttention}
