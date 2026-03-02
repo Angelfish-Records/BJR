@@ -2334,7 +2334,7 @@ export default function ExegesisTrackClient(props: {
                                                   <span
                                                     className="absolute text-[9px] font-black leading-[9px] tabular-nums text-current"
                                                     style={{
-                                                      right: "-1px",
+                                                      right: "0px",
                                                       top: "-1px",
                                                       pointerEvents: "none",
                                                       // True outline (no second glyph -> no misregistration).
