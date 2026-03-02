@@ -2348,7 +2348,6 @@ export default function ExegesisTrackClient(props: {
                                                         "-1px 1px rgb(var(--voteBgRgb) / 1)",
                                                         "-1px -1px rgb(var(--voteBgRgb) / 1)",
 
-                                                        // outer ring (2px) — makes it fatter without glow
                                                         "2px 0 rgb(var(--voteBgRgb) / 1)",
                                                         "-2px 0 rgb(var(--voteBgRgb) / 1)",
                                                         "0 2px rgb(var(--voteBgRgb) / 1)",
