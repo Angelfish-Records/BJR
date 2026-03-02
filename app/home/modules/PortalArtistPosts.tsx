@@ -706,9 +706,9 @@ export default function PortalArtistPosts(props: {
   }, []);
 
   const [posts, setPosts] = React.useState<Post[]>([]);
-  const [cursor, setCursor] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [requiresAuth, setRequiresAuth] = React.useState(false);
+  const [cursor, setCursor] = React.useState<string | null>("0");
   const [err, setErr] = React.useState<string | null>(null);
 
   const [copiedSlug, setCopiedSlug] = React.useState<string | null>(null);
@@ -733,6 +733,8 @@ export default function PortalArtistPosts(props: {
   const fetchPage = React.useCallback(
     async (nextCursor: string | null) => {
       if (requiresAuth) return;
+      if (loading) return;
+      if (nextCursor === null) return;
 
       const key =
         JSON.stringify({
@@ -767,7 +769,7 @@ export default function PortalArtistPosts(props: {
         u.searchParams.set("minVisibility", minVisibility);
         u.searchParams.set("requireAuthAfter", String(requireAuthAfter));
         if (postTypeFilter) u.searchParams.set("postType", postTypeFilter);
-        if (nextCursor) u.searchParams.set("offset", nextCursor);
+        if (nextCursor !== "0") u.searchParams.set("offset", nextCursor);
 
         console.log(`[PortalArtistPosts ${mountId}] fetchPage`, {
           nextCursor,
@@ -815,6 +817,7 @@ export default function PortalArtistPosts(props: {
     },
     [
       requiresAuth,
+      loading,
       pageSize,
       minVisibility,
       requireAuthAfter,
