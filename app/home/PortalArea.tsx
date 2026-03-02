@@ -863,8 +863,13 @@ export default function PortalArea(props: {
     Boolean(qTrack) ||
     Boolean(qAutoplay);
 
+  const recentlyTriedToPlay =
+    typeof p.lastPlayAttemptAtMs === "number" &&
+    Number.isFinite(p.lastPlayAttemptAtMs) &&
+    Date.now() - p.lastPlayAttemptAtMs < 12_000;
+
   const spotlightAttention =
-    spotlightArmed &&
+    (spotlightArmed || recentlyTriedToPlay) &&
     !!derivedAttentionMessage &&
     p.blockUiMode === "global" &&
     spotlightEligibleCode &&

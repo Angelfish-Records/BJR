@@ -36,6 +36,7 @@ export type PlayerState = {
   current?: PlayerTrack;
   queue: PlayerTrack[];
   lastError?: string;
+  lastPlayAttemptAtMs?: number;
 
   queueContextId?: string;
   queueContextSlug?: string;
@@ -208,6 +209,7 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
     current: undefined,
     queue: [],
     lastError: undefined,
+    lastPlayAttemptAtMs: undefined,
 
     queueContextId: undefined,
     queueContextSlug: undefined,
@@ -291,6 +293,18 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
 
         play: (track?: PlayerTrack) => {
           setState((s) => {
+            const now = Date.now();
+
+            // If blocked, treat play as "open the gate", not "start loading forever".
+            if (s.status === "blocked") {
+              return {
+                ...s,
+                lastPlayAttemptAtMs: now,
+                intent: "play",
+                intentAtMs: now,
+              };
+            }
+
             const rawNext = track ?? s.current ?? s.queue[0];
             if (!rawNext) {
               return {
@@ -299,7 +313,8 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
                 current: undefined,
                 positionMs: 0,
                 intent: "play",
-                intentAtMs: Date.now(),
+                intentAtMs: now,
+                lastPlayAttemptAtMs: now,
                 lastError: undefined,
                 loadingReason: undefined,
                 pendingTrackId: undefined,
@@ -314,7 +329,8 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
             const base = {
               ...s,
               intent: "play" as const,
-              intentAtMs: Date.now(),
+              intentAtMs: now,
+              lastPlayAttemptAtMs: now,
               lastError: undefined,
               selectedTrackId: nextTrack.id,
               pendingTrackId: nextTrack.id,
