@@ -14,11 +14,7 @@ import {
 import { getLastPortalTab } from "./portalLastTab";
 import { usePlayer } from "@/app/home/player/PlayerState";
 import { useGlobalTransportKeys } from "./player/useGlobalTransportKeys";
-import type {
-  AlbumNavItem,
-  Tier,
-  AlbumPlayerBundle,
-} from "@/lib/types";
+import type { AlbumNavItem, Tier, AlbumPlayerBundle } from "@/lib/types";
 import PlayerController from "./player/PlayerController";
 import MiniPlayer from "./player/MiniPlayer";
 import ActivationGate from "@/app/home/ActivationGate";
@@ -849,12 +845,6 @@ export default function PortalArea(props: {
     typeof window !== "undefined" &&
     window.sessionStorage.getItem("af:dbgSpotlight") === "1";
 
-  const spotlightAttention =
-    !!derivedAttentionMessage &&
-    p.blockUiMode === "global" &&
-    spotlightEligibleCode &&
-    (!isSignedIn || dbgForceSpotlight);
-
   const qAlbum = (isPublicAlbumRoute ? route.albumSlug : null) ?? null;
   const qTrack = (isPublicAlbumRoute ? route.trackId : null) ?? null;
 
@@ -862,6 +852,21 @@ export default function PortalArea(props: {
   const qAutoplay = getAutoplayFlag(sp);
   const qShareToken = (sp.get("st") ?? sp.get("share") ?? "").trim() || null;
   const hasSt = Boolean(qShareToken);
+
+  const playbackIntent =
+    p.intent === "play" ||
+    p.status === "playing" ||
+    p.status === "paused" ||
+    Boolean(p.current) ||
+    Boolean(qTrack) ||
+    Boolean(qAutoplay);
+
+  const spotlightAttention =
+    playbackIntent &&
+    !!derivedAttentionMessage &&
+    p.blockUiMode === "global" &&
+    spotlightEligibleCode &&
+    (!isSignedIn || dbgForceSpotlight);
 
   const forcedPlayerRef = React.useRef(false);
   React.useEffect(() => {
@@ -1145,41 +1150,41 @@ export default function PortalArea(props: {
       <div
         style={{ height: "100%", minHeight: 0, minWidth: 0, display: "grid" }}
       >
-          <PortalViewerProvider
-            initialPortalTabId={props.initialPortalTabId ?? null}
-            initialExegesisTrackId={props.initialExegesisTrackId ?? null}
-            value={{
-              viewerTier,
-              rawTier: tier,
-              isSignedIn,
-              isPatron,
-              isPartner,
+        <PortalViewerProvider
+          initialPortalTabId={props.initialPortalTabId ?? null}
+          initialExegesisTrackId={props.initialExegesisTrackId ?? null}
+          value={{
+            viewerTier,
+            rawTier: tier,
+            isSignedIn,
+            isPatron,
+            isPartner,
+          }}
+        >
+          <PortalShell
+            panels={panels}
+            defaultPanelId="player"
+            syncToQueryParam={false}
+            activePanelId={effectiveIsPlayer ? "player" : "portal"}
+            keepMountedPanelIds={["player", "portal"]}
+            onPanelChange={(panelId) => {
+              if (panelId === "player") forceSurface("player");
+              else forceSurface("portal");
             }}
-          >
-            <PortalShell
-              panels={panels}
-              defaultPanelId="player"
-              syncToQueryParam={false}
-              activePanelId={effectiveIsPlayer ? "player" : "portal"}
-              keepMountedPanelIds={["player", "portal"]}
-              onPanelChange={(panelId) => {
-                if (panelId === "player") forceSurface("player");
-                else forceSurface("portal");
-              }}
-              headerPortalId="af-portal-topbar-slot"
-              header={() => (
-                <div
-                  style={{
-                    width: "100%",
-                    borderRadius: 0,
-                    border: "none",
-                    background: "transparent",
-                    padding: 12,
-                    minWidth: 0,
-                    position: "relative",
-                  }}
-                >
-                  <style>{`
+            headerPortalId="af-portal-topbar-slot"
+            header={() => (
+              <div
+                style={{
+                  width: "100%",
+                  borderRadius: 0,
+                  border: "none",
+                  background: "transparent",
+                  padding: 12,
+                  minWidth: 0,
+                  position: "relative",
+                }}
+              >
+                <style>{`
 .afTopBar { display:grid; grid-template-columns:1fr auto 1fr; grid-template-rows:1fr; align-items:stretch; gap:12px; min-width:0; }
 .afTopBarControls { display: contents; }
 .afTopBarLeft { grid-column:1; grid-row:1; min-width:0; display:flex; align-items:flex-end; justify-content:flex-start; gap:10px; align-self:stretch; }
@@ -1197,66 +1202,65 @@ export default function PortalArea(props: {
 }
 `}</style>
 
-                  <div
-                    className="afTopBar"
-                    style={{ position: "relative", zIndex: 5 }}
-                  >
-                    <div className="afTopBarLogo">
-                      <div className="afTopBarLogoInner">
-                        {props.topLogoUrl ? (
-                          <Image
-                            src={props.topLogoUrl}
-                            alt="Logo"
-                            height={Math.max(
+                <div
+                  className="afTopBar"
+                  style={{ position: "relative", zIndex: 5 }}
+                >
+                  <div className="afTopBarLogo">
+                    <div className="afTopBarLogoInner">
+                      {props.topLogoUrl ? (
+                        <Image
+                          src={props.topLogoUrl}
+                          alt="Logo"
+                          height={Math.max(
+                            16,
+                            Math.min(120, props.topLogoHeight ?? 38),
+                          )}
+                          width={Math.max(
+                            16,
+                            Math.min(120, props.topLogoHeight ?? 38),
+                          )}
+                          sizes="(max-width: 720px) 120px, 160px"
+                          style={{
+                            height: Math.max(
                               16,
                               Math.min(120, props.topLogoHeight ?? 38),
-                            )}
-                            width={Math.max(
-                              16,
-                              Math.min(120, props.topLogoHeight ?? 38),
-                            )}
-                            sizes="(max-width: 720px) 120px, 160px"
-                            style={{
-                              height: Math.max(
-                                16,
-                                Math.min(120, props.topLogoHeight ?? 38),
-                              ),
-                              width: "auto",
-                              objectFit: "contain",
-                              opacity: 0.94,
-                              userSelect: "none",
-                              filter:
-                                "drop-shadow(0 10px 22px rgba(0,0,0,0.28))",
-                            }}
-                          />
-                        ) : (
-                          <div
-                            aria-label="AF"
-                            title="AF"
-                            style={{
-                              width: 38,
-                              height: 38,
-                              borderRadius: 999,
-                              border: "1px solid rgba(255,255,255,0.14)",
-                              background: "rgba(0,0,0,0.22)",
-                              display: "grid",
-                              placeItems: "center",
-                              fontSize: 13,
-                              fontWeight: 700,
-                              letterSpacing: 0.5,
-                              opacity: 0.92,
-                              userSelect: "none",
-                            }}
-                          >
-                            AF
-                          </div>
-                        )}
-                      </div>
+                            ),
+                            width: "auto",
+                            objectFit: "contain",
+                            opacity: 0.94,
+                            userSelect: "none",
+                            filter: "drop-shadow(0 10px 22px rgba(0,0,0,0.28))",
+                          }}
+                        />
+                      ) : (
+                        <div
+                          aria-label="AF"
+                          title="AF"
+                          style={{
+                            width: 38,
+                            height: 38,
+                            borderRadius: 999,
+                            border: "1px solid rgba(255,255,255,0.14)",
+                            background: "rgba(0,0,0,0.22)",
+                            display: "grid",
+                            placeItems: "center",
+                            fontSize: 13,
+                            fontWeight: 700,
+                            letterSpacing: 0.5,
+                            opacity: 0.92,
+                            userSelect: "none",
+                          }}
+                        >
+                          AF
+                        </div>
+                      )}
                     </div>
+                  </div>
 
-                    <div className="afTopBarControls">
-                      <div className="afTopBarLeft">
-                        <style>{`
+                  <div className="afTopBarControls">
+                    <div className="afTopBarLeft">
+                      <style>{`
 .afTopBarBtn { position: relative; transition: transform 160ms ease, opacity 160ms ease, filter 160ms ease, box-shadow 160ms ease; will-change: transform, filter; }
 .afTopBarBtn::after { content:""; position:absolute; inset:0; border-radius:999px; pointer-events:none; background: radial-gradient(circle at 50% 45%, rgba(255,255,255,0.10), rgba(255,255,255,0.04) 40%, rgba(255,255,255,0.00) 65%); opacity:0; transition:opacity 160ms ease; }
 .afTopBarBtn:hover::after { opacity:1; }
@@ -1271,110 +1275,108 @@ export default function PortalArea(props: {
 .afTopBarBtn:focus-visible { outline:none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 26%, transparent), 0 14px 30px rgba(0,0,0,0.22); }
 `}</style>
 
-                        {(() => {
-                          const commonBtn: React.CSSProperties = {
-                            width: 46,
-                            height: 46,
-                            borderRadius: 999,
-                            border: "1px solid rgba(255,255,255,0.14)",
-                            color: "rgba(255,255,255,0.90)",
-                            cursor: "pointer",
-                            display: "grid",
-                            placeItems: "center",
-                            userSelect: "none",
-                            WebkitTapHighlightColor: "transparent",
-                          };
+                      {(() => {
+                        const commonBtn: React.CSSProperties = {
+                          width: 46,
+                          height: 46,
+                          borderRadius: 999,
+                          border: "1px solid rgba(255,255,255,0.14)",
+                          color: "rgba(255,255,255,0.90)",
+                          cursor: "pointer",
+                          display: "grid",
+                          placeItems: "center",
+                          userSelect: "none",
+                          WebkitTapHighlightColor: "transparent",
+                        };
 
-                          return (
-                            <>
-                              <button
-                                type="button"
-                                aria-label="Player"
-                                title="Player"
-                                onMouseEnter={prefetchPlayer}
-                                onFocus={prefetchPlayer}
-                                onClick={() => {
-                                  setOptimisticSurface("player");
-                                  forceSurface("player");
-                                }}
-                                className="afTopBarBtn"
-                                style={{
-                                  ...commonBtn,
-                                  background: effectiveIsPlayer
-                                    ? "color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))"
-                                    : "rgba(255,255,255,0.04)",
-                                  boxShadow: effectiveIsPlayer
-                                    ? "0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)"
-                                    : "0 12px 26px rgba(0,0,0,0.18)",
-                                  opacity: effectiveIsPlayer ? 0.98 : 0.78,
-                                }}
-                              >
-                                <IconPlayer />
-                              </button>
+                        return (
+                          <>
+                            <button
+                              type="button"
+                              aria-label="Player"
+                              title="Player"
+                              onMouseEnter={prefetchPlayer}
+                              onFocus={prefetchPlayer}
+                              onClick={() => {
+                                setOptimisticSurface("player");
+                                forceSurface("player");
+                              }}
+                              className="afTopBarBtn"
+                              style={{
+                                ...commonBtn,
+                                background: effectiveIsPlayer
+                                  ? "color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))"
+                                  : "rgba(255,255,255,0.04)",
+                                boxShadow: effectiveIsPlayer
+                                  ? "0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)"
+                                  : "0 12px 26px rgba(0,0,0,0.18)",
+                                opacity: effectiveIsPlayer ? 0.98 : 0.78,
+                              }}
+                            >
+                              <IconPlayer />
+                            </button>
 
-                              <button
-                                type="button"
-                                aria-label="Portal"
-                                title="Portal"
-                                onMouseEnter={prefetchPortal}
-                                onFocus={prefetchPortal}
-                                onClick={() => {
-                                  const desired =
-                                    (getLastPortalTab() ??
-                                      portalTabId ??
-                                      DEFAULT_PORTAL_TAB) ||
-                                    DEFAULT_PORTAL_TAB;
-                                  setOptimisticSurface("portal");
-                                  forceSurface("portal", desired);
-                                }}
-                                className="afTopBarBtn"
-                                style={{
-                                  ...commonBtn,
-                                  background: !effectiveIsPlayer
-                                    ? "color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))"
-                                    : "rgba(255,255,255,0.04)",
-                                  boxShadow: !effectiveIsPlayer
-                                    ? "0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)"
-                                    : "0 12px 26px rgba(0,0,0,0.18)",
-                                  opacity: !effectiveIsPlayer ? 0.98 : 0.78,
-                                }}
-                              >
-                                <IconPortal />
-                              </button>
-                            </>
-                          );
-                        })()}
-                      </div>
+                            <button
+                              type="button"
+                              aria-label="Portal"
+                              title="Portal"
+                              onMouseEnter={prefetchPortal}
+                              onFocus={prefetchPortal}
+                              onClick={() => {
+                                const desired =
+                                  (getLastPortalTab() ??
+                                    portalTabId ??
+                                    DEFAULT_PORTAL_TAB) ||
+                                  DEFAULT_PORTAL_TAB;
+                                setOptimisticSurface("portal");
+                                forceSurface("portal", desired);
+                              }}
+                              className="afTopBarBtn"
+                              style={{
+                                ...commonBtn,
+                                background: !effectiveIsPlayer
+                                  ? "color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06))"
+                                  : "rgba(255,255,255,0.04)",
+                                boxShadow: !effectiveIsPlayer
+                                  ? "0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 14px 30px rgba(0,0,0,0.22)"
+                                  : "0 12px 26px rgba(0,0,0,0.18)",
+                                opacity: !effectiveIsPlayer ? 0.98 : 0.78,
+                              }}
+                            >
+                              <IconPortal />
+                            </button>
+                          </>
+                        );
+                      })()}
+                    </div>
 
-                      <div className="afTopBarRight">
+                    <div className="afTopBarRight">
+                      <div
+                        className="afTopBarRightInner"
+                        style={{ maxWidth: 520, minWidth: 0 }}
+                      >
                         <div
-                          className="afTopBarRightInner"
-                          style={{ maxWidth: 520, minWidth: 0 }}
+                          style={{
+                            position: "relative",
+                            visibility: spotlightAttention
+                              ? "hidden"
+                              : "visible",
+                            pointerEvents: spotlightAttention ? "none" : "auto",
+                          }}
                         >
-                          <div
-                            style={{
-                              position: "relative",
-                              visibility: spotlightAttention
-                                ? "hidden"
-                                : "visible",
-                              pointerEvents: spotlightAttention
-                                ? "none"
-                                : "auto",
-                            }}
-                          >
-                            {gateNodeTopRight}
-                            {miniMsgNode}
-                          </div>
+                          {gateNodeTopRight}
+                          {miniMsgNode}
                         </div>
                       </div>
                     </div>
                   </div>
-
-                  {bannerNode}
                 </div>
-              )}
-            />
-          </PortalViewerProvider>
+
+                {bannerNode}
+              </div>
+            )}
+          />
+        </PortalViewerProvider>
         <MiniPlayerHost onExpand={() => forceSurface("player")} />
       </div>
     </>
