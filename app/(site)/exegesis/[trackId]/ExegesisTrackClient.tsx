@@ -285,25 +285,46 @@ export default function ExegesisTrackClient(props: {
 
   const { userId, isLoaded: authLoaded } = useAuth();
 
+  type ForcedInlineReason = "readReceiptsCap" | "authRequired";
+
   const reportInlineGate = React.useCallback(
     (opts: {
       intent: "passive" | "explicit";
       message: string;
       correlationId?: string | null;
+      forced?: ForcedInlineReason;
     }) => {
+      // IMPORTANT: the engine must be told *what happened*.
+      // Otherwise it will return ok:true and we will clear everything.
+      const forced = opts.forced ?? null;
+
       const decision = gate(
+        // Verb can stay "markSeen" for now; the *domain + forced context* is what matters.
         { verb: "markSeen", domain: EXEGESIS_DOMAIN },
         {
           isSignedIn: Boolean(userId),
           intent: opts.intent,
+
+          // These flags are the adapter’s “facts on the ground”.
+          // If your gate.ts uses different names, the hard fallback below still ensures UI opens.
+          readReceiptsCapReached: forced === "readReceiptsCap",
+          authRequired: forced === "authRequired",
+        } as unknown as {
+          isSignedIn: boolean;
+          intent: "passive" | "explicit";
+          readReceiptsCapReached?: boolean;
+          authRequired?: boolean;
         },
       );
 
-      if (!decision.ok) {
+      // Happy path: engine decided we are blocked (ideal).
+      if (decision.ok === false) {
+        const msg = (opts.message || decision.reason.message || "").trim();
+
         broker.reportGate({
           code: decision.reason.code,
           action: decision.reason.action,
-          message: opts.message || decision.reason.message,
+          message: msg,
           domain: decision.reason.domain,
           uiMode: "inline",
           correlationId: opts.correlationId ?? null,
@@ -312,12 +333,39 @@ export default function ExegesisTrackClient(props: {
         setInlineGate({
           open: true,
           uiMode: "inline",
-          message: opts.message || decision.reason.message,
+          message: msg,
           correlationId: opts.correlationId ?? null,
         });
         return;
       }
 
+      // HARD FALLBACK: if caller says “this is blocked” but gate() returned ok:true
+      // (e.g. mismatch in context flag naming), still open the inline gate.
+      if (forced) {
+        const msg = (opts.message || "Sign in to continue.").trim();
+
+        broker.reportGate({
+          code:
+            forced === "readReceiptsCap"
+              ? "READ_RECEIPTS_CAP_REACHED"
+              : "AUTH_REQUIRED",
+          action: "login",
+          message: msg,
+          domain: EXEGESIS_DOMAIN,
+          uiMode: "inline",
+          correlationId: opts.correlationId ?? null,
+        });
+
+        setInlineGate({
+          open: true,
+          uiMode: "inline",
+          message: msg,
+          correlationId: opts.correlationId ?? null,
+        });
+        return;
+      }
+
+      // Otherwise: no gate.
       broker.clearGate({ domain: EXEGESIS_DOMAIN });
       clearInlineGate();
     },
@@ -742,6 +790,7 @@ export default function ExegesisTrackClient(props: {
                 intent: "explicit",
                 message: "Discussion is exclusive to members.",
                 correlationId: null,
+                forced: "authRequired",
               });
               return;
             }
@@ -1324,6 +1373,7 @@ export default function ExegesisTrackClient(props: {
               intent: "passive",
               message: msg,
               correlationId: null,
+              forced: "readReceiptsCap",
             });
 
             // Keep the error out of the normal in-panel error box; the gate overlay owns this UX.
