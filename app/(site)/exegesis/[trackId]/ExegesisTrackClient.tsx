@@ -4,6 +4,10 @@
 import React from "react";
 import { useAuth } from "@clerk/nextjs";
 import { useMembershipModal } from "@/app/home/MembershipModalProvider";
+import ActivationGate from "@/app/home/ActivationGate";
+import { gate } from "@/app/home/gating/gate";
+import { useGateBroker } from "@/app/home/gating/GateBroker";
+import type { GateDomain, GateUiMode } from "@/app/home/gating/gateTypes";
 import TipTapEditor from "./TipTapEditor";
 import TipTapReadOnly from "./TipTapReadOnly";
 import type { LyricCue, LyricGroupMap } from "@/lib/types";
@@ -252,6 +256,73 @@ export default function ExegesisTrackClient(props: {
   trackArtist?: string | null;
 }) {
   const { openMembershipModal } = useMembershipModal();
+  const broker = useGateBroker();
+
+  const EXEGESIS_DOMAIN: GateDomain = "exegesis";
+
+  type InlineGateState = {
+    open: boolean;
+    uiMode: GateUiMode;
+    message: string;
+    correlationId: string | null;
+  };
+
+  const [inlineGate, setInlineGate] = React.useState<InlineGateState>({
+    open: false,
+    uiMode: "inline",
+    message: "",
+    correlationId: null,
+  });
+
+  function clearInlineGate() {
+    setInlineGate({
+      open: false,
+      uiMode: "inline",
+      message: "",
+      correlationId: null,
+    });
+  }
+
+  const { userId, isLoaded: authLoaded } = useAuth();
+
+  const reportInlineGate = React.useCallback(
+    (opts: {
+      intent: "passive" | "explicit";
+      message: string;
+      correlationId?: string | null;
+    }) => {
+      const decision = gate(
+        { verb: "markSeen", domain: EXEGESIS_DOMAIN },
+        {
+          isSignedIn: Boolean(userId),
+          intent: opts.intent,
+        },
+      );
+
+      if (!decision.ok) {
+        broker.reportGate({
+          code: decision.reason.code,
+          action: decision.reason.action,
+          message: opts.message || decision.reason.message,
+          domain: decision.reason.domain,
+          uiMode: "inline",
+          correlationId: opts.correlationId ?? null,
+        });
+
+        setInlineGate({
+          open: true,
+          uiMode: "inline",
+          message: opts.message || decision.reason.message,
+          correlationId: opts.correlationId ?? null,
+        });
+        return;
+      }
+
+      broker.clearGate({ domain: EXEGESIS_DOMAIN });
+      clearInlineGate();
+    },
+    [broker, userId],
+  );
 
   const trackId = (props.trackId ?? "").trim();
   const lyrics = props.lyrics;
@@ -439,8 +510,6 @@ export default function ExegesisTrackClient(props: {
 
   const [threadLoading, setThreadLoading] = React.useState<boolean>(false);
   const [threadLoadedKey, setThreadLoadedKey] = React.useState<string>("");
-
-  const { userId, isLoaded: authLoaded } = useAuth();
 
   // anon = not signed-in (but wait until Clerk has loaded to avoid a brief flicker)
   const isAnon = authLoaded ? !userId : false;
@@ -669,8 +738,11 @@ export default function ExegesisTrackClient(props: {
             }
 
             if (isAnon) {
-              // TODO(BJR): anon login UX — replace with auth modal when available
-              // For now: anon users can't open membership modal, so do nothing.
+              reportInlineGate({
+                intent: "explicit",
+                message: "Discussion is exclusive to members.",
+                correlationId: null,
+              });
               return;
             }
 
@@ -966,7 +1038,12 @@ export default function ExegesisTrackClient(props: {
 
     // Optional but usually nicer: prevents showing stale anon thread while loading the member thread.
     setThread(null);
-  }, [viewerKey]);
+
+    // If they just signed in, clear any exegesis gate (inline + broker).
+    // (Even if they didn't sign in, clearing is harmless and keeps state tidy.)
+    broker.clearGate({ domain: EXEGESIS_DOMAIN });
+    clearInlineGate();
+  }, [viewerKey, broker]);
 
   React.useEffect(() => {
     function onMouseDown(e: MouseEvent) {
@@ -1231,15 +1308,28 @@ export default function ExegesisTrackClient(props: {
         if (!alive) return;
 
         if (!j.ok) {
-          // If we *already* have thread data, keep it visible and just surface the error.
-          // Only hard-null the thread when we truly have nothing to show.
+          // If we *already* have thread data, keep it visible (blurred) and gate further interaction.
           setThread((prev) => (prev ? prev : null));
-          setThreadErr(
-            j.code === "ANON_LIMIT"
-              ? j.error ||
-                  "You’ve hit the anon reading limit. Sign in to continue."
-              : j.error || "Failed to load thread.",
-          );
+
+          if (j.code === "ANON_LIMIT") {
+            const msg =
+              j.error ||
+              "You’ve hit the anon reading limit for Exegesis. Sign in to continue reading the discussion.";
+
+            // Inline-only: do NOT spotlight. Report via broker for global coherence.
+            reportInlineGate({
+              intent: "passive",
+              message: msg,
+              correlationId: null,
+            });
+
+            // Keep the error out of the normal in-panel error box; the gate overlay owns this UX.
+            setThreadErr("");
+            setThreadLoadedKey(wantedCore);
+            return;
+          }
+
+          setThreadErr(j.error || "Failed to load thread.");
           setThreadLoadedKey(wantedCore);
           return;
         }
@@ -1270,6 +1360,7 @@ export default function ExegesisTrackClient(props: {
     threadWantedFetchKey,
     threadWantedCoreKey,
     viewerKey,
+    reportInlineGate,
   ]);
 
   async function postComment() {
@@ -1983,811 +2074,923 @@ export default function ExegesisTrackClient(props: {
                     : undefined
               }
             >
-              {!selected ? (
-                <div className="rounded-xl bg-white/5 p-4">
-                  <div className="text-sm opacity-70">
-                    Select a line to view the discussion.
-                  </div>
-                </div>
-              ) : shouldShowInitialShimmer ? (
-                <DiscourseShimmer />
-              ) : (
-                <>
-                  {isLocked ? (
-                    <div className="mt-2 rounded-md bg-white/5 p-3 text-sm">
-                      <div className="opacity-80">This thread is locked.</div>
-                      <div className="mt-1 text-xs opacity-60">
-                        You can still read, but posting is disabled.
+              {/* Inline-only gate boundary: affects discourse panel only (never lyrics). */}
+              <div className="relative min-h-0 flex-1 flex flex-col">
+                <div
+                  className={
+                    inlineGate.open
+                      ? "min-h-0 flex-1 flex flex-col blur-[1.5px] opacity-55 pointer-events-none select-none"
+                      : "min-h-0 flex-1 flex flex-col"
+                  }
+                >
+                  {!selected ? (
+                    <div className="rounded-xl bg-white/5 p-4">
+                      <div className="text-sm opacity-70">
+                        Select a line to view the discussion.
                       </div>
                     </div>
-                  ) : null}
-
-                  {selected ? (
-                    <div className="mt-2 rounded-md bg-black/20 p-3 text-sm">
-                      {(() => {
-                        const gk = (selected.groupKey ?? "").trim();
-                        if (!gk)
-                          return (
-                            <div className="mt-1">{selected.lineText}</div>
-                          );
-
-                        const lines = (lyrics.cues ?? [])
-                          .filter((c) =>
-                            isSameGroup(cueCanonicalGroupKey(lyrics, c), gk),
-                          )
-                          .map((c) => c.text);
-
-                        const safe =
-                          lines.length > 0 ? lines : [selected.lineText];
-
-                        return (
-                          <div className="mt-1 space-y-1">
-                            {safe.map((t, i) => (
-                              <div key={i}>{t}</div>
-                            ))}
+                  ) : shouldShowInitialShimmer ? (
+                    <DiscourseShimmer />
+                  ) : (
+                    <>
+                      {isLocked ? (
+                        <div className="mt-2 rounded-md bg-white/5 p-3 text-sm">
+                          <div className="opacity-80">
+                            This thread is locked.
                           </div>
-                        );
-                      })()}
-                    </div>
-                  ) : null}
-
-                  {showIdentityPanel ? (
-                    <div className="mt-3 rounded-md bg-black/20 p-3 text-sm">
-                      {canClaimName && !viewerIdentity?.publicName ? (
-                        <div className="flex items-center justify-between gap-3">
-                          <button
-                            className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
-                            onClick={() => {
-                              setClaimErr("");
-                              setClaimOpen((v) => !v);
-                            }}
-                            title="Claim a public name"
-                          >
-                            Claim name
-                          </button>
+                          <div className="mt-1 text-xs opacity-60">
+                            You can still read, but posting is disabled.
+                          </div>
                         </div>
                       ) : null}
 
-                      <div className="mt-1 text-sm">
-                        Commenting as{" "}
-                        <span className="font-semibold">{identityLabel}</span>
-                      </div>
+                      {selected ? (
+                        <div className="mt-2 rounded-md bg-black/20 p-3 text-sm">
+                          {(() => {
+                            const gk = (selected.groupKey ?? "").trim();
+                            if (!gk)
+                              return (
+                                <div className="mt-1">{selected.lineText}</div>
+                              );
 
-                      {!viewerIdentity?.publicName ? (
-                        <div className="mt-1 text-xs opacity-60">
-                          {canClaimName ? " · Unlocked" : ""}
+                            const lines = (lyrics.cues ?? [])
+                              .filter((c) =>
+                                isSameGroup(
+                                  cueCanonicalGroupKey(lyrics, c),
+                                  gk,
+                                ),
+                              )
+                              .map((c) => c.text);
+
+                            const safe =
+                              lines.length > 0 ? lines : [selected.lineText];
+
+                            return (
+                              <div className="mt-1 space-y-1">
+                                {safe.map((t, i) => (
+                                  <div key={i}>{t}</div>
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </div>
                       ) : null}
 
-                      {claimOpen ? (
-                        <div className="mt-3 space-y-2">
-                          <input
-                            className="w-full rounded-md bg-black/20 px-3 py-2 text-sm outline-none"
-                            placeholder="Choose a public name"
-                            value={claimName}
-                            onChange={(e) => setClaimName(e.target.value)}
-                          />
-                          {claimErr ? (
-                            <div className="text-xs opacity-70">{claimErr}</div>
+                      {showIdentityPanel ? (
+                        <div className="mt-3 rounded-md bg-black/20 p-3 text-sm">
+                          {canClaimName && !viewerIdentity?.publicName ? (
+                            <div className="flex items-center justify-between gap-3">
+                              <button
+                                className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
+                                onClick={() => {
+                                  setClaimErr("");
+                                  setClaimOpen((v) => !v);
+                                }}
+                                title="Claim a public name"
+                              >
+                                Claim name
+                              </button>
+                            </div>
                           ) : null}
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              className="rounded-md bg-white/5 px-3 py-1.5 text-sm hover:bg-white/10"
-                              onClick={() => {
-                                setClaimOpen(false);
-                                setClaimErr("");
-                              }}
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
-                              disabled={
-                                !canClaimName || !claimName.trim() || claimBusy
-                              }
-                              onClick={() => void submitClaimName()}
-                            >
-                              {claimBusy ? "Saving…" : "Claim"}
-                            </button>
+
+                          <div className="mt-1 text-sm">
+                            Commenting as{" "}
+                            <span className="font-semibold">
+                              {identityLabel}
+                            </span>
                           </div>
+
+                          {!viewerIdentity?.publicName ? (
+                            <div className="mt-1 text-xs opacity-60">
+                              {canClaimName ? " · Unlocked" : ""}
+                            </div>
+                          ) : null}
+
+                          {claimOpen ? (
+                            <div className="mt-3 space-y-2">
+                              <input
+                                className="w-full rounded-md bg-black/20 px-3 py-2 text-sm outline-none"
+                                placeholder="Choose a public name"
+                                value={claimName}
+                                onChange={(e) => setClaimName(e.target.value)}
+                              />
+                              {claimErr ? (
+                                <div className="text-xs opacity-70">
+                                  {claimErr}
+                                </div>
+                              ) : null}
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  className="rounded-md bg-white/5 px-3 py-1.5 text-sm hover:bg-white/10"
+                                  onClick={() => {
+                                    setClaimOpen(false);
+                                    setClaimErr("");
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
+                                  disabled={
+                                    !canClaimName ||
+                                    !claimName.trim() ||
+                                    claimBusy
+                                  }
+                                  onClick={() => void submitClaimName()}
+                                >
+                                  {claimBusy ? "Saving…" : "Claim"}
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
                       ) : null}
-                    </div>
-                  ) : null}
 
-                  {threadErr ? (
-                    <div className="mt-3 rounded-md bg-white/5 p-3 text-sm">
-                      {threadErr}
-                    </div>
-                  ) : null}
-
-                  {Composer}
-
-                  {/* Header controls: sort when browsing all; Back when focused */}
-                  <div className="mt-3 flex items-center justify-end">
-                    {focusedRootId ? (
-                      <div className="w-full">
-                        <button
-                          type="button"
-                          className="w-full rounded-md bg-white/5 px-2 py-1 text-xs text-left opacity-80 hover:bg-white/10 hover:opacity-100"
-                          onClick={clearRootFocus}
-                        >
-                          ← Back to all threads
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          className={`rounded-md px-2 py-1 text-xs transition ${
-                            sort === "top"
-                              ? "bg-white/10 opacity-100"
-                              : "bg-white/5 opacity-70 hover:opacity-100"
-                          }`}
-                          onClick={() => setSortWithFlip("top")}
-                        >
-                          Top
-                        </button>
-                        <button
-                          className={`rounded-md px-2 py-1 text-xs transition ${
-                            sort === "recent"
-                              ? "bg-white/10 opacity-100"
-                              : "bg-white/5 opacity-70 hover:opacity-100"
-                          }`}
-                          onClick={() => setSortWithFlip("recent")}
-                        >
-                          Recent
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div
-                    ref={threadScrollRef}
-                    className={`mt-3 space-y-3 flex-1 ${isMobile ? "afFadeScroll" : ""}`}
-                    style={{
-                      overflowY: "auto",
-                      overscrollBehavior: isMobile ? "contain" : "auto",
-                      minHeight: 0, // critical for flex scroll containers
-                      // Reserve space for the MiniPlayer dock *inside* the scroll region (mobile only),
-                      // instead of creating dead space in the overall panel layout.
-                      paddingBottom: isMobile ? DOCK_H : 0,
-                    }}
-                  >
-                    <div className="mt-3 space-y-3">
-                      {(rootsForView ?? []).length === 0 ? (
-                        <div className="text-sm opacity-60">
-                          {focusedRootId
-                            ? "Thread not found."
-                            : "Be the first to comment."}
+                      {threadErr ? (
+                        <div className="mt-3 rounded-md bg-white/5 p-3 text-sm">
+                          {threadErr}
                         </div>
-                      ) : (
-                        (rootsForView ?? []).map((root) => {
-                          const allComments = root.comments ?? [];
-                          const previewComments = allComments
-                            .filter((c) => (c.depth ?? 0) <= PREVIEW_MAX_DEPTH)
-                            .slice(0, PREVIEW_MAX_COMMENTS);
+                      ) : null}
 
-                          const isFocused = !!focusedRootId;
-                          const visibleComments = isFocused
-                            ? allComments
-                            : previewComments;
+                      {Composer}
 
-                          // We consider the preview "gated" if there exists deeper discussion,
-                          // or if the count cap clipped anything.
-                          const gated =
-                            !isFocused &&
-                            (allComments.some(
-                              (c) => (c.depth ?? 0) > PREVIEW_MAX_DEPTH,
-                            ) ||
-                              previewComments.length < allComments.length);
-
-                          return (
-                            <div
-                              key={root.rootId}
-                              ref={(el) => {
-                                rootElByIdRef.current[root.rootId] = el;
-                              }}
-                              className="rounded-md bg-black/20"
+                      {/* Header controls: sort when browsing all; Back when focused */}
+                      <div className="mt-3 flex items-center justify-end">
+                        {focusedRootId ? (
+                          <div className="w-full">
+                            <button
+                              type="button"
+                              className="w-full rounded-md bg-white/5 px-2 py-1 text-xs text-left opacity-80 hover:bg-white/10 hover:opacity-100"
+                              onClick={clearRootFocus}
                             >
-                              {visibleComments.map((c) => {
-                                const ident =
-                                  thread?.identities?.[c.createdByMemberId];
-                                const name =
-                                  ident?.publicName ||
-                                  ident?.anonLabel ||
-                                  "Anonymous";
-                                const replyBusy = Boolean(
-                                  replyByCommentId[c.id]?.posting,
-                                );
-                                const isAuthor =
-                                  !!viewerMemberId &&
-                                  c.createdByMemberId === viewerMemberId;
-                                const canEdit =
-                                  canPost &&
-                                  !isLocked &&
-                                  isAuthor &&
-                                  c.status === "live";
-                                const editBusy = Boolean(
-                                  editByCommentId[c.id]?.posting,
-                                );
+                              ← Back to all threads
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              className={`rounded-md px-2 py-1 text-xs transition ${
+                                sort === "top"
+                                  ? "bg-white/10 opacity-100"
+                                  : "bg-white/5 opacity-70 hover:opacity-100"
+                              }`}
+                              onClick={() => setSortWithFlip("top")}
+                            >
+                              Top
+                            </button>
+                            <button
+                              className={`rounded-md px-2 py-1 text-xs transition ${
+                                sort === "recent"
+                                  ? "bg-white/10 opacity-100"
+                                  : "bg-white/5 opacity-70 hover:opacity-100"
+                              }`}
+                              onClick={() => setSortWithFlip("recent")}
+                            >
+                              Recent
+                            </button>
+                          </div>
+                        )}
+                      </div>
 
-                                if (c.status === "deleted") return null;
+                      <div
+                        ref={threadScrollRef}
+                        className={`mt-3 space-y-3 flex-1 ${isMobile ? "afFadeScroll" : ""}`}
+                        style={{
+                          overflowY: "auto",
+                          overscrollBehavior: isMobile ? "contain" : "auto",
+                          minHeight: 0, // critical for flex scroll containers
+                          // Reserve space for the MiniPlayer dock *inside* the scroll region (mobile only),
+                          // instead of creating dead space in the overall panel layout.
+                          paddingBottom: isMobile ? DOCK_H : 0,
+                        }}
+                      >
+                        <div className="mt-3 space-y-3">
+                          {(rootsForView ?? []).length === 0 ? (
+                            <div className="text-sm opacity-60">
+                              {focusedRootId
+                                ? "Thread not found."
+                                : "Be the first to comment."}
+                            </div>
+                          ) : (
+                            (rootsForView ?? []).map((root) => {
+                              const allComments = root.comments ?? [];
+                              const previewComments = allComments
+                                .filter(
+                                  (c) => (c.depth ?? 0) <= PREVIEW_MAX_DEPTH,
+                                )
+                                .slice(0, PREVIEW_MAX_COMMENTS);
 
-                                return (
-                                  <div
-                                    id={`exegesis-c-${c.id}`}
-                                    key={c.id}
-                                    className="group py-2 scroll-mt-4"
-                                    style={{
-                                      paddingLeft: Math.min(
-                                        72,
-                                        (c.depth ?? 0) * 12,
-                                      ),
-                                      borderLeft:
-                                        (c.depth ?? 0) > 0
-                                          ? "1px solid rgba(255,255,255,0.08)"
-                                          : "none",
-                                      marginLeft: (c.depth ?? 0) > 0 ? 6 : 0,
-                                    }}
-                                  >
-                                    <div className="flex items-center justify-between gap-3">
-                                      <div className="flex items-center gap-2">
-                                        <div className="text-xs opacity-70">
-                                          {name}
-                                        </div>
+                              const isFocused = !!focusedRootId;
+                              const visibleComments = isFocused
+                                ? allComments
+                                : previewComments;
 
-                                        {(() => {
-                                          const ago = formatAgo(c.createdAt);
-                                          return ago ? (
-                                            <div className="text-[11px] opacity-45">
-                                              · {ago}
+                              // We consider the preview "gated" if there exists deeper discussion,
+                              // or if the count cap clipped anything.
+                              const gated =
+                                !isFocused &&
+                                (allComments.some(
+                                  (c) => (c.depth ?? 0) > PREVIEW_MAX_DEPTH,
+                                ) ||
+                                  previewComments.length < allComments.length);
+
+                              return (
+                                <div
+                                  key={root.rootId}
+                                  ref={(el) => {
+                                    rootElByIdRef.current[root.rootId] = el;
+                                  }}
+                                  className="rounded-md bg-black/20"
+                                >
+                                  {visibleComments.map((c) => {
+                                    const ident =
+                                      thread?.identities?.[c.createdByMemberId];
+                                    const name =
+                                      ident?.publicName ||
+                                      ident?.anonLabel ||
+                                      "Anonymous";
+                                    const replyBusy = Boolean(
+                                      replyByCommentId[c.id]?.posting,
+                                    );
+                                    const isAuthor =
+                                      !!viewerMemberId &&
+                                      c.createdByMemberId === viewerMemberId;
+                                    const canEdit =
+                                      canPost &&
+                                      !isLocked &&
+                                      isAuthor &&
+                                      c.status === "live";
+                                    const editBusy = Boolean(
+                                      editByCommentId[c.id]?.posting,
+                                    );
+
+                                    if (c.status === "deleted") return null;
+
+                                    return (
+                                      <div
+                                        id={`exegesis-c-${c.id}`}
+                                        key={c.id}
+                                        className="group py-2 scroll-mt-4"
+                                        style={{
+                                          paddingLeft: Math.min(
+                                            72,
+                                            (c.depth ?? 0) * 12,
+                                          ),
+                                          borderLeft:
+                                            (c.depth ?? 0) > 0
+                                              ? "1px solid rgba(255,255,255,0.08)"
+                                              : "none",
+                                          marginLeft:
+                                            (c.depth ?? 0) > 0 ? 6 : 0,
+                                        }}
+                                      >
+                                        <div className="flex items-center justify-between gap-3">
+                                          <div className="flex items-center gap-2">
+                                            <div className="text-xs opacity-70">
+                                              {name}
                                             </div>
-                                          ) : null;
-                                        })()}
 
-                                        {c.editedAt ||
-                                        (c.editCount ?? 0) > 0 ? (
-                                          <div className="text-[11px] opacity-50">
-                                            edited
+                                            {(() => {
+                                              const ago = formatAgo(
+                                                c.createdAt,
+                                              );
+                                              return ago ? (
+                                                <div className="text-[11px] opacity-45">
+                                                  · {ago}
+                                                </div>
+                                              ) : null;
+                                            })()}
+
+                                            {c.editedAt ||
+                                            (c.editCount ?? 0) > 0 ? (
+                                              <div className="text-[11px] opacity-50">
+                                                edited
+                                              </div>
+                                            ) : null}
                                           </div>
-                                        ) : null}
-                                      </div>
 
-                                      <div className="flex items-center gap-2">
-                                        {/* Hover-only actions (reply + report) */}
-                                        <div className="flex items-center gap-2 md:opacity-0 transition-opacity duration-150 ease-out md:group-hover:opacity-100 group-focus-within:opacity-100">
-                                          {canPost && !isLocked ? (
-                                            <button
-                                              className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
-                                              disabled={
-                                                replyBusy ||
-                                                c.status !== "live" ||
-                                                c.depth >= 6
-                                              }
-                                              onClick={() => openReply(c.id)}
-                                              title={
-                                                c.depth >= 6
-                                                  ? "Max thread depth reached"
-                                                  : "Reply"
-                                              }
-                                              aria-label="Reply"
-                                            >
-                                              <ReplyIcon className="h-4 w-4" />
-                                            </button>
-                                          ) : null}
+                                          <div className="flex items-center gap-2">
+                                            {/* Hover-only actions (reply + report) */}
+                                            <div className="flex items-center gap-2 md:opacity-0 transition-opacity duration-150 ease-out md:group-hover:opacity-100 group-focus-within:opacity-100">
+                                              {canPost && !isLocked ? (
+                                                <button
+                                                  className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
+                                                  disabled={
+                                                    replyBusy ||
+                                                    c.status !== "live" ||
+                                                    c.depth >= 6
+                                                  }
+                                                  onClick={() =>
+                                                    openReply(c.id)
+                                                  }
+                                                  title={
+                                                    c.depth >= 6
+                                                      ? "Max thread depth reached"
+                                                      : "Reply"
+                                                  }
+                                                  aria-label="Reply"
+                                                >
+                                                  <ReplyIcon className="h-4 w-4" />
+                                                </button>
+                                              ) : null}
 
-                                          {canReport ? (
-                                            <button
-                                              className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
-                                              onClick={() => openReport(c.id)}
-                                              title="Report"
-                                              aria-label="Report"
-                                            >
-                                              <ShieldAlertIcon className="h-4 w-4" />
-                                            </button>
-                                          ) : null}
-                                        </div>
+                                              {canReport ? (
+                                                <button
+                                                  className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
+                                                  onClick={() =>
+                                                    openReport(c.id)
+                                                  }
+                                                  title="Report"
+                                                  aria-label="Report"
+                                                >
+                                                  <ShieldAlertIcon className="h-4 w-4" />
+                                                </button>
+                                              ) : null}
+                                            </div>
 
-                                        {/* Vote always visible, far right (badge hides at 0, tier tint only after viewer votes) */}
-                                        {(() => {
-                                          const votes = Math.max(
-                                            0,
-                                            c.voteCount ?? 0,
-                                          );
-                                          const showBadge = votes > 0;
+                                            {/* Vote always visible, far right (badge hides at 0, tier tint only after viewer votes) */}
+                                            {(() => {
+                                              const votes = Math.max(
+                                                0,
+                                                c.voteCount ?? 0,
+                                              );
+                                              const showBadge = votes > 0;
 
-                                          const tier = medalTier(votes);
-                                          const tint =
-                                            votes > 0
-                                              ? medalClassForTier(tier)
-                                              : "text-white/80";
+                                              const tier = medalTier(votes);
+                                              const tint =
+                                                votes > 0
+                                                  ? medalClassForTier(tier)
+                                                  : "text-white/80";
 
-                                          const disabled = !canVote;
+                                              const disabled = !canVote;
 
-                                          return (
-                                            <button
-                                              className={`group relative inline-flex items-center justify-center rounded-md px-2 py-1 text-xs ${
-                                                disabled ? "opacity-70" : ""
-                                              } ${tint}
+                                              return (
+                                                <button
+                                                  className={`group relative inline-flex items-center justify-center rounded-md px-2 py-1 text-xs ${
+                                                    disabled ? "opacity-70" : ""
+                                                  } ${tint}
   [--voteBgRgb:17_17_17] hover:[--voteBgRgb:22_22_22]
   bg-[rgb(var(--voteBgRgb)/0.55)] hover:bg-[rgb(var(--voteBgRgb)/0.55)]`}
-                                              disabled={disabled}
-                                              onClick={
-                                                disabled
-                                                  ? undefined
-                                                  : () => void toggleVote(c.id)
-                                              }
-                                              title={
-                                                disabled
-                                                  ? thread?.viewer.kind ===
-                                                    "anon"
-                                                    ? "Sign in to vote"
-                                                    : "Friend tier or higher required to vote"
-                                                  : "Vote"
-                                              }
-                                              aria-label="Vote"
-                                            >
-                                              <span className="relative inline-flex h-4 w-4 items-center justify-center">
-                                                <MedalIcon className="h-4 w-4" />
+                                                  disabled={disabled}
+                                                  onClick={
+                                                    disabled
+                                                      ? undefined
+                                                      : () =>
+                                                          void toggleVote(c.id)
+                                                  }
+                                                  title={
+                                                    disabled
+                                                      ? thread?.viewer.kind ===
+                                                        "anon"
+                                                        ? "Sign in to vote"
+                                                        : "Friend tier or higher required to vote"
+                                                      : "Vote"
+                                                  }
+                                                  aria-label="Vote"
+                                                >
+                                                  <span className="relative inline-flex h-4 w-4 items-center justify-center">
+                                                    <MedalIcon className="h-4 w-4" />
 
-                                                {showBadge ? (
-                                                  <span
-                                                    className="absolute text-[9px] font-black leading-[9px] tabular-nums text-current"
-                                                    style={{
-                                                      right: "0px",
-                                                      top: "-1px",
-                                                      pointerEvents: "none",
-                                                      // True outline (no second glyph -> no misregistration).
-                                                      WebkitTextStroke:
-                                                        "2px rgb(var(--voteBgRgb) / 0.55)",
-                                                      // Helps some rasterizers keep the stroke visually “outside”.
-                                                      paintOrder: "stroke fill",
-                                                    }}
-                                                  >
-                                                    {votes}
+                                                    {showBadge ? (
+                                                      <span
+                                                        className="absolute text-[9px] font-black leading-[9px] tabular-nums text-current"
+                                                        style={{
+                                                          right: "0px",
+                                                          top: "-1px",
+                                                          pointerEvents: "none",
+                                                          // True outline (no second glyph -> no misregistration).
+                                                          WebkitTextStroke:
+                                                            "2px rgb(var(--voteBgRgb) / 0.55)",
+                                                          // Helps some rasterizers keep the stroke visually “outside”.
+                                                          paintOrder:
+                                                            "stroke fill",
+                                                        }}
+                                                      >
+                                                        {votes}
+                                                      </span>
+                                                    ) : null}
                                                   </span>
-                                                ) : null}
-                                              </span>
-                                            </button>
-                                          );
-                                        })()}
-                                      </div>
-                                    </div>
+                                                </button>
+                                              );
+                                            })()}
+                                          </div>
+                                        </div>
 
-                                    {c.status === "hidden" ? (
-                                      <div className="mt-1 text-sm opacity-60 italic">
-                                        This comment is hidden.
-                                      </div>
-                                    ) : (
-                                      <div className="mt-1">
-                                        {isTipTapDoc(c.bodyRich) ? (
-                                          <TipTapReadOnly doc={c.bodyRich} />
+                                        {c.status === "hidden" ? (
+                                          <div className="mt-1 text-sm opacity-60 italic">
+                                            This comment is hidden.
+                                          </div>
                                         ) : (
-                                          <div className="text-sm whitespace-pre-wrap">
-                                            {c.bodyPlain}
+                                          <div className="mt-1">
+                                            {isTipTapDoc(c.bodyRich) ? (
+                                              <TipTapReadOnly
+                                                doc={c.bodyRich}
+                                              />
+                                            ) : (
+                                              <div className="text-sm whitespace-pre-wrap">
+                                                {c.bodyPlain}
+                                              </div>
+                                            )}
+
+                                            {/* Edit: small, under text, left-aligned */}
+                                            {canEdit ? (
+                                              <div className="mt-1 flex items-center">
+                                                <button
+                                                  className="rounded bg-white/0 px-1 py-0.5 text-[11px] opacity-70 hover:bg-white/5 hover:opacity-100 disabled:opacity-40"
+                                                  disabled={
+                                                    editBusy || replyBusy
+                                                  }
+                                                  onClick={() => openEdit(c)}
+                                                  title="Edit"
+                                                >
+                                                  Edit
+                                                </button>
+                                              </div>
+                                            ) : null}
                                           </div>
                                         )}
 
-                                        {/* Edit: small, under text, left-aligned */}
-                                        {canEdit ? (
-                                          <div className="mt-1 flex items-center">
-                                            <button
-                                              className="rounded bg-white/0 px-1 py-0.5 text-[11px] opacity-70 hover:bg-white/5 hover:opacity-100 disabled:opacity-40"
-                                              disabled={editBusy || replyBusy}
-                                              onClick={() => openEdit(c)}
-                                              title="Edit"
-                                            >
-                                              Edit
-                                            </button>
-                                          </div>
-                                        ) : null}
-                                      </div>
-                                    )}
-
-                                    {canPost &&
-                                    !isLocked &&
-                                    canEdit &&
-                                    editByCommentId[c.id]?.open ? (
-                                      <div
-                                        ref={(el) => {
-                                          editWrapByIdRef.current[c.id] = el;
-                                        }}
-                                        className="mt-2 rounded-md bg-black/25 p-3"
-                                      >
-                                        <div className="flex items-center justify-between gap-3">
-                                          <div className="text-xs opacity-70">
-                                            Edit
-                                          </div>
-                                        </div>
-
-                                        <div className="mt-2">
-                                          <TipTapEditor
-                                            key={`edit-${c.id}-${editMountKey}-${editByCommentId[c.id]?.ui ?? "basic"}`}
-                                            valuePlain={
-                                              editByCommentId[c.id]?.plain ?? ""
-                                            }
-                                            valueDoc={
-                                              editByCommentId[c.id]?.doc ?? null
-                                            }
-                                            disabled={
-                                              editByCommentId[c.id]?.posting
-                                            }
-                                            showToolbar={
-                                              (editByCommentId[c.id]?.ui ??
-                                                "basic") === "full"
-                                            }
-                                            autofocus
-                                            placeholder="Edit your comment…"
-                                            onChangePlain={(plain) =>
-                                              setEditByCommentId((prev) => ({
-                                                ...prev,
-                                                [c.id]: {
-                                                  ...(prev[c.id] as EditDraft),
-                                                  plain,
-                                                  err: "",
-                                                },
-                                              }))
-                                            }
-                                            onChangeDoc={(doc) =>
-                                              setEditByCommentId((prev) => ({
-                                                ...prev,
-                                                [c.id]: {
-                                                  ...(prev[c.id] as EditDraft),
-                                                  doc,
-                                                  err: "",
-                                                },
-                                              }))
-                                            }
-                                          />
-                                        </div>
-
-                                        <div className="mt-2 flex items-center justify-between gap-3">
-                                          <button
-                                            type="button"
-                                            className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
-                                            disabled={
-                                              editByCommentId[c.id]?.posting
-                                            }
-                                            onClick={() =>
-                                              setEditByCommentId((prev) => ({
-                                                ...prev,
-                                                [c.id]: {
-                                                  ...(prev[c.id] as EditDraft),
-                                                  ui:
-                                                    (prev[c.id]?.ui ??
-                                                      "basic") === "full"
-                                                      ? "basic"
-                                                      : "full",
-                                                },
-                                              }))
-                                            }
-                                            title={
-                                              (editByCommentId[c.id]?.ui ??
-                                                "basic") === "full"
-                                                ? "Hide formatting"
-                                                : "Formatting"
-                                            }
+                                        {canPost &&
+                                        !isLocked &&
+                                        canEdit &&
+                                        editByCommentId[c.id]?.open ? (
+                                          <div
+                                            ref={(el) => {
+                                              editWrapByIdRef.current[c.id] =
+                                                el;
+                                            }}
+                                            className="mt-2 rounded-md bg-black/25 p-3"
                                           >
-                                            Aa
-                                          </button>
-
-                                          <div className="text-xs opacity-60">
-                                            {
-                                              (
-                                                editByCommentId[c.id]?.plain ??
-                                                ""
-                                              ).trim().length
-                                            }
-                                            /5000
-                                          </div>
-                                        </div>
-
-                                        {editByCommentId[c.id]?.err ? (
-                                          <div className="mt-2 text-xs opacity-75">
-                                            {editByCommentId[c.id]?.err}
-                                          </div>
-                                        ) : null}
-
-                                        <div className="mt-2 flex items-center justify-between">
-                                          <button
-                                            className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
-                                            disabled={
-                                              editByCommentId[c.id]?.posting ||
-                                              !(
-                                                editByCommentId[c.id]?.plain ??
-                                                ""
-                                              ).trim()
-                                            }
-                                            onClick={() => void submitEdit(c)}
-                                          >
-                                            {editByCommentId[c.id]?.posting
-                                              ? "Saving…"
-                                              : "Save edit"}
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ) : null}
-
-                                    {canPost &&
-                                    !isLocked &&
-                                    replyByCommentId[c.id]?.open ? (
-                                      <div
-                                        ref={(el) => {
-                                          replyWrapByIdRef.current[c.id] = el;
-                                        }}
-                                        className="mt-2 rounded-md bg-black/25 p-3"
-                                      >
-                                        <div className="flex items-center justify-between gap-3">
-                                          <div className="text-xs opacity-70">
-                                            Reply
-                                          </div>
-                                        </div>
-
-                                        <div className="mt-2">
-                                          <TipTapEditor
-                                            key={`reply-${c.id}-${replyMountKey}-${replyByCommentId[c.id]?.ui ?? "basic"}`}
-                                            valuePlain={
-                                              replyByCommentId[c.id]?.plain ??
-                                              ""
-                                            }
-                                            valueDoc={
-                                              replyByCommentId[c.id]?.doc ??
-                                              null
-                                            }
-                                            disabled={
-                                              replyByCommentId[c.id]?.posting
-                                            }
-                                            showToolbar={
-                                              (replyByCommentId[c.id]?.ui ??
-                                                "basic") === "full"
-                                            }
-                                            autofocus
-                                            placeholder="Write a reply…"
-                                            onChangePlain={(plain) =>
-                                              setReplyByCommentId((prev) => ({
-                                                ...prev,
-                                                [c.id]: {
-                                                  ...(prev[c.id] as ReplyDraft),
-                                                  plain,
-                                                  err: "",
-                                                },
-                                              }))
-                                            }
-                                            onChangeDoc={(doc) =>
-                                              setReplyByCommentId((prev) => ({
-                                                ...prev,
-                                                [c.id]: {
-                                                  ...(prev[c.id] as ReplyDraft),
-                                                  doc,
-                                                  err: "",
-                                                },
-                                              }))
-                                            }
-                                          />
-                                        </div>
-
-                                        <div className="mt-2 flex items-center justify-between gap-3">
-                                          <button
-                                            type="button"
-                                            className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
-                                            disabled={
-                                              replyByCommentId[c.id]?.posting
-                                            }
-                                            onClick={() =>
-                                              setReplyByCommentId((prev) => ({
-                                                ...prev,
-                                                [c.id]: {
-                                                  ...(prev[c.id] as ReplyDraft),
-                                                  ui:
-                                                    (prev[c.id]?.ui ??
-                                                      "basic") === "full"
-                                                      ? "basic"
-                                                      : "full",
-                                                },
-                                              }))
-                                            }
-                                            title={
-                                              (replyByCommentId[c.id]?.ui ??
-                                                "basic") === "full"
-                                                ? "Hide formatting"
-                                                : "Formatting"
-                                            }
-                                          >
-                                            Aa
-                                          </button>
-
-                                          <div className="text-xs opacity-60">
-                                            {
-                                              (
-                                                replyByCommentId[c.id]?.plain ??
-                                                ""
-                                              ).trim().length
-                                            }
-                                            /5000
-                                          </div>
-                                        </div>
-
-                                        {replyByCommentId[c.id]?.err ? (
-                                          <div className="mt-2 text-xs opacity-75">
-                                            {replyByCommentId[c.id]?.err}
-                                          </div>
-                                        ) : null}
-
-                                        <div className="mt-2 flex items-center justify-between">
-                                          <button
-                                            className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
-                                            disabled={
-                                              replyByCommentId[c.id]?.posting ||
-                                              !(
-                                                replyByCommentId[c.id]?.plain ??
-                                                ""
-                                              ).trim()
-                                            }
-                                            onClick={() => void postReply(c)}
-                                          >
-                                            {replyByCommentId[c.id]?.posting
-                                              ? "Posting…"
-                                              : "Post reply"}
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ) : null}
-
-                                    {canReport &&
-                                    reportByCommentId[c.id]?.open ? (
-                                      <div
-                                        ref={(el) => {
-                                          reportWrapByIdRef.current[c.id] = el;
-                                        }}
-                                        className="mt-2 rounded-md bg-black/25 p-3 text-sm"
-                                      >
-                                        {reportByCommentId[c.id]?.done ? (
-                                          <div className="text-xs opacity-75">
-                                            Report submitted. Thanks — this
-                                            helps keep the discourse usable.
-                                          </div>
-                                        ) : (
-                                          <>
                                             <div className="flex items-center justify-between gap-3">
                                               <div className="text-xs opacity-70">
-                                                Report this comment
+                                                Edit
                                               </div>
                                             </div>
 
-                                            <div className="mt-2 grid gap-2">
-                                              <select
-                                                className="w-full rounded-md bg-black/20 px-3 py-2 text-sm outline-none"
-                                                value={
-                                                  reportByCommentId[c.id]
-                                                    ?.category ?? "spam"
+                                            <div className="mt-2">
+                                              <TipTapEditor
+                                                key={`edit-${c.id}-${editMountKey}-${editByCommentId[c.id]?.ui ?? "basic"}`}
+                                                valuePlain={
+                                                  editByCommentId[c.id]
+                                                    ?.plain ?? ""
                                                 }
-                                                onChange={(e) =>
-                                                  setReportByCommentId(
+                                                valueDoc={
+                                                  editByCommentId[c.id]?.doc ??
+                                                  null
+                                                }
+                                                disabled={
+                                                  editByCommentId[c.id]?.posting
+                                                }
+                                                showToolbar={
+                                                  (editByCommentId[c.id]?.ui ??
+                                                    "basic") === "full"
+                                                }
+                                                autofocus
+                                                placeholder="Edit your comment…"
+                                                onChangePlain={(plain) =>
+                                                  setEditByCommentId(
                                                     (prev) => ({
                                                       ...prev,
                                                       [c.id]: {
                                                         ...(prev[
                                                           c.id
-                                                        ] as ReportDraft),
-                                                        category:
-                                                          e.target.value,
+                                                        ] as EditDraft),
+                                                        plain,
                                                         err: "",
                                                       },
                                                     }),
                                                   )
                                                 }
-                                              >
-                                                {REPORT_CATEGORIES.map(
-                                                  (opt) => (
-                                                    <option
-                                                      key={opt.key}
-                                                      value={opt.key}
-                                                    >
-                                                      {opt.label}
-                                                    </option>
-                                                  ),
-                                                )}
-                                              </select>
-
-                                              <textarea
-                                                className="min-h-[90px] w-full rounded-md bg-black/20 p-3 text-sm outline-none"
-                                                placeholder="Describe the issue (20–300 chars)."
-                                                value={
-                                                  reportByCommentId[c.id]
-                                                    ?.reason ?? ""
-                                                }
-                                                onChange={(e) =>
-                                                  setReportByCommentId(
+                                                onChangeDoc={(doc) =>
+                                                  setEditByCommentId(
                                                     (prev) => ({
                                                       ...prev,
                                                       [c.id]: {
                                                         ...(prev[
                                                           c.id
-                                                        ] as ReportDraft),
-                                                        reason: e.target.value,
+                                                        ] as EditDraft),
+                                                        doc,
                                                         err: "",
                                                       },
                                                     }),
                                                   )
                                                 }
                                               />
+                                            </div>
 
-                                              {reportByCommentId[c.id]?.err ? (
-                                                <div className="text-xs opacity-75">
-                                                  {reportByCommentId[c.id]?.err}
-                                                </div>
-                                              ) : null}
+                                            <div className="mt-2 flex items-center justify-between gap-3">
+                                              <button
+                                                type="button"
+                                                className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
+                                                disabled={
+                                                  editByCommentId[c.id]?.posting
+                                                }
+                                                onClick={() =>
+                                                  setEditByCommentId(
+                                                    (prev) => ({
+                                                      ...prev,
+                                                      [c.id]: {
+                                                        ...(prev[
+                                                          c.id
+                                                        ] as EditDraft),
+                                                        ui:
+                                                          (prev[c.id]?.ui ??
+                                                            "basic") === "full"
+                                                            ? "basic"
+                                                            : "full",
+                                                      },
+                                                    }),
+                                                  )
+                                                }
+                                                title={
+                                                  (editByCommentId[c.id]?.ui ??
+                                                    "basic") === "full"
+                                                    ? "Hide formatting"
+                                                    : "Formatting"
+                                                }
+                                              >
+                                                Aa
+                                              </button>
 
-                                              <div className="flex items-center justify-between">
-                                                <div className="text-xs opacity-60">
-                                                  {
-                                                    (
-                                                      reportByCommentId[c.id]
-                                                        ?.reason ?? ""
-                                                    ).trim().length
-                                                  }
-                                                  /300
-                                                </div>
-                                                <button
-                                                  className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
-                                                  disabled={
-                                                    reportByCommentId[c.id]
-                                                      ?.busy ||
-                                                    (
-                                                      reportByCommentId[c.id]
-                                                        ?.reason ?? ""
-                                                    ).trim().length < 20 ||
-                                                    (
-                                                      reportByCommentId[c.id]
-                                                        ?.reason ?? ""
-                                                    ).trim().length > 300
-                                                  }
-                                                  onClick={() =>
-                                                    void submitReport(c.id)
-                                                  }
-                                                >
-                                                  {reportByCommentId[c.id]?.busy
-                                                    ? "Submitting…"
-                                                    : "Submit report"}
-                                                </button>
+                                              <div className="text-xs opacity-60">
+                                                {
+                                                  (
+                                                    editByCommentId[c.id]
+                                                      ?.plain ?? ""
+                                                  ).trim().length
+                                                }
+                                                /5000
                                               </div>
                                             </div>
-                                          </>
-                                        )}
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                );
-                              })}
 
-                              {gated ? (
-                                <div
-                                  className="mt-2"
-                                  style={{
-                                    // match the indentation + vertical thread line vibe
-                                    paddingLeft: Math.min(72, 3 * 12),
-                                    borderLeft:
-                                      "1px solid rgba(255,255,255,0.08)",
-                                    marginLeft: 6,
-                                  }}
-                                >
-                                  <button
-                                    type="button"
-                                    className="inline-flex items-center rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
-                                    onClick={() => focusRoot(root.rootId)}
-                                  >
-                                    Open full thread
-                                  </button>
+                                            {editByCommentId[c.id]?.err ? (
+                                              <div className="mt-2 text-xs opacity-75">
+                                                {editByCommentId[c.id]?.err}
+                                              </div>
+                                            ) : null}
+
+                                            <div className="mt-2 flex items-center justify-between">
+                                              <button
+                                                className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
+                                                disabled={
+                                                  editByCommentId[c.id]
+                                                    ?.posting ||
+                                                  !(
+                                                    editByCommentId[c.id]
+                                                      ?.plain ?? ""
+                                                  ).trim()
+                                                }
+                                                onClick={() =>
+                                                  void submitEdit(c)
+                                                }
+                                              >
+                                                {editByCommentId[c.id]?.posting
+                                                  ? "Saving…"
+                                                  : "Save edit"}
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ) : null}
+
+                                        {canPost &&
+                                        !isLocked &&
+                                        replyByCommentId[c.id]?.open ? (
+                                          <div
+                                            ref={(el) => {
+                                              replyWrapByIdRef.current[c.id] =
+                                                el;
+                                            }}
+                                            className="mt-2 rounded-md bg-black/25 p-3"
+                                          >
+                                            <div className="flex items-center justify-between gap-3">
+                                              <div className="text-xs opacity-70">
+                                                Reply
+                                              </div>
+                                            </div>
+
+                                            <div className="mt-2">
+                                              <TipTapEditor
+                                                key={`reply-${c.id}-${replyMountKey}-${replyByCommentId[c.id]?.ui ?? "basic"}`}
+                                                valuePlain={
+                                                  replyByCommentId[c.id]
+                                                    ?.plain ?? ""
+                                                }
+                                                valueDoc={
+                                                  replyByCommentId[c.id]?.doc ??
+                                                  null
+                                                }
+                                                disabled={
+                                                  replyByCommentId[c.id]
+                                                    ?.posting
+                                                }
+                                                showToolbar={
+                                                  (replyByCommentId[c.id]?.ui ??
+                                                    "basic") === "full"
+                                                }
+                                                autofocus
+                                                placeholder="Write a reply…"
+                                                onChangePlain={(plain) =>
+                                                  setReplyByCommentId(
+                                                    (prev) => ({
+                                                      ...prev,
+                                                      [c.id]: {
+                                                        ...(prev[
+                                                          c.id
+                                                        ] as ReplyDraft),
+                                                        plain,
+                                                        err: "",
+                                                      },
+                                                    }),
+                                                  )
+                                                }
+                                                onChangeDoc={(doc) =>
+                                                  setReplyByCommentId(
+                                                    (prev) => ({
+                                                      ...prev,
+                                                      [c.id]: {
+                                                        ...(prev[
+                                                          c.id
+                                                        ] as ReplyDraft),
+                                                        doc,
+                                                        err: "",
+                                                      },
+                                                    }),
+                                                  )
+                                                }
+                                              />
+                                            </div>
+
+                                            <div className="mt-2 flex items-center justify-between gap-3">
+                                              <button
+                                                type="button"
+                                                className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
+                                                disabled={
+                                                  replyByCommentId[c.id]
+                                                    ?.posting
+                                                }
+                                                onClick={() =>
+                                                  setReplyByCommentId(
+                                                    (prev) => ({
+                                                      ...prev,
+                                                      [c.id]: {
+                                                        ...(prev[
+                                                          c.id
+                                                        ] as ReplyDraft),
+                                                        ui:
+                                                          (prev[c.id]?.ui ??
+                                                            "basic") === "full"
+                                                            ? "basic"
+                                                            : "full",
+                                                      },
+                                                    }),
+                                                  )
+                                                }
+                                                title={
+                                                  (replyByCommentId[c.id]?.ui ??
+                                                    "basic") === "full"
+                                                    ? "Hide formatting"
+                                                    : "Formatting"
+                                                }
+                                              >
+                                                Aa
+                                              </button>
+
+                                              <div className="text-xs opacity-60">
+                                                {
+                                                  (
+                                                    replyByCommentId[c.id]
+                                                      ?.plain ?? ""
+                                                  ).trim().length
+                                                }
+                                                /5000
+                                              </div>
+                                            </div>
+
+                                            {replyByCommentId[c.id]?.err ? (
+                                              <div className="mt-2 text-xs opacity-75">
+                                                {replyByCommentId[c.id]?.err}
+                                              </div>
+                                            ) : null}
+
+                                            <div className="mt-2 flex items-center justify-between">
+                                              <button
+                                                className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
+                                                disabled={
+                                                  replyByCommentId[c.id]
+                                                    ?.posting ||
+                                                  !(
+                                                    replyByCommentId[c.id]
+                                                      ?.plain ?? ""
+                                                  ).trim()
+                                                }
+                                                onClick={() =>
+                                                  void postReply(c)
+                                                }
+                                              >
+                                                {replyByCommentId[c.id]?.posting
+                                                  ? "Posting…"
+                                                  : "Post reply"}
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ) : null}
+
+                                        {canReport &&
+                                        reportByCommentId[c.id]?.open ? (
+                                          <div
+                                            ref={(el) => {
+                                              reportWrapByIdRef.current[c.id] =
+                                                el;
+                                            }}
+                                            className="mt-2 rounded-md bg-black/25 p-3 text-sm"
+                                          >
+                                            {reportByCommentId[c.id]?.done ? (
+                                              <div className="text-xs opacity-75">
+                                                Report submitted. Thanks — this
+                                                helps keep the discourse usable.
+                                              </div>
+                                            ) : (
+                                              <>
+                                                <div className="flex items-center justify-between gap-3">
+                                                  <div className="text-xs opacity-70">
+                                                    Report this comment
+                                                  </div>
+                                                </div>
+
+                                                <div className="mt-2 grid gap-2">
+                                                  <select
+                                                    className="w-full rounded-md bg-black/20 px-3 py-2 text-sm outline-none"
+                                                    value={
+                                                      reportByCommentId[c.id]
+                                                        ?.category ?? "spam"
+                                                    }
+                                                    onChange={(e) =>
+                                                      setReportByCommentId(
+                                                        (prev) => ({
+                                                          ...prev,
+                                                          [c.id]: {
+                                                            ...(prev[
+                                                              c.id
+                                                            ] as ReportDraft),
+                                                            category:
+                                                              e.target.value,
+                                                            err: "",
+                                                          },
+                                                        }),
+                                                      )
+                                                    }
+                                                  >
+                                                    {REPORT_CATEGORIES.map(
+                                                      (opt) => (
+                                                        <option
+                                                          key={opt.key}
+                                                          value={opt.key}
+                                                        >
+                                                          {opt.label}
+                                                        </option>
+                                                      ),
+                                                    )}
+                                                  </select>
+
+                                                  <textarea
+                                                    className="min-h-[90px] w-full rounded-md bg-black/20 p-3 text-sm outline-none"
+                                                    placeholder="Describe the issue (20–300 chars)."
+                                                    value={
+                                                      reportByCommentId[c.id]
+                                                        ?.reason ?? ""
+                                                    }
+                                                    onChange={(e) =>
+                                                      setReportByCommentId(
+                                                        (prev) => ({
+                                                          ...prev,
+                                                          [c.id]: {
+                                                            ...(prev[
+                                                              c.id
+                                                            ] as ReportDraft),
+                                                            reason:
+                                                              e.target.value,
+                                                            err: "",
+                                                          },
+                                                        }),
+                                                      )
+                                                    }
+                                                  />
+
+                                                  {reportByCommentId[c.id]
+                                                    ?.err ? (
+                                                    <div className="text-xs opacity-75">
+                                                      {
+                                                        reportByCommentId[c.id]
+                                                          ?.err
+                                                      }
+                                                    </div>
+                                                  ) : null}
+
+                                                  <div className="flex items-center justify-between">
+                                                    <div className="text-xs opacity-60">
+                                                      {
+                                                        (
+                                                          reportByCommentId[
+                                                            c.id
+                                                          ]?.reason ?? ""
+                                                        ).trim().length
+                                                      }
+                                                      /300
+                                                    </div>
+                                                    <button
+                                                      className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
+                                                      disabled={
+                                                        reportByCommentId[c.id]
+                                                          ?.busy ||
+                                                        (
+                                                          reportByCommentId[
+                                                            c.id
+                                                          ]?.reason ?? ""
+                                                        ).trim().length < 20 ||
+                                                        (
+                                                          reportByCommentId[
+                                                            c.id
+                                                          ]?.reason ?? ""
+                                                        ).trim().length > 300
+                                                      }
+                                                      onClick={() =>
+                                                        void submitReport(c.id)
+                                                      }
+                                                    >
+                                                      {reportByCommentId[c.id]
+                                                        ?.busy
+                                                        ? "Submitting…"
+                                                        : "Submit report"}
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              </>
+                                            )}
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    );
+                                  })}
+
+                                  {gated ? (
+                                    <div
+                                      className="mt-2"
+                                      style={{
+                                        // match the indentation + vertical thread line vibe
+                                        paddingLeft: Math.min(72, 3 * 12),
+                                        borderLeft:
+                                          "1px solid rgba(255,255,255,0.08)",
+                                        marginLeft: 6,
+                                      }}
+                                    >
+                                      <button
+                                        type="button"
+                                        className="inline-flex items-center rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
+                                        onClick={() => focusRoot(root.rootId)}
+                                      >
+                                        Open full thread
+                                      </button>
+                                    </div>
+                                  ) : null}
                                 </div>
-                              ) : null}
-                            </div>
-                          );
-                        })
-                      )}
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {inlineGate.open ? (
+                  <div className="absolute inset-0 grid place-items-center p-4">
+                    <div className="w-full max-w-[520px]">
+                      <ActivationGate>
+                        <div />
+                      </ActivationGate>
+
+                      {inlineGate.message ? (
+                        <div className="mt-2 rounded-md bg-black/30 p-3 text-sm opacity-90">
+                          {inlineGate.message}
+                        </div>
+                      ) : null}
+
+                      <div className="mt-2 flex items-center justify-end">
+                        <button
+                          type="button"
+                          className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
+                          onClick={() => {
+                            broker.clearGate({ domain: EXEGESIS_DOMAIN });
+                            clearInlineGate();
+                          }}
+                        >
+                          Dismiss
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </>
-              )}
+                ) : null}
+              </div>
             </div>
           );
 
