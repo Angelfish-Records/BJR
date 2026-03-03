@@ -4,6 +4,7 @@ export type GateAction = "login" | "subscribe" | "buy" | "wait";
 
 export type GateDomain =
   | "playback"
+  | "downloads"
   | "journal"
   | "exegesis"
   | "mailbag"
@@ -39,7 +40,7 @@ export type GateReason = {
   action: GateAction;
   message: string;
   correlationId?: string | null;
-  domain?: GateDomain;
+  domain: GateDomain;
 };
 
 /**
@@ -110,6 +111,6 @@ export type GatePayload = {
   action: GateAction;
   reason: string;
   message?: string;
-  domain?: GateDomain;
+  domain: GateDomain;
   correlationId?: string | null;
 };

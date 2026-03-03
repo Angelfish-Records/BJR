@@ -17,6 +17,13 @@ const IP_WINDOW_SECONDS = 30; // rolling window
 const IP_MAX_HITS_PER_WINDOW = 20; // generous; only trips on obvious automation
 const R2_EXISTENCE_CACHE_SECONDS = 6 * 60 * 60; // 6 hours
 
+import type {
+  GatePayload,
+  GateDomain,
+  GateCode,
+  GateAction,
+} from "@/app/home/gating/gateTypes";
+
 type JsonError = { ok: false; error: string; detail?: unknown };
 type JsonOk = {
   ok: true;
@@ -24,7 +31,38 @@ type JsonOk = {
   albumSlug: string;
   asset: { id: string; label: string; filename: string };
 };
-type JsonBody = JsonOk | JsonError;
+type JsonBody = JsonOk | JsonError | GatePayload;
+
+const DOMAIN: GateDomain = "downloads";
+
+function newCorrelationId(): string {
+  // Node runtime: crypto.randomUUID should exist; fall back safely if not.
+  const c = (
+    globalThis as unknown as { crypto?: { randomUUID?: () => string } }
+  ).crypto;
+  const uuid = c?.randomUUID?.();
+  if (typeof uuid === "string" && uuid.length > 0) return uuid;
+  return `dl_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
+}
+
+function gatePayload(params: {
+  code: GateCode;
+  action: GateAction;
+  reason: string;
+  message?: string;
+  correlationId: string;
+}): GatePayload {
+  return {
+    ok: false,
+    blocked: true,
+    code: params.code,
+    action: params.action,
+    reason: params.reason,
+    message: params.message,
+    domain: DOMAIN,
+    correlationId: params.correlationId,
+  };
+}
 
 function json(status: number, body: JsonBody, headers?: HeadersInit) {
   return NextResponse.json(body, { status, headers });
@@ -93,9 +131,7 @@ async function checkMemberCooldown(params: {
   if (lastAt) {
     const ms = Date.now() - lastAt.getTime();
     if (ms < MEMBER_COOLDOWN_SECONDS * 1000) {
-      const retry = Math.ceil(
-        (MEMBER_COOLDOWN_SECONDS * 1000 - ms) / 1000,
-      );
+      const retry = Math.ceil((MEMBER_COOLDOWN_SECONDS * 1000 - ms) / 1000);
       return { ok: false, retryAfterSeconds: retry };
     }
   }
@@ -168,6 +204,8 @@ function parseBody(value: unknown): DownloadRequestBody | null {
 }
 
 export async function POST(req: Request) {
+  const correlationId = newCorrelationId();
+
   const raw = await req.json().catch(() => null);
   const body = parseBody(raw);
 
@@ -177,24 +215,56 @@ export async function POST(req: Request) {
     .trim()
     .toLowerCase();
 
-  if (!albumSlug) return json(400, { ok: false, error: "Missing albumSlug" });
+  if (!albumSlug) {
+    return json(
+      400,
+      gatePayload({
+        code: "INVALID_REQUEST",
+        action: "wait",
+        reason: "Missing albumSlug.",
+        correlationId,
+      }),
+    );
+  }
 
   const offer = getAlbumOffer(albumSlug);
-  if (!offer) return json(400, { ok: false, error: "Unknown albumSlug" });
+  if (!offer) {
+    return json(
+      400,
+      gatePayload({
+        code: "INVALID_REQUEST",
+        action: "wait",
+        reason: "Unknown albumSlug.",
+        correlationId,
+      }),
+    );
+  }
 
   // v1 policy: downloads require an authenticated session
   const { userId } = await auth();
-  if (!userId) return json(401, { ok: false, error: "Sign in required" });
+  if (!userId) {
+    return json(
+      401,
+      gatePayload({
+        code: "AUTH_REQUIRED",
+        action: "login",
+        reason: "Sign in required.",
+        correlationId,
+      }),
+    );
+  }
 
   // Best-effort IP throttle (very generous; only trips on obvious automation)
   const ipGate = await checkIpThrottle(getClientIp(req));
   if (!ipGate.ok) {
     return json(
       429,
-      {
-        ok: false,
-        error: `Too many requests. Please wait ${ipGate.retryAfterSeconds}s.`,
-      },
+      gatePayload({
+        code: "PROVISIONING",
+        action: "wait",
+        reason: `Too many requests. Please wait ${ipGate.retryAfterSeconds}s.`,
+        correlationId,
+      }),
       { "Retry-After": String(ipGate.retryAfterSeconds) },
     );
   }
@@ -207,15 +277,45 @@ export async function POST(req: Request) {
   const email = emailRaw ? normalizeEmail(emailRaw) : null;
 
   const memberId = await resolveMemberId({ userId, email });
-  if (!memberId) return json(404, { ok: false, error: "Member not found" });
+  if (!memberId) {
+    return json(
+      404,
+      gatePayload({
+        code: "PROVISIONING",
+        action: "wait",
+        reason: "Member not found.",
+        correlationId,
+      }),
+    );
+  }
 
   const match = await findEntitlement(memberId, offer.entitlementKey, null, {
     allowGlobalFallback: true,
   });
-  if (!match) return json(403, { ok: false, error: "Not entitled" });
+  if (!match) {
+    return json(
+      403,
+      gatePayload({
+        code: "ENTITLEMENT_REQUIRED",
+        action: "subscribe",
+        reason: "Not entitled.",
+        correlationId,
+      }),
+    );
+  }
 
   const asset = offer.assets.find((a) => a.id === assetId) ?? null;
-  if (!asset) return json(400, { ok: false, error: "Unknown assetId" });
+  if (!asset) {
+    return json(
+      400,
+      gatePayload({
+        code: "INVALID_REQUEST",
+        action: "wait",
+        reason: "Unknown assetId.",
+        correlationId,
+      }),
+    );
+  }
 
   // Primary protection: per-member per-asset cooldown
   const memberGate = await checkMemberCooldown({
@@ -226,10 +326,12 @@ export async function POST(req: Request) {
   if (!memberGate.ok) {
     return json(
       429,
-      {
-        ok: false,
-        error: `Please wait ${memberGate.retryAfterSeconds}s and try again.`,
-      },
+      gatePayload({
+        code: "PROVISIONING",
+        action: "wait",
+        reason: `Please wait ${memberGate.retryAfterSeconds}s and try again.`,
+        correlationId,
+      }),
       { "Retry-After": String(memberGate.retryAfterSeconds) },
     );
   }
@@ -249,8 +351,12 @@ export async function POST(req: Request) {
         : undefined;
 
     return json(500, {
-      ok: false,
-      error: "Download not available (missing object)",
+      ...gatePayload({
+        code: "PROVISIONING",
+        action: "wait",
+        reason: "Download not available (missing object).",
+        correlationId,
+      }),
       ...(detail ? { detail } : {}),
     });
   }

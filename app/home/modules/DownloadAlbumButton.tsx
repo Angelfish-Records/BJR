@@ -1,6 +1,15 @@
+//web/app/home/modules/DownloadAlbumButton.tsx
 "use client";
 
 import React from "react";
+import { useAuth } from "@clerk/nextjs";
+import { gate, type GateVerb } from "@/app/home/gating/gate";
+import { useGateBroker } from "@/app/home/gating/GateBroker";
+import type {
+  GateCode,
+  GateDomain,
+  GatePayload,
+} from "@/app/home/gating/gateTypes";
 
 type Props = {
   albumSlug: string;
@@ -25,7 +34,14 @@ type DownloadResponse =
       albumSlug: string;
       asset: { id: string; label: string; filename: string };
     }
+  | GatePayload
   | { ok: false; error?: string };
+
+function isGatePayload(v: unknown): v is GatePayload {
+  if (!v || typeof v !== "object") return false;
+  const o = v as Record<string, unknown>;
+  return o.ok === false && o.blocked === true && typeof o.code === "string";
+}
 
 function mergeStyle(
   a: React.CSSProperties | undefined,
@@ -58,8 +74,35 @@ export default function DownloadAlbumButton(props: Props) {
     cooldownMs = 10_000,
   } = props;
 
+  const { isSignedIn } = useAuth();
+  const { reportGate, clearGate } = useGateBroker();
+
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
+
+  const domain: GateDomain = "downloads";
+  const verb: GateVerb = "download";
+
+  function reportCode(code: GateCode, message?: string) {
+    const result = gate(
+      { verb, domain },
+      {
+        isSignedIn: Boolean(isSignedIn),
+        intent: "explicit",
+        // For now, downloads are server-authoritative on entitlement; we only preflight auth.
+        hasEntitlement: code === "ENTITLEMENT_REQUIRED" ? false : undefined,
+      },
+    );
+
+    if (!result.ok) {
+      reportGate({
+        ...result.reason,
+        // allow a more specific server-derived message when we have it
+        message: message ?? result.reason.message,
+        uiMode: result.uiMode,
+      });
+    }
+  }
 
   // --- cooldown state (persisted) ---
   const storageKey = `dlcooldown:${albumSlug}:${assetId}`;
@@ -112,6 +155,13 @@ export default function DownloadAlbumButton(props: Props) {
   const onClick = async () => {
     if (busy || disabled) return;
 
+    // Explicit-intent preflight: don’t even hit the API if auth is required.
+    if (!isSignedIn) {
+      reportCode("AUTH_REQUIRED");
+      setErr("Sign in to download.");
+      return;
+    }
+
     if (coolingDown) {
       // Keep it low-friction: gentle hint only.
       setErr(`Please wait ${Math.ceil(remainingMs / 1000)}s before retrying.`);
@@ -135,31 +185,131 @@ export default function DownloadAlbumButton(props: Props) {
       if (res.status === 429) {
         const retryAfter = readRetryAfterSeconds(res);
         if (retryAfter) setCooldownForSeconds(retryAfter);
-        const data = (await res.json().catch(() => null)) as DownloadResponse | null;
-        const msg =
-          data && data.ok === false && data.error
-            ? data.error
-            : retryAfter
+
+        const dataUnknown = (await res.json().catch(() => null)) as unknown;
+
+        // Prefer canonical gate payload messaging if present.
+        if (isGatePayload(dataUnknown)) {
+          const payload = dataUnknown;
+          setErr(payload.message ?? payload.reason);
+          return;
+        }
+
+        // Legacy fallback: { ok:false, error?: string }
+        let msg: string | null = null;
+        if (dataUnknown && typeof dataUnknown === "object") {
+          const obj = dataUnknown as Record<string, unknown>;
+          if (
+            obj.ok === false &&
+            "error" in obj &&
+            typeof obj.error === "string"
+          ) {
+            msg = obj.error;
+          }
+        }
+
+        setErr(
+          msg ??
+            (retryAfter
               ? `Please wait ${retryAfter}s and try again.`
-              : "Please wait and try again.";
-        setErr(msg);
+              : "Please wait and try again."),
+        );
         return;
       }
 
-      const data = (await res.json().catch(() => null)) as DownloadResponse | null;
+      const dataUnknown = (await res.json().catch(() => null)) as unknown;
 
-      if (!res.ok || !data || data.ok !== true || !("url" in data) || !data.url) {
-        const msg =
-          data && data.ok === false && data.error
-            ? data.error
-            : "Could not start download.";
-        setErr(msg);
+      // Payload-first: if server emitted canonical gate payload, use it.
+      if (isGatePayload(dataUnknown)) {
+        const payload = dataUnknown;
+
+        const result = gate(
+          { verb, domain },
+          { isSignedIn: Boolean(isSignedIn), intent: "explicit" },
+        );
+
+        if (!result.ok) {
+          reportGate({
+            code: payload.code,
+            action: payload.action,
+            domain: payload.domain,
+            correlationId: payload.correlationId ?? null,
+            message: payload.message ?? payload.reason,
+            uiMode: result.uiMode,
+          });
+        }
+
+        setErr(payload.message ?? payload.reason);
         return;
       }
 
-      window.location.assign(data.url);
+      const data = dataUnknown as DownloadResponse | null;
+
+      if (!res.ok) {
+        let msg: string | null = null;
+
+        if (data && typeof data === "object") {
+          const obj = data as Record<string, unknown>;
+          if ("error" in obj && typeof obj.error === "string") {
+            msg = obj.error;
+          }
+        }
+
+        // Fallback mapping (only when payload is missing).
+        if (res.status === 401) {
+          reportCode("AUTH_REQUIRED", msg ?? "Sign in required.");
+          setErr(msg ?? "Sign in required.");
+          return;
+        }
+        if (res.status === 403) {
+          reportCode("ENTITLEMENT_REQUIRED", msg ?? "Not entitled.");
+          setErr(msg ?? "Not entitled.");
+          return;
+        }
+        if (res.status === 400) {
+          reportCode("INVALID_REQUEST", msg ?? "Invalid request.");
+          setErr(msg ?? "Invalid request.");
+          return;
+        }
+        if (res.status === 404) {
+          reportCode("PROVISIONING", msg ?? "Account still provisioning.");
+          setErr(msg ?? "Account still provisioning. Try again shortly.");
+          return;
+        }
+
+        reportCode("PROVISIONING", msg ?? "Temporary issue. Try again.");
+        setErr(msg ?? "Temporary issue. Try again.");
+        return;
+      }
+
+      if (
+        !data ||
+        typeof data !== "object" ||
+        (data as Record<string, unknown>).ok !== true
+      ) {
+        reportCode("PROVISIONING", "Could not start download.");
+        setErr("Could not start download.");
+        return;
+      }
+
+      const okData = data as {
+        ok: true;
+        url: string;
+        albumSlug: string;
+        asset: { id: string; label: string; filename: string };
+      };
+
+      if (!okData.url) {
+        reportCode("PROVISIONING", "Could not start download.");
+        setErr("Could not start download.");
+        return;
+      }
+
+      clearGate({ domain });
+      window.location.assign(okData.url);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Network error.";
+      reportCode("PROVISIONING", msg);
       setErr(msg);
     } finally {
       setBusy(false);
@@ -215,10 +365,11 @@ export default function DownloadAlbumButton(props: Props) {
 
   const computed = mergeStyle(mergeStyle(base, variants[variant]), buttonStyle);
 
-  const buttonText =
-    busy ? "Preparing download…"
-    : coolingDown ? `Download started. Button disabled for ${Math.ceil(remainingMs / 1000)}s`
-    : label;
+  const buttonText = busy
+    ? "Preparing download…"
+    : coolingDown
+      ? `Download started. Button disabled for ${Math.ceil(remainingMs / 1000)}s`
+      : label;
 
   return (
     <div className={className} style={style}>
