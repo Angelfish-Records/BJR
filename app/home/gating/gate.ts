@@ -48,6 +48,7 @@ export type GateContext = {
   playbackCapReached?: boolean;
   readReceiptsCapReached?: boolean;
   journalReadCapReached?: boolean;
+  exegesisThreadReadCapReached?: boolean;
 };
 
 export type GateOk = { ok: true };
@@ -81,6 +82,8 @@ function defaultMessageFor(code: GateCode, verb: GateVerb): string {
       return "You’ve reached the anonymous playback limit.";
     case "JOURNAL_READ_CAP_REACHED":
       return "You’ve reached the anonymous reading limit.";
+    case "EXEGESIS_THREAD_READ_CAP_REACHED":
+      return "Sign in to keep reading.";
     case "INVALID_REQUEST":
       return "That request couldn’t be processed.";
   }
@@ -95,6 +98,7 @@ function defaultActionFor(code: GateCode): GateAction {
     case "READ_RECEIPTS_CAP_REACHED":
     case "PLAYBACK_CAP_REACHED":
     case "JOURNAL_READ_CAP_REACHED":
+    case "EXEGESIS_THREAD_READ_CAP_REACHED":
       return "subscribe";
     case "EMBARGO":
     case "PROVISIONING":
@@ -110,9 +114,10 @@ function defaultUiModeFor(
   verb: GateVerb,
   intent: "passive" | "explicit",
 ): GateUiMode {
-  // Invariants: read-receipts and journal caps never spotlight (inline only).
+  // Invariants: receipts, journal, and exegesis read caps never spotlight (inline only).
   if (code === "READ_RECEIPTS_CAP_REACHED") return "inline";
   if (code === "JOURNAL_READ_CAP_REACHED") return "inline";
+  if (code === "EXEGESIS_THREAD_READ_CAP_REACHED") return "inline";
 
   // Playback cap is the canonical “spotlight eligible” gate when intent is explicit.
   if (code === "PLAYBACK_CAP_REACHED" && intent === "explicit")
@@ -197,6 +202,22 @@ export function gate(attempt: GateAttempt, ctx: GateContext): GateResult {
       ok: false,
       uiMode: defaultUiModeFor(attempt.domain, code, attempt.verb, intent),
       cta: { action, label: "Unlock journal" },
+      reason: {
+        code,
+        action,
+        message: defaultMessageFor(code, attempt.verb),
+        domain: attempt.domain,
+      },
+    };
+  }
+
+  if (attempt.domain === "exegesis" && ctx.exegesisThreadReadCapReached) {
+    const code: GateCode = "EXEGESIS_THREAD_READ_CAP_REACHED";
+    const action = defaultActionFor(code);
+    return {
+      ok: false,
+      uiMode: defaultUiModeFor(attempt.domain, code, attempt.verb, intent),
+      cta: { action, label: "Sign in" },
       reason: {
         code,
         action,

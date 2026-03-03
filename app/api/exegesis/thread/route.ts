@@ -12,6 +12,7 @@ import {
   isGroupKeyV1,
   isKnownCanonicalGroupKey,
 } from "@/lib/exegesis/resolveGroupKey";
+import type { GatePayload } from "@/app/home/gating/gateTypes";
 
 export const runtime = "nodejs";
 
@@ -89,7 +90,7 @@ type ApiOk = {
   viewer: ViewerDTO;
 };
 
-type ApiErr = { ok: false; error: string; code?: "ANON_LIMIT" };
+type ApiErr = { ok: false; error: string; gate?: GatePayload };
 
 function json(status: number, body: ApiOk | ApiErr, res?: NextResponse) {
   const r = res ?? NextResponse.json(body, { status });
@@ -217,10 +218,6 @@ async function capsForMember(memberId: string): Promise<{
   canReport: boolean;
   canPost: boolean;
 }> {
-  // Keep this aligned with the write routes:
-  // - vote: Friend+ (Friend, Patron, Partner)
-  // - report: Friend+ (per your policy; default signed-in is Friend)
-  // - post: Patron/Partner
   const canVote = await hasAnyEntitlement(memberId, [
     ENTITLEMENTS.TIER_FRIEND,
     ENTITLEMENTS.TIER_PATRON,
@@ -232,6 +229,11 @@ async function capsForMember(memberId: string): Promise<{
     ENTITLEMENTS.TIER_PARTNER,
   ]);
   return { canVote, canReport, canPost };
+}
+
+function mkCorrelationId(input: string): string {
+  // short, stable, non-PII
+  return crypto.createHash("sha256").update(input).digest("hex").slice(0, 16);
 }
 
 export async function GET(req: NextRequest) {
@@ -255,8 +257,6 @@ export async function GET(req: NextRequest) {
     const resolved = await resolveGroupKeyForAnchor({ trackId, lineKey });
     groupKey = resolved.groupKey;
 
-    // If the client also sent groupKey, require it to match server resolution.
-    // Prevents stale clients reading the wrong thread after mapping changes.
     if (rawGroupKey && norm(rawGroupKey) !== groupKey) {
       return json(409, {
         ok: false,
@@ -270,11 +270,9 @@ export async function GET(req: NextRequest) {
 
     const g = norm(rawGroupKey);
 
-    // Back-compat: v1 still allowed as a direct groupKey
     if (isGroupKeyV1(g)) {
       groupKey = g;
     } else {
-      // v2+ group keys only allowed if they are known on this track
       const ok = await isKnownCanonicalGroupKey({ trackId, groupKey: g });
       if (!ok) {
         return json(400, {
@@ -288,6 +286,8 @@ export async function GET(req: NextRequest) {
 
   if (!groupKey) return json(400, { ok: false, error: "Invalid group key." });
 
+  // Create a response early so ensureAnonId can attach cookies/headers,
+  // and we can forward those headers even on gated responses.
   const res = NextResponse.json<ApiOk | ApiErr>(
     { ok: false, error: "init" },
     { status: 200 },
@@ -305,76 +305,86 @@ export async function GET(req: NextRequest) {
   if (viewerMemberId) {
     const label = stableAnonLabel(viewerMemberId);
     await sql`
-    insert into exegesis_identity (member_id, anon_label)
-    values (${viewerMemberId}::uuid, ${label})
-    on conflict (member_id) do nothing
-  `;
+      insert into exegesis_identity (member_id, anon_label)
+      values (${viewerMemberId}::uuid, ${label})
+      on conflict (member_id) do nothing
+    `;
   }
 
-  // ---- anon metering gate (read) ----
+  // ---- anon metering gate (read) -> canonical GatePayload ----
   if (viewer.kind === "anon") {
     const LIMIT = 8;
 
-    const sessionId = anonId; // session id is the minted cookie id
+    const sessionId = anonId;
 
-    // Ensure session row exists (same as mark-opened)
     await sql`
-  insert into anon_exegesis_sessions (id, anon_id)
-  values (${sessionId}, ${anonId})
-  on conflict (id) do nothing
-`;
+      insert into anon_exegesis_sessions (id, anon_id)
+      values (${sessionId}, ${anonId})
+      on conflict (id) do nothing
+    `;
 
-    const gate = await sql<{
+    const gateRes = await sql<{
       already: boolean;
       allowed: boolean;
       n_before: number;
       n_after: number;
     }>`
-  with
-  already as (
-    select exists(
-      select 1
-      from anon_exegesis_thread_opens
-      where session_id = ${sessionId}
-        and track_id = ${trackId}
-        and group_key = ${groupKey}
-    ) as already
-  ),
-  cnt_before as (
-    select count(*)::int as n_before
-    from anon_exegesis_thread_opens
-    where session_id = ${sessionId}
-  ),
-  attempt as (
-    insert into anon_exegesis_thread_opens (session_id, track_id, group_key)
-    select ${sessionId}, ${trackId}, ${groupKey}
-    where (select already from already) = false
-      and (select n_before from cnt_before) < ${LIMIT}
-    on conflict (session_id, track_id, group_key) do nothing
-    returning 1
-  ),
-  cnt_after as (
-    select count(*)::int as n_after
-    from anon_exegesis_thread_opens
-    where session_id = ${sessionId}
-  )
-  select
-    (select already from already) as already,
-    ((select already from already) = true or exists(select 1 from attempt)) as allowed,
-    (select n_before from cnt_before) as n_before,
-    (select n_after from cnt_after) as n_after
-`;
+      with
+      already as (
+        select exists(
+          select 1
+          from anon_exegesis_thread_opens
+          where session_id = ${sessionId}
+            and track_id = ${trackId}
+            and group_key = ${groupKey}
+        ) as already
+      ),
+      cnt_before as (
+        select count(*)::int as n_before
+        from anon_exegesis_thread_opens
+        where session_id = ${sessionId}
+      ),
+      attempt as (
+        insert into anon_exegesis_thread_opens (session_id, track_id, group_key)
+        select ${sessionId}, ${trackId}, ${groupKey}
+        where (select already from already) = false
+          and (select n_before from cnt_before) < ${LIMIT}
+        on conflict (session_id, track_id, group_key) do nothing
+        returning 1
+      ),
+      cnt_after as (
+        select count(*)::int as n_after
+        from anon_exegesis_thread_opens
+        where session_id = ${sessionId}
+      )
+      select
+        (select already from already) as already,
+        ((select already from already) = true or exists(select 1 from attempt)) as allowed,
+        (select n_before from cnt_before) as n_before,
+        (select n_after from cnt_after) as n_after
+    `;
 
-    const row = gate.rows?.[0];
+    const row = gateRes.rows?.[0];
     const allowed = Boolean(row?.allowed);
 
     if (!allowed) {
+      const message = "Sign in to keep reading.";
+
+      const payload: GatePayload = {
+        code: "EXEGESIS_THREAD_READ_CAP_REACHED",
+        action: "login",
+        domain: "exegesis",
+        message,
+        correlationId: mkCorrelationId(
+          `exegesis:${sessionId}:${trackId}:${groupKey}:${LIMIT}`,
+        ),
+      };
+
       return NextResponse.json<ApiErr>(
         {
           ok: false,
-          code: "ANON_LIMIT",
-          error:
-            "Sign in to keep reading.",
+          error: message,
+          gate: payload,
         },
         { status: 403, headers: res.headers },
       );
@@ -551,9 +561,6 @@ export async function GET(req: NextRequest) {
       cap: {
         ...cap0,
         canPost: locked ? false : cap0.canPost,
-        // voting can stay true (our vote route already blocks LOCKED),
-        // but if we want the UI to disable voting as well, uncomment:
-        // canVote: locked ? false : cap0.canVote,
         canClaimName,
       },
     };

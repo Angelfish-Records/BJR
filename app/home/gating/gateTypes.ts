@@ -22,6 +22,7 @@ export type GateCode =
   | "READ_RECEIPTS_CAP_REACHED"
   | "PLAYBACK_CAP_REACHED"
   | "JOURNAL_READ_CAP_REACHED"
+  | "EXEGESIS_THREAD_READ_CAP_REACHED"
   | "INVALID_REQUEST";
 
 /**
@@ -97,9 +98,18 @@ export function canonicalizeLegacyCapCode(
 ): GateCodeRaw {
   if (raw !== "ANON_CAP_REACHED" && raw !== "CAP_REACHED") return raw;
 
-  if (domain === "playback") return "PLAYBACK_CAP_REACHED";
-  // Default: treat “cap” as receipts/write-side cap unless a domain says otherwise.
-  return "READ_RECEIPTS_CAP_REACHED";
+  switch (domain) {
+    case "playback":
+      return "PLAYBACK_CAP_REACHED";
+    case "journal":
+      return "JOURNAL_READ_CAP_REACHED";
+    case "exegesis":
+      return "EXEGESIS_THREAD_READ_CAP_REACHED";
+    default:
+      // No silent semantic drift: if a legacy cap arrives without a known mapping,
+      // keep it legacy and let the adapter/engine handle it explicitly.
+      return raw;
+  }
 }
 
 /**
@@ -107,12 +117,15 @@ export function canonicalizeLegacyCapCode(
  * (Not yet enforced repo-wide; introduced now so endpoints can converge.)
  */
 export type GatePayload = {
-  ok: false;
-  blocked: true;
   code: GateCodeRaw;
   action: GateAction;
-  reason: string;
-  message?: string;
   domain: GateDomain;
+  message: string;
   correlationId?: string | null;
+
+  /**
+   * Optional extra detail for logs / UX copy variants.
+   * Keep as string so the server doesn't leak UI policy.
+   */
+  reason?: string;
 };

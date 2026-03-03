@@ -5,6 +5,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { sql } from "@vercel/postgres";
 
+import type {
+  GatePayload,
+  GateDomain,
+  GateAction,
+  GateCodeRaw,
+} from "@/app/home/gating/gateTypes";
+
 import { hasAnyEntitlement } from "@/lib/entitlements";
 import { ENTITLEMENTS } from "@/lib/vocab";
 
@@ -22,7 +29,49 @@ type ApiOk = {
   identities: Record<string, IdentityDTO>; // keyed by memberId (at least author)
 };
 
-type ApiErr = { ok: false; error: string };
+type ApiErr = { ok: false; error: string; gate?: GatePayload };
+
+function json(status: number, body: ApiOk | ApiErr) {
+  return NextResponse.json(body, { status });
+}
+
+const EXEGESIS_DOMAIN: GateDomain = "exegesis";
+
+function gatePayload(
+  code: GateCodeRaw,
+  action: GateAction,
+  message: string,
+  correlationId: string | null,
+): GatePayload {
+  return {
+    code,
+    action,
+    message,
+    domain: EXEGESIS_DOMAIN,
+    correlationId,
+  };
+}
+
+function gateErr(
+  status: number,
+  opts: {
+    code: GateCodeRaw;
+    action: GateAction;
+    message: string;
+    error?: string; // optional alternate client-visible `error`
+    correlationId?: string | null;
+  },
+) {
+  const cid =
+    typeof opts.correlationId === "string"
+      ? opts.correlationId
+      : crypto.randomUUID();
+  return json(status, {
+    ok: false,
+    error: (opts.error ?? opts.message).trim(),
+    gate: gatePayload(opts.code, opts.action, opts.message.trim(), cid),
+  });
+}
 
 type IdentityDTO = {
   memberId: string;
@@ -64,10 +113,6 @@ type ThreadMetaDTO = {
   createdAt: string;
   updatedAt: string;
 };
-
-function json(status: number, body: ApiOk | ApiErr) {
-  return NextResponse.json(body, { status });
-}
 
 function norm(s: unknown): string {
   return typeof s === "string" ? s.trim() : "";
@@ -242,7 +287,10 @@ export async function POST(req: NextRequest) {
   // Phase C: if bodyRich present, it becomes canonical; derive bodyPlain server-side.
   // If bodyRich missing/null, fall back to legacy plain-only posting.
   let bodyPlain = legacyBodyPlain;
-  let bodyRichJson = JSON.stringify({ type: "doc", content: [{ type: "paragraph" }] });
+  let bodyRichJson = JSON.stringify({
+    type: "doc",
+    content: [{ type: "paragraph" }],
+  });
 
   if (bodyRichInput !== null && typeof bodyRichInput !== "undefined") {
     const v = validateAndSanitizeTipTapDoc(bodyRichInput);
@@ -305,15 +353,29 @@ export async function POST(req: NextRequest) {
 
   const memberId = await requireMemberId();
   if (!memberId) {
-    return json(401, { ok: false, error: "Sign in required." });
+    return gateErr(401, {
+      code: "AUTH_REQUIRED",
+      action: "login",
+      message: "Sign in to post a comment.",
+    });
   }
+
+  // This is your existing “member row exists but not coherent yet” case.
   if (!isUuid(memberId)) {
-    return json(403, { ok: false, error: "Provisioning required." });
+    return gateErr(403, {
+      code: "PROVISIONING",
+      action: "wait",
+      message: "Still setting things up. Try again shortly.",
+    });
   }
 
   const canPost = await requireCanPost(memberId);
   if (!canPost) {
-    return json(403, { ok: false, error: "Patron or Partner required." });
+    return gateErr(403, {
+      code: "TIER_REQUIRED",
+      action: "subscribe",
+      message: "Posting requires Patron or Partner.",
+    });
   }
 
   const rootIdForRootComment = crypto.randomUUID(); // always generate
@@ -641,7 +703,11 @@ limit 1
 
       // Convert known guard errors into proper HTTP responses
       if (row.guard_err === "LOCKED") {
-        return json(403, { ok: false, error: "Thread is locked." });
+        return gateErr(403, {
+          code: "INVALID_REQUEST",
+          action: "wait",
+          message: "This thread is locked.",
+        });
       }
       if (row.guard_err === "PARENT_NOT_FOUND") {
         return json(404, { ok: false, error: "Parent not found." });

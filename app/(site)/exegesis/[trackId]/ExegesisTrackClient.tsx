@@ -6,8 +6,15 @@ import { useAuth } from "@clerk/nextjs";
 import { useMembershipModal } from "@/app/home/MembershipModalProvider";
 import ActivationGate from "@/app/home/ActivationGate";
 import { gate } from "@/app/home/gating/gate";
+import type {
+  GateAttempt,
+  GateContext,
+  GateResult,
+} from "@/app/home/gating/gate";
+import { gateResultFromPayload } from "@/app/home/gating/fromPayload";
 import { useGateBroker } from "@/app/home/gating/GateBroker";
-import type { GateDomain, GateUiMode } from "@/app/home/gating/gateTypes";
+import type { GateDomain } from "@/app/home/gating/gateTypes";
+import type { GatePayload } from "@/app/home/gating/gateTypes";
 import TipTapEditor from "./TipTapEditor";
 import TipTapReadOnly from "./TipTapReadOnly";
 import type { LyricCue, LyricGroupMap } from "@/lib/types";
@@ -90,7 +97,7 @@ type ThreadApiOk = {
   viewer: ViewerDTO;
 };
 
-type ThreadApiErr = { ok: false; error: string; code?: "ANON_LIMIT" | string };
+type ThreadApiErr = { ok: false; error: string; gate?: GatePayload };
 
 type CommentPostOk = {
   ok: true;
@@ -262,114 +269,88 @@ export default function ExegesisTrackClient(props: {
 
   type InlineGateState = {
     open: boolean;
-    uiMode: GateUiMode;
     message: string;
     correlationId: string | null;
   };
 
   const [inlineGate, setInlineGate] = React.useState<InlineGateState>({
     open: false,
-    uiMode: "inline",
     message: "",
     correlationId: null,
   });
 
   function clearInlineGate() {
-    setInlineGate({
-      open: false,
-      uiMode: "inline",
-      message: "",
-      correlationId: null,
-    });
+    setInlineGate({ open: false, message: "", correlationId: null });
   }
 
   const { userId, isLoaded: authLoaded } = useAuth();
 
-  type ForcedInlineReason = "readReceiptsCap" | "authRequired";
-
-  const reportInlineGate = React.useCallback(
-    (opts: {
-      intent: "passive" | "explicit";
-      message: string;
-      correlationId?: string | null;
-      forced?: ForcedInlineReason;
-    }) => {
-      // IMPORTANT: the engine must be told *what happened*.
-      // Otherwise it will return ok:true and we will clear everything.
-      const forced = opts.forced ?? null;
-
-      const decision = gate(
-        // Verb can stay "markSeen" for now; the *domain + forced context* is what matters.
-        { verb: "markSeen", domain: EXEGESIS_DOMAIN },
-        {
-          isSignedIn: Boolean(userId),
-          intent: opts.intent,
-
-          // These flags are the adapter’s “facts on the ground”.
-          // If your gate.ts uses different names, the hard fallback below still ensures UI opens.
-          readReceiptsCapReached: forced === "readReceiptsCap",
-          authRequired: forced === "authRequired",
-        } as unknown as {
-          isSignedIn: boolean;
-          intent: "passive" | "explicit";
-          readReceiptsCapReached?: boolean;
-          authRequired?: boolean;
-        },
-      );
-
-      // Happy path: engine decided we are blocked (ideal).
-      if (decision.ok === false) {
-        const msg = (opts.message || decision.reason.message || "").trim();
-
-        broker.reportGate({
-          code: decision.reason.code,
-          action: decision.reason.action,
-          message: msg,
-          domain: decision.reason.domain,
-          uiMode: "inline",
-          correlationId: opts.correlationId ?? null,
-        });
-
-        setInlineGate({
-          open: true,
-          uiMode: "inline",
-          message: msg,
-          correlationId: opts.correlationId ?? null,
-        });
+  const applyGateResult = React.useCallback(
+    (res: GateResult) => {
+      if (res.ok) {
+        broker.clearGate({ domain: EXEGESIS_DOMAIN });
+        clearInlineGate();
         return;
       }
 
-      // HARD FALLBACK: if caller says “this is blocked” but gate() returned ok:true
-      // (e.g. mismatch in context flag naming), still open the inline gate.
-      if (forced) {
-        const msg = (opts.message || "Sign in to continue.").trim();
+      // Broker should store the engine-derived uiMode (never hardcode it here).
+      broker.reportGate({
+        code: res.reason.code,
+        action: res.reason.action,
+        message: res.reason.message,
+        domain: res.reason.domain,
+        uiMode: res.uiMode,
+        correlationId: res.reason.correlationId ?? null,
+      });
 
-        broker.reportGate({
-          code:
-            forced === "readReceiptsCap"
-              ? "READ_RECEIPTS_CAP_REACHED"
-              : "AUTH_REQUIRED",
-          action: "login",
-          message: msg,
-          domain: EXEGESIS_DOMAIN,
-          uiMode: "inline",
-          correlationId: opts.correlationId ?? null,
-        });
-
+      // Exegesis read-cap is inline-only by engine invariant, but respect engine anyway.
+      if (res.uiMode === "inline") {
         setInlineGate({
           open: true,
-          uiMode: "inline",
-          message: msg,
-          correlationId: opts.correlationId ?? null,
+          message: (res.reason.message ?? "").trim(),
+          correlationId: res.reason.correlationId ?? null,
         });
-        return;
+      } else {
+        clearInlineGate();
       }
-
-      // Otherwise: no gate.
-      broker.clearGate({ domain: EXEGESIS_DOMAIN });
-      clearInlineGate();
     },
-    [broker, userId],
+    [broker, EXEGESIS_DOMAIN],
+  );
+
+  const gateInlineFromEngine = React.useCallback(
+    (opts: {
+      attempt: GateAttempt;
+      intent: "passive" | "explicit";
+      messageOverride?: string;
+      correlationId?: string | null;
+      ctxExtra?: Omit<GateContext, "isSignedIn" | "intent">;
+    }) => {
+      const baseCtx: GateContext = {
+        isSignedIn: Boolean(userId),
+        intent: opts.intent,
+        ...(opts.ctxExtra ?? {}),
+      };
+
+      const res0 = gate(opts.attempt, baseCtx);
+
+      if (!res0.ok) {
+        const msg = (opts.messageOverride || res0.reason.message || "").trim();
+        const res: GateResult = {
+          ...res0,
+          reason: {
+            ...res0.reason,
+            message: msg,
+            correlationId:
+              opts.correlationId ?? res0.reason.correlationId ?? null,
+          },
+        };
+        applyGateResult(res);
+        return;
+      }
+
+      applyGateResult(res0);
+    },
+    [applyGateResult, userId],
   );
 
   const trackId = (props.trackId ?? "").trim();
@@ -788,11 +769,11 @@ export default function ExegesisTrackClient(props: {
             }
 
             if (isAnon) {
-              reportInlineGate({
+              gateInlineFromEngine({
+                attempt: { verb: "openComposer", domain: EXEGESIS_DOMAIN },
                 intent: "explicit",
-                message: "Discussion is exclusive to members.",
+                messageOverride: "Discussion is exclusive to members.",
                 correlationId: null,
-                forced: "authRequired",
               });
               return;
             }
@@ -1374,21 +1355,23 @@ export default function ExegesisTrackClient(props: {
           // If we *already* have thread data, keep it visible (blurred) and gate further interaction.
           setThread((prev) => (prev ? prev : null));
 
-          if (j.code === "ANON_LIMIT") {
-            const msg =
-              j.error ||
-              "You’ve hit the anon reading limit for Exegesis. Sign in to continue reading the discussion.";
-
-            // Inline-only: do NOT spotlight. Report via broker for global coherence.
-            reportInlineGate({
+          if (j.gate) {
+            const res = gateResultFromPayload({
+              payload: j.gate,
+              attempt: { verb: "readFullThread", domain: EXEGESIS_DOMAIN },
+              isSignedIn: Boolean(userId),
               intent: "passive",
-              message: msg,
-              correlationId: null,
-              forced: "readReceiptsCap",
             });
 
-            // Keep the error out of the normal in-panel error box; the gate overlay owns this UX.
-            setThreadErr("");
+            // If server says “gated” but engine returns ok:true, treat as a protocol mismatch.
+            // We surface the normal error box (not a ghost gate).
+            if (res.ok) {
+              setThreadErr(j.error || "Failed to load thread.");
+              return;
+            }
+
+            applyGateResult(res);
+            setThreadErr(""); // overlay owns the UX
             return;
           }
 
@@ -1421,7 +1404,8 @@ export default function ExegesisTrackClient(props: {
     threadWantedFetchKey,
     threadWantedCoreKey,
     viewerKey,
-    reportInlineGate,
+    applyGateResult,
+    userId,
     inlineGate.open,
   ]);
 
@@ -1482,9 +1466,24 @@ export default function ExegesisTrackClient(props: {
 
       const j = (await r.json()) as
         | CommentPostOk
-        | { ok: false; error: string };
+        | { ok: false; error: string; gate?: GatePayload };
 
       if (!j.ok) {
+        if (j.gate) {
+          const res = gateResultFromPayload({
+            payload: j.gate,
+            attempt: { verb: "postComment", domain: EXEGESIS_DOMAIN },
+            isSignedIn: Boolean(userId),
+            intent: "explicit",
+          });
+
+          if (!res.ok) {
+            applyGateResult(res);
+            setThreadErr(""); // gate owns UX
+            return;
+          }
+        }
+
         setThreadErr(j.error || "Failed to post comment.");
         return;
       }
@@ -1614,17 +1613,25 @@ export default function ExegesisTrackClient(props: {
 
       const j = (await r.json()) as
         | CommentPostOk
-        | { ok: false; error: string };
+        | { ok: false; error: string; gate?: GatePayload };
 
       if (!j.ok) {
-        setReplyByCommentId((prev) => ({
-          ...prev,
-          [parentId]: {
-            ...draft0,
-            posting: false,
-            err: j.error || "Reply failed.",
-          },
-        }));
+        if (j.gate) {
+          const res = gateResultFromPayload({
+            payload: j.gate,
+            attempt: { verb: "postComment", domain: EXEGESIS_DOMAIN },
+            isSignedIn: Boolean(userId),
+            intent: "explicit",
+          });
+
+          if (!res.ok) {
+            applyGateResult(res);
+            setThreadErr(""); // gate owns UX
+            return;
+          }
+        }
+
+        setThreadErr(j.error || "Reply failed.");
         return;
       }
 
@@ -2282,18 +2289,7 @@ export default function ExegesisTrackClient(props: {
                             type="button"
                             className="absolute inset-0 z-10 rounded-lg border border-white/10 bg-black/35 backdrop-blur-[2px] text-left"
                             onClick={() => {
-                              // single obvious action
-                              if (isAnon) {
-                                reportInlineGate({
-                                  intent: "explicit",
-                                  message:
-                                    inlineGate.message ||
-                                    "Discussion is exclusive to members.",
-                                  correlationId:
-                                    inlineGate.correlationId ?? null,
-                                });
-                                return;
-                              }
+                              if (isAnon) return; // ActivationGate handles sign-in CTA globally
                               openMembershipModal();
                             }}
                             aria-label="Unlock discussion"
