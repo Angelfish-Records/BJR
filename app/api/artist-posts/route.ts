@@ -1,9 +1,7 @@
 // web/app/api/artist-posts/route.ts
 import { NextResponse, type NextRequest } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { client } from "@/sanity/lib/client";
 import { urlFor } from "@/sanity/lib/image";
-import { ensureAnonId } from "@/lib/anon";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -26,7 +24,7 @@ type SanityPostDoc = {
   pinned?: boolean;
   visibility?: Visibility;
   postType?: PostType;
-  body?: unknown[]; // portable text array; includes blocks + image objects
+  body?: unknown[];
 };
 
 type ApiImageValue = {
@@ -50,17 +48,8 @@ type ApiPost = {
 
 type OkResponse = {
   ok: true;
-  requiresAuth: false;
   posts: ApiPost[];
   nextCursor: string | null;
-  correlationId: string;
-};
-
-type AuthGateResponse = {
-  ok: true;
-  requiresAuth: true;
-  posts: [];
-  nextCursor: null;
   correlationId: string;
 };
 
@@ -92,7 +81,6 @@ function asPostType(v: unknown): PostType {
     const s = v.trim().toLowerCase();
     if (VALID_POST_TYPES.includes(s as PostType)) return s as PostType;
   }
-  // choose your canonical default
   return "creative";
 }
 
@@ -102,21 +90,6 @@ function parsePostTypeFilter(v: string | null): PostType | null {
   if (s === "all") return null;
   if (VALID_POST_TYPES.includes(s as PostType)) return s as PostType;
   return null;
-}
-
-function getSeenCountFromCookie(req: NextRequest): number {
-  const raw = req.cookies.get("af_posts_seen")?.value ?? "0";
-  const n = Number(raw);
-  return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
-}
-
-function setSeenCountCookie(res: NextResponse, n: number) {
-  res.cookies.set("af_posts_seen", String(Math.max(0, Math.floor(n))), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-  });
 }
 
 function clampMaxWidthPx(v: unknown): number | undefined {
@@ -144,52 +117,8 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const limit = clampInt(url.searchParams.get("limit"), 10, 1, 30);
   const offset = clampInt(url.searchParams.get("offset"), 0, 0, 10_000);
-  const requireAuthAfter = clampInt(
-    url.searchParams.get("requireAuthAfter"),
-    3,
-    0,
-    50,
-  );
   const minVisibility = asVisibility(url.searchParams.get("minVisibility"));
   const postTypeFilter = parsePostTypeFilter(url.searchParams.get("postType"));
-
-  const { userId } = await auth();
-
-  // Create response early so anon cookie can be persisted if newly minted
-  const res = NextResponse.json<OkResponse>(
-    {
-      ok: true,
-      requiresAuth: false,
-      posts: [],
-      nextCursor: null,
-      correlationId,
-    },
-    { status: 200 },
-  );
-
-  // ✅ anon id (stable) + persistence when new
-  const anon = ensureAnonId(req, res);
-  void anon.anonId;
-
-  // Session gate for anon users (N posts per session)
-  if (!userId && requireAuthAfter > 0) {
-    const seen = getSeenCountFromCookie(req);
-    if (seen >= requireAuthAfter) {
-      return NextResponse.json<AuthGateResponse>(
-        {
-          ok: true,
-          requiresAuth: true,
-          posts: [],
-          nextCursor: null,
-          correlationId,
-        },
-        { status: 200, headers: res.headers },
-      );
-    }
-  }
-
-  // Viewer tier for now: signed-in => friend, otherwise public.
-  const viewerTier: Visibility = userId ? "friend" : "public";
 
   const typeClause = postTypeFilter ? " && postType == $postType" : "";
 
@@ -215,16 +144,15 @@ export async function GET(req: NextRequest) {
     { next: { tags: ["artistPost"] } },
   );
 
+  // With gating removed, treat visibility as a pure content filter:
+  // only return posts at/above the configured minVisibility.
   const posts: ApiPost[] = [];
   for (const d of docs) {
     const slug = d.slug?.current?.trim() ?? "";
     if (!slug) continue;
 
     const vis: Visibility = d.visibility ?? "public";
-    if (!canSee(vis, viewerTier)) continue;
-
-    // If the whole module is configured to hide above viewer tier, keep it simple: return nothing.
-    if (!canSee(minVisibility, viewerTier)) continue;
+    if (!canSee(minVisibility, vis)) continue;
 
     const body = Array.isArray(d.body) ? d.body : [];
 
@@ -234,17 +162,11 @@ export async function GET(req: NextRequest) {
       const maxWidth = clampMaxWidthPx(node["maxWidth"]);
 
       try {
-        const u = urlFor(node as UrlForSource)
-          .width(1600)
-          .quality(80)
-          .url();
+        const u = urlFor(node as UrlForSource).width(1600).quality(80).url();
         const out: ApiImageValue = { _type: "image", url: u, maxWidth };
         return out;
       } catch {
-        // Preserve maxWidth even if URL building fails
-        if (maxWidth !== undefined) {
-          return { ...node, maxWidth };
-        }
+        if (maxWidth !== undefined) return { ...(node as object), maxWidth };
         return node;
       }
     });
@@ -265,15 +187,8 @@ export async function GET(req: NextRequest) {
 
   const nextCursor = docs.length === limit ? String(offset + limit) : null;
 
-  // If cookie missing, seed it so the “session” exists
-  if (!userId) {
-    const cur = req.cookies.get("af_posts_seen")?.value;
-    if (!cur) setSeenCountCookie(res, 0);
-  }
-
-  // Return the real payload while preserving Set-Cookie headers from anon seeding
   return NextResponse.json<OkResponse>(
-    { ok: true, requiresAuth: false, posts, nextCursor, correlationId },
-    { status: 200, headers: res.headers },
+    { ok: true, posts, nextCursor, correlationId },
+    { status: 200 },
   );
 }

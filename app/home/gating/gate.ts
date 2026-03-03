@@ -47,6 +47,7 @@ export type GateContext = {
   // caps (domain-explicit)
   playbackCapReached?: boolean;
   readReceiptsCapReached?: boolean;
+  journalReadCapReached?: boolean;
 };
 
 export type GateOk = { ok: true };
@@ -78,6 +79,8 @@ function defaultMessageFor(code: GateCode, verb: GateVerb): string {
       return "You’ve reached the anonymous activity limit.";
     case "PLAYBACK_CAP_REACHED":
       return "You’ve reached the anonymous playback limit.";
+    case "JOURNAL_READ_CAP_REACHED":
+      return "You’ve reached the anonymous reading limit.";
     case "INVALID_REQUEST":
       return "That request couldn’t be processed.";
   }
@@ -91,6 +94,7 @@ function defaultActionFor(code: GateCode): GateAction {
     case "TIER_REQUIRED":
     case "READ_RECEIPTS_CAP_REACHED":
     case "PLAYBACK_CAP_REACHED":
+    case "JOURNAL_READ_CAP_REACHED":
       return "subscribe";
     case "EMBARGO":
     case "PROVISIONING":
@@ -106,8 +110,9 @@ function defaultUiModeFor(
   verb: GateVerb,
   intent: "passive" | "explicit",
 ): GateUiMode {
-  // Invariants: read-receipts caps never spotlight (nag/inline only).
+  // Invariants: read-receipts and journal caps never spotlight (inline only).
   if (code === "READ_RECEIPTS_CAP_REACHED") return "inline";
+  if (code === "JOURNAL_READ_CAP_REACHED") return "inline";
 
   // Playback cap is the canonical “spotlight eligible” gate when intent is explicit.
   if (code === "PLAYBACK_CAP_REACHED" && intent === "explicit")
@@ -176,6 +181,22 @@ export function gate(attempt: GateAttempt, ctx: GateContext): GateResult {
       ok: false,
       uiMode: defaultUiModeFor(attempt.domain, code, attempt.verb, intent),
       cta: { action, label: "Unlock playback" },
+      reason: {
+        code,
+        action,
+        message: defaultMessageFor(code, attempt.verb),
+        domain: attempt.domain,
+      },
+    };
+  }
+
+  if (attempt.domain === "journal" && ctx.journalReadCapReached) {
+    const code: GateCode = "JOURNAL_READ_CAP_REACHED";
+    const action = defaultActionFor(code);
+    return {
+      ok: false,
+      uiMode: defaultUiModeFor(attempt.domain, code, attempt.verb, intent),
+      cta: { action, label: "Unlock journal" },
       reason: {
         code,
         action,

@@ -21,6 +21,7 @@ export type GateCode =
   | "PROVISIONING"
   | "READ_RECEIPTS_CAP_REACHED"
   | "PLAYBACK_CAP_REACHED"
+  | "JOURNAL_READ_CAP_REACHED"
   | "INVALID_REQUEST";
 
 /**
@@ -62,6 +63,7 @@ export function normalizeGateCodeRaw(
     case "PROVISIONING":
     case "READ_RECEIPTS_CAP_REACHED":
     case "PLAYBACK_CAP_REACHED":
+    case "JOURNAL_READ_CAP_REACHED":
     case "INVALID_REQUEST":
       return c;
 

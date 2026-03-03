@@ -6,7 +6,7 @@ import { ensureAnonId } from "@/lib/anon";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type Body = { slug?: string };
+type Body = { slug?: string; slugs?: string[]; cap?: number };
 
 function readSeenList(req: NextRequest): string[] {
   const raw = req.cookies.get("af_posts_seen_list")?.value ?? "";
@@ -53,22 +53,38 @@ export async function POST(req: NextRequest) {
 
   const { userId } = await auth();
 
-  const res = NextResponse.json({ ok: true, correlationId }, { status: 200 });
+  const cookieRes = NextResponse.json({ ok: true, correlationId }, { status: 200 });
 
   // keep anon stable + persist cookie if needed
-  const anon = ensureAnonId(req, res);
+  const anon = ensureAnonId(req, cookieRes);
   void anon.anonId;
 
   // Signed-in users are not gated; accept call but don’t mutate anon counters
-  if (userId) return res;
+  if (userId) return cookieRes;
 
   let json: Body = {};
   try {
     json = (await req.json()) as Body;
   } catch {}
 
-  const slug = (json.slug ?? "").trim();
-  if (!slug) {
+  const capRaw = typeof json.cap === "number" ? json.cap : Number(json.cap);
+  const cap = Number.isFinite(capRaw) && capRaw > 0 ? Math.floor(capRaw) : 0;
+
+  const incoming: string[] = [];
+  const one = (json.slug ?? "").trim();
+  if (one) incoming.push(one);
+
+  if (Array.isArray(json.slugs)) {
+    for (const s of json.slugs) {
+      if (typeof s === "string") {
+        const t = s.trim();
+        if (t) incoming.push(t);
+      }
+    }
+  }
+
+  const uniq = Array.from(new Set(incoming));
+  if (uniq.length === 0) {
     return NextResponse.json(
       { ok: false, error: "missing_slug", correlationId },
       { status: 400 },
@@ -76,15 +92,44 @@ export async function POST(req: NextRequest) {
   }
 
   const seenList = readSeenList(req);
-  const already = seenList.includes(slug);
+  const seenSet = new Set(seenList);
 
-  if (!already) {
-    writeSeenList(res, [...seenList, slug]);
-    setSeenCount(res, getSeenCount(req) + 1);
+  let added = 0;
+  for (const slug of uniq) {
+    if (!seenSet.has(slug)) {
+      seenSet.add(slug);
+      added += 1;
+    }
+  }
+
+  const prevSeenCount = getSeenCount(req);
+  const nextSeenCount = prevSeenCount + added;
+
+  if (added > 0) {
+    const nextList = Array.from(seenSet);
+    writeSeenList(cookieRes, nextList);
+    setSeenCount(cookieRes, nextSeenCount);
+  }
+
+  // Cap reached -> canonical GatePayload (payload-first blocking contract)
+  if (cap > 0 && nextSeenCount >= cap) {
+    return NextResponse.json(
+      {
+        ok: false,
+        blocked: true,
+        code: "AUTH_REQUIRED",
+        action: "login",
+        reason: "You’ve reached the anonymous reading limit.",
+        message: "Sign in to keep reading.",
+        domain: "journal",
+        correlationId,
+      },
+      { status: 403, headers: cookieRes.headers },
+    );
   }
 
   return NextResponse.json(
-    { ok: true, already, correlationId },
-    { status: 200, headers: res.headers },
+    { ok: true, seenCount: nextSeenCount, correlationId },
+    { status: 200, headers: cookieRes.headers },
   );
 }

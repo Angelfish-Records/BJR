@@ -17,6 +17,11 @@ import {
   useShareBuilders,
 } from "@/app/home/player/ShareAction";
 
+import ActivationGate from "@/app/home/ActivationGate";
+import { gate } from "@/app/home/gating/gate";
+import { useGateBroker } from "@/app/home/gating/GateBroker";
+import type { GatePayload, GateDomain } from "@/app/home/gating/gateTypes";
+
 type Visibility = "public" | "friend" | "patron" | "partner";
 type PostType = "qa" | "creative" | "civic" | "cosmic";
 
@@ -58,6 +63,19 @@ type ArtistPostsResponse = {
   nextCursor: string | null;
   correlationId?: string;
 };
+
+type SeenOkResponse = {
+  ok: true;
+  already?: boolean;
+  seenCount?: number;
+  correlationId?: string;
+};
+
+function isGatePayload(x: unknown): x is GatePayload {
+  if (!x || typeof x !== "object") return false;
+  const r = x as Record<string, unknown>;
+  return r.ok === false && r.blocked === true && typeof r.code === "string";
+}
 
 function fmtDate(iso: string) {
   try {
@@ -628,11 +646,14 @@ export default function PortalArtistPosts(props: {
   const {
     pageSize,
     minVisibility,
+    requireAuthAfter,
     authorName = "Brendan John Roch",
     authorInitials = "BJR",
     authorAvatarSrc,
     defaultInlineImageMaxWidthPx,
   } = props;
+
+  const gateDomain: GateDomain = "journal";
 
   // -------------------------
   // DEBUG: mount/unmount + fetch correlation
@@ -640,6 +661,7 @@ export default function PortalArtistPosts(props: {
   // Remove once confirmed.
   // -------------------------
   const mountId = React.useId();
+  const mountIdRef = React.useRef(mountId);
 
   React.useEffect(() => {
     const tag = `[PortalArtistPosts ${mountId}]`;
@@ -673,6 +695,19 @@ export default function PortalArtistPosts(props: {
 
   const { openMembershipModal } = useMembershipModal();
   const { viewerTier, isSignedIn } = usePortalViewer();
+
+  const broker = useGateBroker();
+  const [inlineGateActive, setInlineGateActive] = React.useState(false);
+  const [inlineGateMsg, setInlineGateMsg] = React.useState<string>(
+    "Sign in to keep reading.",
+  );
+
+  React.useEffect(() => {
+    if (isSignedIn) {
+      setInlineGateActive(false);
+      broker.clearGate({ domain: gateDomain });
+    }
+  }, [isSignedIn, broker]);
 
   const [composerOpen, setComposerOpen] = React.useState(false);
   const [questionText, setQuestionText] = React.useState("");
@@ -725,6 +760,72 @@ export default function PortalArtistPosts(props: {
   const inflightRef = React.useRef<AbortController | null>(null);
   const inflightKeyRef = React.useRef<string>("");
 
+  const isSignedInRef = React.useRef<boolean>(isSignedIn);
+  const requireAuthAfterRef = React.useRef<number>(requireAuthAfter);
+
+  React.useEffect(() => {
+    isSignedInRef.current = isSignedIn;
+  }, [isSignedIn]);
+
+  React.useEffect(() => {
+    requireAuthAfterRef.current = requireAuthAfter;
+  }, [requireAuthAfter]);
+
+  const markSeen = React.useCallback(
+    async (slugs: string[], correlationId: string) => {
+      if (isSignedInRef.current) return;
+      const cap = requireAuthAfterRef.current;
+      if (!cap || cap <= 0) return;
+      if (!Array.isArray(slugs) || slugs.length === 0) return;
+
+      try {
+        const res = await fetch("/api/artist-posts/seen", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-correlation-id": correlationId,
+          },
+          body: JSON.stringify({
+            slugs,
+            cap,
+          }),
+        });
+
+        const raw: unknown = await res.json().catch(() => null);
+
+        // Payload-first blocking contract
+        if (isGatePayload(raw)) {
+          const decision = gate(
+            { verb: "markSeen", domain: gateDomain },
+            {
+              isSignedIn: false,
+              intent: "passive",
+              journalReadCapReached: true,
+            },
+          );
+
+          if (decision.ok === false) {
+            broker.reportGate({
+              ...decision.reason,
+              uiMode: decision.uiMode,
+              correlationId: raw.correlationId ?? null,
+            });
+            setInlineGateMsg(decision.reason.message || raw.reason);
+            setInlineGateActive(true);
+          }
+          return;
+        }
+
+        // If server didn’t block, keep going quietly.
+        const ok = raw as Partial<SeenOkResponse>;
+        if (ok && ok.ok === true) return;
+      } catch {
+        // silent: failing to mark seen should not brick the module
+      }
+    },
+    [broker],
+  );
+
   const fetchPage = React.useCallback(
     async (nextCursor: string | null) => {
       if (loadingRef.current) return;
@@ -765,18 +866,20 @@ export default function PortalArtistPosts(props: {
         if (postTypeFilter) u.searchParams.set("postType", postTypeFilter);
         if (nextCursor !== "0") u.searchParams.set("offset", nextCursor);
 
-        console.log(`[PortalArtistPosts ${mountId}] fetchPage`, {
+        console.log(`[PortalArtistPosts ${mountIdRef.current}] fetchPage`, {
           nextCursor,
           pageSize,
           minVisibility,
           postTypeFilter,
         });
 
+        const correlationId = crypto.randomUUID();
+
         const res = await fetch(u.toString(), {
           method: "GET",
           signal: ac.signal,
           cache: "no-store",
-          headers: { "x-correlation-id": crypto.randomUUID() },
+          headers: { "x-correlation-id": correlationId },
         });
 
         if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
@@ -791,6 +894,15 @@ export default function PortalArtistPosts(props: {
           nextCursor !== "0" ? [...p, ...nextPosts] : nextPosts,
         );
         setCursor(j.nextCursor);
+
+        // Mark seen (server owns anon counter + cap -> may emit GatePayload)
+        if (!isSignedInRef.current && requireAuthAfterRef.current > 0) {
+          const slugs = nextPosts
+            .map((p) => (p && typeof p.slug === "string" ? p.slug.trim() : ""))
+            .filter((s) => s.length > 0);
+
+          void markSeen(slugs, j.correlationId ?? correlationId);
+        }
       } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") return;
         const msg = e instanceof Error ? e.message : "Failed to load posts";
@@ -805,7 +917,7 @@ export default function PortalArtistPosts(props: {
         }
       }
     },
-    [pageSize, minVisibility, postTypeFilter],
+    [pageSize, minVisibility, postTypeFilter, markSeen],
   );
 
   // optional: abort on unmount
@@ -1207,7 +1319,7 @@ export default function PortalArtistPosts(props: {
   }
 
   return (
-    <div style={{ minWidth: 0 }}>
+    <div style={{ minWidth: 0, position: "relative" }}>
       <div
         style={{
           display: "flex",
@@ -1456,141 +1568,233 @@ export default function PortalArtistPosts(props: {
         </div>
       ) : null}
 
-      <div style={{ marginTop: 6 }}>
-        {posts.map((p) => {
-          const isDeep = deepSlug === p.slug;
-          const isCopied = copiedSlug === p.slug;
+      <div style={{ marginTop: 6, position: "relative" }}>
+        <div
+          aria-hidden={inlineGateActive}
+          style={{
+            filter: inlineGateActive ? "blur(10px)" : "none",
+            opacity: inlineGateActive ? 0.55 : 1,
+            pointerEvents: inlineGateActive ? "none" : "auto",
+            transition: "filter 180ms ease, opacity 180ms ease",
+          }}
+        >
+          {posts.map((p) => {
+            const isDeep = deepSlug === p.slug;
+            const isCopied = copiedSlug === p.slug;
 
-          return (
-            <div
-              key={p.slug}
-              ref={(el) => {
-                if (!el) postEls.current.delete(p.slug);
-                else postEls.current.set(p.slug, el);
-              }}
-              data-slug={p.slug}
-              style={{
-                padding: "14px 0",
-                borderBottom: "1px solid rgba(255,255,255,0.07)",
-              }}
-            >
+            return (
               <div
+                key={p.slug}
+                ref={(el) => {
+                  if (!el) postEls.current.delete(p.slug);
+                  else postEls.current.set(p.slug, el);
+                }}
+                data-slug={p.slug}
                 style={{
-                  borderRadius: 18,
-                  padding: "12px 0px 10px",
-                  background: isDeep ? "rgba(255,255,255,0.04)" : "transparent",
-                  boxShadow: isDeep
-                    ? "0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent)"
-                    : undefined,
+                  padding: "14px 0",
+                  borderBottom: "1px solid rgba(255,255,255,0.07)",
                 }}
               >
-                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <Avatar
-                    label={authorInitials}
-                    src={authorAvatarSrc}
-                    alt={authorName}
-                  />
+                <div
+                  style={{
+                    borderRadius: 18,
+                    padding: "12px 0px 10px",
+                    background: isDeep
+                      ? "rgba(255,255,255,0.04)"
+                      : "transparent",
+                    boxShadow: isDeep
+                      ? "0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent)"
+                      : undefined,
+                  }}
+                >
+                  <div
+                    style={{ display: "flex", gap: 10, alignItems: "center" }}
+                  >
+                    <Avatar
+                      label={authorInitials}
+                      src={authorAvatarSrc}
+                      alt={authorName}
+                    />
 
-                  <div style={{ minWidth: 0, flex: "1 1 auto" }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "baseline",
-                        gap: 10,
-                        minWidth: 0,
-                        flexWrap: "wrap",
-                      }}
-                    >
+                    <div style={{ minWidth: 0, flex: "1 1 auto" }}>
                       <div
                         style={{
-                          fontSize: 13,
-                          fontWeight: 700,
-                          opacity: 0.92,
-                          whiteSpace: "nowrap",
+                          display: "flex",
+                          alignItems: "baseline",
+                          gap: 10,
+                          minWidth: 0,
+                          flexWrap: "wrap",
                         }}
                       >
-                        {authorName}
-                      </div>
-
-                      <div
-                        style={{
-                          fontSize: 12,
-                          opacity: 0.56,
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {fmtDate(p.publishedAt)}
-                      </div>
-
-                      {p.pinned ? (
                         <div
                           style={{
-                            fontSize: 12,
-                            opacity: 0.62,
+                            fontSize: 13,
+                            fontWeight: 700,
+                            opacity: 0.92,
                             whiteSpace: "nowrap",
                           }}
                         >
-                          • pinned
+                          {authorName}
                         </div>
-                      ) : null}
+
+                        <div
+                          style={{
+                            fontSize: 12,
+                            opacity: 0.56,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {fmtDate(p.publishedAt)}
+                        </div>
+
+                        {p.pinned ? (
+                          <div
+                            style={{
+                              fontSize: 12,
+                              opacity: 0.62,
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            • pinned
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {p.title?.trim() ? (
+                  {p.title?.trim() ? (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        minWidth: 0,
+                      }}
+                    >
+                      <TypeBadge t={p.postType ?? null} />
+                      <div
+                        style={{
+                          fontSize: 15,
+                          fontWeight: 850,
+                          opacity: 0.95,
+                          lineHeight: 1.25,
+                          minWidth: 0,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                        title={p.title.trim()}
+                      >
+                        {p.title.trim()}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div style={{ marginTop: 8 }}>
+                    <PortableText
+                      value={p.body ?? []}
+                      components={components}
+                    />
+                  </div>
+
                   <div
                     style={{
                       marginTop: 10,
                       display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      minWidth: 0,
+                      justifyContent: "flex-start",
                     }}
                   >
-                    <TypeBadge t={p.postType ?? null} />
-                    <div
-                      style={{
-                        fontSize: 15,
-                        fontWeight: 850,
-                        opacity: 0.95,
-                        lineHeight: 1.25,
-                        minWidth: 0,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                      title={p.title.trim()}
+                    <ActionBtn
+                      onClick={() =>
+                        void onShare({ slug: p.slug, title: p.title })
+                      }
+                      label="Share post"
                     >
-                      {p.title.trim()}
-                    </div>
+                      {isCopied ? ICON_CHECK : ICON_SHARE}
+                      <span>{isCopied ? "Copied" : "Share"}</span>
+                    </ActionBtn>
                   </div>
-                ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
 
-                <div style={{ marginTop: 8 }}>
-                  <PortableText value={p.body ?? []} components={components} />
+        {inlineGateActive ? (
+          <div
+            role="dialog"
+            aria-modal="false"
+            aria-label="Sign in to keep reading"
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "grid",
+              placeItems: "center",
+              padding: 14,
+              zIndex: 50,
+              pointerEvents: "auto",
+            }}
+            onMouseDown={(e) => {
+              // keep click containment local to the module
+              e.stopPropagation();
+            }}
+          >
+            <div
+              style={{
+                width: "min(520px, 100%)",
+                borderRadius: 18,
+                border: "1px solid rgba(255,255,255,0.14)",
+                background: "rgba(16,16,16,0.78)",
+                backdropFilter: "blur(10px)",
+                WebkitBackdropFilter: "blur(10px)",
+                boxShadow: "0 26px 90px rgba(0,0,0,0.55)",
+                overflow: "hidden",
+              }}
+            >
+              <div style={{ padding: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 850, opacity: 0.92 }}>
+                  {inlineGateMsg}
                 </div>
 
+                <div style={{ marginTop: 10 }}>
+                  {/* Primary inline reuse (if ActivationGate is self-contained) */}
+                  <ActivationGate>
+                    <div />
+                  </ActivationGate>
+                </div>
+
+                {/* Hard fallback: if ActivationGate doesn’t render meaningfully inline */}
                 <div
                   style={{
-                    marginTop: 10,
+                    marginTop: 12,
                     display: "flex",
-                    justifyContent: "flex-start",
+                    justifyContent: "flex-end",
+                    gap: 10,
                   }}
                 >
-                  <ActionBtn
-                    onClick={() =>
-                      void onShare({ slug: p.slug, title: p.title })
-                    }
-                    label="Share post"
+                  <button
+                    type="button"
+                    onClick={() => openMembershipModal()}
+                    style={{
+                      height: 30,
+                      padding: "0 12px",
+                      borderRadius: 10,
+                      border: "1px solid rgba(255,255,255,0.14)",
+                      background: "rgba(255,255,255,0.06)",
+                      color: "rgba(255,255,255,0.88)",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      fontWeight: 750,
+                    }}
                   >
-                    {isCopied ? ICON_CHECK : ICON_SHARE}
-                    <span>{isCopied ? "Copied" : "Share"}</span>
-                  </ActionBtn>
+                    Sign in / unlock
+                  </button>
                 </div>
               </div>
             </div>
-          );
-        })}
+          </div>
+        ) : null}
 
         {loading ? (
           <div style={{ fontSize: 12, opacity: 0.7, padding: "12px 0" }}>
