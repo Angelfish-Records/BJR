@@ -559,10 +559,12 @@ export default function ExegesisTrackClient(props: {
   const [threadLoading, setThreadLoading] = React.useState<boolean>(false);
   const [threadLoadedKey, setThreadLoadedKey] = React.useState<string>("");
 
-  // anon = not signed-in (but wait until Clerk has loaded to avoid a brief flicker)
+  // Treat viewer identity as stable for fetch keys; do not let "loading" cause a key flip.
+  // We still use authLoaded elsewhere for UX (e.g. preventing brief anon UI on load),
+  // but fetch/gate keys must not oscillate.
   const isAnon = authLoaded ? !userId : false;
 
-  const viewerKey = authLoaded ? (userId ?? "anon") : "loading";
+  const viewerKey = userId ?? "anon";
 
   // "Core" identity of the requested thread (selection + viewer), regardless of sort.
   const threadWantedCoreKey = React.useMemo(() => {
@@ -1080,19 +1082,28 @@ export default function ExegesisTrackClient(props: {
     }
   }
 
+  const prevUserIdRef = React.useRef<string | null>(null);
+
   React.useEffect(() => {
+    const prev = prevUserIdRef.current;
+    const next = userId ?? null;
+    prevUserIdRef.current = next;
+
+    // Only treat this as an "auth change" when the actual user id changes,
+    // NOT when Clerk flips authLoaded from false -> true for anonymous visitors.
+    if (prev === next) return;
+
     // Auth changed while on-page: force a refetch by invalidating the "loaded" marker.
     setThreadLoadedKey("");
     setThreadErr("");
 
-    // Optional but usually nicer: prevents showing stale anon thread while loading the member thread.
+    // Prevent showing stale viewer thread while loading the new viewer thread.
     setThread(null);
 
-    // If they just signed in, clear any exegesis gate (inline + broker).
-    // (Even if they didn't sign in, clearing is harmless and keeps state tidy.)
+    // Clear any exegesis gate (inline + broker).
     broker.clearGate({ domain: EXEGESIS_DOMAIN });
     clearInlineGate();
-  }, [viewerKey, broker]);
+  }, [userId, broker]);
 
   React.useEffect(() => {
     function onMouseDown(e: MouseEvent) {
