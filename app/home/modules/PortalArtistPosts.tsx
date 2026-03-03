@@ -800,10 +800,11 @@ export default function PortalArtistPosts(props: {
         }
 
         const nextPosts = Array.isArray(j.posts) ? j.posts : [];
-        setPosts((p) => (nextCursor ? [...p, ...nextPosts] : nextPosts));
+        setPosts((p) =>
+          nextCursor !== "0" ? [...p, ...nextPosts] : nextPosts,
+        );
         setCursor(j.nextCursor);
       } catch (e) {
-        // Ignore aborts cleanly
         if (e instanceof DOMException && e.name === "AbortError") return;
         const msg = e instanceof Error ? e.message : "Failed to load posts";
         setErr(msg);
@@ -842,15 +843,15 @@ export default function PortalArtistPosts(props: {
 
     if (firstFilterRunRef.current) {
       firstFilterRunRef.current = false;
-      void fetchPage(null);
+      void fetchPage("0");
       return;
     }
 
     setRequiresAuth(false);
-    setCursor(null);
+    setCursor("0"); 
     setPosts([]);
     setErr(null);
-    void fetchPage(null);
+    void fetchPage("0");
   }, [postTypeFilter, fetchPage]);
 
   React.useEffect(() => {
