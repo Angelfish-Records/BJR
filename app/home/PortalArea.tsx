@@ -999,16 +999,6 @@ export default function PortalArea(props: {
 
   mix-blend-mode: multiply;
 
-  /* ✅ Keep veil layers inside PNG alpha too */
-  -webkit-mask-image: var(--afLogoMaskUrl);
-  mask-image: var(--afLogoMaskUrl);
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-size: contain;
-  mask-size: contain;
-  -webkit-mask-position: center;
-  mask-position: center;
-
   /* primary shadow sweep */
   background-image: linear-gradient(
     90deg,
