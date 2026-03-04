@@ -3,6 +3,7 @@
 
 import React from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 
 const ENABLED = process.env.NEXT_PUBLIC_ADMIN_DEBUG === "1";
 
@@ -253,7 +254,11 @@ export default function AdminDebugBar(props: { isAdmin: boolean }) {
           >
             Share tokens
           </button>
-          <button type="button" style={btn} onClick={() => openAdmin("mailbag")}>
+          <button
+            type="button"
+            style={btn}
+            onClick={() => openAdmin("mailbag")}
+          >
             Mailbag
           </button>
           <button
@@ -263,6 +268,17 @@ export default function AdminDebugBar(props: { isAdmin: boolean }) {
           >
             Exegesis
           </button>
+          <Link
+            href="/admin/campaigns"
+            style={{
+              ...btn,
+              display: "inline-flex",
+              alignItems: "center",
+              textDecoration: "none",
+            }}
+          >
+            Campaigns
+          </Link>
         </div>
       </div>
 

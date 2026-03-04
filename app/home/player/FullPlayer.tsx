@@ -734,10 +734,6 @@ export default function FullPlayer(props: {
           if (player.lastError) {
             player.clearError();
           }
-          if (player.status === "blocked") {
-            // Legacy state might still exist until PlayerState cleanup lands.
-            player.setStatusExternal("idle");
-          }
         }
       } catch (e) {
         if (ac.signal.aborted) return;
@@ -758,7 +754,6 @@ export default function FullPlayer(props: {
 
         const player = pRef.current;
         if (player.lastError) player.clearError();
-        if (player.status === "blocked") player.setStatusExternal("idle");
       }
     })();
 
