@@ -1737,12 +1737,7 @@ export default function PortalArtistPosts(props: {
             style={{
               position: "absolute",
               inset: 0,
-
-              // Don’t center within the *module height*.
-              // Instead, let the dialog stick to the viewport as the user scrolls.
-              display: "block",
               padding: 14,
-
               zIndex: 50,
               pointerEvents: "auto",
             }}
@@ -1753,13 +1748,13 @@ export default function PortalArtistPosts(props: {
           >
             <div
               style={{
-                width: "min(520px, 100%)",
-                marginLeft: "auto",
-                marginRight: "auto",
+                width: "min(520px, calc(100vw - 28px))",
 
-                // ✅ stays in the viewport while scrolling the page
-                position: "sticky",
-                top: 14,
+                // ✅ always centered in the user's *viewport* (not the module)
+                position: "fixed",
+                left: "50%",
+                top: "50%",
+                transform: "translate(-50%, -50%)",
 
                 borderRadius: 18,
                 border: "1px solid rgba(255,255,255,0.14)",
@@ -1768,9 +1763,8 @@ export default function PortalArtistPosts(props: {
                 WebkitBackdropFilter: "blur(10px)",
                 boxShadow: "0 26px 90px rgba(0,0,0,0.55)",
 
-                // keep it usable on short screens
-                maxHeight: "calc(100vh - 28px)",
-                overflow: "auto",
+                // no internal scrollbars
+                overflow: "hidden",
               }}
             >
               <div style={{ padding: 14 }}>
