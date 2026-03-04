@@ -850,8 +850,8 @@ export default function PortalArea(props: {
 .afTopBarLeft { grid-column:1; grid-row:1; min-width:0; display:flex; align-items:flex-end; justify-content:flex-start; gap:10px; align-self:stretch; }
 .afTopBarLogo { grid-column:2; grid-row:1; min-width:0; display:flex; align-items:flex-end; justify-content:center; padding:6px 0 2px; align-self:stretch; }
 .afTopBarLogoInner { width:fit-content; display:grid; place-items:end center; }
-.afTopBarRight { grid-column:3; grid-row:1; min-width:0; display:flex; align-items:flex-end; justify-content:flex-end; align-self:stretch; }
-.afTopBarRightInner { max-width:520px; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:flex-end; }
+.afTopBarRight { grid-column:3; grid-row:1; min-width:0; display:flex; align-items:center; justify-content:flex-end; align-self:stretch; }
+.afTopBarRightInner { max-width:520px; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:center; }
 
 /* --- Logo “veil” effect: slow shadow wash (visible -> almost swallowed -> visible) --- */
 @keyframes afLogoVeilDrift {
@@ -1126,8 +1126,8 @@ export default function PortalArea(props: {
   .afTopBarLogo { grid-row:1; grid-column:1 / -1; width:100%; padding:10px 0 0; display:flex; align-items:flex-end; justify-content:center; }
   .afTopBarControls { grid-row:2; display:grid; grid-template-columns:auto 1fr; align-items:stretch; column-gap:10px; row-gap:0px; width:100%; min-width:0; }
   .afTopBarLeft { grid-column:1; justify-self:start; display:flex; align-items:flex-end; align-self:stretch; }
-  .afTopBarRight { grid-column:2; justify-self:end; width:100%; display:flex; align-items:flex-end; justify-content:flex-end; align-self:stretch; }
-  .afTopBarRightInner { margin-left:auto; max-width:520px; height:100%; display:flex; flex-direction:column; justify-content:flex-end; }
+  .afTopBarRight { grid-column:2; justify-self:end; width:100%; display:flex; align-items:center; justify-content:flex-end; align-self:stretch; }
+  .afTopBarRightInner { margin-left:auto; max-width:520px; height:100%; display:flex; flex-direction:column; justify-content:center; }
 }
 `}</style>
 

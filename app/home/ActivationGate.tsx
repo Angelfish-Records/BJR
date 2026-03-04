@@ -841,7 +841,7 @@ export default function ActivationGate(props: Props) {
           border: "none",
           background: "rgba(0,0,0,0.32)",
           boxShadow: "0 12px 26px rgba(0,0,0,0.24)",
-          padding: "12px 12px",
+          padding: "0px",
           boxSizing: "border-box",
         }}
       >
