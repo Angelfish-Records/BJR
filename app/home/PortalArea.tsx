@@ -857,12 +857,12 @@ export default function PortalArea(props: {
 @keyframes afLogoVeilDrift {
   0%, 100% {
     background-position: 0% 50%;
-    opacity: 0.24;
+    opacity: 0.26;
     transform: translateX(-2%) translateY(-0.6%);
   }
   55% {
     background-position: 100% 50%;
-    opacity: 0.78;
+    opacity: 0.84;
     transform: translateX(2%) translateY(0.6%);
   }
 }
@@ -998,16 +998,15 @@ export default function PortalArea(props: {
   0%, 84% {
     background-position: -260% -260%, -260% -260%;
   }
-  86% {
+  81% {
     background-position: -160% -160%, -160% -160%;
   }
-
   /*
     MAIN SWEEP (1) slower travel:
     - sweep spans 86% → 98% of the timeline (12% of cycle)
     - to make it even slower, widen this span (e.g. 85% → 99%)
   */
-  98% {
+  99% {
     background-position: 260% 260%, 260% 260%;
   }
 
@@ -1044,7 +1043,7 @@ export default function PortalArea(props: {
     90deg,
     rgba(0,0,0,0.00) 0%,
     rgba(0,0,0,0.82) 22%,
-    rgba(0,0,0,0.98) 44%,
+    rgba(0,0,0,0.995) 48%,
     rgba(0,0,0,0.70) 68%,
     rgba(0,0,0,0.00) 100%
   );
