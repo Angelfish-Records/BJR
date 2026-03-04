@@ -901,34 +901,40 @@ export default function PortalArea(props: {
 
   /*
     Full-logo glass sheen:
-    - wide soft wash (glass)
-    - narrow bright core (sun beam)
+    - wide soft wash (glass)  ✅ (2) make this wider + (3) more diffuse
+    - narrow bright core      ✅ (2) slightly wider + (3) softer edges
   */
   background-image:
+    /* (2)+(3) WIDER + more gradual fade: move “rise” earlier + “fall” later, lower peak a touch */
     linear-gradient(
       120deg,
       rgba(255,255,255,0.00) 0%,
-      rgba(255,255,255,0.00) 28%,
-      rgba(255,255,255,0.09) 44%,
-      rgba(255,255,255,0.00) 60%,
+      rgba(255,255,255,0.00) 18%,   /* (2) widen: starts affecting sooner (was 28%) */
+      rgba(255,255,255,0.08) 46%,   /* (3) diffuse: lower peak + broadened mid (was 0.09 @ 44%) */
+      rgba(255,255,255,0.00) 74%,   /* (2) widen: fades out later (was 60%) */
       rgba(255,255,255,0.00) 100%
     ),
+    /* (2)+(3) core beam: widen band + soften edges (bigger shoulder, smaller peak) */
     linear-gradient(
       120deg,
       rgba(255,255,255,0.00) 0%,
-      rgba(255,255,255,0.00) 45%,
-      rgba(255,255,255,0.34) 50%,
-      rgba(255,255,255,0.00) 55%,
+      rgba(255,255,255,0.00) 38%,   /* (2) widen: earlier lead-in (was 45%) */
+      rgba(255,255,255,0.26) 50%,   /* (3) diffuse: reduce “bar” intensity (was 0.34) */
+      rgba(255,255,255,0.00) 62%,   /* (2) widen: later fade-out (was 55%) */
       rgba(255,255,255,0.00) 100%
     );
 
   background-repeat: no-repeat;
-  background-size: 340% 340%, 340% 340%;
-  background-position: -220% -220%, -220% -220%;
+
+  /* (2) widen: bigger background field makes the sheen feel broader as it traverses */
+  background-size: 420% 420%, 420% 420%; /* (was 340%) */
+  background-position: -260% -260%, -260% -260%; /* keep start off-canvas to avoid early flashes */
 
   mix-blend-mode: screen;
   opacity: 0;
-  filter: blur(0.55px);
+
+  /* (3) diffuse: more blur = softer glow distance (but don’t go too high or it looks like fog) */
+  filter: blur(1.05px); /* (was 0.55px) */
 
   /* ✅ Perfect alpha mask: sheen only where PNG has pixels */
   -webkit-mask-image: var(--afLogoMaskUrl);
@@ -940,42 +946,43 @@ export default function PortalArea(props: {
   -webkit-mask-position: center;
   mask-position: center;
 
-  animation: afLogoGlisten 62s ease-in-out infinite;
+  /* (1) slower: increase total cycle duration (more time between shimmers + slower traverse) */
+  animation: afLogoGlisten 92s ease-in-out infinite; /* (was 62s) */
   will-change: opacity, background-position, transform;
 }
 
 @keyframes afLogoGlisten {
-  /* idle */
-  0%, 84% {
+  /* (1) slower: longer idle window before the sweep begins */
+  0%, 88% { /* (was 0%,84%) */
     opacity: 0;
-    background-position: -220% -220%, -220% -220%;
+    background-position: -260% -260%, -260% -260%;
     transform: translateX(0%) translateY(0%);
   }
 
-  /* slow ramp in */
-  87% {
-    opacity: 0.18;
-    background-position: -150% -150%, -150% -150%;
-    transform: translateX(-0.15%) translateY(-0.15%);
+  /* (1) slower: gentler ramp-in */
+  91% { /* (was 87%) */
+    opacity: 0.16; /* (3) diffuse: slightly less “bar” punch on entry */
+    background-position: -170% -170%, -170% -170%;
+    transform: translateX(-0.12%) translateY(-0.12%);
   }
 
-  /* long sweep (this is the main “beam across glass”) */
-  95% {
-    opacity: 0.72;
-    background-position: 220% 220%, 220% 220%;
-    transform: translateX(0.22%) translateY(0.22%);
+  /* (1) slower: the main sweep arrives later + (3) slightly lower peak for diffused glass look */
+  97% { /* (was 95%) */
+    opacity: 0.58; /* (was 0.72) */
+    background-position: 260% 260%, 260% 260%;
+    transform: translateX(0.18%) translateY(0.18%);
   }
 
-  /* slow fade out */
-  98% {
-    opacity: 0.10;
-    background-position: 300% 300%, 300% 300%;
-    transform: translateX(0.28%) translateY(0.28%);
+  /* (1) slower: longer fade-out tail (still subtle) */
+  99% { /* (was 98%) */
+    opacity: 0.08; /* (was 0.10) */
+    background-position: 340% 340%, 340% 340%;
+    transform: translateX(0.24%) translateY(0.24%);
   }
 
   100% {
     opacity: 0;
-    background-position: 300% 300%, 300% 300%;
+    background-position: 340% 340%, 340% 340%;
     transform: translateX(0%) translateY(0%);
   }
 }
