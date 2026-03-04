@@ -853,10 +853,17 @@ export default function PortalArea(props: {
 .afTopBarRight { grid-column:3; grid-row:1; min-width:0; display:flex; align-items:flex-end; justify-content:flex-end; align-self:stretch; }
 .afTopBarRightInner { max-width:520px; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:flex-end; }
 
-/* --- Logo “veil” effect (subtle drifting shadow pass) --- */
+/* --- Logo “veil” effect: slow shadow wash (visible -> almost swallowed -> visible) --- */
 @keyframes afLogoVeilDrift {
-  0%, 100% { transform: translateX(-7%) translateY(0%); opacity: 0.18; }
-  50%      { transform: translateX(7%)  translateY(0%); opacity: 0.30; }
+  0%, 100% {
+    transform: translateX(-14%);
+    opacity: 0.10;
+  }
+  55% {
+    transform: translateX(14%);
+    opacity: 0.82;
+  }
+}
 }
 .afLogoVeilWrap {
   position: relative;
@@ -872,34 +879,34 @@ export default function PortalArea(props: {
   display: inline-block;
 }
 
-/* Subtle drifting highlight veil (reads on dark-on-dark logos) */
 .afLogoVeil {
   position: absolute;
-  inset: -18% -10%;
+  inset: -30% -22%;
   pointer-events: none;
   z-index: 2;
 
-  mix-blend-mode: screen;
-  background: radial-gradient(
-    60% 120% at 30% 50%,
-    rgba(255,255,255,0.14),
-    rgba(255,255,255,0.00) 62%
+  mix-blend-mode: multiply;
+
+  /* Wide wash: most of the logo gets darker together */
+  background: linear-gradient(
+    90deg,
+    rgba(0,0,0,0.00) 0%,
+    rgba(0,0,0,0.88) 28%,
+    rgba(0,0,0,0.98) 52%,
+    rgba(0,0,0,0.88) 76%,
+    rgba(0,0,0,0.00) 100%
   );
 
-  opacity: 0.14;
-  animation: afLogoVeilDrift 9.5s ease-in-out infinite;
+  opacity: 0.10;
+  filter: blur(1.0px);
+  animation: afLogoVeilDrift 13.5s ease-in-out infinite;
   will-change: transform, opacity;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* Keep it visible, just stop movement */
-  .afLogoVeil { animation: none !important; opacity: 0.20; }
+  /* Keep a mild shadow, just stop movement */
+  .afLogoVeil { animation: none !important; opacity: 0.22; }
 }
-@media (prefers-reduced-motion: reduce) {
-  /* Keep it visible, just stop movement */
-  .afLogoVeil { animation: none !important; opacity: 0.32; }
-}
-
 @media (max-width:720px) {
   .afTopBar { grid-template-columns:1fr; grid-template-rows:auto auto; gap:10px; align-items:stretch; justify-items:stretch; }
   .afTopBarLogo { grid-row:1; grid-column:1 / -1; width:100%; padding:10px 0 0; display:flex; align-items:flex-end; justify-content:center; }
