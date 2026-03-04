@@ -1751,16 +1751,19 @@ export default function PortalArtistPosts(props: {
           >
             <div
               style={{
-                position: "absolute",
-                inset: 0,
+                // ✅ the overlay is still scoped to the module, but this centering layer
+                // "pins" itself to the visible window of the *scrolling panel*.
+                position: "sticky",
+                top: 0,
+
+                // use the panel’s visible viewport, not the document height
+                height: "100dvh",
                 padding: 14,
 
-                // center within the viewport, but interaction remains scoped to this module
-                // because the veil is contained by the module overlay.
                 display: "grid",
                 placeItems: "center",
 
-                // IMPORTANT: don’t create a new scrolling context
+                // don't create a new scrolling context
                 overflow: "visible",
               }}
             >
