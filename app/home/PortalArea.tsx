@@ -880,7 +880,6 @@ export default function PortalArea(props: {
     transform: translateX(-2%) translateY(-0.35%);
   }
 }
-}
 .afLogoVeilWrap {
   position: relative;
   display: inline-block;
@@ -888,83 +887,76 @@ export default function PortalArea(props: {
   isolation: isolate; /* keeps blend/stacking predictable */
 }
 
-/* Occasional glossy glisten — clipped to the logo box, iOS-app-style */
+/* Occasional glossy glisten — hard-clipped to the logo wrapper */
 .afLogoVeilWrap {
-  overflow: hidden; /* hard-clip ANY shimmer to the logo bounds */
+  overflow: hidden; /* guarantees shimmer cannot leave logo bounds */
 }
 
-/* shimmer lives ONLY inside the wrapper bounds */
-.afLogoVeilWrap::after {
-  content: "";
+/* Real DOM node shimmer (more reliable than pseudo-elements) */
+.afLogoGlisten {
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 6;
 
-  /* diagonal “app icon” sweep band */
   background: linear-gradient(
     115deg,
     rgba(255,255,255,0.00) 0%,
-    rgba(255,255,255,0.00) 44%,
-    rgba(255,255,255,0.18) 50%,
-    rgba(255,255,255,0.00) 56%,
+    rgba(255,255,255,0.00) 46%,
+    rgba(255,255,255,0.22) 50%,
+    rgba(255,255,255,0.00) 54%,
     rgba(255,255,255,0.00) 100%
   );
   background-repeat: no-repeat;
-  background-size: 220% 220%;
-  background-position: -140% 140%;
+  background-size: 260% 260%;
+  background-position: -160% 160%;
 
-  /* keep it “polished” not “flashbang” */
   mix-blend-mode: screen;
   opacity: 0;
+  filter: blur(0.75px);
 
-  filter: blur(0.7px);
-  transform: translateX(0%) translateY(0%);
-
-  /* long idle, slow-ish sweep */
-  animation: afLogoGlisten 34s ease-in-out infinite;
+  animation: afLogoGlisten 42s ease-in-out infinite;
   will-change: opacity, background-position, transform;
 }
 
 @keyframes afLogoGlisten {
-  /* idle */
-  0%, 78% {
+  /* idle (most of the time) */
+  0%, 82% {
     opacity: 0;
-    background-position: -140% 140%;
+    background-position: -160% 160%;
     transform: translateX(0%) translateY(0%);
   }
 
-  /* fade in */
-  82% {
-    opacity: 0.35;
-    background-position: -80% 80%;
-    transform: translateX(-0.4%) translateY(-0.2%);
+  /* ease in */
+  86% {
+    opacity: 0.30;
+    background-position: -90% 90%;
+    transform: translateX(-0.4%) translateY(-0.25%);
   }
 
-  /* sweep across */
-  88% {
-    opacity: 0.55;
-    background-position: 120% -120%;
-    transform: translateX(0.4%) translateY(0.2%);
-  }
-
-  /* fade out */
+  /* slow-ish sweep (iOS icon vibe) */
   92% {
-    opacity: 0.10;
-    background-position: 170% -170%;
-    transform: translateX(0.6%) translateY(0.3%);
+    opacity: 0.60;
+    background-position: 130% -130%;
+    transform: translateX(0.45%) translateY(0.25%);
   }
 
-  /* back to idle */
+  /* decay */
+  95% {
+    opacity: 0.10;
+    background-position: 185% -185%;
+    transform: translateX(0.55%) translateY(0.35%);
+  }
+
   100% {
     opacity: 0;
-    background-position: 170% -170%;
+    background-position: 185% -185%;
     transform: translateX(0%) translateY(0%);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .afLogoVeilWrap::after { animation: none !important; opacity: 0 !important; }
+  .afLogoGlisten { animation: none !important; opacity: 0 !important; }
 }
 
 /* Force the image to be its own stacking participant */
@@ -1111,6 +1103,7 @@ export default function PortalArea(props: {
                             />
                           </div>
                           <div aria-hidden="true" className="afLogoVeil" />
+                          <div aria-hidden="true" className="afLogoGlisten" />
                         </div>
                       ) : (
                         <div
