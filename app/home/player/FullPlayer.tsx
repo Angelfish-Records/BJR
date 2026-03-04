@@ -1671,7 +1671,7 @@ export default function FullPlayer(props: {
 
        .afAvailWrap{
   margin-top: 18px;
-  margin-bottom: 10px;
+  margin-bottom: 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1706,7 +1706,7 @@ export default function FullPlayer(props: {
   font-weight: 600;
   letter-spacing: 0.28px;
   text-transform: uppercase;
-  opacity: 0.75;
+  opacity: 0.65;
   text-align: center;
 }
 
@@ -1726,7 +1726,7 @@ export default function FullPlayer(props: {
   background: transparent;
   border-radius: 0;
   color: rgba(255,255,255,0.72);
-  opacity: 0.85;
+  opacity: 0.65;
   transition: transform 120ms ease, color 120ms ease, opacity 120ms ease;
 }
 
@@ -1735,7 +1735,7 @@ export default function FullPlayer(props: {
   background: transparent;
   border-color: transparent;
   color: rgba(255,255,255,0.90);
-  opacity: 1;
+  opacity: 0.90;
 }
 
 .afAvailIcon:focus-visible{
