@@ -839,7 +839,7 @@ export default function PortalArea(props: {
                   borderRadius: 0,
                   border: "none",
                   background: "transparent",
-                  padding: 12,
+                  padding: "12px 0 0",
                   minWidth: 0,
                   position: "relative",
                 }}

@@ -917,7 +917,7 @@ export default function FullPlayer(props: {
           justifyItems: "center",
           textAlign: "center",
           gap: 10,
-          padding: 18, // was on the removed parent card
+          padding: "18px 0", // no horizontal inset (fixes mobile “drift”)
         }}
       >
         <div
@@ -1106,7 +1106,7 @@ export default function FullPlayer(props: {
         </div>
       </div>
 
-      <div style={{ marginTop: 18, padding: "0 18px 18px" }}>
+      <div style={{ marginTop: 18, padding: "0 0 18px" }}>
         <div
           style={{
             borderTop: "1px solid rgba(255,255,255,0.10)",
