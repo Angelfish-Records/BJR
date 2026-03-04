@@ -18,9 +18,12 @@ import {
 } from "@/app/home/player/ShareAction";
 
 import ActivationGate from "@/app/home/ActivationGate";
-import { gate } from "@/app/home/gating/gate";
 import { useGateBroker } from "@/app/home/gating/GateBroker";
-import type { GatePayload, GateDomain } from "@/app/home/gating/gateTypes";
+import type { GateDomain } from "@/app/home/gating/gateTypes";
+import {
+  gatePayloadFromUnknown,
+  gateResultFromPayload,
+} from "@/app/home/gating/fromPayload";
 
 type Visibility = "public" | "friend" | "patron" | "partner";
 type PostType = "qa" | "creative" | "civic" | "cosmic";
@@ -70,17 +73,6 @@ type SeenOkResponse = {
   seenCount?: number;
   correlationId?: string;
 };
-
-function isGatePayload(x: unknown): x is GatePayload {
-  if (!x || typeof x !== "object") return false;
-  const r = x as Record<string, unknown>;
-  return (
-    typeof r.code === "string" &&
-    typeof r.action === "string" &&
-    typeof r.domain === "string" &&
-    typeof r.message === "string"
-  );
-}
 
 function fmtDate(iso: string) {
   try {
@@ -799,31 +791,36 @@ export default function PortalArtistPosts(props: {
         const raw: unknown = await res.json().catch(() => null);
 
         // Payload-first blocking contract
-        if (isGatePayload(raw)) {
-          const decision = gate(
-            { verb: "markSeen", domain: gateDomain },
-            {
-              isSignedIn: false,
-              intent: "passive",
-              journalReadCapReached: true,
-            },
-          );
+        const payload = gatePayloadFromUnknown(raw);
 
-          if (decision.ok === false) {
+        if (payload) {
+          // One-pass: payload is already normalized (domain, code, message, corr).
+          const decision = gateResultFromPayload({
+            payload,
+            attempt: { verb: "markSeen", domain: gateDomain },
+            isSignedIn: false,
+            intent: "passive",
+          });
+
+          if (!decision.ok) {
             broker.reportGate({
               ...decision.reason,
               uiMode: decision.uiMode,
-              correlationId: raw.correlationId ?? null,
+              // gateResultFromPayload already prefers payload correlationId in reason,
+              // but keeping this is harmless if your broker expects explicit corr.
+              correlationId: payload.correlationId ?? null,
             });
+
             setInlineGateMsg(
               (
-                decision.reason.message ??
-                (raw as Partial<GatePayload>).message ??
+                payload.message ||
+                decision.reason.message ||
                 "Sign in to keep reading."
               ).trim(),
             );
             setInlineGateActive(true);
           }
+
           return;
         }
 

@@ -145,86 +145,6 @@ function IconPortal() {
   );
 }
 
-/** Top-right (native) bar: ONLY for auth/blocking attention (non-spotlight). */
-function MiniMessageBar(props: { attentionMessage: string | null }) {
-  const { attentionMessage } = props;
-  if (!attentionMessage) return null;
-
-  return (
-    <div
-      style={{
-        marginTop: 10,
-        borderRadius: 14,
-        border: "1px solid rgba(255,255,255,0.18)",
-        background: "rgba(0,0,0,0.28)",
-        padding: "10px 12px",
-        fontSize: 12,
-        opacity: 0.92,
-        lineHeight: 1.45,
-        textAlign: "left",
-        maxWidth: "100%",
-        width: "100%",
-        display: "flex",
-        gap: 10,
-        alignItems: "flex-start",
-        boxShadow: "0 16px 40px rgba(0,0,0,0.22)",
-      }}
-    >
-      <div
-        aria-hidden
-        style={{
-          width: 18,
-          height: 18,
-          borderRadius: 999,
-          display: "grid",
-          placeItems: "center",
-          marginTop: 1,
-          background: "rgba(255,255,255,0.08)",
-          border: "1px solid rgba(255,255,255,0.14)",
-          flex: "0 0 auto",
-        }}
-      >
-        <span aria-hidden>⚠️</span>
-      </div>
-
-      <div style={{ minWidth: 0 }}>{attentionMessage}</div>
-    </div>
-  );
-}
-
-/** Centered modal message (spotlight state). */
-function ModalAttentionMessage(props: { attentionMessage: string | null }) {
-  const { attentionMessage } = props;
-  if (!attentionMessage) return null;
-
-  return (
-    <div
-      style={{
-        width: "100%",
-        borderRadius: 20,
-        border: "1px solid rgba(255,255,255,0.14)",
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.24))",
-        padding: "16px 16px",
-        boxShadow: "0 18px 52px rgba(0,0,0,0.35)",
-        display: "grid",
-        gap: 8,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 13,
-          lineHeight: "17px",
-          opacity: 0.9,
-          paddingLeft: 2,
-        }}
-      >
-        {attentionMessage}
-      </div>
-    </div>
-  );
-}
-
 type BannerTone = "success" | "neutral" | "warn";
 
 /** Full-width banner under topbar: non-auth flow messages. */
@@ -510,7 +430,7 @@ function SpotlightModal(props: {
   attentionMessage: string | null;
   gateNode: React.ReactNode;
 }) {
-  const { active, attentionMessage, gateNode } = props;
+  const { active, gateNode } = props;
   const modalRef = React.useRef<HTMLDivElement | null>(null);
 
   useFocusTrap(active, modalRef);
@@ -554,7 +474,6 @@ function SpotlightModal(props: {
             gap: 14,
           }}
         >
-          <ModalAttentionMessage attentionMessage={attentionMessage} />
 
           <div
             style={{
@@ -1112,10 +1031,6 @@ export default function PortalArea(props: {
     </ActivationGate>
   );
 
-  const miniMsgNode = (
-    <MiniMessageBar attentionMessage={derivedAttentionMessage} />
-  );
-
   const bannerKind: "gift" | "checkout" | null = gift
     ? "gift"
     : checkout
@@ -1358,7 +1273,6 @@ export default function PortalArea(props: {
                           }}
                         >
                           {gateNodeTopRight}
-                          {miniMsgNode}
                         </div>
                       </div>
                     </div>
