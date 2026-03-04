@@ -1776,6 +1776,9 @@ export default function PortalArtistPosts(props: {
                   // ✅ stay inside the module overlay (which is already centered by the grid parent)
                   position: "relative",
 
+                  // 🎯 vertical bias (negative = higher, positive = lower)
+                  transform: "translateY(-6vh)",
+
                   borderRadius: 18,
                   border: "1px solid rgba(255,255,255,0.14)",
                   background: "rgba(16,16,16,0.78)",
