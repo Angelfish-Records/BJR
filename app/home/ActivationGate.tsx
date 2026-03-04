@@ -1205,7 +1205,7 @@ export default function ActivationGate(props: Props) {
                     <input
                       ref={emailInputRef}
                       type="email"
-                      placeholder="Enter email for access."
+                      placeholder="Enter email for access"
                       value={email}
                       onChange={(e) => onEmailChange(e.target.value)}
                       onKeyDown={(e) => {
