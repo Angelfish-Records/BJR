@@ -856,12 +856,28 @@ export default function PortalArea(props: {
 /* --- Logo “veil” effect: slow shadow wash (visible -> almost swallowed -> visible) --- */
 @keyframes afLogoVeilDrift {
   0%, 100% {
-    transform: translateX(-14%);
-    opacity: 0.10;
+    background-position: 0% 50%;
+    opacity: 0.24;
+    transform: translateX(-2%) translateY(-0.6%);
   }
   55% {
-    transform: translateX(14%);
-    opacity: 0.82;
+    background-position: 100% 50%;
+    opacity: 0.78;
+    transform: translateX(2%) translateY(0.6%);
+  }
+}
+
+/* slower counter-moving layer */
+@keyframes afLogoVeilDriftSlow {
+  0%, 100% {
+    background-position: 100% 50%;
+    opacity: 0.18;
+    transform: translateX(2%) translateY(0.35%);
+  }
+  55% {
+    background-position: 0% 50%;
+    opacity: 0.46;
+    transform: translateX(-2%) translateY(-0.35%);
   }
 }
 }
@@ -881,26 +897,89 @@ export default function PortalArea(props: {
 
 .afLogoVeil {
   position: absolute;
-  inset: -30% -22%;
+  inset: -34% -26%;
   pointer-events: none;
   z-index: 2;
 
   mix-blend-mode: multiply;
 
-  /* Wide wash: most of the logo gets darker together */
-  background: linear-gradient(
+  /* primary shadow sweep */
+  background-image: linear-gradient(
     90deg,
     rgba(0,0,0,0.00) 0%,
-    rgba(0,0,0,0.88) 28%,
-    rgba(0,0,0,0.98) 52%,
-    rgba(0,0,0,0.88) 76%,
+    rgba(0,0,0,0.82) 22%,
+    rgba(0,0,0,0.98) 44%,
+    rgba(0,0,0,0.70) 68%,
+    rgba(0,0,0,0.00) 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 220% 100%;
+  background-position: 0% 50%;
+
+  opacity: 0.24;
+
+  filter: blur(1.15px);
+  animation: afLogoVeilDrift 14.5s ease-in-out infinite;
+  will-change: transform, opacity, background-position;
+}
+
+/* secondary softer environmental shadow */
+.afLogoVeil::before {
+  content: "";
+  position: absolute;
+  inset: -10% -18%;
+  pointer-events: none;
+
+  background-image: linear-gradient(
+    90deg,
+    rgba(0,0,0,0.00) 0%,
+    rgba(0,0,0,0.55) 30%,
+    rgba(0,0,0,0.65) 52%,
+    rgba(0,0,0,0.40) 72%,
     rgba(0,0,0,0.00) 100%
   );
 
+  background-repeat: no-repeat;
+  background-size: 240% 100%;
+  background-position: 100% 50%;
+
+  opacity: 0.28;
+  filter: blur(2.2px);
+
+  animation: afLogoVeilDriftSlow 21s ease-in-out infinite;
+  will-change: transform, opacity, background-position;
+}
+
+/* faint grain to keep the sweep from feeling “too perfect” */
+.afLogoVeil::after {
+  content: "";
+  position: absolute;
+  inset: -16% -16%;
+  pointer-events: none;
+
+  /*
+    Pure-CSS “noise” approximation: tiny repeating speckles.
+    It’s intentionally subtle — it should read as texture, not dots.
+  */
+  background-image:
+    repeating-radial-gradient(circle at 12% 18%, rgba(255,255,255,0.09) 0 0.7px, rgba(255,255,255,0.00) 0.7px 2.2px),
+    repeating-radial-gradient(circle at 74% 63%, rgba(255,255,255,0.06) 0 0.8px, rgba(255,255,255,0.00) 0.8px 2.6px);
+  background-size: 140px 110px, 170px 140px;
+  background-position: 0% 0%, 30% 10%;
+
+  mix-blend-mode: soft-light;
   opacity: 0.10;
-  filter: blur(1.0px);
-  animation: afLogoVeilDrift 13.5s ease-in-out infinite;
-  will-change: transform, opacity;
+  filter: blur(0.35px);
+
+  /* very slow drift so it never “locks” to the logo */
+  animation: afLogoVeilNoiseDrift 27s linear infinite;
+  will-change: transform, opacity, background-position;
+}
+
+@keyframes afLogoVeilNoiseDrift {
+  0%   { transform: translateX(0%) translateY(0%); background-position: 0% 0%, 30% 10%; opacity: 0.08; }
+  50%  { transform: translateX(1.8%) translateY(-1.2%); background-position: 60% 40%, 10% 70%; opacity: 0.12; }
+  100% { transform: translateX(0%) translateY(0%); background-position: 0% 0%, 30% 10%; opacity: 0.08; }
 }
 
 @media (prefers-reduced-motion: reduce) {
