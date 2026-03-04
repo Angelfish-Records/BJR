@@ -3071,23 +3071,31 @@ export default function ExegesisTrackClient(props: {
                   <div className="absolute inset-0 grid place-items-center p-4">
                     <div className="w-full max-w-[520px]">
                       <div className="relative rounded-2xl border border-white/10 bg-black/50 p-4 shadow-[0_26px_90px_rgba(0,0,0,0.55)] backdrop-blur-md">
-                        {inlineGate.dismissible ? (
-                          <button
-                            type="button"
-                            aria-label="Dismiss"
-                            className="absolute right-3 top-3 rounded-md p-1 text-white/50 hover:bg-white/10 hover:text-white/80 transition"
-                            onClick={() => {
-                              broker.clearGate({ domain: EXEGESIS_DOMAIN });
-                              clearInlineGate();
-                            }}
-                          >
-                            ✕
-                          </button>
-                        ) : null}
+                        {inlineGate.dismissible || inlineGate.message ? (
+                          <div className="flex items-start gap-3">
+                            <div className="min-w-0 flex-1">
+                              {inlineGate.message ? (
+                                <div className="rounded-md bg-black/30 px-3 py-2.5 text-[13px] opacity-90">
+                                  {inlineGate.message}
+                                </div>
+                              ) : null}
+                            </div>
 
-                        {inlineGate.message ? (
-                          <div className="mt-2 rounded-md bg-black/30 p-3 text-[13px] opacity-90">
-                            {inlineGate.message}
+                            {inlineGate.dismissible ? (
+                              <button
+                                type="button"
+                                aria-label="Dismiss"
+                                className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-md bg-white/0 text-white/50 hover:bg-white/10 hover:text-white/80 transition leading-none"
+                                onClick={() => {
+                                  broker.clearGate({ domain: EXEGESIS_DOMAIN });
+                                  clearInlineGate();
+                                }}
+                              >
+                                <span className="text-[18px] leading-none">
+                                  ×
+                                </span>
+                              </button>
+                            ) : null}
                           </div>
                         ) : null}
 
