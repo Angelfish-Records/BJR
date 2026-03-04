@@ -892,12 +892,44 @@ export default function PortalArea(props: {
   overflow: hidden; /* guarantees shimmer cannot leave logo bounds */
 }
 
-/* Real DOM node shimmer (more reliable than pseudo-elements) */
+/* Real DOM node shimmer (curved + masked) */
 .afLogoGlisten {
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 6;
+
+  /* ✅ Perfect alpha mask: sheen only where PNG has pixels */
+  -webkit-mask-image: var(--afLogoMaskUrl);
+  mask-image: var(--afLogoMaskUrl);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-position: center;
+  mask-position: center;
+
+  /* keep blend on the layer as a whole */
+  mix-blend-mode: screen;
+
+  /* This animation only drives visibility (NOT travel) */
+  opacity: 0;
+  animation: afLogoGlistenOpacity 62s ease-in-out infinite; /* cycle length (frequency) */
+
+  will-change: opacity;
+}
+
+/*
+  The actual moving light field lives on ::before.
+  We “curve” it by warping the gradient plane (rotate + skew + scale).
+*/
+.afLogoGlisten::before {
+  content: "";
+  position: absolute;
+
+  /* Give room so curvature doesn't clip at edges */
+  inset: -20%;
+  pointer-events: none;
 
   /*
     Full-logo glass sheen:
@@ -930,74 +962,66 @@ export default function PortalArea(props: {
   /* start fully off-frame */
   background-position: -260% -260%, -260% -260%;
 
-  mix-blend-mode: screen;
-  opacity: 0;
-
   /* (3) diffusion of sheen */
   filter: blur(1.1px);
 
-  /* mask to PNG alpha */
-  -webkit-mask-image: var(--afLogoMaskUrl);
-  mask-image: var(--afLogoMaskUrl);
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-size: contain;
-  mask-size: contain;
-  -webkit-mask-position: center;
-  mask-position: center;
+  /*
+    ✅ CURVE CONTROLS (tweak these):
+    - rotate: direction of sweep
+    - skewX: primary “bowed glass” feel
+    - scaleY: subtle cylindrical/lens feel
+    - border-radius: softens the warped plane edges
+  */
+  transform:
+    rotate(-10deg)
+    skewX(-10deg)  /* CURVE: -6deg (subtle) to -14deg (more bow) */
+    scaleY(1.06);  /* CURVE: 1.02 to 1.10 */
+  border-radius: 999px;
 
-  /* overall cycle length (affects frequency, not travel speed) */
-  animation: afLogoGlisten 62s ease-in-out infinite;
+  /* Travel animation (this controls “time to cross the logo”) */
+  animation: afLogoGlistenTravel 62s ease-in-out infinite;
 
-  will-change: opacity, background-position, transform;
+  will-change: background-position, transform;
 }
 
+/* Opacity-only (keeps timing logic clean) */
+@keyframes afLogoGlistenOpacity {
+  0%, 84% { opacity: 0; }   /* idle */
+  86%     { opacity: 0.14; } /* (3) subtle entry glow */
+  98%     { opacity: 0.56; } /* (3) softer peak */
+  99.5%   { opacity: 0.08; } /* fade-out tail */
+  100%    { opacity: 0; }
+}
 
-@keyframes afLogoGlisten {
-
-  /* idle period */
+/* Travel-only (slowness = how much timeline the sweep consumes) */
+@keyframes afLogoGlistenTravel {
   0%, 84% {
-    opacity: 0;
     background-position: -260% -260%, -260% -260%;
-    transform: translateX(0%) translateY(0%);
   }
-
-  /* gentle appearance */
   86% {
-    opacity: 0.14; /* (3) subtle entry glow */
     background-position: -160% -160%, -160% -160%;
-    transform: translateX(-0.12%) translateY(-0.12%);
   }
 
   /*
-    MAIN SWEEP
-    (1) slower movement:
-    - previously ~87 → 95 (≈8% of timeline)
-    - now ~86 → 98 (≈12% of timeline)
-    → beam crosses frame ~50% slower
+    MAIN SWEEP (1) slower travel:
+    - sweep spans 86% → 98% of the timeline (12% of cycle)
+    - to make it even slower, widen this span (e.g. 85% → 99%)
   */
   98% {
-    opacity: 0.56; /* (3) softer peak */
     background-position: 260% 260%, 260% 260%;
-    transform: translateX(0.18%) translateY(0.18%);
   }
 
-  /* fade-out tail */
-  99.5% {
-    opacity: 0.08;
+  99.5%, 100% {
     background-position: 340% 340%, 340% 340%;
-    transform: translateX(0.22%) translateY(0.22%);
-  }
-
-  100% {
-    opacity: 0;
-    background-position: 340% 340%, 340% 340%;
-    transform: translateX(0%) translateY(0%);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .afLogoGlisten { animation: none !important; opacity: 0 !important; }
+  .afLogoGlisten,
+  .afLogoGlisten::before {
+    animation: none !important;
+    opacity: 0 !important;
+  }
 }
 
 /* Force the image to be its own stacking participant */
