@@ -45,11 +45,11 @@ export function musicAlbumJsonLd(args: {
             name,
             position: idx + 1,
             // Use canonical IDs if present
-            identifier: t.catalogueId
+            identifier: t.recordingId
               ? {
                   "@type": "PropertyValue",
-                  propertyID: "catalogueId",
-                  value: t.catalogueId,
+                  propertyID: "recordingId",
+                  value: t.recordingId,
                 }
               : undefined,
             duration: dur ?? undefined,

@@ -52,7 +52,7 @@ export default async function PlayerAlias(props: {
   const sp = (props.searchParams ? await props.searchParams : {}) ?? {};
 
   const featured = await getFeaturedAlbumSlugFromSanity();
-  const slug = featured.slug ?? featured.fallbackSlug ?? "consolers";
+  const slug = featured.slug ?? featured.fallbackSlug ?? "god-defend";
   redirect(
     `/album/${encodeURIComponent(slug)}${preservedQueryFromSearchParams(sp)}`,
   );

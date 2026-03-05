@@ -245,11 +245,11 @@ export default defineType({
           title: "Track",
           fields: [
             defineField({
-              name: "catalogueId",
-              title: "Track Catalogue ID",
+              name: "recordingId",
+              title: "Recording ID",
               type: "string",
               description:
-                "Stable canonical ID for this track (label catalogue). Example: AF-TRK-0001-A (use suffixes for variants).",
+                "Globally unique, stable identifier for this recording. Used for lyrics, exegesis, analytics, and internal wiring. E.g. AFR-R-0001",
               validation: (r) =>
                 r
                   .required()
@@ -259,12 +259,19 @@ export default defineType({
             }),
 
             defineField({
-              name: "id",
-              title: "Legacy Track ID",
+              name: "displayId",
+              title: "Display ID",
               type: "string",
               description:
-                "Deprecated. Kept for backwards compatibility with existing lyrics + playback wiring. Prefer Track Catalogue ID.",
-              validation: (r) => r.required(),
+                "Per-album unique URL identifier for this track. Used in /album/:slug/track/:displayId.",
+              validation: (r) =>
+                r
+                  .required()
+                  .min(2)
+                  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+                  .error(
+                    "Use lowercase URL-safe slug format: letters/numbers + hyphens.",
+                  ),
             }),
 
             defineField({

@@ -104,7 +104,7 @@ export default async function SessionRuntime(props: {
   );
 
   const featuredAlbumSlug =
-    featured.slug ?? featured.fallbackSlug ?? "consolers";
+    featured.slug ?? featured.fallbackSlug ?? "god-defend";
 
   const albumSlug = (props.albumSlugOverride ?? "").trim() || featuredAlbumSlug;
 

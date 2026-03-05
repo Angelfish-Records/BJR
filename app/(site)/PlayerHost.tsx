@@ -80,7 +80,7 @@ export default function PlayerHost({
     <PlayerStateProvider>
       <AudioEngine />
       <StageInlineHost />
-      <TrackTitleSync fallbackLeaf="Consolers" mode="track" />
+      <TrackTitleSync fallbackLeaf="God Defend" mode="track" />
       {children}
     </PlayerStateProvider>
   );
