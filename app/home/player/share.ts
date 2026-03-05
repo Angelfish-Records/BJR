@@ -22,6 +22,9 @@ type AlbumResolveOk = {
     id: string;
     catalogueId: string | null;
     slug: string;
+    // `displayTitle` should be the human/stylised title (e.g. "GOD DEFEND").
+    // `title` remains as a fallback.
+    displayTitle?: string | null;
     title: string;
     artist?: string;
     artworkUrl: string | null;
@@ -67,10 +70,13 @@ async function resolveAlbumMeta(
   if (!resolvedSlug)
     throw new Error("Cannot share: resolved album is missing slug.");
 
+  const resolvedTitle =
+    clean(data.album.displayTitle) ?? clean(data.album.title);
+
   return {
     ...ctx,
     albumSlug: resolvedSlug,
-    albumTitle: clean(ctx.albumTitle) ?? clean(data.album.title),
+    albumTitle: clean(ctx.albumTitle) ?? resolvedTitle,
     albumArtist: clean(ctx.albumArtist) ?? clean(data.album.artist),
   };
 }
@@ -129,10 +135,14 @@ export function deriveShareContext(args: {
 }): PlayerShareContext {
   const albumId = args.albumId ?? args.album?.catalogueId ?? args.album?.id;
 
+  const displayTitle = clean(
+    (args.album as { displayTitle?: string | null } | null)?.displayTitle,
+  );
+
   return {
     albumSlug: clean(args.albumSlug),
     albumId: clean(albumId),
-    albumTitle: clean(args.album?.title),
+    albumTitle: displayTitle ?? clean(args.album?.title),
     albumArtist: clean(args.album?.artist ?? args.queueArtist),
   };
 }

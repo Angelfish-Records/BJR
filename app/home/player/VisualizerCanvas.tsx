@@ -16,11 +16,9 @@ type ThemeFactory = () => Theme;
 type NebulaMod = typeof import("./visualizer/themes/nebula");
 type LatticeMod = typeof import("./visualizer/themes/gravitationalLattice");
 type OrbitalMod = typeof import("./visualizer/themes/orbitalScript");
-type PhaseMod = typeof import("./visualizer/themes/phaseGlass");
 type MhdMod = typeof import("./visualizer/themes/mhdSilk");
 type PressureMod = typeof import("./visualizer/themes/pressureGlass");
 type VeinsMod = typeof import("./visualizer/themes/reactionVeins");
-type FogMod = typeof import("./visualizer/themes/dreamFog");
 type FilamentMod = typeof import("./visualizer/themes/filamentStorm");
 type MosaicMod = typeof import("./visualizer/themes/mosaicDrift");
 type MeaningMod = typeof import("./visualizer/themes/meaningLeak");
@@ -28,12 +26,10 @@ type MeaningMod = typeof import("./visualizer/themes/meaningLeak");
 type ThemeName =
   | "nebula"
   | "gravitational-lattice"
-  | "dream-fog"
   | "filament-storm"
   | "mosaic-drift"
   | "meaning-leak"
   | "orbital-script"
-  | "phase-glass"
   | "mhd-silk"
   | "pressure-glass"
   | "reaction-veins";
@@ -50,9 +46,6 @@ function canonicalThemeName(raw: string | undefined | null): ThemeName {
     case "gravitational-lattice":
     case "lattice":
       return "gravitational-lattice";
-    case "dream-fog":
-    case "fog":
-      return "dream-fog";
     case "filament-storm":
     case "filament":
       return "filament-storm";
@@ -65,9 +58,6 @@ function canonicalThemeName(raw: string | undefined | null): ThemeName {
     case "orbital-script":
     case "orbital":
       return "orbital-script";
-    case "phase-glass":
-    case "glass":
-      return "phase-glass";
     case "mhd-silk":
     case "mhd":
       return "mhd-silk";
@@ -90,9 +80,6 @@ const THEME_LOADERS: Record<ThemeName, () => Promise<ThemeFactory>> = {
   "gravitational-lattice": async () =>
     ((await import("./visualizer/themes/gravitationalLattice")) as LatticeMod)
       .createGravitationalLatticeTheme,
-  "dream-fog": async () =>
-    ((await import("./visualizer/themes/dreamFog")) as FogMod)
-      .createDreamFogTheme,
   "filament-storm": async () =>
     ((await import("./visualizer/themes/filamentStorm")) as FilamentMod)
       .createFilamentStormTheme,
@@ -105,9 +92,6 @@ const THEME_LOADERS: Record<ThemeName, () => Promise<ThemeFactory>> = {
   "orbital-script": async () =>
     ((await import("./visualizer/themes/orbitalScript")) as OrbitalMod)
       .createOrbitalScriptTheme,
-  "phase-glass": async () =>
-    ((await import("./visualizer/themes/phaseGlass")) as PhaseMod)
-      .createPhaseGlassTheme,
   "mhd-silk": async () =>
     ((await import("./visualizer/themes/mhdSilk")) as MhdMod)
       .createMHDSilkTheme,

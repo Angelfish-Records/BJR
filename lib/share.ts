@@ -90,7 +90,7 @@ export function buildShareTarget(
           artistName?: string;
           id?: string;
         };
-        track: { recordingId: string; displayId: string, title: string };
+        track: { recordingId: string; displayId: string; title: string };
       }
     | {
         type: "post";
@@ -132,7 +132,16 @@ export function buildShareTarget(
   }
 
   const artist = input.album.artistName?.trim();
-  const albumTitle = input.album.title?.trim() || "Album";
+  const albumTitleRaw = (input.album.title ?? "").toString().trim();
+
+  // Never treat slug-ish strings as display titles.
+  // If title is missing, keep it generic rather than leaking `god-defend`.
+  const albumTitle =
+    albumTitleRaw.length > 0 && albumTitleRaw.includes("-") === false
+      ? albumTitleRaw
+      : albumTitleRaw.length > 0
+        ? albumTitleRaw // keep non-empty titles even if they contain hyphens
+        : "Album";
 
   // ✅ canonical album base path
   const basePath = `/album/${encodePathSeg(input.album.slug)}`;
@@ -140,7 +149,11 @@ export function buildShareTarget(
 
   if (input.type === "album") {
     const url = origin
-      ? addUtm(maybeAddSt(new URL(baseAbs), input.st), method, "album").toString()
+      ? addUtm(
+          maybeAddSt(new URL(baseAbs), input.st),
+          method,
+          "album",
+        ).toString()
       : baseAbs;
 
     const title = artist ? `${artist} — ${albumTitle}` : albumTitle;
@@ -166,7 +179,11 @@ export function buildShareTarget(
   const trackAbs = origin ? `${origin}${trackPath}` : trackPath;
 
   const url = origin
-    ? addUtm(maybeAddSt(new URL(trackAbs), input.st), method, "track").toString()
+    ? addUtm(
+        maybeAddSt(new URL(trackAbs), input.st),
+        method,
+        "track",
+      ).toString()
     : trackAbs;
 
   const title = artist
