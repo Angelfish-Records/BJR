@@ -2291,33 +2291,7 @@ export default function ExegesisTrackClient(props: {
                         </div>
                       ) : null}
 
-                      <div className="relative">
-                        {Composer}
-
-                        {inlineGate.open ? (
-                          <button
-                            type="button"
-                            className="absolute inset-0 z-10 rounded-lg border border-white/10 bg-black/35 backdrop-blur-[2px] text-left"
-                            onClick={() => {
-                              if (isAnon) return; // ActivationGate handles sign-in CTA globally
-                              openMembershipModal();
-                            }}
-                            aria-label="Unlock discussion"
-                          >
-                            <div className="px-3 py-2">
-                              <div className="text-sm font-semibold text-white/90">
-                                {isAnon
-                                  ? "Sign in to continue"
-                                  : "Upgrade to continue"}
-                              </div>
-                              <div className="mt-0.5 text-xs text-white/65">
-                                {inlineGate.message ||
-                                  "Unlock full discussion and posting."}
-                              </div>
-                            </div>
-                          </button>
-                        ) : null}
-                      </div>
+                      {Composer}
 
                       {/* Header controls: sort when browsing all; Back when focused */}
                       <div className="mt-3 flex items-center justify-end">
@@ -3075,7 +3049,7 @@ export default function ExegesisTrackClient(props: {
                           <div className="flex items-start gap-3">
                             <div className="min-w-0 flex-1">
                               {inlineGate.message ? (
-                                <div className="rounded-md bg-black/30 px-3 py-2.5 text-[13px] opacity-90">
+                                <div className="rounded-md px-3 py-2.5 text-[13px] opacity-90">
                                   {inlineGate.message}
                                 </div>
                               ) : null}
