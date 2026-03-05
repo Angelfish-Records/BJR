@@ -298,8 +298,18 @@ export default function LyricsOverlay(props: {
 
   // Reserve footer zone (StageTransportBar) + safe-area inset.
   // We implement this in padding and ALSO in the mask so content fades out before the controls.
+
+  // Horizontal geometry:
+  // - sidePad: reduce padding to increase usable line width (fewer wraps)
+  // - lineMax: a centered column so text stays centered even with a right-side icon
+  const sidePadPx = isInline ? 10 : 18;
+  const lineMax = isInline ? "min(860px, 100%)" : "min(980px, 100%)";
+
   const styleVars: React.CSSProperties &
     Record<`--af-lyrics-${string}`, string> = {
+    "--af-lyrics-side-pad": `${sidePadPx}px`,
+    "--af-lyrics-line-max": lineMax,
+
     "--af-lyrics-reserved-bottom": `${Math.max(0, Math.floor(reservedBottomPx))}px`,
     "--af-lyrics-fade-top": `${fadeTopPx}px`,
     "--af-lyrics-fade-bottom": `${fadeBottomPx}px`,
@@ -391,7 +401,7 @@ export default function LyricsOverlay(props: {
             overflowY: "auto",
             overflowX: "hidden",
             WebkitOverflowScrolling: "touch",
-            padding: `${padTop}px 14px ${padBottom} 14px`,
+            padding: `${padTop}px var(--af-lyrics-side-pad) ${padBottom} var(--af-lyrics-side-pad)`,
             display: "grid",
             gap: isInline ? 5 : 9,
             zIndex: 1,
@@ -448,7 +458,6 @@ export default function LyricsOverlay(props: {
               isInline && (idx === hoverIdx || idx === revealIdx);
 
             const iconSize = 26;
-            const iconGutter = isInline ? iconSize + 8 : 0; // reserve space so text never sits under the icon
 
             return (
               <div
@@ -470,12 +479,16 @@ export default function LyricsOverlay(props: {
                   position: "relative",
                   width: "100%",
                   minWidth: 0,
+
+                  // 3-column layout:
+                  // [left spacer] [centered lyric column] [right spacer w/ icon docked to edge]
                   display: "grid",
-                  justifyItems: "center",
+                  gridTemplateColumns:
+                    "1fr minmax(0, var(--af-lyrics-line-max)) 1fr",
                   alignItems: "center",
+
                   paddingTop: isInline ? 2 : 4,
                   paddingBottom: isInline ? 2 : 4,
-                  paddingRight: iconGutter,
                 }}
               >
                 {/* Discourse icon (hover on desktop, long-press reveal on touch) */}
@@ -493,23 +506,29 @@ export default function LyricsOverlay(props: {
                     openExegesis(cue);
                   }}
                   style={{
-                    position: "absolute",
-                    right: 0, // a tiny inset from the scroller edge
-                    top: "50%",
-                    transform: `translateY(-50%) ${showDiscourse ? "scale(1)" : "scale(0.98)"}`,
+                    // Put the icon in the right gutter column so the lyric column stays perfectly centered.
+                    gridColumn: 3,
+                    justifySelf: "end",
+                    alignSelf: "center",
+
+                    // Nudge it further toward the scroller edge (without changing lyric centering).
+                    // Negative margin “eats” into the side padding a bit.
+                    marginRight: isInline ? -8 : 0,
+
+                    transform: `${showDiscourse ? "scale(1)" : "scale(0.98)"}`,
                     width: iconSize,
                     height: iconSize,
                     borderRadius: 0,
                     border: 0,
                     background: "transparent",
                     color: "rgba(255,255,255,0.86)",
+                    display: isInline ? "grid" : "none",
                     placeItems: "center",
                     lineHeight: 0,
                     cursor: recordingId ? "pointer" : "default",
                     pointerEvents: recordingId ? "auto" : "none",
                     zIndex: 3,
                     opacity: showDiscourse && recordingId ? 1 : 0,
-                    display: isInline ? "grid" : "none",
                     overflow: "visible",
                     transition:
                       "opacity 140ms ease, transform 160ms ease, filter 160ms ease",
@@ -584,7 +603,8 @@ export default function LyricsOverlay(props: {
                     background: "transparent",
                     padding: 0,
 
-                    width: isInline ? `calc(100% - ${iconGutter}px)` : "100%",
+                    gridColumn: 2,
+                    width: "100%",
                     minWidth: 0,
                     display: "grid",
                     justifyItems: "center",
