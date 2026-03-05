@@ -602,7 +602,8 @@ export default function MiniPlayer(props: {
 
   /* ---------------- Copy ---------------- */
 
-  const title = displayTrack?.title ?? displayTrack?.recordingId ?? "Nothing queued";
+  const title =
+    displayTrack?.title ?? displayTrack?.recordingId ?? "Nothing queued";
 
   const statusLine = p.lastError
     ? "Playback error"
@@ -635,8 +636,10 @@ export default function MiniPlayer(props: {
           artistName,
         },
         track: {
-          id: cur.recordingId,
-          title: (cur.title ?? cur.recordingId).toString().trim() || cur.recordingId,
+          recordingId: cur.recordingId,
+          displayId: cur.displayId,
+          title:
+            (cur.title ?? cur.displayId).toString().trim() || cur.displayId,
         },
       });
       await shareTarget(target);

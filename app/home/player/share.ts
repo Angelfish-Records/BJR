@@ -113,8 +113,9 @@ export async function shareTrack(
       artistName: clean(full.albumArtist ?? t.artist),
     },
     track: {
-      id: t.recordingId,
-      title: clean(t.title) ?? t.recordingId,
+      recordingId: t.recordingId,
+      displayId: t.displayId,
+      title: clean(t.title) ?? t.displayId,
     },
   });
   return performShare(target);

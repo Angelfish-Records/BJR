@@ -16,6 +16,7 @@ export type ShareTarget =
       albumSlug: string;
       albumId?: string;
       recordingId: string;
+      displayId: string;
       trackTitle: string;
       title: string;
       text: string;
@@ -89,7 +90,7 @@ export function buildShareTarget(
           artistName?: string;
           id?: string;
         };
-        track: { id: string; title: string };
+        track: { recordingId: string; displayId: string, title: string };
       }
     | {
         type: "post";
@@ -160,7 +161,7 @@ export function buildShareTarget(
   // ✅ canonical track path (no query-based player state)
   const trackTitle = input.track.title?.trim() || "Track";
   const trackPath = `/album/${encodePathSeg(input.album.slug)}/track/${encodePathSeg(
-    input.track.id,
+    input.track.displayId,
   )}`;
   const trackAbs = origin ? `${origin}${trackPath}` : trackPath;
 
@@ -179,7 +180,8 @@ export function buildShareTarget(
     type: "track",
     albumSlug: input.album.slug,
     albumId: input.album.id,
-    recordingId: input.track.id,
+    recordingId: input.track.recordingId,
+    displayId: input.track.displayId,
     trackTitle,
     title,
     text,

@@ -442,16 +442,16 @@ function AvailableOnRibbon({ links }: { links: PlatformLink[] }) {
 
 function parsePublicAlbumPath(pathname: string | null): {
   albumSlug: string | null;
-  recordingId: string | null;
+  displayId: string | null;
 } {
   const p = (pathname ?? "").trim();
   // /album/:slug
-  // /album/:slug/track/:recordingId
+  // /album/:slug/track/:displayId
   const m = p.match(/^\/album\/([^\/?#]+)(?:\/track\/([^\/?#]+))?\/?$/i);
-  if (!m) return { albumSlug: null, recordingId: null };
+  if (!m) return { albumSlug: null, displayId: null };
   const albumSlug = decodeURIComponent(m[1] ?? "").trim() || null;
-  const recordingId = decodeURIComponent(m[2] ?? "").trim() || null;
-  return { albumSlug, recordingId };
+  const displayId = decodeURIComponent(m[2] ?? "").trim() || null;
+  return { albumSlug, displayId };
 }
 
 function canonicalCarryQuery(): string {
@@ -537,13 +537,13 @@ export default function FullPlayer(props: {
   const isPublicAlbumRoute = Boolean(route.albumSlug);
 
   const goCanonicalTrack = React.useCallback(
-    (recordingId: string | null, mode: "push" | "replace" = "push") => {
+    (displayId: string | null, mode: "push" | "replace" = "push") => {
       if (!isPublicAlbumRoute) return;
 
       const qs = canonicalCarryQuery();
       const base = `/album/${encodeURIComponent(effAlbumSlug)}`;
-      const href = recordingId
-        ? `${base}/track/${encodeURIComponent(recordingId)}${qs}`
+      const href = displayId
+        ? `${base}/track/${encodeURIComponent(displayId)}${qs}`
         : `${base}${qs}`;
 
       if (mode === "replace") router.replace(href, { scroll: false });
@@ -826,7 +826,7 @@ export default function FullPlayer(props: {
 
     if (isPublicAlbumRoute) {
       // Pressing play on an album implies first-track is the canonical track leaf.
-      goCanonicalTrack(firstTrack.recordingId, "replace");
+      goCanonicalTrack(firstTrack.displayId, "replace");
     }
 
     p.play(firstTrack);
@@ -890,7 +890,7 @@ export default function FullPlayer(props: {
     ensureAlbumQueue();
     if (isPublicAlbumRoute) {
       // User-initiated navigation; preserve history.
-      goCanonicalTrack(t.recordingId, "push");
+      goCanonicalTrack(t.displayId, "push");
     }
 
     p.play(t);
@@ -1176,7 +1176,7 @@ export default function FullPlayer(props: {
                     contextArtist: effAlbum?.artist ?? undefined,
                   });
 
-                  goCanonicalTrack(t.recordingId, "push");
+                  goCanonicalTrack(t.displayId, "push");
 
                   if (isCoarsePointer) {
                     p.play(t);
@@ -1190,7 +1190,7 @@ export default function FullPlayer(props: {
                   if (isCoarsePointer) return;
                   if (!canPlay) return;
 
-                  goCanonicalTrack(t.recordingId, "push");
+                  goCanonicalTrack(t.displayId, "push");
 
                   p.play(t);
                   window.dispatchEvent(new Event("af:play-intent"));

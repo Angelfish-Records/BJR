@@ -2,11 +2,7 @@
 "use client";
 
 import React from "react";
-import {
-  performShare,
-  buildShareTarget,
-  type ShareTarget,
-} from "@/lib/share";
+import { performShare, buildShareTarget, type ShareTarget } from "@/lib/share";
 
 function CopyFallbackModal(props: { url: string; onClose: () => void }) {
   const ref = React.useRef<HTMLInputElement | null>(null);
@@ -110,10 +106,7 @@ export function useShareAction() {
   );
 
   const fallbackModal = fallbackUrl ? (
-    <CopyFallbackModal
-      url={fallbackUrl}
-      onClose={() => setFallbackUrl(null)}
-    />
+    <CopyFallbackModal url={fallbackUrl} onClose={() => setFallbackUrl(null)} />
   ) : null;
 
   return {
@@ -147,7 +140,7 @@ export function useShareBuilders() {
           artistName?: string;
           id?: string;
         },
-        track: { id: string; title: string },
+        track: { recordingId: string; displayId: string; title: string },
       ) =>
         buildShareTarget({
           type: "track",

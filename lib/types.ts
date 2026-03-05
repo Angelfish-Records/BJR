@@ -68,18 +68,8 @@ export type AlbumNavItem = {
 };
 
 export type PlayerTrack = {
-  /**
-   * Canonical media identity (globally unique).
-   * This is the "track identity" everywhere in player, lyrics, exegesis, telemetry, mux.
-   */
   recordingId: string;
-
-  /**
-   * Release context identity (album/release-level label vocabulary).
-   * Nullable because some contexts may present tracks outside a release.
-   */
-  catalogueId: string | null;
-
+  displayId: string;
   title?: string;
   artist?: string;
   durationMs?: number;

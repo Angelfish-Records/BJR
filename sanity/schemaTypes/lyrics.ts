@@ -8,8 +8,8 @@ export default defineType({
   type: "document",
   fields: [
     defineField({
-      name: "trackId",
-      title: "Track ID (app)",
+      name: "recordingId",
+      title: "Recording ID",
       type: "string",
       validation: (r) => r.required(),
     }),

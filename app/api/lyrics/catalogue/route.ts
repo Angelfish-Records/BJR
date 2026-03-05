@@ -8,10 +8,14 @@ export const runtime = "nodejs";
 export const revalidate = 300;
 
 type CatalogueTrack = {
-  recordingId: string; // the id we will link with (legacy id OR catalogueId — whichever has lyrics)
+  // ✅ canonical URL id (per-album unique)
+  displayId: string;
+
+  // ✅ canonical internal id (lyrics + exegesis)
+  recordingId: string;
+
   title: string | null;
   artist: string | null;
-  trackCatalogueId: string | null;
   trackNo: number; // ✅ ordinal in the album tracklist (1-based)
 };
 
@@ -20,9 +24,11 @@ type CatalogueAlbum = {
   albumSlug: string | null;
   albumTitle: string | null;
   albumCatalogueId: string | null;
-  coverUrl: string | null; // ✅ album artwork URL (same idea as FullPlayer)
+  coverUrl: string | null;
   tracks: CatalogueTrack[];
-  recordingIds: string[]; // legacy-ish surface: list of returned recordingId values
+
+  // Helpful for clients that still want an index by internal ids
+  recordingIds: string[];
 };
 
 type CatalogueOk = { ok: true; albums: CatalogueAlbum[] };
@@ -35,10 +41,10 @@ type CatalogueQueryResult = {
     albumSlug?: string | null;
     albumTitle?: string | null;
     albumCatalogueId?: string | null;
-    artwork?: unknown; // ✅
+    artwork?: unknown;
     tracks?: Array<{
-      id?: string | null; // legacy
-      catalogueId?: string | null; // canonical
+      recordingId?: string | null;
+      displayId?: string | null;
       title?: string | null;
       artist?: string | null;
     }>;
@@ -72,11 +78,11 @@ export async function GET() {
             "albumId": _id,
             "albumTitle": title,
             "albumSlug": slug.current,
-                        "albumCatalogueId": catalogueId,
+            "albumCatalogueId": catalogueId,
             artwork,
             "tracks": tracks[]{
-              id,
-              catalogueId,
+              recordingId,
+              displayId,
               title,
               artist
             }
@@ -97,7 +103,7 @@ export async function GET() {
     const albumsRaw = Array.isArray(bundle?.albums) ? bundle!.albums! : [];
 
     const albums: CatalogueAlbum[] = albumsRaw
-            .map((a) => {
+      .map((a) => {
         const tracksRaw = Array.isArray(a.tracks) ? a.tracks : [];
 
         const coverUrl =
@@ -106,28 +112,35 @@ export async function GET() {
             : null;
 
         const normTracks: CatalogueTrack[] = [];
-        const seen = new Set<string>();
+        const seenRecordingIds = new Set<string>();
+        const seenDisplayIds = new Set<string>();
 
         // ✅ preserve album tracklist ordinals even if some tracks are skipped
         for (let idx = 0; idx < tracksRaw.length; idx++) {
           const t = tracksRaw[idx];
-          const legacyId = asTrimmedString(t?.id);
-          const catId = asTrimmedString(t?.catalogueId);
 
-          // Pick whichever identifier actually has lyrics
-          const picked =
-            (legacyId && lyricIdSet.has(legacyId) ? legacyId : "") ||
-            (catId && lyricIdSet.has(catId) ? catId : "");
+          const recordingId = asTrimmedString(t?.recordingId);
+          const displayId = asTrimmedString(t?.displayId);
 
-          if (!picked) continue;
-          if (seen.has(picked)) continue;
-          seen.add(picked);
+          // Eligibility: must have a recordingId AND lyrics for that recordingId
+          if (!recordingId) continue;
+          if (!lyricIdSet.has(recordingId)) continue;
+
+          // URL requirement: must have displayId (your albums.ts already guarantees fallback/uniq,
+          // but catalogue is used for lightweight browsing; enforce it here too).
+          if (!displayId) continue;
+
+          if (seenRecordingIds.has(recordingId)) continue;
+          if (seenDisplayIds.has(displayId)) continue;
+
+          seenRecordingIds.add(recordingId);
+          seenDisplayIds.add(displayId);
 
           normTracks.push({
-            recordingId: picked,
+            recordingId,
+            displayId,
             title: asTrimmedString(t?.title) || null,
             artist: asTrimmedString(t?.artist) || null,
-            trackCatalogueId: catId || null,
             trackNo: idx + 1,
           });
         }
@@ -144,7 +157,6 @@ export async function GET() {
           recordingIds,
         };
       })
-      // drop albums that ended up with zero eligible tracks
       .filter((g) => g.tracks.length > 0);
 
     return NextResponse.json<CatalogueOk>(

@@ -34,7 +34,7 @@ type AlbumDoc = {
   }>;
   tracks?: Array<{
     recordingId: string;
-    catalogueId?: string | null;
+    displayId?: string;
     title?: string;
     artist?: string;
     durationMs?: number;
@@ -120,6 +120,39 @@ function parseTierNameArray(v: unknown): TierName[] {
   return v.map(parseTierName).filter((x): x is TierName => x !== null);
 }
 
+function slugifySeg(v: string): string {
+  // safe for URLs and stable-ish: lowercase, hyphens, strip junk
+  return v
+    .toLowerCase()
+    .trim()
+    .replace(/['"]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function fallbackDisplayId(args: {
+  title?: string;
+  trackNo: number; // 1-based
+}): string {
+  const base = slugifySeg(args.title ?? "");
+  // always produce something
+  return base
+    ? `${String(args.trackNo).padStart(2, "0")}-${base}`
+    : `track-${String(args.trackNo).padStart(2, "0")}`;
+}
+
+function uniqifyDisplayId(desired: string, used: Set<string>): string {
+  let d = desired;
+  let i = 2;
+  while (used.has(d)) {
+    d = `${desired}-${i}`;
+    i++;
+  }
+  used.add(d);
+  return d;
+}
+
 export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
   const q = `
     *[_type == "album" && slug.current == $slug][0]{
@@ -143,7 +176,7 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
       },
       "tracks": tracks[]{
         recordingId,
-        catalogueId,
+        displayId,
         title,
         artist,
         durationMs,
@@ -214,26 +247,45 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
     },
   };
 
-    const tracks: PlayerTrack[] = Array.isArray(doc.tracks)
-    ? doc.tracks
-        .filter((t) => typeof t?.recordingId === "string" && t.recordingId.trim())
-        .map((t) => {
-          const raw = t.durationMs;
-          const n =
-            typeof raw === "number" && Number.isFinite(raw) ? raw : undefined;
-          const trackTheme = normTheme(t.visualTheme);
+  const tracks: PlayerTrack[] = Array.isArray(doc.tracks)
+    ? (() => {
+        const used = new Set<string>();
 
-          return {
-            recordingId: t.recordingId.trim(),
-            catalogueId: normStr(t.catalogueId) ?? null,
-            title: normStr(t.title),
-            artist: normStr(t.artist),
-            muxPlaybackId: normStr(t.muxPlaybackId),
-            durationMs: typeof n === "number" && n > 0 ? n : undefined,
-            visualTheme: trackTheme ?? albumTheme,
-            explicit: t.explicit === true,
-          };
-        })
+        return doc.tracks
+          .filter(
+            (t) => typeof t?.recordingId === "string" && t.recordingId.trim(),
+          )
+          .map((t, idx) => {
+            const rawDur = t.durationMs;
+            const dur =
+              typeof rawDur === "number" && Number.isFinite(rawDur)
+                ? rawDur
+                : undefined;
+
+            const albumOrdinal = idx + 1;
+
+            const recordingId = t.recordingId.trim();
+
+            const wanted =
+              normStr(t.displayId) ??
+              fallbackDisplayId({ title: t.title, trackNo: albumOrdinal });
+
+            const displayId = uniqifyDisplayId(wanted, used);
+
+            const trackTheme = normTheme(t.visualTheme);
+
+            return {
+              recordingId,
+              displayId,
+              title: normStr(t.title),
+              artist: normStr(t.artist),
+              muxPlaybackId: normStr(t.muxPlaybackId),
+              durationMs: typeof dur === "number" && dur > 0 ? dur : undefined,
+              visualTheme: trackTheme ?? albumTheme,
+              explicit: t.explicit === true,
+            };
+          });
+      })()
     : [];
 
   const recordingIds = tracks
@@ -256,7 +308,7 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
   const offsetByRecordingId: Record<string, number> = {};
 
   for (const d of Array.isArray(lyricDocs) ? lyricDocs : []) {
-    const id = d?.recordingId;
+    const id = (d?.recordingId ?? "").trim();
     if (!id) continue;
     cuesByRecordingId[id] = normalizeLyricCuesFromSanity(d.cues);
     offsetByRecordingId[id] =
