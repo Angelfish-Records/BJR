@@ -303,7 +303,10 @@ export default function LyricsOverlay(props: {
   // - sidePad: reduce padding to increase usable line width (fewer wraps)
   // - lineMax: a centered column so text stays centered even with a right-side icon
   const sidePadPx = isInline ? 10 : 18;
-  const lineMax = isInline ? "min(820px, 100%)" : "min(980px, 100%)";
+
+  // IMPORTANT: keep this as a plain <length> so gridTemplateColumns never fails to parse.
+  const lineMaxPx = isInline ? 820 : 980;
+  const lineMax = `${lineMaxPx}px`;
 
   const discourseYOffsetPx = isInline ? 3 : 0;
 
