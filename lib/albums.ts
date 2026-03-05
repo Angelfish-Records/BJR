@@ -33,21 +33,19 @@ type AlbumDoc = {
     url?: string;
   }>;
   tracks?: Array<{
-    id: string; // legacy
-    catalogueId?: string; // new canonical
+    recordingId: string;
+    catalogueId?: string | null;
     title?: string;
     artist?: string;
     durationMs?: number;
     muxPlaybackId?: string;
     visualTheme?: string;
-
-    // NEW
     explicit?: boolean;
   }>;
 };
 
 type TrackLyricsDoc = {
-  trackId?: string; // still legacy for now
+  recordingId?: string;
   offsetMs?: number;
   cues?: Array<{ _key?: string; tMs?: number; text?: string; endMs?: number }>;
 };
@@ -144,7 +142,7 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
         url
       },
       "tracks": tracks[]{
-        id,
+        recordingId,
         catalogueId,
         title,
         artist,
@@ -216,9 +214,9 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
     },
   };
 
-  const tracks: PlayerTrack[] = Array.isArray(doc.tracks)
+    const tracks: PlayerTrack[] = Array.isArray(doc.tracks)
     ? doc.tracks
-        .filter((t) => t?.id)
+        .filter((t) => typeof t?.recordingId === "string" && t.recordingId.trim())
         .map((t) => {
           const raw = t.durationMs;
           const n =
@@ -226,44 +224,42 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
           const trackTheme = normTheme(t.visualTheme);
 
           return {
-            id: t.id,
+            recordingId: t.recordingId.trim(),
             catalogueId: normStr(t.catalogueId) ?? null,
             title: normStr(t.title),
             artist: normStr(t.artist),
             muxPlaybackId: normStr(t.muxPlaybackId),
             durationMs: typeof n === "number" && n > 0 ? n : undefined,
             visualTheme: trackTheme ?? albumTheme,
-
-            // NEW
             explicit: t.explicit === true,
           };
         })
     : [];
 
-  const trackIds = tracks
-    .map((t) => t.id)
+  const recordingIds = tracks
+    .map((t) => t.recordingId)
     .filter((x): x is string => typeof x === "string" && x.length > 0);
 
   const lyricsQ = `
-    *[_type == "lyrics" && trackId in $trackIds]{
-      trackId,
+    *[_type == "lyrics" && recordingId in $recordingIds]{
+      recordingId,
       offsetMs,
       cues[]{ _key, tMs, text, endMs }
     }
   `;
 
-  const lyricDocs = trackIds.length
-    ? await client.fetch<TrackLyricsDoc[]>(lyricsQ, { trackIds })
+  const lyricDocs = recordingIds.length
+    ? await client.fetch<TrackLyricsDoc[]>(lyricsQ, { recordingIds })
     : [];
 
-  const cuesByTrackId: Record<string, LyricCue[]> = {};
-  const offsetByTrackId: Record<string, number> = {};
+  const cuesByRecordingId: Record<string, LyricCue[]> = {};
+  const offsetByRecordingId: Record<string, number> = {};
 
   for (const d of Array.isArray(lyricDocs) ? lyricDocs : []) {
-    const id = d?.trackId;
+    const id = d?.recordingId;
     if (!id) continue;
-    cuesByTrackId[id] = normalizeLyricCuesFromSanity(d.cues);
-    offsetByTrackId[id] =
+    cuesByRecordingId[id] = normalizeLyricCuesFromSanity(d.cues);
+    offsetByRecordingId[id] =
       typeof d.offsetMs === "number" && Number.isFinite(d.offsetMs)
         ? Math.floor(d.offsetMs)
         : 0;
@@ -273,7 +269,7 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
     albumSlug: slug,
     album,
     tracks,
-    albumLyrics: { cuesByTrackId, offsetByTrackId },
+    albumLyrics: { cuesByRecordingId, offsetByRecordingId },
   });
 }
 

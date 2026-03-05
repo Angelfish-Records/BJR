@@ -26,12 +26,12 @@ export type ResolvedGroupKey = {
 };
 
 export async function resolveGroupKeyForAnchor(args: {
-  trackId: string;
+  recordingId: string;
   lineKey: string;
 }): Promise<ResolvedGroupKey> {
-  const trackId = norm(args.trackId);
+  const recordingId = norm(args.recordingId);
   const lineKey = norm(args.lineKey);
-  if (!trackId || !lineKey) {
+  if (!recordingId || !lineKey) {
     return { groupKey: "", scheme: "v1", kind: null, anchorLineKey: lineKey };
   }
 
@@ -43,7 +43,7 @@ export async function resolveGroupKeyForAnchor(args: {
   }>`
     select canonical_group_key, kind, scheme_version
     from exegesis_group_map
-    where track_id = ${trackId}
+    where track_id = ${recordingId}
       and anchor_line_key = ${lineKey}
     limit 1
   `;
@@ -71,20 +71,20 @@ export async function resolveGroupKeyForAnchor(args: {
 }
 
 export async function isKnownCanonicalGroupKey(args: {
-  trackId: string;
+  recordingId: string;
   groupKey: string;
 }): Promise<boolean> {
-  const trackId = norm(args.trackId);
+  const recordingId = norm(args.recordingId);
   const groupKey = norm(args.groupKey);
-  if (!trackId || !groupKey) return false;
+  if (!recordingId || !groupKey) return false;
 
   const r = await sql<{ ok: boolean }>`
     select exists(
-      select 1 from exegesis_thread_meta where track_id = ${trackId} and group_key = ${groupKey}
+      select 1 from exegesis_thread_meta where track_id = ${recordingId} and group_key = ${groupKey}
       union all
-      select 1 from exegesis_comment where track_id = ${trackId} and group_key = ${groupKey}
+      select 1 from exegesis_comment where track_id = ${recordingId} and group_key = ${groupKey}
       union all
-      select 1 from exegesis_group_map where track_id = ${trackId} and canonical_group_key = ${groupKey}
+      select 1 from exegesis_group_map where track_id = ${recordingId} and canonical_group_key = ${groupKey}
     ) as ok
   `;
   return Boolean(r.rows?.[0]?.ok);

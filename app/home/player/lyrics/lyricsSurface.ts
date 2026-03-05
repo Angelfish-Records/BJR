@@ -3,20 +3,20 @@
 
 import type { LyricCue } from "@/lib/types";
 
-export type CuesByTrackId = Record<string, LyricCue[]>;
-export type OffsetByTrackId = Record<string, number>;
+export type CuesByrecordingId = Record<string, LyricCue[]>;
+export type OffsetByrecordingId = Record<string, number>;
 
 type Snapshot = {
-  cuesByTrackId: CuesByTrackId;
-  offsetByTrackId: OffsetByTrackId;
+  cuesByRecordingId: CuesByrecordingId;
+  offsetByRecordingId: OffsetByrecordingId;
   globalOffsetMs: number;
 };
 
 type Listener = () => void;
 
 let snap: Snapshot = {
-  cuesByTrackId: {},
-  offsetByTrackId: {},
+  cuesByRecordingId: {},
+  offsetByRecordingId: {},
   globalOffsetMs: 0,
 };
 
@@ -37,12 +37,12 @@ export const lyricsSurface = {
   },
 
   setMaps(next: {
-    cuesByTrackId?: CuesByTrackId | null;
-    offsetByTrackId?: OffsetByTrackId | null;
+    cuesByrecordingId?: CuesByrecordingId | null;
+    offsetByrecordingId?: OffsetByrecordingId | null;
     globalOffsetMs?: number | null;
   }) {
-    const cuesByTrackId = next.cuesByTrackId ?? {};
-    const offsetByTrackId = next.offsetByTrackId ?? {};
+    const cuesByRecordingId = next.cuesByrecordingId ?? {};
+    const offsetByRecordingId = next.offsetByrecordingId ?? {};
     const globalOffsetMs =
       typeof next.globalOffsetMs === "number" && Number.isFinite(next.globalOffsetMs)
         ? next.globalOffsetMs
@@ -50,13 +50,13 @@ export const lyricsSurface = {
 
     // cheap identity guard: only emit if something actually changes by reference/value
     const changed =
-      snap.cuesByTrackId !== cuesByTrackId ||
-      snap.offsetByTrackId !== offsetByTrackId ||
+      snap.cuesByRecordingId !== cuesByRecordingId ||
+      snap.offsetByRecordingId !== offsetByRecordingId ||
       snap.globalOffsetMs !== globalOffsetMs;
 
     if (!changed) return;
 
-    snap = { cuesByTrackId, offsetByTrackId, globalOffsetMs };
+    snap = { cuesByRecordingId, offsetByRecordingId, globalOffsetMs };
     emit();
   },
 };

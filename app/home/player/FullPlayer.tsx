@@ -442,16 +442,16 @@ function AvailableOnRibbon({ links }: { links: PlatformLink[] }) {
 
 function parsePublicAlbumPath(pathname: string | null): {
   albumSlug: string | null;
-  trackId: string | null;
+  recordingId: string | null;
 } {
   const p = (pathname ?? "").trim();
   // /album/:slug
-  // /album/:slug/track/:trackId
+  // /album/:slug/track/:recordingId
   const m = p.match(/^\/album\/([^\/?#]+)(?:\/track\/([^\/?#]+))?\/?$/i);
-  if (!m) return { albumSlug: null, trackId: null };
+  if (!m) return { albumSlug: null, recordingId: null };
   const albumSlug = decodeURIComponent(m[1] ?? "").trim() || null;
-  const trackId = decodeURIComponent(m[2] ?? "").trim() || null;
-  return { albumSlug, trackId };
+  const recordingId = decodeURIComponent(m[2] ?? "").trim() || null;
+  return { albumSlug, recordingId };
 }
 
 function canonicalCarryQuery(): string {
@@ -524,10 +524,10 @@ export default function FullPlayer(props: {
   const effAlbum = showCached ? stableView!.album : album;
   const effTracks = showCached ? stableView!.tracks : tracks;
   // Track membership ref (lets access-check logic test membership without re-triggering fetch)
-  const effTrackIdSetRef = React.useRef<Set<string>>(new Set());
+  const effRecordingIdSetRef = React.useRef<Set<string>>(new Set());
 
   React.useEffect(() => {
-    effTrackIdSetRef.current = new Set(effTracks.map((t) => t.id));
+    effRecordingIdSetRef.current = new Set(effTracks.map((t) => t.recordingId));
   }, [effTracks]);
 
   const router = useRouter();
@@ -537,13 +537,13 @@ export default function FullPlayer(props: {
   const isPublicAlbumRoute = Boolean(route.albumSlug);
 
   const goCanonicalTrack = React.useCallback(
-    (trackId: string | null, mode: "push" | "replace" = "push") => {
+    (recordingId: string | null, mode: "push" | "replace" = "push") => {
       if (!isPublicAlbumRoute) return;
 
       const qs = canonicalCarryQuery();
       const base = `/album/${encodeURIComponent(effAlbumSlug)}`;
-      const href = trackId
-        ? `${base}/track/${encodeURIComponent(trackId)}${qs}`
+      const href = recordingId
+        ? `${base}/track/${encodeURIComponent(recordingId)}${qs}`
         : `${base}${qs}`;
 
       if (mode === "replace") router.replace(href, { scroll: false });
@@ -590,10 +590,10 @@ export default function FullPlayer(props: {
 
     const cur = p.current;
     const curInThisAlbum = Boolean(
-      cur?.id && effTracks.some((t) => t.id === cur.id),
+      cur?.recordingId && effTracks.some((t) => t.recordingId === cur.recordingId),
     );
     const trackTitle = curInThisAlbum
-      ? cur?.title?.trim() || cur?.id || ""
+      ? cur?.title?.trim() || cur?.recordingId || ""
       : "";
 
     const aTitle = (effAlbum?.title?.trim() || "").trim();
@@ -612,7 +612,7 @@ export default function FullPlayer(props: {
     };
     // Intentionally depend on the minimal fields that affect the title.
   }, [
-    p.current?.id,
+    p.current?.recordingId,
     p.current?.title,
     effAlbum?.title,
     effAlbum?.artist,
@@ -681,14 +681,14 @@ export default function FullPlayer(props: {
 
         if (!next.allowed) {
           const cur = player.current;
-          const set = effTrackIdSetRef.current;
-          const curInThisAlbum = Boolean(cur?.id && set.has(cur.id));
+          const set = effRecordingIdSetRef.current;
+          const curInThisAlbum = Boolean(cur?.recordingId && set.has(cur.recordingId));
 
           const queueIsThisAlbum = Boolean(
             albumKey && player.queueContextId === albumKey,
           );
           const pendingInThisAlbum = Boolean(
-            player.pendingTrackId && set.has(player.pendingTrackId),
+            player.pendingRecordingId && set.has(player.pendingRecordingId),
           );
 
           const code = typeof next.code === "string" ? next.code.trim() : "";
@@ -826,14 +826,14 @@ export default function FullPlayer(props: {
 
     if (isPublicAlbumRoute) {
       // Pressing play on an album implies first-track is the canonical track leaf.
-      goCanonicalTrack(firstTrack.id, "replace");
+      goCanonicalTrack(firstTrack.recordingId, "replace");
     }
 
     p.play(firstTrack);
     window.dispatchEvent(new Event("af:play-intent"));
   };
 
-  const getDurMs = (t: PlayerTrack) => p.durationById?.[t.id] ?? t.durationMs;
+  const getDurMs = (t: PlayerTrack) => p.durationByRecordingId?.[t.recordingId] ?? t.durationMs;
   const renderDur = (t: PlayerTrack) => {
     const ms = getDurMs(t) ?? 0;
     return ms > 0 ? fmtTime(ms) : "—";
@@ -846,7 +846,7 @@ export default function FullPlayer(props: {
     albumId: albumKey ?? undefined,
   });
 
-  const [selectedTrackId, setSelectedTrackId] = React.useState<string | null>(
+  const [selectedRecordingId, setSelectedRecordingId] = React.useState<string | null>(
     null,
   );
 
@@ -862,8 +862,8 @@ export default function FullPlayer(props: {
   // --- Album-local transport (FullPlayer) ---
   // Only operate within effTracks. Never call p.prev()/p.next() here.
 
-  const curId = p.current?.id ?? "";
-  const albumIdx = curId ? effTracks.findIndex((t) => t.id === curId) : -1;
+  const curId = p.current?.recordingId ?? "";
+  const albumIdx = curId ? effTracks.findIndex((t) => t.recordingId === curId) : -1;
   const albumHasCurrent = albumIdx >= 0;
 
   const albumAtStart = albumHasCurrent ? albumIdx === 0 : true;
@@ -890,7 +890,7 @@ export default function FullPlayer(props: {
     ensureAlbumQueue();
     if (isPublicAlbumRoute) {
       // User-initiated navigation; preserve history.
-      goCanonicalTrack(t.id, "push");
+      goCanonicalTrack(t.recordingId, "push");
     }
 
     p.play(t);
@@ -1114,9 +1114,9 @@ export default function FullPlayer(props: {
           }}
         >
           {effTracks.map((t, i) => {
-            const isCur = p.current?.id === t.id;
-            const isSelected = selectedTrackId === t.id;
-            const isPending = p.pendingTrackId === t.id;
+            const isCur = p.current?.recordingId === t.recordingId;
+            const isSelected = selectedRecordingId === t.recordingId;
+            const isPending = p.pendingRecordingId === t.recordingId;
 
             const shimmerTitle = isPending || (isCur && p.status === "loading");
             const isNowPlaying =
@@ -1152,7 +1152,7 @@ export default function FullPlayer(props: {
 
             return (
               <button
-                key={t.id}
+                key={t.recordingId}
                 type="button"
                 className="afTrackRow"
                 onMouseEnter={(e) => {
@@ -1176,7 +1176,7 @@ export default function FullPlayer(props: {
                     contextArtist: effAlbum?.artist ?? undefined,
                   });
 
-                  goCanonicalTrack(t.id, "push");
+                  goCanonicalTrack(t.recordingId, "push");
 
                   if (isCoarsePointer) {
                     p.play(t);
@@ -1184,13 +1184,13 @@ export default function FullPlayer(props: {
                     return;
                   }
 
-                  setSelectedTrackId(t.id);
+                  setSelectedRecordingId(t.recordingId);
                 }}
                 onDoubleClick={() => {
                   if (isCoarsePointer) return;
                   if (!canPlay) return;
 
-                  goCanonicalTrack(t.id, "push");
+                  goCanonicalTrack(t.recordingId, "push");
 
                   p.play(t);
                   window.dispatchEvent(new Event("af:play-intent"));
@@ -1272,7 +1272,7 @@ export default function FullPlayer(props: {
                         textOverflow: "ellipsis",
                       }}
                     >
-                      {t.title ?? t.id}
+                      {t.title ?? t.recordingId}
                     </span>
 
                     {t.explicit ? (

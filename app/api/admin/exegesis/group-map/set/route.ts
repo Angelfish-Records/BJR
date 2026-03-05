@@ -25,14 +25,14 @@ export async function POST(req: NextRequest) {
     string,
     unknown
   > | null;
-  const trackId = norm(body?.trackId);
+  const recordingId = norm(body?.recordingId);
   const canonicalGroupKey = norm(body?.canonicalGroupKey);
   const lineKeys0 = asStringArray(body?.lineKeys);
   const kind0 = norm(body?.kind) || "rep";
 
   const lineKeys = Array.from(new Set(lineKeys0)).slice(0, 500); // admin safety cap
 
-  if (!trackId) return json(400, { ok: false, error: "Missing trackId." });
+  if (!recordingId) return json(400, { ok: false, error: "Missing recordingId." });
   if (!canonicalGroupKey)
     return json(400, { ok: false, error: "Missing canonicalGroupKey." });
   if (/\s/.test(canonicalGroupKey) || canonicalGroupKey.length > 200) {
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
         created_by_member_id
       )
       values (
-        ${trackId},
+        ${recordingId},
         ${lk},
         ${canonicalGroupKey},
         2,

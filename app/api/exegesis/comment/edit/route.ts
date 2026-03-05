@@ -20,7 +20,7 @@ export const runtime = "nodejs";
 
 type CommentDTO = {
   id: string;
-  trackId: string;
+  recordingId: string;
   groupKey: string;
   lineKey: string;
   parentId: string | null;
@@ -41,7 +41,7 @@ type CommentDTO = {
 };
 
 type ThreadMetaDTO = {
-  trackId: string;
+  recordingId: string;
   groupKey: string;
   pinnedCommentId: string | null;
   locked: boolean;
@@ -430,7 +430,7 @@ limit 1
 
     const comment: CommentDTO = {
       id: row.id,
-      trackId: row.track_id,
+      recordingId: row.track_id,
       groupKey: row.group_key,
       lineKey: row.line_key ?? "",
       parentId: row.parent_id ?? null,
@@ -451,7 +451,7 @@ limit 1
     };
 
     const meta: ThreadMetaDTO = {
-      trackId: String(row.meta_track_id ?? row.track_id),
+      recordingId: String(row.meta_track_id ?? row.track_id),
       groupKey: String(row.meta_group_key ?? row.group_key),
       pinnedCommentId: row.meta_pinned_comment_id ?? null,
       locked: Boolean(row.meta_locked),

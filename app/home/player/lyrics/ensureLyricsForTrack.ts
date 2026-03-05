@@ -2,7 +2,7 @@
 "use client";
 
 import { lyricsSurface } from "./lyricsSurface";
-import { fetchLyricsByTrackId } from "./fetchLyricsByTrackId";
+import { fetchLyricsByrecordingId } from "./fetchLyricsByRecordingId";
 import type { AlbumLyricsBundle } from "@/lib/types";
 
 // Module-scope in-flight map so *any* caller (any surface) dedupes fetches.
@@ -25,15 +25,15 @@ export function primeLyricsFromAlbumBundle(
 
   const snap = lyricsSurface.getSnapshot();
 
-  const cuesIn = bundle.cuesByTrackId ?? {};
-  const offIn = bundle.offsetByTrackId ?? {};
+  const cuesIn = bundle.cuesByRecordingId ?? {};
+  const offIn = bundle.offsetByRecordingId ?? {};
 
   // Build merged maps but only add keys that are currently unknown.
-  let cuesOut = snap.cuesByTrackId;
-  let offOut = snap.offsetByTrackId;
+  let cuesOut = snap.cuesByRecordingId;
+  let offOut = snap.offsetByRecordingId;
 
-  for (const [trackIdRaw, cuesRaw] of Object.entries(cuesIn)) {
-    const id = (trackIdRaw ?? "").trim();
+  for (const [recordingIdRaw, cuesRaw] of Object.entries(cuesIn)) {
+    const id = (recordingIdRaw ?? "").trim();
     if (!id) continue;
 
     if (hasOwn(cuesOut, id)) continue; // don't overwrite existing (including [] known-no-lyrics)
@@ -42,8 +42,8 @@ export function primeLyricsFromAlbumBundle(
     cuesOut = { ...cuesOut, [id]: cues };
   }
 
-  for (const [trackIdRaw, offRaw] of Object.entries(offIn)) {
-    const id = (trackIdRaw ?? "").trim();
+  for (const [recordingIdRaw, offRaw] of Object.entries(offIn)) {
+    const id = (recordingIdRaw ?? "").trim();
     if (!id) continue;
 
     if (hasOwn(offOut, id)) continue; // don't overwrite existing
@@ -57,32 +57,32 @@ export function primeLyricsFromAlbumBundle(
   }
 
   // Only write if something changed (cheap reference check).
-  if (cuesOut === snap.cuesByTrackId && offOut === snap.offsetByTrackId) return;
+  if (cuesOut === snap.cuesByRecordingId && offOut === snap.offsetByRecordingId) return;
 
   lyricsSurface.setMaps({
-    cuesByTrackId: cuesOut,
-    offsetByTrackId: offOut,
+    cuesByrecordingId: cuesOut,
+    offsetByrecordingId: offOut,
     globalOffsetMs: snap.globalOffsetMs,
   });
 }
 
 /**
- * Ensure lyrics (cues + offset) exist in lyricsSurface for trackId.
+ * Ensure lyrics (cues + offset) exist in lyricsSurface for recordingId.
  * - Dedupes concurrent calls (module-level inFlight).
  * - Caches "no lyrics" as [] to avoid refetch loops.
  * - Safe to call repeatedly from any surface.
  */
 export async function ensureLyricsForTrack(
-  trackId: string,
+  recordingId: string,
   opts?: { signal?: AbortSignal },
 ): Promise<void> {
-  const id = (trackId ?? "").trim();
+  const id = (recordingId ?? "").trim();
   if (!id) return;
 
   const snap = lyricsSurface.getSnapshot();
-  const existing = snap.cuesByTrackId[id];
+  const existing = snap.cuesByRecordingId[id];
 
-  const knownKey = hasOwn(snap.cuesByTrackId, id);
+  const knownKey = hasOwn(snap.cuesByRecordingId, id);
   const hasCues = Array.isArray(existing) && existing.length > 0;
   const knownNoLyrics =
     knownKey && Array.isArray(existing) && existing.length === 0;
@@ -105,27 +105,27 @@ export async function ensureLyricsForTrack(
   }
 
   try {
-    const r = await fetchLyricsByTrackId(id, ac.signal);
+    const r = await fetchLyricsByrecordingId(id, ac.signal);
     if (!r) return;
-    if (r.trackId !== id) return;
+    if (r.recordingId !== id) return;
 
     const prev = lyricsSurface.getSnapshot();
 
-    const nextCuesByTrackId =
+    const nextCuesByrecordingId =
       Array.isArray(r.cues) && r.cues.length
-        ? { ...prev.cuesByTrackId, [id]: r.cues }
-        : hasOwn(prev.cuesByTrackId, id)
-          ? prev.cuesByTrackId
-          : { ...prev.cuesByTrackId, [id]: [] };
+        ? { ...prev.cuesByRecordingId, [id]: r.cues }
+        : hasOwn(prev.cuesByRecordingId, id)
+          ? prev.cuesByRecordingId
+          : { ...prev.cuesByRecordingId, [id]: [] };
 
-    const nextOffsetByTrackId =
+    const nextOffsetByrecordingId =
       typeof r.offsetMs === "number" && Number.isFinite(r.offsetMs)
-        ? { ...prev.offsetByTrackId, [id]: r.offsetMs }
-        : prev.offsetByTrackId;
+        ? { ...prev.offsetByRecordingId, [id]: r.offsetMs }
+        : prev.offsetByRecordingId;
 
     lyricsSurface.setMaps({
-      cuesByTrackId: nextCuesByTrackId,
-      offsetByTrackId: nextOffsetByTrackId,
+      cuesByrecordingId: nextCuesByrecordingId,
+      offsetByrecordingId: nextOffsetByrecordingId,
       // preserve whatever globalOffsetMs currently is (lyricsSurface handles defaulting)
       globalOffsetMs: prev.globalOffsetMs,
     });

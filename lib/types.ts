@@ -68,8 +68,18 @@ export type AlbumNavItem = {
 };
 
 export type PlayerTrack = {
-  id: string;
+  /**
+   * Canonical media identity (globally unique).
+   * This is the "track identity" everywhere in player, lyrics, exegesis, telemetry, mux.
+   */
+  recordingId: string;
+
+  /**
+   * Release context identity (album/release-level label vocabulary).
+   * Nullable because some contexts may present tracks outside a release.
+   */
   catalogueId: string | null;
+
   title?: string;
   artist?: string;
   durationMs?: number;
@@ -79,8 +89,8 @@ export type PlayerTrack = {
 };
 
 export type AlbumLyricsBundle = {
-  cuesByTrackId: Record<string, LyricCue[]>;
-  offsetByTrackId: Record<string, number>;
+  cuesByRecordingId: Record<string, LyricCue[]>;
+  offsetByRecordingId: Record<string, number>;
 };
 
 export type LyricGroupMapEntry = {
@@ -105,7 +115,7 @@ export type LyricCue = {
 
 export type TrackLyricsApiOk = {
   ok: true;
-  trackId: string;
+  recordingId: string;
   offsetMs: number;
   cues: LyricCue[];
 
@@ -192,7 +202,7 @@ export function parseTrackLyricsApiOk(raw: unknown): TrackLyricsApiOk | null {
   const o = raw as Record<string, unknown>;
   if (o.ok !== true) return null;
 
-  if (typeof o.trackId !== "string" || !o.trackId.trim()) return null;
+  if (typeof o.recordingId !== "string" || !o.recordingId.trim()) return null;
   if (typeof o.offsetMs !== "number" || !Number.isFinite(o.offsetMs))
     return null;
 
@@ -206,7 +216,7 @@ export function parseTrackLyricsApiOk(raw: unknown): TrackLyricsApiOk | null {
 
   const out: TrackLyricsApiOk = {
     ok: true,
-    trackId: o.trackId.trim(),
+    recordingId: o.recordingId.trim(),
     offsetMs: Math.floor(o.offsetMs),
     cues,
   };

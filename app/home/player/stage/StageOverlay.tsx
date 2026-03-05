@@ -33,17 +33,17 @@ function useScrollLock(locked: boolean) {
   }, [locked]);
 }
 
-type CuesByTrackId = Record<string, LyricCue[]>;
-type OffsetByTrackId = Record<string, number>;
+type CuesByRecordingId = Record<string, LyricCue[]>;
+type OffsetByRecordingId = Record<string, number>;
 
 function pickKeyWithCues(
-  cuesByTrackId: CuesByTrackId | undefined,
+  cuesByRecordingId: CuesByRecordingId | undefined,
   keys: Array<string | null | undefined>,
 ) {
-  if (!cuesByTrackId) return (keys.find(Boolean) as string | null) ?? null;
+  if (!cuesByRecordingId) return (keys.find(Boolean) as string | null) ?? null;
   for (const k of keys) {
     if (!k) continue;
-    const xs = cuesByTrackId[k];
+    const xs = cuesByRecordingId[k];
     if (Array.isArray(xs) && xs.length) return k;
   }
   return (keys.find(Boolean) as string | null) ?? null;
@@ -59,29 +59,29 @@ export default function StageOverlay(props: {
 
   const snap = useLyricsSnapshot();
 
-  const playerTrackId = p.current?.id ?? null;
+  const playerRecordingId = p.current?.recordingId ?? null;
   const playerMuxId = p.current?.muxPlaybackId ?? null;
-  const surfaceTrackId = mediaSurface.getTrackId();
+  const surfaceRecordingId = mediaSurface.getRecordingId();
 
-  const trackId = React.useMemo(() => {
-    return pickKeyWithCues(snap.cuesByTrackId, [
-      playerTrackId,
-      surfaceTrackId,
+  const recordingId = React.useMemo(() => {
+    return pickKeyWithCues(snap.cuesByRecordingId, [
+      playerRecordingId,
+      surfaceRecordingId,
       playerMuxId,
     ]);
-  }, [snap.cuesByTrackId, playerTrackId, playerMuxId, surfaceTrackId]);
+  }, [snap.cuesByRecordingId, playerRecordingId, playerMuxId, surfaceRecordingId]);
 
   const cues: LyricCue[] | null = React.useMemo(() => {
-    if (!trackId) return null;
-    const xs = snap.cuesByTrackId?.[trackId];
+    if (!recordingId) return null;
+    const xs = snap.cuesByRecordingId?.[recordingId];
     return Array.isArray(xs) && xs.length ? xs : null;
-  }, [snap.cuesByTrackId, trackId]);
+  }, [snap.cuesByRecordingId, recordingId]);
 
   const trackOffsetMs = React.useMemo(() => {
-    if (!trackId) return 0;
-    const v = (snap.offsetByTrackId as OffsetByTrackId | undefined)?.[trackId];
+    if (!recordingId) return 0;
+    const v = (snap.offsetByRecordingId as OffsetByRecordingId | undefined)?.[recordingId];
     return typeof v === "number" && Number.isFinite(v) ? v : 0;
-  }, [snap.offsetByTrackId, trackId]);
+  }, [snap.offsetByRecordingId, recordingId]);
 
   const effectiveOffsetMs = trackOffsetMs + (snap.globalOffsetMs ?? 0);
 
@@ -131,7 +131,7 @@ export default function StageOverlay(props: {
 
   if (!mounted || !open) return null;
 
-  const title = p.current?.title ?? p.current?.id ?? "—";
+  const title = p.current?.title ?? p.current?.recordingId ?? "—";
   const artist = p.current?.artist ?? p.queueContextArtist ?? "";
 
   const node = (
@@ -274,7 +274,7 @@ export default function StageOverlay(props: {
 
       {/* Lyrics layer (fade + reserved footer handled inside LyricsOverlay) */}
       <LyricsOverlay
-        trackId={trackId}
+        recordingId={recordingId}
         cues={cues}
         offsetMs={effectiveOffsetMs}
         variant="stage"

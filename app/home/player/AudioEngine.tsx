@@ -50,7 +50,7 @@ export default function AudioEngine() {
 
   // ---- Playback intent ----
   const playIntentRef = React.useRef(false);
-  const playthroughSentRef = React.useRef(new Set<string>()); // key: `${trackId}:${playbackId}`
+  const playthroughSentRef = React.useRef(new Set<string>()); // key: `${recordingId}:${playbackId}`
 
   // Track attachment bookkeeping
   const attachedKeyRef = React.useRef<string | null>(null);
@@ -428,7 +428,7 @@ export default function AudioEngine() {
     const playbackId = s.current?.muxPlaybackId;
     if (!playbackId) return;
 
-    mediaSurface.setTrack(s.current?.id ?? null);
+    mediaSurface.setTrack(s.current?.recordingId ?? null);
 
     // If the engine is blocked, never attach.
     if (engineBlockedRef.current) return;
@@ -557,11 +557,11 @@ export default function AudioEngine() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             playbackId,
-            trackId: s.current?.id,
+            recordingId: s.current?.recordingId,
             albumId: s.queueContextId,
             albumSlug: s.queueContextSlug,
             durationMs:
-              s.current?.durationMs ?? s.durationById?.[s.current?.id ?? ""],
+              s.current?.durationMs ?? s.durationByRecordingId?.[s.current?.recordingId ?? ""],
             ...(st ? { st } : {}),
           }),
           signal: ac.signal,
@@ -641,7 +641,7 @@ export default function AudioEngine() {
     void load();
     return () => ac.abort();
   }, [
-    p.current?.id,
+    p.current?.recordingId,
     p.current?.muxPlaybackId,
     p.reloadNonce,
     p.intent,
@@ -659,11 +659,11 @@ export default function AudioEngine() {
     if (!a) return;
 
     const reportPlaythroughComplete = (pct: number) => {
-      const trackId = pRef.current.current?.id ?? "";
+      const recordingId = pRef.current.current?.recordingId ?? "";
       const playbackId = pRef.current.current?.muxPlaybackId ?? "";
-      if (!trackId || !playbackId) return;
+      if (!recordingId || !playbackId) return;
 
-      const key = `${trackId}:${playbackId}`;
+      const key = `${recordingId}:${playbackId}`;
       if (playthroughSentRef.current.has(key)) return;
       if (pct < 0.9) return;
 
@@ -672,7 +672,7 @@ export default function AudioEngine() {
       fetch("/api/playthrough/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trackId, playbackId, pct }),
+        body: JSON.stringify({ recordingId, playbackId, pct }),
         keepalive: true,
       }).catch(() => {});
     };
@@ -682,9 +682,9 @@ export default function AudioEngine() {
       mediaSurface.setTime(ms);
       pRef.current.setPositionMs(ms);
 
-      const curId = pRef.current.current?.id ?? "";
+      const curId = pRef.current.current?.recordingId ?? "";
       const durFromState =
-        (curId ? pRef.current.durationById[curId] : 0) ||
+        (curId ? pRef.current.durationByRecordingId[curId] : 0) ||
         pRef.current.current?.durationMs ||
         0;
 
@@ -728,7 +728,7 @@ export default function AudioEngine() {
       pRef.current.setLoadingReasonExternal(undefined);
       pRef.current.clearIntent();
       applyPendingSeek();
-      const curId = pRef.current.current?.id;
+      const curId = pRef.current.current?.recordingId;
       if (curId) pRef.current.resolvePendingTrack(curId);
     };
 

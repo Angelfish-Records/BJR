@@ -25,23 +25,23 @@ async function getMemberIdByClerkUserId(
 export async function POST(req: NextRequest) {
   const correlationId = newCorrelationId();
 
-  let trackId = "";
+  let recordingId = "";
   let playbackId = "";
   let pct = 0;
 
   try {
     const body = (await req.json()) as {
-      trackId?: string;
+      recordingId?: string;
       playbackId?: string;
       pct?: number;
     };
-    trackId = (body.trackId ?? "").toString().trim();
+    recordingId = (body.recordingId ?? "").toString().trim();
     playbackId = (body.playbackId ?? "").toString().trim();
     pct =
       typeof body.pct === "number" && Number.isFinite(body.pct) ? body.pct : 0;
   } catch {}
 
-  if (!trackId || !playbackId) {
+  if (!recordingId || !playbackId) {
     const res = NextResponse.json({ ok: false }, { status: 400 });
     res.headers.set("x-correlation-id", correlationId);
     return res;
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     source: EVENT_SOURCES.SERVER,
     correlationId,
     payload: {
-      track_id: trackId,
+      track_id: recordingId,
       playback_id: playbackId,
       pct,
       anon_id: anonId,

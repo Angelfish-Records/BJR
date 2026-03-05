@@ -9,7 +9,7 @@ import type { LyricCue, LyricGroupMap } from "@/lib/types";
 export const runtime = "nodejs";
 
 type TrackLyricsDoc = {
-  trackId?: string;
+  recordingId?: string;
   offsetMs?: number;
   version?: string;
   geniusUrl?: string | null;
@@ -44,7 +44,7 @@ function safeUrl(raw: unknown): string | null {
   }
 }
 
-async function fetchGroupMap(trackId: string): Promise<LyricGroupMap> {
+async function fetchGroupMap(recordingId: string): Promise<LyricGroupMap> {
   const r = await sql<{
     anchor_line_key: string;
     canonical_group_key: string;
@@ -52,7 +52,7 @@ async function fetchGroupMap(trackId: string): Promise<LyricGroupMap> {
   }>`
     select anchor_line_key, canonical_group_key, updated_at
     from exegesis_group_map
-    where track_id = ${trackId}
+    where track_id = ${recordingId}
   `;
 
   const map: LyricGroupMap = {};
@@ -71,30 +71,30 @@ async function fetchGroupMap(trackId: string): Promise<LyricGroupMap> {
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const trackIdRaw = searchParams.get("trackId");
-  const trackId = typeof trackIdRaw === "string" ? trackIdRaw.trim() : "";
+  const recordingIdRaw = searchParams.get("recordingId");
+  const recordingId = typeof recordingIdRaw === "string" ? recordingIdRaw.trim() : "";
 
-  if (!trackId) {
+  if (!recordingId) {
     return NextResponse.json(
-      { ok: false, error: "missing_trackId" },
+      { ok: false, error: "missing_recordingId" },
       { status: 400 },
     );
   }
 
   const q = `
     {
-      "lyrics": *[_type == "lyrics" && trackId == $trackId][0]{
-        trackId,
+      "lyrics": *[_type == "lyrics" && recordingId == $recordingId][0]{
+        recordingId,
         offsetMs,
         version,
         geniusUrl,
         cues[]{ _key, tMs, text, endMs }
       },
-      "meta": *[_type == "album" && $trackId in tracks[].id][0]{
+      "meta": *[_type == "album" && $recordingId in tracks[].id][0]{
         "albumTitle": title,
         "albumSlug": slug.current,
         "albumCatalogueId": catalogueId,
-        "track": tracks[id == $trackId][0]{
+        "track": tracks[id == $recordingId][0]{
           title,
           artist,
           "trackCatalogueId": catalogueId
@@ -104,7 +104,7 @@ export async function GET(req: Request) {
   `;
 
   const bundle = await client.fetch<LyricsQueryResult | null>(q, {
-    trackId,
+    recordingId,
   });
 
   const doc = bundle?.lyrics ?? null;
@@ -156,7 +156,7 @@ export async function GET(req: Request) {
   const geniusUrl = safeUrl(doc?.geniusUrl);
 
   // Embed exegesis grouping map (admin-auth not needed; it's just presentation data)
-  const groupMap = await fetchGroupMap(trackId);
+  const groupMap = await fetchGroupMap(recordingId);
 
   // Annotate cues with canonicalGroupKey when mapped (unmapped cues omit the field)
   const PARA_BREAK = "__PARA_BREAK__";
@@ -171,7 +171,7 @@ export async function GET(req: Request) {
   return NextResponse.json(
     {
       ok: true,
-      trackId,
+      recordingId,
 
       // ✅ new meta (all nullable)
       trackTitle,

@@ -21,7 +21,7 @@ import { ensureAnonId } from "@/lib/anon";
 
 type TokenReq = {
   playbackId: string;
-  trackId?: string;
+  recordingId?: string;
   albumId?: string;
   durationMs?: number;
   st?: string;

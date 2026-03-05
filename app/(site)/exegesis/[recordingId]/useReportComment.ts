@@ -1,4 +1,4 @@
-// web/app/(site)/exegesis/[trackId]/useReportComment.ts
+// web/app/(site)/exegesis/[recordingId]/useReportComment.ts
 "use client";
 
 import * as React from "react";

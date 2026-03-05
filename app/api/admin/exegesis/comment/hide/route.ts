@@ -10,7 +10,7 @@ type ApiOk = {
   ok: true;
   comment: {
     id: string;
-    trackId: string;
+    recordingId: string;
     groupKey: string;
     status: "live" | "hidden" | "deleted";
     updatedAt: string; // server time
@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
     ok: true,
     comment: {
       id: must(row?.id, "Expected id on success."),
-      trackId: must(row?.track_id, "Expected track_id on success."),
+      recordingId: must(row?.track_id, "Expected track_id on success."),
       groupKey: must(row?.group_key, "Expected group_key on success."),
       status: must(row?.status, "Expected status on success.") as
         | "live"

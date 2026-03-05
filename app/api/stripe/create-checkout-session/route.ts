@@ -1,7 +1,6 @@
 // web/app/api/stripe/create-checkout-session/route.ts
 import "server-only";
 import { NextResponse } from "next/server";
-import { sql } from "@vercel/postgres";
 import Stripe from "stripe";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { normalizeEmail, ensureMemberByEmail } from "../../../../lib/members";
@@ -66,18 +65,6 @@ function priceForTier(tier: "patron" | "partner"): string {
   // Prefer explicit tier prices; fall back to legacy for patron if present.
   if (tier === "partner") return PRICE_PARTNER;
   return PRICE_PATRON || LEGACY_PRICE;
-}
-
-async function lookupStripeCustomerIdByClerkUserId(
-  userId: string,
-): Promise<string | null> {
-  const r = await sql`
-    select stripe_customer_id
-    from members
-    where clerk_user_id = ${userId}
-    limit 1
-  `;
-  return (r.rows[0]?.stripe_customer_id as string | null | undefined) ?? null;
 }
 
 function unwrapStripeResponse<T>(res: T | Stripe.Response<T>): T {

@@ -339,7 +339,7 @@ function findTrackById(
   id?: string | null,
 ): PlayerTrack | null {
   if (!id) return null;
-  return queue.find((t) => t.id === id) ?? null;
+  return queue.find((t) => t.recordingId === id) ?? null;
 }
 
 export default function MiniPlayer(props: {
@@ -352,7 +352,7 @@ export default function MiniPlayer(props: {
 
   const openPlayerToNowPlaying = () => {
     const slug = (p.queueContextSlug ?? "").trim();
-    const tid = (p.current?.id ?? "").trim();
+    const tid = (p.current?.recordingId ?? "").trim();
 
     const qs = preservedQueryFromLocation();
 
@@ -432,7 +432,7 @@ export default function MiniPlayer(props: {
     p.status === "playing" || p.status === "loading" || p.intent === "play";
 
   // Pending-first display (truthy UI during transitions)
-  const pendingTrack = findTrackById(p.queue, p.pendingTrackId) ?? null;
+  const pendingTrack = findTrackById(p.queue, p.pendingRecordingId) ?? null;
   const displayTrack = pendingTrack ?? p.current ?? null;
 
   const resolvedArtworkUrl = artworkUrl ?? p.queueContextArtworkUrl ?? null;
@@ -453,14 +453,14 @@ export default function MiniPlayer(props: {
 
   /* ---------------- Seek (based on current track, not pending) ---------------- */
 
-  const curId = p.current?.id ?? "";
+  const curId = p.current?.recordingId ?? "";
   const durMs = Number(
-    (p.durationById?.[curId] ?? p.current?.durationMs ?? 0) || 0,
+    (p.durationByRecordingId?.[curId] ?? p.current?.durationMs ?? 0) || 0,
   );
   const durKnown = durMs > 0;
   const durSec = Math.max(1, Math.round(durMs / 1000));
 
-  const idx = curId ? p.queue.findIndex((t) => t.id === curId) : -1;
+  const idx = curId ? p.queue.findIndex((t) => t.recordingId === curId) : -1;
   const atStart = idx <= 0;
   const atEnd = idx >= 0 && idx === p.queue.length - 1;
 
@@ -482,7 +482,7 @@ export default function MiniPlayer(props: {
   React.useEffect(() => {
     setScrubbing(false);
     setScrubSec(0);
-  }, [p.current?.id]);
+  }, [p.current?.recordingId]);
 
   React.useEffect(() => {
     if (!scrubbing) setScrubSec(safePosReal);
@@ -602,7 +602,7 @@ export default function MiniPlayer(props: {
 
   /* ---------------- Copy ---------------- */
 
-  const title = displayTrack?.title ?? displayTrack?.id ?? "Nothing queued";
+  const title = displayTrack?.title ?? displayTrack?.recordingId ?? "Nothing queued";
 
   const statusLine = p.lastError
     ? "Playback error"
@@ -623,7 +623,7 @@ export default function MiniPlayer(props: {
       ((displayTrack?.artist ?? "").toString().trim() || undefined);
 
     const cur = displayTrack;
-    if (cur?.id) {
+    if (cur?.recordingId) {
       const target = buildShareTarget({
         type: "track",
         methodHint: "sheet",
@@ -635,8 +635,8 @@ export default function MiniPlayer(props: {
           artistName,
         },
         track: {
-          id: cur.id,
-          title: (cur.title ?? cur.id).toString().trim() || cur.id,
+          id: cur.recordingId,
+          title: (cur.title ?? cur.recordingId).toString().trim() || cur.recordingId,
         },
       });
       await shareTarget(target);
@@ -670,7 +670,7 @@ export default function MiniPlayer(props: {
 
   const shimmerMeta =
     // shimmer while loading (pending or current)
-    (Boolean(p.pendingTrackId) && p.status === "loading") ||
+    (Boolean(p.pendingRecordingId) && p.status === "loading") ||
     (p.status === "loading" && Boolean(p.current));
 
   const dock = (

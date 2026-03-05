@@ -29,7 +29,7 @@ function findActiveIndex(cues: LyricCue[], tMs: number) {
 }
 
 export default function LyricsOverlay(props: {
-  trackId?: string | null;
+  recordingId?: string | null;
   cues: LyricCue[] | null;
   offsetMs?: number;
   onSeek?: (tMs: number) => void;
@@ -38,7 +38,7 @@ export default function LyricsOverlay(props: {
   reservedBottomPx?: number;
 }) {
   const {
-    trackId: trackIdRaw = null,
+    recordingId: recordingIdRaw = null,
     cues,
     offsetMs = 0,
     onSeek,
@@ -48,7 +48,7 @@ export default function LyricsOverlay(props: {
 
   const router = useRouter();
 
-  const trackId = (trackIdRaw ?? "").trim() || null;
+  const recordingId = (recordingIdRaw ?? "").trim() || null;
   const isInline = variant === "inline";
 
   const viewportRef = React.useRef<HTMLDivElement | null>(null);
@@ -107,10 +107,10 @@ export default function LyricsOverlay(props: {
   }, []);
 
   function openExegesis(cue: LyricCue) {
-    if (!trackId) return;
+    if (!recordingId) return;
 
     const path =
-      `/exegesis/${encodeURIComponent(trackId)}` +
+      `/exegesis/${encodeURIComponent(recordingId)}` +
       `#l=${encodeURIComponent(cue.lineKey)}`;
 
     router.push(path, { scroll: false });
@@ -456,7 +456,7 @@ export default function LyricsOverlay(props: {
                 data-lyric-idx={idx}
                 className="af-lyric-row"
                 data-af-inline={isInline ? "1" : "0"}
-                data-af-has-track={trackId ? "1" : "0"}
+                data-af-has-track={recordingId ? "1" : "0"}
                 data-af-reveal={idx === revealIdx ? "1" : "0"}
                 onMouseEnter={() => {
                   if (!isInline) return;
@@ -505,10 +505,10 @@ export default function LyricsOverlay(props: {
                     color: "rgba(255,255,255,0.86)",
                     placeItems: "center",
                     lineHeight: 0,
-                    cursor: trackId ? "pointer" : "default",
-                    pointerEvents: trackId ? "auto" : "none",
+                    cursor: recordingId ? "pointer" : "default",
+                    pointerEvents: recordingId ? "auto" : "none",
                     zIndex: 3,
-                    opacity: showDiscourse && trackId ? 1 : 0,
+                    opacity: showDiscourse && recordingId ? 1 : 0,
                     display: isInline ? "grid" : "none",
                     overflow: "visible",
                     transition:
@@ -554,7 +554,7 @@ export default function LyricsOverlay(props: {
                     clearPressTimer();
 
                     if (!isInline) return; // fullscreen/stage: no discourse affordance at all
-                    if (!trackId) return;
+                    if (!recordingId) return;
 
                     pressTimerRef.current = window.setTimeout(() => {
                       pressFiredRef.current = true;

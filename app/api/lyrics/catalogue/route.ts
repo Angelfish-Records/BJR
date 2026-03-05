@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export const revalidate = 300;
 
 type CatalogueTrack = {
-  trackId: string; // the id we will link with (legacy id OR catalogueId — whichever has lyrics)
+  recordingId: string; // the id we will link with (legacy id OR catalogueId — whichever has lyrics)
   title: string | null;
   artist: string | null;
   trackCatalogueId: string | null;
@@ -22,7 +22,7 @@ type CatalogueAlbum = {
   albumCatalogueId: string | null;
   coverUrl: string | null; // ✅ album artwork URL (same idea as FullPlayer)
   tracks: CatalogueTrack[];
-  trackIds: string[]; // legacy-ish surface: list of returned trackId values
+  recordingIds: string[]; // legacy-ish surface: list of returned recordingId values
 };
 
 type CatalogueOk = { ok: true; albums: CatalogueAlbum[] };
@@ -66,7 +66,7 @@ export async function GET() {
   try {
     const q = `
       {
-        "lyricIds": *[_type == "lyrics" && defined(trackId)].trackId,
+        "lyricIds": *[_type == "lyrics" && defined(recordingId)].recordingId,
         "albums": *[_type == "album" && publicPageVisible != false]
           | order(year desc, title asc) {
             "albumId": _id,
@@ -124,7 +124,7 @@ export async function GET() {
           seen.add(picked);
 
           normTracks.push({
-            trackId: picked,
+            recordingId: picked,
             title: asTrimmedString(t?.title) || null,
             artist: asTrimmedString(t?.artist) || null,
             trackCatalogueId: catId || null,
@@ -132,7 +132,7 @@ export async function GET() {
           });
         }
 
-        const trackIds = uniqNonEmpty(normTracks.map((t) => t.trackId));
+        const recordingIds = uniqNonEmpty(normTracks.map((t) => t.recordingId));
 
         return {
           albumId: asTrimmedString(a?.albumId),
@@ -141,7 +141,7 @@ export async function GET() {
           albumCatalogueId: asTrimmedString(a?.albumCatalogueId) || null,
           coverUrl,
           tracks: normTracks,
-          trackIds,
+          recordingIds,
         };
       })
       // drop albums that ended up with zero eligible tracks

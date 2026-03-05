@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 type ApiOk = {
   ok: true;
   meta: {
-    trackId: string;
+    recordingId: string;
     groupKey: string;
     locked: boolean;
     pinnedCommentId: string | null;
@@ -42,11 +42,11 @@ export async function POST(req: NextRequest) {
     | Record<string, unknown>
     | null;
 
-  const trackId = norm(body?.trackId);
+  const recordingId = norm(body?.recordingId);
   const groupKey = norm(body?.groupKey);
   const locked = asBool(body?.locked);
 
-  if (!trackId) return json(400, { ok: false, error: "Missing trackId." });
+  if (!recordingId) return json(400, { ok: false, error: "Missing recordingId." });
   if (!groupKey) return json(400, { ok: false, error: "Missing groupKey." });
 
   const r = await sql<{
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
   }>`
     with ins as (
       insert into exegesis_thread_meta (track_id, group_key)
-      values (${trackId}, ${groupKey})
+      values (${recordingId}, ${groupKey})
       on conflict (track_id, group_key) do nothing
       returning 1
     ),
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
       update exegesis_thread_meta
       set locked = ${locked}::boolean,
           updated_at = now()
-      where track_id = ${trackId}
+      where track_id = ${recordingId}
         and group_key = ${groupKey}
       returning track_id, group_key, pinned_comment_id, locked, comment_count, last_activity_at, updated_at
     )
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
   return json(200, {
     ok: true,
     meta: {
-      trackId: row.track_id,
+      recordingId: row.track_id,
       groupKey: row.group_key,
       locked: row.locked,
       pinnedCommentId: row.pinned_comment_id,

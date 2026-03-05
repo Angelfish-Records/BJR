@@ -16,7 +16,7 @@ class MediaSurface {
   private listeners = new Set<Listener>();
   private lastTimeMs = 0;
   private lastStatus: MediaStatus = "idle";
-  private lastTrackId: string | null = null;
+  private lastRecordingId: string | null = null;
 
   // Stage “authority”
   private inlineCount = 0;
@@ -27,7 +27,7 @@ class MediaSurface {
     this.listeners.add(fn);
     fn({ type: "time", ms: this.lastTimeMs });
     fn({ type: "status", status: this.lastStatus });
-    fn({ type: "track", id: this.lastTrackId });
+    fn({ type: "track", id: this.lastRecordingId });
     fn({ type: "stage", variant: this.activeStage });
 
     return () => {
@@ -48,7 +48,7 @@ class MediaSurface {
   }
 
   setTrack(id: string | null) {
-    this.lastTrackId = id;
+    this.lastRecordingId = id;
     for (const fn of this.listeners) fn({ type: "track", id });
   }
 
@@ -60,8 +60,8 @@ class MediaSurface {
     return this.lastStatus;
   }
 
-  getTrackId() {
-    return this.lastTrackId;
+  getRecordingId() {
+    return this.lastRecordingId;
   }
 
   /* ---------------- stage authority ---------------- */

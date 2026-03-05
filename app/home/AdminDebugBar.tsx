@@ -270,6 +270,7 @@ export default function AdminDebugBar(props: { isAdmin: boolean }) {
           </button>
           <Link
             href="/admin/campaigns"
+            target="_blank"
             style={{
               ...btn,
               display: "inline-flex",
@@ -281,6 +282,7 @@ export default function AdminDebugBar(props: { isAdmin: boolean }) {
           </Link>
           <Link
             href="/studio"
+            target="_blank"
             style={{
               ...btn,
               display: "inline-flex",

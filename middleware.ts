@@ -123,7 +123,7 @@ export default clerkMiddleware((auth, req) => {
     if (slug) {
       const preserved = pickPreservedParams(url);
 
-      // /albums/:slug/track/:trackId
+      // /albums/:slug/track/:recordingId
       if ((parts[2] ?? "") === "track" && parts[3]) {
         return redirect308(
           url,

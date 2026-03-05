@@ -32,7 +32,7 @@ type IdentityDTO = {
 
 type CommentDTO = {
   id: string;
-  trackId: string;
+  recordingId: string;
   groupKey: string;
   lineKey: string;
   parentId: string | null;
@@ -53,7 +53,7 @@ type CommentDTO = {
 };
 
 type ThreadMetaDTO = {
-  trackId: string;
+  recordingId: string;
   groupKey: string;
   pinnedCommentId: string | null;
   locked: boolean;
@@ -78,7 +78,7 @@ type ViewerDTO =
 
 type ApiOk = {
   ok: true;
-  trackId: string;
+  recordingId: string;
   groupKey: string;
   sort: ThreadSort;
   meta: ThreadMetaDTO | null;
@@ -253,14 +253,14 @@ function mkCorrelationId(input: string): string {
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
 
-  const trackId = norm(url.searchParams.get("trackId"));
+  const recordingId = norm(url.searchParams.get("recordingId"));
 
   const sortParam = norm(url.searchParams.get("sort")) || "top";
   const sort: ThreadSort = isSort(sortParam) ? sortParam : "top";
 
-  if (!trackId) return json(400, { ok: false, error: "Missing trackId." });
-  if (trackId.length > 200)
-    return json(400, { ok: false, error: "Invalid trackId." });
+  if (!recordingId) return json(400, { ok: false, error: "Missing recordingId." });
+  if (recordingId.length > 200)
+    return json(400, { ok: false, error: "Invalid recordingId." });
 
   const rawGroupKey = norm(url.searchParams.get("groupKey"));
   const lineKey = norm(url.searchParams.get("lineKey"));
@@ -268,7 +268,7 @@ export async function GET(req: NextRequest) {
   let groupKey = "";
 
   if (lineKey) {
-    const resolved = await resolveGroupKeyForAnchor({ trackId, lineKey });
+    const resolved = await resolveGroupKeyForAnchor({ recordingId, lineKey });
     groupKey = resolved.groupKey;
 
     if (rawGroupKey && norm(rawGroupKey) !== groupKey) {
@@ -287,7 +287,7 @@ export async function GET(req: NextRequest) {
     if (isGroupKeyV1(g)) {
       groupKey = g;
     } else {
-      const ok = await isKnownCanonicalGroupKey({ trackId, groupKey: g });
+      const ok = await isKnownCanonicalGroupKey({ recordingId, groupKey: g });
       if (!ok) {
         return json(400, {
           ok: false,
@@ -349,7 +349,7 @@ export async function GET(req: NextRequest) {
           select 1
           from anon_exegesis_thread_opens
           where session_id = ${sessionId}
-            and track_id = ${trackId}
+            and track_id = ${recordingId}
             and group_key = ${groupKey}
         ) as already
       ),
@@ -360,7 +360,7 @@ export async function GET(req: NextRequest) {
       ),
       attempt as (
         insert into anon_exegesis_thread_opens (session_id, track_id, group_key)
-        select ${sessionId}, ${trackId}, ${groupKey}
+        select ${sessionId}, ${recordingId}, ${groupKey}
         where (select already from already) = false
           and (select n_before from cnt_before) < ${LIMIT}
         on conflict (session_id, track_id, group_key) do nothing
@@ -393,7 +393,7 @@ export async function GET(req: NextRequest) {
             action: "login",
             message,
             correlationId: mkCorrelationId(
-              `exegesis:${sessionId}:${trackId}:${groupKey}:${LIMIT}`,
+              `exegesis:${sessionId}:${recordingId}:${groupKey}:${LIMIT}`,
             ),
           }),
         },
@@ -406,7 +406,7 @@ export async function GET(req: NextRequest) {
   const metaRes = await sql<DbThreadMetaRow>`
     select track_id, group_key, pinned_comment_id, locked, comment_count, last_activity_at, created_at, updated_at
     from exegesis_thread_meta
-    where track_id = ${trackId}
+    where track_id = ${recordingId}
       and group_key = ${groupKey}
     limit 1
   `;
@@ -435,7 +435,7 @@ export async function GET(req: NextRequest) {
         c.edit_count,
         c.vote_count
       from exegesis_comment c
-      where c.track_id = ${trackId}
+      where c.track_id = ${recordingId}
         and c.group_key = ${groupKey}
         and c.status <> 'deleted'
     ),
@@ -473,7 +473,7 @@ export async function GET(req: NextRequest) {
 
     const dto: CommentDTO = {
       id: r.id,
-      trackId: r.track_id,
+      recordingId: r.track_id,
       groupKey: r.group_key,
       lineKey: r.line_key,
       parentId: r.parent_id,
@@ -540,7 +540,7 @@ export async function GET(req: NextRequest) {
 
   const meta: ThreadMetaDTO | null = metaRow
     ? {
-        trackId: metaRow.track_id,
+        recordingId: metaRow.track_id,
         groupKey: metaRow.group_key,
         pinnedCommentId: metaRow.pinned_comment_id,
         locked: metaRow.locked,
@@ -580,7 +580,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json<ApiOk>(
     {
       ok: true,
-      trackId,
+      recordingId,
       groupKey,
       sort,
       meta,

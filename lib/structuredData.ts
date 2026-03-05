@@ -36,7 +36,7 @@ export function musicAlbumJsonLd(args: {
           const name =
             typeof t.title === "string" && t.title.trim().length
               ? t.title.trim()
-              : t.id;
+              : t.recordingId;
 
           const dur = typeof t.durationMs === "number" ? iso8601DurationFromMs(t.durationMs) : null;
 

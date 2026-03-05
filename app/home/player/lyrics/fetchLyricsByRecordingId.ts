@@ -1,15 +1,15 @@
-//web/app/home/player/lyrics/fetchLyricsByTrackId.ts
+//web/app/home/player/lyrics/fetchLyricsByrecordingId.ts
 "use client";
 
 import { parseTrackLyricsApiOk } from "@/lib/types";
 import type { LyricCue } from "@/lib/types";
 
-export async function fetchLyricsByTrackId(
-  trackId: string,
+export async function fetchLyricsByrecordingId(
+  recordingId: string,
   signal?: AbortSignal,
-): Promise<{ trackId: string; cues: LyricCue[]; offsetMs: number } | null> {
+): Promise<{ recordingId: string; cues: LyricCue[]; offsetMs: number } | null> {
   const res = await fetch(
-    `/api/lyrics/by-track?trackId=${encodeURIComponent(trackId)}`,
+    `/api/lyrics/by-track?recordingId=${encodeURIComponent(recordingId)}`,
     { signal, cache: "no-store" },
   );
   if (!res.ok) return null;
@@ -19,7 +19,7 @@ export async function fetchLyricsByTrackId(
   if (!parsed) return null;
 
   return {
-    trackId: parsed.trackId,
+    recordingId: parsed.recordingId,
     cues: parsed.cues,
     offsetMs: parsed.offsetMs,
   };

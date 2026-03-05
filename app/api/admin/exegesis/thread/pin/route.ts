@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 type ApiOk = {
   ok: true;
   meta: {
-    trackId: string;
+    recordingId: string;
     groupKey: string;
     pinnedCommentId: string | null;
     locked: boolean;
@@ -42,12 +42,12 @@ export async function POST(req: NextRequest) {
     | Record<string, unknown>
     | null;
 
-  const trackId = norm(body?.trackId);
+  const recordingId = norm(body?.recordingId);
   const groupKey = norm(body?.groupKey);
   const pinnedCommentIdRaw = norm(body?.pinnedCommentId);
   const pinnedCommentId = pinnedCommentIdRaw ? pinnedCommentIdRaw : null;
 
-  if (!trackId) return json(400, { ok: false, error: "Missing trackId." });
+  if (!recordingId) return json(400, { ok: false, error: "Missing recordingId." });
   if (!groupKey) return json(400, { ok: false, error: "Missing groupKey." });
   if (pinnedCommentId && !isUuid(pinnedCommentId))
     return json(400, { ok: false, error: "Invalid pinnedCommentId." });
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     `;
     const row = c.rows?.[0];
     if (!row) return json(404, { ok: false, error: "Comment not found." });
-    if (row.track_id !== trackId || row.group_key !== groupKey) {
+    if (row.track_id !== recordingId || row.group_key !== groupKey) {
       return json(400, { ok: false, error: "Comment is not in that thread." });
     }
     if (row.parent_id) {
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
   }>`
     with ins as (
       insert into exegesis_thread_meta (track_id, group_key)
-      values (${trackId}, ${groupKey})
+      values (${recordingId}, ${groupKey})
       on conflict (track_id, group_key) do nothing
       returning 1
     ),
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
       update exegesis_thread_meta
       set pinned_comment_id = ${pinnedCommentId}::uuid,
           updated_at = now()
-      where track_id = ${trackId}
+      where track_id = ${recordingId}
         and group_key = ${groupKey}
       returning track_id, group_key, pinned_comment_id, locked, comment_count, last_activity_at, updated_at
     )
@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
   return json(200, {
     ok: true,
     meta: {
-      trackId: row.track_id,
+      recordingId: row.track_id,
       groupKey: row.group_key,
       pinnedCommentId: row.pinned_comment_id,
       locked: row.locked,

@@ -4,7 +4,6 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { ensureStripeCustomerForClerkUser } from "@/lib/stripeCustomer";
-import { sql } from "@vercel/postgres";
 import { getAlbumOffer } from "../../../../lib/albumOffers";
 import { normalizeEmail, ensureMemberByEmail } from "../../../../lib/members";
 

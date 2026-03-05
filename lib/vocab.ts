@@ -89,7 +89,7 @@ export function entKey(obj: Record<string, unknown>): StructuredEntitlementKey {
 export const ENT = {
   pageView: (page: string) => entKey({ kind: "page_view", page }),
   theme: (name: string) => entKey({ kind: "theme", name }), // keep only if we still want structured themes later
-  mediaPlay: (trackId: string) => entKey({ kind: "media_play", trackId }),
+  mediaPlay: (recordingId: string) => entKey({ kind: "media_play", recordingId }),
   download: (assetId: string) => entKey({ kind: "download", assetId }),
   downloadAlbum: (slug: string) => `download_album_${slug}`,
 

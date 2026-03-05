@@ -25,10 +25,10 @@ export async function POST(req: NextRequest) {
     string,
     unknown
   > | null;
-  const trackId = norm(body?.trackId);
+  const recordingId = norm(body?.recordingId);
   const lineKeys = asStringArray(body?.lineKeys);
 
-  if (!trackId) return json(400, { ok: false, error: "Missing trackId." });
+  if (!recordingId) return json(400, { ok: false, error: "Missing recordingId." });
   if (lineKeys.length === 0)
     return json(400, { ok: false, error: "Missing lineKeys." });
 
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
 
     const del = await sql<{ ok: number }>`
       delete from exegesis_group_map
-      where track_id = ${trackId}
+      where track_id = ${recordingId}
         and anchor_line_key = ${lk}
       returning 1 as ok
     `;

@@ -15,7 +15,7 @@ export type ShareTarget =
       type: "track";
       albumSlug: string;
       albumId?: string;
-      trackId: string;
+      recordingId: string;
       trackTitle: string;
       title: string;
       text: string;
@@ -179,7 +179,7 @@ export function buildShareTarget(
     type: "track",
     albumSlug: input.album.slug,
     albumId: input.album.id,
-    trackId: input.track.id,
+    recordingId: input.track.id,
     trackTitle,
     title,
     text,

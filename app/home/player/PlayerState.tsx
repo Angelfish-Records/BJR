@@ -33,8 +33,8 @@ export type PlayerState = {
 
   intent: Intent;
   intentAtMs?: number;
-  selectedTrackId?: string;
-  pendingTrackId?: string;
+  selectedRecordingId?: string;
+  pendingRecordingId?: string;
 
   pendingSeekMs?: number;
   seeking: boolean;
@@ -49,7 +49,7 @@ export type PlayerState = {
   muted: boolean;
   repeat: RepeatMode;
 
-  durationById: Record<string, number>;
+  durationByRecordingId: Record<string, number>;
 };
 
 type PlayerActions = {
@@ -71,7 +71,7 @@ type PlayerActions = {
   setIntent: (i: Intent) => void;
   clearIntent: () => void;
   selectTrack: (id?: string) => void;
-  setPendingTrackId: (id?: string) => void;
+  setPendingRecordingId: (id?: string) => void;
   resolvePendingTrack: (id: string) => void;
 
   seek: (ms: number) => void;
@@ -101,36 +101,36 @@ function nextRepeat(r: RepeatMode): RepeatMode {
 
 function hydrateTrack(
   t: PlayerTrack,
-  durationById: Record<string, number>,
+  durationByRecordingId: Record<string, number>,
 ): PlayerTrack {
-  const cached = durationById[t.id];
+  const cached = durationByRecordingId[t.recordingId];
   if (!cached || cached <= 0) return t;
   if (t.durationMs === cached) return t;
   return { ...t, durationMs: cached };
 }
 
-function hydrateTracks(ts: PlayerTrack[], durationById: Record<string, number>) {
+function hydrateTracks(ts: PlayerTrack[], durationByRecordingId: Record<string, number>) {
   let changed = false;
   const next = ts.map((t) => {
-    const ht = hydrateTrack(t, durationById);
+    const ht = hydrateTrack(t, durationByRecordingId);
     if (ht !== t) changed = true;
     return ht;
   });
   return changed ? next : ts;
 }
 
-function primeDurationById(
+function primeDurationByRecordingId(
   prev: Record<string, number>,
   tracks: PlayerTrack[],
 ): Record<string, number> {
   let next = prev;
   for (const t of tracks) {
-    if (!t?.id) continue;
+    if (!t?.recordingId) continue;
     const ms = t.durationMs;
     if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) continue;
-    if (typeof next[t.id] === "number" && next[t.id] > 0) continue;
+    if (typeof next[t.recordingId] === "number" && next[t.recordingId] > 0) continue;
     if (next === prev) next = { ...prev };
-    next[t.id] = ms;
+    next[t.recordingId] = ms;
   }
   return next;
 }
@@ -151,8 +151,8 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
 
     intent: null,
     intentAtMs: undefined,
-    selectedTrackId: undefined,
-    pendingTrackId: undefined,
+    selectedRecordingId: undefined,
+    pendingRecordingId: undefined,
 
     pendingSeekMs: undefined,
     seeking: false,
@@ -167,7 +167,7 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
     muted: false,
     repeat: "off",
 
-    durationById: {},
+    durationByRecordingId: {},
   });
 
   const api: PlayerState & PlayerActions = React.useMemo(() => {
@@ -189,19 +189,19 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
       selectTrack: (id?: string) =>
         setState((s) => ({
           ...s,
-          selectedTrackId: id,
+          selectedRecordingId: id,
         })),
 
-      setPendingTrackId: (id?: string) =>
+      setPendingRecordingId: (id?: string) =>
         setState((s) => ({
           ...s,
-          pendingTrackId: id,
+          pendingRecordingId: id,
         })),
 
       resolvePendingTrack: (id: string) =>
         setState((s) => {
-          if (s.pendingTrackId !== id) return s;
-          return { ...s, pendingTrackId: undefined };
+          if (s.pendingRecordingId !== id) return s;
+          return { ...s, pendingRecordingId: undefined };
         }),
 
       play: (track?: PlayerTrack) => {
@@ -220,12 +220,12 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
               lastPlayAttemptAtMs: now,
               lastError: undefined,
               loadingReason: undefined,
-              pendingTrackId: undefined,
+              pendingRecordingId: undefined,
             };
           }
 
-          const nextTrack = hydrateTrack(rawNext, s.durationById);
-          const sameTrack = Boolean(s.current && s.current.id === nextTrack.id);
+          const nextTrack = hydrateTrack(rawNext, s.durationByRecordingId);
+          const sameTrack = Boolean(s.current && s.current.recordingId === nextTrack.recordingId);
 
           const base = {
             ...s,
@@ -233,14 +233,14 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
             intentAtMs: now,
             lastPlayAttemptAtMs: now,
             lastError: undefined,
-            selectedTrackId: nextTrack.id,
-            pendingTrackId: nextTrack.id,
+            selectedRecordingId: nextTrack.recordingId,
+            pendingRecordingId: nextTrack.recordingId,
           };
 
           if (sameTrack && s.status === "paused") {
             return {
               ...base,
-              current: hydrateTrack(s.current!, s.durationById),
+              current: hydrateTrack(s.current!, s.durationByRecordingId),
               status: "paused",
               loadingReason: undefined,
             };
@@ -272,7 +272,7 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
           const cur = s.current;
           if (!cur || s.queue.length === 0) return s;
 
-          const idx = s.queue.findIndex((t) => t.id === cur.id);
+          const idx = s.queue.findIndex((t) => t.recordingId === cur.recordingId);
           const at = idx >= 0 ? idx : 0;
 
           if (s.repeat === "one") {
@@ -283,14 +283,14 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
               positionMs: 0,
               intent: "play",
               intentAtMs: Date.now(),
-              pendingTrackId: cur.id,
-              selectedTrackId: cur.id,
+              pendingRecordingId: cur.recordingId,
+              selectedRecordingId: cur.recordingId,
             };
           }
 
           const nextIdx = at + 1;
           if (nextIdx < s.queue.length) {
-            const t = hydrateTrack(s.queue[nextIdx], s.durationById);
+            const t = hydrateTrack(s.queue[nextIdx], s.durationByRecordingId);
             return {
               ...s,
               current: t,
@@ -299,13 +299,13 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
               positionMs: 0,
               intent: "play",
               intentAtMs: Date.now(),
-              pendingTrackId: t.id,
-              selectedTrackId: t.id,
+              pendingRecordingId: t.recordingId,
+              selectedRecordingId: t.recordingId,
             };
           }
 
           if (s.repeat === "all" && s.queue.length > 0) {
-            const t = hydrateTrack(s.queue[0], s.durationById);
+            const t = hydrateTrack(s.queue[0], s.durationByRecordingId);
             return {
               ...s,
               current: t,
@@ -314,8 +314,8 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
               positionMs: 0,
               intent: "play",
               intentAtMs: Date.now(),
-              pendingTrackId: t.id,
-              selectedTrackId: t.id,
+              pendingRecordingId: t.recordingId,
+              selectedRecordingId: t.recordingId,
             };
           }
 
@@ -329,7 +329,7 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
             seeking: true,
             seekNonce: s.seekNonce + 1,
             loadingReason: undefined,
-            pendingTrackId: undefined,
+            pendingRecordingId: undefined,
           };
         });
       },
@@ -347,17 +347,17 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
               loadingReason: "attach",
               intent: "play",
               intentAtMs: Date.now(),
-              pendingTrackId: cur.id,
-              selectedTrackId: cur.id,
+              pendingRecordingId: cur.recordingId,
+              selectedRecordingId: cur.recordingId,
             };
           }
 
-          const idx = s.queue.findIndex((t) => t.id === cur.id);
+          const idx = s.queue.findIndex((t) => t.recordingId === cur.recordingId);
           const at = idx >= 0 ? idx : 0;
           const prevIdx = at - 1;
 
           if (prevIdx >= 0) {
-            const t = hydrateTrack(s.queue[prevIdx], s.durationById);
+            const t = hydrateTrack(s.queue[prevIdx], s.durationByRecordingId);
             return {
               ...s,
               current: t,
@@ -366,13 +366,13 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
               positionMs: 0,
               intent: "play",
               intentAtMs: Date.now(),
-              pendingTrackId: t.id,
-              selectedTrackId: t.id,
+              pendingRecordingId: t.recordingId,
+              selectedRecordingId: t.recordingId,
             };
           }
 
           if (s.repeat === "all" && s.queue.length > 0) {
-            const t = hydrateTrack(s.queue[s.queue.length - 1], s.durationById);
+            const t = hydrateTrack(s.queue[s.queue.length - 1], s.durationByRecordingId);
             return {
               ...s,
               current: t,
@@ -381,8 +381,8 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
               positionMs: 0,
               intent: "play",
               intentAtMs: Date.now(),
-              pendingTrackId: t.id,
-              selectedTrackId: t.id,
+              pendingRecordingId: t.recordingId,
+              selectedRecordingId: t.recordingId,
             };
           }
 
@@ -393,20 +393,20 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
             loadingReason: "attach",
             intent: "play",
             intentAtMs: Date.now(),
-            pendingTrackId: cur.id,
-            selectedTrackId: cur.id,
+            pendingRecordingId: cur.recordingId,
+            selectedRecordingId: cur.recordingId,
           };
         });
       },
 
       setQueue: (tracks: PlayerTrack[], opts?: QueueContext) =>
         setState((s) => {
-          const nextDurationById = primeDurationById(s.durationById, tracks);
-          const hydratedQueue = hydrateTracks(tracks, nextDurationById);
+          const nextDurationByRecordingId = primeDurationByRecordingId(s.durationByRecordingId, tracks);
+          const hydratedQueue = hydrateTracks(tracks, nextDurationByRecordingId);
 
           const nextCurrentRaw = s.current ?? hydratedQueue[0];
           const nextCurrent = nextCurrentRaw
-            ? hydrateTrack(nextCurrentRaw, nextDurationById)
+            ? hydrateTrack(nextCurrentRaw, nextDurationByRecordingId)
             : undefined;
 
           const slug =
@@ -429,7 +429,7 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
 
           return {
             ...s,
-            durationById: nextDurationById,
+            durationByRecordingId: nextDurationByRecordingId,
             queue: hydratedQueue,
 
             queueContextId: hasId ? opts!.contextId : s.queueContextId,
@@ -442,20 +442,20 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
 
             current: nextCurrent,
             positionMs: s.current ? s.positionMs : 0,
-            selectedTrackId: s.selectedTrackId ?? nextCurrent?.id,
+            selectedRecordingId: s.selectedRecordingId ?? nextCurrent?.recordingId,
           };
         }),
 
       enqueue: (track: PlayerTrack) =>
         setState((s) => {
-          const nextDurationById = primeDurationById(s.durationById, [track]);
-          const t = hydrateTrack(track, nextDurationById);
+          const nextDurationByRecordingId = primeDurationByRecordingId(s.durationByRecordingId, [track]);
+          const t = hydrateTrack(track, nextDurationByRecordingId);
           return {
             ...s,
-            durationById: nextDurationById,
+            durationByRecordingId: nextDurationByRecordingId,
             queue: [...s.queue, t],
             current: s.current ?? t,
-            selectedTrackId: s.selectedTrackId ?? t.id,
+            selectedRecordingId: s.selectedRecordingId ?? t.recordingId,
           };
         }),
 
@@ -464,8 +464,8 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
           ...s,
           queue: [],
           current: undefined,
-          selectedTrackId: undefined,
-          pendingTrackId: undefined,
+          selectedRecordingId: undefined,
+          pendingRecordingId: undefined,
 
           positionMs: 0,
           pendingSeekMs: undefined,
@@ -487,17 +487,17 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
           if (!Number.isFinite(ms) || ms <= 0) return s;
 
           const alreadyCached =
-            typeof s.durationById[cur.id] === "number" && s.durationById[cur.id] > 0;
+            typeof s.durationByRecordingId[cur.recordingId] === "number" && s.durationByRecordingId[cur.recordingId] > 0;
           const alreadyOnTrack =
             typeof cur.durationMs === "number" && cur.durationMs > 0;
           if (alreadyCached || alreadyOnTrack) return s;
 
-          const nextDurationById = { ...s.durationById, [cur.id]: ms };
+          const nextDurationByRecordingId = { ...s.durationByRecordingId, [cur.recordingId]: ms };
 
           const nextCurrent = { ...cur, durationMs: ms };
           let changed = false;
           const nextQueue = s.queue.map((t) => {
-            if (t.id !== cur.id) return t;
+            if (t.recordingId !== cur.recordingId) return t;
             if (typeof t.durationMs === "number" && t.durationMs > 0) return t;
             changed = true;
             return { ...t, durationMs: ms };
@@ -505,7 +505,7 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
 
           return {
             ...s,
-            durationById: nextDurationById,
+            durationByRecordingId: nextDurationByRecordingId,
             current: nextCurrent,
             queue: changed ? nextQueue : s.queue,
           };
@@ -519,9 +519,9 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
 
       seek: (ms: number) => {
         setState((s) => {
-          const curId = s.current?.id ?? "";
+          const curId = s.current?.recordingId ?? "";
           const dur =
-            (curId ? s.durationById[curId] : 0) || s.current?.durationMs || 0;
+            (curId ? s.durationByRecordingId[curId] : 0) || s.current?.durationMs || 0;
           const next = dur > 0 ? clamp(ms, 0, dur) : Math.max(0, ms);
           return {
             ...s,
@@ -548,9 +548,9 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
         setState((s) => {
           if (s.status !== "playing") return s;
 
-          const curId = s.current?.id ?? "";
+          const curId = s.current?.recordingId ?? "";
           const dur =
-            (curId ? s.durationById[curId] : 0) || s.current?.durationMs || 0;
+            (curId ? s.durationByRecordingId[curId] : 0) || s.current?.durationMs || 0;
           const nextPos = Math.max(0, s.positionMs + Math.max(0, deltaMs));
 
           if (dur <= 0) return { ...s, positionMs: nextPos };
@@ -559,29 +559,29 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
           if (s.repeat === "one") return { ...s, positionMs: 0 };
 
           const cur = s.current;
-          const idx = cur ? s.queue.findIndex((t) => t.id === cur.id) : -1;
+          const idx = cur ? s.queue.findIndex((t) => t.recordingId === cur.recordingId) : -1;
           const at = idx >= 0 ? idx : 0;
           const nextIdx = at + 1;
 
           if (nextIdx < s.queue.length) {
-            const t = hydrateTrack(s.queue[nextIdx], s.durationById);
+            const t = hydrateTrack(s.queue[nextIdx], s.durationByRecordingId);
             return {
               ...s,
               current: t,
               positionMs: 0,
-              selectedTrackId: t.id,
-              pendingTrackId: t.id,
+              selectedRecordingId: t.recordingId,
+              pendingRecordingId: t.recordingId,
             };
           }
 
           if (s.repeat === "all" && s.queue.length > 0) {
-            const t = hydrateTrack(s.queue[0], s.durationById);
+            const t = hydrateTrack(s.queue[0], s.durationByRecordingId);
             return {
               ...s,
               current: t,
               positionMs: 0,
-              selectedTrackId: t.id,
-              pendingTrackId: t.id,
+              selectedRecordingId: t.recordingId,
+              pendingRecordingId: t.recordingId,
             };
           }
 
@@ -605,15 +605,15 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
             lastError: undefined,
             intent: "play",
             intentAtMs: Date.now(),
-            pendingTrackId: s.current.id,
-            selectedTrackId: s.current.id,
+            pendingRecordingId: s.current.recordingId,
+            selectedRecordingId: s.current.recordingId,
           };
         }),
     };
   }, [state]);
 
-  const currentId = state.current?.id ?? null;
-  const pendingId = state.pendingTrackId ?? null;
+  const currentId = state.current?.recordingId ?? null;
+  const pendingId = state.pendingRecordingId ?? null;
 
   React.useEffect(() => {
     const id = (currentId ?? "").trim();

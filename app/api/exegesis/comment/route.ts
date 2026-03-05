@@ -22,7 +22,7 @@ export const runtime = "nodejs";
 
 type ApiOk = {
   ok: true;
-  trackId: string;
+  recordingId: string;
   groupKey: string;
   comment: CommentDTO;
   meta: ThreadMetaDTO;
@@ -92,7 +92,7 @@ type IdentityDTO = {
 
 type CommentDTO = {
   id: string;
-  trackId: string;
+  recordingId: string;
   groupKey: string;
   lineKey: string;
   parentId: string | null;
@@ -113,7 +113,7 @@ type CommentDTO = {
 };
 
 type ThreadMetaDTO = {
-  trackId: string;
+  recordingId: string;
   groupKey: string;
   pinnedCommentId: string | null;
   locked: boolean;
@@ -272,7 +272,7 @@ export async function POST(req: NextRequest) {
     return json(400, { ok: false, error: "Invalid JSON body." });
   }
 
-  const trackId = norm(b.trackId);
+  const recordingId = norm(b.recordingId);
   const lineKey = norm(b.lineKey);
 
   // groupKey becomes optional (client may still send it, but we don't trust it)
@@ -328,11 +328,11 @@ export async function POST(req: NextRequest) {
   const tMs = clampInt(b.tMs, 0, 60 * 60 * 1000);
   const tMsOrNull = tMs === null ? null : tMs;
 
-  if (!trackId) return json(400, { ok: false, error: "Missing trackId." });
+  if (!recordingId) return json(400, { ok: false, error: "Missing recordingId." });
   if (!lineKey) return json(400, { ok: false, error: "Missing lineKey." });
 
   // Resolve canonical group key (map-first, v1 fallback)
-  const resolved = await resolveGroupKeyForAnchor({ trackId, lineKey });
+  const resolved = await resolveGroupKeyForAnchor({ recordingId, lineKey });
   const groupKey = resolved.groupKey;
 
   if (!groupKey) {
@@ -366,7 +366,7 @@ export async function POST(req: NextRequest) {
       code: "AUTH_REQUIRED",
       action: "login",
       message: "Sign in to post a comment.",
-      correlationKey: `${trackId}:${groupKey}:${lineKey}`,
+      correlationKey: `${recordingId}:${groupKey}:${lineKey}`,
     });
   }
 
@@ -376,7 +376,7 @@ export async function POST(req: NextRequest) {
       code: "PROVISIONING",
       action: "wait",
       message: "Still setting things up. Try again shortly.",
-      correlationKey: `${trackId}:${groupKey}:${lineKey}`,
+      correlationKey: `${recordingId}:${groupKey}:${lineKey}`,
     });
   }
 
@@ -386,7 +386,7 @@ export async function POST(req: NextRequest) {
       code: "TIER_REQUIRED",
       action: "subscribe",
       message: "Posting requires Patron or Partner.",
-      correlationKey: `${trackId}:${groupKey}:${lineKey}`,
+      correlationKey: `${recordingId}:${groupKey}:${lineKey}`,
     });
   }
 
@@ -452,7 +452,7 @@ export async function POST(req: NextRequest) {
       with
 params as (
   select
-    ${trackId}::text          as track_id,
+    ${recordingId}::text          as track_id,
     ${groupKey}::text         as group_key,
     ${lineKey}::text          as line_key,
     nullif(${parentUuid}::text, '')::uuid as parent_id,
@@ -704,7 +704,7 @@ limit 1
 
     if ((row.inserted_count ?? 0) === 0) {
       console.error("[exegesis/comment] insert suppressed", {
-        trackId,
+        recordingId,
         parentIdRaw,
         groupKey,
         lineKey,
@@ -759,7 +759,7 @@ limit 1
 
     const comment: CommentDTO = {
       id: row.id,
-      trackId: row.track_id,
+      recordingId: row.track_id,
       groupKey: row.group_key,
       lineKey: row.line_key,
       parentId: row.parent_id,
@@ -780,7 +780,7 @@ limit 1
     };
 
     const meta: ThreadMetaDTO = {
-      trackId: row.meta_track_id,
+      recordingId: row.meta_track_id,
       groupKey: row.meta_group_key,
       pinnedCommentId: row.meta_pinned_comment_id,
       locked: row.meta_locked,
@@ -802,7 +802,7 @@ limit 1
 
     return json(200, {
       ok: true,
-      trackId,
+      recordingId,
       groupKey,
       comment,
       meta,

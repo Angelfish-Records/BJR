@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 type ApiOk = {
   ok: true;
-  trackId: string;
+  recordingId: string;
   // mapping keyed by anchorLineKey
   map: Record<string, { canonicalGroupKey: string; updatedAt: string }>;
   // list of canonical groups already used on this track
@@ -33,10 +33,10 @@ export async function GET(req: NextRequest) {
   await requireAdminMemberId();
 
   const url = new URL(req.url);
-  const trackId = norm(url.searchParams.get("trackId"));
-  if (!trackId) return json(400, { ok: false, error: "Missing trackId." });
-  if (trackId.length > 200)
-    return json(400, { ok: false, error: "Invalid trackId." });
+  const recordingId = norm(url.searchParams.get("recordingId"));
+  if (!recordingId) return json(400, { ok: false, error: "Missing recordingId." });
+  if (recordingId.length > 200)
+    return json(400, { ok: false, error: "Invalid recordingId." });
 
   const r = await sql<{
     track_id: string;
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
   }>`
     select track_id, anchor_line_key, canonical_group_key, updated_at
     from exegesis_group_map
-    where track_id = ${trackId}
+    where track_id = ${recordingId}
     order by updated_at desc
   `;
 
@@ -65,14 +65,14 @@ export async function GET(req: NextRequest) {
   }>`
     select canonical_group_key, count(*)::int as n, max(updated_at) as updated_at
     from exegesis_group_map
-    where track_id = ${trackId}
+    where track_id = ${recordingId}
     group by canonical_group_key
     order by max(updated_at) desc
   `;
 
   return json(200, {
     ok: true,
-    trackId,
+    recordingId,
     map,
     groups: (g.rows ?? []).map((x) => ({
       canonicalGroupKey: x.canonical_group_key,

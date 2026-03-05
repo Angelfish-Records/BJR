@@ -114,8 +114,8 @@ export default function StageTransportBar() {
   const playingish =
     p.status === "playing" || p.status === "loading" || p.intent === "play";
 
-  const curId = p.current?.id ?? "";
-  const idx = curId ? p.queue.findIndex((t) => t.id === curId) : -1;
+  const curId = p.current?.recordingId ?? "";
+  const idx = curId ? p.queue.findIndex((t) => t.recordingId === curId) : -1;
   const atStart = idx <= 0;
   const atEnd = idx >= 0 && idx === p.queue.length - 1;
 

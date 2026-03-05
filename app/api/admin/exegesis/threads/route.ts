@@ -7,7 +7,7 @@ import { requireAdminMemberId } from "@/lib/adminAuth";
 export const runtime = "nodejs";
 
 type ThreadRow = {
-  trackId: string;
+  recordingId: string;
   groupKey: string;
   locked: boolean;
   pinnedCommentId: string | null;
@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
   `;
 
   const threads: ThreadRow[] = (r.rows ?? []).map((x) => ({
-    trackId: x.track_id,
+    recordingId: x.track_id,
     groupKey: x.group_key,
     locked: x.locked,
     pinnedCommentId: x.pinned_comment_id,

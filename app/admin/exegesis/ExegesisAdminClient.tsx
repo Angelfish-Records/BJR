@@ -4,7 +4,7 @@
 import React from "react";
 
 type ThreadRow = {
-  trackId: string;
+  recordingId: string;
   groupKey: string;
   locked: boolean;
   pinnedCommentId: string | null;
@@ -21,7 +21,7 @@ type ReportRow = {
 
   commentId: string;
   commentStatus: "live" | "hidden" | "deleted";
-  trackId: string;
+  recordingId: string;
   groupKey: string;
   lineKey: string;
   bodyPlain: string;
@@ -36,7 +36,7 @@ type LyricsApiCue = {
 };
 type LyricsApiOk = {
   ok: true;
-  trackId: string;
+  recordingId: string;
   offsetMs: number;
   version: string;
   geniusUrl: string | null;
@@ -45,7 +45,7 @@ type LyricsApiOk = {
 
 type GroupMapOk = {
   ok: true;
-  trackId: string;
+  recordingId: string;
   map: Record<string, { canonicalGroupKey: string; updatedAt: string }>;
   groups: Array<{
     canonicalGroupKey: string;
@@ -73,7 +73,7 @@ export default function ExegesisAdminClient(props: { embed: boolean }) {
   const [reports, setReports] = React.useState<ReportRow[]>([]);
   const [limit, setLimit] = React.useState(60);
 
-  const [groupTrackId, setGroupTrackId] = React.useState<string>("");
+  const [grouprecordingId, setGrouprecordingId] = React.useState<string>("");
   const [lyrics, setLyrics] = React.useState<LyricsApiOk | null>(null);
   const [groupMap, setGroupMap] = React.useState<GroupMapOk | null>(null);
   const [selectedLineKeys, setSelectedLineKeys] = React.useState<
@@ -117,9 +117,9 @@ export default function ExegesisAdminClient(props: { embed: boolean }) {
   }
 
   async function loadGrouping() {
-    const trackId = groupTrackId.trim();
-    if (!trackId) {
-      setErr("Enter a trackId for grouping.");
+    const recordingId = grouprecordingId.trim();
+    if (!recordingId) {
+      setErr("Enter a recordingId for grouping.");
       return;
     }
 
@@ -127,7 +127,7 @@ export default function ExegesisAdminClient(props: { embed: boolean }) {
     setBusy(true);
     try {
       const lr = await fetch(
-        `/api/lyrics/by-track?trackId=${encodeURIComponent(trackId)}`,
+        `/api/lyrics/by-track?recordingId=${encodeURIComponent(recordingId)}`,
         { cache: "no-store" },
       );
       const lj: unknown = await lr.json();
@@ -135,7 +135,7 @@ export default function ExegesisAdminClient(props: { embed: boolean }) {
       setLyrics(lj);
 
       const mr = await fetch(
-        `/api/admin/exegesis/group-map?trackId=${encodeURIComponent(trackId)}`,
+        `/api/admin/exegesis/group-map?recordingId=${encodeURIComponent(recordingId)}`,
         { cache: "no-store" },
       );
       const mj: unknown = await mr.json();
@@ -182,9 +182,9 @@ export default function ExegesisAdminClient(props: { embed: boolean }) {
   }
 
   async function assignSelectedToGroup() {
-    const trackId = groupTrackId.trim();
+    const recordingId = grouprecordingId.trim();
     const gk = targetGroupKey.trim();
-    if (!trackId) return;
+    if (!recordingId) return;
 
     if (!gk) {
       setErr("Choose a canonical group key first.");
@@ -202,7 +202,7 @@ export default function ExegesisAdminClient(props: { embed: boolean }) {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          trackId,
+          recordingId,
           canonicalGroupKey: gk,
           lineKeys: selectedKeys,
         }),
@@ -231,8 +231,8 @@ export default function ExegesisAdminClient(props: { embed: boolean }) {
   }
 
   async function clearSelectedMapping() {
-    const trackId = groupTrackId.trim();
-    if (!trackId) return;
+    const recordingId = grouprecordingId.trim();
+    if (!recordingId) return;
 
     if (selectedKeys.length === 0) {
       setErr("Select at least one line.");
@@ -245,7 +245,7 @@ export default function ExegesisAdminClient(props: { embed: boolean }) {
       const r = await fetch("/api/admin/exegesis/group-map/clear", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ trackId, lineKeys: selectedKeys }),
+        body: JSON.stringify({ recordingId, lineKeys: selectedKeys }),
       });
 
       const j: unknown = await r.json();
@@ -313,14 +313,14 @@ export default function ExegesisAdminClient(props: { embed: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [limit]);
 
-  async function setLocked(trackId: string, groupKey: string, locked: boolean) {
+  async function setLocked(recordingId: string, groupKey: string, locked: boolean) {
     setErr("");
     setBusy(true);
     try {
       const r = await fetch("/api/admin/exegesis/thread/lock", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ trackId, groupKey, locked }),
+        body: JSON.stringify({ recordingId, groupKey, locked }),
       });
       const j = (await r.json()) as
         | { ok: true; meta: ThreadRow }
@@ -329,7 +329,7 @@ export default function ExegesisAdminClient(props: { embed: boolean }) {
 
       setThreads((prev) =>
         prev.map((t) =>
-          t.trackId === trackId && t.groupKey === groupKey
+          t.recordingId === recordingId && t.groupKey === groupKey
             ? { ...t, locked: j.meta.locked, updatedAt: j.meta.updatedAt }
             : t,
         ),
@@ -342,7 +342,7 @@ export default function ExegesisAdminClient(props: { embed: boolean }) {
   }
 
   async function setPinned(
-    trackId: string,
+    recordingId: string,
     groupKey: string,
     pinnedCommentId: string | null,
   ) {
@@ -352,7 +352,7 @@ export default function ExegesisAdminClient(props: { embed: boolean }) {
       const r = await fetch("/api/admin/exegesis/thread/pin", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ trackId, groupKey, pinnedCommentId }),
+        body: JSON.stringify({ recordingId, groupKey, pinnedCommentId }),
       });
       const j = (await r.json()) as
         | { ok: true; meta: ThreadRow }
@@ -361,7 +361,7 @@ export default function ExegesisAdminClient(props: { embed: boolean }) {
 
       setThreads((prev) =>
         prev.map((t) =>
-          t.trackId === trackId && t.groupKey === groupKey
+          t.recordingId === recordingId && t.groupKey === groupKey
             ? {
                 ...t,
                 pinnedCommentId: j.meta.pinnedCommentId,
@@ -465,12 +465,12 @@ export default function ExegesisAdminClient(props: { embed: boolean }) {
               threads.map((t) => {
                 const lineKey = deriveLineKeyFromGroupKey(t.groupKey);
                 const href =
-                  `/exegesis/${encodeURIComponent(t.trackId)}` +
+                  `/exegesis/${encodeURIComponent(t.recordingId)}` +
                   (lineKey ? `#l=${encodeURIComponent(lineKey)}` : "");
 
                 return (
                   <div
-                    key={`${t.trackId}::${t.groupKey}`}
+                    key={`${t.recordingId}::${t.groupKey}`}
                     className="rounded-md bg-black/20 p-3"
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -482,7 +482,7 @@ export default function ExegesisAdminClient(props: { embed: boolean }) {
                             target="_blank"
                             rel="noreferrer"
                           >
-                            {t.trackId}
+                            {t.recordingId}
                           </a>
                         </div>
                         <div className="mt-1 text-xs opacity-60">
@@ -509,7 +509,7 @@ export default function ExegesisAdminClient(props: { embed: boolean }) {
                           className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
                           disabled={busy}
                           onClick={() =>
-                            void setLocked(t.trackId, t.groupKey, !t.locked)
+                            void setLocked(t.recordingId, t.groupKey, !t.locked)
                           }
                           title="Lock/unlock thread"
                         >
@@ -520,7 +520,7 @@ export default function ExegesisAdminClient(props: { embed: boolean }) {
                           className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
                           disabled={busy || !t.pinnedCommentId}
                           onClick={() =>
-                            void setPinned(t.trackId, t.groupKey, null)
+                            void setPinned(t.recordingId, t.groupKey, null)
                           }
                           title="Unpin"
                         >
@@ -552,10 +552,10 @@ export default function ExegesisAdminClient(props: { embed: boolean }) {
             ) : (
               reports.map((r) => {
                 const threadHref =
-                  `/exegesis/${encodeURIComponent(r.trackId)}` +
+                  `/exegesis/${encodeURIComponent(r.recordingId)}` +
                   `#l=${encodeURIComponent(r.lineKey)}&c=${encodeURIComponent(r.commentId)}`;
 
-                const threadKey = `${r.trackId}::${r.groupKey}`;
+                const threadKey = `${r.recordingId}::${r.groupKey}`;
 
                 return (
                   <div key={r.reportId} className="rounded-md bg-black/20 p-3">
@@ -615,7 +615,7 @@ export default function ExegesisAdminClient(props: { embed: boolean }) {
                               onClick={() => {
                                 // Pin this comment if it's a root; server will reject if not.
                                 void setPinned(
-                                  r.trackId,
+                                  r.recordingId,
                                   r.groupKey,
                                   r.commentId,
                                 );
@@ -653,13 +653,13 @@ export default function ExegesisAdminClient(props: { embed: boolean }) {
           <div className="mt-3 flex items-center gap-2">
             <input
               className="w-full rounded-md bg-black/20 px-3 py-2 text-sm outline-none"
-              placeholder="trackId"
-              value={groupTrackId}
-              onChange={(e) => setGroupTrackId(e.target.value)}
+              placeholder="recordingId"
+              value={grouprecordingId}
+              onChange={(e) => setGrouprecordingId(e.target.value)}
             />
             <button
               className="rounded-md bg-white/10 px-3 py-2 text-sm hover:bg-white/15 disabled:opacity-40"
-              disabled={busy || !groupTrackId.trim()}
+              disabled={busy || !grouprecordingId.trim()}
               onClick={() => void loadGrouping()}
             >
               Load

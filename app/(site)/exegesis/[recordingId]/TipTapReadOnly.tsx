@@ -1,4 +1,4 @@
-// web/app/(site)/exegesis/[trackId]/TipTapReadOnly.tsx
+// web/app/(site)/exegesis/[recordingId]/TipTapReadOnly.tsx
 "use client";
 
 import React from "react";

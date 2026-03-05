@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 type ApiOk = {
   ok: true;
   map: {
-    trackId: string;
+    recordingId: string;
     anchorLineKey: string;
     canonicalGroupKey: string;
     kind: string;
@@ -35,12 +35,12 @@ export async function POST(req: NextRequest) {
     | Record<string, unknown>
     | null;
 
-  const trackId = norm(body?.trackId);
+  const recordingId = norm(body?.recordingId);
   const anchorLineKey = norm(body?.anchorLineKey);
   const canonicalGroupKey = norm(body?.canonicalGroupKey);
   const kind = norm(body?.kind) || "rep";
 
-  if (!trackId) return json(400, { ok: false, error: "Missing trackId." });
+  if (!recordingId) return json(400, { ok: false, error: "Missing recordingId." });
   if (!anchorLineKey)
     return json(400, { ok: false, error: "Missing anchorLineKey." });
   if (!canonicalGroupKey)
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       updated_at
     )
     values (
-      ${trackId},
+      ${recordingId},
       ${anchorLineKey},
       ${canonicalGroupKey},
       ${kind},
@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
   return json(200, {
     ok: true,
     map: {
-      trackId: row.track_id,
+      recordingId: row.track_id,
       anchorLineKey: row.anchor_line_key,
       canonicalGroupKey: row.canonical_group_key,
       kind: row.kind,

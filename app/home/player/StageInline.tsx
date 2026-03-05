@@ -115,18 +115,18 @@ export default function StageInline(props: { height?: number }) {
   const p = usePlayer();
 
   // Lazy-load lyrics for the currently playing track when missing.
-  const currentTrackId = p.current?.id ?? null;
+  const currentRecordingId = p.current?.recordingId ?? null;
 
   React.useEffect(() => {
-    if (!currentTrackId) return;
+    if (!currentRecordingId) return;
 
-    const trackId = currentTrackId; // stable capture
+    const recordingId = currentRecordingId; // stable capture
     const ac = new AbortController();
 
-    void ensureLyricsForTrack(trackId, { signal: ac.signal });
+    void ensureLyricsForTrack(recordingId, { signal: ac.signal });
 
     return () => ac.abort();
-  }, [currentTrackId]);
+  }, [currentRecordingId]);
 
   const isMobile = useIsMobile(640);
   const inlineHeight = isMobile
@@ -193,7 +193,7 @@ export default function StageInline(props: { height?: number }) {
     }
   }, []);
 
-  const nothingPlaying = p.queue.length === 0 && !p.current?.id;
+  const nothingPlaying = p.queue.length === 0 && !p.current?.recordingId;
 
   const overlay =
     mounted && open

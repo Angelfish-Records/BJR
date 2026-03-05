@@ -38,14 +38,14 @@ function portalTabFromPathname(pathname: string | null): string | null {
 
 function parsePublicAlbumPath(pathname: string | null): {
   albumSlug: string | null;
-  trackId: string | null;
+  recordingId: string | null;
 } {
   const p = (pathname ?? "").trim();
   const m = p.match(/^\/album\/([^\/?#]+)(?:\/track\/([^\/?#]+))?\/?$/i);
-  if (!m) return { albumSlug: null, trackId: null };
+  if (!m) return { albumSlug: null, recordingId: null };
   const albumSlug = decodeURIComponent(m[1] ?? "").trim() || null;
-  const trackId = decodeURIComponent(m[2] ?? "").trim() || null;
-  return { albumSlug, trackId };
+  const recordingId = decodeURIComponent(m[2] ?? "").trim() || null;
+  return { albumSlug, recordingId };
 }
 
 function MiniPlayerHost(props: { onExpand: () => void }) {
@@ -258,7 +258,7 @@ export default function PortalArea(props: {
   topLogoUrl?: string | null;
   topLogoHeight?: number | null;
   initialPortalTabId?: string | null;
-  initialExegesisTrackId?: string | null;
+  initialExegesisRecordingId?: string | null;
   bundle: AlbumPlayerBundle;
   albums: AlbumNavItem[];
   attentionMessage?: string | null;
@@ -279,7 +279,7 @@ export default function PortalArea(props: {
   } = props;
 
   const p = usePlayer();
-  const { setQueue, play, selectTrack, setPendingTrackId } = p;
+  const { setQueue, play, selectTrack, setPendingRecordingId } = p;
   useGlobalTransportKeys(p, { enabled: true });
   const sp = useClientSearchParams();
   const { isSignedIn: isSignedInRaw } = useAuth();
@@ -521,7 +521,7 @@ export default function PortalArea(props: {
     attentionMessage ?? brokerAttentionMessage ?? null;
 
   const qAlbum = (isPublicAlbumRoute ? route.albumSlug : null) ?? null;
-  const qTrack = (isPublicAlbumRoute ? route.trackId : null) ?? null;
+  const qTrack = (isPublicAlbumRoute ? route.recordingId : null) ?? null;
 
   // Secondary concerns stay query-based (allowed everywhere)
   const qAutoplay = getAutoplayFlag(sp);
@@ -598,7 +598,7 @@ export default function PortalArea(props: {
   React.useEffect(() => {
     if (!qTrack) return;
     selectTrack(qTrack);
-    setPendingTrackId(undefined);
+    setPendingRecordingId(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qTrack]);
 
@@ -623,7 +623,7 @@ export default function PortalArea(props: {
     }
 
     const first = tracks[0];
-    if (!first?.id) return;
+    if (!first?.recordingId) return;
 
     const ctxId = hasSt
       ? (album.catalogueId ?? undefined)
@@ -639,8 +639,8 @@ export default function PortalArea(props: {
       artworkUrl: album.artworkUrl ?? null,
     });
 
-    p.selectTrack(first.id);
-    p.setPendingTrackId(undefined);
+    p.selectTrack(first.recordingId);
+    p.setPendingRecordingId(undefined);
 
     primedRef.current = true;
   }, [album, tracks, hasSt, qAlbum, currentAlbumSlug, qTrack, p]);
@@ -675,7 +675,7 @@ export default function PortalArea(props: {
       artworkUrl: album.artworkUrl ?? null,
     });
 
-    const t = tracks.find((x) => x.id === qTrack);
+    const t = tracks.find((x) => x.recordingId === qTrack);
     play(t);
     patchQuery({ autoplay: null });
   }, [
@@ -812,7 +812,7 @@ export default function PortalArea(props: {
       >
         <PortalViewerProvider
           initialPortalTabId={props.initialPortalTabId ?? null}
-          initialExegesisTrackId={props.initialExegesisTrackId ?? null}
+          initialExegesisRecordingId={props.initialExegesisRecordingId ?? null}
           value={{
             viewerTier,
             rawTier: tier,

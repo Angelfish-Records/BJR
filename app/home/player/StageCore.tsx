@@ -12,17 +12,17 @@ import StageTransportBar, {
 import { mediaSurface } from "./mediaSurface";
 import { useLyricsSnapshot } from "./lyrics/useLyricsSurface";
 
-type CuesByTrackId = Record<string, LyricCue[]>;
-type OffsetByTrackId = Record<string, number>;
+type CuesByRecordingId = Record<string, LyricCue[]>;
+type OffsetByRecordingId = Record<string, number>;
 
 function pickKeyWithCues(
-  cuesByTrackId: CuesByTrackId | undefined,
+  cuesByRecordingId: CuesByRecordingId | undefined,
   keys: Array<string | null | undefined>,
 ) {
-  if (!cuesByTrackId) return (keys.find(Boolean) as string | null) ?? null;
+  if (!cuesByRecordingId) return (keys.find(Boolean) as string | null) ?? null;
   for (const k of keys) {
     if (!k) continue;
-    const xs = cuesByTrackId[k];
+    const xs = cuesByRecordingId[k];
     if (Array.isArray(xs) && xs.length) return k;
   }
   return (keys.find(Boolean) as string | null) ?? null;
@@ -30,16 +30,16 @@ function pickKeyWithCues(
 
 export default function StageCore(props: {
   variant: "inline" | "fullscreen";
-  cuesByTrackId?: CuesByTrackId;
-  offsetByTrackId?: OffsetByTrackId;
+  cuesByRecordingId?: CuesByRecordingId;
+  offsetByRecordingId?: OffsetByRecordingId;
   offsetMs?: number;
   autoResumeOnSeek?: boolean;
   lyricsMode?: "embedded" | "none";
 }) {
   const {
     variant,
-    cuesByTrackId: cuesByTrackIdProp,
-    offsetByTrackId: offsetByTrackIdProp,
+    cuesByRecordingId: cuesByRecordingIdProp,
+    offsetByRecordingId: offsetByRecordingIdProp,
     offsetMs: globalOffsetMs = 0,
     autoResumeOnSeek = false,
     lyricsMode = "embedded",
@@ -49,45 +49,45 @@ export default function StageCore(props: {
   const snap = useLyricsSnapshot();
 
   // ✅ prefer props when provided; otherwise use lyricsSurface
-  const cuesByTrackId = cuesByTrackIdProp ?? snap.cuesByTrackId;
-  const offsetByTrackId = offsetByTrackIdProp ?? snap.offsetByTrackId;
+  const cuesByRecordingId = cuesByRecordingIdProp ?? snap.cuesByRecordingId;
+  const offsetByRecordingId = offsetByRecordingIdProp ?? snap.offsetByRecordingId;
 
   // Register stage presence; fullscreen wins if it exists.
   React.useEffect(() => mediaSurface.registerStage(variant), [variant]);
 
-  const [surfaceTrackId, setSurfaceTrackId] = React.useState<string | null>(
-    () => mediaSurface.getTrackId(),
+  const [surfaceRecordingId, setSurfaceRecordingId] = React.useState<string | null>(
+    () => mediaSurface.getRecordingId(),
   );
 
   React.useEffect(() => {
     const unsub = mediaSurface.subscribe((e) => {
-      if (e.type === "track") setSurfaceTrackId(e.id);
+      if (e.type === "track") setSurfaceRecordingId(e.id);
     });
     return unsub;
   }, []);
 
-  const playerTrackId = p.current?.id ?? null;
+  const playerRecordingId = p.current?.recordingId ?? null;
   const playerMuxId = p.current?.muxPlaybackId ?? null;
 
-  const trackId = React.useMemo(() => {
-    return pickKeyWithCues(cuesByTrackId, [
-      playerTrackId,
-      surfaceTrackId,
+  const recordingId = React.useMemo(() => {
+    return pickKeyWithCues(cuesByRecordingId, [
+      playerRecordingId,
+      surfaceRecordingId,
       playerMuxId,
     ]);
-  }, [cuesByTrackId, playerTrackId, playerMuxId, surfaceTrackId]);
+  }, [cuesByRecordingId, playerRecordingId, playerMuxId, surfaceRecordingId]);
 
   const cues: LyricCue[] | null = React.useMemo(() => {
-    if (!trackId) return null;
-    const xs = cuesByTrackId?.[trackId];
+    if (!recordingId) return null;
+    const xs = cuesByRecordingId?.[recordingId];
     return Array.isArray(xs) && xs.length ? xs : null;
-  }, [cuesByTrackId, trackId]);
+  }, [cuesByRecordingId, recordingId]);
 
   const trackOffsetMs = React.useMemo(() => {
-    if (!trackId) return 0;
-    const v = offsetByTrackId?.[trackId];
+    if (!recordingId) return 0;
+    const v = offsetByRecordingId?.[recordingId];
     return typeof v === "number" && Number.isFinite(v) ? v : 0;
-  }, [offsetByTrackId, trackId]);
+  }, [offsetByRecordingId, recordingId]);
 
   const effectiveOffsetMs = trackOffsetMs + globalOffsetMs;
 
@@ -142,7 +142,7 @@ export default function StageCore(props: {
       <div style={{ position: "absolute", inset: 0, zIndex: 2 }}>
         {lyricsMode === "embedded" ? (
           <LyricsOverlay
-            trackId={trackId}
+            recordingId={recordingId}
             cues={cues}
             offsetMs={effectiveOffsetMs}
             onSeek={onSeek}

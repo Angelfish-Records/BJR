@@ -4,7 +4,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import ExegesisTrackClient from "@/app/(site)/exegesis/[trackId]/ExegesisTrackClient";
+import ExegesisTrackClient from "@/app/(site)/exegesis/[recordingId]/ExegesisTrackClient";
 import { usePortalViewer } from "@/app/home/PortalViewerProvider";
 
 type CatalogueOk = {
@@ -14,9 +14,9 @@ type CatalogueOk = {
     albumSlug: string | null;
     albumTitle: string | null;
     coverUrl?: string | null; // ✅ add (source from same place as FullPlayer)
-    trackIds: string[]; // legacy
+    recordingIds: string[]; // legacy
     tracks?: Array<{
-      trackId: string;
+      recordingId: string;
       title: string | null;
       artist: string | null;
       trackNo?: number | null; // optional; we can compute from index if absent
@@ -33,7 +33,7 @@ type LyricsApiCue = {
 };
 type LyricsOk = {
   ok: true;
-  trackId: string;
+  recordingId: string;
   offsetMs: number;
   version: string;
   geniusUrl: string | null;
@@ -49,9 +49,9 @@ type LyricsOk = {
 
 type LyricsErr = { ok: false; error: string };
 
-function extractTrackIdFromPath(pathname: string): string | null {
+function extractrecordingIdFromPath(pathname: string): string | null {
   // We only care about the canonical path segment, query is separate.
-  // Expected: /exegesis or /exegesis/<trackId>
+  // Expected: /exegesis or /exegesis/<recordingId>
   const parts = (pathname ?? "")
     .split("?")[0]
     .split("#")[0]
@@ -72,7 +72,7 @@ function getTrackMeta(
   if (!cat || !t) return { title: null, artist: null };
   for (const a of cat.albums ?? []) {
     for (const tr of a.tracks ?? []) {
-      if ((tr.trackId ?? "").trim() === t)
+      if ((tr.recordingId ?? "").trim() === t)
         return { title: tr.title ?? null, artist: tr.artist ?? null };
     }
   }
@@ -106,7 +106,7 @@ const TRACK_PROMISES = new Map<string, Promise<LyricsOk>>();
 
 function loadTrackCached(tid: string, signal?: AbortSignal): Promise<LyricsOk> {
   const key = tid.trim();
-  if (!key) return Promise.reject(new Error("Missing trackId"));
+  if (!key) return Promise.reject(new Error("Missing recordingId"));
 
   const hit = TRACK_CACHE.get(key);
   if (hit) return Promise.resolve(hit);
@@ -115,7 +115,7 @@ function loadTrackCached(tid: string, signal?: AbortSignal): Promise<LyricsOk> {
   if (inflight) return inflight;
 
   const p = (async () => {
-    const url = `/api/lyrics/by-track?trackId=${encodeURIComponent(key)}`;
+    const url = `/api/lyrics/by-track?recordingId=${encodeURIComponent(key)}`;
     const r = await fetch(url, { cache: "no-store", signal });
     const j = (await r.json()) as LyricsOk | LyricsErr;
     if (!j.ok) throw new Error(j.error || "Failed to load lyrics.");
@@ -350,7 +350,7 @@ function AlbumCard(props: {
 
       <div className="mt-4 space-y-2">
         {(a.tracks ?? []).map((t, i) => {
-          const tid = (t.trackId ?? "").trim();
+          const tid = (t.recordingId ?? "").trim();
           if (!tid) return null;
 
           const trackLabel = (t.title ?? "").trim() || tid;
@@ -388,18 +388,18 @@ export default function PortalExegesis(props: { title?: string }) {
   const sp = useSearchParams();
   const search = sp?.toString() ? `?${sp.toString()}` : "";
 
-  const { exegesisTrackId, setExegesisTrackId } = usePortalViewer();
+  const { exegesisrecordingId, setExegesisrecordingId } = usePortalViewer();
 
-  const trackIdFromPath = extractTrackIdFromPath(pathname);
-  const trackId = (exegesisTrackId ?? trackIdFromPath ?? "").trim() || null;
+  const recordingIdFromPath = extractrecordingIdFromPath(pathname);
+  const recordingId = (exegesisrecordingId ?? recordingIdFromPath ?? "").trim() || null;
 
   // If we had to fall back to pathname parsing, persist it into context so other
   // components (and subsequent renders) have a stable single source of truth.
   React.useEffect(() => {
-    if (!exegesisTrackId && trackIdFromPath) {
-      setExegesisTrackId(trackIdFromPath);
+    if (!exegesisrecordingId && recordingIdFromPath) {
+      setExegesisrecordingId(recordingIdFromPath);
     }
-  }, [exegesisTrackId, trackIdFromPath, setExegesisTrackId]);
+  }, [exegesisrecordingId, recordingIdFromPath, setExegesisrecordingId]);
 
   // -------- index state --------
   const [catalogue, setCatalogue] = React.useState<CatalogueOk | null>(null);
@@ -438,7 +438,7 @@ export default function PortalExegesis(props: { title?: string }) {
   }, []);
 
   React.useEffect(() => {
-    if (!trackId) {
+    if (!recordingId) {
       setLyrics(null);
       setLyricsErr("");
       setLyricsLoading(false);
@@ -446,7 +446,7 @@ export default function PortalExegesis(props: { title?: string }) {
     }
 
     const ac = new AbortController();
-    const tid = trackId;
+    const tid = recordingId;
 
     setLyricsErr("");
 
@@ -470,11 +470,11 @@ export default function PortalExegesis(props: { title?: string }) {
       .finally(() => setLyricsLoading(false));
 
     return () => ac.abort();
-  }, [trackId]);
+  }, [recordingId]);
 
   // -------- render --------
-  if (trackId) {
-    const meta = getTrackMeta(catalogue, trackId);
+  if (recordingId) {
+    const meta = getTrackMeta(catalogue, recordingId);
 
     const resolvedTitle =
       (lyrics?.trackTitle ?? meta.title ?? "").trim() || null;
@@ -492,7 +492,7 @@ export default function PortalExegesis(props: { title?: string }) {
             aria-label="Back to all tracks"
             className="inline-flex items-center gap-2 rounded-md p-1 opacity-70 hover:opacity-100 hover:bg-white/5"
             onClick={() => {
-              setExegesisTrackId(null);
+              setExegesisrecordingId(null);
               router.push(`/exegesis${search}`);
             }}
           >
@@ -520,7 +520,7 @@ export default function PortalExegesis(props: { title?: string }) {
             <div className="rounded-md bg-white/5 p-3 text-sm">{lyricsErr}</div>
           </div>
         ) : lyrics ? (
-          // ✅ Gate: if catalogue is still loading, show a tiny header skeleton instead of flashing trackId
+          // ✅ Gate: if catalogue is still loading, show a tiny header skeleton instead of flashing recordingId
           noCatalogueYet ? (
             <div className="mx-auto max-w-5xl px-4 py-6">
               <div className="h-6 w-72 rounded bg-white/10 animate-pulse" />
@@ -528,11 +528,11 @@ export default function PortalExegesis(props: { title?: string }) {
             </div>
           ) : (
             <ExegesisTrackClient
-              trackId={lyrics.trackId}
+              recordingId={lyrics.recordingId}
               trackTitle={resolvedTitle}
               trackArtist={resolvedArtist}
               lyrics={lyrics}
-              canonicalPath={`/exegesis/${encodeURIComponent(lyrics.trackId)}`}
+              canonicalPath={`/exegesis/${encodeURIComponent(lyrics.recordingId)}`}
             />
           )
         ) : null}

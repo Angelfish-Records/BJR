@@ -14,7 +14,7 @@ type ReportRow = {
 
   commentId: string;
   commentStatus: "live" | "hidden" | "deleted";
-  trackId: string;
+  recordingId: string;
   groupKey: string;
   lineKey: string;
   bodyPlain: string;
@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
 
     commentId: x.comment_id,
     commentStatus: x.comment_status as "live" | "hidden" | "deleted",
-    trackId: x.track_id,
+    recordingId: x.track_id,
     groupKey: x.group_key,
     lineKey: x.line_key,
     bodyPlain: x.body_plain,

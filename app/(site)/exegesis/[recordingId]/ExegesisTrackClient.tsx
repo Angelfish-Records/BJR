@@ -1,4 +1,4 @@
-// web/app/(site)/exegesis/[trackId]/ExegesisTrackClient.tsx
+// web/app/(site)/exegesis/[recordingId]/ExegesisTrackClient.tsx
 "use client";
 
 import React from "react";
@@ -23,7 +23,7 @@ import { GeniusIcon, MedalIcon, ReplyIcon, ShieldAlertIcon } from "./icons";
 
 type LyricsApiOk = {
   ok: true;
-  trackId: string;
+  recordingId: string;
   offsetMs: number;
   version: string;
   geniusUrl: string | null;
@@ -43,7 +43,7 @@ type IdentityDTO = {
 
 type CommentDTO = {
   id: string;
-  trackId: string;
+  recordingId: string;
   groupKey: string;
   lineKey: string;
   parentId: string | null;
@@ -64,7 +64,7 @@ type CommentDTO = {
 };
 
 type ThreadMetaDTO = {
-  trackId: string;
+  recordingId: string;
   groupKey: string;
   pinnedCommentId: string | null;
   locked: boolean;
@@ -89,7 +89,7 @@ type ViewerDTO =
 
 type ThreadApiOk = {
   ok: true;
-  trackId: string;
+  recordingId: string;
   groupKey: string;
   sort: ThreadSort;
   meta: ThreadMetaDTO | null;
@@ -102,7 +102,7 @@ type ThreadApiErr = { ok: false; error: string; gate?: GatePayload };
 
 type CommentPostOk = {
   ok: true;
-  trackId: string;
+  recordingId: string;
   groupKey: string;
   comment: CommentDTO;
   meta: ThreadMetaDTO;
@@ -257,7 +257,7 @@ function medalClassForTier(t: "copper" | "gold" | "adamantium"): string {
 }
 
 export default function ExegesisTrackClient(props: {
-  trackId: string;
+  recordingId: string;
   lyrics: LyricsApiOk;
   canonicalPath?: string;
   trackTitle?: string | null;
@@ -363,9 +363,9 @@ export default function ExegesisTrackClient(props: {
     [applyGateResult, userId],
   );
 
-  const trackId = (props.trackId ?? "").trim();
+  const recordingId = (props.recordingId ?? "").trim();
   const lyrics = props.lyrics;
-  const { trackId: lyricsTrackId, cues, groupMap } = lyrics;
+  const { recordingId: lyricsrecordingId, cues, groupMap } = lyrics;
 
   const canonicalPath = (props.canonicalPath ?? "").trim();
 
@@ -561,9 +561,9 @@ export default function ExegesisTrackClient(props: {
   const threadWantedCoreKey = React.useMemo(() => {
     const lk = (selected?.lineKey ?? "").trim();
     const gk = (selected?.groupKey ?? "").trim();
-    if (!trackId || !lk) return "";
-    return `${trackId}::${lk}::${gk}::${viewerKey}`;
-  }, [trackId, selected?.lineKey, selected?.groupKey, viewerKey]);
+    if (!recordingId || !lk) return "";
+    return `${recordingId}::${lk}::${gk}::${viewerKey}`;
+  }, [recordingId, selected?.lineKey, selected?.groupKey, viewerKey]);
 
   // Fetch key now ignores sort (sort is client-side).
   const threadWantedFetchKey = threadWantedCoreKey;
@@ -1300,10 +1300,10 @@ export default function ExegesisTrackClient(props: {
 
     // Mark as deep-link so mobile drawer opens (but only if selection exists).
     openFromHashRef.current = true;
-  }, [lyricsTrackId, cues, groupMap]);
+  }, [lyricsrecordingId, cues, groupMap]);
 
   const threadKey = thread
-    ? `${thread.trackId}::${thread.groupKey}::${thread.meta?.commentCount ?? 0}`
+    ? `${thread.recordingId}::${thread.groupKey}::${thread.meta?.commentCount ?? 0}`
     : "";
 
   React.useEffect(() => {
@@ -1349,7 +1349,7 @@ export default function ExegesisTrackClient(props: {
       const gk = (selected.groupKey ?? "").trim();
 
       const url =
-        `/api/exegesis/thread?trackId=${encodeURIComponent(trackId)}` +
+        `/api/exegesis/thread?recordingId=${encodeURIComponent(recordingId)}` +
         (gk
           ? `&groupKey=${encodeURIComponent(gk)}&lineKey=${encodeURIComponent(
               selected.lineKey,
@@ -1409,7 +1409,7 @@ export default function ExegesisTrackClient(props: {
       alive = false;
     };
   }, [
-    trackId,
+    recordingId,
     selected?.lineKey,
     selected?.groupKey,
     threadWantedFetchKey,
@@ -1460,7 +1460,7 @@ export default function ExegesisTrackClient(props: {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          trackId,
+          recordingId,
           lineKey: selected.lineKey,
           groupKey: (thread?.groupKey ?? "").trim(), // server-canonical key for this anchor
           parentId: null,
@@ -1513,7 +1513,7 @@ export default function ExegesisTrackClient(props: {
       // If not, do NOT fabricate viewer state; rely on refetch.
       setThread((prev) => {
         if (!prev) return prev;
-        if (prev.trackId !== j.trackId || prev.groupKey !== j.groupKey)
+        if (prev.recordingId !== j.recordingId || prev.groupKey !== j.groupKey)
           return prev;
 
         const newRoot = { rootId: j.comment.rootId, comments: [j.comment] };
@@ -1527,7 +1527,7 @@ export default function ExegesisTrackClient(props: {
 
       // Reconcile with server truth
       const url =
-        `/api/exegesis/thread?trackId=${encodeURIComponent(trackId)}` +
+        `/api/exegesis/thread?recordingId=${encodeURIComponent(recordingId)}` +
         `&groupKey=${encodeURIComponent(groupKey)}` +
         ``;
 
@@ -1607,7 +1607,7 @@ export default function ExegesisTrackClient(props: {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          trackId,
+          recordingId,
           lineKey: selected.lineKey,
           groupKey, // drift guard
           parentId,
@@ -1669,7 +1669,7 @@ export default function ExegesisTrackClient(props: {
       // optimistic insert into the correct root bucket (append chronologically)
       setThread((prev) => {
         if (!prev) return prev;
-        if (prev.trackId !== j.trackId || prev.groupKey !== j.groupKey)
+        if (prev.recordingId !== j.recordingId || prev.groupKey !== j.groupKey)
           return prev;
 
         const roots = (prev.roots ?? []).map((root) => {
@@ -1693,7 +1693,7 @@ export default function ExegesisTrackClient(props: {
 
       // reconcile with server truth (same as root post)
       const url =
-        `/api/exegesis/thread?trackId=${encodeURIComponent(trackId)}` +
+        `/api/exegesis/thread?recordingId=${encodeURIComponent(recordingId)}` +
         `&groupKey=${encodeURIComponent(groupKey)}` +
         ``;
 
@@ -1760,7 +1760,7 @@ export default function ExegesisTrackClient(props: {
       if (selected) {
         const gk = (thread?.groupKey ?? "").trim();
         const url =
-          `/api/exegesis/thread?trackId=${encodeURIComponent(trackId)}` +
+          `/api/exegesis/thread?recordingId=${encodeURIComponent(recordingId)}` +
           (gk
             ? `&groupKey=${encodeURIComponent(gk)}`
             : `&lineKey=${encodeURIComponent(selected.lineKey)}`) +
@@ -2037,7 +2037,7 @@ export default function ExegesisTrackClient(props: {
       <div>
         <h1 className="mt-1 text-xl font-semibold">
           <span className="opacity-90">
-            {(props.trackTitle ?? "").trim() || lyrics.trackId}
+            {(props.trackTitle ?? "").trim() || lyrics.recordingId}
           </span>
         </h1>
         {(props.trackArtist ?? "").trim() ? (

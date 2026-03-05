@@ -53,11 +53,11 @@ export default function TrackTitleSync(props: {
   // ---- derive stable scalars (no object deps) ----
   const status = p.status;
 
-  const curId = p.current?.id ?? "";
+  const curId = p.current?.recordingId ?? "";
   const curTitle = p.current?.title ?? "";
 
   const q0 = p.queue.length ? p.queue[0] : null;
-  const q0Id = q0?.id ?? "";
+  const q0Id = q0?.recordingId ?? "";
   const q0Title = q0?.title ?? "";
 
   const queueArtist = p.queueContextArtist ?? "";
