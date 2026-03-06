@@ -463,6 +463,7 @@ export default function LyricsOverlay(props: {
               isInline && (idx === hoverIdx || idx === revealIdx);
 
             const iconSize = 26;
+            const iconGutter = isInline ? iconSize + 8 : 0; // reserve space so text never sits under the icon
 
             return (
               <div
@@ -484,16 +485,12 @@ export default function LyricsOverlay(props: {
                   position: "relative",
                   width: "100%",
                   minWidth: 0,
-
-                  // 3-column layout:
-                  // [left spacer] [centered lyric column] [right spacer w/ icon docked to edge]
                   display: "grid",
-                  gridTemplateColumns:
-                    "1fr minmax(0, var(--af-lyrics-line-max)) 1fr",
+                  justifyItems: "center",
                   alignItems: "center",
-
                   paddingTop: isInline ? 2 : 4,
                   paddingBottom: isInline ? 2 : 4,
+                  paddingRight: iconGutter,
                 }}
               >
                 {/* Discourse icon (hover on desktop, long-press reveal on touch) */}
@@ -511,16 +508,14 @@ export default function LyricsOverlay(props: {
                     openExegesis(cue);
                   }}
                   style={{
-                    // Put the icon in the right gutter column so the lyric column stays perfectly centered.
-                    gridColumn: 3,
-                    justifySelf: "end",
-                    alignSelf: "center",
+                    position: "absolute",
+                    right: isInline ? -10 : 0, // push it outward a touch
+                    top: "50%",
 
-                    // Nudge it further toward the scroller edge (without changing lyric centering).
-                    // Negative margin “eats” into the side padding a bit.
-                    marginRight: isInline ? -10 : 0,
-
-                    transform: `${showDiscourse ? "scale(1)" : "scale(0.98)"}`,
+                    // IMPORTANT: include -50% baseline AND your var offset
+                    transform: `translateY(calc(-50% + var(--af-discourse-y, 0px))) ${
+                      showDiscourse ? "scale(1)" : "scale(0.98)"
+                    }`,
                     width: iconSize,
                     height: iconSize,
                     borderRadius: 0,
@@ -607,9 +602,7 @@ export default function LyricsOverlay(props: {
                     border: 0,
                     background: "transparent",
                     padding: 0,
-
-                    gridColumn: 2,
-                    width: "100%",
+                    width: isInline ? `calc(100% - ${iconGutter}px)` : "100%",
                     minWidth: 0,
                     display: "grid",
                     justifyItems: "center",
@@ -737,17 +730,17 @@ export default function LyricsOverlay(props: {
                     /* Inline-only: reveal discourse affordance on hover even if React hover state misses. */
           .af-lyric-row[data-af-inline="1"][data-af-has-track="1"]:hover .af-discourse-btn {
   opacity: 1 !important;
-  transform: translateY(var(--af-discourse-y, 0px)) scale(1) !important;
+  transform: translateY(calc(-50% + var(--af-discourse-y, 0px))) scale(1) !important;
 }
 
 .af-discourse-btn:hover {
-  transform: translateY(var(--af-discourse-y, 0px)) scale(1.12) !important;
+  transform: translateY(calc(-50% + var(--af-discourse-y, 0px))) scale(1.12) !important;
   filter: brightness(1.15);
 }
 
 /* Subtle radial glow behind discourse icon */
 .af-discourse-btn {
-  position: relative; /* keep pseudo positioning context without breaking grid layout */
+  position: absolute; /* matches the inline style model */
 }
 
 .af-discourse-btn::before {
@@ -777,7 +770,7 @@ export default function LyricsOverlay(props: {
           /* Touch reveal path: when we set revealIdx, make sure it shows regardless of hover. */
           .af-lyric-row[data-af-inline="1"][data-af-has-track="1"][data-af-reveal="1"] .af-discourse-btn {
   opacity: 1 !important;
-  transform: translateY(var(--af-discourse-y, 0px)) scale(1) !important;
+  transform: translateY(calc(-50% + var(--af-discourse-y, 0px))) scale(1) !important;
 }
         `}</style>
       </div>
