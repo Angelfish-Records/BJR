@@ -34,6 +34,43 @@ function useScrollLock(locked: boolean) {
   }, [locked]);
 }
 
+function useIdleCursor(active: boolean, timeoutMs: number) {
+  const [hidden, setHidden] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!active) {
+      setHidden(false);
+      return;
+    }
+
+    let timer: number | null = null;
+
+    const reset = () => {
+      setHidden(false);
+      if (timer != null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        setHidden(true);
+      }, timeoutMs);
+    };
+
+    reset();
+
+    const onMove = () => reset();
+    const onDown = () => reset();
+
+    window.addEventListener("mousemove", onMove, { passive: true });
+    window.addEventListener("mousedown", onDown, { passive: true });
+
+    return () => {
+      if (timer != null) window.clearTimeout(timer);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mousedown", onDown);
+    };
+  }, [active, timeoutMs]);
+
+  return hidden;
+}
+
 type CuesByRecordingId = Record<string, LyricCue[]>;
 type OffsetByRecordingId = Record<string, number>;
 
@@ -57,6 +94,8 @@ export default function StageOverlay(props: {
   const { open, onClose } = props;
   const p = usePlayer();
   const [mounted, setMounted] = React.useState(false);
+
+  const cursorHidden = useIdleCursor(open, 3000);
 
   const snap = useLyricsSnapshot();
 
@@ -149,6 +188,7 @@ export default function StageOverlay(props: {
       aria-label="Stage"
       style={{
         position: "fixed",
+        cursor: cursorHidden ? "none" : "default",
         inset: 0,
         zIndex: 100001,
         width: "100%",
@@ -293,7 +333,18 @@ export default function StageOverlay(props: {
         }}
       />
 
-      <StageNowPlayingBadge />
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: 9,
+          pointerEvents: "none",
+        }}
+      >
+        <StageNowPlayingBadge />
+      </div>
+
       <StageTransportBar />
     </div>
   );

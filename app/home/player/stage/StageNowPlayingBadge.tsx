@@ -3,7 +3,6 @@
 import React from "react";
 import { usePlayer } from "../PlayerState";
 import type { PlayerTrack } from "@/lib/types";
-import { STAGE_TRANSPORT_FOOTER_PX } from "../StageTransportBar";
 
 function findTrackByRecordingId(
   queue: PlayerTrack[],
@@ -29,16 +28,11 @@ export default function StageNowPlayingBadge() {
     "Nothing queued";
 
   const artist =
-    displayTrack?.artist?.trim() ||
-    p.queueContextArtist?.trim() ||
-    "";
+    displayTrack?.artist?.trim() || p.queueContextArtist?.trim() || "";
 
   const artworkUrl = p.queueContextArtworkUrl ?? null;
 
-  const bottomInsetPx = Math.max(
-    12,
-    Math.round((STAGE_TRANSPORT_FOOTER_PX - BADGE_HEIGHT_PX) / 2),
-  );
+  const bottomInsetPx = 20;
 
   return (
     <div
@@ -47,7 +41,6 @@ export default function StageNowPlayingBadge() {
         position: "absolute",
         right: "max(16px, env(safe-area-inset-right, 0px))",
         bottom: `calc(env(safe-area-inset-bottom, 0px) + ${bottomInsetPx}px)`,
-        zIndex: 6,
         pointerEvents: "none",
       }}
     >
