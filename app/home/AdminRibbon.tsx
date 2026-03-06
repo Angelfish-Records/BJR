@@ -7,40 +7,42 @@ import { type AdminPanelId } from "./admin/adminPanels";
 
 const ENABLED = process.env.NEXT_PUBLIC_ADMIN_DEBUG === "1";
 
+/**
+ * Canonical ribbon colours used by both the bar and the collapsed tab.
+ * Keep these shared so the chevron feels like part of the same structure.
+ */
+const ADMIN_RIBBON_BG = "rgba(10,10,14,0.92)";
+const ADMIN_RIBBON_GOLD = "rgba(255,215,130,0.95)";
+
+/**
+ * Main tuning lever for the collapsed tab position.
+ * Increase this number to pull the tab upward further into the ribbon.
+ * Decrease it to let the tab hang lower.
+ */
+const COLLAPSED_TAB_RAISE_PX = 12;
+
 function ChevronIcon(props: { collapsed: boolean }) {
   if (props.collapsed) {
     return (
       <svg
-        width="20"
-        height="18"
-        viewBox="0 0 20 18"
+        width="24"
+        height="20"
+        viewBox="0 0 24 20"
         aria-hidden="true"
         style={{
           display: "block",
           overflow: "visible",
         }}
       >
-        <defs>
-          <linearGradient
-            id="admin-ribbon-chevron-gold"
-            x1="0"
-            y1="0"
-            x2="1"
-            y2="1"
-          >
-            <stop offset="0%" stopColor="rgba(255,215,130,0.95)" />
-            <stop offset="55%" stopColor="rgba(255,200,110,0.92)" />
-            <stop offset="100%" stopColor="rgba(255,230,170,0.88)" />
-          </linearGradient>
-        </defs>
+        {/* inner dark triangle to make the chevron read as a hollow tab */}
+        <path d="M8.1 6.4 L12 10.8 L15.9 6.4 Z" fill={ADMIN_RIBBON_BG} />
 
-        <path d="M6.1 6.2 L10 11.4 L13.9 6.2 Z" fill="rgba(10,10,14,0.92)" />
-
+        {/* gold chevron edge, matched to ribbon border tone */}
         <path
-          d="M3.9 5.5 10 11.7l6.1-6.2"
+          d="M6 5.6 12 11.8l6-6.2"
           fill="none"
-          stroke="url(#admin-ribbon-chevron-gold)"
-          strokeWidth="2.2"
+          stroke={ADMIN_RIBBON_GOLD}
+          strokeWidth="2.6"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
@@ -50,34 +52,20 @@ function ChevronIcon(props: { collapsed: boolean }) {
 
   return (
     <svg
-      width="20"
-      height="18"
-      viewBox="0 0 20 18"
+      width="24"
+      height="20"
+      viewBox="0 0 24 20"
       aria-hidden="true"
       style={{
         display: "block",
         overflow: "visible",
       }}
     >
-      <defs>
-        <linearGradient
-          id="admin-ribbon-chevron-gold"
-          x1="0"
-          y1="0"
-          x2="1"
-          y2="1"
-        >
-          <stop offset="0%" stopColor="rgba(255, 234, 170, 0.98)" />
-          <stop offset="48%" stopColor="rgba(255, 215, 130, 0.98)" />
-          <stop offset="100%" stopColor="rgba(255, 244, 210, 0.90)" />
-        </linearGradient>
-      </defs>
-
       <path
-        d="M3.9 11.7 10 5.5l6.1 6.2"
+        d="M6 12.4 12 6.2l6 6.2"
         fill="none"
-        stroke="url(#admin-ribbon-chevron-gold)"
-        strokeWidth="2.2"
+        stroke={ADMIN_RIBBON_GOLD}
+        strokeWidth="2.6"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -163,7 +151,7 @@ export default function AdminRibbon(props: { isAdmin: boolean }) {
               background: `
                 radial-gradient(circle at 12% 0%, rgba(255,223,160,0.12), transparent 24%),
                 linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015)),
-                rgba(10,10,14,0.92)
+                ${ADMIN_RIBBON_BG}
               `,
               overflow: collapsed ? "visible" : "hidden",
               position: "relative",
@@ -179,14 +167,14 @@ export default function AdminRibbon(props: { isAdmin: boolean }) {
               title={collapsed ? "Expand" : "Collapse"}
               onClick={() => setCollapsed((v) => !v)}
               style={{
-                width: 30,
-                height: 30,
+                width: 34,
+                height: 28,
                 padding: 0,
                 margin: 0,
                 border: "none",
                 outline: "none",
                 background: "transparent",
-                color: "rgba(255,235,190,0.98)",
+                color: ADMIN_RIBBON_GOLD,
                 cursor: "pointer",
                 display: "inline-flex",
                 alignItems: "center",
@@ -194,9 +182,11 @@ export default function AdminRibbon(props: { isAdmin: boolean }) {
                 lineHeight: 0,
                 opacity: 1,
                 position: "absolute",
-                left: 13,
+                left: 12,
                 top: collapsed ? "100%" : "50%",
-                transform: collapsed ? "translateY(-10px)" : "translateY(-50%)",
+                transform: collapsed
+                  ? `translateY(-${COLLAPSED_TAB_RAISE_PX}px)`
+                  : "translateY(-50%)",
                 zIndex: 3,
                 pointerEvents: "auto",
               }}
