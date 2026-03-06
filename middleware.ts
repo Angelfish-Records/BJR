@@ -26,7 +26,11 @@ function pickPreservedParams(url: URL): URLSearchParams {
   const out = new URLSearchParams();
 
   // unify share token into st
-  const st = (url.searchParams.get("st") ?? url.searchParams.get("share") ?? "").trim();
+  const st = (
+    url.searchParams.get("st") ??
+    url.searchParams.get("share") ??
+    ""
+  ).trim();
   if (st) out.set("st", st);
 
   // keep autoplay if present
@@ -51,7 +55,10 @@ function filteredCanonicalParams(url: URL): URLSearchParams {
   const out = new URLSearchParams();
   for (const [k, v] of url.searchParams.entries()) {
     if (STRIP_KEYS.has(k)) continue;
-    if (PRESERVE_KEYS.has(k) || PRESERVE_PREFIXES.some((p) => k.startsWith(p))) {
+    if (
+      PRESERVE_KEYS.has(k) ||
+      PRESERVE_PREFIXES.some((p) => k.startsWith(p))
+    ) {
       const vv = (v ?? "").trim();
       if (vv) out.set(k, vv);
     }
@@ -109,8 +116,8 @@ const RESERVED_ROOTS = new Set<string>([
   "player",
   "download",
   "gift",
-  "posts",   // legacy tab
-  "extras",  // legacy tab
+  "posts", // legacy tab
+  "extras", // legacy tab
 
   // other known surfaces you use in-repo
   "exegesis",
@@ -142,7 +149,7 @@ export default clerkMiddleware((auth, req) => {
     );
   }
 
-  // ---- B) Hard upgrades: legacy /albums family -> new canonical music URLs ----
+  // ---- B) Hard upgrades: legacy /albums family -> canonical music URLs ----
   if (pathname.startsWith("/albums/")) {
     const parts = splitPath(pathname); // ["albums", ":slug", ...]
     const slug = (parts[1] ?? "").trim();
@@ -228,7 +235,7 @@ export default clerkMiddleware((auth, req) => {
     }
   }
 
-  // ---- E) New canonical music URLs: rewrite /:slug(/:displayId) -> existing page tree ----
+  // ---- E) Canonical pretty music URLs: rewrite /:slug(/:displayId) -> existing internal page tree ----
   // NOTE: rewrite (not redirect) so the browser URL stays clean.
   {
     const parts = splitPath(pathname);
@@ -240,11 +247,13 @@ export default clerkMiddleware((auth, req) => {
         // Keep segments exactly as encoded in the incoming URL.
         const slugSeg = parts[0];
         if (parts.length === 1) {
-          // /:slug -> /album/:slug
+          // Public canonical: /:slug
+          // Internal page target remains /album/:slug for now.
           return rewriteTo(url, `/album/${slugSeg}`);
         } else {
           const displaySeg = parts[1];
-          // /:slug/:displayId -> /album/:slug/track/:displayId
+          // Public canonical: /:slug/:displayId
+          // Internal page target remains /album/:slug/track/:displayId for now.
           return rewriteTo(url, `/album/${slugSeg}/track/${displaySeg}`);
         }
       }

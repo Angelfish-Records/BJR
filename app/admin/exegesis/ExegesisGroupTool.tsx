@@ -171,6 +171,9 @@ export default function ExegesisGroupTool() {
         const r = await fetch("/api/lyrics/catalogue", { cache: "no-store" });
         const j: unknown = await r.json();
 
+        // Temporary debug so we see the real shape once
+        console.debug("lyrics catalogue payload", j);
+
         // Accept a few plausible shapes:
         // 1) { ok:true, recordings: string[] }
         // 2) { ok:true, items: Array<{ recordingId: string }> }
@@ -178,38 +181,56 @@ export default function ExegesisGroupTool() {
         // 4) Array<{ recordingId: string }>
         const out: string[] = [];
 
+        // Handle common catalogue shapes safely
         if (Array.isArray(j)) {
           for (const it of j) {
-            if (typeof it === "string" && it.trim()) out.push(it.trim());
+            if (typeof it === "string") out.push(it.trim());
             else if (
               typeof it === "object" &&
               it !== null &&
               typeof (it as Record<string, unknown>).recordingId === "string"
             ) {
-              const v = String(
-                (it as Record<string, unknown>).recordingId,
-              ).trim();
-              if (v) out.push(v);
+              out.push(
+                String((it as Record<string, unknown>).recordingId).trim(),
+              );
             }
           }
-        } else if (typeof j === "object" && j !== null) {
-          const o = j as Record<string, unknown>;
-          if (o.ok === true && Array.isArray(o.recordings)) {
-            for (const it of o.recordings) {
-              if (typeof it === "string" && it.trim()) out.push(it.trim());
+        }
+
+        if (
+          typeof j === "object" &&
+          j !== null &&
+          Array.isArray((j as Record<string, unknown>).recordings)
+        ) {
+          for (const it of (j as Record<string, unknown>)
+            .recordings as unknown[]) {
+            if (typeof it === "string") out.push(it.trim());
+            else if (
+              typeof it === "object" &&
+              it !== null &&
+              typeof (it as Record<string, unknown>).recordingId === "string"
+            ) {
+              out.push(
+                String((it as Record<string, unknown>).recordingId).trim(),
+              );
             }
-          } else if (o.ok === true && Array.isArray(o.items)) {
-            for (const it of o.items) {
-              if (
-                typeof it === "object" &&
-                it !== null &&
-                typeof (it as Record<string, unknown>).recordingId === "string"
-              ) {
-                const v = String(
-                  (it as Record<string, unknown>).recordingId,
-                ).trim();
-                if (v) out.push(v);
-              }
+          }
+        }
+
+        if (
+          typeof j === "object" &&
+          j !== null &&
+          Array.isArray((j as Record<string, unknown>).items)
+        ) {
+          for (const it of (j as Record<string, unknown>).items as unknown[]) {
+            if (
+              typeof it === "object" &&
+              it !== null &&
+              typeof (it as Record<string, unknown>).recordingId === "string"
+            ) {
+              out.push(
+                String((it as Record<string, unknown>).recordingId).trim(),
+              );
             }
           }
         }
