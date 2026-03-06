@@ -28,16 +28,13 @@ function ChevronIcon(props: { collapsed: boolean }) {
             x2="1"
             y2="1"
           >
-            <stop offset="0%" stopColor="rgba(255, 234, 170, 0.98)" />
-            <stop offset="48%" stopColor="rgba(255, 215, 130, 0.98)" />
-            <stop offset="100%" stopColor="rgba(255, 244, 210, 0.90)" />
+            <stop offset="0%" stopColor="rgba(255,215,130,0.95)" />
+            <stop offset="55%" stopColor="rgba(255,200,110,0.92)" />
+            <stop offset="100%" stopColor="rgba(255,230,170,0.88)" />
           </linearGradient>
         </defs>
 
-        <path
-          d="M6.1 6.2 L10 11.4 L13.9 6.2 Z"
-          fill="rgba(10,10,14,0.92)"
-        />
+        <path d="M6.1 6.2 L10 11.4 L13.9 6.2 Z" fill="rgba(10,10,14,0.92)" />
 
         <path
           d="M3.9 5.5 10 11.7l6.1-6.2"
@@ -113,7 +110,8 @@ export default function AdminRibbon(props: { isAdmin: boolean }) {
     cursor: "pointer",
     whiteSpace: "nowrap",
     boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-    transition: "background 140ms ease, opacity 140ms ease, transform 140ms ease",
+    transition:
+      "background 140ms ease, opacity 140ms ease, transform 140ms ease",
   };
 
   const modal = (
@@ -169,12 +167,15 @@ export default function AdminRibbon(props: { isAdmin: boolean }) {
               `,
               overflow: collapsed ? "visible" : "hidden",
               position: "relative",
-              transition: "height 160ms ease, padding 160ms ease, background 160ms ease",
+              transition:
+                "height 160ms ease, padding 160ms ease, background 160ms ease",
             }}
           >
             <button
               type="button"
-              aria-label={collapsed ? "Expand admin ribbon" : "Collapse admin ribbon"}
+              aria-label={
+                collapsed ? "Expand admin ribbon" : "Collapse admin ribbon"
+              }
               title={collapsed ? "Expand" : "Collapse"}
               onClick={() => setCollapsed((v) => !v)}
               style={{
@@ -195,9 +196,7 @@ export default function AdminRibbon(props: { isAdmin: boolean }) {
                 position: "absolute",
                 left: 13,
                 top: collapsed ? "100%" : "50%",
-                transform: collapsed
-                  ? "translateY(-13px)"
-                  : "translateY(-50%)",
+                transform: collapsed ? "translateY(-10px)" : "translateY(-50%)",
                 zIndex: 3,
                 pointerEvents: "auto",
               }}
