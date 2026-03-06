@@ -1,4 +1,3 @@
-// web/app/admin/share-tokens/AdminEntitlementsPanel.tsx
 "use client";
 
 import React from "react";
@@ -9,6 +8,7 @@ type MemberRow = {
   clerk_user_id: string | null;
   created_at: string;
 };
+
 type GrantRow = {
   id: string;
   entitlement_key: string;
@@ -118,18 +118,49 @@ export default function AdminEntitlementsPanel(props: {
     }
   }
 
+  const cardStyle: React.CSSProperties = {
+    padding: 14,
+    borderRadius: 16,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.04)",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+  };
+
+  const fieldStyle: React.CSSProperties = {
+    width: "100%",
+    padding: "10px 12px",
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.06)",
+    color: "rgba(255,255,255,0.92)",
+    outline: "none",
+  };
+
+  const subtleButtonStyle: React.CSSProperties = {
+    padding: "8px 10px",
+    borderRadius: 10,
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.04)",
+    color: "rgba(255,255,255,0.9)",
+    cursor: "pointer",
+  };
+
+  const primaryButtonStyle: React.CSSProperties = {
+    padding: "10px 12px",
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,0.16)",
+    background: "rgba(255,255,255,0.12)",
+    color: "rgba(255,255,255,0.94)",
+    fontWeight: 800,
+    cursor: "pointer",
+  };
+
   const albumScopeButtons = (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 2 }}>
       <button
         type="button"
         onClick={() => setScopeId("catalogue")}
-        style={{
-          padding: "8px 10px",
-          borderRadius: 10,
-          border: "1px solid rgba(255,255,255,0.14)",
-          background: "rgba(255,255,255,0.04)",
-          color: "rgba(255,255,255,0.9)",
-        }}
+        style={subtleButtonStyle}
       >
         scope: catalogue
       </button>
@@ -138,13 +169,7 @@ export default function AdminEntitlementsPanel(props: {
           key={a.slug}
           type="button"
           onClick={() => setScopeId(`alb:${a.id}`)}
-          style={{
-            padding: "8px 10px",
-            borderRadius: 10,
-            border: "1px solid rgba(255,255,255,0.14)",
-            background: "rgba(255,255,255,0.04)",
-            color: "rgba(255,255,255,0.9)",
-          }}
+          style={subtleButtonStyle}
           title={a.title}
         >
           alb:{a.id}
@@ -169,246 +194,268 @@ export default function AdminEntitlementsPanel(props: {
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search member email prefix…"
             style={{
+              ...fieldStyle,
               flex: "1 1 320px",
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid rgba(255,255,255,0.14)",
-              background: "rgba(0,0,0,0.22)",
-              color: "rgba(255,255,255,0.92)",
             }}
           />
           <button
             type="button"
             onClick={runSearch}
             style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid rgba(255,255,255,0.14)",
-              background: "rgba(255,255,255,0.06)",
-              color: "rgba(255,255,255,0.92)",
+              ...primaryButtonStyle,
+              minWidth: 96,
             }}
           >
             Search
           </button>
         </div>
 
-        {members.length > 0 && (
+        {members.length > 0 ? (
           <div style={{ display: "grid", gap: 8 }}>
-            {members.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={async () => {
-                  setSelected(m);
-                  await loadMember(m.id);
-                }}
-                style={{
-                  textAlign: "left",
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.14)",
-                  background:
-                    selected?.id === m.id
+            {members.map((m) => {
+              const isActive = selected?.id === m.id;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={async () => {
+                    setSelected(m);
+                    await loadMember(m.id);
+                  }}
+                  style={{
+                    textAlign: "left",
+                    padding: "12px 14px",
+                    borderRadius: 14,
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    background: isActive
                       ? "rgba(255,255,255,0.10)"
                       : "rgba(255,255,255,0.04)",
-                  color: "rgba(255,255,255,0.92)",
-                }}
-              >
-                <div style={{ fontSize: 13, opacity: 0.95 }}>{m.email}</div>
-                <div style={{ fontSize: 12, opacity: 0.65 }}>
-                  member_id: {m.id}
-                </div>
-              </button>
-            ))}
+                    color: "rgba(255,255,255,0.92)",
+                    cursor: "pointer",
+                  }}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.96 }}>
+                    {m.email}
+                  </div>
+                  <div style={{ marginTop: 4, fontSize: 12, opacity: 0.62 }}>
+                    member_id: {m.id}
+                  </div>
+                </button>
+              );
+            })}
           </div>
-        )}
+        ) : null}
       </div>
 
-      {error && (
+      {error ? (
         <div
           style={{
-            padding: 10,
+            padding: 12,
             borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.14)",
-            background: "rgba(0,0,0,0.22)",
-            color: "#ffb4b4",
+            border: "1px solid rgba(255,140,140,0.22)",
+            background: "rgba(120,0,0,0.16)",
+            color: "#ffd0d0",
           }}
         >
           {error}
         </div>
-      )}
+      ) : null}
 
-      {selected && (
+      {selected ? (
         <div style={{ display: "grid", gap: 12 }}>
-          <div
-            style={{
-              padding: 12,
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.14)",
-              background: "rgba(255,255,255,0.04)",
-            }}
-          >
-            <div style={{ fontSize: 13, opacity: 0.95 }}>
-              Selected: {selected.email}
+          <div style={cardStyle}>
+            <div style={{ fontSize: 12, letterSpacing: "0.04em", opacity: 0.56 }}>
+              SELECTED MEMBER
+            </div>
+            <div style={{ marginTop: 6, fontSize: 14, fontWeight: 700 }}>
+              {selected.email}
+            </div>
+            <div style={{ marginTop: 4, fontSize: 12, opacity: 0.6 }}>
+              member_id: {selected.id}
             </div>
 
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 10,
-                marginTop: 10,
+                gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 0.9fr)",
+                gap: 14,
+                marginTop: 14,
               }}
             >
-              <div style={{ display: "grid", gap: 8 }}>
-                <div style={{ fontSize: 12, opacity: 0.7 }}>
+              <div style={{ display: "grid", gap: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.72 }}>
                   Grant entitlement
                 </div>
-                <input
-                  value={key}
-                  onChange={(e) => setKey(e.target.value)}
-                  placeholder="entitlement_key (e.g. tier_patron, play_album)"
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    border: "1px solid rgba(255,255,255,0.14)",
-                    background: "rgba(0,0,0,0.22)",
-                    color: "rgba(255,255,255,0.92)",
-                  }}
-                />
-                <input
-                  value={scopeId}
-                  onChange={(e) => setScopeId(e.target.value)}
-                  placeholder="scope_id (optional): catalogue OR alb:<albumId>"
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    border: "1px solid rgba(255,255,255,0.14)",
-                    background: "rgba(0,0,0,0.22)",
-                    color: "rgba(255,255,255,0.92)",
-                  }}
-                />
-                {albumScopeButtons}
-                <input
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="reason"
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    border: "1px solid rgba(255,255,255,0.14)",
-                    background: "rgba(0,0,0,0.22)",
-                    color: "rgba(255,255,255,0.92)",
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={grant}
-                  disabled={busy === "grant"}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    border: "1px solid rgba(255,255,255,0.14)",
-                    background: "rgba(255,255,255,0.06)",
-                    color: "rgba(255,255,255,0.92)",
-                    opacity: busy === "grant" ? 0.6 : 1,
-                  }}
-                >
-                  Grant
-                </button>
+
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 12, opacity: 0.66 }}>
+                    Entitlement key
+                  </div>
+                  <input
+                    value={key}
+                    onChange={(e) => setKey(e.target.value)}
+                    placeholder="e.g. tier_patron, play_album"
+                    style={fieldStyle}
+                  />
+                </div>
+
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 12, opacity: 0.66 }}>
+                    Scope ID
+                  </div>
+                  <input
+                    value={scopeId}
+                    onChange={(e) => setScopeId(e.target.value)}
+                    placeholder="catalogue OR alb:<albumId>"
+                    style={fieldStyle}
+                  />
+                </div>
+
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 12, opacity: 0.66 }}>
+                    Quick scope helpers
+                  </div>
+                  {albumScopeButtons}
+                </div>
+
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 12, opacity: 0.66 }}>
+                    Reason
+                  </div>
+                  <input
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="reason"
+                    style={fieldStyle}
+                  />
+                </div>
+
+                <div style={{ paddingTop: 2 }}>
+                  <button
+                    type="button"
+                    onClick={grant}
+                    disabled={busy === "grant"}
+                    style={{
+                      ...primaryButtonStyle,
+                      opacity: busy === "grant" ? 0.6 : 1,
+                      cursor: busy === "grant" ? "default" : "pointer",
+                    }}
+                  >
+                    {busy === "grant" ? "Granting…" : "Grant"}
+                  </button>
+                </div>
               </div>
 
-              <div style={{ display: "grid", gap: 8 }}>
-                <div style={{ fontSize: 12, opacity: 0.7 }}>
-                  Effective entitlements (derived)
+              <div style={{ display: "grid", gap: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.72 }}>
+                  Effective entitlements
                 </div>
-                <div style={{ display: "grid", gap: 6 }}>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 8,
+                    alignContent: "start",
+                  }}
+                >
                   {current.map((c, i) => (
-                    <div key={i} style={{ fontSize: 12, opacity: 0.9 }}>
-                      <span style={{ opacity: 0.85 }}>{c.entitlement_key}</span>
+                    <div
+                      key={`${c.entitlement_key}-${c.scope_id ?? "global"}-${i}`}
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: 12,
+                        border: "1px solid rgba(255,255,255,0.10)",
+                        background: "rgba(255,255,255,0.03)",
+                        fontSize: 12,
+                      }}
+                    >
+                      <span style={{ opacity: 0.92, fontWeight: 700 }}>
+                        {c.entitlement_key}
+                      </span>
                       {c.scope_id ? (
-                        <span style={{ opacity: 0.6 }}> — {c.scope_id}</span>
+                        <span style={{ opacity: 0.62 }}> — {c.scope_id}</span>
                       ) : null}
                     </div>
                   ))}
                   {!current.length ? (
-                    <div style={{ fontSize: 12, opacity: 0.6 }}>None.</div>
+                    <div style={{ fontSize: 12, opacity: 0.58 }}>None.</div>
                   ) : null}
                 </div>
               </div>
             </div>
           </div>
 
-          <div
-            style={{
-              padding: 12,
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.14)",
-              background: "rgba(255,255,255,0.04)",
-            }}
-          >
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>
+          <div style={cardStyle}>
+            <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.72 }}>
               Grants (raw history)
             </div>
-            <div style={{ display: "grid", gap: 8 }}>
+
+            <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
               {grants.map((g) => {
                 const active =
                   !g.revoked_at &&
                   (!g.expires_at ||
                     new Date(g.expires_at).getTime() > Date.now());
+
+                const revokeBusy = busy === `revoke:${g.id}`;
+
                 return (
                   <div
                     key={g.id}
                     style={{
                       display: "flex",
-                      gap: 10,
+                      gap: 12,
                       alignItems: "center",
                       justifyContent: "space-between",
+                      padding: "11px 12px",
+                      borderRadius: 12,
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background: "rgba(255,255,255,0.03)",
                     }}
                   >
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 12, opacity: 0.92 }}>
-                        {g.entitlement_key}
+                      <div style={{ fontSize: 12, opacity: 0.94 }}>
+                        <span style={{ fontWeight: 700 }}>{g.entitlement_key}</span>
                         {g.scope_id ? (
-                          <span style={{ opacity: 0.65 }}> — {g.scope_id}</span>
+                          <span style={{ opacity: 0.62 }}> — {g.scope_id}</span>
                         ) : null}
                       </div>
-                      <div style={{ fontSize: 11, opacity: 0.55 }}>
+                      <div style={{ marginTop: 4, fontSize: 11, opacity: 0.56 }}>
                         {active ? "active" : "inactive"} · {g.id}
                       </div>
                     </div>
 
                     <button
                       type="button"
-                      disabled={!active || busy === `revoke:${g.id}`}
+                      disabled={!active || revokeBusy}
                       onClick={() => revoke(g.id)}
                       style={{
                         padding: "8px 10px",
-                        borderRadius: 12,
-                        border: "1px solid rgba(255,255,255,0.14)",
-                        background: "rgba(0,0,0,0.18)",
+                        borderRadius: 10,
+                        border: "1px solid rgba(255,120,120,0.22)",
+                        background: active
+                          ? "rgba(120,0,0,0.16)"
+                          : "rgba(255,255,255,0.03)",
                         color: "rgba(255,255,255,0.92)",
-                        opacity: !active
-                          ? 0.35
-                          : busy === `revoke:${g.id}`
-                            ? 0.6
-                            : 0.9,
-                        cursor: !active ? "default" : "pointer",
+                        opacity: !active ? 0.35 : revokeBusy ? 0.6 : 1,
+                        cursor: !active || revokeBusy ? "default" : "pointer",
                         flex: "0 0 auto",
+                        fontWeight: 700,
                       }}
                     >
-                      Revoke
+                      {revokeBusy ? "Revoking…" : "Revoke"}
                     </button>
                   </div>
                 );
               })}
+
               {!grants.length ? (
-                <div style={{ fontSize: 12, opacity: 0.6 }}>No grants.</div>
+                <div style={{ fontSize: 12, opacity: 0.58 }}>No grants.</div>
               ) : null}
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

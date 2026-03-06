@@ -55,115 +55,218 @@ export default function AdminOverlayShell(props: Props) {
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.55)",
-        backdropFilter: "blur(10px)",
-        WebkitBackdropFilter: "blur(10px)",
         zIndex: 100000,
         display: "grid",
         placeItems: "center",
-        padding: 16,
+        padding: "clamp(14px, 2.2vw, 24px)",
+        background: `
+          radial-gradient(circle at 50% 18%, rgba(255,220,160,0.09), transparent 34%),
+          radial-gradient(circle at 50% 100%, rgba(255,255,255,0.04), transparent 42%),
+          rgba(0,0,0,0.62)
+        `,
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
       }}
     >
       <div
+        className="portalPanel--gold"
         style={{
-          width: "min(1040px, 100%)",
-          height: "min(78vh, 760px)",
-          borderRadius: 18,
-          border: "1px solid rgba(255,255,255,0.14)",
-          background: "rgba(10,10,12,0.85)",
-          boxShadow: "0 22px 70px rgba(0,0,0,0.55)",
-          overflow: "hidden",
-          display: "grid",
-          gridTemplateRows: "auto 1fr",
+          width: "min(92vw, 1480px)",
+          height: "min(90vh, 1040px)",
+          borderRadius: 28,
+          padding: 2,
         }}
       >
         <div
-          style={{
-            padding: "10px 12px",
-            borderBottom: "1px solid rgba(255,255,255,0.10)",
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) auto auto",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 650, opacity: 0.92 }}>
-              {panel.modalTitle}
-            </div>
-            <div style={{ fontSize: 11, opacity: 0.62 }}>
-              Admin panel (server page inside iframe)
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              gap: 6,
-              alignItems: "center",
-              flexWrap: "wrap",
-              justifyContent: "center",
-            }}
-          >
-            {ADMIN_PANELS.map((item) => {
-              const active = item.id === activePanel;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => onSelectPanel(item.id)}
-                  style={{
-                    height: 28,
-                    padding: "0 10px",
-                    borderRadius: 999,
-                    border: "1px solid rgba(255,255,255,0.14)",
-                    background: active
-                      ? "rgba(255,255,255,0.10)"
-                      : "rgba(255,255,255,0.04)",
-                    color: "rgba(255,255,255,0.90)",
-                    cursor: "pointer",
-                    fontSize: 12,
-                    opacity: active ? 1 : 0.78,
-                    userSelect: "none",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {item.pillLabel}
-                </button>
-              );
-            })}
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: 999,
-              border: "1px solid rgba(255,255,255,0.14)",
-              background: "rgba(255,255,255,0.06)",
-              color: "rgba(255,255,255,0.90)",
-              cursor: "pointer",
-              lineHeight: 0,
-              flex: "0 0 auto",
-            }}
-          >
-            ×
-          </button>
-        </div>
-
-        <iframe
-          title={panel.modalTitle}
-          src={panel.src}
+          className="portalPanelFrame--gold"
           style={{
             width: "100%",
             height: "100%",
-            border: 0,
-            background: "transparent",
+            borderRadius: 28,
+            padding: 1.5,
           }}
-        />
+        >
+          <div
+            className="portalPanelInner--gold"
+            style={{
+              width: "100%",
+              height: "100%",
+              borderRadius: 26,
+              overflow: "hidden",
+              display: "grid",
+              gridTemplateRows: "auto 1fr",
+              position: "relative",
+            }}
+          >
+            <div
+              style={{
+                position: "relative",
+                padding: "16px 18px 14px",
+                borderBottom: "1px solid rgba(255,255,255,0.09)",
+                background: `
+                  linear-gradient(
+                    180deg,
+                    rgba(255,255,255,0.055),
+                    rgba(255,255,255,0.02)
+                  )
+                `,
+                boxShadow: "0 1px 0 rgba(255,255,255,0.04) inset",
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  pointerEvents: "none",
+                  background:
+                    "radial-gradient(circle at 12% 0%, rgba(255,223,160,0.14), transparent 28%)",
+                  opacity: 0.85,
+                }}
+              />
+
+              <div
+                style={{
+                  position: "relative",
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0, 1fr) auto auto",
+                  alignItems: "center",
+                  gap: 16,
+                }}
+              >
+                <div style={{ minWidth: 0, paddingLeft: 2 }}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      letterSpacing: "0.16em",
+                      textTransform: "uppercase",
+                      opacity: 0.52,
+                      userSelect: "none",
+                    }}
+                  >
+                    Admin workspace
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 6,
+                      fontSize: 18,
+                      lineHeight: 1.15,
+                      fontWeight: 700,
+                      color: "rgba(255,255,255,0.96)",
+                      textWrap: "balance",
+                    }}
+                  >
+                    {panel.modalTitle}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    justifyContent: "center",
+                    padding: 4,
+                    borderRadius: 999,
+                    background: "rgba(255,255,255,0.03)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    boxShadow: "0 1px 0 rgba(255,255,255,0.03) inset",
+                  }}
+                >
+                  {ADMIN_PANELS.map((item) => {
+                    const active = item.id === activePanel;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => onSelectPanel(item.id)}
+                        style={{
+                          height: 34,
+                          padding: "0 14px",
+                          borderRadius: 999,
+                          border: active
+                            ? "1px solid rgba(255,230,180,0.26)"
+                            : "1px solid rgba(255,255,255,0.10)",
+                          background: active
+                            ? `
+                              linear-gradient(
+                                180deg,
+                                rgba(255,228,176,0.18),
+                                rgba(255,255,255,0.09)
+                              )
+                            `
+                            : "rgba(255,255,255,0.035)",
+                          color: "rgba(255,255,255,0.94)",
+                          cursor: "pointer",
+                          fontSize: 12,
+                          fontWeight: active ? 800 : 700,
+                          opacity: active ? 1 : 0.82,
+                          userSelect: "none",
+                          whiteSpace: "nowrap",
+                          boxShadow: active
+                            ? "0 8px 20px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.12)"
+                            : "none",
+                          transition:
+                            "background 140ms ease, opacity 140ms ease, transform 140ms ease",
+                        }}
+                      >
+                        {item.pillLabel}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Close"
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 999,
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: `
+                      linear-gradient(
+                        180deg,
+                        rgba(255,255,255,0.10),
+                        rgba(255,255,255,0.05)
+                      )
+                    `,
+                    color: "rgba(255,255,255,0.94)",
+                    cursor: "pointer",
+                    lineHeight: 0,
+                    flex: "0 0 auto",
+                    fontSize: 22,
+                    boxShadow:
+                      "0 8px 20px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.08)",
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div
+              style={{
+                position: "relative",
+                minHeight: 0,
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0))",
+              }}
+            >
+              <iframe
+                title={panel.modalTitle}
+                src={panel.src}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: 0,
+                  background: "transparent",
+                }}
+              />
+            </div>
+          </div>
+        </div>
       </div>
     </div>,
     document.body,

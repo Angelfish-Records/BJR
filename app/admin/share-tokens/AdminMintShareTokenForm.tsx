@@ -116,10 +116,7 @@ export default function AdminMintShareTokenForm({ albums }: Props) {
     if (typeof window === "undefined") return null;
     const slug = selected?.slug;
     if (!slug) return null;
-    const u = new URL(
-      `/${encodeURIComponent(slug)}`,
-      window.location.origin,
-    );
+    const u = new URL(`/${encodeURIComponent(slug)}`, window.location.origin);
     u.searchParams.set("st", result.token);
     return u.toString();
   }, [result, selected?.slug]);
@@ -197,77 +194,43 @@ export default function AdminMintShareTokenForm({ albums }: Props) {
     return idleLabel;
   }
 
-  const shellStyle: React.CSSProperties = {
-    display: "grid",
-    gap: 16,
-    padding: 18,
-    borderRadius: 18,
+  const cardStyle: React.CSSProperties = {
+    padding: 14,
+    borderRadius: 16,
     border: "1px solid rgba(255,255,255,0.12)",
-    background:
-      "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))",
-    boxShadow:
-      "0 20px 50px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.05)",
-    backdropFilter: "blur(10px)",
-    WebkitBackdropFilter: "blur(10px)",
+    background: "rgba(255,255,255,0.04)",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
   };
 
-  const labelStyle: React.CSSProperties = {
-    display: "grid",
-    gap: 8,
-  };
-
-  const labelTitleStyle: React.CSSProperties = {
-    fontWeight: 700,
-    fontSize: 13,
-    letterSpacing: 0.2,
-    opacity: 0.95,
-  };
-
-  const controlStyle: React.CSSProperties = {
+  const fieldStyle: React.CSSProperties = {
     width: "100%",
     minWidth: 0,
-    padding: "12px 14px",
+    padding: "10px 12px",
     borderRadius: 12,
     border: "1px solid rgba(255,255,255,0.14)",
     background: "rgba(255,255,255,0.06)",
-    color: "inherit",
+    color: "rgba(255,255,255,0.92)",
     outline: "none",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
   };
 
-  const secondaryButtonStyle: React.CSSProperties = {
-    padding: "9px 12px",
+  const subtleButtonStyle: React.CSSProperties = {
+    padding: "8px 10px",
     borderRadius: 10,
-    border: "1px solid rgba(255,255,255,0.16)",
-    background: "rgba(255,255,255,0.08)",
-    color: "inherit",
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.04)",
+    color: "rgba(255,255,255,0.92)",
     fontWeight: 700,
     cursor: "pointer",
   };
 
   const primaryButtonStyle: React.CSSProperties = {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 180,
-    padding: "13px 18px",
-    borderRadius: 14,
-    border: "1px solid rgba(255,255,255,0.18)",
-    background:
-      "linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.11))",
-    color: "inherit",
+    padding: "10px 12px",
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,0.16)",
+    background: "rgba(255,255,255,0.12)",
+    color: "rgba(255,255,255,0.94)",
     fontWeight: 800,
-    letterSpacing: 0.2,
     cursor: "pointer",
-    boxShadow:
-      "0 10px 24px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.14)",
-  };
-
-  const resultCardStyle: React.CSSProperties = {
-    padding: 14,
-    border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: 14,
-    background: "rgba(255,255,255,0.04)",
   };
 
   const codePillStyle: React.CSSProperties = {
@@ -276,25 +239,19 @@ export default function AdminMintShareTokenForm({ albums }: Props) {
     padding: "10px 12px",
     borderRadius: 12,
     background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.08)",
+    border: "1px solid rgba(255,255,255,0.10)",
     overflowX: "auto",
     whiteSpace: "nowrap",
+    color: "rgba(255,255,255,0.94)",
   };
 
   if (!mintable.length) {
     return (
-      <div
-        style={{
-          padding: 16,
-          border: "1px solid rgba(255,255,255,0.12)",
-          borderRadius: 16,
-          background: "rgba(255,255,255,0.04)",
-        }}
-      >
-        <div style={{ fontWeight: 800, marginBottom: 6 }}>
+      <div style={cardStyle}>
+        <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 6 }}>
           No mintable albums
         </div>
-        <div style={{ opacity: 0.85 }}>
+        <div style={{ fontSize: 13, lineHeight: 1.5, opacity: 0.78 }}>
           No albums have <code>catalogueId</code> set. Add a{" "}
           <code>catalogueId</code> in Sanity before minting press tokens.
         </div>
@@ -303,114 +260,133 @@ export default function AdminMintShareTokenForm({ albums }: Props) {
   }
 
   return (
-    <div style={shellStyle}>
-      <label style={labelStyle}>
-        <div style={labelTitleStyle}>Album</div>
-        <select
-          value={albumCatalogueId}
-          onChange={(e) => setAlbumCatalogueId(e.target.value)}
-          style={controlStyle}
-        >
-          {mintable.map((a) => (
-            <option
-              key={a.catalogueId as string}
-              value={a.catalogueId as string}
-            >
-              {a.title} {a.year ? `(${a.year})` : ""} — {a.slug}
-            </option>
-          ))}
-        </select>
-
-        {hasUnmintable ? (
-          <div style={{ opacity: 0.72, fontSize: 13, lineHeight: 1.45 }}>
-            Some albums are hidden because they have no <code>catalogueId</code>{" "}
-            set.
-          </div>
-        ) : null}
-      </label>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-          gap: 12,
-        }}
-      >
-        <label style={labelStyle}>
-          <div style={labelTitleStyle}>Max redemptions (optional)</div>
-          <input
-            value={maxRedemptions}
-            onChange={(e) => setMaxRedemptions(e.target.value)}
-            placeholder="e.g. 25"
-            inputMode="numeric"
-            style={controlStyle}
-          />
-        </label>
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={cardStyle}>
+        <div style={{ fontSize: 12, letterSpacing: "0.04em", opacity: 0.56 }}>
+          TOKEN CONFIGURATION
+        </div>
 
         <div
           style={{
             display: "grid",
-            alignContent: "end",
-            paddingBottom: 2,
+            gap: 12,
+            marginTop: 10,
           }}
         >
-          <label
+          <div style={{ display: "grid", gap: 6 }}>
+            <div style={{ fontSize: 12, opacity: 0.66 }}>Album</div>
+            <select
+              value={albumCatalogueId}
+              onChange={(e) => setAlbumCatalogueId(e.target.value)}
+              style={fieldStyle}
+            >
+              {mintable.map((a) => (
+                <option
+                  key={a.catalogueId as string}
+                  value={a.catalogueId as string}
+                >
+                  {a.title} {a.year ? `(${a.year})` : ""} — {a.slug}
+                </option>
+              ))}
+            </select>
+
+            {hasUnmintable ? (
+              <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.58 }}>
+                Some albums are hidden because they have no{" "}
+                <code>catalogueId</code> set.
+              </div>
+            ) : null}
+          </div>
+
+          <div
             style={{
-              display: "inline-flex",
-              gap: 10,
-              alignItems: "center",
-              fontWeight: 700,
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+              gap: 12,
             }}
           >
-            <input
-              type="checkbox"
-              checked={expiresEnabled}
-              onChange={(e) => setExpiresEnabled(e.target.checked)}
-            />
-            <span>Set expiry</span>
-          </label>
+            <div style={{ display: "grid", gap: 6 }}>
+              <div style={{ fontSize: 12, opacity: 0.66 }}>
+                Max redemptions
+              </div>
+              <input
+                value={maxRedemptions}
+                onChange={(e) => setMaxRedemptions(e.target.value)}
+                placeholder="e.g. 25"
+                inputMode="numeric"
+                style={fieldStyle}
+              />
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                alignContent: "end",
+              }}
+            >
+              <label
+                style={{
+                  display: "inline-flex",
+                  gap: 10,
+                  alignItems: "center",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  opacity: 0.92,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={expiresEnabled}
+                  onChange={(e) => setExpiresEnabled(e.target.checked)}
+                />
+                <span>Set expiry</span>
+              </label>
+            </div>
+          </div>
+
+          {expiresEnabled ? (
+            <div style={{ display: "grid", gap: 6 }}>
+              <div style={{ fontSize: 12, opacity: 0.66 }}>
+                Expires at (local time)
+              </div>
+              <input
+                type="datetime-local"
+                value={expiresAtLocal}
+                onChange={(e) => setExpiresAtLocal(e.target.value)}
+                style={fieldStyle}
+              />
+            </div>
+          ) : null}
+
+          <div style={{ paddingTop: 2 }}>
+            <button
+              type="button"
+              onClick={onMint}
+              disabled={busy || !albumCatalogueId}
+              style={{
+                ...primaryButtonStyle,
+                opacity: busy || !albumCatalogueId ? 0.6 : 1,
+                cursor: busy || !albumCatalogueId ? "default" : "pointer",
+              }}
+            >
+              {busy ? "Minting…" : "Mint token"}
+            </button>
+          </div>
         </div>
       </div>
 
-      {expiresEnabled ? (
-        <label style={labelStyle}>
-          <div style={labelTitleStyle}>Expires at (local time)</div>
-          <input
-            type="datetime-local"
-            value={expiresAtLocal}
-            onChange={(e) => setExpiresAtLocal(e.target.value)}
-            style={controlStyle}
-          />
-        </label>
-      ) : null}
-
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "flex-start",
-          paddingTop: 4,
-        }}
-      >
-        <button
-          type="button"
-          onClick={onMint}
-          disabled={busy || !albumCatalogueId}
-          style={{
-            ...primaryButtonStyle,
-            opacity: busy || !albumCatalogueId ? 0.6 : 1,
-            cursor: busy || !albumCatalogueId ? "not-allowed" : "pointer",
-          }}
-        >
-          {busy ? "Minting…" : "Mint token"}
-        </button>
-      </div>
-
       {result ? (
-        <div style={resultCardStyle}>
-          {result.ok ? (
-            <div style={{ display: "grid", gap: 14 }}>
-              <div style={{ display: "grid", gap: 8 }}>
-                <div style={{ fontWeight: 800 }}>Token</div>
+        result.ok ? (
+          <div style={cardStyle}>
+            <div style={{ fontSize: 12, letterSpacing: "0.04em", opacity: 0.56 }}>
+              MINT RESULT
+            </div>
+
+            <div style={{ display: "grid", gap: 12, marginTop: 10 }}>
+              <div style={{ display: "grid", gap: 6 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.72 }}>
+                  Token
+                </div>
                 <div
                   style={{
                     display: "grid",
@@ -423,7 +399,7 @@ export default function AdminMintShareTokenForm({ albums }: Props) {
                   <button
                     type="button"
                     onClick={() => handleCopy("token", result.token)}
-                    style={secondaryButtonStyle}
+                    style={subtleButtonStyle}
                   >
                     {copyButtonLabel(tokenCopyState, "Copy token")}
                   </button>
@@ -431,8 +407,10 @@ export default function AdminMintShareTokenForm({ albums }: Props) {
               </div>
 
               {deepLink ? (
-                <div style={{ display: "grid", gap: 8 }}>
-                  <div style={{ fontWeight: 800 }}>Deep link</div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.72 }}>
+                    Deep link
+                  </div>
                   <div
                     style={{
                       display: "grid",
@@ -445,7 +423,7 @@ export default function AdminMintShareTokenForm({ albums }: Props) {
                     <button
                       type="button"
                       onClick={() => handleCopy("link", deepLink)}
-                      style={secondaryButtonStyle}
+                      style={subtleButtonStyle}
                     >
                       {copyButtonLabel(linkCopyState, "Copy link")}
                     </button>
@@ -453,26 +431,37 @@ export default function AdminMintShareTokenForm({ albums }: Props) {
                 </div>
               ) : null}
 
-              <div style={{ opacity: 0.78, fontSize: 13, lineHeight: 1.45 }}>
+              <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.6 }}>
                 catalogueId: <code>{albumCatalogueId}</code> • tokenId:{" "}
                 <code>{result.tokenId}</code>
               </div>
             </div>
-          ) : (
-            <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ fontWeight: 800 }}>Error</div>
-              <code
-                style={{
-                  ...codePillStyle,
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                }}
-              >
-                {result.error}
-              </code>
-            </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div
+            style={{
+              padding: 12,
+              borderRadius: 12,
+              border: "1px solid rgba(255,140,140,0.22)",
+              background: "rgba(120,0,0,0.16)",
+              color: "#ffd0d0",
+              display: "grid",
+              gap: 6,
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 800 }}>Error</div>
+            <code
+              style={{
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                fontSize: 12,
+                lineHeight: 1.45,
+              }}
+            >
+              {result.error}
+            </code>
+          </div>
+        )
       ) : null}
     </div>
   );
