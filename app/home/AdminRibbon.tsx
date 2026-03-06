@@ -8,16 +8,57 @@ import { type AdminPanelId } from "./admin/adminPanels";
 const ENABLED = process.env.NEXT_PUBLIC_ADMIN_DEBUG === "1";
 
 function ChevronIcon(props: { collapsed: boolean }) {
+  if (props.collapsed) {
+    return (
+      <svg
+        width="20"
+        height="18"
+        viewBox="0 0 20 18"
+        aria-hidden="true"
+        style={{
+          display: "block",
+          overflow: "visible",
+        }}
+      >
+        <defs>
+          <linearGradient
+            id="admin-ribbon-chevron-gold"
+            x1="0"
+            y1="0"
+            x2="1"
+            y2="1"
+          >
+            <stop offset="0%" stopColor="rgba(255, 234, 170, 0.98)" />
+            <stop offset="48%" stopColor="rgba(255, 215, 130, 0.98)" />
+            <stop offset="100%" stopColor="rgba(255, 244, 210, 0.90)" />
+          </linearGradient>
+        </defs>
+
+        <path
+          d="M6.1 6.2 L10 11.4 L13.9 6.2 Z"
+          fill="rgba(10,10,14,0.92)"
+        />
+
+        <path
+          d="M3.9 5.5 10 11.7l6.1-6.2"
+          fill="none"
+          stroke="url(#admin-ribbon-chevron-gold)"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
   return (
     <svg
-      width="18"
+      width="20"
       height="18"
-      viewBox="0 0 18 18"
+      viewBox="0 0 20 18"
       aria-hidden="true"
       style={{
         display: "block",
-        transform: props.collapsed ? "rotate(180deg)" : "rotate(0deg)",
-        transition: "transform 160ms ease",
         overflow: "visible",
       }}
     >
@@ -30,29 +71,16 @@ function ChevronIcon(props: { collapsed: boolean }) {
           y2="1"
         >
           <stop offset="0%" stopColor="rgba(255, 234, 170, 0.98)" />
-          <stop offset="48%" stopColor="rgba(255, 215, 130, 0.96)" />
-          <stop offset="100%" stopColor="rgba(255, 244, 210, 0.88)" />
-        </linearGradient>
-        <linearGradient id="admin-ribbon-tab-gold" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="rgba(255, 223, 150, 0.90)" />
-          <stop offset="60%" stopColor="rgba(255, 215, 130, 0.72)" />
-          <stop offset="100%" stopColor="rgba(255, 244, 210, 0.42)" />
+          <stop offset="48%" stopColor="rgba(255, 215, 130, 0.98)" />
+          <stop offset="100%" stopColor="rgba(255, 244, 210, 0.90)" />
         </linearGradient>
       </defs>
 
-      {props.collapsed ? (
-        <path
-          d="M4.4 6.2 L9 11.6 L13.6 6.2 Z"
-          fill="url(#admin-ribbon-tab-gold)"
-          opacity="0.95"
-        />
-      ) : null}
-
       <path
-        d="M4.1 10.6 9 5.8l4.9 4.8"
+        d="M3.9 11.7 10 5.5l6.1 6.2"
         fill="none"
         stroke="url(#admin-ribbon-chevron-gold)"
-        strokeWidth="2.1"
+        strokeWidth="2.2"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -85,8 +113,7 @@ export default function AdminRibbon(props: { isAdmin: boolean }) {
     cursor: "pointer",
     whiteSpace: "nowrap",
     boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-    transition:
-      "background 140ms ease, opacity 140ms ease, transform 140ms ease",
+    transition: "background 140ms ease, opacity 140ms ease, transform 140ms ease",
   };
 
   const modal = (
@@ -124,7 +151,7 @@ export default function AdminRibbon(props: { isAdmin: boolean }) {
           <div
             className="portalPanelInner--gold"
             style={{
-              height: collapsed ? 9 : 52,
+              height: collapsed ? 6 : 52,
               minHeight: 0,
               borderRadius: 0,
               borderLeft: "none",
@@ -142,15 +169,12 @@ export default function AdminRibbon(props: { isAdmin: boolean }) {
               `,
               overflow: collapsed ? "visible" : "hidden",
               position: "relative",
-              transition:
-                "height 160ms ease, padding 160ms ease, background 160ms ease",
+              transition: "height 160ms ease, padding 160ms ease, background 160ms ease",
             }}
           >
             <button
               type="button"
-              aria-label={
-                collapsed ? "Expand admin ribbon" : "Collapse admin ribbon"
-              }
+              aria-label={collapsed ? "Expand admin ribbon" : "Collapse admin ribbon"}
               title={collapsed ? "Expand" : "Collapse"}
               onClick={() => setCollapsed((v) => !v)}
               style={{
@@ -171,7 +195,9 @@ export default function AdminRibbon(props: { isAdmin: boolean }) {
                 position: "absolute",
                 left: 13,
                 top: collapsed ? "100%" : "50%",
-                transform: collapsed ? "translateY(-10px)" : "translateY(-50%)",
+                transform: collapsed
+                  ? "translateY(-13px)"
+                  : "translateY(-50%)",
                 zIndex: 3,
                 pointerEvents: "auto",
               }}
