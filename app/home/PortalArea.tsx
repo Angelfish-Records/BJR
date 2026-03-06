@@ -26,26 +26,94 @@ import Image from "next/image";
 
 const DEFAULT_PORTAL_TAB = "portal";
 
+// Keep aligned with middleware + returnTo.
+const RESERVED_ROOTS = new Set<string>([
+  "portal",
+  "journal",
+  "posts",
+  "extras",
+  "download",
+  "player",
+  "gift",
+  "unsubscribe",
+  "studio",
+  "admin",
+  "api",
+  "exegesis",
+]);
+
+function splitPath(pathname: string | null): string[] {
+  return (pathname ?? "").split("?")[0]!.split("/").filter(Boolean);
+}
+
+/**
+ * Portal tabs are now only allowed on known/reserved roots.
+ * Everything else at /:slug(/:displayId) is treated as music.
+ */
 function portalTabFromPathname(pathname: string | null): string | null {
-  const p = (pathname ?? "").split("?")[0] ?? "";
-  const parts = p.split("/").filter(Boolean);
-  const head = (parts[0] ?? "").trim().toLowerCase();
+  const parts = splitPath(pathname);
+  const headRaw = (parts[0] ?? "").trim();
+  if (!headRaw) return null;
+
+  let head = headRaw.toLowerCase();
+  try {
+    head = decodeURIComponent(head).trim().toLowerCase();
+  } catch {}
+
   if (!head) return null;
-  if (head === "player") return null;
-  if (head === "album") return null;
-  return decodeURIComponent(head);
+  if (head === "player") return null; // system route, never a portal tab
+  if (!RESERVED_ROOTS.has(head)) return null;
+  return head;
 }
 
 function parsePublicAlbumPath(pathname: string | null): {
   albumSlug: string | null;
-  recordingId: string | null;
+  displayId: string | null;
 } {
-  const p = (pathname ?? "").trim();
-  const m = p.match(/^\/album\/([^\/?#]+)(?:\/track\/([^\/?#]+))?\/?$/i);
-  if (!m) return { albumSlug: null, recordingId: null };
-  const albumSlug = decodeURIComponent(m[1] ?? "").trim() || null;
-  const recordingId = decodeURIComponent(m[2] ?? "").trim() || null;
-  return { albumSlug, recordingId };
+  const parts = splitPath(pathname);
+
+  // canonical music surfaces:
+  // /:slug
+  // /:slug/:displayId
+  if (parts.length === 0 || parts.length > 2) {
+    return { albumSlug: null, displayId: null };
+  }
+
+  const slugRaw = (parts[0] ?? "").trim();
+  if (!slugRaw) return { albumSlug: null, displayId: null };
+
+  // If it’s a reserved/system root, it’s not music.
+  const lowered = (() => {
+    try {
+      return decodeURIComponent(slugRaw).trim().toLowerCase();
+    } catch {
+      return slugRaw.trim().toLowerCase();
+    }
+  })();
+
+  if (!lowered || RESERVED_ROOTS.has(lowered)) {
+    return { albumSlug: null, displayId: null };
+  }
+
+  const albumSlug = (() => {
+    try {
+      return decodeURIComponent(slugRaw).trim() || null;
+    } catch {
+      return slugRaw.trim() || null;
+    }
+  })();
+
+  const displayId = (() => {
+    const raw = (parts[1] ?? "").trim();
+    if (!raw) return null;
+    try {
+      return decodeURIComponent(raw).trim() || null;
+    } catch {
+      return raw.trim() || null;
+    }
+  })();
+
+  return { albumSlug, displayId };
 }
 
 function MiniPlayerHost(props: { onExpand: () => void }) {
@@ -290,13 +358,12 @@ export default function PortalArea(props: {
   const pathname = usePathname();
 
   const route = React.useMemo(() => parsePublicAlbumPath(pathname), [pathname]);
-  const isPublicAlbumRoute = Boolean(route.albumSlug);
+  const isMusicRoute = Boolean(route.albumSlug);
 
   const pathTab = portalTabFromPathname(pathname);
 
-  // ✅ Player surface is any /:slug/:id) route.
-  // Portal surface is /{tab}.
-  const isPlayer = isPublicAlbumRoute;
+  // Player surface is any /:slug(/:displayId) that is NOT a reserved root.
+  const isPlayer = isMusicRoute;
   const portalTabId = !isPlayer ? pathTab : null;
 
   // --- Optimistic surface flip (optional polish) ---
@@ -520,8 +587,15 @@ export default function PortalArea(props: {
   const derivedAttentionMessage =
     attentionMessage ?? brokerAttentionMessage ?? null;
 
-  const qAlbum = (isPublicAlbumRoute ? route.albumSlug : null) ?? null;
-  const qTrack = (isPublicAlbumRoute ? route.recordingId : null) ?? null;
+  const qAlbum = (isPlayer ? route.albumSlug : null) ?? null;
+  const qDisplayId = (isPlayer ? route.displayId : null) ?? null;
+
+  // Resolve URL displayId -> internal recordingId (best-effort).
+  const qTrackRecordingId = React.useMemo(() => {
+    if (!qDisplayId) return null;
+    const hit = (bundle.tracks ?? []).find((t) => t.displayId === qDisplayId);
+    return hit?.recordingId ?? null;
+  }, [qDisplayId, bundle.tracks]);
 
   // Secondary concerns stay query-based (allowed everywhere)
   const qAutoplay = getAutoplayFlag(sp);
@@ -537,7 +611,7 @@ export default function PortalArea(props: {
   React.useEffect(() => {
     if (forcedPlayerRef.current) return;
 
-    const playbackIntent = Boolean(qTrack) || Boolean(qAutoplay);
+    const playbackIntent = Boolean(qDisplayId) || Boolean(qAutoplay);
     if (!playbackIntent) return;
 
     // already on /album/... (player surface)
@@ -548,7 +622,7 @@ export default function PortalArea(props: {
 
     forcedPlayerRef.current = true;
     forceSurface("player", null, "replace");
-  }, [qTrack, qAutoplay, isPlayer, forceSurface]);
+  }, [qDisplayId, qAutoplay, isPlayer, forceSurface]);
 
   const currentAlbumSlug = bundle.albumSlug;
   const album = bundle.album;
@@ -596,11 +670,11 @@ export default function PortalArea(props: {
   );
 
   React.useEffect(() => {
-    if (!qTrack) return;
-    selectTrack(qTrack);
+    if (!qTrackRecordingId) return;
+    selectTrack(qTrackRecordingId);
     setPendingRecordingId(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qTrack]);
+  }, [qTrackRecordingId]);
 
   const primedRef = React.useRef(false);
   React.useEffect(() => {
@@ -617,7 +691,7 @@ export default function PortalArea(props: {
 
     // If a specific track is requested via URL, let the track-selection effect handle it.
     // (We still need the queue, but we shouldn't force-select first track here.)
-    if (qTrack) {
+    if (qDisplayId) {
       primedRef.current = true;
       return;
     }
@@ -643,13 +717,13 @@ export default function PortalArea(props: {
     p.setPendingRecordingId(undefined);
 
     primedRef.current = true;
-  }, [album, tracks, hasSt, qAlbum, currentAlbumSlug, qTrack, p]);
+  }, [album, tracks, hasSt, qAlbum, currentAlbumSlug, qDisplayId, p]);
 
   const autoplayFiredRef = React.useRef<string | null>(null);
   React.useEffect(() => {
     if (!isPlayer) return;
     if (!qAutoplay) return;
-    if (!qTrack) return;
+    if (!qTrackRecordingId) return;
 
     if (!qShareToken) {
       patchQuery({ autoplay: null });
@@ -658,7 +732,7 @@ export default function PortalArea(props: {
 
     if (!album || tracks.length === 0) return;
 
-    const key = `${qAlbum ?? ""}:${qTrack}:${qShareToken}`;
+    const key = `${qAlbum ?? ""}:${qTrackRecordingId}:${qShareToken}`;
     if (autoplayFiredRef.current === key) return;
     autoplayFiredRef.current = key;
 
@@ -675,13 +749,13 @@ export default function PortalArea(props: {
       artworkUrl: album.artworkUrl ?? null,
     });
 
-    const t = tracks.find((x) => x.recordingId === qTrack);
+    const t = tracks.find((x) => x.recordingId === qTrackRecordingId);
     play(t);
     patchQuery({ autoplay: null });
   }, [
     isPlayer,
     qAutoplay,
-    qTrack,
+    qTrackRecordingId,
     qAlbum,
     qShareToken,
     album,
