@@ -332,7 +332,7 @@ export default function PortalArea(props: {
   attentionMessage?: string | null;
   tier?: string | null;
   isPatron?: boolean;
-  // isAdmin is owned at /(site)/layout.tsx via AdminDebugBar.
+  // isAdmin is owned at /(site)/layout.tsx via AdminRibbon.
   // PortalArea should not take it as input.
   canManageBilling?: boolean;
 }) {

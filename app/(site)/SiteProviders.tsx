@@ -3,7 +3,7 @@
 
 import React from "react";
 import PlayerHost from "./PlayerHost";
-import AdminDebugBar from "@/app/home/AdminDebugBar";
+import AdminRibbon from "@/app/home/AdminRibbon";
 import { MembershipModalProvider } from "@/app/home/MembershipModalProvider";
 import { GateBrokerProvider } from "@/app/home/gating/GateBroker";
 
@@ -15,7 +15,7 @@ export default function SiteProviders(props: {
     <GateBrokerProvider>
       <MembershipModalProvider>
         <PlayerHost>
-          {props.isAdmin ? <AdminDebugBar isAdmin={props.isAdmin} /> : null}
+          {props.isAdmin ? <AdminRibbon isAdmin={props.isAdmin} /> : null}
           {props.children}
         </PlayerHost>
       </MembershipModalProvider>

@@ -120,7 +120,7 @@ function useFocusTrap(enabled: boolean, rootRef: React.RefObject<HTMLElement | n
   }, [enabled, rootRef]);
 }
 
-function useAdminDebugbarAboveOverlay(active: boolean) {
+function useAdminRibbonAboveOverlay(active: boolean) {
   const debugbarStyleRef = React.useRef<string | null>(null);
 
   React.useEffect(() => {
@@ -163,9 +163,9 @@ export default function GateSpotlightOverlay(props: {
   gateNode: React.ReactNode;
   ariaLabel?: string;
   // Keep your current behavior: admin debugbar stays clickable above overlay.
-  allowAdminDebugbarAbove?: boolean;
+  allowAdminRibbonAbove?: boolean;
 }) {
-  const { active, gateNode, ariaLabel = "Authentication required", allowAdminDebugbarAbove = true } =
+  const { active, gateNode, ariaLabel = "Authentication required", allowAdminRibbonAbove = true } =
     props;
 
   const modalRef = React.useRef<HTMLDivElement | null>(null);
@@ -177,7 +177,7 @@ export default function GateSpotlightOverlay(props: {
     return lockScroll(true);
   }, [active]);
 
-  useAdminDebugbarAboveOverlay(allowAdminDebugbarAbove && active);
+  useAdminRibbonAboveOverlay(allowAdminRibbonAbove && active);
 
   if (!active) return null;
 
