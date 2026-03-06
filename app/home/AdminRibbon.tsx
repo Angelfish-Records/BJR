@@ -1,4 +1,3 @@
-// web/app/home/AdminRibbon.tsx
 "use client";
 
 import React from "react";
@@ -11,6 +10,7 @@ const ENABLED = process.env.NEXT_PUBLIC_ADMIN_DEBUG === "1";
 export default function AdminRibbon(props: { isAdmin: boolean }) {
   const [adminOpen, setAdminOpen] = React.useState(false);
   const [adminPanel, setAdminPanel] = React.useState<AdminPanelId>("access");
+  const [collapsed, setCollapsed] = React.useState(false);
 
   function openAdmin(panel: AdminPanelId) {
     setAdminPanel(panel);
@@ -23,7 +23,7 @@ export default function AdminRibbon(props: { isAdmin: boolean }) {
   const btn: React.CSSProperties = {
     height: 32,
     padding: "0 12px",
-    borderRadius: 999,
+    borderRadius: 11,
     border: "1px solid rgba(255,255,255,0.12)",
     background: "rgba(255,255,255,0.05)",
     color: "rgba(255,255,255,0.94)",
@@ -33,6 +33,25 @@ export default function AdminRibbon(props: { isAdmin: boolean }) {
     whiteSpace: "nowrap",
     boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
     transition: "background 140ms ease, opacity 140ms ease, transform 140ms ease",
+  };
+
+  const chromeButton: React.CSSProperties = {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.05)",
+    color: "rgba(255,255,255,0.94)",
+    fontSize: 16,
+    fontWeight: 700,
+    cursor: "pointer",
+    lineHeight: 1,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+    transition: "background 140ms ease, opacity 140ms ease, transform 140ms ease",
+    flex: "0 0 auto",
   };
 
   const modal = (
@@ -70,7 +89,7 @@ export default function AdminRibbon(props: { isAdmin: boolean }) {
           <div
             className="portalPanelInner--gold"
             style={{
-              minHeight: 52,
+              minHeight: collapsed ? 14 : 52,
               borderRadius: 0,
               borderLeft: "none",
               borderRight: "none",
@@ -79,117 +98,103 @@ export default function AdminRibbon(props: { isAdmin: boolean }) {
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              gap: 16,
-              padding: "9px 14px",
+              gap: 12,
+              padding: collapsed ? "2px 10px" : "9px 14px",
               background: `
                 radial-gradient(circle at 12% 0%, rgba(255,223,160,0.12), transparent 24%),
                 linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015)),
                 rgba(10,10,14,0.92)
               `,
+              overflow: "hidden",
+              transition:
+                "min-height 160ms ease, padding 160ms ease, background 160ms ease",
             }}
           >
-            <div
+            <button
+              type="button"
+              aria-label={collapsed ? "Expand admin ribbon" : "Collapse admin ribbon"}
+              title={collapsed ? "Expand" : "Collapse"}
+              onClick={() => setCollapsed((v) => !v)}
               style={{
-                minWidth: 0,
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "center",
-                gap: 2,
-                paddingLeft: 2,
+                ...chromeButton,
+                width: 28,
+                height: 28,
+                borderRadius: 9,
+                fontSize: 14,
+                transform: collapsed ? "rotate(180deg)" : "none",
               }}
             >
-              <div
-                style={{
-                  fontSize: 11,
-                  letterSpacing: "0.16em",
-                  textTransform: "uppercase",
-                  opacity: 0.5,
-                  userSelect: "none",
-                  lineHeight: 1,
-                }}
-              >
-                Admin workspace
-              </div>
-              <div
-                style={{
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: "rgba(255,255,255,0.96)",
-                  lineHeight: 1.15,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Control ribbon
-              </div>
-            </div>
+              ˅
+            </button>
 
-            <div
-              style={{
-                display: "flex",
-                gap: 8,
-                flexWrap: "wrap",
-                alignItems: "center",
-                justifyContent: "flex-end",
-                padding: 4,
-                borderRadius: 999,
-                background: "rgba(255,255,255,0.03)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                boxShadow: "0 1px 0 rgba(255,255,255,0.03) inset",
-              }}
-            >
-              <button
-                type="button"
-                style={btn}
-                onClick={() => openAdmin("access")}
-              >
-                Member Access
-              </button>
-              <button
-                type="button"
-                style={btn}
-                onClick={() => openAdmin("share_tokens")}
-              >
-                Share Tokens
-              </button>
-              <button
-                type="button"
-                style={btn}
-                onClick={() => openAdmin("mailbag")}
-              >
-                Mailbag
-              </button>
-              <button
-                type="button"
-                style={btn}
-                onClick={() => openAdmin("exegesis")}
-              >
-                Exegesis Mod
-              </button>
-              <Link
-                href="/admin/campaigns"
-                target="_blank"
+            {!collapsed ? (
+              <div
                 style={{
-                  ...btn,
-                  display: "inline-flex",
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
                   alignItems: "center",
-                  textDecoration: "none",
+                  justifyContent: "flex-end",
+                  flex: 1,
+                  minWidth: 0,
                 }}
               >
-                Campaigns
-              </Link>
-              <Link
-                href="/studio"
-                target="_blank"
-                style={{
-                  ...btn,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  textDecoration: "none",
-                }}
-              >
-                Sanity Studio
-              </Link>
-            </div>
+                <button
+                  type="button"
+                  style={btn}
+                  onClick={() => openAdmin("access")}
+                >
+                  Member Access
+                </button>
+                <button
+                  type="button"
+                  style={btn}
+                  onClick={() => openAdmin("share_tokens")}
+                >
+                  Share Tokens
+                </button>
+                <button
+                  type="button"
+                  style={btn}
+                  onClick={() => openAdmin("mailbag")}
+                >
+                  Mailbag
+                </button>
+                <button
+                  type="button"
+                  style={btn}
+                  onClick={() => openAdmin("exegesis")}
+                >
+                  Exegesis Mod
+                </button>
+                <Link
+                  href="/admin/campaigns"
+                  target="_blank"
+                  style={{
+                    ...btn,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    textDecoration: "none",
+                  }}
+                >
+                  Campaigns
+                </Link>
+                <Link
+                  href="/studio"
+                  target="_blank"
+                  style={{
+                    ...btn,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    textDecoration: "none",
+                  }}
+                >
+                  Sanity Studio
+                </Link>
+              </div>
+            ) : (
+              <div style={{ flex: 1 }} />
+            )}
           </div>
         </div>
       </div>
