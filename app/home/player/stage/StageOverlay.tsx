@@ -11,6 +11,7 @@ import { useLyricsSnapshot } from "../lyrics/useLyricsSurface";
 import StageTransportBar, {
   STAGE_TRANSPORT_FOOTER_PX,
 } from "../StageTransportBar";
+import StageNowPlayingBadge from "./StageNowPlayingBadge";
 
 function useScrollLock(locked: boolean) {
   React.useEffect(() => {
@@ -69,7 +70,12 @@ export default function StageOverlay(props: {
       surfaceRecordingId,
       playerMuxId,
     ]);
-  }, [snap.cuesByRecordingId, playerRecordingId, playerMuxId, surfaceRecordingId]);
+  }, [
+    snap.cuesByRecordingId,
+    playerRecordingId,
+    playerMuxId,
+    surfaceRecordingId,
+  ]);
 
   const cues: LyricCue[] | null = React.useMemo(() => {
     if (!recordingId) return null;
@@ -79,7 +85,9 @@ export default function StageOverlay(props: {
 
   const trackOffsetMs = React.useMemo(() => {
     if (!recordingId) return 0;
-    const v = (snap.offsetByRecordingId as OffsetByRecordingId | undefined)?.[recordingId];
+    const v = (snap.offsetByRecordingId as OffsetByRecordingId | undefined)?.[
+      recordingId
+    ];
     return typeof v === "number" && Number.isFinite(v) ? v : 0;
   }, [snap.offsetByRecordingId, recordingId]);
 
@@ -285,6 +293,7 @@ export default function StageOverlay(props: {
         }}
       />
 
+      <StageNowPlayingBadge />
       <StageTransportBar />
     </div>
   );
