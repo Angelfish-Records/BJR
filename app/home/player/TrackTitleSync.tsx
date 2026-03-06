@@ -30,7 +30,7 @@ function buildTitle(opts: {
 
   // mode === "track"
   if (trackTitle) {
-    const leaf = artist ? `${trackTitle} — ${artist}` : trackTitle;
+    const leaf = artist ? `${trackTitle} · ${artist}` : trackTitle;
     return `${leaf} · ${siteName}`;
   }
 

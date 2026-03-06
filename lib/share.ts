@@ -118,7 +118,7 @@ export function buildShareTarget(
     const url = abs ? abs.toString() : baseAbs;
 
     const who = input.authorName?.trim();
-    const title = who ? `${postTitle} — ${who}` : postTitle;
+    const title = who ? `${postTitle} · ${who}` : postTitle;
     const text = who ? `Read “${postTitle}” by ${who}` : `Read “${postTitle}”`;
 
     return {
@@ -156,7 +156,7 @@ export function buildShareTarget(
         ).toString()
       : baseAbs;
 
-    const title = artist ? `${artist} — ${albumTitle}` : albumTitle;
+    const title = artist ? `${artist} · ${albumTitle}` : albumTitle;
     const text = artist
       ? `Listen to ${albumTitle} by ${artist}`
       : `Listen to ${albumTitle}`;
@@ -187,8 +187,8 @@ export function buildShareTarget(
     : trackAbs;
 
   const title = artist
-    ? `${trackTitle} — ${albumTitle} — ${artist}`
-    : `${trackTitle} — ${albumTitle}`;
+    ? `${trackTitle} · ${albumTitle} · ${artist}`
+    : `${trackTitle} · ${albumTitle}`;
   const text = artist
     ? `Listen to “${trackTitle}” on ${albumTitle} by ${artist}`
     : `Listen to “${trackTitle}” on ${albumTitle}`;

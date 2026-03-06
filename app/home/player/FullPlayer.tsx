@@ -632,10 +632,10 @@ export default function FullPlayer(props: {
     const aTitle = (effAlbum?.title?.trim() || "").trim();
     const artist = (effAlbum?.artist?.trim() || "").trim();
 
-    // Format: "Track — Album — Artist" (falls back gracefully)
+    // Format: "Track · Album · Artist" (falls back gracefully)
     const next = trackTitle
-      ? [trackTitle, aTitle, artist].filter(Boolean).join(" — ")
-      : [aTitle, artist].filter(Boolean).join(" — ");
+      ? [trackTitle, aTitle, artist].filter(Boolean).join(" · ")
+      : [aTitle, artist].filter(Boolean).join(" · ");
 
     if (next) document.title = next;
 
