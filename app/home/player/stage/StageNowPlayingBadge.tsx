@@ -89,12 +89,17 @@ export default function StageNowPlayingBadge() {
             padding: "10px 16px 10px 12px",
             marginLeft: -1,
             borderTop: "1px solid rgba(255,255,255,0.12)",
-            borderRight: "1px solid rgba(255,255,255,0.02)",
+            borderRight: "1px solid rgba(255,255,255,0.10)",
             borderBottom: "1px solid rgba(255,255,255,0.12)",
             borderTopRightRadius: 16,
             borderBottomRightRadius: 16,
-            background:
-              "linear-gradient(90deg, rgba(0,0,0,0.52) 0%, rgba(0,0,0,0.36) 42%, rgba(0,0,0,0.16) 72%, rgba(0,0,0,0.00) 100%)",
+            background: "rgba(0,0,0,0.42)",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            maskImage:
+              "linear-gradient(90deg, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 58%, rgba(0,0,0,0.70) 78%, rgba(0,0,0,0.00) 100%)",
+            WebkitMaskImage:
+              "linear-gradient(90deg, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 58%, rgba(0,0,0,0.70) 78%, rgba(0,0,0,0.00) 100%)",
           }}
         >
           <div
