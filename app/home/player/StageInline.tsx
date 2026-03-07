@@ -5,6 +5,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { usePlayer } from "./PlayerState";
 import StageCore from "./StageCore";
+import StageNowPlayingBadge from "./stage/StageNowPlayingBadge";
 import { ensureLyricsForTrack } from "./lyrics/ensureLyricsForTrack";
 
 function lockBodyScroll(lock: boolean) {
@@ -34,6 +35,43 @@ function useIsMobile(breakpointPx = 640) {
   }, [breakpointPx]);
 
   return isMobile;
+}
+
+function useIdleCursor(active: boolean, timeoutMs: number) {
+  const [hidden, setHidden] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!active) {
+      setHidden(false);
+      return;
+    }
+
+    let timer: number | null = null;
+
+    const reset = () => {
+      setHidden(false);
+      if (timer != null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        setHidden(true);
+      }, timeoutMs);
+    };
+
+    reset();
+
+    const onMove = () => reset();
+    const onDown = () => reset();
+
+    window.addEventListener("mousemove", onMove, { passive: true });
+    window.addEventListener("mousedown", onDown, { passive: true });
+
+    return () => {
+      if (timer != null) window.clearTimeout(timer);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mousedown", onDown);
+    };
+  }, [active, timeoutMs]);
+
+  return hidden;
 }
 
 function IconFullscreen(props: { size?: number }) {
@@ -137,6 +175,7 @@ export default function StageInline(props: { height?: number }) {
   React.useEffect(() => setMounted(true), []);
 
   const [open, setOpen] = React.useState(false);
+  const cursorHidden = useIdleCursor(open, 3000);
 
   React.useEffect(() => {
     lockBodyScroll(open);
@@ -212,6 +251,7 @@ export default function StageInline(props: { height?: number }) {
               width: "100%",
               height: "100dvh",
               zIndex: 200000,
+              cursor: cursorHidden ? "none" : "default",
               background: "rgba(0,0,0,0.80)",
               backdropFilter: "blur(10px)",
               WebkitBackdropFilter: "blur(10px)",
@@ -228,6 +268,18 @@ export default function StageInline(props: { height?: number }) {
               }}
             >
               <StageCore variant="fullscreen" lyricsMode="embedded" />
+
+              <div
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  zIndex: 9,
+                  pointerEvents: "none",
+                }}
+              >
+                <StageNowPlayingBadge />
+              </div>
 
               <div
                 aria-hidden
