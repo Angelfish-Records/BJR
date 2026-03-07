@@ -6,13 +6,19 @@ import { sql } from "@vercel/postgres";
 import { ensureAnonId } from "@/lib/anon";
 import { hasAnyEntitlement } from "@/lib/entitlements";
 import { ENTITLEMENTS } from "@/lib/vocab";
-import crypto from "crypto";
 import {
   resolveGroupKeyForAnchor,
   isGroupKeyV1,
   isKnownCanonicalGroupKey,
 } from "@/lib/exegesis/resolveGroupKey";
 import type { GatePayload } from "@/app/home/gating/gateTypes";
+import {
+  correlationIdFromRequest,
+  gateError,
+  jsonOk,
+  withCorrelationId,
+} from "@/app/api/_gate";
+import { stableAnonLabel } from "@/lib/exegesis/stableAnonLabel";
 
 export const runtime = "nodejs";
 
@@ -69,10 +75,10 @@ type ViewerDTO =
       kind: "member";
       memberId: string;
       cap: {
-        canVote: boolean; // Friend+
-        canReport: boolean; // Friend+
-        canPost: boolean; // Patron/Partner
-        canClaimName: boolean; // server-derived from identity row
+        canVote: boolean;
+        canReport: boolean;
+        canPost: boolean;
+        canClaimName: boolean;
       };
     };
 
@@ -84,33 +90,24 @@ type ApiOk = {
   meta: ThreadMetaDTO | null;
   roots: Array<{
     rootId: string;
-    comments: CommentDTO[]; // chronological
+    comments: CommentDTO[];
   }>;
-  identities: Record<string, IdentityDTO>; // keyed by memberId
+  identities: Record<string, IdentityDTO>;
   viewer: ViewerDTO;
 };
 
 type ApiErr = { ok: false; error: string; gate?: GatePayload };
 
-function gatePayload(opts: {
-  code: GatePayload["code"];
-  action: GatePayload["action"];
-  message: string;
-  correlationId?: string | null;
-}): GatePayload {
-  return {
-    code: opts.code,
-    action: opts.action,
-    domain: "exegesis",
-    message: opts.message.trim(),
-    correlationId: opts.correlationId ?? null,
-  };
+function jsonErr(
+  correlationId: string,
+  status: number,
+  body: ApiErr,
+  headers?: HeadersInit,
+) {
+  const res = NextResponse.json<ApiErr>(body, { status, headers });
+  return withCorrelationId(res, correlationId);
 }
 
-function json(status: number, body: ApiOk | ApiErr, res?: NextResponse) {
-  const r = res ?? NextResponse.json(body, { status });
-  return r;
-}
 function norm(s: string | null): string {
   return (s ?? "").trim();
 }
@@ -123,46 +120,6 @@ function isUuid(v: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     v,
   );
-}
-
-function stableAnonLabel(memberId: string): string {
-  const words = [
-    "Amber",
-    "Obsidian",
-    "Juniper",
-    "Cobalt",
-    "Saffron",
-    "Quartz",
-    "Cedar",
-    "Heliotrope",
-    "Moss",
-    "Ember",
-    "Indigo",
-    "Umber",
-    "Lichen",
-    "Aster",
-    "Onyx",
-    "Kauri",
-    "Dusk",
-    "Nimbus",
-    "Salt",
-    "Foxglove",
-    "Kelp",
-    "Aurora",
-    "Fjord",
-    "Cicada",
-    "Vesper",
-    "Drift",
-    "Sable",
-    "Pollen",
-    "Basalt",
-    "Mirage",
-  ];
-
-  const h = crypto.createHash("sha256").update(memberId).digest();
-  const n = h.readUInt32BE(0);
-  const w = words[n % words.length] ?? "Cipher";
-  return `Anonymous ${w}`;
 }
 
 async function getViewer(
@@ -245,22 +202,26 @@ async function capsForMember(memberId: string): Promise<{
   return { canVote, canReport, canPost };
 }
 
-function mkCorrelationId(input: string): string {
-  // short, stable, non-PII
-  return crypto.createHash("sha256").update(input).digest("hex").slice(0, 16);
-}
-
 export async function GET(req: NextRequest) {
+  const correlationId = correlationIdFromRequest(req);
   const url = new URL(req.url);
 
   const recordingId = norm(url.searchParams.get("recordingId"));
-
   const sortParam = norm(url.searchParams.get("sort")) || "top";
   const sort: ThreadSort = isSort(sortParam) ? sortParam : "top";
 
-  if (!recordingId) return json(400, { ok: false, error: "Missing recordingId." });
-  if (recordingId.length > 200)
-    return json(400, { ok: false, error: "Invalid recordingId." });
+  if (!recordingId) {
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Missing recordingId.",
+    });
+  }
+  if (recordingId.length > 200) {
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Invalid recordingId.",
+    });
+  }
 
   const rawGroupKey = norm(url.searchParams.get("groupKey"));
   const lineKey = norm(url.searchParams.get("lineKey"));
@@ -272,14 +233,17 @@ export async function GET(req: NextRequest) {
     groupKey = resolved.groupKey;
 
     if (rawGroupKey && norm(rawGroupKey) !== groupKey) {
-      return json(409, {
+      return jsonErr(correlationId, 409, {
         ok: false,
         error: "Group key changed. Refresh and try again.",
       });
     }
   } else {
     if (!rawGroupKey) {
-      return json(400, { ok: false, error: "Missing lineKey (or groupKey)." });
+      return jsonErr(correlationId, 400, {
+        ok: false,
+        error: "Missing lineKey (or groupKey).",
+      });
     }
 
     const g = norm(rawGroupKey);
@@ -289,7 +253,7 @@ export async function GET(req: NextRequest) {
     } else {
       const ok = await isKnownCanonicalGroupKey({ recordingId, groupKey: g });
       if (!ok) {
-        return json(400, {
+        return jsonErr(correlationId, 400, {
           ok: false,
           error: "Unknown groupKey.",
         });
@@ -298,15 +262,16 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  if (!groupKey) return json(400, { ok: false, error: "Invalid group key." });
+  if (!groupKey) {
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Invalid group key.",
+    });
+  }
 
-  // Create a response early so ensureAnonId can attach cookies/headers,
-  // and we can forward those headers even on gated responses.
-  const res = NextResponse.json<ApiOk | ApiErr>(
-    { ok: false, error: "init" },
-    { status: 200 },
-  );
-  const { anonId } = ensureAnonId(req, res);
+  const bootstrapRes = jsonOk({ ok: true }, { correlationId });
+  const ensured = ensureAnonId(req, bootstrapRes);
+  const { anonId } = ensured;
 
   const viewer = await getViewer(req, anonId);
 
@@ -315,7 +280,6 @@ export async function GET(req: NextRequest) {
       ? viewer.memberId
       : null;
 
-  // Ensure viewer identity exists (so we can always show anonLabel even before first post)
   if (viewerMemberId) {
     const label = stableAnonLabel(viewerMemberId);
     await sql`
@@ -325,10 +289,8 @@ export async function GET(req: NextRequest) {
     `;
   }
 
-  // ---- anon metering gate (read) -> canonical GatePayload ----
   if (viewer.kind === "anon") {
     const LIMIT = 8;
-
     const sessionId = anonId;
 
     await sql`
@@ -384,25 +346,22 @@ export async function GET(req: NextRequest) {
     if (!allowed) {
       const message = "Sign in to keep reading.";
 
-      return NextResponse.json<ApiErr>(
-        {
-          ok: false,
-          error: message,
-          gate: gatePayload({
-            code: "EXEGESIS_THREAD_READ_CAP_REACHED",
-            action: "login",
-            message,
-            correlationId: mkCorrelationId(
-              `exegesis:${sessionId}:${recordingId}:${groupKey}:${LIMIT}`,
-            ),
-          }),
+      return gateError(req, {
+        correlationId,
+        status: 403,
+        domain: "exegesis",
+        code: "EXEGESIS_THREAD_READ_CAP_REACHED",
+        action: "login",
+        message,
+        onResponse: (res) => {
+          for (const [k, v] of bootstrapRes.headers.entries()) {
+            if (k.toLowerCase() === "set-cookie") res.headers.append(k, v);
+          }
         },
-        { status: 403, headers: res.headers },
-      );
+      });
     }
   }
 
-  // thread meta (optional row)
   const metaRes = await sql<DbThreadMetaRow>`
     select track_id, group_key, pinned_comment_id, locked, comment_count, last_activity_at, created_at, updated_at
     from exegesis_thread_meta
@@ -412,7 +371,6 @@ export async function GET(req: NextRequest) {
   `;
   const metaRow = metaRes.rows?.[0] ?? null;
 
-  // Comments + viewer vote state (single query)
   const commentsRes = await sql<DbCommentRow>`
     with base as (
       select
@@ -463,8 +421,6 @@ export async function GET(req: NextRequest) {
   `;
 
   const rows = commentsRes.rows ?? [];
-
-  // Build roots grouped by root_id, chronological within each root
   const byRoot = new Map<string, CommentDTO[]>();
   const authorIds = new Set<string>();
 
@@ -498,7 +454,6 @@ export async function GET(req: NextRequest) {
     byRoot.set(dto.rootId, arr);
   }
 
-  // Identity hydration (single query) + always include viewer identity
   const identities: Record<string, IdentityDTO> = {};
   const wantIds = new Set<string>();
 
@@ -551,17 +506,13 @@ export async function GET(req: NextRequest) {
       }
     : null;
 
-  // Viewer DTO (server-authoritative caps)
   let viewerDto: ViewerDTO;
 
   if (!viewerMemberId) {
     viewerDto = { kind: "anon" };
   } else {
     const cap0 = await capsForMember(viewerMemberId);
-
-    // Respect thread lock for UI (server-authoritative)
     const locked = Boolean(metaRow?.locked);
-
     const me = identities[viewerMemberId];
     const canClaimName =
       !!me && !me.publicName && me.publicNameUnlockedAt != null;
@@ -577,7 +528,7 @@ export async function GET(req: NextRequest) {
     };
   }
 
-  return NextResponse.json<ApiOk>(
+  const okRes = jsonOk<ApiOk>(
     {
       ok: true,
       recordingId,
@@ -588,6 +539,12 @@ export async function GET(req: NextRequest) {
       identities,
       viewer: viewerDto,
     },
-    { status: 200, headers: res.headers },
+    { correlationId },
   );
+
+  for (const [k, v] of bootstrapRes.headers.entries()) {
+    if (k.toLowerCase() === "set-cookie") okRes.headers.append(k, v);
+  }
+
+  return okRes;
 }

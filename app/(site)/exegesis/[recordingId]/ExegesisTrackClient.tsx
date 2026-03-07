@@ -122,7 +122,7 @@ type VoteOk = {
   viewerHasVoted: boolean;
   voteCount: number;
 };
-type VoteErr = { ok: false; error: string };
+type VoteErr = { ok: false; error: string; gate?: GatePayload };
 
 type ReportOk = { ok: true; reportId: string };
 type ReportErr = { ok: false; error: string; code?: string };
@@ -1754,6 +1754,21 @@ export default function ExegesisTrackClient(props: {
 
     const j = (await r.json()) as VoteOk | VoteErr;
     if (!j.ok) {
+      if (j.gate) {
+        const res = gateResultFromPayload({
+          payload: j.gate,
+          attempt: { verb: "vote", domain: EXEGESIS_DOMAIN },
+          isSignedIn: Boolean(userId),
+          intent: "explicit",
+        });
+
+        if (!res.ok) {
+          applyGateResult(res);
+          setThreadErr("");
+          return;
+        }
+      }
+
       setThreadErr(j.error || "Vote failed.");
 
       // refetch authoritative thread
@@ -1763,8 +1778,7 @@ export default function ExegesisTrackClient(props: {
           `/api/exegesis/thread?recordingId=${encodeURIComponent(recordingId)}` +
           (gk
             ? `&groupKey=${encodeURIComponent(gk)}`
-            : `&lineKey=${encodeURIComponent(selected.lineKey)}`) +
-          ``;
+            : `&lineKey=${encodeURIComponent(selected.lineKey)}`);
         const rr = await fetch(url, { cache: "no-store" });
         const jj = (await rr.json()) as ThreadApiOk | ThreadApiErr;
         if (jj.ok) {

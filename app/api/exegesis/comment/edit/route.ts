@@ -1,20 +1,20 @@
 // web/app/api/exegesis/comment/edit/route.ts
 import "server-only";
-import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { sql } from "@vercel/postgres";
 
-import type {
-  GatePayload,
-  GateDomain,
-  GateAction,
-  GateCodeRaw,
-} from "@/app/home/gating/gateTypes";
+import type { GatePayload } from "@/app/home/gating/gateTypes";
 
 import { hasAnyEntitlement } from "@/lib/entitlements";
 import { ENTITLEMENTS } from "@/lib/vocab";
 import { validateAndSanitizeTipTapDoc } from "@/lib/exegesis/richText";
+import {
+  correlationIdFromRequest,
+  gateError,
+  jsonOk,
+  withCorrelationId,
+} from "@/app/api/_gate";
 
 export const runtime = "nodejs";
 
@@ -58,50 +58,8 @@ type ApiErr = {
   gate?: GatePayload;
 };
 
-function json(status: number, body: ApiOk | ApiErr) {
-  return NextResponse.json(body, { status });
-}
-
-const EXEGESIS_DOMAIN: GateDomain = "exegesis";
-
-function mkCorrelationId(input: string): string {
-  // short, stable, non-PII
-  return crypto.createHash("sha256").update(input).digest("hex").slice(0, 16);
-}
-
-function gatePayload(
-  code: GateCodeRaw,
-  action: GateAction,
-  message: string,
-  correlationId: string | null,
-): GatePayload {
-  return {
-    code,
-    action,
-    domain: EXEGESIS_DOMAIN,
-    message: message.trim(),
-    correlationId: typeof correlationId === "string" ? correlationId : null,
-  };
-}
-
-function gateErr(
-  status: number,
-  opts: {
-    code: GateCodeRaw;
-    action: GateAction;
-    message: string;
-    error?: string;
-    correlationKey: string;
-  },
-) {
-  const cid = mkCorrelationId(
-    `exegesis:comment_edit:${opts.code}:${opts.action}:${opts.correlationKey}`,
-  );
-  return json(status, {
-    ok: false,
-    error: (opts.error ?? opts.message).trim(),
-    gate: gatePayload(opts.code, opts.action, opts.message, cid),
-  });
+function jsonErr(correlationId: string, status: number, body: ApiErr) {
+  return withCorrelationId(NextResponse.json(body, { status }), correlationId);
 }
 
 function norm(v: unknown): string {
@@ -136,32 +94,49 @@ async function requireCanPost(memberId: string): Promise<boolean> {
 }
 
 export async function POST(req: NextRequest) {
+  const correlationId = correlationIdFromRequest(req);
+
   let raw: unknown;
   try {
     raw = await req.json();
   } catch {
-    return json(400, { ok: false, error: "Invalid JSON body." });
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Invalid JSON body.",
+    });
   }
 
   const b =
     typeof raw === "object" && raw !== null
       ? (raw as Record<string, unknown>)
       : null;
-  if (!b) return json(400, { ok: false, error: "Invalid JSON body." });
+  if (!b) {
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Invalid JSON body.",
+    });
+  }
 
   const commentId = norm(b.commentId);
   if (!commentId || !isUuid(commentId)) {
-    return json(400, { ok: false, error: "Invalid commentId." });
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Invalid commentId.",
+    });
   }
 
-  // Edit is canonical-rich only: require bodyRich and derive plain server-side.
   if (!("bodyRich" in b)) {
-    return json(400, { ok: false, error: "Missing bodyRich." });
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Missing bodyRich.",
+    });
   }
   const bodyRichInput: unknown = b.bodyRich ?? null;
 
   const v = validateAndSanitizeTipTapDoc(bodyRichInput);
-  if (!v.ok) return json(400, { ok: false, error: v.error });
+  if (!v.ok) {
+    return jsonErr(correlationId, 400, { ok: false, error: v.error });
+  }
 
   const bodyPlain = v.plain;
 
@@ -169,49 +144,57 @@ export async function POST(req: NextRequest) {
   try {
     bodyRichJson = JSON.stringify(v.doc);
   } catch {
-    return json(400, { ok: false, error: "Invalid bodyRich." });
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Invalid bodyRich.",
+    });
   }
 
   if (bodyRichJson.length > 200_000) {
-    return json(400, { ok: false, error: "bodyRich too large." });
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "bodyRich too large.",
+    });
   }
-
-  // bodyPlain already validated by validateAndSanitizeTipTapDoc
 
   const memberId = await requireMemberId();
   if (!memberId) {
-    return gateErr(401, {
+    return gateError(req, {
+      correlationId,
+      status: 401,
+      domain: "exegesis",
       code: "AUTH_REQUIRED",
       action: "login",
       message: "Sign in to edit a comment.",
-      correlationKey: commentId,
     });
   }
 
   if (!isUuid(memberId)) {
-    return gateErr(403, {
+    return gateError(req, {
+      correlationId,
+      status: 403,
+      domain: "exegesis",
       code: "PROVISIONING",
       action: "wait",
       message: "Provisioning required.",
-      correlationKey: `${memberId}:${commentId}`,
     });
   }
 
-  // Policy: editing is a write capability (same gate as posting)
   const canPost = await requireCanPost(memberId);
   if (!canPost) {
-    return gateErr(403, {
+    return gateError(req, {
+      correlationId,
+      status: 403,
+      domain: "exegesis",
       code: "TIER_REQUIRED",
       action: "subscribe",
       message: "Editing requires Patron or Partner.",
-      correlationKey: `${memberId}:${commentId}`,
     });
   }
 
   try {
     const q = await sql<{
       guard_err: string | null;
-
       id: string | null;
       track_id: string | null;
       group_key: string | null;
@@ -230,7 +213,6 @@ export async function POST(req: NextRequest) {
       edited_at: string | null;
       edit_count: number | null;
       vote_count: number | null;
-
       meta_track_id: string | null;
       meta_group_key: string | null;
       meta_pinned_comment_id: string | null;
@@ -242,15 +224,13 @@ export async function POST(req: NextRequest) {
     }>`
     with
 one as (select 1 as one),
-
 params as (
   select
-    ${commentId}::uuid        as comment_id,
-    ${memberId}::uuid         as member_id,
-    ${bodyRichJson}::jsonb    as body_rich,
-    ${bodyPlain}::text        as body_plain
+    ${commentId}::uuid     as comment_id,
+    ${memberId}::uuid      as member_id,
+    ${bodyRichJson}::jsonb as body_rich,
+    ${bodyPlain}::text     as body_plain
 ),
-
 target as (
   select
     c.id,
@@ -262,8 +242,6 @@ target as (
   join params p on c.id = p.comment_id
   limit 1
 ),
-
--- ensure meta exists (should already, but keep this route robust)
 meta_base as (
   insert into exegesis_thread_meta (track_id, group_key)
   select t.track_id, t.group_key
@@ -285,7 +263,6 @@ meta_pre as (
   select * from meta_existing
   where not exists (select 1 from meta_base)
 ),
-
 guard_row as (
   select
     case
@@ -301,7 +278,6 @@ guard_row as (
   left join meta_pre mp on true
   left join params p on true
 ),
-
 upd as (
   update exegesis_comment c
   set
@@ -319,7 +295,6 @@ upd as (
     c.created_by_member_id, c.status::text as status,
     c.created_at, c.edited_at, c.edit_count, c.vote_count
 ),
-
 meta_upd as (
   update exegesis_thread_meta m
   set
@@ -331,17 +306,14 @@ meta_upd as (
   returning m.track_id, m.group_key, m.pinned_comment_id, m.locked,
             m.comment_count, m.last_activity_at, m.created_at, m.updated_at
 ),
-
 meta_out as (
   select * from meta_upd
   union all
   select * from meta_pre
   where not exists (select 1 from meta_upd)
 )
-
 select
   g.err as guard_err,
-
   u.id,
   u.track_id,
   u.group_key,
@@ -360,7 +332,6 @@ select
   u.edited_at,
   u.edit_count,
   u.vote_count,
-
   m.track_id as meta_track_id,
   m.group_key as meta_group_key,
   m.pinned_comment_id as meta_pinned_comment_id,
@@ -377,55 +348,67 @@ limit 1
     `;
 
     const row = q.rows?.[0] ?? null;
-    if (!row) return json(500, { ok: false, error: "No response row." });
+    if (!row) {
+      return jsonErr(correlationId, 500, {
+        ok: false,
+        error: "No response row.",
+      });
+    }
 
     if (row.guard_err) {
       if (row.guard_err === "NOT_FOUND") {
-        return json(404, {
+        return jsonErr(correlationId, 404, {
           ok: false,
           error: "Comment not found.",
         });
       }
       if (row.guard_err === "LOCKED") {
-        return gateErr(403, {
-          // Keep consistent with your current “locked thread” mapping.
+        return gateError(req, {
+          correlationId,
+          status: 403,
+          domain: "exegesis",
           code: "INVALID_REQUEST",
           action: "wait",
           message: "Thread is locked.",
-          correlationKey: `${memberId}:${commentId}:locked`,
         });
       }
-
       if (row.guard_err === "FORBIDDEN") {
-        return gateErr(403, {
+        return gateError(req, {
+          correlationId,
+          status: 403,
+          domain: "exegesis",
           code: "INVALID_REQUEST",
           action: "wait",
           message: "You can only edit your own comments.",
-          correlationKey: `${memberId}:${commentId}:forbidden`,
         });
       }
-
       if (row.guard_err === "DELETED") {
-        return json(400, {
+        return jsonErr(correlationId, 400, {
           ok: false,
           error: "Cannot edit a deleted comment.",
         });
       }
-
       if (row.guard_err === "HIDDEN") {
-        return gateErr(403, {
+        return gateError(req, {
+          correlationId,
+          status: 403,
+          domain: "exegesis",
           code: "INVALID_REQUEST",
           action: "wait",
           message: "Cannot edit a hidden comment.",
-          correlationKey: `${memberId}:${commentId}:hidden`,
         });
       }
-      return json(400, { ok: false, error: "Cannot edit comment." });
+      return jsonErr(correlationId, 400, {
+        ok: false,
+        error: "Cannot edit comment.",
+      });
     }
 
-    // If guard passed, upd must exist
     if (!row.id || !row.track_id || !row.group_key) {
-      return json(500, { ok: false, error: "Edit failed." });
+      return jsonErr(correlationId, 500, {
+        ok: false,
+        error: "Edit failed.",
+      });
     }
 
     const comment: CommentDTO = {
@@ -447,7 +430,7 @@ limit 1
       editedAt: row.edited_at ?? null,
       editCount: Number(row.edit_count ?? 0),
       voteCount: Number(row.vote_count ?? 0),
-      viewerHasVoted: false, // client keeps this from thread fetch; edit does not change votes
+      viewerHasVoted: false,
     };
 
     const meta: ThreadMetaDTO = {
@@ -461,10 +444,10 @@ limit 1
       updatedAt: String(row.meta_updated_at ?? ""),
     };
 
-    return json(200, { ok: true, comment, meta });
+    return jsonOk<ApiOk>({ ok: true, comment, meta }, { correlationId });
   } catch (e: unknown) {
     console.error("[exegesis/comment/edit] POST failed", e);
-    return json(500, {
+    return jsonErr(correlationId, 500, {
       ok: false,
       error: e instanceof Error ? e.message : "Unknown error.",
     });

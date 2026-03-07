@@ -1,19 +1,19 @@
 // web/app/api/exegesis/report/route.ts
 import "server-only";
-import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { sql } from "@vercel/postgres";
 
-import type {
-  GatePayload,
-  GateDomain,
-  GateAction,
-  GateCodeRaw,
-} from "@/app/home/gating/gateTypes";
+import type { GatePayload } from "@/app/home/gating/gateTypes";
 
 import { hasAnyEntitlement } from "@/lib/entitlements";
 import { ENTITLEMENTS } from "@/lib/vocab";
+import {
+  correlationIdFromRequest,
+  gateError,
+  jsonOk,
+  withCorrelationId,
+} from "@/app/api/_gate";
 
 export const runtime = "nodejs";
 
@@ -25,50 +25,8 @@ type ApiErr = {
   gate?: GatePayload;
 };
 
-function json(status: number, body: ApiOk | ApiErr) {
-  return NextResponse.json(body, { status });
-}
-
-const EXEGESIS_DOMAIN: GateDomain = "exegesis";
-
-function mkCorrelationId(input: string): string {
-  // short, stable, non-PII
-  return crypto.createHash("sha256").update(input).digest("hex").slice(0, 16);
-}
-
-function gatePayload(
-  code: GateCodeRaw,
-  action: GateAction,
-  message: string,
-  correlationId: string | null,
-): GatePayload {
-  return {
-    code,
-    action,
-    domain: EXEGESIS_DOMAIN,
-    message: message.trim(),
-    correlationId: typeof correlationId === "string" ? correlationId : null,
-  };
-}
-
-function gateErr(
-  status: number,
-  opts: {
-    code: GateCodeRaw;
-    action: GateAction;
-    message: string;
-    error?: string;
-    correlationKey: string;
-  },
-) {
-  const cid = mkCorrelationId(
-    `exegesis:report:${opts.code}:${opts.action}:${opts.correlationKey}`,
-  );
-  return json(status, {
-    ok: false,
-    error: (opts.error ?? opts.message).trim(),
-    gate: gatePayload(opts.code, opts.action, opts.message, cid),
-  });
+function jsonErr(correlationId: string, status: number, body: ApiErr) {
+  return withCorrelationId(NextResponse.json(body, { status }), correlationId);
 }
 
 function norm(v: unknown): string {
@@ -96,7 +54,6 @@ async function requireMemberId(): Promise<string | null> {
 }
 
 async function requireCanReport(memberId: string): Promise<boolean> {
-  // Friend+ can report (Friend, Patron, Partner)
   return await hasAnyEntitlement(memberId, [
     ENTITLEMENTS.TIER_FRIEND,
     ENTITLEMENTS.TIER_PATRON,
@@ -122,73 +79,103 @@ function validateCategory(raw: string): string | null {
 }
 
 export async function POST(req: NextRequest) {
+  const correlationId = correlationIdFromRequest(req);
+
   let raw: unknown;
   try {
     raw = await req.json();
   } catch {
-    return json(400, { ok: false, error: "Invalid JSON body." });
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Invalid JSON body.",
+    });
   }
 
   const b =
     typeof raw === "object" && raw !== null
       ? (raw as Record<string, unknown>)
       : null;
-  if (!b) return json(400, { ok: false, error: "Invalid JSON body." });
+  if (!b) {
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Invalid JSON body.",
+    });
+  }
 
   const commentId = norm(b.commentId);
   const categoryRaw = norm(b.category);
   const reason = norm(b.reason);
 
-  if (!commentId) return json(400, { ok: false, error: "Missing commentId." });
-  if (!isUuid(commentId))
-    return json(400, { ok: false, error: "Invalid commentId." });
+  if (!commentId) {
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Missing commentId.",
+    });
+  }
+  if (!isUuid(commentId)) {
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Invalid commentId.",
+    });
+  }
 
   const category = validateCategory(categoryRaw);
-  if (!category) return json(400, { ok: false, error: "Invalid category." });
+  if (!category) {
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Invalid category.",
+    });
+  }
 
-  // enforce your DB constraint + friendlier message
-  if (reason.length < 20)
-    return json(400, {
+  if (reason.length < 20) {
+    return jsonErr(correlationId, 400, {
       ok: false,
       error: "Reason must be at least 20 characters.",
     });
-  if (reason.length > 300)
-    return json(400, {
+  }
+  if (reason.length > 300) {
+    return jsonErr(correlationId, 400, {
       ok: false,
       error: "Reason must be 300 characters or less.",
     });
+  }
 
   const memberId = await requireMemberId();
   if (!memberId) {
-    return gateErr(401, {
+    return gateError(req, {
+      correlationId,
+      status: 401,
+      domain: "exegesis",
       code: "AUTH_REQUIRED",
       action: "login",
       message: "Sign in to report a comment.",
-      correlationKey: commentId,
     });
   }
 
   if (!isUuid(memberId)) {
-    return gateErr(403, {
+    return gateError(req, {
+      correlationId,
+      status: 403,
+      domain: "exegesis",
       code: "PROVISIONING",
       action: "wait",
       message: "Provisioning required.",
-      correlationKey: `${memberId}:${commentId}`,
     });
   }
 
   const canReport = await requireCanReport(memberId);
   if (!canReport) {
-    return gateErr(403, {
+    return gateError(req, {
+      correlationId,
+      status: 403,
+      domain: "exegesis",
       code: "TIER_REQUIRED",
       action: "subscribe",
       message: "Reporting requires Friend tier or higher.",
-      correlationKey: `${memberId}:${commentId}`,
     });
   }
 
   try {
-    // Atomic: validate comment existence + status, then insert if not already reported.
     const ins = await sql<{ id: string; comment_status: string | null }>`
       with c as (
         select id, status::text as status
@@ -227,27 +214,29 @@ export async function POST(req: NextRequest) {
       | null;
 
     if (!commentStatus) {
-      return json(404, { ok: false, error: "Comment not found." });
+      return jsonErr(correlationId, 404, {
+        ok: false,
+        error: "Comment not found.",
+      });
     }
     if (commentStatus === "deleted") {
-      return json(400, {
+      return jsonErr(correlationId, 400, {
         ok: false,
         error: "Cannot report a deleted comment.",
       });
     }
 
     if (!reportId) {
-      // either already reported, or something prevented insert (we ruled out missing/deleted above)
-      return json(409, {
+      return jsonErr(correlationId, 409, {
         ok: false,
         code: "ALREADY_REPORTED",
         error: "You’ve already reported this comment.",
       });
     }
 
-    return json(200, { ok: true, reportId });
+    return jsonOk<ApiOk>({ ok: true, reportId }, { correlationId });
   } catch (e: unknown) {
-    return json(500, {
+    return jsonErr(correlationId, 500, {
       ok: false,
       error: e instanceof Error ? e.message : "Unknown error.",
     });

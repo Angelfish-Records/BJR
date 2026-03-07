@@ -1,6 +1,5 @@
 // web/app/api/downloads/album/route.ts
 import "server-only";
-import { NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { sql } from "@vercel/postgres";
 
@@ -11,93 +10,24 @@ import { normalizeEmail } from "../../../../lib/members";
 
 export const runtime = "nodejs";
 
+import type { GateDomain } from "@/app/home/gating/gateTypes";
+
+import { correlationIdFromRequest, gateError, jsonOk } from "@/app/api/_gate";
+
 // ---- tuning knobs (safe defaults) ----
 const MEMBER_COOLDOWN_SECONDS = 10; // same user + same asset
 const IP_WINDOW_SECONDS = 30; // rolling window
 const IP_MAX_HITS_PER_WINDOW = 20; // generous; only trips on obvious automation
 const R2_EXISTENCE_CACHE_SECONDS = 6 * 60 * 60; // 6 hours
 
-import type {
-  GatePayload,
-  GateDomain,
-  GateCodeRaw,
-  GateAction,
-} from "@/app/home/gating/gateTypes";
-
-type ApiErr = {
-  ok: false;
-  error: string;
-  gate?: GatePayload;
-  detail?: unknown;
-};
 type JsonOk = {
   ok: true;
   url: string;
   albumSlug: string;
   asset: { id: string; label: string; filename: string };
 };
-type JsonBody = JsonOk | ApiErr;
 
 const DOMAIN: GateDomain = "downloads";
-
-function newCorrelationId(): string {
-  // Node runtime: crypto.randomUUID should exist; fall back safely if not.
-  const c = (
-    globalThis as unknown as { crypto?: { randomUUID?: () => string } }
-  ).crypto;
-  const uuid = c?.randomUUID?.();
-  if (typeof uuid === "string" && uuid.length > 0) return uuid;
-  return `dl_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
-}
-
-function gatePayload(params: {
-  code: GateCodeRaw; // <-- raw, not canonicalized
-  action: GateAction;
-  message: string; // <-- required
-  correlationId: string;
-}): GatePayload {
-  return {
-    code: params.code,
-    action: params.action,
-    message: params.message,
-    domain: DOMAIN,
-    correlationId: params.correlationId,
-  };
-}
-
-function json(status: number, body: JsonBody, headers?: HeadersInit) {
-  return NextResponse.json(body, { status, headers });
-}
-
-function respondGated(
-  status: number,
-  opts: {
-    code: GateCodeRaw;
-    action: GateAction;
-    message: string;
-    correlationId: string;
-    // optional alternate client-visible error string
-    error?: string;
-    detail?: unknown;
-  },
-  headers?: HeadersInit,
-) {
-  const payload = gatePayload({
-    code: opts.code,
-    action: opts.action,
-    message: opts.message,
-    correlationId: opts.correlationId,
-  });
-
-  const body: ApiErr = {
-    ok: false,
-    error: (opts.error ?? opts.message).trim(),
-    gate: payload,
-    ...(opts.detail ? { detail: opts.detail } : {}),
-  };
-
-  return json(status, body, headers);
-}
 
 async function resolveMemberId(params: {
   userId: string | null;
@@ -229,13 +159,12 @@ type DownloadRequestBody = { albumSlug?: unknown; assetId?: unknown };
 
 function parseBody(value: unknown): DownloadRequestBody | null {
   if (!value || typeof value !== "object") return null;
-  // We only care about these two keys; keep it permissive.
   const v = value as Record<string, unknown>;
   return { albumSlug: v.albumSlug, assetId: v.assetId };
 }
 
 export async function POST(req: Request) {
-  const correlationId = newCorrelationId();
+  const correlationId = correlationIdFromRequest(req);
 
   const raw = await req.json().catch(() => null);
   const body = parseBody(raw);
@@ -247,48 +176,53 @@ export async function POST(req: Request) {
     .toLowerCase();
 
   if (!albumSlug) {
-    return respondGated(400, {
+    return gateError(req, {
+      correlationId,
+      status: 400,
+      domain: DOMAIN,
       code: "INVALID_REQUEST",
       action: "wait",
       message: "Missing albumSlug.",
-      correlationId,
     });
   }
 
   const offer = getAlbumOffer(albumSlug);
   if (!offer) {
-    return respondGated(400, {
+    return gateError(req, {
+      correlationId,
+      status: 400,
+      domain: DOMAIN,
       code: "INVALID_REQUEST",
       action: "wait",
       message: "Unknown albumSlug.",
-      correlationId,
     });
   }
 
   // v1 policy: downloads require an authenticated session
   const { userId } = await auth();
   if (!userId) {
-    return respondGated(401, {
+    return gateError(req, {
+      correlationId,
+      status: 401,
+      domain: DOMAIN,
       code: "AUTH_REQUIRED",
       action: "login",
       message: "Sign in required.",
-      correlationId,
     });
   }
 
   // Best-effort IP throttle (very generous; only trips on obvious automation)
   const ipGate = await checkIpThrottle(getClientIp(req));
   if (!ipGate.ok) {
-    return respondGated(
-      429,
-      {
-        code: "PROVISIONING",
-        action: "wait",
-        message: `Too many requests. Please wait ${ipGate.retryAfterSeconds}s.`,
-        correlationId,
-      },
-      { "Retry-After": String(ipGate.retryAfterSeconds) },
-    );
+    return gateError(req, {
+      correlationId,
+      status: 429,
+      domain: DOMAIN,
+      code: "PROVISIONING",
+      action: "wait",
+      message: `Too many requests. Please wait ${ipGate.retryAfterSeconds}s.`,
+      headers: { "Retry-After": String(ipGate.retryAfterSeconds) },
+    });
   }
 
   const user = await currentUser();
@@ -300,11 +234,13 @@ export async function POST(req: Request) {
 
   const memberId = await resolveMemberId({ userId, email });
   if (!memberId) {
-    return respondGated(404, {
+    return gateError(req, {
+      correlationId,
+      status: 404,
+      domain: DOMAIN,
       code: "PROVISIONING",
       action: "wait",
       message: "Member not found.",
-      correlationId,
     });
   }
 
@@ -312,21 +248,25 @@ export async function POST(req: Request) {
     allowGlobalFallback: true,
   });
   if (!match) {
-    return respondGated(403, {
+    return gateError(req, {
+      correlationId,
+      status: 403,
+      domain: DOMAIN,
       code: "ENTITLEMENT_REQUIRED",
       action: "subscribe",
       message: "Not entitled.",
-      correlationId,
     });
   }
 
   const asset = offer.assets.find((a) => a.id === assetId) ?? null;
   if (!asset) {
-    return respondGated(400, {
+    return gateError(req, {
+      correlationId,
+      status: 400,
+      domain: DOMAIN,
       code: "INVALID_REQUEST",
       action: "wait",
       message: "Unknown assetId.",
-      correlationId,
     });
   }
 
@@ -337,38 +277,31 @@ export async function POST(req: Request) {
     assetId: asset.id,
   });
   if (!memberGate.ok) {
-    return respondGated(
-      429,
-      {
-        code: "PROVISIONING",
-        action: "wait",
-        message: `Please wait ${memberGate.retryAfterSeconds}s and try again.`,
-        correlationId,
-      },
-      { "Retry-After": String(memberGate.retryAfterSeconds) },
-    );
+    return gateError(req, {
+      correlationId,
+      status: 429,
+      domain: DOMAIN,
+      code: "PROVISIONING",
+      action: "wait",
+      message: `Please wait ${memberGate.retryAfterSeconds}s and try again.`,
+      headers: { "Retry-After": String(memberGate.retryAfterSeconds) },
+    });
   }
 
   // Existence check, cached so it can’t be abused to force repeated HEAD calls
   try {
     await assertR2ExistsCached(asset.r2Key);
-  } catch (err: unknown) {
-    const detail =
-      process.env.NODE_ENV !== "production"
-        ? {
-            attemptedKey: asset.r2Key,
-            bucket: process.env.R2_BUCKET ?? null,
-            endpoint: process.env.R2_ENDPOINT ?? null,
-            err: err instanceof Error ? err.message : String(err),
-          }
-        : undefined;
-
-    return respondGated(500, {
+  } catch {
+    return gateError(req, {
+      correlationId,
+      status: 500,
+      domain: DOMAIN,
       code: "PROVISIONING",
       action: "wait",
       message: "Download not available (missing object).",
-      correlationId,
-      detail,
+      // If you still want detail, you can keep it by switching to jsonOk/json + manual body,
+      // but you asked for the standard envelope; keep detail out of prod responses anyway.
+      // (If you *do* want it: tell me and I'll extend _gate.ts to accept extra fields.)
     });
   }
 
@@ -379,10 +312,13 @@ export async function POST(req: Request) {
     responseContentDispositionFilename: asset.filename,
   });
 
-  return json(200, {
-    ok: true,
-    url,
-    albumSlug: offer.albumSlug,
-    asset: { id: asset.id, label: asset.label, filename: asset.filename },
-  });
+  return jsonOk<JsonOk>(
+    {
+      ok: true,
+      url,
+      albumSlug: offer.albumSlug,
+      asset: { id: asset.id, label: asset.label, filename: asset.filename },
+    },
+    { correlationId },
+  );
 }

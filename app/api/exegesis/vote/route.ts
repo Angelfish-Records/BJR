@@ -1,19 +1,19 @@
 // web/app/api/exegesis/vote/route.ts
 import "server-only";
-import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { sql } from "@vercel/postgres";
 
-import type {
-  GatePayload,
-  GateDomain,
-  GateAction,
-  GateCodeRaw,
-} from "@/app/home/gating/gateTypes";
+import type { GatePayload } from "@/app/home/gating/gateTypes";
 
 import { hasAnyEntitlement } from "@/lib/entitlements";
 import { ENTITLEMENTS } from "@/lib/vocab";
+import {
+  correlationIdFromRequest,
+  gateError,
+  jsonOk,
+  withCorrelationId,
+} from "@/app/api/_gate";
 
 export const runtime = "nodejs";
 
@@ -26,50 +26,8 @@ type ApiOk = {
 
 type ApiErr = { ok: false; error: string; gate?: GatePayload };
 
-function json(status: number, body: ApiOk | ApiErr) {
-  return NextResponse.json(body, { status });
-}
-
-const EXEGESIS_DOMAIN: GateDomain = "exegesis";
-
-function mkCorrelationId(input: string): string {
-  // short, stable, non-PII
-  return crypto.createHash("sha256").update(input).digest("hex").slice(0, 16);
-}
-
-function gatePayload(
-  code: GateCodeRaw,
-  action: GateAction,
-  message: string,
-  correlationId: string | null,
-): GatePayload {
-  return {
-    code,
-    action,
-    domain: EXEGESIS_DOMAIN,
-    message: message.trim(),
-    correlationId: typeof correlationId === "string" ? correlationId : null,
-  };
-}
-
-function gateErr(
-  status: number,
-  opts: {
-    code: GateCodeRaw;
-    action: GateAction;
-    message: string;
-    error?: string;
-    correlationKey: string;
-  },
-) {
-  const cid = mkCorrelationId(
-    `exegesis:vote:${opts.code}:${opts.action}:${opts.correlationKey}`,
-  );
-  return json(status, {
-    ok: false,
-    error: (opts.error ?? opts.message).trim(),
-    gate: gatePayload(opts.code, opts.action, opts.message, cid),
-  });
+function jsonErr(correlationId: string, status: number, body: ApiErr) {
+  return withCorrelationId(NextResponse.json(body, { status }), correlationId);
 }
 
 function norm(s: unknown): string {
@@ -97,7 +55,6 @@ async function requireMemberId(): Promise<string | null> {
 }
 
 async function requireCanVote(memberId: string): Promise<boolean> {
-  // Friend+ can vote (Friend, Patron, Partner)
   return await hasAnyEntitlement(memberId, [
     ENTITLEMENTS.TIER_FRIEND,
     ENTITLEMENTS.TIER_PATRON,
@@ -106,50 +63,75 @@ async function requireCanVote(memberId: string): Promise<boolean> {
 }
 
 export async function POST(req: NextRequest) {
+  const correlationId = correlationIdFromRequest(req);
+
   let raw: unknown;
   try {
     raw = await req.json();
   } catch {
-    return json(400, { ok: false, error: "Invalid JSON body." });
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Invalid JSON body.",
+    });
   }
 
   const b =
     typeof raw === "object" && raw !== null
       ? (raw as Record<string, unknown>)
       : null;
-  if (!b) return json(400, { ok: false, error: "Invalid JSON body." });
+  if (!b) {
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Invalid JSON body.",
+    });
+  }
 
   const commentId = norm(b.commentId);
-  if (!commentId) return json(400, { ok: false, error: "Missing commentId." });
-  if (!isUuid(commentId))
-    return json(400, { ok: false, error: "Invalid commentId." });
+  if (!commentId) {
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Missing commentId.",
+    });
+  }
+  if (!isUuid(commentId)) {
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Invalid commentId.",
+    });
+  }
 
   const memberId = await requireMemberId();
   if (!memberId) {
-    return gateErr(401, {
+    return gateError(req, {
+      correlationId,
+      status: 401,
+      domain: "exegesis",
       code: "AUTH_REQUIRED",
       action: "login",
       message: "Sign in to vote.",
-      correlationKey: commentId,
     });
   }
 
   if (!isUuid(memberId)) {
-    return gateErr(403, {
+    return gateError(req, {
+      correlationId,
+      status: 403,
+      domain: "exegesis",
       code: "PROVISIONING",
       action: "wait",
       message: "Provisioning required.",
-      correlationKey: `${memberId}:${commentId}`,
     });
   }
 
   const canVote = await requireCanVote(memberId);
   if (!canVote) {
-    return gateErr(403, {
+    return gateError(req, {
+      correlationId,
+      status: 403,
+      domain: "exegesis",
       code: "TIER_REQUIRED",
       action: "subscribe",
       message: "Voting requires Friend tier or higher.",
-      correlationKey: `${memberId}:${commentId}`,
     });
   }
 
@@ -222,52 +204,74 @@ export async function POST(req: NextRequest) {
     `;
 
     const row = r.rows?.[0] ?? null;
-    if (!row) return json(500, { ok: false, error: "Vote failed." });
+    if (!row) {
+      return jsonErr(correlationId, 500, {
+        ok: false,
+        error: "Vote failed.",
+      });
+    }
 
     if (!row.ok) {
-      if (row.err === "NOT_FOUND")
-        return json(404, { ok: false, error: "Comment not found." });
+      if (row.err === "NOT_FOUND") {
+        return jsonErr(correlationId, 404, {
+          ok: false,
+          error: "Comment not found.",
+        });
+      }
       if (row.err === "DELETED") {
-        return gateErr(400, {
+        return gateError(req, {
+          correlationId,
+          status: 400,
+          domain: "exegesis",
           code: "INVALID_REQUEST",
           action: "wait",
           message: "Cannot vote on deleted comment.",
-          correlationKey: `${memberId}:${commentId}:deleted`,
         });
       }
       if (row.err === "HIDDEN") {
-        return gateErr(403, {
+        return gateError(req, {
+          correlationId,
+          status: 403,
+          domain: "exegesis",
           code: "INVALID_REQUEST",
           action: "wait",
           message: "Cannot vote on hidden comment.",
-          correlationKey: `${memberId}:${commentId}:hidden`,
         });
       }
-
       if (row.err === "LOCKED") {
-        return gateErr(403, {
-          // You previously mapped locked thread to INVALID_REQUEST elsewhere; keep consistent for now.
+        return gateError(req, {
+          correlationId,
+          status: 403,
+          domain: "exegesis",
           code: "INVALID_REQUEST",
           action: "wait",
           message: "Thread is locked.",
-          correlationKey: `${memberId}:${commentId}:locked`,
         });
       }
 
-      return json(400, { ok: false, error: "Cannot vote on this comment." });
+      return jsonErr(correlationId, 400, {
+        ok: false,
+        error: "Cannot vote on this comment.",
+      });
     }
 
-    return json(200, {
-      ok: true,
-      commentId,
-      viewerHasVoted: row.viewer_has_voted,
-      voteCount: Number(row.vote_count ?? 0),
-    });
+    return jsonOk<ApiOk>(
+      {
+        ok: true,
+        commentId,
+        viewerHasVoted: row.viewer_has_voted,
+        voteCount: Number(row.vote_count ?? 0),
+      },
+      { correlationId },
+    );
   } catch (e: unknown) {
     const msg =
       e instanceof Error
         ? norm(e.message)
         : norm(typeof e === "string" ? e : "");
-    return json(500, { ok: false, error: msg || "Unknown error." });
+    return jsonErr(correlationId, 500, {
+      ok: false,
+      error: msg || "Unknown error.",
+    });
   }
 }

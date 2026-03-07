@@ -5,18 +5,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { sql } from "@vercel/postgres";
 
-import type {
-  GatePayload,
-  GateDomain,
-  GateAction,
-  GateCodeRaw,
-} from "@/app/home/gating/gateTypes";
+import type { GatePayload } from "@/app/home/gating/gateTypes";
 
 import { hasAnyEntitlement } from "@/lib/entitlements";
 import { ENTITLEMENTS } from "@/lib/vocab";
 
 import { resolveGroupKeyForAnchor } from "@/lib/exegesis/resolveGroupKey";
 import { validateAndSanitizeTipTapDoc } from "@/lib/exegesis/richText";
+import { stableAnonLabel } from "@/lib/exegesis/stableAnonLabel";
+import {
+  correlationIdFromRequest,
+  gateError,
+  jsonOk,
+  withCorrelationId,
+} from "@/app/api/_gate";
 
 export const runtime = "nodejs";
 
@@ -26,60 +28,13 @@ type ApiOk = {
   groupKey: string;
   comment: CommentDTO;
   meta: ThreadMetaDTO;
-  identities: Record<string, IdentityDTO>; // keyed by memberId (at least author)
+  identities: Record<string, IdentityDTO>;
 };
 
 type ApiErr = { ok: false; error: string; gate?: GatePayload };
 
-function json(status: number, body: ApiOk | ApiErr) {
-  return NextResponse.json(body, { status });
-}
-
-const EXEGESIS_DOMAIN: GateDomain = "exegesis";
-
-function mkCorrelationId(input: string): string {
-  // short, stable, non-PII
-  return crypto.createHash("sha256").update(input).digest("hex").slice(0, 16);
-}
-
-function gatePayload(
-  code: GateCodeRaw,
-  action: GateAction,
-  message: string,
-  correlationId: string | null,
-): GatePayload {
-  return {
-    code,
-    action,
-    domain: EXEGESIS_DOMAIN,
-    message: message.trim(),
-    correlationId: typeof correlationId === "string" ? correlationId : null,
-  };
-}
-
-function gateErr(
-  status: number,
-  opts: {
-    code: GateCodeRaw;
-    action: GateAction;
-    message: string;
-    error?: string; // optional alternate client-visible `error`
-    correlationId?: string | null;
-    correlationKey?: string; // optional: caller can provide a stable input
-  },
-) {
-  const cid =
-    typeof opts.correlationId === "string"
-      ? opts.correlationId
-      : mkCorrelationId(
-          `exegesis:comment:${opts.code}:${opts.action}:${opts.correlationKey ?? opts.message}`,
-        );
-
-  return json(status, {
-    ok: false,
-    error: (opts.error ?? opts.message).trim(),
-    gate: gatePayload(opts.code, opts.action, opts.message, cid),
-  });
+function jsonErr(correlationId: string, status: number, body: ApiErr) {
+  return withCorrelationId(NextResponse.json(body, { status }), correlationId);
 }
 
 type IdentityDTO = {
@@ -139,46 +94,6 @@ function clampInt(v: unknown, min: number, max: number): number | null {
   if (n < min) return min;
   if (n > max) return max;
   return n;
-}
-
-function stableAnonLabel(memberId: string): string {
-  const words = [
-    "Amber",
-    "Obsidian",
-    "Juniper",
-    "Cobalt",
-    "Saffron",
-    "Quartz",
-    "Cedar",
-    "Heliotrope",
-    "Moss",
-    "Ember",
-    "Indigo",
-    "Umber",
-    "Lichen",
-    "Aster",
-    "Onyx",
-    "Kauri",
-    "Dusk",
-    "Nimbus",
-    "Salt",
-    "Foxglove",
-    "Kelp",
-    "Aurora",
-    "Fjord",
-    "Cicada",
-    "Vesper",
-    "Drift",
-    "Sable",
-    "Pollen",
-    "Basalt",
-    "Mirage",
-  ];
-
-  const h = crypto.createHash("sha256").update(memberId).digest();
-  const n = h.readUInt32BE(0);
-  const w = words[n % words.length] ?? "Cipher";
-  return `Anonymous ${w}`;
 }
 
 async function requireMemberId(): Promise<string | null> {
@@ -256,11 +171,16 @@ function assertInsertedRow(row: {
 }
 
 export async function POST(req: NextRequest) {
+  const correlationId = correlationIdFromRequest(req);
+
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return json(400, { ok: false, error: "Invalid JSON body." });
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Invalid JSON body.",
+    });
   }
 
   const b =
@@ -269,13 +189,14 @@ export async function POST(req: NextRequest) {
       : null;
 
   if (!b) {
-    return json(400, { ok: false, error: "Invalid JSON body." });
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Invalid JSON body.",
+    });
   }
 
   const recordingId = norm(b.recordingId);
   const lineKey = norm(b.lineKey);
-
-  // groupKey becomes optional (client may still send it, but we don't trust it)
   const groupKeyClient = norm(b.groupKey);
 
   function normNullableId(v: unknown): string | null {
@@ -285,16 +206,11 @@ export async function POST(req: NextRequest) {
     return s;
   }
 
-  const parentIdRaw = norm(b.parentId);
   const parentId = normNullableId(b.parentId);
-
   const legacyBodyPlain = norm(b.bodyPlain);
-
   const hasBodyRich = "bodyRich" in b;
   const bodyRichInput: unknown = hasBodyRich ? (b.bodyRich ?? null) : null;
 
-  // Phase C: if bodyRich present, it becomes canonical; derive bodyPlain server-side.
-  // If bodyRich missing/null, fall back to legacy plain-only posting.
   let bodyPlain = legacyBodyPlain;
   let bodyRichJson = JSON.stringify({
     type: "doc",
@@ -303,23 +219,38 @@ export async function POST(req: NextRequest) {
 
   if (bodyRichInput !== null && typeof bodyRichInput !== "undefined") {
     const v = validateAndSanitizeTipTapDoc(bodyRichInput);
-    if (!v.ok) return json(400, { ok: false, error: v.error });
+    if (!v.ok) {
+      return jsonErr(correlationId, 400, { ok: false, error: v.error });
+    }
     bodyPlain = v.plain;
     try {
       bodyRichJson = JSON.stringify(v.doc);
     } catch {
-      return json(400, { ok: false, error: "Invalid bodyRich." });
+      return jsonErr(correlationId, 400, {
+        ok: false,
+        error: "Invalid bodyRich.",
+      });
     }
   } else {
-    // legacy mode
-    if (!bodyPlain)
-      return json(400, { ok: false, error: "Missing bodyPlain." });
-    if (bodyPlain.length > 5000)
-      return json(400, { ok: false, error: "bodyPlain too long." });
+    if (!bodyPlain) {
+      return jsonErr(correlationId, 400, {
+        ok: false,
+        error: "Missing bodyPlain.",
+      });
+    }
+    if (bodyPlain.length > 5000) {
+      return jsonErr(correlationId, 400, {
+        ok: false,
+        error: "bodyPlain too long.",
+      });
+    }
   }
 
   if (bodyRichJson.length > 200_000) {
-    return json(400, { ok: false, error: "bodyRich too large." });
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "bodyRich too large.",
+    });
   }
 
   const lineTextSnapshot = norm(b.lineTextSnapshot);
@@ -328,89 +259,112 @@ export async function POST(req: NextRequest) {
   const tMs = clampInt(b.tMs, 0, 60 * 60 * 1000);
   const tMsOrNull = tMs === null ? null : tMs;
 
-  if (!recordingId) return json(400, { ok: false, error: "Missing recordingId." });
-  if (!lineKey) return json(400, { ok: false, error: "Missing lineKey." });
+  if (!recordingId) {
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Missing recordingId.",
+    });
+  }
+  if (!lineKey) {
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Missing lineKey.",
+    });
+  }
 
-  // Resolve canonical group key (map-first, v1 fallback)
   const resolved = await resolveGroupKeyForAnchor({ recordingId, lineKey });
   const groupKey = resolved.groupKey;
 
   if (!groupKey) {
-    return json(400, { ok: false, error: "Could not resolve groupKey." });
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Could not resolve groupKey.",
+    });
   }
 
-  // If the client sent a groupKey, require it to match server resolution.
-  // This prevents “posting into the wrong thread” if mappings changed mid-session.
   if (groupKeyClient && groupKeyClient !== groupKey) {
-    return json(409, {
+    return jsonErr(correlationId, 409, {
       ok: false,
       error: "Group key changed. Refresh and try again.",
     });
   }
 
-  if (!bodyPlain) return json(400, { ok: false, error: "Missing bodyPlain." });
-  if (bodyPlain.length > 5000)
-    return json(400, { ok: false, error: "bodyPlain too long." });
-
-  if (!lineTextSnapshot)
-    return json(400, { ok: false, error: "Missing lineTextSnapshot." });
-  if (lineTextSnapshot.length > 2000)
-    return json(400, { ok: false, error: "lineTextSnapshot too long." });
-
-  if (parentId && !isUuid(parentId))
-    return json(400, { ok: false, error: "Invalid parentId." });
-
-  const memberId = await requireMemberId();
-  if (!memberId) {
-    return gateErr(401, {
-      code: "AUTH_REQUIRED",
-      action: "login",
-      message: "Sign in to post a comment.",
-      correlationKey: `${recordingId}:${groupKey}:${lineKey}`,
+  if (!bodyPlain) {
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Missing bodyPlain.",
+    });
+  }
+  if (bodyPlain.length > 5000) {
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "bodyPlain too long.",
+    });
+  }
+  if (!lineTextSnapshot) {
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Missing lineTextSnapshot.",
+    });
+  }
+  if (lineTextSnapshot.length > 2000) {
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "lineTextSnapshot too long.",
+    });
+  }
+  if (parentId && !isUuid(parentId)) {
+    return jsonErr(correlationId, 400, {
+      ok: false,
+      error: "Invalid parentId.",
     });
   }
 
-  // This is your existing “member row exists but not coherent yet” case.
+  const memberId = await requireMemberId();
+  if (!memberId) {
+    return gateError(req, {
+      correlationId,
+      status: 401,
+      domain: "exegesis",
+      code: "AUTH_REQUIRED",
+      action: "login",
+      message: "Sign in to post a comment.",
+    });
+  }
+
   if (!isUuid(memberId)) {
-    return gateErr(403, {
+    return gateError(req, {
+      correlationId,
+      status: 403,
+      domain: "exegesis",
       code: "PROVISIONING",
       action: "wait",
       message: "Still setting things up. Try again shortly.",
-      correlationKey: `${recordingId}:${groupKey}:${lineKey}`,
     });
   }
 
   const canPost = await requireCanPost(memberId);
   if (!canPost) {
-    return gateErr(403, {
+    return gateError(req, {
+      correlationId,
+      status: 403,
+      domain: "exegesis",
       code: "TIER_REQUIRED",
       action: "subscribe",
       message: "Posting requires Patron or Partner.",
-      correlationKey: `${recordingId}:${groupKey}:${lineKey}`,
     });
   }
 
-  const rootIdForRootComment = crypto.randomUUID(); // always generate
-  const commentIdForReply = crypto.randomUUID(); // always generate
+  const rootIdForRootComment = crypto.randomUUID();
+  const commentIdForReply = crypto.randomUUID();
 
   try {
-    // Precompute ids deterministically:
-    // - root comments: id == rootId
-    // - replies: id is a new uuid, rootId inherited from parent
-    // We'll compute final ids inside SQL to avoid mismatches.
-
     const label = stableAnonLabel(memberId);
+    const parentUuid = parentId;
 
-    const parentUuid = parentId; // string | null
-
-    // Atomic statement: ensure meta, block if locked, ensure identity, resolve parent/root/depth,
-    // insert comment, bump meta + identity, return comment + meta + identity.
     const q = await sql<{
-      // diagnostic
       inserted_count: number;
       guard_err: string | null;
-
-      // comment (nullable when insert suppressed)
       id: string | null;
       track_id: string | null;
       group_key: string | null;
@@ -429,8 +383,6 @@ export async function POST(req: NextRequest) {
       edited_at: string | null;
       edit_count: number | null;
       vote_count: number | null;
-
-      // meta (always present)
       meta_track_id: string;
       meta_group_key: string;
       meta_pinned_comment_id: string | null;
@@ -439,10 +391,6 @@ export async function POST(req: NextRequest) {
       meta_last_activity_at: string;
       meta_created_at: string;
       meta_updated_at: string;
-      meta_exists: boolean;
-      ident_exists: boolean;
-
-      // identity (always present)
       ident_member_id: string;
       ident_anon_label: string;
       ident_public_name: string | null;
@@ -453,21 +401,19 @@ export async function POST(req: NextRequest) {
 params as (
   select
     ${recordingId}::text          as track_id,
-    ${groupKey}::text         as group_key,
-    ${lineKey}::text          as line_key,
+    ${groupKey}::text             as group_key,
+    ${lineKey}::text              as line_key,
     nullif(${parentUuid}::text, '')::uuid as parent_id,
-    ${memberId}::uuid         as member_id,
-    ${label}::text            as anon_label,
-    ${bodyRichJson}::jsonb    as body_rich,
-    ${bodyPlain}::text        as body_plain,
-    ${tMsOrNull}::int         as t_ms,
-    ${lineTextSnapshot}::text as line_text_snapshot,
-    ${lyricsVersion}::text    as lyrics_version,
+    ${memberId}::uuid             as member_id,
+    ${label}::text                as anon_label,
+    ${bodyRichJson}::jsonb        as body_rich,
+    ${bodyPlain}::text            as body_plain,
+    ${tMsOrNull}::int             as t_ms,
+    ${lineTextSnapshot}::text     as line_text_snapshot,
+    ${lyricsVersion}::text        as lyrics_version,
     ${rootIdForRootComment}::uuid as root_id_for_root,
     ${commentIdForReply}::uuid    as id_for_reply
 ),
-
--- ensure thread meta exists (exactly one row)
 meta_base as (
   insert into exegesis_thread_meta (track_id, group_key)
   select p.track_id, p.group_key
@@ -490,8 +436,6 @@ meta_pre as (
   select * from meta_existing
   where not exists (select 1 from meta_base)
 ),
-
--- ensure identity exists (exactly one row)
 ident_base as (
   insert into exegesis_identity (member_id, anon_label)
   select p.member_id, p.anon_label
@@ -511,8 +455,6 @@ ident_pre as (
   select * from ident_existing
   where not exists (select 1 from ident_base)
 ),
-
--- parent (0/1 row) + a single-row “parent facts” shim
 parent_row as (
   select c.id, c.track_id, c.group_key, c.root_id, c.depth
   from exegesis_comment c
@@ -529,31 +471,23 @@ parent_facts as (
     (select depth from parent_row)                   as parent_depth
   from params p
 ),
-
--- single-row guard (this is the key structural change)
 guard_row as (
   select
     case
       when (select track_id from meta_pre) is null then 'META_MISSING'
       when (select member_id from ident_pre) is null then 'IDENT_MISSING'
       when (select locked from meta_pre) then 'LOCKED'
-
       when (select has_parent from parent_facts)
            and (select parent_id_found from parent_facts) is null then 'PARENT_NOT_FOUND'
-
       when (select has_parent from parent_facts)
            and (select parent_track_id from parent_facts) <> (select track_id from params) then 'PARENT_SCOPE'
-
       when (select has_parent from parent_facts)
            and (select parent_group_key from parent_facts) <> (select group_key from params) then 'PARENT_SCOPE'
-
       when (select has_parent from parent_facts)
            and ((select parent_depth from parent_facts) + 1) > 6 then 'DEPTH'
-
       else null
     end as err
 ),
-
 resolved as (
   select
     case
@@ -569,7 +503,6 @@ resolved as (
       else (select id_for_reply from params)
     end as id
 ),
-
 inserted as (
   insert into exegesis_comment (
     id, track_id, group_key, line_key, parent_id, root_id, depth,
@@ -601,7 +534,6 @@ inserted as (
     created_by_member_id, status::text as status,
     created_at, edited_at, edit_count, vote_count
 ),
-
 meta_upd as (
   update exegesis_thread_meta m
   set
@@ -615,7 +547,6 @@ meta_upd as (
   returning m.track_id, m.group_key, m.pinned_comment_id, m.locked,
             m.comment_count, m.last_activity_at, m.created_at, m.updated_at
 ),
-
 ident_upd as (
   update exegesis_identity i
   set
@@ -630,31 +561,26 @@ ident_upd as (
     and exists (select 1 from inserted)
   returning i.member_id, i.anon_label, i.public_name, i.public_name_unlocked_at, i.contribution_count
 ),
-
 meta_out as (
   select * from meta_upd
   union all
   select * from meta_pre
   where not exists (select 1 from meta_upd)
 ),
-
 ident_out as (
   select * from ident_upd
   union all
   select * from ident_pre
   where not exists (select 1 from ident_upd)
 ),
-
 stats as (
   select
     (select err from guard_row) as guard_err,
     (select count(*)::int from inserted) as inserted_count
 )
-
 select
   s.inserted_count,
   s.guard_err,
-
   i.id,
   i.track_id,
   i.group_key,
@@ -673,7 +599,6 @@ select
   i.edited_at,
   i.edit_count,
   i.vote_count,
-
   m.track_id as meta_track_id,
   m.group_key as meta_group_key,
   m.pinned_comment_id as meta_pinned_comment_id,
@@ -682,13 +607,11 @@ select
   m.last_activity_at as meta_last_activity_at,
   m.created_at as meta_created_at,
   m.updated_at as meta_updated_at,
-
   u.member_id as ident_member_id,
   u.anon_label as ident_anon_label,
   u.public_name as ident_public_name,
   u.public_name_unlocked_at as ident_public_name_unlocked_at,
   u.contribution_count as ident_contribution_count
-
 from stats s
 join meta_out m on true
 join ident_out u on true
@@ -699,46 +622,58 @@ limit 1
     const row = q.rows?.[0] ?? null;
 
     if (!row) {
-      return json(500, { ok: false, error: "No response row." });
+      return jsonErr(correlationId, 500, {
+        ok: false,
+        error: "No response row.",
+      });
     }
 
     if ((row.inserted_count ?? 0) === 0) {
-      console.error("[exegesis/comment] insert suppressed", {
-        recordingId,
-        parentIdRaw,
-        groupKey,
-        lineKey,
-        parentId,
-        memberId,
-        guard_err: row.guard_err,
-      });
-
-      // Convert known guard errors into proper HTTP responses
       if (row.guard_err === "LOCKED") {
-        return gateErr(403, {
+        return gateError(req, {
+          correlationId,
+          status: 403,
+          domain: "exegesis",
           code: "INVALID_REQUEST",
           action: "wait",
           message: "This thread is locked.",
         });
       }
       if (row.guard_err === "PARENT_NOT_FOUND") {
-        return json(404, { ok: false, error: "Parent not found." });
+        return jsonErr(correlationId, 404, {
+          ok: false,
+          error: "Parent not found.",
+        });
       }
       if (row.guard_err === "PARENT_SCOPE") {
-        return json(400, { ok: false, error: "Parent scope mismatch." });
+        return jsonErr(correlationId, 400, {
+          ok: false,
+          error: "Parent scope mismatch.",
+        });
       }
       if (row.guard_err === "DEPTH") {
-        return json(400, { ok: false, error: "Thread depth limit reached." });
+        return jsonErr(correlationId, 400, {
+          ok: false,
+          error: "Thread depth limit reached.",
+        });
       }
       if (row.guard_err === "META_MISSING") {
-        return json(500, { ok: false, error: "Thread meta missing." });
+        return jsonErr(correlationId, 500, {
+          ok: false,
+          error: "Thread meta missing.",
+        });
       }
       if (row.guard_err === "IDENT_MISSING") {
-        return json(500, { ok: false, error: "Identity missing." });
+        return jsonErr(correlationId, 500, {
+          ok: false,
+          error: "Identity missing.",
+        });
       }
 
-      // If guard_err is null but inserted_count is 0, that's the anomaly we are chasing.
-      return json(500, { ok: false, error: "Insert suppressed unexpectedly." });
+      return jsonErr(correlationId, 500, {
+        ok: false,
+        error: "Insert suppressed unexpectedly.",
+      });
     }
 
     if (
@@ -748,11 +683,10 @@ limit 1
       !row.line_key ||
       !row.root_id
     ) {
-      console.error(
-        "[exegesis/comment] inserted_count>0 but missing comment fields",
-        row,
-      );
-      return json(500, { ok: false, error: "Insert returned incomplete row." });
+      return jsonErr(correlationId, 500, {
+        ok: false,
+        error: "Insert returned incomplete row.",
+      });
     }
 
     assertInsertedRow(row);
@@ -800,16 +734,18 @@ limit 1
       },
     };
 
-    return json(200, {
-      ok: true,
-      recordingId,
-      groupKey,
-      comment,
-      meta,
-      identities,
-    });
+    return jsonOk<ApiOk>(
+      {
+        ok: true,
+        recordingId,
+        groupKey,
+        comment,
+        meta,
+        identities,
+      },
+      { correlationId },
+    );
   } catch (e: unknown) {
-    // Make sure it shows up in Vercel logs with details
     console.error("[exegesis/comment] POST failed", e);
 
     const errObj = e as {
@@ -817,7 +753,6 @@ limit 1
       message?: string;
       detail?: string;
       hint?: string;
-      position?: string;
     } | null;
 
     const msg =
@@ -827,8 +762,6 @@ limit 1
           ? e.message.trim()
           : "";
 
-    // In dev, give yourself enough to debug without guessing.
-    // (If we later want to redact in prod, we can gate on NODE_ENV.)
     const extra =
       errObj?.code || errObj?.detail || errObj?.hint
         ? ` (${[errObj?.code, errObj?.detail, errObj?.hint]
@@ -836,6 +769,9 @@ limit 1
             .join(" · ")})`
         : "";
 
-    return json(500, { ok: false, error: (msg || "Unknown error.") + extra });
+    return jsonErr(correlationId, 500, {
+      ok: false,
+      error: (msg || "Unknown error.") + extra,
+    });
   }
 }

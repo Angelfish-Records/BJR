@@ -1,12 +1,19 @@
 // web/app/api/artist-posts/seen/route.ts
-import { NextResponse, type NextRequest } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { ensureAnonId } from "@/lib/anon";
+import {
+  correlationIdFromRequest,
+  gateError,
+  jsonOk,
+} from "@/app/api/_gate";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type Body = { slug?: string; slugs?: string[]; cap?: number };
+
+const DOMAIN = "journal" as const;
 
 function readSeenList(req: NextRequest): string[] {
   const raw = req.cookies.get("af_posts_seen_list")?.value ?? "";
@@ -48,22 +55,22 @@ function setSeenCount(res: NextResponse, n: number) {
 }
 
 export async function POST(req: NextRequest) {
-  const correlationId =
-    req.headers.get("x-correlation-id") ?? crypto.randomUUID();
-
+  const correlationId = correlationIdFromRequest(req);
   const { userId } = await auth();
 
-  const cookieRes = NextResponse.json(
-    { ok: true, correlationId },
-    { status: 200 },
-  );
-
-  // keep anon stable + persist cookie if needed
-  const anon = ensureAnonId(req, cookieRes);
+  // Keep anon stable for both success and blocked responses.
+  const anon = ensureAnonId(req);
   void anon.anonId;
 
-  // Signed-in users are not gated; accept call but don’t mutate anon counters
-  if (userId) return cookieRes;
+  // Signed-in users are not gated; accept call but don’t mutate anon counters.
+  if (userId) {
+    const res = jsonOk(
+      { ok: true, correlationId },
+      { correlationId },
+    );
+    ensureAnonId(req, res);
+    return res;
+  }
 
   let json: Body = {};
   try {
@@ -88,10 +95,16 @@ export async function POST(req: NextRequest) {
 
   const uniq = Array.from(new Set(incoming));
   if (uniq.length === 0) {
-    return NextResponse.json(
-      { ok: false, error: "missing_slug", correlationId },
-      { status: 400 },
-    );
+    return gateError(req, {
+      correlationId,
+      status: 400,
+      domain: DOMAIN,
+      code: "INVALID_REQUEST",
+      action: "wait",
+      message: "Missing slug.",
+      error: "missing_slug",
+      onResponse: (res) => ensureAnonId(req, res),
+    });
   }
 
   const seenList = readSeenList(req);
@@ -108,32 +121,30 @@ export async function POST(req: NextRequest) {
   const prevSeenCount = getSeenCount(req);
   const nextSeenCount = prevSeenCount + added;
 
+  // Cap reached -> canonical wrapped gate contract.
+  if (cap > 0 && nextSeenCount >= cap) {
+    return gateError(req, {
+      correlationId,
+      status: 403,
+      domain: DOMAIN,
+      code: "JOURNAL_READ_CAP_REACHED",
+      action: "login",
+      message: "Sign in to keep reading.",
+      onResponse: (res) => ensureAnonId(req, res),
+    });
+  }
+
+  const res = jsonOk(
+    { ok: true, seenCount: nextSeenCount, correlationId },
+    { correlationId },
+  );
+
   if (added > 0) {
     const nextList = Array.from(seenSet);
-    writeSeenList(cookieRes, nextList);
-    setSeenCount(cookieRes, nextSeenCount);
+    writeSeenList(res, nextList);
+    setSeenCount(res, nextSeenCount);
   }
 
-  // Cap reached -> canonical GatePayload (wrapped API error contract)
-  if (cap > 0 && nextSeenCount >= cap) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "Sign in to keep reading.",
-        gate: {
-          code: "JOURNAL_READ_CAP_REACHED",
-          action: "login",
-          domain: "journal",
-          message: "Sign in to keep reading.",
-          correlationId,
-        },
-      },
-      { status: 403 },
-    );
-  }
-
-  return NextResponse.json(
-    { ok: true, seenCount: nextSeenCount, correlationId },
-    { status: 200, headers: cookieRes.headers },
-  );
+  ensureAnonId(req, res);
+  return res;
 }

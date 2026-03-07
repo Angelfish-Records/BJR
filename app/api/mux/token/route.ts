@@ -1,16 +1,13 @@
 // web/app/api/mux/token/route.ts
 import "server-only";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { importPKCS8, SignJWT } from "jose";
 import crypto from "crypto";
-import {
-  countAnonDistinctCompletedTracks,
-  newCorrelationId,
-} from "@/lib/events";
+
+import { countAnonDistinctCompletedTracks } from "@/lib/events";
 import { ACCESS_ACTIONS } from "@/lib/vocab";
 import type {
-  GatePayload,
   GateDomain,
   GateAction,
   GateCodeRaw,
@@ -19,9 +16,11 @@ import { validateShareToken } from "@/lib/shareTokens";
 import { decideAlbumPlaybackAccess } from "@/lib/accessOracle";
 import { ensureAnonId } from "@/lib/anon";
 
+import { correlationIdFromRequest, gateError, jsonOk } from "@/app/api/_gate";
+
 type TokenReq = {
   playbackId: string;
-  recordingId?: string;
+  trackId?: string;
   albumId?: string;
   durationMs?: number;
   st?: string;
@@ -32,12 +31,6 @@ type TokenOk = {
   token: string;
   expiresAt: number;
   correlationId: string;
-};
-
-type ApiErr = {
-  ok: false;
-  error: string;
-  gate?: GatePayload;
 };
 
 const AUD = "v";
@@ -60,40 +53,6 @@ function normalizeAlbumId(raw: string): string {
 }
 
 const PLAYBACK_DOMAIN: GateDomain = "playback";
-
-function respondGated(
-  req: NextRequest,
-  correlationId: string,
-  opts: {
-    code: GateCodeRaw;
-    action: GateAction;
-    message: string;
-    // optional alternate client-visible error string
-    error?: string;
-    status?: number; // default 403
-  },
-) {
-  const payload: GatePayload = {
-    code: opts.code,
-    action: opts.action,
-    domain: PLAYBACK_DOMAIN,
-    message: opts.message.trim(),
-    correlationId,
-  };
-
-  const res = NextResponse.json<ApiErr>(
-    {
-      ok: false,
-      error: (opts.error ?? opts.message).trim(),
-      gate: payload,
-    },
-    { status: opts.status ?? 403 },
-  );
-
-  res.headers.set("x-correlation-id", correlationId);
-  ensureAnonId(req, res); // ✅ persist cookie consistently
-  return res;
-}
 
 function normalizePemMaybe(input: string): string {
   const raw = (input ?? "").trim();
@@ -126,7 +85,7 @@ async function getMemberIdByClerkUserId(
 }
 
 export async function POST(req: NextRequest) {
-  const correlationId = newCorrelationId();
+  const correlationId = correlationIdFromRequest(req);
 
   let body: TokenReq | null = null;
   try {
@@ -137,37 +96,48 @@ export async function POST(req: NextRequest) {
 
   const playbackId = body?.playbackId;
   if (!playbackId || typeof playbackId !== "string") {
-    return respondGated(req, correlationId, {
+    return gateError(req, {
+      correlationId,
+      status: 400,
+      domain: PLAYBACK_DOMAIN,
       code: "INVALID_REQUEST",
       action: "wait",
       message: "Missing playbackId",
-      status: 400,
+      onResponse: (res) => ensureAnonId(req, res),
     });
   }
 
   const rawAlbumId = (body?.albumId ?? "").trim();
   if (!rawAlbumId) {
-    return respondGated(req, correlationId, {
+    return gateError(req, {
+      correlationId,
+      status: 400,
+      domain: PLAYBACK_DOMAIN,
       code: "INVALID_REQUEST",
       action: "wait",
       message: "Missing albumId (canonical album context)",
-      status: 400,
+      onResponse: (res) => ensureAnonId(req, res),
     });
   }
+
   const albumId = normalizeAlbumId(rawAlbumId);
   if (!albumId) {
-    return respondGated(req, correlationId, {
+    return gateError(req, {
+      correlationId,
+      status: 400,
+      domain: PLAYBACK_DOMAIN,
       code: "INVALID_REQUEST",
       action: "wait",
       message: "Missing albumId (canonical album context)",
-      status: 400,
+      onResponse: (res) => ensureAnonId(req, res),
     });
   }
+
   const albumScopeId = `alb:${albumId}`;
 
   const { userId } = await auth();
 
-  // ✅ stable anon id (cookie-backed)
+  // ✅ stable anon id (cookie-backed) — read side
   const { anonId } = ensureAnonId(req);
 
   const url = new URL(req.url);
@@ -176,11 +146,9 @@ export async function POST(req: NextRequest) {
     (url.searchParams.get("st") ?? "").trim() ||
     (url.searchParams.get("share") ?? "").trim();
 
-  // NOTE: Share tokens grant album *access*.
-  // Playback is a consequence of access, not a separate capability.
-
-  // ---- Capability mode via share token ----
+  // NOTE: Share tokens grant album *access*. Playback is a consequence of access.
   let tokenAllowsPlayback = false;
+
   if (st) {
     const v = await validateShareToken({
       token: st,
@@ -192,21 +160,28 @@ export async function POST(req: NextRequest) {
     });
 
     tokenAllowsPlayback = v.ok;
+
     if (!v.ok) {
       if (v.code === "CAP_REACHED") {
-        return respondGated(req, correlationId, {
+        return gateError(req, {
+          correlationId,
+          status: 403,
+          domain: PLAYBACK_DOMAIN,
           code: "CAP_REACHED",
           action: "login",
           message: "Share link cap reached.",
-          status: 403,
+          onResponse: (res) => ensureAnonId(req, res),
         });
       }
 
-      return respondGated(req, correlationId, {
+      return gateError(req, {
+        correlationId,
+        status: 403,
+        domain: PLAYBACK_DOMAIN,
         code: "ENTITLEMENT_REQUIRED",
         action: "login",
         message: "Invalid or expired share token.",
-        status: 403,
+        onResponse: (res) => ensureAnonId(req, res),
       });
     }
   }
@@ -217,13 +192,17 @@ export async function POST(req: NextRequest) {
       anonId,
       sinceDays: ANON_WINDOW_DAYS,
     });
+
     if (distinctCompleted >= ANON_DISTINCT_TRACK_CAP) {
-      return respondGated(req, correlationId, {
+      return gateError(req, {
+        correlationId,
+        status: 403,
+        domain: PLAYBACK_DOMAIN,
         code: "PLAYBACK_CAP_REACHED",
         action: "login",
         message:
           "Please enter an email address to continue listening for free.",
-        status: 403,
+        onResponse: (res) => ensureAnonId(req, res),
       });
     }
   }
@@ -232,38 +211,23 @@ export async function POST(req: NextRequest) {
   if (userId && !tokenAllowsPlayback) {
     const memberId = await getMemberIdByClerkUserId(userId);
     if (!memberId) {
-      return respondGated(req, correlationId, {
+      return gateError(req, {
+        correlationId,
+        status: 403,
+        domain: PLAYBACK_DOMAIN,
         code: "PROVISIONING",
         action: "wait",
         message:
           "Signed in, but your member profile is still being created. Refresh in a moment.",
-        status: 403,
+        onResponse: (res) => ensureAnonId(req, res),
       });
     }
-
-    console.log("[MUX_TOKEN] about to decideAlbumPlaybackAccess", {
-      correlationId,
-      userId,
-      memberId,
-      rawAlbumId,
-      albumId,
-      albumScopeId, // `alb:${albumId}`
-      tokenAllowsPlayback,
-    });
 
     const d = await decideAlbumPlaybackAccess({
       memberId,
       albumId,
       correlationId,
       action: ACCESS_ACTIONS.PLAYBACK_TOKEN_ISSUE,
-    });
-
-    console.log("[MUX_TOKEN] decideAlbumPlaybackAccess result", {
-      correlationId,
-      memberId,
-      albumId,
-      albumScopeId,
-      decision: d,
     });
 
     if (!d.allowed) {
@@ -278,11 +242,14 @@ export async function POST(req: NextRequest) {
                 ? "PROVISIONING"
                 : "ENTITLEMENT_REQUIRED";
 
-      return respondGated(req, correlationId, {
+      return gateError(req, {
+        correlationId,
+        status: 403,
+        domain: PLAYBACK_DOMAIN,
         code,
         action: (d.action ?? "wait") as GateAction,
         message: d.reason,
-        status: 403,
+        onResponse: (res) => ensureAnonId(req, res),
       });
     }
   }
@@ -327,8 +294,8 @@ export async function POST(req: NextRequest) {
     .sign(pk);
 
   const out: TokenOk = { ok: true, token: jwt, expiresAt: exp, correlationId };
-  const res = NextResponse.json(out);
-  res.headers.set("x-correlation-id", correlationId);
+
+  const res = jsonOk(out, { correlationId });
   ensureAnonId(req, res); // ✅ persist cookie if missing/invalid
   return res;
 }
