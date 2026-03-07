@@ -337,12 +337,17 @@ export default function StageOverlay(props: {
         aria-hidden="true"
         style={{
           position: "absolute",
-          inset: 0,
-          zIndex: 9,
+          right: 16,
+          bottom: 20,
+          zIndex: 999,
           pointerEvents: "none",
+          background: "red",
+          color: "white",
+          padding: 12,
+          borderRadius: 12,
         }}
       >
-        <StageNowPlayingBadge />
+        TEST
       </div>
 
       <StageTransportBar />

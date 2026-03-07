@@ -13,7 +13,6 @@ const ENABLED = process.env.NEXT_PUBLIC_ADMIN_DEBUG === "1";
  */
 const ADMIN_RIBBON_BG = "rgba(10,10,14,0.92)";
 const ADMIN_RIBBON_GOLD = "rgba(255,215,130,0.95)";
-const ADMIN_RIBBON_TAB_FILL = "rgba(36,30,22,0.96)";
 
 /**
  * Main tuning lever for the collapsed tab position.
@@ -36,7 +35,7 @@ function ChevronIcon(props: { collapsed: boolean }) {
         }}
       >
         {/* inner dark triangle to make the chevron read as a hollow tab */}
-        <path d="M8.1 6.4 L12 10.8 L15.9 6.4 Z" fill={ADMIN_RIBBON_TAB_FILL} />
+        <path d="M7.2 5.6 L12 10.2 L16.8 5.6 Z" fill="rgba(60,50,34,0.96)" />
 
         {/* gold chevron edge, matched to ribbon border tone */}
         <path

@@ -1,3 +1,4 @@
+// web/app/home/player/stage/StageNowPlayingBadge.tsx
 "use client";
 
 import React from "react";
