@@ -4,7 +4,6 @@
 import React from "react";
 import { useAuth } from "@clerk/nextjs";
 import { useMembershipModal } from "@/app/home/MembershipModalProvider";
-import ActivationGate from "@/app/home/ActivationGate";
 import { gate } from "@/app/home/gating/gate";
 import type {
   GateAttempt,
@@ -15,192 +14,45 @@ import { gateResultFromPayload } from "@/app/home/gating/fromPayload";
 import { useGateBroker } from "@/app/home/gating/GateBroker";
 import type { GateDomain } from "@/app/home/gating/gateTypes";
 import type { GatePayload } from "@/app/home/gating/gateTypes";
-import TipTapEditor from "./TipTapEditor";
 import TipTapReadOnly from "./TipTapReadOnly";
-import type { LyricCue, LyricGroupMap } from "@/lib/types";
-import { isParaBreakCue } from "@/app/home/player/lyrics/lyricBreaks";
 import { GeniusIcon, MedalIcon, ReplyIcon, ShieldAlertIcon } from "./icons";
-
-type LyricsApiOk = {
-  ok: true;
-  recordingId: string;
-  offsetMs: number;
-  version: string;
-  geniusUrl: string | null;
-  cues: LyricCue[];
-  groupMap?: LyricGroupMap;
-};
-
-type ThreadSort = "top" | "recent";
-
-type IdentityDTO = {
-  memberId: string;
-  anonLabel: string;
-  publicName: string | null;
-  publicNameUnlockedAt: string | null;
-  contributionCount: number;
-};
-
-type CommentDTO = {
-  id: string;
-  recordingId: string;
-  groupKey: string;
-  lineKey: string;
-  parentId: string | null;
-  rootId: string;
-  depth: number;
-  bodyRich: unknown;
-  bodyPlain: string;
-  tMs: number | null;
-  lineTextSnapshot: string;
-  lyricsVersion: string | null;
-  createdByMemberId: string;
-  status: "live" | "hidden" | "deleted";
-  createdAt: string;
-  editedAt: string | null;
-  editCount: number;
-  voteCount: number;
-  viewerHasVoted: boolean;
-};
-
-type ThreadMetaDTO = {
-  recordingId: string;
-  groupKey: string;
-  pinnedCommentId: string | null;
-  locked: boolean;
-  commentCount: number;
-  lastActivityAt: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-type ViewerDTO =
-  | { kind: "anon" }
-  | {
-      kind: "member";
-      memberId: string;
-      cap: {
-        canVote: boolean;
-        canReport: boolean;
-        canPost: boolean;
-        canClaimName: boolean;
-      };
-    };
-
-type ThreadApiOk = {
-  ok: true;
-  recordingId: string;
-  groupKey: string;
-  sort: ThreadSort;
-  meta: ThreadMetaDTO | null;
-  roots: Array<{ rootId: string; comments: CommentDTO[] }>;
-  identities: Record<string, IdentityDTO>;
-  viewer: ViewerDTO;
-};
-
-type ThreadApiErr = { ok: false; error: string; gate?: GatePayload };
-
-type CommentPostOk = {
-  ok: true;
-  recordingId: string;
-  groupKey: string;
-  comment: CommentDTO;
-  meta: ThreadMetaDTO;
-  identities: Record<string, IdentityDTO>;
-};
-
-type CommentEditOk = {
-  ok: true;
-  comment: CommentDTO;
-  meta: ThreadMetaDTO;
-};
-type CommentEditErr = { ok: false; error: string; code?: string };
-
-type VoteOk = {
-  ok: true;
-  commentId: string;
-  viewerHasVoted: boolean;
-  voteCount: number;
-};
-type VoteErr = { ok: false; error: string; gate?: GatePayload };
-
-type ReportOk = { ok: true; reportId: string };
-type ReportErr = { ok: false; error: string; code?: string };
-
-const REPORT_CATEGORIES: Array<{ key: string; label: string }> = [
-  { key: "spam", label: "Spam" },
-  { key: "harassment", label: "Harassment" },
-  { key: "misinfo", label: "Misinformation" },
-  { key: "copyright", label: "Copyright" },
-  { key: "other", label: "Other" },
-];
-
-type ReportDraft = {
-  open: boolean;
-  category: string;
-  reason: string;
-  err: string;
-  done: boolean;
-  busy: boolean;
-};
-
-function reorderRootsPinnedFirst(
-  roots: Array<{ rootId: string; comments: CommentDTO[] }>,
-  pinnedCommentId: string | null,
-) {
-  const pid = (pinnedCommentId ?? "").trim();
-  if (!pid) return roots;
-
-  const idx = roots.findIndex((r) =>
-    (r.comments ?? []).some((c) => c.id === pid),
-  );
-  if (idx <= 0) return roots;
-
-  const pinned = roots[idx];
-  const rest = roots.slice(0, idx).concat(roots.slice(idx + 1));
-  return [pinned, ...rest];
-}
-
-function parseHash(): {
-  lineKey?: string;
-  commentId?: string;
-  rootId?: string;
-} {
-  if (typeof window === "undefined") return {};
-  const raw = (window.location.hash ?? "").replace(/^#/, "").trim();
-  if (!raw) return {};
-  const sp = new URLSearchParams(raw);
-  const lineKey = (sp.get("l") ?? "").trim();
-  const commentId = (sp.get("c") ?? "").trim();
-  const rootId = (sp.get("root") ?? "").trim();
-  return {
-    lineKey: lineKey || undefined,
-    commentId: commentId || undefined,
-    rootId: rootId || undefined,
-  };
-}
-
-function cueGroupKey(lyrics: LyricsApiOk, lineKey: string): string {
-  const lk = (lineKey ?? "").trim();
-  if (!lk) return "";
-  // prefer the explicit mapping table if present
-  const m = lyrics.groupMap?.[lk]?.canonicalGroupKey;
-  if (typeof m === "string" && m.trim()) return m.trim();
-  // fallback: look at cue annotation
-  const c = (lyrics.cues ?? []).find((x) => x.lineKey === lk);
-  const g = c?.canonicalGroupKey;
-  return typeof g === "string" ? g.trim() : "";
-}
-
-function isSameGroup(a: string, b: string): boolean {
-  const aa = (a ?? "").trim();
-  const bb = (b ?? "").trim();
-  return !!aa && !!bb && aa === bb;
-}
-
-function cueCanonicalGroupKey(lyrics: LyricsApiOk, c: LyricCue): string {
-  return (c.canonicalGroupKey ?? cueGroupKey(lyrics, c.lineKey) ?? "").trim();
-}
+import ExegesisDiscourseShimmer from "./components/ExegesisDiscourseShimmer";
+import ExegesisIdentityPanel from "./components/ExegesisIdentityPanel";
+import ExegesisInlineGateOverlay from "./components/ExegesisInlineGateOverlay";
+import ExegesisLyricsRail from "./components/ExegesisLyricsRail";
+import ExegesisRichComposer from "./components/ExegesisRichComposer";
+import type {
+  CommentDTO,
+  CommentEditErr,
+  CommentEditOk,
+  CommentPostOk,
+  ComposerStage,
+  EditDraft,
+  IdentityDTO,
+  LyricsApiOk,
+  ReplyDraft,
+  ReportDraft,
+  ReportErr,
+  ReportOk,
+  ThreadApiErr,
+  ThreadApiOk,
+  ThreadSort,
+  VoteErr,
+  VoteOk,
+} from "./exegesisTypes";
+import { REPORT_CATEGORIES } from "./exegesisTypes";
+import {
+  cueCanonicalGroupKey,
+  formatAgo,
+  isSameGroup,
+  isTipTapDoc,
+  medalClassForTier,
+  medalTier,
+  parseHash,
+  reorderRootsPinnedFirst,
+  rootRecentTs,
+  rootTopScore,
+} from "./exegesisUi";
 
 function useMediaQuery(query: string): boolean {
   const get = () =>
@@ -213,10 +65,8 @@ function useMediaQuery(query: string): boolean {
     const m = window.matchMedia(query);
     const onChange = () => setMatches(m.matches);
 
-    // init
     setMatches(m.matches);
 
-    // modern + fallback
     if (typeof m.addEventListener === "function") {
       m.addEventListener("change", onChange);
       return () => m.removeEventListener("change", onChange);
@@ -227,33 +77,6 @@ function useMediaQuery(query: string): boolean {
   }, [query]);
 
   return matches;
-}
-
-function isTipTapDoc(v: unknown): v is { type: "doc"; content?: unknown[] } {
-  if (!v || typeof v !== "object") return false;
-  const o = v as { type?: unknown; content?: unknown };
-  if (o.type !== "doc") return false;
-  if (typeof o.content === "undefined") return true;
-  return Array.isArray(o.content);
-}
-
-function medalTier(votes: number): "copper" | "gold" | "adamantium" {
-  const n = Math.max(0, votes || 0);
-  // v1 thresholds — tweak freely
-  if (n >= 7) return "adamantium";
-  if (n >= 3) return "gold";
-  return "copper";
-}
-
-function medalClassForTier(t: "copper" | "gold" | "adamantium"): string {
-  // Default: neutral (pre-click). These only apply after the viewer has voted.
-  if (t === "copper") return "text-[#b87333]"; // copper
-  if (t === "gold") return "text-[#f5d062]"; // gold
-
-  // "Nebulaic adamantium" — a slightly glistening purple vibe.
-  // Uses background-clip on an inner span, so the SVG stays "currentColor".
-  // We'll apply this via a wrapper class that sets a gradient to text.
-  return "afMedalAdamantium";
 }
 
 export default function ExegesisTrackClient(props: {
@@ -660,7 +483,6 @@ export default function ExegesisTrackClient(props: {
   const [draftDoc, setDraftDoc] = React.useState<unknown | null>(null);
   const [posting, setPosting] = React.useState<boolean>(false);
 
-  type ComposerStage = "collapsed" | "basic" | "full";
   const [composerStage, setComposerStage] =
     React.useState<ComposerStage>("collapsed");
 
@@ -674,71 +496,6 @@ export default function ExegesisTrackClient(props: {
     setComposerStage(stage);
     setComposerMountKey((n) => n + 1);
   }
-
-  function DiscourseShimmer() {
-    return (
-      <div className="rounded-xl bg-white/5 p-4">
-        {/* Selected lyric preview block */}
-        <div className="mt-2 rounded-md bg-black/20 p-3">
-          <div className="space-y-2">
-            <div className="afShimmerBlock h-4 w-[90%] rounded bg-white/5" />
-            <div className="afShimmerBlock h-4 w-[72%] rounded bg-white/5" />
-          </div>
-        </div>
-
-        {/* Composer */}
-        <div className="mt-3 rounded-lg border border-white/10 bg-white/6 p-3">
-          <div className="afShimmerBlock h-9 w-full rounded-md bg-white/5" />
-          <div className="mt-2 flex items-center justify-between">
-            <div className="afShimmerBlock h-5 w-10 rounded-md bg-white/5" />
-            <div className="afShimmerBlock h-4 w-16 rounded bg-white/5" />
-          </div>
-          <div className="mt-2 flex justify-end">
-            <div className="afShimmerBlock h-8 w-20 rounded-md bg-white/5" />
-          </div>
-        </div>
-
-        {/* Comments skeleton */}
-        <div className="mt-4 space-y-3">
-          <div className="rounded-md bg-black/20 p-3">
-            <div className="afShimmerBlock h-3 w-24 rounded bg-white/5" />
-            <div className="mt-2 space-y-2">
-              <div className="afShimmerBlock h-4 w-[92%] rounded bg-white/5" />
-              <div className="afShimmerBlock h-4 w-[76%] rounded bg-white/5" />
-            </div>
-          </div>
-
-          <div className="rounded-md bg-black/20 p-3">
-            <div className="afShimmerBlock h-3 w-20 rounded bg-white/5" />
-            <div className="mt-2 space-y-2">
-              <div className="afShimmerBlock h-4 w-[88%] rounded bg-white/5" />
-              <div className="afShimmerBlock h-4 w-[66%] rounded bg-white/5" />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  type MiniStage = "basic" | "full";
-
-  type ReplyDraft = {
-    open: boolean;
-    ui: MiniStage;
-    plain: string;
-    doc: unknown | null;
-    posting: boolean;
-    err: string;
-  };
-
-  type EditDraft = {
-    open: boolean;
-    ui: MiniStage;
-    plain: string;
-    doc: unknown | null;
-    posting: boolean;
-    err: string;
-  };
 
   const [editByCommentId, setEditByCommentId] = React.useState<
     Record<string, EditDraft>
@@ -804,51 +561,26 @@ export default function ExegesisTrackClient(props: {
       {/* Stage 2/3: editor + bottom mini ribbon (two buttons) */}
       {composerStage !== "collapsed" && canPost ? (
         <>
-          <div className="mt-2">
-            <TipTapEditor
-              key={`composer-${composerMountKey}-${composerStage}`}
-              valuePlain={draft}
-              valueDoc={draftDoc}
-              disabled={!canPost || isLocked}
-              showToolbar={composerStage === "full"}
-              autofocus
-              placeholder="Join the conversation"
-              onChangePlain={(plain) => setDraft(plain)}
-              onChangeDoc={(doc) => setDraftDoc(doc)}
-            />
-          </div>
-
-          {/* bottom ribbon: exactly two buttons */}
-          <div className="mt-2 flex items-center justify-between gap-3">
-            <button
-              type="button"
-              className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
-              disabled={!canPost || isLocked}
-              onClick={() =>
-                setComposerStage((s) => (s === "full" ? "basic" : "full"))
-              }
-              title={
-                composerStage === "full" ? "Hide formatting" : "Formatting"
-              }
-            >
-              Aa
-            </button>
-
-            <div className="text-xs opacity-60">{draft.trim().length}/5000</div>
-          </div>
-
-          {/* your existing Post row stays (Reddit-style: separate action area) */}
-          <div className="mt-2 flex items-center justify-end gap-3">
-            <button
-              className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
-              disabled={
-                !canPost || isLocked || !selected || !draft.trim() || posting
-              }
-              onClick={() => void postComment()}
-            >
-              {posting ? "Posting…" : "Post"}
-            </button>
-          </div>
+          <ExegesisRichComposer
+            editorKey={`composer-${composerMountKey}-${composerStage}`}
+            valuePlain={draft}
+            valueDoc={draftDoc}
+            disabled={!canPost || isLocked}
+            showToolbar={composerStage === "full"}
+            autofocus
+            placeholder="Join the conversation"
+            posting={posting}
+            submitLabel="Post"
+            submitDisabled={
+              !canPost || isLocked || !selected || !draft.trim() || posting
+            }
+            onChangePlain={setDraft}
+            onChangeDoc={setDraftDoc}
+            onToggleToolbar={() =>
+              setComposerStage((s) => (s === "full" ? "basic" : "full"))
+            }
+            onSubmit={() => void postComment()}
+          />
 
           {thread?.viewer.kind === "anon" ? (
             <div className="mt-2 text-xs opacity-60">
@@ -1817,43 +1549,6 @@ export default function ExegesisTrackClient(props: {
     }
   }, [viewerIdentity?.publicName]);
 
-  function rootTopScore(root: { rootId: string; comments: CommentDTO[] }) {
-    // “Top” = aggregate votes in the root (simple + stable).
-    return (root.comments ?? []).reduce(
-      (sum, c) => sum + (c.voteCount ?? 0),
-      0,
-    );
-  }
-
-  function rootRecentTs(root: { rootId: string; comments: CommentDTO[] }) {
-    // “Recent” = latest activity timestamp among comments (editedAt > createdAt).
-    let best = 0;
-    for (const c of root.comments ?? []) {
-      const t = Date.parse((c.editedAt ?? c.createdAt) as string);
-      if (!Number.isNaN(t)) best = Math.max(best, t);
-    }
-    return best;
-  }
-
-  function formatAgo(iso: string | null | undefined): string {
-    const t = Date.parse((iso ?? "") as string);
-    if (!Number.isFinite(t)) return "";
-    const now = Date.now();
-    const s = Math.max(0, Math.floor((now - t) / 1000));
-
-    if (s < 60) return "just now";
-    const m = Math.floor(s / 60);
-    if (m < 60) return `${m}m ago`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h ago`;
-    const d = Math.floor(h / 24);
-    if (d < 7) return `${d}d ago`;
-    const w = Math.floor(d / 7);
-    if (w < 52) return `${w}w ago`;
-    const y = Math.floor(d / 365);
-    return `${Math.max(1, y)}y ago`;
-  }
-
   // If the page loads with a deep-link (#l / #c), open drawer on mobile.
   React.useEffect(() => {
     if (!isMobile) return;
@@ -2072,87 +1767,31 @@ export default function ExegesisTrackClient(props: {
       </div>
 
       <div className="mt-6 grid gap-6 md:grid-cols-[1fr_570px]">
-        <div ref={lyricsWrapRef} className="rounded-xl bg-white/5 p-4">
-          <div
-            className="mt-3 flex flex-col" // IMPORTANT: remove dead hover gaps from space-y-0.5
-            onPointerMove={onLyricsPointerMove}
-            onPointerLeave={clearHover}
-          >
-            {(lyrics.cues ?? []).map((c) => {
-              if (isParaBreakCue(c)) {
-                return (
-                  <div
-                    key={`br-${c.lineKey}`}
-                    aria-hidden="true"
-                    className="h-3"
-                  />
-                );
-              }
+        <ExegesisLyricsRail
+          lyrics={lyrics}
+          selectedLineKey={(selected?.lineKey ?? "").trim()}
+          selectedGroupKey={(selected?.groupKey ?? "").trim()}
+          hoverGroupKey={(hoverGroupKey ?? "").trim()}
+          hoverLineKey={(hoverLineKey ?? "").trim()}
+          lyricsWrapRef={lyricsWrapRef}
+          lineBtnByKeyRef={lineBtnByKeyRef}
+          onPointerMove={onLyricsPointerMove}
+          onPointerLeave={clearHover}
+          onLineFocus={scheduleHover}
+          onLineBlur={clearHover}
+          onSelectLine={({ lineKey, lineText, tMs, groupKey }) => {
+            setSelected({
+              lineKey,
+              lineText,
+              tMs,
+              groupKey,
+            });
 
-              const isSelected = selected?.lineKey === c.lineKey;
+            setHash({ lineKey });
 
-              const gk = cueCanonicalGroupKey(lyrics, c);
-
-              const selectedGk = (selected?.groupKey ?? "").trim();
-              const hoverGk = (hoverGroupKey ?? "").trim();
-              const hoverLk = (hoverLineKey ?? "").trim();
-
-              const isGrouped = !!gk;
-
-              const inSelectedGroup = isGrouped && isSameGroup(gk, selectedGk);
-              const inHoverGroup = isGrouped && isSameGroup(gk, hoverGk);
-
-              // ungrouped hover applies only to the hovered line
-              const inHoverLine = !isGrouped && hoverLk === c.lineKey;
-
-              const inPreview =
-                isSelected || inSelectedGroup || inHoverGroup || inHoverLine;
-
-              return (
-                <button
-                  key={c.lineKey}
-                  ref={(el) => {
-                    lineBtnByKeyRef.current[c.lineKey] = el;
-                  }}
-                  type="button"
-                  className="block w-full py-0.5 text-left"
-                  data-linekey={c.lineKey}
-                  data-groupkey={gk}
-                  onFocus={() => scheduleHover({ gk, lk: c.lineKey })}
-                  onBlur={clearHover}
-                  onClick={() => {
-                    const nextGroupKey = cueCanonicalGroupKey(lyrics, c);
-
-                    setSelected({
-                      lineKey: c.lineKey,
-                      lineText: c.text,
-                      tMs: c.tMs,
-                      groupKey: nextGroupKey || undefined,
-                    });
-
-                    setHash({ lineKey: c.lineKey });
-
-                    // Mobile: open the discourse drawer immediately.
-                    if (isMobile) setDrawerOpen(true);
-                  }}
-                >
-                  <span
-                    className="inline-block rounded px-1.5 py-0.5 text-sm leading-snug transition-colors duration-75"
-                    style={{
-                      backgroundColor: isSelected
-                        ? "var(--lxSelected)"
-                        : inPreview
-                          ? "var(--lxHover)"
-                          : "var(--lxRow)",
-                    }}
-                  >
-                    <span className="opacity-90">{c.text}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+            if (isMobile) setDrawerOpen(true);
+          }}
+        />
 
         {(() => {
           // Mobile-only: reserve space for the ever-present MiniPlayer dock.
@@ -2194,7 +1833,7 @@ export default function ExegesisTrackClient(props: {
                       </div>
                     </div>
                   ) : shouldShowInitialShimmer ? (
-                    <DiscourseShimmer />
+                    <ExegesisDiscourseShimmer />
                   ) : (
                     <>
                       {isLocked ? (
@@ -2240,75 +1879,26 @@ export default function ExegesisTrackClient(props: {
                         </div>
                       ) : null}
 
-                      {showIdentityPanel ? (
-                        <div className="mt-3 rounded-md bg-black/20 p-3 text-sm">
-                          {canClaimName && !viewerIdentity?.publicName ? (
-                            <div className="flex items-center justify-between gap-3">
-                              <button
-                                className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
-                                onClick={() => {
-                                  setClaimErr("");
-                                  setClaimOpen((v) => !v);
-                                }}
-                                title="Claim a public name"
-                              >
-                                Claim name
-                              </button>
-                            </div>
-                          ) : null}
-
-                          <div className="mt-1 text-sm">
-                            Commenting as{" "}
-                            <span className="font-semibold">
-                              {identityLabel}
-                            </span>
-                          </div>
-
-                          {!viewerIdentity?.publicName ? (
-                            <div className="mt-1 text-xs opacity-60">
-                              {canClaimName ? " · Unlocked" : ""}
-                            </div>
-                          ) : null}
-
-                          {claimOpen ? (
-                            <div className="mt-3 space-y-2">
-                              <input
-                                className="w-full rounded-md bg-black/20 px-3 py-2 text-sm outline-none"
-                                placeholder="Choose a public name"
-                                value={claimName}
-                                onChange={(e) => setClaimName(e.target.value)}
-                              />
-                              {claimErr ? (
-                                <div className="text-xs opacity-70">
-                                  {claimErr}
-                                </div>
-                              ) : null}
-                              <div className="flex items-center justify-end gap-2">
-                                <button
-                                  className="rounded-md bg-white/5 px-3 py-1.5 text-sm hover:bg-white/10"
-                                  onClick={() => {
-                                    setClaimOpen(false);
-                                    setClaimErr("");
-                                  }}
-                                >
-                                  Cancel
-                                </button>
-                                <button
-                                  className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
-                                  disabled={
-                                    !canClaimName ||
-                                    !claimName.trim() ||
-                                    claimBusy
-                                  }
-                                  onClick={() => void submitClaimName()}
-                                >
-                                  {claimBusy ? "Saving…" : "Claim"}
-                                </button>
-                              </div>
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : null}
+                      <ExegesisIdentityPanel
+                        show={showIdentityPanel}
+                        canClaimName={canClaimName}
+                        identityLabel={identityLabel}
+                        publicName={viewerIdentity?.publicName}
+                        claimOpen={claimOpen}
+                        claimName={claimName}
+                        claimErr={claimErr}
+                        claimBusy={claimBusy}
+                        onToggleClaim={() => {
+                          setClaimErr("");
+                          setClaimOpen((v) => !v);
+                        }}
+                        onChangeClaimName={setClaimName}
+                        onCancelClaim={() => {
+                          setClaimOpen(false);
+                          setClaimErr("");
+                        }}
+                        onSubmitClaim={() => void submitClaimName()}
+                      />
 
                       {threadErr ? (
                         <div className="mt-3 rounded-md bg-white/5 p-3 text-sm">
@@ -2631,128 +2221,85 @@ export default function ExegesisTrackClient(props: {
                                               </div>
                                             </div>
 
-                                            <div className="mt-2">
-                                              <TipTapEditor
-                                                key={`edit-${c.id}-${editMountKey}-${editByCommentId[c.id]?.ui ?? "basic"}`}
-                                                valuePlain={
+                                            <ExegesisRichComposer
+                                              editorKey={`edit-${c.id}-${editMountKey}-${editByCommentId[c.id]?.ui ?? "basic"}`}
+                                              valuePlain={
+                                                editByCommentId[c.id]?.plain ??
+                                                ""
+                                              }
+                                              valueDoc={
+                                                editByCommentId[c.id]?.doc ??
+                                                null
+                                              }
+                                              disabled={Boolean(
+                                                editByCommentId[c.id]?.posting,
+                                              )}
+                                              showToolbar={
+                                                (editByCommentId[c.id]?.ui ??
+                                                  "basic") === "full"
+                                              }
+                                              autofocus
+                                              placeholder="Edit your comment…"
+                                              error={
+                                                editByCommentId[c.id]?.err ?? ""
+                                              }
+                                              posting={Boolean(
+                                                editByCommentId[c.id]?.posting,
+                                              )}
+                                              submitLabel="Save edit"
+                                              submitDisabled={
+                                                Boolean(
+                                                  editByCommentId[c.id]
+                                                    ?.posting,
+                                                ) ||
+                                                !(
                                                   editByCommentId[c.id]
                                                     ?.plain ?? ""
-                                                }
-                                                valueDoc={
-                                                  editByCommentId[c.id]?.doc ??
-                                                  null
-                                                }
-                                                disabled={
-                                                  editByCommentId[c.id]?.posting
-                                                }
-                                                showToolbar={
-                                                  (editByCommentId[c.id]?.ui ??
-                                                    "basic") === "full"
-                                                }
-                                                autofocus
-                                                placeholder="Edit your comment…"
-                                                onChangePlain={(plain) =>
-                                                  setEditByCommentId(
-                                                    (prev) => ({
-                                                      ...prev,
-                                                      [c.id]: {
-                                                        ...(prev[
-                                                          c.id
-                                                        ] as EditDraft),
-                                                        plain,
-                                                        err: "",
-                                                      },
-                                                    }),
-                                                  )
-                                                }
-                                                onChangeDoc={(doc) =>
-                                                  setEditByCommentId(
-                                                    (prev) => ({
-                                                      ...prev,
-                                                      [c.id]: {
-                                                        ...(prev[
-                                                          c.id
-                                                        ] as EditDraft),
-                                                        doc,
-                                                        err: "",
-                                                      },
-                                                    }),
-                                                  )
-                                                }
-                                              />
-                                            </div>
-
-                                            <div className="mt-2 flex items-center justify-between gap-3">
-                                              <button
-                                                type="button"
-                                                className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
-                                                disabled={
-                                                  editByCommentId[c.id]?.posting
-                                                }
-                                                onClick={() =>
-                                                  setEditByCommentId(
-                                                    (prev) => ({
-                                                      ...prev,
-                                                      [c.id]: {
-                                                        ...(prev[
-                                                          c.id
-                                                        ] as EditDraft),
-                                                        ui:
-                                                          (prev[c.id]?.ui ??
-                                                            "basic") === "full"
-                                                            ? "basic"
-                                                            : "full",
-                                                      },
-                                                    }),
-                                                  )
-                                                }
-                                                title={
-                                                  (editByCommentId[c.id]?.ui ??
-                                                    "basic") === "full"
-                                                    ? "Hide formatting"
-                                                    : "Formatting"
-                                                }
-                                              >
-                                                Aa
-                                              </button>
-
-                                              <div className="text-xs opacity-60">
-                                                {
-                                                  (
-                                                    editByCommentId[c.id]
-                                                      ?.plain ?? ""
-                                                  ).trim().length
-                                                }
-                                                /5000
-                                              </div>
-                                            </div>
-
-                                            {editByCommentId[c.id]?.err ? (
-                                              <div className="mt-2 text-xs opacity-75">
-                                                {editByCommentId[c.id]?.err}
-                                              </div>
-                                            ) : null}
-
-                                            <div className="mt-2 flex items-center justify-between">
-                                              <button
-                                                className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
-                                                disabled={
-                                                  editByCommentId[c.id]
-                                                    ?.posting ||
-                                                  !(
-                                                    editByCommentId[c.id]
-                                                      ?.plain ?? ""
-                                                  ).trim()
-                                                }
-                                                onClick={() =>
-                                                  void submitEdit(c)
-                                                }
-                                              >
-                                                {editByCommentId[c.id]?.posting
-                                                  ? "Saving…"
-                                                  : "Save edit"}
-                                              </button>
-                                            </div>
+                                                ).trim()
+                                              }
+                                              onChangePlain={(plain) =>
+                                                setEditByCommentId((prev) => ({
+                                                  ...prev,
+                                                  [c.id]: {
+                                                    ...(prev[
+                                                      c.id
+                                                    ] as EditDraft),
+                                                    plain,
+                                                    err: "",
+                                                  },
+                                                }))
+                                              }
+                                              onChangeDoc={(doc) =>
+                                                setEditByCommentId((prev) => ({
+                                                  ...prev,
+                                                  [c.id]: {
+                                                    ...(prev[
+                                                      c.id
+                                                    ] as EditDraft),
+                                                    doc,
+                                                    err: "",
+                                                  },
+                                                }))
+                                              }
+                                              onToggleToolbar={() =>
+                                                setEditByCommentId((prev) => ({
+                                                  ...prev,
+                                                  [c.id]: {
+                                                    ...(prev[
+                                                      c.id
+                                                    ] as EditDraft),
+                                                    ui:
+                                                      (prev[c.id]?.ui ??
+                                                        "basic") === "full"
+                                                        ? "basic"
+                                                        : "full",
+                                                  },
+                                                }))
+                                              }
+                                              onSubmit={() =>
+                                                void submitEdit(c)
+                                              }
+                                            />
                                           </div>
                                         ) : null}
 
@@ -2772,130 +2319,84 @@ export default function ExegesisTrackClient(props: {
                                               </div>
                                             </div>
 
-                                            <div className="mt-2">
-                                              <TipTapEditor
-                                                key={`reply-${c.id}-${replyMountKey}-${replyByCommentId[c.id]?.ui ?? "basic"}`}
-                                                valuePlain={
+                                            <ExegesisRichComposer
+                                              editorKey={`reply-${c.id}-${replyMountKey}-${replyByCommentId[c.id]?.ui ?? "basic"}`}
+                                              valuePlain={
+                                                replyByCommentId[c.id]?.plain ??
+                                                ""
+                                              }
+                                              valueDoc={
+                                                replyByCommentId[c.id]?.doc ??
+                                                null
+                                              }
+                                              disabled={Boolean(
+                                                replyByCommentId[c.id]?.posting,
+                                              )}
+                                              showToolbar={
+                                                (replyByCommentId[c.id]?.ui ??
+                                                  "basic") === "full"
+                                              }
+                                              autofocus
+                                              placeholder="Write a reply…"
+                                              error={
+                                                replyByCommentId[c.id]?.err ??
+                                                ""
+                                              }
+                                              posting={Boolean(
+                                                replyByCommentId[c.id]?.posting,
+                                              )}
+                                              submitLabel="Post reply"
+                                              submitDisabled={
+                                                Boolean(
+                                                  replyByCommentId[c.id]
+                                                    ?.posting,
+                                                ) ||
+                                                !(
                                                   replyByCommentId[c.id]
                                                     ?.plain ?? ""
-                                                }
-                                                valueDoc={
-                                                  replyByCommentId[c.id]?.doc ??
-                                                  null
-                                                }
-                                                disabled={
-                                                  replyByCommentId[c.id]
-                                                    ?.posting
-                                                }
-                                                showToolbar={
-                                                  (replyByCommentId[c.id]?.ui ??
-                                                    "basic") === "full"
-                                                }
-                                                autofocus
-                                                placeholder="Write a reply…"
-                                                onChangePlain={(plain) =>
-                                                  setReplyByCommentId(
-                                                    (prev) => ({
-                                                      ...prev,
-                                                      [c.id]: {
-                                                        ...(prev[
-                                                          c.id
-                                                        ] as ReplyDraft),
-                                                        plain,
-                                                        err: "",
-                                                      },
-                                                    }),
-                                                  )
-                                                }
-                                                onChangeDoc={(doc) =>
-                                                  setReplyByCommentId(
-                                                    (prev) => ({
-                                                      ...prev,
-                                                      [c.id]: {
-                                                        ...(prev[
-                                                          c.id
-                                                        ] as ReplyDraft),
-                                                        doc,
-                                                        err: "",
-                                                      },
-                                                    }),
-                                                  )
-                                                }
-                                              />
-                                            </div>
-
-                                            <div className="mt-2 flex items-center justify-between gap-3">
-                                              <button
-                                                type="button"
-                                                className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
-                                                disabled={
-                                                  replyByCommentId[c.id]
-                                                    ?.posting
-                                                }
-                                                onClick={() =>
-                                                  setReplyByCommentId(
-                                                    (prev) => ({
-                                                      ...prev,
-                                                      [c.id]: {
-                                                        ...(prev[
-                                                          c.id
-                                                        ] as ReplyDraft),
-                                                        ui:
-                                                          (prev[c.id]?.ui ??
-                                                            "basic") === "full"
-                                                            ? "basic"
-                                                            : "full",
-                                                      },
-                                                    }),
-                                                  )
-                                                }
-                                                title={
-                                                  (replyByCommentId[c.id]?.ui ??
-                                                    "basic") === "full"
-                                                    ? "Hide formatting"
-                                                    : "Formatting"
-                                                }
-                                              >
-                                                Aa
-                                              </button>
-
-                                              <div className="text-xs opacity-60">
-                                                {
-                                                  (
-                                                    replyByCommentId[c.id]
-                                                      ?.plain ?? ""
-                                                  ).trim().length
-                                                }
-                                                /5000
-                                              </div>
-                                            </div>
-
-                                            {replyByCommentId[c.id]?.err ? (
-                                              <div className="mt-2 text-xs opacity-75">
-                                                {replyByCommentId[c.id]?.err}
-                                              </div>
-                                            ) : null}
-
-                                            <div className="mt-2 flex items-center justify-between">
-                                              <button
-                                                className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
-                                                disabled={
-                                                  replyByCommentId[c.id]
-                                                    ?.posting ||
-                                                  !(
-                                                    replyByCommentId[c.id]
-                                                      ?.plain ?? ""
-                                                  ).trim()
-                                                }
-                                                onClick={() =>
-                                                  void postReply(c)
-                                                }
-                                              >
-                                                {replyByCommentId[c.id]?.posting
-                                                  ? "Posting…"
-                                                  : "Post reply"}
-                                              </button>
-                                            </div>
+                                                ).trim()
+                                              }
+                                              onChangePlain={(plain) =>
+                                                setReplyByCommentId((prev) => ({
+                                                  ...prev,
+                                                  [c.id]: {
+                                                    ...(prev[
+                                                      c.id
+                                                    ] as ReplyDraft),
+                                                    plain,
+                                                    err: "",
+                                                  },
+                                                }))
+                                              }
+                                              onChangeDoc={(doc) =>
+                                                setReplyByCommentId((prev) => ({
+                                                  ...prev,
+                                                  [c.id]: {
+                                                    ...(prev[
+                                                      c.id
+                                                    ] as ReplyDraft),
+                                                    doc,
+                                                    err: "",
+                                                  },
+                                                }))
+                                              }
+                                              onToggleToolbar={() =>
+                                                setReplyByCommentId((prev) => ({
+                                                  ...prev,
+                                                  [c.id]: {
+                                                    ...(prev[
+                                                      c.id
+                                                    ] as ReplyDraft),
+                                                    ui:
+                                                      (prev[c.id]?.ui ??
+                                                        "basic") === "full"
+                                                        ? "basic"
+                                                        : "full",
+                                                  },
+                                                }))
+                                              }
+                                              onSubmit={() => void postReply(c)}
+                                            />
                                           </div>
                                         ) : null}
 
@@ -3066,45 +2567,15 @@ export default function ExegesisTrackClient(props: {
                   )}
                 </div>
 
-                {inlineGate.open ? (
-                  <div className="absolute inset-0 grid place-items-center p-4">
-                    <div className="w-full max-w-[520px]">
-                      <div className="relative rounded-2xl border border-white/10 bg-black/50 p-4 shadow-[0_26px_90px_rgba(0,0,0,0.55)] backdrop-blur-md">
-                        {inlineGate.dismissible || inlineGate.message ? (
-                          <div className="flex items-start gap-3">
-                            <div className="min-w-0 flex-1">
-                              {inlineGate.message ? (
-                                <div className="rounded-md px-3 py-2.5 text-[13px] opacity-90">
-                                  {inlineGate.message}
-                                </div>
-                              ) : null}
-                            </div>
-
-                            {inlineGate.dismissible ? (
-                              <button
-                                type="button"
-                                aria-label="Dismiss"
-                                className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-md bg-white/0 text-white/50 hover:bg-white/10 hover:text-white/80 transition leading-none"
-                                onClick={() => {
-                                  broker.clearGate({ domain: EXEGESIS_DOMAIN });
-                                  clearInlineGate();
-                                }}
-                              >
-                                <span className="text-[18px] leading-none">
-                                  ×
-                                </span>
-                              </button>
-                            ) : null}
-                          </div>
-                        ) : null}
-
-                        <ActivationGate>
-                          <div />
-                        </ActivationGate>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
+                <ExegesisInlineGateOverlay
+                  open={inlineGate.open}
+                  message={inlineGate.message}
+                  dismissible={inlineGate.dismissible}
+                  onDismiss={() => {
+                    broker.clearGate({ domain: EXEGESIS_DOMAIN });
+                    clearInlineGate();
+                  }}
+                />
               </div>
             </div>
           );
