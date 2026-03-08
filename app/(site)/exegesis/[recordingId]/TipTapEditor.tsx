@@ -1,3 +1,4 @@
+// web/app/(site)/exegesis/[recordingId]/TipTapEditor.tsx
 "use client";
 
 import React from "react";
@@ -253,7 +254,7 @@ function TipTapToolbar(props: { editor: Editor | null; disabled?: boolean }) {
   const disabled = Boolean(props.disabled);
 
   return (
-    <div className="px-3 py-2">
+    <div className="bg-black/[0.16] px-3 py-2">
       <div className="flex flex-wrap items-center gap-1.5">
         <ToolbarBtn
           title="Bold"
@@ -444,14 +445,11 @@ export default function TipTapEditor(props: {
   }, [editor, valuePlain, props.valueDoc]);
 
   return (
-    <div className="overflow-hidden rounded-t-xl">
+    <div className="bg-black/[0.16]">
       {showToolbar ? (
         <TipTapToolbar editor={editor} disabled={disabled} />
       ) : null}
-
-      <div className="bg-black/[0.16]">
-        <EditorContent editor={editor} />
-      </div>
+      <EditorContent editor={editor} />
     </div>
   );
 }

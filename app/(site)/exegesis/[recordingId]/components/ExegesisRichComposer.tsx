@@ -58,7 +58,7 @@ export default function ExegesisRichComposer({
         />
       </div>
 
-      <div className="flex items-center justify-between px-2 pb-2">
+      <div className="flex items-center justify-between bg-black/[0.16] px-3 py-3">
         <button
           type="button"
           className={[
