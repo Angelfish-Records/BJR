@@ -1,3 +1,4 @@
+// web/lib/memberIdentity.ts
 export type MemberIdentityFacts = {
   memberId: string;
   anonLabel: string;

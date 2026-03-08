@@ -76,12 +76,19 @@ export type PortalModuleArtistPosts = {
   minVisibility?: "public" | "friend" | "patron" | "partner";
 };
 
+export type PortalModuleExegesis = {
+  _key: string;
+  _type: "moduleExegesis";
+  title?: string;
+};
+
 export type PortalModule =
   | PortalModuleHeading
   | PortalModulePanels
   | PortalModuleDownloads
   | PortalModuleDownloadGrid
-  | PortalModuleArtistPosts;
+  | PortalModuleArtistPosts
+  | PortalModuleExegesis;
 
 export type PortalPageDoc = {
   title?: string;
@@ -131,10 +138,12 @@ const portalPageQuery = `
       },
 
 
-      // moduleArtistPosts
+            // moduleArtistPosts
       pageSize,
       requireAuthAfter,
       minVisibility
+
+      // moduleExegesis
     }
   }
 `;

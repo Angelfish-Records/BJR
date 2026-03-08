@@ -5,6 +5,11 @@ import type { PortableTextBlock } from "@portabletext/types";
 import { listCurrentEntitlementKeys } from "../../lib/entitlements";
 import { getAlbumOffer, type AlbumOfferAsset } from "../../lib/albumOffers";
 import { urlFor } from "../../sanity/lib/image";
+import type {
+  PortalModule,
+  PortalModuleDownloads,
+  SanityImage,
+} from "../../lib/portal";
 import BuyAlbumButton from "./modules/BuyAlbumButton";
 import DownloadAlbumButton from "./modules/DownloadAlbumButton";
 import GiftAlbumButton from "./modules/GiftAlbumButton";
@@ -12,93 +17,7 @@ import PortalTabs, { type PortalTabSpec } from "./PortalTabs";
 import PortalArtistPosts from "./modules/PortalArtistPosts";
 import PortalExegesis from "./modules/PortalExegesis";
 
-// --------------------
-// Module discriminated unions
-// --------------------
-
-type ModuleHeading = {
-  _key: string;
-  _type: "moduleHeading";
-  title?: string;
-  blurb?: string;
-};
-
-type ModulePanels = {
-  _key: string;
-  _type: "modulePanels";
-  title?: string;
-  layout?: 1 | 2 | 3;
-  panels: Array<{
-    _key: string;
-    title: string;
-    teaser?: import("@portabletext/types").PortableTextBlock[];
-    full?: import("@portabletext/types").PortableTextBlock[];
-    requiresEntitlement?: string | null;
-    styleVariant?: "default" | "gold" | "patternPill";
-  }>;
-};
-
-type SanityImage = {
-  _type: "image";
-  asset: { _ref: string; _type: "reference" };
-  crop?: unknown;
-  hotspot?: unknown;
-};
-
-type DownloadAssetSel = { assetId: string; label?: string };
-
-type ModuleDownloads = {
-  _key: string;
-  _type: "moduleDownloads";
-  title?: string;
-  albumSlug: string;
-  assets?: DownloadAssetSel[];
-  coverImage?: SanityImage;
-  productLabel?: string;
-  highlights?: string[];
-  techSpec?: string;
-  giftBlurb?: string;
-};
-
-type PortalDownloadOffer = {
-  albumSlug: string;
-  coverImage?: SanityImage;
-  productLabel?: string;
-  highlights?: string[];
-  techSpec?: string;
-  giftBlurb?: string;
-  assets?: DownloadAssetSel[];
-};
-
-type ModuleDownloadGrid = {
-  _key: string;
-  _type: "moduleDownloadGrid";
-  title?: string;
-  offers: PortalDownloadOffer[];
-};
-
-type ModuleArtistPosts = {
-  _key: string;
-  _type: "moduleArtistPosts";
-  title?: string;
-  pageSize?: number;
-  requireAuthAfter?: number;
-  minVisibility?: "public" | "friend" | "patron" | "partner";
-};
-
-type ModuleExegesis = {
-  _key: string;
-  _type: "moduleExegesis";
-  title?: string;
-};
-
-type PortalModule =
-  | ModuleHeading
-  | ModulePanels
-  | ModuleDownloads
-  | ModuleDownloadGrid
-  | ModuleArtistPosts
-  | ModuleExegesis;
+type DownloadAssetSel = NonNullable<PortalModuleDownloads["assets"]>[number];
 
 type Props = {
   modules: PortalModule[];
@@ -259,7 +178,6 @@ function Panel(props: {
     >
       <div
         style={{
-
           fontSize: 13,
           opacity: locked ? 0.62 : 0.82,
           lineHeight: 1.6,
@@ -808,6 +726,10 @@ function inferTabs(
 // --------------------
 // Main renderer
 // --------------------
+//
+// This file renders authored portal modules fetched from Sanity.
+// Viewer-specific runtime surfaces should be composed above this layer
+// rather than added as ad hoc local type drift here.
 
 export default async function PortalModules(props: Props) {
   const { modules, memberId } = props;

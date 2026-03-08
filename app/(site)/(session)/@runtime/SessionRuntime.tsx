@@ -10,7 +10,11 @@ import { listCurrentEntitlementKeys } from "@/lib/entitlements";
 import { deriveTier } from "@/lib/vocab";
 
 import { fetchPortalPage } from "@/lib/portal";
-import PortalModules from "@/app/home/PortalModules";
+import {
+  emptyPortalMemberSummary,
+  type PortalMemberSummary,
+} from "@/lib/memberDashboard";
+import PortalSurface from "@/app/home/PortalSurface";
 import PortalArea from "@/app/home/PortalArea";
 
 import {
@@ -84,8 +88,28 @@ export default async function SessionRuntime(props: {
 
   const isPatron = tier === "patron";
 
+  // Bootstrap summary only.
+  // This establishes the runtime dashboard surface without pretending
+  // telemetry, badges, or global public-name resolution already exist.
+  const memberSummary: PortalMemberSummary = member
+    ? {
+        ...emptyPortalMemberSummary(),
+        identity: {
+          memberId: member.id,
+          displayName: member.email,
+          isAdmin: false,
+          hasClaimedPublicName: false,
+          canClaimName: false,
+        },
+      }
+    : emptyPortalMemberSummary();
+
   const portalPanel = portal?.modules?.length ? (
-    <PortalModules modules={portal.modules} memberId={member?.id ?? null} />
+    <PortalSurface
+      modules={portal.modules}
+      memberId={member?.id ?? null}
+      memberSummary={memberSummary}
+    />
   ) : (
     <div
       style={{
