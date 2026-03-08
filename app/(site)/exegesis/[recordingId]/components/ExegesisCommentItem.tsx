@@ -19,8 +19,8 @@ import {
   medalTier,
 } from "../exegesisUi";
 
-function TickIcon(props: { size?: number; stroke?: string }) {
-  const { size = 14, stroke = "rgba(255,255,255,0.92)" } = props;
+function TickIcon(props: { size?: number }) {
+  const { size = 14 } = props;
 
   return (
     <svg
@@ -32,9 +32,19 @@ function TickIcon(props: { size?: number; stroke?: string }) {
       focusable="false"
       style={{ display: "block" }}
     >
+      {/* punch-out stroke */}
       <path
         d="M20 6L9 17l-5-5"
-        stroke={stroke}
+        stroke="var(--lxSelected)"
+        strokeWidth="4.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+
+      {/* visible tick */}
+      <path
+        d="M20 6L9 17l-5-5"
+        stroke="rgba(0,0,0,0.92)"
         strokeWidth="2.2"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -153,7 +163,7 @@ export default function ExegesisCommentItem(props: {
               }}
               title="Artist"
             >
-              <TickIcon size={12} stroke="var(--bg)" />
+              <TickIcon size={12} />
             </div>
           ) : null}
 
