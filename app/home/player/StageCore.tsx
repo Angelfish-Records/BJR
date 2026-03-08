@@ -26,7 +26,7 @@ function pickKeyWithCues(
   return (keys.find(Boolean) as string | null) ?? null;
 }
 
-export default function StageCore(props: {
+function StageCore(props: {
   variant: "inline" | "fullscreen";
   cuesByRecordingId?: CuesByRecordingId;
   offsetByRecordingId?: OffsetByRecordingId;
@@ -68,25 +68,25 @@ export default function StageCore(props: {
   const playerRecordingId = p.current?.recordingId ?? null;
   const playerMuxId = p.current?.muxPlaybackId ?? null;
 
-  const recordingId = React.useMemo(() => {
-    return pickKeyWithCues(cuesByRecordingId, [
-      playerRecordingId,
-      surfaceRecordingId,
-      playerMuxId,
-    ]);
-  }, [cuesByRecordingId, playerRecordingId, playerMuxId, surfaceRecordingId]);
+  const recordingId = pickKeyWithCues(cuesByRecordingId, [
+    playerRecordingId,
+    surfaceRecordingId,
+    playerMuxId,
+  ]);
 
-  const cues: LyricCue[] | null = React.useMemo(() => {
-    if (!recordingId) return null;
-    const xs = cuesByRecordingId?.[recordingId];
-    return Array.isArray(xs) && xs.length ? xs : null;
-  }, [cuesByRecordingId, recordingId]);
+  const cues: LyricCue[] | null = recordingId
+    ? Array.isArray(cuesByRecordingId?.[recordingId]) &&
+      cuesByRecordingId[recordingId].length
+      ? cuesByRecordingId[recordingId]
+      : null
+    : null;
 
-  const trackOffsetMs = React.useMemo(() => {
-    if (!recordingId) return 0;
-    const v = offsetByRecordingId?.[recordingId];
-    return typeof v === "number" && Number.isFinite(v) ? v : 0;
-  }, [offsetByRecordingId, recordingId]);
+  const trackOffsetMs =
+    recordingId && typeof offsetByRecordingId?.[recordingId] === "number"
+      ? Number.isFinite(offsetByRecordingId[recordingId])
+        ? offsetByRecordingId[recordingId]
+        : 0
+      : 0;
 
   const effectiveOffsetMs = trackOffsetMs + globalOffsetMs;
 
@@ -153,3 +153,5 @@ export default function StageCore(props: {
     </div>
   );
 }
+
+export default React.memo(StageCore);

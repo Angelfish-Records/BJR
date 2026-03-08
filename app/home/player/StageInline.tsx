@@ -115,7 +115,19 @@ function IconClose(props: { size?: number }) {
   );
 }
 
-function RoundIconButton(props: {
+const ROUND_ICON_BUTTON_STYLE: React.CSSProperties = {
+  width: 40,
+  height: 40,
+  borderRadius: 999,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(0,0,0,0.28)",
+  color: "rgba(255,255,255,0.92)",
+  display: "grid",
+  placeItems: "center",
+  boxShadow: "0 14px 30px rgba(0,0,0,0.22)",
+};
+
+const RoundIconButton = React.memo(function RoundIconButton(props: {
   label: string;
   title?: string;
   onClick: () => void;
@@ -131,23 +143,122 @@ function RoundIconButton(props: {
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
       style={{
-        width: 40,
-        height: 40,
-        borderRadius: 999,
-        border: "1px solid rgba(255,255,255,0.14)",
-        background: "rgba(0,0,0,0.28)",
-        color: "rgba(255,255,255,0.92)",
-        display: "grid",
-        placeItems: "center",
+        ...ROUND_ICON_BUTTON_STYLE,
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.6 : 1,
-        boxShadow: "0 14px 30px rgba(0,0,0,0.22)",
       }}
     >
       {children}
     </button>
   );
-}
+});
+
+const FullscreenStageOverlay = React.memo(
+  function FullscreenStageOverlay(props: {
+    cursorHidden: boolean;
+    isMobile: boolean;
+    onBackdropMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
+    onRequestFullscreen: () => void;
+    onClose: () => void;
+  }) {
+    const {
+      cursorHidden,
+      isMobile,
+      onBackdropMouseDown,
+      onRequestFullscreen,
+      onClose,
+    } = props;
+
+    return (
+      <div
+        id="af-stage-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Stage"
+        onMouseDown={onBackdropMouseDown}
+        style={{
+          position: "fixed",
+          inset: 0,
+          width: "100%",
+          height: "100dvh",
+          zIndex: 200000,
+          cursor: cursorHidden ? "none" : "default",
+          background: "rgba(0,0,0,0.80)",
+          backdropFilter: "blur(10px)",
+          WebkitBackdropFilter: "blur(10px)",
+          padding: 0,
+          display: "grid",
+        }}
+      >
+        <div
+          style={{
+            position: "relative",
+            width: "100%",
+            height: "100%",
+            minHeight: 0,
+          }}
+        >
+          <StageCore variant="fullscreen" lyricsMode="embedded" />
+
+          {!isMobile && (
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                inset: 0,
+                zIndex: 9,
+                pointerEvents: "none",
+              }}
+            >
+              <StageNowPlayingBadge />
+            </div>
+          )}
+
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              top: 0,
+              height: 64,
+              background:
+                "linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0.22) 55%, rgba(0,0,0,0.00))",
+              pointerEvents: "none",
+            }}
+          />
+
+          <div
+            style={{
+              position: "absolute",
+              top: `calc(10px + env(safe-area-inset-top, 0px))`,
+              right: `calc(10px + env(safe-area-inset-right, 0px))`,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              pointerEvents: "auto",
+              zIndex: 50,
+            }}
+          >
+            <RoundIconButton
+              label="Fullscreen"
+              title="Request fullscreen"
+              onClick={onRequestFullscreen}
+            >
+              <IconFullscreen />
+            </RoundIconButton>
+
+            <RoundIconButton label="Close" title="Close" onClick={onClose}>
+              <IconClose />
+            </RoundIconButton>
+          </div>
+
+          <StageTransportBar />
+        </div>
+      </div>
+    );
+  },
+);
 
 export default function StageInline(props: { height?: number }) {
   const { height = 300 } = props;
@@ -176,7 +287,8 @@ export default function StageInline(props: { height?: number }) {
   React.useEffect(() => setMounted(true), []);
 
   const [open, setOpen] = React.useState(false);
-  const cursorHidden = useIdleCursor(open, 3000);
+  const enableIdleCursor = open && !isMobile;
+  const cursorHidden = useIdleCursor(enableIdleCursor, 3000);
 
   React.useEffect(() => {
     lockBodyScroll(open);
@@ -235,99 +347,31 @@ export default function StageInline(props: { height?: number }) {
 
   const nothingPlaying = p.queue.length === 0 && !p.current?.recordingId;
 
+  const handleOverlayBackdropMouseDown = React.useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (e.target === e.currentTarget) setOpen(false);
+    },
+    [],
+  );
+
+  const handleOverlayClose = React.useCallback(() => {
+    setOpen(false);
+  }, []);
+
+  const handleOverlayRequestFullscreen = React.useCallback(() => {
+    void tryRequestFullscreen();
+  }, [tryRequestFullscreen]);
+
   const overlay =
     mounted && open
       ? createPortal(
-          <div
-            id="af-stage-overlay"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Stage"
-            onMouseDown={(e) => {
-              if (e.target === e.currentTarget) setOpen(false);
-            }}
-            style={{
-              position: "fixed",
-              inset: 0,
-              width: "100%",
-              height: "100dvh",
-              zIndex: 200000,
-              cursor: cursorHidden ? "none" : "default",
-              background: "rgba(0,0,0,0.80)",
-              backdropFilter: "blur(10px)",
-              WebkitBackdropFilter: "blur(10px)",
-              padding: 0,
-              display: "grid",
-            }}
-          >
-            <div
-              style={{
-                position: "relative",
-                width: "100%",
-                height: "100%",
-                minHeight: 0,
-              }}
-            >
-              <StageCore variant="fullscreen" lyricsMode="embedded" />
-
-              <div
-                aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  zIndex: 9,
-                  pointerEvents: "none",
-                }}
-              >
-                <StageNowPlayingBadge />
-              </div>
-
-              <div
-                aria-hidden
-                style={{
-                  position: "absolute",
-                  left: 0,
-                  right: 0,
-                  top: 0,
-                  height: 64,
-                  background:
-                    "linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0.22) 55%, rgba(0,0,0,0.00))",
-                  pointerEvents: "none",
-                }}
-              />
-
-              <div
-                style={{
-                  position: "absolute",
-                  top: `calc(10px + env(safe-area-inset-top, 0px))`,
-                  right: `calc(10px + env(safe-area-inset-right, 0px))`,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  pointerEvents: "auto",
-                  zIndex: 50,
-                }}
-              >
-                <RoundIconButton
-                  label="Fullscreen"
-                  title="Request fullscreen"
-                  onClick={() => void tryRequestFullscreen()}
-                >
-                  <IconFullscreen />
-                </RoundIconButton>
-
-                <RoundIconButton
-                  label="Close"
-                  title="Close"
-                  onClick={() => setOpen(false)}
-                >
-                  <IconClose />
-                </RoundIconButton>
-              </div>
-
-              <StageTransportBar />
-            </div>
-          </div>,
+          <FullscreenStageOverlay
+            cursorHidden={cursorHidden}
+            isMobile={isMobile}
+            onBackdropMouseDown={handleOverlayBackdropMouseDown}
+            onRequestFullscreen={handleOverlayRequestFullscreen}
+            onClose={handleOverlayClose}
+          />,
           document.body,
         )
       : null;
@@ -344,9 +388,11 @@ export default function StageInline(props: { height?: number }) {
           position: "relative",
         }}
       >
-        <div style={{ position: "absolute", inset: 0 }}>
-          <StageCore variant="inline" lyricsMode="embedded" />
-        </div>
+        {!open ? (
+          <div style={{ position: "absolute", inset: 0 }}>
+            <StageCore variant="inline" lyricsMode="embedded" />
+          </div>
+        ) : null}
 
         <div
           aria-hidden

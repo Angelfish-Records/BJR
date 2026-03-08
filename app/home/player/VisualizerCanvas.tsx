@@ -156,6 +156,7 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
       canvas,
       getAudio,
       theme: createBlankTheme(),
+      performanceProfile: variant === "fullscreen" ? "fullscreen" : "inline",
     });
 
     engine.setIdleTheme(createIdleMistTheme());
@@ -178,7 +179,7 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
         engineRef.current = null;
       }
     };
-  }, []);
+  }, [variant]);
 
   // IMPORTANT: only register the canvas as the visual source when this variant
   // is the authoritative stage. Otherwise samplers may lock onto a blank/stopped canvas.
@@ -216,7 +217,6 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
     if (activeStage === variant) engine.start();
     else engine.stop();
   }, [activeStage, variant]);
-  
 
   // Feed wantPlaying into engine.
   const wantPlaying =

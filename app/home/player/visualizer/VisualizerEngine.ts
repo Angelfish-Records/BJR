@@ -5,10 +5,13 @@ import type { Theme, AudioFeatures } from "./types";
 import { createProgram, makeFullscreenTriangle } from "./gl";
 import { createPortalWipe, type PortalWipe } from "./transition/portalWipe";
 
+type PerformanceProfile = "inline" | "fullscreen";
+
 type EngineOpts = {
   canvas: HTMLCanvasElement;
   getAudio: () => AudioFeatures;
   theme: Theme; // initial (can be blank)
+  performanceProfile?: PerformanceProfile;
 };
 
 type StageTier = "idle" | "active" | "transition";
@@ -19,11 +22,27 @@ type TierCfg = {
   dprMax: number;
 };
 
-const TIER: Record<StageTier, TierCfg> = {
-  idle: { fpsCap: 24, dprMin: 0.45, dprMax: 0.62 },
-  active: { fpsCap: 60, dprMin: 0.6, dprMax: 1.0 },
-  transition: { fpsCap: 60, dprMin: 0.6, dprMax: 1.0 },
-};
+function getTierConfig(tier: StageTier, profile: PerformanceProfile): TierCfg {
+  if (profile === "fullscreen") {
+    switch (tier) {
+      case "idle":
+        return { fpsCap: 20, dprMin: 0.42, dprMax: 0.56 };
+      case "active":
+        return { fpsCap: 48, dprMin: 0.56, dprMax: 0.85 };
+      case "transition":
+        return { fpsCap: 48, dprMin: 0.56, dprMax: 0.85 };
+    }
+  }
+
+  switch (tier) {
+    case "idle":
+      return { fpsCap: 24, dprMin: 0.45, dprMax: 0.62 };
+    case "active":
+      return { fpsCap: 60, dprMin: 0.6, dprMax: 1.0 };
+    case "transition":
+      return { fpsCap: 60, dprMin: 0.6, dprMax: 1.0 };
+  }
+}
 
 type StageMode =
   | { mode: "idle" }
@@ -164,7 +183,7 @@ function isLikelyMobile(): boolean {
   return /Android|iPhone|iPad|iPod/i.test(ua);
 }
 
-function pickSnapshotCapPx(): number {
+function pickSnapshotCapPx(profile: PerformanceProfile): number {
   // Conservative: reduce memory & bandwidth pressure on mobile.
   const mobile = isLikelyMobile();
   type NavigatorMaybeMemory = Navigator & { deviceMemory?: number };
@@ -172,6 +191,12 @@ function pickSnapshotCapPx(): number {
     typeof navigator !== "undefined"
       ? (navigator as NavigatorMaybeMemory).deviceMemory
       : undefined;
+
+  if (profile === "fullscreen") {
+    if (mobile) return 384;
+    if (typeof dm === "number" && dm > 0 && dm <= 4) return 384;
+    return 640;
+  }
 
   if (mobile) return 512;
   if (typeof dm === "number" && dm > 0 && dm <= 4) return 512;
@@ -226,10 +251,10 @@ export class VisualizerEngine {
   private snapFbo: FboTex8 | null = null;
   private snapCanvas: HTMLCanvasElement;
   private snapCtx: CanvasRenderingContext2D;
-  private snapCapPx = pickSnapshotCapPx();
+  private performanceProfile: PerformanceProfile;
+  private snapCapPx = 768;
   private snapFps = 12;
   private lastSnapAtMs = 0;
-
   private snapW = 2;
   private snapH = 2;
   private snapBufAB: ArrayBuffer = new ArrayBuffer(2 * 2 * 4);
@@ -256,6 +281,9 @@ export class VisualizerEngine {
     this.canvas = opts.canvas;
     this.getAudio = opts.getAudio;
     this.currentTheme = opts.theme;
+    this.performanceProfile = opts.performanceProfile ?? "inline";
+    this.snapCapPx = pickSnapshotCapPx(this.performanceProfile);
+    this.snapFps = this.performanceProfile === "fullscreen" ? 8 : 12;
 
     const gl = this.canvas.getContext("webgl2", {
       alpha: false,
@@ -420,7 +448,7 @@ export class VisualizerEngine {
       this.lastT = tNowMs;
 
       // FPS cap per tier
-      const fpsCap = TIER[this.tier].fpsCap;
+      const fpsCap = getTierConfig(this.tier, this.performanceProfile).fpsCap;
       const minFrame = 1000 / Math.max(1, fpsCap);
       if (this.lastDrawMs && tNowMs - this.lastDrawMs < minFrame) {
         this.raf = window.requestAnimationFrame(loop);
@@ -551,7 +579,7 @@ export class VisualizerEngine {
       else if (this.avgFrameCostMs < 12)
         this.dprScale = Math.min(1.0, this.dprScale * 1.02);
 
-      const cfg = TIER[this.tier];
+      const cfg = getTierConfig(this.tier, this.performanceProfile);
       this.dprScale = clamp(this.dprScale, cfg.dprMin, cfg.dprMax);
 
       this.raf = window.requestAnimationFrame(loop);
