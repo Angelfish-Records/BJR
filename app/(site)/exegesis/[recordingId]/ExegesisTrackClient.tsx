@@ -697,14 +697,11 @@ export default function ExegesisTrackClient(props: {
   }, [isMobile, selected?.lineKey]);
 
   const Composer = (
-    <div
-      ref={composerWrapRef}
-      className="mt-3 rounded-lg border border-white/10 bg-white/6 p-3"
-    >
+    <div ref={composerWrapRef} className="mt-3">
       {composerStage === "collapsed" ? (
         <button
           type="button"
-          className="w-full rounded-md border border-white/10 bg-black/20 px-3 py-2 text-left text-sm text-white/50 hover:bg-black/25"
+          className="w-full bg-black/[0.16] px-4 py-3 text-left text-sm text-white/50 transition hover:text-white/72 focus-visible:outline-none"
           onClick={() => {
             if (isLocked) return;
 
