@@ -31,7 +31,8 @@ import type {
   ThreadSort,
 } from "./exegesisTypes";
 import { isTipTapDoc, parseHash } from "./exegesisUi";
-import { resolveViewerAuthorIdentity } from "./exegesisIdentity";
+import { resolveViewerDisplayIdentity } from "@/lib/memberIdentity";
+import { identityFactsFromDTO } from "./exegesisIdentity";
 
 function useMediaQuery(query: string): boolean {
   const get = () =>
@@ -625,8 +626,8 @@ export default function ExegesisTrackClient(props: {
 
   const viewerAuthorIdentity = React.useMemo(
     () =>
-      resolveViewerAuthorIdentity({
-        identity: viewerIdentity,
+      resolveViewerDisplayIdentity({
+        identity: identityFactsFromDTO(viewerIdentity),
         canClaimName,
       }),
     [viewerIdentity, canClaimName],

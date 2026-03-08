@@ -10,7 +10,8 @@ import type {
   ReportDraft,
   ThreadApiOk,
 } from "../exegesisTypes";
-import { resolveCommentAuthorIdentity } from "../exegesisIdentity";
+import { resolveAuthorDisplayIdentity } from "@/lib/memberIdentity";
+import { identityFactsFromDTO } from "../exegesisIdentity";
 
 export default function ExegesisThreadList(props: {
   roots: Array<ThreadApiOk["roots"][number]>;
@@ -119,7 +120,9 @@ export default function ExegesisThreadList(props: {
           >
             {visibleComments.map((c) => {
               const ident = identities?.[c.createdByMemberId];
-              const authorIdentity = resolveCommentAuthorIdentity(ident);
+              const authorIdentity = resolveAuthorDisplayIdentity(
+                identityFactsFromDTO(ident),
+              );
               const replyBusy = Boolean(replyByCommentId[c.id]?.posting);
               const isAuthor =
                 Boolean(viewerMemberId) &&
