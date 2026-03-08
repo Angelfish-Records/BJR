@@ -5,6 +5,7 @@ import type { PortableTextBlock } from "@portabletext/types";
 import { listCurrentEntitlementKeys } from "../../lib/entitlements";
 import { getAlbumOffer, type AlbumOfferAsset } from "../../lib/albumOffers";
 import { urlFor } from "../../sanity/lib/image";
+import type { PortalMemberSummary } from "../../lib/memberDashboard";
 import type {
   PortalModule,
   PortalModuleDownloads,
@@ -16,12 +17,14 @@ import GiftAlbumButton from "./modules/GiftAlbumButton";
 import PortalTabs, { type PortalTabSpec } from "./PortalTabs";
 import PortalArtistPosts from "./modules/PortalArtistPosts";
 import PortalExegesis from "./modules/PortalExegesis";
+import PortalMemberPanel from "./modules/PortalMemberPanel";
 
 type DownloadAssetSel = NonNullable<PortalModuleDownloads["assets"]>[number];
 
 type Props = {
   modules: PortalModule[];
   memberId: string | null;
+  memberSummary?: PortalMemberSummary | null;
 };
 
 // --------------------
@@ -56,6 +59,18 @@ function expandEntitlementKeys(keys: string[]): string[] {
   }
 
   return Array.from(set);
+}
+
+function hasMeaningfulMemberSummary(
+  summary: PortalMemberSummary | null | undefined,
+): boolean {
+  if (!summary) return false;
+  if (summary.identity) return true;
+  if (summary.contributionCount != null) return true;
+  if (summary.minutesStreamed != null) return true;
+  if (summary.favouriteTrack) return true;
+  if (summary.badges.length > 0) return true;
+  return false;
 }
 
 function slugify(s: string): string {
@@ -727,12 +742,12 @@ function inferTabs(
 // Main renderer
 // --------------------
 //
-// This file renders authored portal modules fetched from Sanity.
-// Viewer-specific runtime surfaces should be composed above this layer
-// rather than added as ad hoc local type drift here.
+// This file primarily renders authored portal modules fetched from Sanity.
+// Viewer-specific runtime surfaces may be injected into specific tab content
+// through explicit props, but should not create parallel local module contracts.
 
 export default async function PortalModules(props: Props) {
-  const { modules, memberId } = props;
+  const { modules, memberId, memberSummary = null } = props;
   const entitlementKeysRaw = memberId
     ? await listCurrentEntitlementKeys(memberId)
     : [];
@@ -740,18 +755,27 @@ export default async function PortalModules(props: Props) {
   const entitlementKeys = expandEntitlementKeys(entitlementKeysRaw);
 
   const tabsBuilt = inferTabs(modules, entitlementKeys);
+  const showMemberPanel = hasMeaningfulMemberSummary(memberSummary);
 
-  const tabs: PortalTabSpec[] = tabsBuilt.map((t) => ({
-    id: t.id,
-    title: t.title,
-    locked: t.locked,
-    lockedHint: t.lockedHint,
-    content: (
-      <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
-        {t.modules.map((m) => renderModule(m, entitlementKeys))}
-      </div>
-    ),
-  }));
+  const tabs: PortalTabSpec[] = tabsBuilt.map((t) => {
+    const isDefaultPortalTab = t.id === "portal";
+
+    return {
+      id: t.id,
+      title: t.title,
+      locked: t.locked,
+      lockedHint: t.lockedHint,
+      content: (
+        <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
+          {isDefaultPortalTab && showMemberPanel && memberSummary ? (
+            <PortalMemberPanel summary={memberSummary} />
+          ) : null}
+
+          {t.modules.map((m) => renderModule(m, entitlementKeys))}
+        </div>
+      ),
+    };
+  });
 
   return <PortalTabs tabs={tabs} defaultTabId={tabs[0]?.id ?? null} />;
 }
