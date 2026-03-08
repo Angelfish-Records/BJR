@@ -8,6 +8,7 @@ type ExegesisIdentityPanelProps = {
   canClaimName: boolean;
   identityLabel: string;
   publicName: string | null | undefined;
+  isAdminAuthor: boolean;
   claimOpen: boolean;
   claimName: string;
   claimErr: string;
@@ -23,6 +24,7 @@ export default function ExegesisIdentityPanel({
   canClaimName,
   identityLabel,
   publicName,
+  isAdminAuthor,
   claimOpen,
   claimName,
   claimErr,
@@ -34,13 +36,15 @@ export default function ExegesisIdentityPanel({
 }: ExegesisIdentityPanelProps) {
   if (!show) return null;
 
+  const effectivePublicName = isAdminAuthor ? null : publicName;
+
   return (
     <div className="min-w-0 flex-1 text-sm">
       <div className="flex min-w-0 items-center gap-2">
         <div className="min-w-0 text-xs text-white/72">
           Commenting as{" "}
           <span className="font-semibold text-white">{identityLabel}</span>
-          {!publicName && canClaimName ? (
+          {!effectivePublicName && canClaimName ? (
             <span className="ml-1 text-white/45">· Unlocked</span>
           ) : null}
         </div>

@@ -19,6 +19,30 @@ import {
   medalTier,
 } from "../exegesisUi";
 
+function TickIcon(props: { size?: number; stroke?: string }) {
+  const { size = 14, stroke = "rgba(255,255,255,0.92)" } = props;
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+      style={{ display: "block" }}
+    >
+      <path
+        d="M20 6L9 17l-5-5"
+        stroke={stroke}
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export default function ExegesisCommentItem(props: {
   comment: CommentDTO;
   commenterName: string;
@@ -102,12 +126,9 @@ export default function ExegesisCommentItem(props: {
       ].join(" ")}
       style={{
         paddingLeft: Math.min(72, (c.depth ?? 0) * 12),
-        borderLeft: isAdminAuthor
-          ? "2px solid var(--lxSelected)"
-          : (c.depth ?? 0) > 0
-            ? "1px solid rgba(255,255,255,0.08)"
-            : "none",
-        marginLeft: (c.depth ?? 0) > 0 || isAdminAuthor ? 6 : 0,
+        borderLeft:
+          (c.depth ?? 0) > 0 ? "1px solid rgba(255,255,255,0.08)" : "none",
+        marginLeft: (c.depth ?? 0) > 0 ? 6 : 0,
       }}
     >
       <div className="flex items-center justify-between gap-3">
@@ -123,8 +144,16 @@ export default function ExegesisCommentItem(props: {
           </div>
 
           {isAdminAuthor ? (
-            <div className="rounded-full bg-[color:var(--lxSelected)]/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--lxSelected)]">
-              Artist
+            <div
+              className="flex items-center justify-center rounded-full"
+              style={{
+                width: 16,
+                height: 16,
+                background: "var(--lxSelected)",
+              }}
+              title="Artist"
+            >
+              <TickIcon size={12} stroke="var(--bg)" />
             </div>
           ) : null}
 

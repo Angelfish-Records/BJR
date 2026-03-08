@@ -253,6 +253,7 @@ export default function ExegesisDiscoursePanel(props: {
                     canClaimName={canClaimName}
                     identityLabel={identityLabel}
                     publicName={viewerIdentity?.publicName}
+                    isAdminAuthor={Boolean(viewerIdentity?.isAdmin)}
                     claimOpen={claimOpen}
                     claimName={claimName}
                     claimErr={claimErr}
