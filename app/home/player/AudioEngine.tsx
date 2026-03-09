@@ -39,6 +39,9 @@ export default function AudioEngine() {
   const tokenAbortRef = React.useRef<AbortController | null>(null);
   const loadSeq = React.useRef(0);
 
+  const telemetryProgressSentRef = React.useRef(new Set<string>());
+  const telemetryCompleteSentRef = React.useRef(new Set<string>());
+
   const srcNodeRef = React.useRef<MediaElementAudioSourceNode | null>(null);
 
   // ---- Audio analysis ----
@@ -51,6 +54,7 @@ export default function AudioEngine() {
   // ---- Playback intent ----
   const playIntentRef = React.useRef(false);
   const playthroughSentRef = React.useRef(new Set<string>()); // key: `${recordingId}:${playbackId}`
+  const TELEMETRY_PROGRESS_STEP_MS = 15_000;
 
   // Track attachment bookkeeping
   const attachedKeyRef = React.useRef<string | null>(null);
@@ -181,6 +185,8 @@ export default function AudioEngine() {
     const tokenCache = tokenCacheRef.current;
     const blockedNonce = blockedNonceRef.current;
     const playthroughSent = playthroughSentRef.current;
+    const telemetryProgressSent = telemetryProgressSentRef.current;
+    const telemetryCompleteSent = telemetryCompleteSentRef.current;
 
     const tokenAbort = tokenAbortRef.current;
 
@@ -230,6 +236,8 @@ export default function AudioEngine() {
       tokenCache.clear();
       blockedNonce.clear();
       playthroughSent.clear();
+      telemetryProgressSent.clear();
+      telemetryCompleteSent.clear();
 
       try {
         audioSurface.set({
@@ -561,7 +569,8 @@ export default function AudioEngine() {
             albumId: s.queueContextId,
             albumSlug: s.queueContextSlug,
             durationMs:
-              s.current?.durationMs ?? s.durationByRecordingId?.[s.current?.recordingId ?? ""],
+              s.current?.durationMs ??
+              s.durationByRecordingId?.[s.current?.recordingId ?? ""],
             ...(st ? { st } : {}),
           }),
           signal: ac.signal,
@@ -677,6 +686,72 @@ export default function AudioEngine() {
       }).catch(() => {});
     };
 
+    const reportTelemetryProgress = (params: {
+      recordingId: string;
+      playbackId: string;
+      progressMs: number;
+      durationMs: number | null;
+    }) => {
+      if (!isSignedIn) return;
+
+      const { recordingId, playbackId, progressMs, durationMs } = params;
+      const milestoneMs =
+        Math.floor(progressMs / TELEMETRY_PROGRESS_STEP_MS) *
+        TELEMETRY_PROGRESS_STEP_MS;
+
+      if (milestoneMs < TELEMETRY_PROGRESS_STEP_MS) return;
+
+      const milestoneKey = `${recordingId}:${playbackId}:progress:${milestoneMs}`;
+      if (telemetryProgressSentRef.current.has(milestoneKey)) return;
+
+      telemetryProgressSentRef.current.add(milestoneKey);
+
+      fetch("/api/playback/telemetry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          event: "progress",
+          recordingId,
+          playbackId,
+          milestoneKey: String(milestoneMs),
+          listenedMs: TELEMETRY_PROGRESS_STEP_MS,
+          progressMs,
+          durationMs,
+        }),
+        keepalive: true,
+      }).catch(() => {});
+    };
+
+    const reportTelemetryComplete = (params: {
+      recordingId: string;
+      playbackId: string;
+      progressMs: number;
+      durationMs: number | null;
+    }) => {
+      if (!isSignedIn) return;
+
+      const { recordingId, playbackId, progressMs, durationMs } = params;
+      const milestoneKey = `${recordingId}:${playbackId}:complete`;
+
+      if (telemetryCompleteSentRef.current.has(milestoneKey)) return;
+
+      telemetryCompleteSentRef.current.add(milestoneKey);
+
+      fetch("/api/playback/telemetry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          event: "complete",
+          recordingId,
+          playbackId,
+          milestoneKey: "complete",
+          progressMs,
+          durationMs,
+        }),
+        keepalive: true,
+      }).catch(() => {});
+    };
+
     const onTime = () => {
       const ms = Math.floor(a.currentTime * 1000);
       mediaSurface.setTime(ms);
@@ -696,7 +771,24 @@ export default function AudioEngine() {
       const durMs = durFromState || durFromEl;
 
       if (durMs > 0) {
-        reportPlaythroughComplete(ms / durMs);
+        reportTelemetryProgress({
+          recordingId: curId,
+          playbackId: pRef.current.current?.muxPlaybackId ?? "",
+          progressMs: ms,
+          durationMs: durMs,
+        });
+
+        const pct = ms / durMs;
+        reportPlaythroughComplete(pct);
+
+        if (pct >= 0.9) {
+          reportTelemetryComplete({
+            recordingId: curId,
+            playbackId: pRef.current.current?.muxPlaybackId ?? "",
+            progressMs: ms,
+            durationMs: durMs,
+          });
+        }
       }
     };
 
@@ -787,7 +879,7 @@ export default function AudioEngine() {
       a.removeEventListener("canplaythrough", clearBuffering);
       a.removeEventListener("ended", onEnded);
     };
-  }, [hardStopAndDetach]);
+  }, [isSignedIn, hardStopAndDetach]);
 
   /* ---------------- Seek: PlayerState -> media element ---------------- */
 

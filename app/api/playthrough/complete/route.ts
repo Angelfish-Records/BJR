@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { sql } from "@vercel/postgres";
 import { logMemberEvent, newCorrelationId } from "@/lib/events";
-import { EVENT_SOURCES } from "@/lib/vocab";
+import { EVENT_SOURCES, EVENT_TYPES } from "@/lib/vocab";
 import { ensureAnonId } from "@/lib/anon";
 
 const COMPLETE_THRESHOLD = 0.9;
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
 
   await logMemberEvent({
     memberId,
-    eventType: "track_play_completed",
+    eventType: EVENT_TYPES.TRACK_PLAY_COMPLETED,
     source: EVENT_SOURCES.SERVER,
     correlationId,
     payload: {

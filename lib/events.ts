@@ -206,3 +206,33 @@ export async function logAccessDecision(params: {
     },
   });
 }
+
+export async function logPlaybackTelemetryProgress(params: {
+  memberId: string;
+  correlationId?: string | null;
+  source?: EventSource | string;
+  payload?: EventPayload;
+}) {
+  return logMemberEvent({
+    memberId: params.memberId,
+    eventType: EVENT_TYPES.PLAYBACK_TELEMETRY_PROGRESS,
+    source: params.source ?? EVENT_SOURCES.SERVER,
+    correlationId: params.correlationId ?? null,
+    payload: params.payload ?? {},
+  });
+}
+
+export async function logPlaybackTelemetryComplete(params: {
+  memberId: string;
+  correlationId?: string | null;
+  source?: EventSource | string;
+  payload?: EventPayload;
+}) {
+  return logMemberEvent({
+    memberId: params.memberId,
+    eventType: EVENT_TYPES.PLAYBACK_TELEMETRY_COMPLETE,
+    source: params.source ?? EVENT_SOURCES.SERVER,
+    correlationId: params.correlationId ?? null,
+    payload: params.payload ?? {},
+  });
+}

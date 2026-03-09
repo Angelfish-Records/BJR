@@ -358,6 +358,57 @@ export async function listAlbumsForBrowse(): Promise<AlbumBrowseItem[]> {
   }));
 }
 
+export async function getRecordingSummaryByRecordingId(
+  recordingId: string,
+): Promise<RecordingSummary | null> {
+  const id = normStr(recordingId);
+  if (!id) return null;
+
+  const q = `
+    *[_type == "album" && count(tracks[recordingId == $recordingId]) > 0][0]{
+      "albumSlug": slug.current,
+      "albumTitle": title,
+      "albumArtist": artist,
+      "track": tracks[recordingId == $recordingId][0]{
+        recordingId,
+        title,
+        artist
+      }
+    }
+  `;
+
+  const doc = await client.fetch<{
+    albumSlug?: string;
+    albumTitle?: string;
+    albumArtist?: string;
+    track?: {
+      recordingId?: string;
+      title?: string;
+      artist?: string;
+    };
+  } | null>(q, { recordingId: id });
+
+  const trackRecordingId = normStr(doc?.track?.recordingId);
+  const trackTitle = normStr(doc?.track?.title);
+  if (!trackRecordingId || !trackTitle) return null;
+
+  return {
+    recordingId: trackRecordingId,
+    title: trackTitle,
+    artist: normStr(doc?.track?.artist) ?? normStr(doc?.albumArtist) ?? null,
+    albumSlug: normStr(doc?.albumSlug) ?? null,
+    albumTitle: normStr(doc?.albumTitle) ?? null,
+  };
+}
+
+export type RecordingSummary = {
+  recordingId: string;
+  title: string;
+  artist?: string | null;
+  albumSlug?: string | null;
+  albumTitle?: string | null;
+};
+
 export type AlbumEmailMeta = {
   slug: string;
   title: string;

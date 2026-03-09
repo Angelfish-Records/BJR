@@ -32,6 +32,12 @@ export const EVENT_TYPES = {
   ACCESS_ALLOWED: "access_allowed",
   ACCESS_DENIED: "access_denied",
   IDENTITY_LINKED: "identity_linked",
+
+  // Playback audit / telemetry
+  TRACK_PLAY_COMPLETED: "track_play_completed",
+  PLAYBACK_TELEMETRY_PROGRESS: "playback_telemetry_progress",
+  PLAYBACK_TELEMETRY_COMPLETE: "playback_telemetry_complete",
+
   DEBUG: "debug",
 } as const;
 
@@ -89,7 +95,8 @@ export function entKey(obj: Record<string, unknown>): StructuredEntitlementKey {
 export const ENT = {
   pageView: (page: string) => entKey({ kind: "page_view", page }),
   theme: (name: string) => entKey({ kind: "theme", name }), // keep only if we still want structured themes later
-  mediaPlay: (recordingId: string) => entKey({ kind: "media_play", recordingId }),
+  mediaPlay: (recordingId: string) =>
+    entKey({ kind: "media_play", recordingId }),
   download: (assetId: string) => entKey({ kind: "download", assetId }),
   downloadAlbum: (slug: string) => `download_album_${slug}`,
 
