@@ -1379,11 +1379,10 @@ export default function FullPlayer(props: {
 
                   <div
                     className="afRowPlaysRight"
-                    style={{ fontSize: 12, opacity: 0.58, color: subColor }}
+                    style={{ fontSize: 12, opacity: 0.52, color: subColor }}
                   >
                     {renderPlayCount(t)}
                   </div>
-                  <span className="afRowMetaDot">•</span>
                   <div
                     className="afRowDurRight"
                     style={{ fontSize: 12, opacity: 0.85, color: subColor }}
