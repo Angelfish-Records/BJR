@@ -26,6 +26,17 @@ function canPlayNativeHls(a: HTMLMediaElement) {
   return a.canPlayType("application/vnd.apple.mpegurl") !== "";
 }
 
+function newPlaybackSessionId(): string {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export default function AudioEngine() {
   const p = usePlayer();
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
@@ -38,6 +49,10 @@ export default function AudioEngine() {
   const hlsRef = React.useRef<Hls | null>(null);
   const tokenAbortRef = React.useRef<AbortController | null>(null);
   const loadSeq = React.useRef(0);
+
+  // Distinct from muxPlaybackId:
+  // this is a fresh per-listen session id used for telemetry dedupe.
+  const telemetrySessionIdRef = React.useRef<string | null>(null);
 
   const telemetryPlaySentRef = React.useRef(new Set<string>());
   const telemetryPlayAccumulatedMsRef = React.useRef(new Map<string, number>());
@@ -102,6 +117,7 @@ export default function AudioEngine() {
     }
 
     attachedKeyRef.current = null;
+    telemetrySessionIdRef.current = null;
 
     try {
       a.removeAttribute("src");
@@ -211,6 +227,7 @@ export default function AudioEngine() {
         } catch {}
       }
       hlsRef.current = null;
+      telemetrySessionIdRef.current = null;
 
       if (a) {
         try {
@@ -479,6 +496,16 @@ export default function AudioEngine() {
     }
 
     attachedKeyRef.current = null;
+    telemetrySessionIdRef.current = newPlaybackSessionId();
+
+    const recordingId = s.current?.recordingId ?? "";
+    const sessionId = telemetrySessionIdRef.current;
+    if (recordingId && sessionId) {
+      const sessionKey = `${recordingId}:${sessionId}`;
+      telemetryPlayAccumulatedMsRef.current.delete(sessionKey);
+      telemetryPlayLastProgressMsRef.current.delete(sessionKey);
+    }
+
     const seq = ++loadSeq.current;
 
     mediaSurface.setStatus("loading");
@@ -681,7 +708,7 @@ export default function AudioEngine() {
 
     const reportPlaythroughComplete = (pct: number) => {
       const recordingId = pRef.current.current?.recordingId ?? "";
-      const playbackId = pRef.current.current?.muxPlaybackId ?? "";
+      const playbackId = telemetrySessionIdRef.current ?? "";
       if (!recordingId || !playbackId) return;
 
       const key = `${recordingId}:${playbackId}`;
@@ -725,11 +752,13 @@ export default function AudioEngine() {
 
       const deltaMs = progressMs - prevProgress;
 
-      const safeForwardDeltaMs = deltaMs > 0 && deltaMs <= 5_000 ? deltaMs : 0;
+      if (deltaMs <= 0 || deltaMs > 5_000) {
+        telemetryPlayLastProgressMsRef.current.set(sessionKey, progressMs);
+        return;
+      }
 
       const accumulatedMs =
-        (telemetryPlayAccumulatedMsRef.current.get(sessionKey) ?? 0) +
-        safeForwardDeltaMs;
+        (telemetryPlayAccumulatedMsRef.current.get(sessionKey) ?? 0) + deltaMs;
 
       telemetryPlayAccumulatedMsRef.current.set(sessionKey, accumulatedMs);
 
@@ -840,14 +869,14 @@ export default function AudioEngine() {
       if (durMs > 0) {
         reportTelemetryPlay({
           recordingId: curId,
-          playbackId: pRef.current.current?.muxPlaybackId ?? "",
+          playbackId: telemetrySessionIdRef.current ?? "",
           progressMs: ms,
           durationMs: durMs,
         });
 
         reportTelemetryProgress({
           recordingId: curId,
-          playbackId: pRef.current.current?.muxPlaybackId ?? "",
+          playbackId: telemetrySessionIdRef.current ?? "",
           progressMs: ms,
           durationMs: durMs,
         });
@@ -858,7 +887,7 @@ export default function AudioEngine() {
         if (pct >= 0.9) {
           reportTelemetryComplete({
             recordingId: curId,
-            playbackId: pRef.current.current?.muxPlaybackId ?? "",
+            playbackId: telemetrySessionIdRef.current ?? "",
             progressMs: ms,
             durationMs: durMs,
           });
