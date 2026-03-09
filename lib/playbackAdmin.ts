@@ -22,7 +22,9 @@ type RecordingAggregateRow = {
 
 type DedupeRow = {
   member_id: string;
+  member_email: string | null;
   playback_id: string;
+  recording_id: string | null;
   event_type: string;
   milestone_key: string;
   created_at: string;
@@ -69,7 +71,10 @@ export type PlaybackAdminTrackRow = {
 
 export type PlaybackAdminDedupeRow = {
   memberId: string;
+  memberEmail: string | null;
   playbackId: string;
+  recordingId: string | null;
+  recordingTitle: string | null;
   eventType: string;
   milestoneKey: string;
   createdAt: string;
@@ -143,7 +148,9 @@ async function hydrateTrackRows(
 ): Promise<PlaybackAdminTrackRow[]> {
   const hydrated = await Promise.all(
     rows.map(async (row): Promise<PlaybackAdminTrackRow> => {
-      const recording = await getRecordingSummaryByRecordingId(row.recording_id);
+      const recording = await getRecordingSummaryByRecordingId(
+        row.recording_id,
+      );
 
       return {
         recordingId: row.recording_id,
@@ -208,19 +215,58 @@ async function getRecentTracks(): Promise<PlaybackAdminTrackRow[]> {
 async function getRecentDedupe(): Promise<PlaybackAdminDedupeRow[]> {
   const res = await sql<DedupeRow>`
     select
-      member_id,
-      playback_id,
-      event_type,
-      milestone_key,
-      created_at::text as created_at
-    from member_playback_telemetry_dedupe
-    order by created_at desc
+      d.member_id,
+      m.email::text as member_email,
+      d.playback_id,
+      evt.recording_id,
+      d.event_type,
+      d.milestone_key,
+      d.created_at::text as created_at
+    from member_playback_telemetry_dedupe d
+    left join members m
+      on m.id = d.member_id
+    left join lateral (
+      select
+        me.payload->>'recording_id' as recording_id
+      from member_events me
+      where
+        me.member_id = d.member_id
+        and me.event_type = d.event_type
+        and me.payload->>'playback_id' = d.playback_id
+      order by me.created_at desc
+      limit 1
+    ) evt on true
+    order by d.created_at desc
     limit 40
   `;
 
+  const titleByRecordingId = new Map<string, string | null>();
+  const distinctRecordingIds = Array.from(
+    new Set(
+      res.rows
+        .map((row) => row.recording_id)
+        .filter(
+          (value): value is string =>
+            typeof value === "string" && value.length > 0,
+        ),
+    ),
+  );
+
+  await Promise.all(
+    distinctRecordingIds.map(async (recordingId) => {
+      const recording = await getRecordingSummaryByRecordingId(recordingId);
+      titleByRecordingId.set(recordingId, recording?.title ?? recordingId);
+    }),
+  );
+
   return res.rows.map((row) => ({
     memberId: row.member_id,
+    memberEmail: row.member_email,
     playbackId: row.playback_id,
+    recordingId: row.recording_id,
+    recordingTitle: row.recording_id
+      ? (titleByRecordingId.get(row.recording_id) ?? row.recording_id)
+      : null,
     eventType: row.event_type,
     milestoneKey: row.milestone_key,
     createdAt: new Date(row.created_at).toISOString(),
@@ -228,14 +274,19 @@ async function getRecentDedupe(): Promise<PlaybackAdminDedupeRow[]> {
 }
 
 export async function getPlaybackAdminSnapshot(): Promise<PlaybackAdminSnapshot> {
-  const [memberTotals, siteTotals, topTracksByListenedMs, recentTracks, recentDedupe] =
-    await Promise.all([
-      getMemberTotals(),
-      getSiteTotals(),
-      getTopTracksByListenedMs(),
-      getRecentTracks(),
-      getRecentDedupe(),
-    ]);
+  const [
+    memberTotals,
+    siteTotals,
+    topTracksByListenedMs,
+    recentTracks,
+    recentDedupe,
+  ] = await Promise.all([
+    getMemberTotals(),
+    getSiteTotals(),
+    getTopTracksByListenedMs(),
+    getRecentTracks(),
+    getRecentDedupe(),
+  ]);
 
   return {
     generatedAt: new Date().toISOString(),

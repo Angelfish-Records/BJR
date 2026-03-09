@@ -1337,8 +1337,8 @@ export default function FullPlayer(props: {
                   </div>
 
                   <div className="afRowMetaUnder" aria-hidden="true">
-                    <span>{renderPlayCount(t)}</span>
-                    <span className="afRowMetaDot">•</span>
+                      {/** ENABLE THIS WHEN TOTALS ARE RESPECTABLE <span>{renderPlayCount(t)}</span>
+                    <span className="afRowMetaDot">•</span> */}
                     <span>{renderDur(t)}</span>
                   </div>
                 </div>
@@ -1377,12 +1377,14 @@ export default function FullPlayer(props: {
                     <ShareIcon />
                   </button>
 
-                  <div
+                  {/** ENABLE THIS WHEN TOTALS ARE RESPECTABLE 
+                    <div
                     className="afRowPlaysRight"
                     style={{ fontSize: 12, opacity: 0.38, color: subColor }}
                   >
                     {renderPlayCount(t)}
-                  </div>
+                  </div> 
+                  */}
                   <div
                     className="afRowDurRight"
                     style={{ fontSize: 12, opacity: 0.85, color: subColor }}

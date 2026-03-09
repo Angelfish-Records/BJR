@@ -58,6 +58,24 @@ function fmtSnapshotStamp(iso: string): string {
   }
 }
 
+type TrackRow = PlaybackAdminSnapshot["topTracksByListenedMs"][number];
+type DedupeRowBase = PlaybackAdminSnapshot["recentDedupe"][number];
+
+type DedupeRow = DedupeRowBase & {
+  recordingTitle?: string | null;
+  trackTitle?: string | null;
+  memberEmail?: string | null;
+};
+
+const PANEL_BORDER = "1px solid rgba(255,255,255,0.12)";
+const ROW_BORDER = "1px solid rgba(255,255,255,0.08)";
+const TEXT_PRIMARY = "rgba(255,255,255,0.92)";
+const TEXT_STRONG = "rgba(255,255,255,0.86)";
+const TEXT_MUTED = "rgba(255,255,255,0.68)";
+const TEXT_FAINT = "rgba(255,255,255,0.58)";
+const FONT_SIZE_UI = 12;
+const FONT_SIZE_DEDUPE = 11;
+
 function SectionCard(props: {
   title: string;
   subtitle?: string;
@@ -66,7 +84,7 @@ function SectionCard(props: {
   return (
     <section
       style={{
-        border: "1px solid rgba(255,255,255,0.12)",
+        border: PANEL_BORDER,
         borderRadius: 14,
         padding: 14,
         background: "rgba(255,255,255,0.04)",
@@ -77,9 +95,10 @@ function SectionCard(props: {
       <div>
         <div
           style={{
-            fontSize: 13,
-            fontWeight: 900,
-            color: "rgba(255,255,255,0.94)",
+            fontSize: FONT_SIZE_UI,
+            fontWeight: 800,
+            color: TEXT_PRIMARY,
+            lineHeight: 1.4,
           }}
         >
           {props.title}
@@ -88,9 +107,9 @@ function SectionCard(props: {
           <div
             style={{
               marginTop: 4,
-              fontSize: 12,
+              fontSize: FONT_SIZE_UI,
               lineHeight: 1.5,
-              color: "rgba(255,255,255,0.68)",
+              color: TEXT_MUTED,
             }}
           >
             {props.subtitle}
@@ -103,68 +122,14 @@ function SectionCard(props: {
   );
 }
 
-function MetricCard(props: {
-  label: string;
-  value: string;
-  sublabel?: string;
-}) {
-  return (
-    <div
-      style={{
-        borderRadius: 12,
-        padding: "12px 12px",
-        border: "1px solid rgba(255,255,255,0.10)",
-        background: "rgba(255,255,255,0.03)",
-        minWidth: 0,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 11,
-          fontWeight: 800,
-          letterSpacing: "0.06em",
-          textTransform: "uppercase",
-          color: "rgba(255,255,255,0.62)",
-        }}
-      >
-        {props.label}
-      </div>
-
-      <div
-        style={{
-          marginTop: 6,
-          fontSize: 24,
-          fontWeight: 900,
-          lineHeight: 1.05,
-          color: "rgba(255,255,255,0.94)",
-        }}
-      >
-        {props.value}
-      </div>
-
-      {props.sublabel ? (
-        <div
-          style={{
-            marginTop: 6,
-            fontSize: 12,
-            color: "rgba(255,255,255,0.64)",
-          }}
-        >
-          {props.sublabel}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function TableShell(props: { children: React.ReactNode }) {
   return (
     <div
       style={{
         overflowX: "auto",
-        borderRadius: 14,
-        border: "1px solid rgba(255,255,255,0.12)",
-        background: "rgba(255,255,255,0.03)",
+        borderRadius: 12,
+        border: PANEL_BORDER,
+        background: "rgba(255,255,255,0.02)",
       }}
     >
       {props.children}
@@ -172,39 +137,56 @@ function TableShell(props: { children: React.ReactNode }) {
   );
 }
 
-function TrackTable(props: {
-  rows: PlaybackAdminSnapshot["topTracksByListenedMs"];
-}) {
+function AggregateTable(props: { snapshot: PlaybackAdminSnapshot }) {
+  const rows = [
+    {
+      label: "Active",
+      members: formatNumber(props.snapshot.memberTotals.activeCount),
+      site: formatNumber(props.snapshot.siteTotals.activeCount),
+    },
+    {
+      label: "Hours listened",
+      members: formatHoursFromMs(props.snapshot.memberTotals.listenedMs),
+      site: formatHoursFromMs(props.snapshot.siteTotals.listenedMs),
+    },
+    {
+      label: "Minutes listened",
+      members: formatMinutesFromMs(props.snapshot.memberTotals.listenedMs),
+      site: formatMinutesFromMs(props.snapshot.siteTotals.listenedMs),
+    },
+    {
+      label: "Qualified plays",
+      members: formatNumber(props.snapshot.memberTotals.playCount),
+      site: formatNumber(props.snapshot.siteTotals.playCount),
+    },
+    {
+      label: "90% completes",
+      members: formatNumber(props.snapshot.memberTotals.completedCount),
+      site: formatNumber(props.snapshot.siteTotals.completedCount),
+    },
+  ];
+
   return (
     <TableShell>
       <table
         style={{
           width: "100%",
           borderCollapse: "collapse",
-          minWidth: 760,
+          minWidth: 520,
         }}
       >
         <thead>
           <tr>
-            {[
-              "Track",
-              "Artist",
-              "Hours",
-              "Plays",
-              "Milestones",
-              "Completions",
-              "Last heard",
-            ].map((label) => (
+            {["Category", "Members only", "Site-wide"].map((label) => (
               <th
                 key={label}
                 style={{
                   textAlign: "left",
-                  padding: "12px 14px",
-                  fontSize: 11,
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
-                  color: "rgba(255,255,255,0.62)",
-                  borderBottom: "1px solid rgba(255,255,255,0.10)",
+                  padding: "10px 14px",
+                  fontSize: FONT_SIZE_UI,
+                  fontWeight: 700,
+                  color: TEXT_MUTED,
+                  borderBottom: ROW_BORDER,
                   whiteSpace: "nowrap",
                 }}
               >
@@ -215,87 +197,41 @@ function TrackTable(props: {
         </thead>
 
         <tbody>
-          {props.rows.length === 0 ? (
-            <tr>
-              <td
-                colSpan={7}
-                style={{
-                  padding: 14,
-                  fontSize: 12,
-                  color: "rgba(255,255,255,0.68)",
-                }}
-              >
-                No rows.
-              </td>
-            </tr>
-          ) : null}
-
-          {props.rows.map((row) => (
-            <tr key={row.recordingId}>
+          {rows.map((row) => (
+            <tr key={row.label}>
               <td
                 style={{
-                  padding: "12px 14px",
-                  borderBottom: "1px solid rgba(255,255,255,0.08)",
-                  color: "rgba(255,255,255,0.94)",
-                  fontWeight: 800,
-                }}
-              >
-                {row.title}
-              </td>
-              <td
-                style={{
-                  padding: "12px 14px",
-                  borderBottom: "1px solid rgba(255,255,255,0.08)",
-                  color: "rgba(255,255,255,0.72)",
-                }}
-              >
-                {row.artist ?? "—"}
-              </td>
-              <td
-                style={{
-                  padding: "12px 14px",
-                  borderBottom: "1px solid rgba(255,255,255,0.08)",
-                  color: "rgba(255,255,255,0.88)",
-                }}
-              >
-                {formatHoursFromMs(row.listenedMs)}
-              </td>
-              <td
-                style={{
-                  padding: "12px 14px",
-                  borderBottom: "1px solid rgba(255,255,255,0.08)",
-                  color: "rgba(255,255,255,0.88)",
-                }}
-              >
-                {formatNumber(row.playCount)}
-              </td>
-              <td
-                style={{
-                  padding: "12px 14px",
-                  borderBottom: "1px solid rgba(255,255,255,0.08)",
-                  color: "rgba(255,255,255,0.88)",
-                }}
-              >
-                {formatNumber(row.creditedProgressCount)}
-              </td>
-              <td
-                style={{
-                  padding: "12px 14px",
-                  borderBottom: "1px solid rgba(255,255,255,0.08)",
-                  color: "rgba(255,255,255,0.88)",
-                }}
-              >
-                {formatNumber(row.completedCount)}
-              </td>
-              <td
-                style={{
-                  padding: "12px 14px",
-                  borderBottom: "1px solid rgba(255,255,255,0.08)",
-                  color: "rgba(255,255,255,0.68)",
+                  padding: "10px 14px",
+                  borderBottom: ROW_BORDER,
+                  color: TEXT_PRIMARY,
+                  fontSize: FONT_SIZE_UI,
+                  fontWeight: 700,
                   whiteSpace: "nowrap",
                 }}
               >
-                {formatAgo(row.lastListenedAt)}
+                {row.label}
+              </td>
+              <td
+                style={{
+                  padding: "10px 14px",
+                  borderBottom: ROW_BORDER,
+                  color: TEXT_STRONG,
+                  fontSize: FONT_SIZE_UI,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {row.members}
+              </td>
+              <td
+                style={{
+                  padding: "10px 14px",
+                  borderBottom: ROW_BORDER,
+                  color: TEXT_STRONG,
+                  fontSize: FONT_SIZE_UI,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {row.site}
               </td>
             </tr>
           ))}
@@ -305,32 +241,29 @@ function TrackTable(props: {
   );
 }
 
-function DedupeTable(props: {
-  rows: PlaybackAdminSnapshot["recentDedupe"];
-}) {
+function TrackTable(props: { rows: TrackRow[]; emptyLabel?: string }) {
   return (
     <TableShell>
       <table
         style={{
           width: "100%",
           borderCollapse: "collapse",
-          minWidth: 760,
+          minWidth: 520,
         }}
       >
         <thead>
           <tr>
-            {["When", "Event", "Milestone", "Playback", "Member"].map(
+            {["Track", "Hours", "Plays", "Completes", "Last heard"].map(
               (label) => (
                 <th
                   key={label}
                   style={{
                     textAlign: "left",
-                    padding: "12px 14px",
-                    fontSize: 11,
-                    letterSpacing: "0.06em",
-                    textTransform: "uppercase",
-                    color: "rgba(255,255,255,0.62)",
-                    borderBottom: "1px solid rgba(255,255,255,0.10)",
+                    padding: "10px 12px",
+                    fontSize: FONT_SIZE_UI,
+                    fontWeight: 700,
+                    color: TEXT_MUTED,
+                    borderBottom: ROW_BORDER,
                     whiteSpace: "nowrap",
                   }}
                 >
@@ -347,9 +280,135 @@ function DedupeTable(props: {
               <td
                 colSpan={5}
                 style={{
-                  padding: 14,
-                  fontSize: 12,
-                  color: "rgba(255,255,255,0.68)",
+                  padding: 12,
+                  fontSize: FONT_SIZE_UI,
+                  color: TEXT_MUTED,
+                }}
+              >
+                {props.emptyLabel ?? "No rows."}
+              </td>
+            </tr>
+          ) : null}
+
+          {props.rows.map((row) => (
+            <tr key={row.recordingId}>
+              <td
+                style={{
+                  padding: "10px 12px",
+                  borderBottom: ROW_BORDER,
+                  color: TEXT_PRIMARY,
+                  fontSize: FONT_SIZE_UI,
+                  fontWeight: 700,
+                }}
+              >
+                {row.title}
+              </td>
+              <td
+                style={{
+                  padding: "10px 12px",
+                  borderBottom: ROW_BORDER,
+                  color: TEXT_STRONG,
+                  fontSize: FONT_SIZE_UI,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {formatHoursFromMs(row.listenedMs)}
+              </td>
+              <td
+                style={{
+                  padding: "10px 12px",
+                  borderBottom: ROW_BORDER,
+                  color: TEXT_STRONG,
+                  fontSize: FONT_SIZE_UI,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {formatNumber(row.playCount)}
+              </td>
+              <td
+                style={{
+                  padding: "10px 12px",
+                  borderBottom: ROW_BORDER,
+                  color: TEXT_STRONG,
+                  fontSize: FONT_SIZE_UI,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {formatNumber(row.completedCount)}
+              </td>
+              <td
+                style={{
+                  padding: "10px 12px",
+                  borderBottom: ROW_BORDER,
+                  color: TEXT_MUTED,
+                  fontSize: FONT_SIZE_UI,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {formatAgo(row.lastListenedAt)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </TableShell>
+  );
+}
+
+function resolveDedupeTrackLabel(row: DedupeRow): string {
+  return (
+    row.recordingTitle ?? row.trackTitle ?? ellipsisMiddle(row.playbackId, 10)
+  );
+}
+
+function resolveDedupeMemberLabel(row: DedupeRow): string {
+  return row.memberEmail ?? ellipsisMiddle(row.memberId, 8);
+}
+
+function DedupeTable(props: { rows: PlaybackAdminSnapshot["recentDedupe"] }) {
+  const rows = props.rows as DedupeRow[];
+
+  return (
+    <TableShell>
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          minWidth: 900,
+        }}
+      >
+        <thead>
+          <tr>
+            {["When", "Event", "Milestone", "Playback", "Member"].map(
+              (label) => (
+                <th
+                  key={label}
+                  style={{
+                    textAlign: "left",
+                    padding: "8px 10px",
+                    fontSize: FONT_SIZE_DEDUPE,
+                    fontWeight: 700,
+                    color: TEXT_FAINT,
+                    borderBottom: ROW_BORDER,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {label}
+                </th>
+              ),
+            )}
+          </tr>
+        </thead>
+
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td
+                colSpan={5}
+                style={{
+                  padding: 10,
+                  fontSize: FONT_SIZE_DEDUPE,
+                  color: TEXT_MUTED,
                 }}
               >
                 No rows.
@@ -357,15 +416,16 @@ function DedupeTable(props: {
             </tr>
           ) : null}
 
-          {props.rows.map((row) => (
+          {rows.map((row) => (
             <tr
               key={`${row.memberId}:${row.playbackId}:${row.eventType}:${row.milestoneKey}:${row.createdAt}`}
             >
               <td
                 style={{
-                  padding: "12px 14px",
-                  borderBottom: "1px solid rgba(255,255,255,0.08)",
-                  color: "rgba(255,255,255,0.68)",
+                  padding: "8px 10px",
+                  borderBottom: ROW_BORDER,
+                  color: TEXT_MUTED,
+                  fontSize: FONT_SIZE_DEDUPE,
                   whiteSpace: "nowrap",
                 }}
               >
@@ -373,10 +433,11 @@ function DedupeTable(props: {
               </td>
               <td
                 style={{
-                  padding: "12px 14px",
-                  borderBottom: "1px solid rgba(255,255,255,0.08)",
-                  color: "rgba(255,255,255,0.94)",
-                  fontWeight: 800,
+                  padding: "8px 10px",
+                  borderBottom: ROW_BORDER,
+                  color: TEXT_PRIMARY,
+                  fontSize: FONT_SIZE_DEDUPE,
+                  fontWeight: 700,
                   whiteSpace: "nowrap",
                 }}
               >
@@ -384,9 +445,10 @@ function DedupeTable(props: {
               </td>
               <td
                 style={{
-                  padding: "12px 14px",
-                  borderBottom: "1px solid rgba(255,255,255,0.08)",
-                  color: "rgba(255,255,255,0.72)",
+                  padding: "8px 10px",
+                  borderBottom: ROW_BORDER,
+                  color: TEXT_MUTED,
+                  fontSize: FONT_SIZE_DEDUPE,
                   whiteSpace: "nowrap",
                 }}
               >
@@ -394,25 +456,29 @@ function DedupeTable(props: {
               </td>
               <td
                 style={{
-                  padding: "12px 14px",
-                  borderBottom: "1px solid rgba(255,255,255,0.08)",
-                  color: "rgba(255,255,255,0.72)",
-                  fontFamily:
-                    'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+                  padding: "8px 10px",
+                  borderBottom: ROW_BORDER,
+                  color: TEXT_STRONG,
+                  fontSize: FONT_SIZE_DEDUPE,
+                  maxWidth: 280,
                 }}
               >
-                {ellipsisMiddle(row.playbackId, 10)}
+                {resolveDedupeTrackLabel(row)}
               </td>
               <td
                 style={{
-                  padding: "12px 14px",
-                  borderBottom: "1px solid rgba(255,255,255,0.08)",
-                  color: "rgba(255,255,255,0.72)",
+                  padding: "8px 10px",
+                  borderBottom: ROW_BORDER,
+                  color: TEXT_STRONG,
+                  fontSize: FONT_SIZE_DEDUPE,
+                  maxWidth: 280,
                   fontFamily:
-                    'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+                    row.memberEmail == null
+                      ? 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace'
+                      : undefined,
                 }}
               >
-                {ellipsisMiddle(row.memberId, 8)}
+                {resolveDedupeMemberLabel(row)}
               </td>
             </tr>
           ))}
@@ -455,14 +521,14 @@ export default function PlaybackTelemetryDashboardClient(props: {
           router.refresh();
         }}
         style={{
-          height: 32,
+          height: 30,
           padding: "0 12px",
           borderRadius: 999,
           border: "1px solid rgba(255,255,255,0.14)",
           background: "rgba(255,255,255,0.04)",
-          color: "rgba(255,255,255,0.92)",
+          color: TEXT_PRIMARY,
           cursor: "pointer",
-          fontSize: 12,
+          fontSize: FONT_SIZE_UI,
           fontWeight: 700,
           opacity: refreshing ? 0.72 : 1,
         }}
@@ -472,18 +538,18 @@ export default function PlaybackTelemetryDashboardClient(props: {
 
       <button
         type="button"
-        onClick={() => setAutoRefresh((v) => !v)}
+        onClick={() => setAutoRefresh((value) => !value)}
         style={{
-          height: 32,
+          height: 30,
           padding: "0 12px",
           borderRadius: 999,
           border: "1px solid rgba(255,255,255,0.14)",
           background: autoRefresh
             ? "rgba(255,255,255,0.10)"
             : "rgba(255,255,255,0.04)",
-          color: "rgba(255,255,255,0.92)",
+          color: TEXT_PRIMARY,
           cursor: "pointer",
-          fontSize: 12,
+          fontSize: FONT_SIZE_UI,
           fontWeight: 700,
           opacity: autoRefresh ? 1 : 0.82,
         }}
@@ -496,7 +562,7 @@ export default function PlaybackTelemetryDashboardClient(props: {
   return (
     <AdminPageFrame
       embed={props.embed}
-      maxWidth={1240}
+      maxWidth={1320}
       title="Playback telemetry"
       subtitle="Monitor site-wide listening aggregates, recent recording activity, and telemetry dedupe behaviour."
       headerActions={headerActions}
@@ -509,107 +575,44 @@ export default function PlaybackTelemetryDashboardClient(props: {
       >
         <div
           style={{
-            fontSize: 12,
-            color: "rgba(255,255,255,0.68)",
+            fontSize: FONT_SIZE_UI,
+            lineHeight: 1.5,
+            color: TEXT_MUTED,
           }}
         >
           Generated {formatAgo(snapshot.generatedAt)} · snapshot{" "}
           {fmtSnapshotStamp(snapshot.generatedAt)}
         </div>
 
+        <SectionCard
+          title="Listening aggregates"
+          subtitle="Members-only and site-wide roll-up totals shown side by side."
+        >
+          <AggregateTable snapshot={snapshot} />
+        </SectionCard>
+
         <div
           style={{
             display: "grid",
             gap: 16,
-            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            alignItems: "start",
           }}
         >
           <SectionCard
-            title="Member aggregates"
-            subtitle="Roll-up totals from the member-facing aggregate layer."
+            title="Top tracks by listened time"
+            subtitle="Ranked by cumulative listened milliseconds."
           >
-            <div
-              style={{
-                display: "grid",
-                gap: 10,
-                gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-              }}
-            >
-              <MetricCard
-                label="Active members"
-                value={formatNumber(snapshot.memberTotals.activeCount)}
-              />
-              <MetricCard
-                label="Hours listened"
-                value={formatHoursFromMs(snapshot.memberTotals.listenedMs)}
-                sublabel={`${formatMinutesFromMs(snapshot.memberTotals.listenedMs)} minutes`}
-              />
-              <MetricCard
-                label="Qualified plays"
-                value={formatNumber(snapshot.memberTotals.playCount)}
-              />
-              <MetricCard
-                label="15s milestones"
-                value={formatNumber(
-                  snapshot.memberTotals.creditedProgressCount,
-                )}
-              />
-              <MetricCard
-                label="90% completes"
-                value={formatNumber(snapshot.memberTotals.completedCount)}
-              />
-            </div>
+            <TrackTable rows={snapshot.topTracksByListenedMs} />
           </SectionCard>
 
           <SectionCard
-            title="Site-wide track aggregates"
-            subtitle="Roll-up totals from the recording aggregate layer."
+            title="Most recent track activity"
+            subtitle="Latest recording-level activity ordered by most recent listening."
           >
-            <div
-              style={{
-                display: "grid",
-                gap: 10,
-                gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-              }}
-            >
-              <MetricCard
-                label="Active recordings"
-                value={formatNumber(snapshot.siteTotals.activeCount)}
-              />
-              <MetricCard
-                label="Hours listened"
-                value={formatHoursFromMs(snapshot.siteTotals.listenedMs)}
-                sublabel={`${formatMinutesFromMs(snapshot.siteTotals.listenedMs)} minutes`}
-              />
-              <MetricCard
-                label="Qualified plays"
-                value={formatNumber(snapshot.siteTotals.playCount)}
-              />
-              <MetricCard
-                label="15s milestones"
-                value={formatNumber(snapshot.siteTotals.creditedProgressCount)}
-              />
-              <MetricCard
-                label="90% completes"
-                value={formatNumber(snapshot.siteTotals.completedCount)}
-              />
-            </div>
+            <TrackTable rows={snapshot.recentTracks} />
           </SectionCard>
         </div>
-
-        <SectionCard
-          title="Top tracks by listened time"
-          subtitle="Ranked by cumulative listened milliseconds."
-        >
-          <TrackTable rows={snapshot.topTracksByListenedMs} />
-        </SectionCard>
-
-        <SectionCard
-          title="Most recent track activity"
-          subtitle="Latest recording-level activity ordered by most recent listening."
-        >
-          <TrackTable rows={snapshot.recentTracks} />
-        </SectionCard>
 
         <SectionCard
           title="Recent telemetry dedupe rows"
