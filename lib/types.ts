@@ -76,6 +76,7 @@ export type PlayerTrack = {
   muxPlaybackId?: string;
   visualTheme?: string;
   explicit?: boolean;
+  playCount?: number;
 };
 
 export type AlbumLyricsBundle = {

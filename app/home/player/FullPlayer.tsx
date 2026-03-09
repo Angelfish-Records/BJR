@@ -22,6 +22,17 @@ function fmtTime(ms: number) {
   return `${m}:${String(r).padStart(2, "0")}`;
 }
 
+function fmtPlayCount(value: number | undefined): string {
+  const n =
+    typeof value === "number" && Number.isFinite(value) && value > 0
+      ? Math.floor(value)
+      : 0;
+
+  if (n < 1000) return `${n} plays`;
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K plays`;
+  return `${(n / 1_000_000).toFixed(1)}M plays`;
+}
+
 function tierRank(t: Tier): number {
   if (t === "partner") return 3;
   if (t === "patron") return 2;
@@ -874,6 +885,7 @@ export default function FullPlayer(props: {
     const ms = getDurMs(t) ?? 0;
     return ms > 0 ? fmtTime(ms) : "—";
   };
+  const renderPlayCount = (t: PlayerTrack) => fmtPlayCount(t.playCount);
 
   const shareCtx = deriveShareContext({
     albumSlug: effAlbumSlug,
@@ -1324,8 +1336,10 @@ export default function FullPlayer(props: {
                     ) : null}
                   </div>
 
-                  <div className="afRowDurUnder" aria-hidden="true">
-                    {renderDur(t)}
+                  <div className="afRowMetaUnder" aria-hidden="true">
+                    <span>{renderPlayCount(t)}</span>
+                    <span className="afRowMetaDot">•</span>
+                    <span>{renderDur(t)}</span>
                   </div>
                 </div>
 
@@ -1362,6 +1376,13 @@ export default function FullPlayer(props: {
                   >
                     <ShareIcon />
                   </button>
+
+                  <div
+                    className="afRowPlaysRight"
+                    style={{ fontSize: 12, opacity: 0.68, color: subColor }}
+                  >
+                    {renderPlayCount(t)}
+                  </div>
 
                   <div
                     className="afRowDurRight"
@@ -1688,17 +1709,28 @@ export default function FullPlayer(props: {
           transform: translateX(0);
         }
 
-        .afRowDurUnder{
+                .afRowMetaUnder{
           display: none;
           margin-top: 4px;
           font-size: 12px;
           opacity: 0.65;
           color: rgba(255,255,255,0.70);
           line-height: 1.1;
+          align-items: center;
+          gap: 6px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .afRowMetaDot{
+          opacity: 0.5;
+          flex: 0 0 auto;
         }
 
         @media (max-width: 520px){
-          .afRowDurUnder{ display: block; }
+          .afRowMetaUnder{ display: flex; }
+          .afRowPlaysRight{ display: none; }
           .afRowDurRight{ display: none; }
           .afTrackRow .afRowShare{
             opacity: 0.95;

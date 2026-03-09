@@ -12,6 +12,7 @@ import {
   makeAlbumPlayerBundle,
   normalizeLyricCuesFromSanity,
 } from "@/lib/types";
+import { getRecordingPlayCountsByRecordingIds } from "@/lib/recordingListenTotals";
 
 type AlbumDoc = {
   _id?: string;
@@ -292,6 +293,14 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
     .map((t) => t.recordingId)
     .filter((x): x is string => typeof x === "string" && x.length > 0);
 
+  const playCountsByRecordingId =
+    await getRecordingPlayCountsByRecordingIds(recordingIds);
+
+  const tracksWithPlayCounts: PlayerTrack[] = tracks.map((t) => ({
+    ...t,
+    playCount: playCountsByRecordingId[t.recordingId] ?? 0,
+  }));
+
   const lyricsQ = `
     *[_type == "lyrics" && recordingId in $recordingIds]{
       recordingId,
@@ -320,7 +329,7 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
   return makeAlbumPlayerBundle({
     albumSlug: slug,
     album,
-    tracks,
+    tracks: tracksWithPlayCounts,
     albumLyrics: { cuesByRecordingId, offsetByRecordingId },
   });
 }
