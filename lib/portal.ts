@@ -82,13 +82,20 @@ export type PortalModuleExegesis = {
   title?: string;
 };
 
+export type PortalModuleMemberPanel = {
+  _key: string;
+  _type: "moduleMemberPanel";
+  title?: string;
+};
+
 export type PortalModule =
   | PortalModuleHeading
   | PortalModulePanels
   | PortalModuleDownloads
   | PortalModuleDownloadGrid
   | PortalModuleArtistPosts
-  | PortalModuleExegesis;
+  | PortalModuleExegesis
+  | PortalModuleMemberPanel;
 
 export type PortalPageDoc = {
   title?: string;
@@ -144,6 +151,7 @@ const portalPageQuery = `
       minVisibility
 
       // moduleExegesis
+      // moduleMemberPanel
     }
   }
 `;

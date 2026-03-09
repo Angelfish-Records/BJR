@@ -24,10 +24,11 @@ export const portalPage = defineType({
       type: "array",
       of: [
         { type: "moduleHeading" },
-        { type: "modulePanels"},
+        { type: "modulePanels" },
         { type: "moduleDownloads" },
         { type: "moduleArtistPosts" },
-        { type: "moduleExegesis"},
+        { type: "moduleExegesis" },
+        { type: "moduleMemberPanel" },
       ],
       validation: (r) => r.required().min(1),
     }),

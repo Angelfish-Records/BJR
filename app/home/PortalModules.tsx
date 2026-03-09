@@ -507,7 +507,11 @@ function DownloadOfferCard(props: {
 // Module renderer (reused per tab)
 // --------------------
 
-function renderModule(m: PortalModule, entitlementKeys: string[]) {
+function renderModule(
+  m: PortalModule,
+  entitlementKeys: string[],
+  memberSummary: PortalMemberSummary | null,
+) {
   if (m._type === "moduleHeading") return null;
 
   if (m._type === "modulePanels") {
@@ -658,6 +662,19 @@ function renderModule(m: PortalModule, entitlementKeys: string[]) {
     return <PortalExegesis key={m._key} title={m.title ?? "Exegesis"} />;
   }
 
+  if (m._type === "moduleMemberPanel") {
+    if (!memberSummary) return null;
+    if (!hasMeaningfulMemberSummary(memberSummary)) return null;
+
+    return (
+      <PortalMemberPanel
+        key={m._key}
+        summary={memberSummary}
+        title={m.title ?? "Member"}
+      />
+    );
+  }
+
   return null;
 }
 
@@ -743,8 +760,8 @@ function inferTabs(
 // --------------------
 //
 // This file primarily renders authored portal modules fetched from Sanity.
-// Viewer-specific runtime surfaces may be injected into specific tab content
-// through explicit props, but should not create parallel local module contracts.
+// Some modules may act as authored runtime markers: Studio controls placement,
+// while runtime code owns the actual data and component behavior.
 
 export default async function PortalModules(props: Props) {
   const { modules, memberId, memberSummary = null } = props;
@@ -755,27 +772,20 @@ export default async function PortalModules(props: Props) {
   const entitlementKeys = expandEntitlementKeys(entitlementKeysRaw);
 
   const tabsBuilt = inferTabs(modules, entitlementKeys);
-  const showMemberPanel = hasMeaningfulMemberSummary(memberSummary);
 
-  const tabs: PortalTabSpec[] = tabsBuilt.map((t) => {
-    const isDefaultPortalTab = t.id === "portal";
-
-    return {
-      id: t.id,
-      title: t.title,
-      locked: t.locked,
-      lockedHint: t.lockedHint,
-      content: (
-        <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
-          {isDefaultPortalTab && showMemberPanel && memberSummary ? (
-            <PortalMemberPanel summary={memberSummary} />
-          ) : null}
-
-          {t.modules.map((m) => renderModule(m, entitlementKeys))}
-        </div>
-      ),
-    };
-  });
+  const tabs: PortalTabSpec[] = tabsBuilt.map((t) => ({
+    id: t.id,
+    title: t.title,
+    locked: t.locked,
+    lockedHint: t.lockedHint,
+    content: (
+      <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
+        {t.modules.map((m) =>
+          renderModule(m, entitlementKeys, memberSummary ?? null),
+        )}
+      </div>
+    ),
+  }));
 
   return <PortalTabs tabs={tabs} defaultTabId={tabs[0]?.id ?? null} />;
 }
