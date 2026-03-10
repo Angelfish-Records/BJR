@@ -12,7 +12,7 @@ export default async function PortalExegesisIndexRuntimePage() {
     <SessionRuntime
       albumSlugOverride={null}
       initialPortalTabId="exegesis"
-      initialExegesisRecordingId={null}
+      initialExegesisDisplayId={null}
     />
   );
 }

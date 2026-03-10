@@ -65,38 +65,41 @@ function extractDisplayIdFromPath(pathname: string): string | null {
   return raw ? raw : null;
 }
 
-function getTrackMeta(
-  cat: CatalogueOk | null,
-  tid: string,
-): { title: string | null; artist: string | null } {
-  const t = (tid ?? "").trim();
-  if (!cat || !t) return { title: null, artist: null };
-  for (const a of cat.albums ?? []) {
-    for (const tr of a.tracks ?? []) {
-      if ((tr.recordingId ?? "").trim() === t)
-        return { title: tr.title ?? null, artist: tr.artist ?? null };
-    }
-  }
-  return { title: null, artist: null };
-}
+function buildCatalogueIndexes(cat: CatalogueOk | null): {
+  recordingIdByDisplayId: Record<string, string>;
+  trackMetaByRecordingId: Record<
+    string,
+    { title: string | null; artist: string | null }
+  >;
+} {
+  const recordingIdByDisplayId: Record<string, string> = {};
+  const trackMetaByRecordingId: Record<
+    string,
+    { title: string | null; artist: string | null }
+  > = {};
 
-function resolveRecordingIdFromDisplayId(
-  cat: CatalogueOk | null,
-  displayIdRaw: string,
-): string | null {
-  const displayId = (displayIdRaw ?? "").trim();
-  if (!cat || !displayId) return null;
+  if (!cat) {
+    return { recordingIdByDisplayId, trackMetaByRecordingId };
+  }
 
   for (const album of cat.albums ?? []) {
     for (const track of album.tracks ?? []) {
-      if ((track.displayId ?? "").trim() === displayId) {
-        const recordingId = (track.recordingId ?? "").trim();
-        return recordingId || null;
+      const recordingId = (track.recordingId ?? "").trim();
+      const displayId = (track.displayId ?? "").trim();
+      if (!recordingId) continue;
+
+      trackMetaByRecordingId[recordingId] = {
+        title: track.title ?? null,
+        artist: track.artist ?? null,
+      };
+
+      if (displayId) {
+        recordingIdByDisplayId[displayId] = recordingId;
       }
     }
   }
 
-  return null;
+  return { recordingIdByDisplayId, trackMetaByRecordingId };
 }
 
 // ---- module-level caches (persist across route transitions) ----
@@ -428,11 +431,14 @@ export default function PortalExegesis(props: { title?: string }) {
     }
   }, [exegesisDisplayId, displayIdFromPath, setExegesisDisplayId]);
 
-  const recordingId = React.useMemo(
-    () =>
-      displayId ? resolveRecordingIdFromDisplayId(catalogue, displayId) : null,
-    [catalogue, displayId],
+  const { recordingIdByDisplayId, trackMetaByRecordingId } = React.useMemo(
+    () => buildCatalogueIndexes(catalogue),
+    [catalogue],
   );
+
+  const recordingId = displayId
+    ? (recordingIdByDisplayId[displayId] ?? null)
+    : null;
 
   // -------- track state --------
   const [lyrics, setLyrics] = React.useState<LyricsOk | null>(null);
@@ -517,7 +523,7 @@ export default function PortalExegesis(props: { title?: string }) {
   // -------- render --------
   if (displayId) {
     const meta = recordingId
-      ? getTrackMeta(catalogue, recordingId)
+      ? (trackMetaByRecordingId[recordingId] ?? { title: null, artist: null })
       : { title: null, artist: null };
 
     const resolvedTitle =

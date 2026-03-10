@@ -14,6 +14,17 @@ import {
 } from "@/lib/types";
 import { getRecordingPlayCountsByRecordingIds } from "@/lib/recordingListenTotals";
 
+export type AlbumDocTrack = {
+  recordingId: string;
+  displayId?: string;
+  title?: string;
+  artist?: string;
+  durationMs?: number;
+  muxPlaybackId?: string;
+  visualTheme?: string;
+  explicit?: boolean;
+};
+
 type AlbumDoc = {
   _id?: string;
   catalogueId?: string | null;
@@ -33,16 +44,7 @@ type AlbumDoc = {
     platform?: string;
     url?: string;
   }>;
-  tracks?: Array<{
-    recordingId: string;
-    displayId?: string;
-    title?: string;
-    artist?: string;
-    durationMs?: number;
-    muxPlaybackId?: string;
-    visualTheme?: string;
-    explicit?: boolean;
-  }>;
+  tracks?: AlbumDocTrack[];
 };
 
 type TrackLyricsDoc = {
@@ -154,6 +156,59 @@ function uniqifyDisplayId(desired: string, used: Set<string>): string {
   return d;
 }
 
+export type NormalizedAlbumTrack = {
+  recordingId: string;
+  displayId: string;
+  title?: string;
+  artist?: string;
+  muxPlaybackId?: string;
+  durationMs?: number;
+  visualTheme?: string;
+  explicit?: boolean;
+  trackNo: number;
+};
+
+export function normalizeAlbumTracks(
+  tracks: AlbumDocTrack[] | null | undefined,
+  args?: { albumTheme?: string | undefined },
+): NormalizedAlbumTrack[] {
+  const albumTheme = normTheme(args?.albumTheme);
+  if (!Array.isArray(tracks)) return [];
+
+  const used = new Set<string>();
+
+  return tracks
+    .filter((t) => typeof t?.recordingId === "string" && t.recordingId.trim())
+    .map((t, idx) => {
+      const rawDur = t.durationMs;
+      const dur =
+        typeof rawDur === "number" && Number.isFinite(rawDur)
+          ? rawDur
+          : undefined;
+
+      const trackNo = idx + 1;
+      const recordingId = t.recordingId.trim();
+
+      const wanted =
+        normStr(t.displayId) ?? fallbackDisplayId({ title: t.title, trackNo });
+
+      const displayId = uniqifyDisplayId(wanted, used);
+      const trackTheme = normTheme(t.visualTheme);
+
+      return {
+        recordingId,
+        displayId,
+        title: normStr(t.title),
+        artist: normStr(t.artist),
+        muxPlaybackId: normStr(t.muxPlaybackId),
+        durationMs: typeof dur === "number" && dur > 0 ? dur : undefined,
+        visualTheme: trackTheme ?? albumTheme,
+        explicit: t.explicit === true,
+        trackNo,
+      };
+    });
+}
+
 export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
   const q = `
     *[_type == "album" && slug.current == $slug][0]{
@@ -248,46 +303,18 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
     },
   };
 
-  const tracks: PlayerTrack[] = Array.isArray(doc.tracks)
-    ? (() => {
-        const used = new Set<string>();
-
-        return doc.tracks
-          .filter(
-            (t) => typeof t?.recordingId === "string" && t.recordingId.trim(),
-          )
-          .map((t, idx) => {
-            const rawDur = t.durationMs;
-            const dur =
-              typeof rawDur === "number" && Number.isFinite(rawDur)
-                ? rawDur
-                : undefined;
-
-            const albumOrdinal = idx + 1;
-
-            const recordingId = t.recordingId.trim();
-
-            const wanted =
-              normStr(t.displayId) ??
-              fallbackDisplayId({ title: t.title, trackNo: albumOrdinal });
-
-            const displayId = uniqifyDisplayId(wanted, used);
-
-            const trackTheme = normTheme(t.visualTheme);
-
-            return {
-              recordingId,
-              displayId,
-              title: normStr(t.title),
-              artist: normStr(t.artist),
-              muxPlaybackId: normStr(t.muxPlaybackId),
-              durationMs: typeof dur === "number" && dur > 0 ? dur : undefined,
-              visualTheme: trackTheme ?? albumTheme,
-              explicit: t.explicit === true,
-            };
-          });
-      })()
-    : [];
+  const tracks: PlayerTrack[] = normalizeAlbumTracks(doc.tracks, {
+    albumTheme,
+  }).map((t) => ({
+    recordingId: t.recordingId,
+    displayId: t.displayId,
+    title: t.title,
+    artist: t.artist,
+    muxPlaybackId: t.muxPlaybackId,
+    durationMs: t.durationMs,
+    visualTheme: t.visualTheme,
+    explicit: t.explicit,
+  }));
 
   const recordingIds = tracks
     .map((t) => t.recordingId)

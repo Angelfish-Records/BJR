@@ -3,6 +3,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { client } from "@/sanity/lib/client";
 import { urlFor } from "@/sanity/lib/image";
+import { normalizeAlbumTracks, type AlbumDocTrack } from "@/lib/albums";
 
 export const runtime = "nodejs";
 export const revalidate = 300;
@@ -42,12 +43,7 @@ type CatalogueQueryResult = {
     albumTitle?: string | null;
     albumCatalogueId?: string | null;
     artwork?: unknown;
-    tracks?: Array<{
-      recordingId?: string | null;
-      displayId?: string | null;
-      title?: string | null;
-      artist?: string | null;
-    }>;
+    tracks?: AlbumDocTrack[];
   }>;
 };
 
@@ -106,46 +102,21 @@ export async function GET() {
       .map((a) => {
         const tracksRaw = Array.isArray(a.tracks) ? a.tracks : [];
 
-        const coverUrl =
-          a?.artwork
-            ? urlFor(a.artwork).width(300).height(300).quality(80).url()
-            : null;
-
-        const normTracks: CatalogueTrack[] = [];
-        const seenRecordingIds = new Set<string>();
-        const seenDisplayIds = new Set<string>();
-
-        // ✅ preserve album tracklist ordinals even if some tracks are skipped
-        for (let idx = 0; idx < tracksRaw.length; idx++) {
-          const t = tracksRaw[idx];
-
-          const recordingId = asTrimmedString(t?.recordingId);
-          const displayId = asTrimmedString(t?.displayId);
-
-          // Eligibility: must have a recordingId AND lyrics for that recordingId
-          if (!recordingId) continue;
-          if (!lyricIdSet.has(recordingId)) continue;
-
-          // URL requirement: must have displayId (your albums.ts already guarantees fallback/uniq,
-          // but catalogue is used for lightweight browsing; enforce it here too).
-          if (!displayId) continue;
-
-          if (seenRecordingIds.has(recordingId)) continue;
-          if (seenDisplayIds.has(displayId)) continue;
-
-          seenRecordingIds.add(recordingId);
-          seenDisplayIds.add(displayId);
-
-          normTracks.push({
-            recordingId,
-            displayId,
-            title: asTrimmedString(t?.title) || null,
-            artist: asTrimmedString(t?.artist) || null,
-            trackNo: idx + 1,
-          });
-        }
+        const normTracks: CatalogueTrack[] = normalizeAlbumTracks(tracksRaw)
+          .filter((t) => lyricIdSet.has(t.recordingId))
+          .map((t) => ({
+            recordingId: t.recordingId,
+            displayId: t.displayId,
+            title: t.title ?? null,
+            artist: t.artist ?? null,
+            trackNo: t.trackNo,
+          }));
 
         const recordingIds = uniqNonEmpty(normTracks.map((t) => t.recordingId));
+
+        const coverUrl = a?.artwork
+          ? urlFor(a.artwork).width(300).height(300).quality(80).url()
+          : null;
 
         return {
           albumId: asTrimmedString(a?.albumId),
