@@ -102,6 +102,7 @@ export default async function SessionRuntime(props: {
   const payload: SessionRuntimePayload = {
     portalModules: portal?.modules ?? [],
     memberId: member?.id ?? null,
+    entitlementKeys,
     memberSummary,
     initialPortalTabId: props.initialPortalTabId ?? null,
     initialExegesisDisplayId: props.initialExegesisDisplayId ?? null,

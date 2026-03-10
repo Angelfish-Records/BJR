@@ -24,6 +24,7 @@ import { usePlaybackReconciliation } from "./usePlaybackReconciliation";
 export type PortalAreaProps = {
   portalModules: PortalModule[];
   memberId: string | null;
+  entitlementKeys: string[];
   memberSummary?: PortalMemberSummary | null;
   topLogoUrl?: string | null;
   topLogoHeight?: number | null;
@@ -43,6 +44,7 @@ export default function PortalArea(props: PortalAreaProps) {
   const {
     portalModules,
     memberId,
+    entitlementKeys,
     memberSummary = null,
     bundle,
     albums,
@@ -142,6 +144,7 @@ export default function PortalArea(props: PortalAreaProps) {
           <PortalSurface
             modules={portalModules}
             memberId={memberId}
+            entitlementKeys={entitlementKeys}
             memberSummary={memberSummary}
           />
         ) : (
@@ -171,6 +174,7 @@ export default function PortalArea(props: PortalAreaProps) {
       viewerTier,
       portalModules,
       memberId,
+      entitlementKeys,
       memberSummary,
     ],
   );

@@ -13,6 +13,7 @@ import type { PortalMemberSummary } from "@/lib/memberDashboard";
 export type SessionRuntimePayload = {
   portalModules: PortalModule[];
   memberId: string | null;
+  entitlementKeys: string[];
   memberSummary?: PortalMemberSummary | null;
   initialPortalTabId?: string | null;
   initialExegesisDisplayId?: string | null;

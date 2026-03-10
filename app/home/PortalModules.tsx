@@ -2,7 +2,6 @@
 import React from "react";
 import { PortableText } from "@portabletext/react";
 import type { PortableTextBlock } from "@portabletext/types";
-import { listCurrentEntitlementKeys } from "../../lib/entitlements";
 import { getAlbumOffer, type AlbumOfferAsset } from "../../lib/albumOffers";
 import { urlFor } from "../../sanity/lib/image";
 import type { PortalMemberSummary } from "../../lib/memberDashboard";
@@ -24,6 +23,7 @@ type DownloadAssetSel = NonNullable<PortalModuleDownloads["assets"]>[number];
 type Props = {
   modules: PortalModule[];
   memberId: string | null;
+  entitlementKeys: string[];
   memberSummary?: PortalMemberSummary | null;
 };
 
@@ -763,13 +763,14 @@ function inferTabs(
 // Some modules may act as authored runtime markers: Studio controls placement,
 // while runtime code owns the actual data and component behavior.
 
-export default async function PortalModules(props: Props) {
-  const { modules, memberId, memberSummary = null } = props;
-  const entitlementKeysRaw = memberId
-    ? await listCurrentEntitlementKeys(memberId)
-    : [];
+export default function PortalModules(props: Props) {
+  const {
+    modules,
+    entitlementKeys: entitlementKeysInput,
+    memberSummary = null,
+  } = props;
 
-  const entitlementKeys = expandEntitlementKeys(entitlementKeysRaw);
+  const entitlementKeys = expandEntitlementKeys(entitlementKeysInput);
 
   const tabsBuilt = inferTabs(modules, entitlementKeys);
 

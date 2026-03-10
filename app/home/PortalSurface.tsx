@@ -7,6 +7,7 @@ import type { PortalMemberSummary } from "@/lib/memberDashboard";
 type Props = {
   modules: PortalModule[];
   memberId: string | null;
+  entitlementKeys: string[];
   memberSummary?: PortalMemberSummary | null;
 };
 
@@ -15,12 +16,13 @@ export default function PortalSurface(props: Props) {
   // Viewer-specific surfaces (member dashboard, future telemetry cards, etc.)
   // should be routed through this layer, then injected into the appropriate
   // tab content rather than rendered above the tab system.
-  const { modules, memberId, memberSummary } = props;
+  const { modules, memberId, entitlementKeys, memberSummary } = props;
 
   return (
     <PortalModules
       modules={modules}
       memberId={memberId}
+      entitlementKeys={entitlementKeys}
       memberSummary={memberSummary ?? null}
     />
   );

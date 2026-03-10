@@ -19,6 +19,7 @@ function toPortalAreaProps(
   return {
     portalModules: payload.portalModules,
     memberId: payload.memberId,
+    entitlementKeys: payload.entitlementKeys,
     memberSummary: payload.memberSummary ?? null,
     topLogoUrl: shellConfig.topLogoUrl,
     topLogoHeight: shellConfig.topLogoHeight,
@@ -32,7 +33,6 @@ function toPortalAreaProps(
     canManageBilling: payload.canManageBilling ?? false,
   };
 }
-
 function StableSessionViewport(props: {
   runtime: React.ReactNode;
   topLogoUrl: string | null;
