@@ -4,9 +4,6 @@ import React from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getLastPortalTab, setLastPortalTab } from "./portalLastTab";
 
-// Optional: unify with urlState’s QS event pattern
-const PATH_EVENT = "af:path-change";
-
 function getStablePathname(nextPathname: string | null): string | null {
   if (nextPathname) return nextPathname;
   if (typeof window === "undefined") return null;
@@ -52,16 +49,6 @@ function getRememberedValidTab(
   return resolveValid(remembered);
 }
 
-function pushPathOnly(href: string) {
-  if (typeof window === "undefined") return;
-  const cur = window.location.href;
-  const next = href.startsWith("http") ? href : new URL(href, cur).toString();
-  if (next === cur) return;
-
-  window.history.pushState({}, "", next);
-  window.dispatchEvent(new Event(PATH_EVENT));
-}
-
 export default function PortalTabs(props: {
   tabs: PortalTabSpec[];
   defaultTabId?: string | null;
@@ -77,6 +64,7 @@ export default function PortalTabs(props: {
   const stablePathname = getStablePathname(pathname);
 
   const didHydrateRef = React.useRef(false);
+  const pendingRouteTabRef = React.useRef<string | null>(null);
 
   const hasTabs = tabs.length > 0;
   const firstId = (hasTabs ? tabs[0]?.id : null) ?? null;
@@ -112,17 +100,6 @@ export default function PortalTabs(props: {
     if (initial) s.add(initial);
     return s;
   });
-
-  const activeIdRef = React.useRef<string | null>(initial);
-  const mountedIdsRef = React.useRef<Set<string>>(new Set(mountedIds));
-
-  React.useEffect(() => {
-    activeIdRef.current = activeId;
-  }, [activeId]);
-
-  React.useEffect(() => {
-    mountedIdsRef.current = mountedIds;
-  }, [mountedIds]);
 
   // --- two-signal model for differential Exegesis portal styling ---
 
@@ -171,12 +148,12 @@ export default function PortalTabs(props: {
   const ensureMounted = React.useCallback((tabId: string) => {
     if (!tabId) return;
 
-    if (mountedIdsRef.current.has(tabId)) return;
-
-    const next = new Set(mountedIdsRef.current);
-    next.add(tabId);
-    mountedIdsRef.current = next;
-    setMountedIds(next);
+    setMountedIds((prev) => {
+      if (prev.has(tabId)) return prev;
+      const next = new Set(prev);
+      next.add(tabId);
+      return next;
+    });
   }, []);
 
   const measure = React.useCallback(() => {
@@ -286,66 +263,27 @@ export default function PortalTabs(props: {
     return tabs.find((t) => t.id === activeId) ?? tabs[0] ?? null;
   }, [hasTabs, tabs, activeId]);
 
-  // ✅ Initial hydrate alignment + validity repair only
+  // Initial hydrate alignment + pathname sync
   React.useEffect(() => {
     if (!initial) return;
 
     if (!didHydrateRef.current) {
       didHydrateRef.current = true;
-      activeIdRef.current = initial;
       setActiveId(initial);
       ensureMounted(initial);
       return;
     }
 
-    const current = activeIdRef.current;
-    const currentStillValid = current
-      ? tabs.some((t) => t.id === current)
-      : false;
+    if (pendingRouteTabRef.current && pendingRouteTabRef.current === initial) {
+      pendingRouteTabRef.current = null;
+      return;
+    }
 
-    if (!currentStillValid) {
-      activeIdRef.current = initial;
+    if (activeId !== initial) {
       setActiveId(initial);
       ensureMounted(initial);
     }
-  }, [initial, tabs, ensureMounted]);
-
-  // ✅ Listen to real URL changes (back/forward + our PATH_EVENT)
-  React.useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const syncFromLocation = () => {
-      const t = tabFromPathname(window.location.pathname);
-      const rememberedValid = getRememberedValidTab(tabs, resolveValid);
-      const v = resolveValid(t) ?? rememberedValid ?? initial;
-
-      if (v) setLastPortalTab(v);
-      if (!v) return;
-
-      const current = activeIdRef.current;
-
-      if (v !== current) {
-        armIndicatorMotion();
-        activeIdRef.current = v;
-        setActiveId(v);
-        ensureMounted(v);
-        requestAnimationFrame(() => measure());
-        return;
-      }
-
-      ensureMounted(v);
-    };
-
-    const onPop = () => syncFromLocation();
-    const onCustom = () => syncFromLocation();
-
-    window.addEventListener("popstate", onPop);
-    window.addEventListener(PATH_EVENT, onCustom as EventListener);
-    return () => {
-      window.removeEventListener("popstate", onPop);
-      window.removeEventListener(PATH_EVENT, onCustom as EventListener);
-    };
-  }, [initial, resolveValid, measure, tabs, armIndicatorMotion, ensureMounted]);
+  }, [initial, activeId, ensureMounted]);
 
   if (!hasTabs) return null;
 
@@ -443,22 +381,21 @@ export default function PortalTabs(props: {
                 const targetPath = pathForTab(t.id);
                 const currentSearch =
                   typeof window !== "undefined" ? window.location.search : "";
+                const href = `${targetPath}${currentSearch}`;
 
                 armIndicatorMotion();
-                activeIdRef.current = t.id;
+                pendingRouteTabRef.current = t.id;
                 setActiveId(t.id);
                 ensureMounted(t.id);
 
                 // measure after DOM updates / font layout
                 requestAnimationFrame(() => measure());
 
-                // Optional: still warm Next’s cache for refresh/direct entry
                 try {
-                  router.prefetch(`${targetPath}${currentSearch}`);
+                  router.prefetch(href);
                 } catch {}
 
-                // URL update without Next navigation
-                pushPathOnly(`${targetPath}${currentSearch}`);
+                router.replace(href, { scroll: false });
               }}
               style={tabBtn(isActive)}
               title={t.locked ? (t.lockedHint ?? "Locked") : t.title}
