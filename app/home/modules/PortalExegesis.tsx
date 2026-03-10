@@ -454,6 +454,7 @@ export default function PortalExegesis(props: { title?: string }) {
   const [optimisticDisplayId, setOptimisticDisplayId] = React.useState<
     string | null | undefined
   >(undefined);
+  const [isReturningToIndex, setIsReturningToIndex] = React.useState(false);
 
   // -------- index state --------
   const [catalogue, setCatalogue] = React.useState<CatalogueOk | null>(null);
@@ -465,37 +466,60 @@ export default function PortalExegesis(props: { title?: string }) {
   const displayId =
     optimisticDisplayId !== undefined
       ? optimisticDisplayId
-      : (exegesisDisplayId ?? displayIdFromPath ?? "").trim() || null;
+      : (
+          (isReturningToIndex
+            ? exegesisDisplayId
+            : (exegesisDisplayId ?? displayIdFromPath)) ?? ""
+        ).trim() || null;
 
   // If we had to fall back to pathname parsing, persist it into context so other
   // components (and subsequent renders) have a stable single source of truth.
   React.useEffect(() => {
+    if (isReturningToIndex) return;
     if (!exegesisDisplayId && displayIdFromPath) {
       setExegesisDisplayId(displayIdFromPath);
     }
-  }, [exegesisDisplayId, displayIdFromPath, setExegesisDisplayId]);
+  }, [
+    exegesisDisplayId,
+    displayIdFromPath,
+    isReturningToIndex,
+    setExegesisDisplayId,
+  ]);
 
   React.useEffect(() => {
-    if (optimisticDisplayId === undefined) return;
-
     const pathResolved = displayIdFromPath ?? null;
     const viewerResolved = exegesisDisplayId ?? null;
 
-    if (
-      optimisticDisplayId === pathResolved ||
-      optimisticDisplayId === viewerResolved
-    ) {
-      setOptimisticDisplayId(undefined);
+    if (optimisticDisplayId !== undefined) {
+      if (
+        optimisticDisplayId === pathResolved ||
+        optimisticDisplayId === viewerResolved
+      ) {
+        setOptimisticDisplayId(undefined);
+      }
+
+      if (
+        optimisticDisplayId === null &&
+        pathResolved === null &&
+        viewerResolved === null
+      ) {
+        setOptimisticDisplayId(undefined);
+      }
     }
 
     if (
-      optimisticDisplayId === null &&
+      isReturningToIndex &&
       pathResolved === null &&
       viewerResolved === null
     ) {
-      setOptimisticDisplayId(undefined);
+      setIsReturningToIndex(false);
     }
-  }, [optimisticDisplayId, displayIdFromPath, exegesisDisplayId]);
+  }, [
+    optimisticDisplayId,
+    displayIdFromPath,
+    exegesisDisplayId,
+    isReturningToIndex,
+  ]);
 
   const { recordingIdByDisplayId, trackMetaByRecordingId } = React.useMemo(
     () => buildCatalogueIndexes(catalogue),
@@ -531,6 +555,7 @@ export default function PortalExegesis(props: { title?: string }) {
     const nextHref = buildTrackHref(did, search);
     const currentHref = `${pathname}${search}`;
 
+    setIsReturningToIndex(false);
     setOptimisticDisplayId(did);
     setExegesisDisplayId(did);
 
@@ -554,13 +579,18 @@ export default function PortalExegesis(props: { title?: string }) {
     const nextHref = buildIndexHref(search);
     const currentHref = `${pathname}${search}`;
 
+    setIsReturningToIndex(true);
     setOptimisticDisplayId(null);
     setExegesisDisplayId(null);
+    setLyrics(null);
     setLyricsErr("");
     setLyricsLoading(false);
 
     if (currentHref !== nextHref) {
       router.replace(nextHref, { scroll: false });
+    } else {
+      setIsReturningToIndex(false);
+      setOptimisticDisplayId(undefined);
     }
   }
 
