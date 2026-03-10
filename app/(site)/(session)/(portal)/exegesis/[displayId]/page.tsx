@@ -1,4 +1,4 @@
-// web/app/(site)/(session)/(portal)/exegesis/[recordingId]/page.tsx
+// web/app/(site)/(session)/(portal)/exegesis/[displayId]/page.tsx
 import type { Metadata } from "next";
 
 export async function generateMetadata(props: {

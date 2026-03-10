@@ -16,7 +16,8 @@ import {
 } from "@/lib/memberDashboard";
 import { buildPortalMemberSummary } from "@/lib/memberDashboardServer";
 import PortalSurface from "@/app/home/PortalSurface";
-import PortalArea from "@/app/home/PortalArea";
+import { SessionRuntimePayloadBridge } from "@/app/home/SessionRuntimePayloadContext";
+import type { SessionRuntimePayload } from "@/app/home/sessionRuntimePayload";
 
 import {
   listAlbumsForBrowse,
@@ -144,19 +145,26 @@ export default async function SessionRuntime(props: {
       },
     }));
 
-  return (
-    <PortalArea
-      portalPanel={portalPanel}
-      bundle={bundle}
-      albums={browseAlbums}
-      attentionMessage={null}
-      tier={tier}
-      isPatron={isPatron}
-      canManageBilling={!!member}
-      topLogoUrl={page?.topLogoUrl ?? null}
-      topLogoHeight={page?.topLogoHeight ?? null}
-      initialPortalTabId={props.initialPortalTabId ?? null}
-      initialExegesisDisplayId={props.initialExegesisDisplayId ?? null}
-    />
-  );
+  const payload: SessionRuntimePayload = {
+    portalPanel,
+    bundle,
+    albums: browseAlbums,
+    attentionMessage: null,
+    tier,
+    isPatron,
+    canManageBilling: !!member,
+    topLogoUrl: page?.topLogoUrl ?? null,
+    topLogoHeight: page?.topLogoHeight ?? null,
+    initialPortalTabId: props.initialPortalTabId ?? null,
+    initialExegesisDisplayId: props.initialExegesisDisplayId ?? null,
+  };
+
+  const routeKey = JSON.stringify({
+    albumSlugOverride: props.albumSlugOverride ?? null,
+    initialPortalTabId: props.initialPortalTabId ?? null,
+    initialExegesisDisplayId: props.initialExegesisDisplayId ?? null,
+    resolvedAlbumSlug: bundle.albumSlug,
+  });
+
+  return <SessionRuntimePayloadBridge routeKey={routeKey} payload={payload} />;
 }

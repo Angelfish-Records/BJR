@@ -1,6 +1,7 @@
 // web/app/(site)/(session)/layout.tsx
 import React from "react";
 import ShadowHomeFrame from "@/app/home/ShadowHomeFrame";
+import StableSessionShell from "@/app/home/StableSessionShell";
 
 export default async function SessionLayout(props: {
   // Parallel route slot:
@@ -13,7 +14,7 @@ export default async function SessionLayout(props: {
       stageHeight={560}
       shadowHomeSlug="home"
     >
-      {props.runtime}
+      <StableSessionShell runtime={props.runtime} />
     </ShadowHomeFrame>
   );
 }
