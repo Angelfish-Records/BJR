@@ -1,13 +1,9 @@
 // web/app/(site)/(session)/@runtime/SessionRuntime.tsx
 import React from "react";
 import { auth, currentUser } from "@clerk/nextjs/server";
-
-import { urlFor } from "@/sanity/lib/image";
-
 import { ensureMemberByClerk } from "@/lib/members";
 import { listCurrentEntitlementKeys } from "@/lib/entitlements";
 import { deriveTier } from "@/lib/vocab";
-
 import { fetchPortalPage } from "@/lib/portal";
 import {
   emptyPortalMemberSummary,
@@ -16,17 +12,12 @@ import {
 import { buildPortalMemberSummary } from "@/lib/memberDashboardServer";
 import { SessionRuntimePayloadBridge } from "@/app/home/SessionRuntimePayloadContext";
 import type { SessionRuntimePayload } from "@/app/home/sessionRuntimePayload";
-
-import {
-  listAlbumsForBrowse,
-  getAlbumBySlug,
-  getFeaturedAlbumSlugFromSanity,
-} from "@/lib/albums";
-import type { AlbumNavItem } from "@/lib/types";
+import { getAlbumBySlug } from "@/lib/albums";
 
 export default async function SessionRuntime(props: {
   // When present, this is the “player album” canonical slug for /album/:slug routes.
   albumSlugOverride?: string | null;
+  featuredAlbumSlug: string;
   initialPortalTabId?: string | null;
   initialExegesisDisplayId?: string | null;
 }) {
@@ -39,10 +30,7 @@ export default async function SessionRuntime(props: {
     user?.emailAddresses?.[0]?.emailAddress ??
     null;
 
-  const [portal, featured] = await Promise.all([
-    fetchPortalPage("home"),
-    getFeaturedAlbumSlugFromSanity(),
-  ]);
+  const portal = await fetchPortalPage("home");
 
   let member: null | { id: string; created: boolean; email: string } = null;
   let entitlementKeys: string[] = [];
@@ -66,38 +54,10 @@ export default async function SessionRuntime(props: {
 
   const isPatron = tier === "patron";
 
-  const featuredAlbumSlug =
-    featured.slug ?? featured.fallbackSlug ?? "god-defend";
+  const selectedAlbumSlug =
+    (props.albumSlugOverride ?? "").trim() || props.featuredAlbumSlug;
 
-  const albumSlug = (props.albumSlugOverride ?? "").trim() || featuredAlbumSlug;
-
-  const bundle = await getAlbumBySlug(albumSlug);
-
-  const browseAlbumsRaw = await listAlbumsForBrowse();
-
-  const asTierName = (v: unknown): "friend" | "patron" | "partner" | null => {
-    const s = typeof v === "string" ? v.trim().toLowerCase() : "";
-    if (s === "friend" || s === "patron" || s === "partner") return s;
-    return null;
-  };
-
-  const browseAlbums: AlbumNavItem[] = browseAlbumsRaw
-    .filter((a) => a.slug && a.title)
-    .filter((a) => a.policy?.publicPageVisible !== false)
-    .map((a) => ({
-      id: a.id,
-      slug: a.slug,
-      title: a.title,
-      artist: a.artist ?? undefined,
-      year: a.year ?? undefined,
-      coverUrl: a.artwork
-        ? urlFor(a.artwork).width(400).height(400).quality(80).url()
-        : null,
-      policy: {
-        publicPageVisible: a.policy?.publicPageVisible !== false,
-        minTierToLoad: asTierName(a.policy?.minTierToLoad),
-      },
-    }));
+  const bundle = await getAlbumBySlug(selectedAlbumSlug);
 
   const payload: SessionRuntimePayload = {
     portalModules: portal?.modules ?? [],
@@ -107,7 +67,6 @@ export default async function SessionRuntime(props: {
     initialPortalTabId: props.initialPortalTabId ?? null,
     initialExegesisDisplayId: props.initialExegesisDisplayId ?? null,
     bundle,
-    albums: browseAlbums,
     attentionMessage: null,
     tier,
     isPatron,
@@ -118,7 +77,7 @@ export default async function SessionRuntime(props: {
     albumSlugOverride: props.albumSlugOverride ?? null,
     initialPortalTabId: props.initialPortalTabId ?? null,
     initialExegesisDisplayId: props.initialExegesisDisplayId ?? null,
-    resolvedAlbumSlug: bundle.albumSlug,
+    selectedAlbumSlug: bundle.albumSlug,
   });
 
   return <SessionRuntimePayloadBridge routeKey={routeKey} payload={payload} />;

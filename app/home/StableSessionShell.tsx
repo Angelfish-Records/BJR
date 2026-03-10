@@ -14,6 +14,8 @@ function toPortalAreaProps(
   shellConfig: {
     topLogoUrl: string | null;
     topLogoHeight: number | null;
+    featuredAlbumSlug: string;
+    albums: PortalAreaProps["albums"];
   },
 ): PortalAreaProps {
   return {
@@ -23,10 +25,11 @@ function toPortalAreaProps(
     memberSummary: payload.memberSummary ?? null,
     topLogoUrl: shellConfig.topLogoUrl,
     topLogoHeight: shellConfig.topLogoHeight,
+    featuredAlbumSlug: shellConfig.featuredAlbumSlug,
     initialPortalTabId: payload.initialPortalTabId ?? null,
     initialExegesisDisplayId: payload.initialExegesisDisplayId ?? null,
     bundle: payload.bundle,
-    albums: payload.albums,
+    albums: shellConfig.albums,
     attentionMessage: payload.attentionMessage ?? null,
     tier: payload.tier ?? null,
     isPatron: payload.isPatron ?? false,
@@ -37,6 +40,8 @@ function StableSessionViewport(props: {
   runtime: React.ReactNode;
   topLogoUrl: string | null;
   topLogoHeight: number | null;
+  featuredAlbumSlug: string;
+  albums: PortalAreaProps["albums"];
 }) {
   const record = useSessionRuntimePayloadRecord();
   const payload = record?.payload ?? null;
@@ -47,9 +52,17 @@ function StableSessionViewport(props: {
         ? toPortalAreaProps(payload, {
             topLogoUrl: props.topLogoUrl,
             topLogoHeight: props.topLogoHeight,
+            featuredAlbumSlug: props.featuredAlbumSlug,
+            albums: props.albums,
           })
         : null,
-    [payload, props.topLogoUrl, props.topLogoHeight],
+    [
+      payload,
+      props.topLogoUrl,
+      props.topLogoHeight,
+      props.featuredAlbumSlug,
+      props.albums,
+    ],
   );
 
   return (
@@ -67,6 +80,8 @@ export default function StableSessionShell(props: {
   runtime: React.ReactNode;
   topLogoUrl: string | null;
   topLogoHeight: number | null;
+  featuredAlbumSlug: string;
+  albums: PortalAreaProps["albums"];
 }) {
   return (
     <SessionRuntimePayloadProvider>
@@ -74,6 +89,8 @@ export default function StableSessionShell(props: {
         runtime={props.runtime}
         topLogoUrl={props.topLogoUrl}
         topLogoHeight={props.topLogoHeight}
+        featuredAlbumSlug={props.featuredAlbumSlug}
+        albums={props.albums}
       />
     </SessionRuntimePayloadProvider>
   );

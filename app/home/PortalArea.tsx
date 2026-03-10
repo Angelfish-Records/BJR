@@ -28,6 +28,7 @@ export type PortalAreaProps = {
   memberSummary?: PortalMemberSummary | null;
   topLogoUrl?: string | null;
   topLogoHeight?: number | null;
+  featuredAlbumSlug: string;
   initialPortalTabId?: string | null;
   initialExegesisDisplayId?: string | null;
   bundle: AlbumPlayerBundle;
@@ -46,6 +47,7 @@ export default function PortalArea(props: PortalAreaProps) {
     memberId,
     entitlementKeys,
     memberSummary = null,
+    featuredAlbumSlug,
     bundle,
     albums,
     attentionMessage = null,
@@ -78,7 +80,7 @@ export default function PortalArea(props: PortalAreaProps) {
     openPlayer,
     openPortal,
   } = useSessionSurfaceController({
-    defaultAlbumSlug: bundle.albumSlug,
+    defaultAlbumSlug: featuredAlbumSlug,
   });
 
   const { gate: brokerGate } = useGateBroker();

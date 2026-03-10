@@ -1,5 +1,5 @@
 //web/app/home/sessionRuntimePayload.ts
-import type { AlbumNavItem, AlbumPlayerBundle } from "@/lib/types";
+import type { AlbumPlayerBundle } from "@/lib/types";
 import type { PortalModule } from "@/lib/portal";
 import type { PortalMemberSummary } from "@/lib/memberDashboard";
 
@@ -18,7 +18,6 @@ export type SessionRuntimePayload = {
   initialPortalTabId?: string | null;
   initialExegesisDisplayId?: string | null;
   bundle: AlbumPlayerBundle;
-  albums: AlbumNavItem[];
   attentionMessage?: string | null;
   tier?: string | null;
   isPatron?: boolean;
