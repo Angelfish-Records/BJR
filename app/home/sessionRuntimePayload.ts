@@ -17,6 +17,5 @@ export type SessionRuntimePayload = {
   initialExegesisDisplayId: string | null;
   bundle: AlbumPlayerBundle;
   tier: Tier;
-  isPatron: boolean;
   canManageBilling: boolean;
 };

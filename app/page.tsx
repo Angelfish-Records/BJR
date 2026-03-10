@@ -42,7 +42,11 @@ const dupesQuery = `
 
 export default async function Home() {
   const [data, dupesCount] = await Promise.all([
-    client.fetch<LandingPageData>(landingQuery, {}, { next: { tags: ["landingPage"] } }),
+    client.fetch<LandingPageData>(
+      landingQuery,
+      {},
+      { next: { tags: ["landingPage"] } },
+    ),
     client.fetch<number>(dupesQuery),
   ]);
 
@@ -204,7 +208,7 @@ export default async function Home() {
           padding: clamp(28px, 4vw, 48px) 20px;
         }
 
-        .landingContent {
+                .landingContent {
           width: 100%;
           max-width: 880px;
           display: grid;
@@ -213,7 +217,13 @@ export default async function Home() {
           gap: 18px;
         }
 
-        .landingEyebrow,
+        .landingLogoBlock {
+          display: grid;
+          justify-items: center;
+          gap: 24px;
+        }
+
+                .landingEyebrow,
         .landingSubtitlePill {
           display: inline-flex;
           align-items: center;
@@ -392,19 +402,51 @@ export default async function Home() {
           text-shadow: 0 18px 38px rgba(0,0,0,0.34);
         }
 
-        .landingSubtitlePill {
-          max-width: min(100%, 520px);
-          padding: 0 18px;
-          color: rgba(255,255,255,0.82);
-          font-size: clamp(15px, 1.8vw, 19px);
+                .landingSubtitlePill {
+          position: relative;
+          max-width: min(100%, 560px);
+          min-height: 40px;
+          padding: 0 22px;
+          border-color: rgba(255,255,255,0.10);
+          background:
+            linear-gradient(180deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0.018) 100%);
+          box-shadow:
+            0 16px 34px rgba(0,0,0,0.18),
+            inset 0 1px 0 rgba(255,255,255,0.04);
+          color: rgba(255,255,255,0.58);
+          font-size: clamp(11px, 1.05vw, 12px);
           line-height: 1;
-          letter-spacing: -0.01em;
+          letter-spacing: 0.22em;
+          text-transform: uppercase;
+          text-shadow:
+            0 1px 0 rgba(255,255,255,0.04),
+            0 -1px 0 rgba(0,0,0,0.28);
+          filter: saturate(0.85);
         }
 
-        .landingActions {
+        .landingSubtitlePill::before {
+          content: "";
+          position: absolute;
+          inset: 1px;
+          border-radius: 999px;
+          pointer-events: none;
+          background:
+            linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.00));
+          opacity: 0.7;
+        }
+
+        .landingSubtitlePill > span {
+          position: relative;
+          z-index: 1;
+          display: inline-block;
+          transform: translateX(0.11em);
+          mix-blend-mode: screen;
+        }
+
+                .landingActions {
           display: grid;
           justify-items: center;
-          gap: 16px;
+          gap: 14px;
           width: 100%;
           margin-top: 8px;
         }
@@ -477,12 +519,16 @@ export default async function Home() {
             gap: 16px;
           }
 
-          .landingSubtitlePill {
+                    .landingSubtitlePill {
             max-width: 100%;
             white-space: normal;
-            line-height: 1.25;
+            line-height: 1.35;
             padding-top: 9px;
             padding-bottom: 9px;
+          }
+
+          .landingSubtitlePill > span {
+            transform: none;
           }
         }
 
@@ -518,7 +564,9 @@ export default async function Home() {
             : "linear-gradient(180deg, #050506 0%, #0a0a10 54%, #050506 100%)",
           backgroundSize: "cover",
           backgroundPosition: "center",
-          filter: bgUrl ? "saturate(0.86) contrast(1.05) brightness(0.82)" : undefined,
+          filter: bgUrl
+            ? "saturate(0.86) contrast(1.05) brightness(0.82)"
+            : undefined,
           transform: "scale(1.02)",
         }}
       />
@@ -535,35 +583,39 @@ export default async function Home() {
             </div>
           ) : null}
 
-          {logoUrl ? (
-            <div
-              className="landingLogoWrap"
-              style={
-                {
-                  ["--afLogoMaskUrl" as const]: `url(${logoUrl})`,
-                } as React.CSSProperties
-              }
-            >
-              <Image
-                src={logoUrl}
-                alt={logoAlt}
-                width={2200}
-                height={Math.max(120, logoHeightPx * 6)}
-                priority
-                sizes="(max-width: 768px) 92vw, 860px"
-                className="landingLogoImage"
-                style={{
-                  height: logoHeightPx,
-                }}
-              />
-              <div aria-hidden="true" className="landingLogoVeil" />
-              <div aria-hidden="true" className="landingLogoGlisten" />
-            </div>
-          ) : (
-            <h1 className="landingHeadingFallback">{title}</h1>
-          )}
+          <div className="landingLogoBlock">
+            {logoUrl ? (
+              <div
+                className="landingLogoWrap"
+                style={
+                  {
+                    ["--afLogoMaskUrl" as const]: `url(${logoUrl})`,
+                  } as React.CSSProperties
+                }
+              >
+                <Image
+                  src={logoUrl}
+                  alt={logoAlt}
+                  width={2200}
+                  height={Math.max(120, logoHeightPx * 6)}
+                  priority
+                  sizes="(max-width: 768px) 92vw, 860px"
+                  className="landingLogoImage"
+                  style={{
+                    height: logoHeightPx,
+                  }}
+                />
+                <div aria-hidden="true" className="landingLogoVeil" />
+                <div aria-hidden="true" className="landingLogoGlisten" />
+              </div>
+            ) : (
+              <h1 className="landingHeadingFallback">{title}</h1>
+            )}
 
-          <div className="landingSubtitlePill">{subtitle}</div>
+            <div className="landingSubtitlePill">
+              <span>{subtitle}</span>
+            </div>
+          </div>
 
           <div className="landingActions">
             <EarlyAccessForm />

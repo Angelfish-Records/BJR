@@ -50,8 +50,6 @@ export default async function SessionRuntime(props: {
     memberSummary = await buildPortalMemberSummary(ensured.id);
   }
 
-  const isPatron = tier === "patron";
-
   const selectedAlbumSlug =
     (props.albumSlugOverride ?? "").trim() ||
     (props.featuredAlbumSlug ?? "").trim() ||
@@ -67,7 +65,6 @@ export default async function SessionRuntime(props: {
     initialExegesisDisplayId: props.initialExegesisDisplayId ?? null,
     bundle,
     tier,
-    isPatron,
     canManageBilling: !!member,
   };
 

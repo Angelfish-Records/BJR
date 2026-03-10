@@ -55,11 +55,11 @@ export default function EarlyAccessForm() {
   return (
     <>
       <style>{`
-        .afEarlyAccessRoot {
-          width: min(100%, 1040px);
-          margin-top: 18px;
+                .afEarlyAccessRoot {
+          width: min(100%, 440px);
+          margin-top: 12px;
           display: grid;
-          gap: 10px;
+          gap: 8px;
         }
 
         .afEarlyAccessForm {
@@ -71,37 +71,38 @@ export default function EarlyAccessForm() {
         .afEarlyAccessRow {
           width: 100%;
           display: grid;
-          grid-template-columns: minmax(0, 1fr) auto;
-          gap: 12px;
+          grid-template-columns: 1fr;
+          gap: 10px;
           align-items: stretch;
         }
 
         .afEarlyAccessInputShell {
+          width: 100%;
           min-width: 0;
           display: flex;
           align-items: center;
-          min-height: 72px;
-          padding: 0 22px;
+          min-height: 44px;
+          padding: 0 16px;
           border: 1px solid rgba(255,255,255,0.10);
           border-radius: 999px;
           background:
-            linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.025) 100%);
+            linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
           box-shadow:
-            0 24px 56px rgba(0,0,0,0.26),
-            inset 0 1px 0 rgba(255,255,255,0.06);
+            0 16px 34px rgba(0,0,0,0.22),
+            inset 0 1px 0 rgba(255,255,255,0.05);
           backdrop-filter: blur(16px);
           -webkit-backdrop-filter: blur(16px);
           transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
         }
 
         .afEarlyAccessInputShell:focus-within {
-          border-color: rgba(255,255,255,0.18);
+          border-color: rgba(255,255,255,0.16);
           background:
-            linear-gradient(180deg, rgba(255,255,255,0.075) 0%, rgba(255,255,255,0.03) 100%);
+            linear-gradient(180deg, rgba(255,255,255,0.065) 0%, rgba(255,255,255,0.025) 100%);
           box-shadow:
-            0 24px 56px rgba(0,0,0,0.26),
-            inset 0 1px 0 rgba(255,255,255,0.07),
-            0 0 0 3px rgba(255,255,255,0.06);
+            0 16px 34px rgba(0,0,0,0.22),
+            inset 0 1px 0 rgba(255,255,255,0.06),
+            0 0 0 3px rgba(255,255,255,0.05);
         }
 
         .afEarlyAccessInput {
@@ -110,32 +111,33 @@ export default function EarlyAccessForm() {
           border: 0;
           outline: 0;
           background: transparent;
-          color: rgba(255,255,255,0.92);
-          font-size: clamp(18px, 2vw, 20px);
+          color: rgba(255,255,255,0.88);
+          font-size: 12px;
           line-height: 1.2;
-          letter-spacing: -0.01em;
+          letter-spacing: 0.02em;
         }
 
         .afEarlyAccessInput::placeholder {
-          color: rgba(255,255,255,0.38);
+          color: rgba(255,255,255,0.34);
         }
 
         .afEarlyAccessButton {
-          min-width: 320px;
-          min-height: 72px;
-          padding: 0 28px;
-          border: 1px solid rgba(255,255,255,0.14);
+          width: 100%;
+          min-height: 44px;
+          padding: 0 16px;
+          border: 1px solid rgba(255,255,255,0.12);
           border-radius: 999px;
           background:
-            linear-gradient(180deg, rgba(255,255,255,0.09) 0%, rgba(255,255,255,0.05) 100%);
-          color: rgba(255,255,255,0.92);
-          font-size: clamp(16px, 1.8vw, 18px);
-          font-weight: 650;
-          letter-spacing: -0.01em;
+            linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.04) 100%);
+          color: rgba(255,255,255,0.84);
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
           cursor: pointer;
           box-shadow:
-            0 24px 56px rgba(0,0,0,0.26),
-            inset 0 1px 0 rgba(255,255,255,0.08);
+            0 16px 34px rgba(0,0,0,0.22),
+            inset 0 1px 0 rgba(255,255,255,0.07);
           transition:
             background 160ms ease,
             border-color 160ms ease,
@@ -146,9 +148,9 @@ export default function EarlyAccessForm() {
 
         .afEarlyAccessButton:hover:not(:disabled) {
           background:
-            linear-gradient(180deg, rgba(255,255,255,0.11) 0%, rgba(255,255,255,0.06) 100%);
-          border-color: rgba(255,255,255,0.20);
-          filter: brightness(1.03);
+            linear-gradient(180deg, rgba(255,255,255,0.095) 0%, rgba(255,255,255,0.05) 100%);
+          border-color: rgba(255,255,255,0.18);
+          filter: brightness(1.02);
         }
 
         .afEarlyAccessButton:disabled {
@@ -162,29 +164,16 @@ export default function EarlyAccessForm() {
         }
 
         .afEarlyAccessStatus {
-          min-height: 18px;
-          font-size: 13px;
-          line-height: 1.4;
+          min-height: 16px;
+          font-size: 11px;
+          line-height: 1.35;
           text-align: center;
+          letter-spacing: 0.03em;
         }
 
         @media (max-width: 820px) {
-          .afEarlyAccessRow {
-            grid-template-columns: 1fr;
-          }
-
-          .afEarlyAccessInputShell,
-          .afEarlyAccessButton {
-            min-height: 64px;
-          }
-
-          .afEarlyAccessButton {
-            min-width: 0;
-            width: 100%;
-          }
-
-          .afEarlyAccessInput {
-            font-size: 17px;
+          .afEarlyAccessRoot {
+            width: min(100%, 440px);
           }
         }
 
