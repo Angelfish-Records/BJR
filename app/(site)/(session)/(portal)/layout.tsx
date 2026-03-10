@@ -5,9 +5,6 @@ import type { Metadata } from "next";
 import { client } from "@/sanity/lib/client";
 import ShadowHomeFrame from "@/app/home/ShadowHomeFrame";
 
-export const revalidate = 0;
-export const fetchCache = "force-no-store";
-
 export async function generateMetadata(): Promise<Metadata> {
   const page = await client.fetch<{ subtitle?: string }>(
     `*[_type == "shadowHomePage" && slug.current == "home"][0]{ subtitle }`,
@@ -21,9 +18,15 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function PortalLayout(props: { children: React.ReactNode }) {
+export default async function PortalLayout(props: {
+  children: React.ReactNode;
+}) {
   return (
-    <ShadowHomeFrame lyricsOverlayZIndex={50} stageHeight={560} shadowHomeSlug="home">
+    <ShadowHomeFrame
+      lyricsOverlayZIndex={50}
+      stageHeight={560}
+      shadowHomeSlug="home"
+    >
       {props.children}
     </ShadowHomeFrame>
   );
