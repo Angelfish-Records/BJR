@@ -38,7 +38,6 @@ function toPortalAreaProps(
     featuredAlbumSlug: shell.featuredAlbumSlug,
 
     tier: payload.tier,
-    isPatron: payload.tier === "patron",
     canManageBilling: payload.canManageBilling,
   };
 }

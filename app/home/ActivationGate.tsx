@@ -11,6 +11,12 @@ import {
   PatternPillUnderlay,
   VisualizerSnapshotCanvas,
 } from "@/app/home/player/VisualizerPattern";
+import type { Tier } from "@/lib/types";
+import {
+  isPartnerTier,
+  isPatronTier,
+  isPaidSupporterTier,
+} from "@/app/home/membershipTier";
 
 type Phase = "idle" | "code";
 type Flow = "signin" | "signup" | null;
@@ -19,8 +25,7 @@ type Props = {
   children: React.ReactNode;
   attentionMessage?: string | null;
   canManageBilling?: boolean;
-  isPatron?: boolean;
-  tier?: string | null;
+  tier?: Tier;
 
   /**
    * - "topbar": native top-right layout (dropdown panels are absolutely positioned)
@@ -510,8 +515,7 @@ export default function ActivationGate(props: Props) {
     children,
     attentionMessage = null,
     canManageBilling = false,
-    isPatron = false,
-    tier = null,
+    tier = "none",
     placement = "topbar",
   } = props;
 
@@ -574,7 +578,7 @@ export default function ActivationGate(props: Props) {
     }
     // Only matters for paying tiers; also only show if the user can manage billing
     if (!canManageBilling) return;
-    if (!isPatron && !(tier ?? "").toLowerCase().includes("partner")) return;
+    if (!isPaidSupporterTier(tier)) return;
 
     let alive = true;
     (async () => {
@@ -610,7 +614,7 @@ export default function ActivationGate(props: Props) {
     return () => {
       alive = false;
     };
-  }, [isActive, canManageBilling, isPatron, tier]);
+  }, [isActive, canManageBilling, tier]);
 
   const { isMembershipOpen, openMembershipModal, closeMembershipModal } =
     useMembershipModal();
@@ -645,9 +649,9 @@ export default function ActivationGate(props: Props) {
   const toggleClickable =
     !isActive && phase === "idle" && emailValid && clerkLoaded;
 
-  const tierLower = (tier ?? "").toLowerCase();
-  const isPartner = tierLower.includes("partner");
-  const isFriend = !isPatron && !isPartner;
+  const isPatron = isPatronTier(tier);
+  const isPartner = isPartnerTier(tier);
+  const isFriend = tier === "friend";
 
   async function startEmailCode() {
     if (!clerkLoaded || !emailValid) return;

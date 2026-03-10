@@ -34,7 +34,6 @@ export type PortalAreaProps = {
   bundle: AlbumPlayerBundle;
   albums: AlbumNavItem[];
   tier: Tier;
-  isPatron: boolean;
   // isAdmin is owned at /(site)/layout.tsx via AdminRibbon.
   // PortalArea should not take it as input.
   canManageBilling: boolean;
@@ -50,7 +49,6 @@ export default function PortalArea(props: PortalAreaProps) {
     bundle,
     albums,
     tier,
-    isPatron,
     canManageBilling,
   } = props;
 
@@ -109,8 +107,6 @@ export default function PortalArea(props: PortalAreaProps) {
   });
 
   const viewerTier: Tier = tier;
-  const tierLower = (tier ?? "").toLowerCase();
-  const isPartner = tierLower.includes("partner");
 
   const panels = React.useMemo<PortalPanelSpec[]>(
     () => [
@@ -175,7 +171,6 @@ export default function PortalArea(props: PortalAreaProps) {
       placement="modal"
       attentionMessage={brokerAttentionMessage}
       canManageBilling={canManageBilling}
-      isPatron={isPatron}
       tier={tier}
     >
       <div />
@@ -197,11 +192,8 @@ export default function PortalArea(props: PortalAreaProps) {
           initialPortalTabId={props.initialPortalTabId}
           initialExegesisDisplayId={props.initialExegesisDisplayId}
           value={{
-            viewerTier,
-            rawTier: tier,
+            tier: viewerTier,
             isSignedIn,
-            isPatron,
-            isPartner,
           }}
         >
           <PortalShell
@@ -224,7 +216,6 @@ export default function PortalArea(props: PortalAreaProps) {
                 spotlightAttention={spotlightAttention}
                 attentionMessage={brokerAttentionMessage}
                 canManageBilling={canManageBilling}
-                isPatron={isPatron}
                 tier={tier}
                 bannerKind={bannerKind}
                 bannerCode={bannerCode}

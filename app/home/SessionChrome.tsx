@@ -2,6 +2,7 @@
 
 import React from "react";
 import Image from "next/image";
+import type { Tier } from "@/lib/types";
 import ActivationGate from "@/app/home/ActivationGate";
 import { getLastPortalTab } from "./portalLastTab";
 
@@ -168,8 +169,7 @@ export type SessionChromeProps = {
   spotlightAttention: boolean;
   attentionMessage: string | null;
   canManageBilling: boolean;
-  isPatron: boolean;
-  tier: string | null;
+  tier: Tier;
   bannerKind: "gift" | "checkout" | null;
   bannerCode: string | null;
   onDismissBanner: () => void;
@@ -188,7 +188,6 @@ export default function SessionChrome(props: SessionChromeProps) {
     spotlightAttention,
     attentionMessage,
     canManageBilling,
-    isPatron,
     tier,
     bannerKind,
     bannerCode,
@@ -203,7 +202,6 @@ export default function SessionChrome(props: SessionChromeProps) {
     <ActivationGate
       attentionMessage={attentionMessage}
       canManageBilling={canManageBilling}
-      isPatron={isPatron}
       tier={tier}
     >
       <div />

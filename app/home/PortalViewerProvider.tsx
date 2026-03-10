@@ -3,10 +3,10 @@
 
 import React from "react";
 import type { Tier } from "@/lib/types";
+import { isPartnerTier, isPatronTier } from "./membershipTier";
 
 type ViewerCtx = {
-  viewerTier: Tier; // "none" | "friend" | "patron" | "partner"
-  rawTier: string | null; // whatever was passed from server (for display/debug if needed)
+  tier: Tier;
   isSignedIn: boolean;
   isPatron: boolean;
   isPartner: boolean;
@@ -31,13 +31,10 @@ export function usePortalViewer(): ViewerCtx {
 }
 
 export function PortalViewerProvider(props: {
-  value: Omit<
-    ViewerCtx,
-    | "portalTabId"
-    | "setPortalTabId"
-    | "exegesisDisplayId"
-    | "setExegesisDisplayId"
-  >;
+  value: {
+    tier: Tier;
+    isSignedIn: boolean;
+  };
   children: React.ReactNode;
   initialPortalTabId?: string | null;
   initialExegesisDisplayId?: string | null;
@@ -58,7 +55,10 @@ export function PortalViewerProvider(props: {
 
   const ctxValue: ViewerCtx = React.useMemo(
     () => ({
-      ...props.value,
+      tier: props.value.tier,
+      isSignedIn: props.value.isSignedIn,
+      isPatron: isPatronTier(props.value.tier),
+      isPartner: isPartnerTier(props.value.tier),
       portalTabId,
       setPortalTabId,
       exegesisDisplayId,
