@@ -1,5 +1,5 @@
-// web/lib/vocab.ts
 import "server-only";
+import { ENT, entKey, type StructuredEntitlementKey } from "./entitlementVocab";
 
 export const ENTITLEMENTS = {
   // permissions (capabilities)
@@ -7,7 +7,7 @@ export const ENTITLEMENTS = {
   TRACK_SHARE_GRANT: "track_share_grant",
   ALBUM_SHARE_GRANT: "album_share_grant",
 
-  // ✅ admin
+  // admin
   ADMIN: "admin",
 
   // human tiers (membership)
@@ -71,39 +71,8 @@ export type AccessAction = (typeof ACCESS_ACTIONS)[keyof typeof ACCESS_ACTIONS];
  * Goal: granular semantics without ever leaving “string keys” as the canonical storage type.
  */
 
-export type StructuredEntitlementKey = string;
-
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  if (value && typeof value === "object") {
-    const obj = value as Record<string, unknown>;
-    const keys = Object.keys(obj).sort();
-    return `{${keys
-      .map((k) => JSON.stringify(k) + ":" + stableStringify(obj[k]))
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
-export function entKey(obj: Record<string, unknown>): StructuredEntitlementKey {
-  return stableStringify(obj);
-}
-
-/**
- * Canonical structured keys. Add-only. Avoid renames.
- * (These do not replace ENTITLEMENTS; they complement them.)
- */
-export const ENT = {
-  pageView: (page: string) => entKey({ kind: "page_view", page }),
-  theme: (name: string) => entKey({ kind: "theme", name }), // keep only if we still want structured themes later
-  mediaPlay: (recordingId: string) =>
-    entKey({ kind: "media_play", recordingId }),
-  download: (assetId: string) => entKey({ kind: "download", assetId }),
-  downloadAlbum: (slug: string) => `download_album_${slug}`,
-
-  // optional: if we still want a helper for the new tiers
-  tier: (name: "friend" | "patron" | "partner") => `tier_${name}`,
-} as const;
+export { ENT, entKey };
+export type { StructuredEntitlementKey };
 
 export type Tier = "none" | "friend" | "patron" | "partner";
 

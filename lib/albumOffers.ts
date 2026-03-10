@@ -1,5 +1,5 @@
 // web/lib/albumOffers.ts
-import { ENT } from "./vocab";
+import { ENT } from "./entitlementVocab";
 
 export type AlbumOfferAsset = {
   id: "bundle_zip" | string;
