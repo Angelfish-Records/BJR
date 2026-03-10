@@ -40,6 +40,16 @@ function pathForTab(tabId: string) {
   return `/${encodeURIComponent(t)}`;
 }
 
+function replacePathOnly(href: string) {
+  if (typeof window === "undefined") return;
+
+  const cur = window.location.href;
+  const next = href.startsWith("http") ? href : new URL(href, cur).toString();
+  if (next === cur) return;
+
+  window.history.replaceState({}, "", next);
+}
+
 function getRememberedValidTab(
   tabs: PortalTabSpec[],
   resolveValid: (candidate: string | null) => string | null,
@@ -55,11 +65,11 @@ export default function PortalTabs(props: {
 }) {
   const { tabs, defaultTabId = null } = props;
 
-  // Keep router only if we still want prefetch warming.
+  // Router is only used here for optional prefetch warming.
   const router = useRouter();
 
-  // We can keep usePathname for initial server->client consistency,
-  // but post-patch we will NOT rely on it for updates.
+  // We keep usePathname for initial server->client consistency and
+  // passive reconciliation after native history updates.
   const pathname = usePathname();
   const stablePathname = getStablePathname(pathname);
 
@@ -395,7 +405,7 @@ export default function PortalTabs(props: {
                   router.prefetch(href);
                 } catch {}
 
-                router.replace(href, { scroll: false });
+                replacePathOnly(href);
               }}
               style={tabBtn(isActive)}
               title={t.locked ? (t.lockedHint ?? "Locked") : t.title}
