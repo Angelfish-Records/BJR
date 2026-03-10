@@ -940,7 +940,7 @@ export default function ExegesisTrackClient(props: {
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-[1fr_570px]">
+      <div className="mt-3 grid gap-6 md:grid-cols-[1fr_570px]">
         <ExegesisLyricsRail
           lyrics={lyrics}
           selectedLineKey={(selected?.lineKey ?? "").trim()}

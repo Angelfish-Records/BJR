@@ -27,15 +27,14 @@ function tabFromPathname(pathname: string | null): string | null {
 
   if (head === "player") return null;
   if (head === "album") return null;
-  if (head === "portal") return null;
+  if (head === "portal") return "portal";
 
   return decodeURIComponent(head);
 }
 
 function pathForTab(tabId: string) {
   const t = (tabId || "").trim().toLowerCase();
-  // Default surface for "no tab" is now /portal (was /extras)
-  if (!t || t === "player") return "/portal";
+  if (!t || t === "player" || t === "portal") return "/portal";
   if (t === "exegesis") return "/exegesis";
   return `/${encodeURIComponent(t)}`;
 }
