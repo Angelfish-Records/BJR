@@ -113,6 +113,17 @@ export default function PortalTabs(props: {
     return s;
   });
 
+  const activeIdRef = React.useRef<string | null>(initial);
+  const mountedIdsRef = React.useRef<Set<string>>(new Set(mountedIds));
+
+  React.useEffect(() => {
+    activeIdRef.current = activeId;
+  }, [activeId]);
+
+  React.useEffect(() => {
+    mountedIdsRef.current = mountedIds;
+  }, [mountedIds]);
+
   // --- two-signal model for differential Exegesis portal styling ---
 
   React.useEffect(() => {
@@ -155,6 +166,17 @@ export default function PortalTabs(props: {
       setIndicatorMotionEnabled(false);
       indicatorMotionTimeoutRef.current = null;
     }, 260);
+  }, []);
+
+  const ensureMounted = React.useCallback((tabId: string) => {
+    if (!tabId) return;
+
+    if (mountedIdsRef.current.has(tabId)) return;
+
+    const next = new Set(mountedIdsRef.current);
+    next.add(tabId);
+    mountedIdsRef.current = next;
+    setMountedIds(next);
   }, []);
 
   const measure = React.useCallback(() => {
@@ -264,20 +286,31 @@ export default function PortalTabs(props: {
     return tabs.find((t) => t.id === activeId) ?? tabs[0] ?? null;
   }, [hasTabs, tabs, activeId]);
 
-  // ✅ Initial hydrate alignment (keep)
+  // ✅ Initial hydrate alignment + validity repair only
   React.useEffect(() => {
     if (!initial) return;
 
     if (!didHydrateRef.current) {
       didHydrateRef.current = true;
+      activeIdRef.current = initial;
       setActiveId(initial);
+      ensureMounted(initial);
       return;
     }
 
-    if (activeId !== initial) setActiveId(initial);
-  }, [initial, activeId]);
+    const current = activeIdRef.current;
+    const currentStillValid = current
+      ? tabs.some((t) => t.id === current)
+      : false;
 
-  // ✅ NEW: listen to real URL changes (back/forward + our PATH_EVENT)
+    if (!currentStillValid) {
+      activeIdRef.current = initial;
+      setActiveId(initial);
+      ensureMounted(initial);
+    }
+  }, [initial, tabs, ensureMounted]);
+
+  // ✅ Listen to real URL changes (back/forward + our PATH_EVENT)
   React.useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -287,19 +320,20 @@ export default function PortalTabs(props: {
       const v = resolveValid(t) ?? rememberedValid ?? initial;
 
       if (v) setLastPortalTab(v);
+      if (!v) return;
 
-      if (v && v !== activeId) {
+      const current = activeIdRef.current;
+
+      if (v !== current) {
         armIndicatorMotion();
+        activeIdRef.current = v;
         setActiveId(v);
-
-        setMountedIds((prev) => {
-          const next = new Set(prev);
-          next.add(v);
-          return next;
-        });
-
+        ensureMounted(v);
         requestAnimationFrame(() => measure());
+        return;
       }
+
+      ensureMounted(v);
     };
 
     const onPop = () => syncFromLocation();
@@ -311,7 +345,7 @@ export default function PortalTabs(props: {
       window.removeEventListener("popstate", onPop);
       window.removeEventListener(PATH_EVENT, onCustom as EventListener);
     };
-  }, [activeId, initial, resolveValid, measure, tabs, armIndicatorMotion]);
+  }, [initial, resolveValid, measure, tabs, armIndicatorMotion, ensureMounted]);
 
   if (!hasTabs) return null;
 
@@ -411,12 +445,9 @@ export default function PortalTabs(props: {
                   typeof window !== "undefined" ? window.location.search : "";
 
                 armIndicatorMotion();
+                activeIdRef.current = t.id;
                 setActiveId(t.id);
-                setMountedIds((prev) => {
-                  const next = new Set(prev);
-                  next.add(t.id);
-                  return next;
-                });
+                ensureMounted(t.id);
 
                 // measure after DOM updates / font layout
                 requestAnimationFrame(() => measure());
