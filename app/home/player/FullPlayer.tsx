@@ -526,14 +526,14 @@ export default function FullPlayer(props: {
   albums: AlbumNavItem[];
   onSelectAlbum?: (slug: string) => void;
   isBrowsingAlbum?: boolean;
-  viewerTier?: Tier;
+  tier?: Tier;
 }) {
   const {
     bundle,
     albums,
     onSelectAlbum,
     isBrowsingAlbum = false,
-    viewerTier = "none",
+    tier = "none",
   } = props;
 
   const { albumSlug, album, tracks, albumLyrics } = bundle;
@@ -1337,7 +1337,7 @@ export default function FullPlayer(props: {
                   </div>
 
                   <div className="afRowMetaUnder" aria-hidden="true">
-                      {/** ENABLE THIS WHEN TOTALS ARE RESPECTABLE <span>{renderPlayCount(t)}</span>
+                    {/** ENABLE THIS WHEN TOTALS ARE RESPECTABLE <span>{renderPlayCount(t)}</span>
                     <span className="afRowMetaDot">•</span> */}
                     <span>{renderDur(t)}</span>
                   </div>
@@ -1433,8 +1433,7 @@ export default function FullPlayer(props: {
               {browseAlbums.map((a) => {
                 const isActive = effAlbum?.id === a.id;
                 const min = a.policy?.minTierToLoad ?? null;
-                const canLoadByTier =
-                  !min || tierRank(viewerTier) >= tierRank(min);
+                const canLoadByTier = !min || tierRank(tier) >= tierRank(min);
                 const disabled =
                   !onSelectAlbum ||
                   isBrowsingAlbum ||

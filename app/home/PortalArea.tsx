@@ -106,8 +106,6 @@ export default function PortalArea(props: PortalAreaProps) {
     },
   });
 
-  const viewerTier: Tier = tier;
-
   const panels = React.useMemo<PortalPanelSpec[]>(
     () => [
       {
@@ -120,7 +118,7 @@ export default function PortalArea(props: PortalAreaProps) {
             onSelectAlbum={onSelectAlbum}
             isBrowsingAlbum={isBrowsingAlbum}
             openPlayerPanel={() => forceSurface("player")}
-            viewerTier={viewerTier}
+            tier={tier}
           />
         ),
       },
@@ -158,7 +156,7 @@ export default function PortalArea(props: PortalAreaProps) {
       onSelectAlbum,
       isBrowsingAlbum,
       forceSurface,
-      viewerTier,
+      tier,
       portalModules,
       memberId,
       entitlementKeys,
@@ -192,7 +190,7 @@ export default function PortalArea(props: PortalAreaProps) {
           initialPortalTabId={props.initialPortalTabId}
           initialExegesisDisplayId={props.initialExegesisDisplayId}
           value={{
-            tier: viewerTier,
+            tier,
             isSignedIn,
           }}
         >

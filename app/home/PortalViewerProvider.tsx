@@ -10,12 +10,8 @@ type ViewerCtx = {
   isSignedIn: boolean;
   isPatron: boolean;
   isPartner: boolean;
-
-  // ✅ portal navigation state (client-owned, seeded from server/runtime)
   portalTabId: string | null;
   setPortalTabId: (next: string | null) => void;
-
-  // ✅ exegesis pin state (client-owned, seeded from server/runtime)
   exegesisDisplayId: string | null;
   setExegesisDisplayId: (next: string | null) => void;
 };

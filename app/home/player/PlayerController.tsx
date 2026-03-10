@@ -11,14 +11,14 @@ export default function PlayerController(props: {
   albums: AlbumNavItem[];
   onSelectAlbum: (slug: string) => void;
   isBrowsingAlbum: boolean;
-  viewerTier?: Tier;
+  tier?: Tier;
 }) {
   const {
     bundle,
     albums,
     onSelectAlbum,
     isBrowsingAlbum,
-    viewerTier = "none",
+    tier = "none",
   } = props;
 
   return (
@@ -27,7 +27,7 @@ export default function PlayerController(props: {
       albums={albums}
       onSelectAlbum={onSelectAlbum}
       isBrowsingAlbum={isBrowsingAlbum}
-      viewerTier={viewerTier}
+      tier={tier}
     />
   );
 }

@@ -89,12 +89,12 @@ function fmtDate(iso: string) {
 
 function SubmitQuestionCTA(props: { onOpenComposer: () => void }) {
   const { onOpenComposer } = props;
-  const { viewerTier, isSignedIn } = usePortalViewer();
+  const { tier, isSignedIn } = usePortalViewer();
   const { openMembershipModal } = useMembershipModal();
 
-  if (!isSignedIn || viewerTier === "none") return null;
+  if (!isSignedIn || tier === "none") return null;
 
-  const locked = viewerTier === "friend";
+  const locked = tier === "friend";
   const label = locked ? "Ask a Question (Patron+)" : "Ask a Question";
 
   return (
@@ -724,7 +724,7 @@ export default function PortalArtistPosts(props: {
   const shareBuilders = useShareBuilders();
 
   const { openMembershipModal } = useMembershipModal();
-  const { viewerTier, isSignedIn } = usePortalViewer();
+  const { tier, isSignedIn } = usePortalViewer();
 
   const broker = useGateBroker();
   const [inlineGateActive, setInlineGateActive] = React.useState(false);
@@ -752,8 +752,7 @@ export default function PortalArtistPosts(props: {
   const [askerName, setAskerName] = React.useState("");
   const MAX_NAME_CHARS = 48;
 
-  const canSubmit =
-    isSignedIn && (viewerTier === "patron" || viewerTier === "partner");
+  const canSubmit = isSignedIn && (tier === "patron" || tier === "partner");
 
   const thankTimerRef = React.useRef<number | null>(null);
   React.useEffect(() => {
@@ -963,7 +962,7 @@ export default function PortalArtistPosts(props: {
         }
       }
     },
-    [pageSize, minVisibility, postTypeFilter, markSeen],
+    [pageSize, minVisibility, postTypeFilter, markSeen, posts.length],
   );
 
   // optional: abort on unmount
