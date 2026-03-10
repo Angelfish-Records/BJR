@@ -25,8 +25,6 @@ import {
 } from "@/lib/albums";
 import type { AlbumNavItem } from "@/lib/types";
 
-export const dynamic = "auto";
-
 type ShadowHomeDoc = {
   title?: string;
   subtitle?: string;

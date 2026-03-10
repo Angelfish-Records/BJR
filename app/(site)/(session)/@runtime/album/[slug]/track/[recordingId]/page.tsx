@@ -2,8 +2,6 @@
 import React from "react";
 import AlbumRuntimePage from "../../page";
 
-export const dynamic = "auto";
-
 export default async function AlbumTrackRuntimePage(props: {
   params: Promise<{ slug: string; recordingId: string }>;
 }) {

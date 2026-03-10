@@ -1,8 +1,7 @@
-// web/app/(site)/(session)/@runtime/exegesis/[recordingId]/page.tsx
+// web/app/(site)/(session)/@runtime/exegesis/[displayId]/page.tsx
 import React from "react";
 import SessionRuntime from "../../SessionRuntime";
 
-export const dynamic = "auto";
 export const revalidate = 0;
 
 export default async function PortalExegesisTrackRuntimePage(props: {

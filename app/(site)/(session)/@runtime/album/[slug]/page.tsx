@@ -2,8 +2,6 @@
 import React from "react";
 import SessionRuntime from "../../SessionRuntime";
 
-export const dynamic = "auto";
-
 export default async function AlbumRuntimePage(props: {
   params: Promise<{ slug: string }>;
 }) {
