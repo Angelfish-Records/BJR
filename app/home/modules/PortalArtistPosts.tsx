@@ -769,6 +769,7 @@ export default function PortalArtistPosts(props: {
 
   const [posts, setPosts] = React.useState<Post[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [refreshing, setRefreshing] = React.useState(false);
   const [cursor, setCursor] = React.useState<string | null>("0");
   const [, setErr] = React.useState<string | null>(null);
 
@@ -894,8 +895,11 @@ export default function PortalArtistPosts(props: {
       inflightRef.current = ac;
       inflightKeyRef.current = key;
 
+      const isFirstPage = nextCursor === "0";
+
       loadingRef.current = true;
-      setLoading(true);
+      if (isFirstPage && posts.length > 0) setRefreshing(true);
+      else setLoading(true);
 
       const filterAtCall = postTypeFilter;
       setErr(null);
@@ -955,6 +959,7 @@ export default function PortalArtistPosts(props: {
           inflightKeyRef.current = "";
           loadingRef.current = false;
           setLoading(false);
+          setRefreshing(false);
         }
       }
     },
@@ -974,9 +979,8 @@ export default function PortalArtistPosts(props: {
   React.useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // reset list state
+    // Keep current posts on screen while first page revalidates.
     setCursor("0");
-    setPosts([]);
     setErr(null);
 
     // kick first page
@@ -1856,7 +1860,13 @@ export default function PortalArtistPosts(props: {
           </div>
         ) : null}
 
-        {!loading && posts.length === 0 ? (
+        {refreshing && posts.length > 0 ? (
+          <div style={{ fontSize: 12, opacity: 0.55, padding: "8px 0 0" }}>
+            Refreshing…
+          </div>
+        ) : null}
+
+        {!loading && !refreshing && posts.length === 0 ? (
           <div style={{ fontSize: 13, opacity: 0.75, padding: "12px 0" }}>
             No posts yet.
           </div>
