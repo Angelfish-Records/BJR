@@ -11,31 +11,31 @@ export const ADMIN_PANELS: readonly AdminPanelDef[] = [
   {
     id: "access",
     pillLabel: "Access",
-    modalTitle: "Admin — Access",
+    modalTitle: "Access",
     src: "/admin/access?embed=1",
   },
   {
     id: "playback",
     pillLabel: "Playback",
-    modalTitle: "Admin — Playback",
+    modalTitle: "Playback",
     src: "/admin/playback?embed=1",
   },
   {
     id: "share_tokens",
     pillLabel: "Share tokens",
-    modalTitle: "Admin — Share tokens",
+    modalTitle: "Share tokens",
     src: "/admin/access?tab=tokens&embed=1",
   },
   {
     id: "mailbag",
     pillLabel: "Mailbag",
-    modalTitle: "Admin — Mailbag",
+    modalTitle: "Mailbag",
     src: "/admin/mailbag?embed=1",
   },
   {
     id: "exegesis",
     pillLabel: "Exegesis",
-    modalTitle: "Admin — Exegesis",
+    modalTitle: "Exegesis",
     src: "/admin/exegesis?embed=1",
   },
 ] as const;

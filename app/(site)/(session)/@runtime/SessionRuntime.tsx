@@ -4,7 +4,6 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { ensureMemberByClerk } from "@/lib/members";
 import { listCurrentEntitlementKeys } from "@/lib/entitlements";
 import { deriveTier } from "@/lib/vocab";
-import { fetchPortalPage } from "@/lib/portal";
 import {
   emptyPortalMemberSummary,
   type PortalMemberSummary,
@@ -30,12 +29,7 @@ export default async function SessionRuntime(props: {
     user?.emailAddresses?.[0]?.emailAddress ??
     null;
 
-  const [portal, featured] = await Promise.all([
-    fetchPortalPage("home"),
-    props.featuredAlbumSlug
-      ? Promise.resolve(null)
-      : getFeaturedAlbumSlugFromSanity(),
-  ]);
+  const featured = await getFeaturedAlbumSlugFromSanity();
 
   let member: null | { id: string; created: boolean; email: string } = null;
   let entitlementKeys: string[] = [];
@@ -71,7 +65,7 @@ export default async function SessionRuntime(props: {
   const bundle = await getAlbumBySlug(selectedAlbumSlug);
 
   const payload: SessionRuntimePayload = {
-    portalModules: portal?.modules ?? [],
+    portalModules: [],
     memberId: member?.id ?? null,
     entitlementKeys,
     memberSummary,

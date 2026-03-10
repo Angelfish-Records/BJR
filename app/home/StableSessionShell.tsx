@@ -9,68 +9,61 @@ import {
 } from "@/app/home/SessionRuntimePayloadContext";
 import type { SessionRuntimePayload } from "@/app/home/sessionRuntimePayload";
 
+type ShellConfig = {
+  topLogoUrl: string | null;
+  topLogoHeight: number | null;
+  featuredAlbumSlug: string;
+  albums: PortalAreaProps["albums"];
+  portalModules: PortalAreaProps["portalModules"];
+};
+
 function toPortalAreaProps(
   payload: SessionRuntimePayload,
-  shellConfig: {
-    topLogoUrl: string | null;
-    topLogoHeight: number | null;
-    featuredAlbumSlug: string;
-    albums: PortalAreaProps["albums"];
-  },
+  shell: ShellConfig,
 ): PortalAreaProps {
   return {
-    portalModules: payload.portalModules,
+    portalModules: shell.portalModules,
     memberId: payload.memberId,
     entitlementKeys: payload.entitlementKeys,
     memberSummary: payload.memberSummary ?? null,
-    topLogoUrl: shellConfig.topLogoUrl,
-    topLogoHeight: shellConfig.topLogoHeight,
-    featuredAlbumSlug: shellConfig.featuredAlbumSlug,
+
+    topLogoUrl: shell.topLogoUrl,
+    topLogoHeight: shell.topLogoHeight,
+
     initialPortalTabId: payload.initialPortalTabId ?? null,
     initialExegesisDisplayId: payload.initialExegesisDisplayId ?? null,
+
     bundle: payload.bundle,
-    albums: shellConfig.albums,
+    albums: shell.albums,
+    featuredAlbumSlug: shell.featuredAlbumSlug,
+
     attentionMessage: payload.attentionMessage ?? null,
     tier: payload.tier ?? null,
     isPatron: payload.isPatron ?? false,
     canManageBilling: payload.canManageBilling ?? false,
   };
 }
+
 function StableSessionViewport(props: {
   runtime: React.ReactNode;
-  topLogoUrl: string | null;
-  topLogoHeight: number | null;
-  featuredAlbumSlug: string;
-  albums: PortalAreaProps["albums"];
+  shell: ShellConfig;
 }) {
   const record = useSessionRuntimePayloadRecord();
   const payload = record?.payload ?? null;
 
-  const portalAreaProps = React.useMemo(
-    () =>
-      payload
-        ? toPortalAreaProps(payload, {
-            topLogoUrl: props.topLogoUrl,
-            topLogoHeight: props.topLogoHeight,
-            featuredAlbumSlug: props.featuredAlbumSlug,
-            albums: props.albums,
-          })
-        : null,
-    [
-      payload,
-      props.topLogoUrl,
-      props.topLogoHeight,
-      props.featuredAlbumSlug,
-      props.albums,
-    ],
-  );
+  const portalAreaProps = React.useMemo(() => {
+    if (!payload) return null;
+    return toPortalAreaProps(payload, props.shell);
+  }, [payload, props.shell]);
 
   return (
     <>
+      {/* Runtime payload bridge subtree */}
       <div aria-hidden="true" hidden>
         {props.runtime}
       </div>
 
+      {/* Persistent UI shell */}
       {portalAreaProps ? <PortalArea {...portalAreaProps} /> : null}
     </>
   );
@@ -82,16 +75,19 @@ export default function StableSessionShell(props: {
   topLogoHeight: number | null;
   featuredAlbumSlug: string;
   albums: PortalAreaProps["albums"];
+  portalModules: PortalAreaProps["portalModules"];
 }) {
+  const shell: ShellConfig = {
+    topLogoUrl: props.topLogoUrl,
+    topLogoHeight: props.topLogoHeight,
+    featuredAlbumSlug: props.featuredAlbumSlug,
+    albums: props.albums,
+    portalModules: props.portalModules,
+  };
+
   return (
     <SessionRuntimePayloadProvider>
-      <StableSessionViewport
-        runtime={props.runtime}
-        topLogoUrl={props.topLogoUrl}
-        topLogoHeight={props.topLogoHeight}
-        featuredAlbumSlug={props.featuredAlbumSlug}
-        albums={props.albums}
-      />
+      <StableSessionViewport runtime={props.runtime} shell={shell} />
     </SessionRuntimePayloadProvider>
   );
 }

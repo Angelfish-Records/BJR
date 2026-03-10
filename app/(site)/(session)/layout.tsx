@@ -2,6 +2,7 @@
 import React from "react";
 import ShadowHomeFrame from "@/app/home/ShadowHomeFrame";
 import StableSessionShell from "@/app/home/StableSessionShell";
+import { fetchPortalPage } from "@/lib/portal";
 import { client } from "@/sanity/lib/client";
 import {
   getFeaturedAlbumSlugFromSanity,
@@ -65,6 +66,10 @@ export default async function SessionLayout(props: {
     listAlbumsForBrowse(),
   ]);
 
+  const [portalPage] = await Promise.all([fetchPortalPage("home")]);
+
+  const portalModules = portalPage?.modules ?? [];
+
   const featuredAlbumSlug =
     featured.slug ?? featured.fallbackSlug ?? "god-defend";
 
@@ -82,6 +87,7 @@ export default async function SessionLayout(props: {
         topLogoHeight={shellConfig?.topLogoHeight ?? null}
         featuredAlbumSlug={featuredAlbumSlug}
         albums={albums}
+        portalModules={portalModules}
       />
     </ShadowHomeFrame>
   );

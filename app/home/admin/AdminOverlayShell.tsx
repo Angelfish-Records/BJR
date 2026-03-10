@@ -143,7 +143,7 @@ export default function AdminOverlayShell(props: Props) {
                       userSelect: "none",
                     }}
                   >
-                    Admin workspace
+                    BJR Admin
                   </div>
                   <div
                     style={{
