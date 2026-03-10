@@ -1,16 +1,3 @@
-import type React from "react";
-import type { AlbumNavItem, AlbumPlayerBundle } from "@/lib/types";
+import type { PortalAreaProps } from "@/app/home/PortalArea";
 
-export type SessionRuntimePayload = {
-  portalPanel: React.ReactNode;
-  topLogoUrl?: string | null;
-  topLogoHeight?: number | null;
-  initialPortalTabId?: string | null;
-  initialExegesisDisplayId?: string | null;
-  bundle: AlbumPlayerBundle;
-  albums: AlbumNavItem[];
-  attentionMessage?: string | null;
-  tier?: string | null;
-  isPatron?: boolean;
-  canManageBilling?: boolean;
-};
+export type SessionRuntimePayload = PortalAreaProps;

@@ -50,6 +50,8 @@ export default async function SessionRuntime(props: {
   initialPortalTabId?: string | null;
   initialExegesisDisplayId?: string | null;
 }) {
+  // Important: this file is now a route-payload loader only.
+  // It must not directly instantiate the persistent session shell.
   const { userId } = await auth();
   const user = userId ? await currentUser() : null;
   const email =

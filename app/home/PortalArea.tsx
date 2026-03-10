@@ -321,7 +321,7 @@ function FullWidthBanner(props: {
   );
 }
 
-export default function PortalArea(props: {
+export type PortalAreaProps = {
   portalPanel: React.ReactNode;
   topLogoUrl?: string | null;
   topLogoHeight?: number | null;
@@ -335,7 +335,9 @@ export default function PortalArea(props: {
   // isAdmin is owned at /(site)/layout.tsx via AdminRibbon.
   // PortalArea should not take it as input.
   canManageBilling?: boolean;
-}) {
+};
+
+export default function PortalArea(props: PortalAreaProps) {
   const {
     portalPanel,
     bundle,
