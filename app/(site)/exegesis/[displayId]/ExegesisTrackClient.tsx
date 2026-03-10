@@ -66,6 +66,7 @@ export default function ExegesisTrackClient(props: {
   trackTitle?: string | null;
   trackArtist?: string | null;
   headerLeading?: React.ReactNode;
+  headerArtwork?: React.ReactNode;
 }) {
   const { openMembershipModal } = useMembershipModal();
   const broker = useGateBroker();
@@ -897,20 +898,30 @@ export default function ExegesisTrackClient(props: {
       `}</style>
 
       <div className="min-w-0">
-        <div className="flex items-start gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           {props.headerLeading ? (
-            <div className="shrink-0 pt-[2px]">{props.headerLeading}</div>
+            <div className="flex shrink-0 items-center justify-center">
+              {props.headerLeading}
+            </div>
+          ) : null}
+
+          {props.headerArtwork ? (
+            <div className="flex shrink-0 items-center justify-center">
+              {props.headerArtwork}
+            </div>
           ) : null}
 
           <div className="min-w-0 flex-1">
-            <h1 className="mt-1 text-xl font-semibold leading-tight">
+            <h1 className="text-xl font-semibold leading-tight">
               <span className="opacity-90">
                 {(props.trackTitle ?? "").trim() || lyrics.recordingId}
               </span>
             </h1>
 
             {(props.trackArtist ?? "").trim() ? (
-              <div className="mt-1 text-sm opacity-70">{props.trackArtist}</div>
+              <div className="mt-1 text-sm leading-tight opacity-70">
+                {props.trackArtist}
+              </div>
             ) : null}
 
             {lyrics.geniusUrl ? (

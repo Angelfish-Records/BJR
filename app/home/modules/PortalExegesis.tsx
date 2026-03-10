@@ -69,13 +69,13 @@ function buildCatalogueIndexes(cat: CatalogueOk | null): {
   recordingIdByDisplayId: Record<string, string>;
   trackMetaByRecordingId: Record<
     string,
-    { title: string | null; artist: string | null }
+    { title: string | null; artist: string | null; coverUrl: string | null }
   >;
 } {
   const recordingIdByDisplayId: Record<string, string> = {};
   const trackMetaByRecordingId: Record<
     string,
-    { title: string | null; artist: string | null }
+    { title: string | null; artist: string | null; coverUrl: string | null }
   > = {};
 
   if (!cat) {
@@ -83,6 +83,8 @@ function buildCatalogueIndexes(cat: CatalogueOk | null): {
   }
 
   for (const album of cat.albums ?? []) {
+    const albumCoverUrl = (album.coverUrl ?? "").trim() || null;
+
     for (const track of album.tracks ?? []) {
       const recordingId = (track.recordingId ?? "").trim();
       const displayId = (track.displayId ?? "").trim();
@@ -91,6 +93,7 @@ function buildCatalogueIndexes(cat: CatalogueOk | null): {
       trackMetaByRecordingId[recordingId] = {
         title: track.title ?? null,
         artist: track.artist ?? null,
+        coverUrl: albumCoverUrl,
       };
 
       if (displayId) {
@@ -523,14 +526,20 @@ export default function PortalExegesis(props: { title?: string }) {
   // -------- render --------
   if (displayId) {
     const meta = recordingId
-      ? (trackMetaByRecordingId[recordingId] ?? { title: null, artist: null })
-      : { title: null, artist: null };
+      ? (trackMetaByRecordingId[recordingId] ?? {
+          title: null,
+          artist: null,
+          coverUrl: null,
+        })
+      : { title: null, artist: null, coverUrl: null };
 
     const resolvedTitle =
       (lyrics?.trackTitle ?? meta.title ?? "").trim() || null;
 
     const resolvedArtist =
       (lyrics?.trackArtist ?? meta.artist ?? "").trim() || null;
+
+    const resolvedCoverUrl = (meta.coverUrl ?? "").trim() || null;
 
     const noCatalogueYet = !catalogue && catalogueLoading; // still fetching
 
@@ -562,7 +571,7 @@ export default function PortalExegesis(props: { title?: string }) {
                 <button
                   type="button"
                   aria-label="Back to all tracks"
-                  className="inline-flex items-center gap-2 rounded-md p-1 opacity-70 hover:opacity-100 hover:bg-white/5"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md opacity-70 transition hover:bg-white/5 hover:opacity-100"
                   onClick={() => {
                     setExegesisDisplayId(null);
                     router.push(`/exegesis${search}`);
@@ -581,6 +590,19 @@ export default function PortalExegesis(props: { title?: string }) {
                   </svg>
                   <span className="sr-only">Back to all tracks</span>
                 </button>
+              }
+              headerArtwork={
+                resolvedCoverUrl ? (
+                  <div
+                    className="h-10 w-10 shrink-0 rounded-md"
+                    style={{
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background: `url(${resolvedCoverUrl}) center/cover no-repeat`,
+                      boxShadow: "0 10px 24px rgba(0,0,0,0.22)",
+                    }}
+                    aria-hidden="true"
+                  />
+                ) : null
               }
             />
           )
