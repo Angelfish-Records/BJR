@@ -1,3 +1,4 @@
+//web/app/home/StableSessionShell.tsx
 "use client";
 
 import React from "react";
