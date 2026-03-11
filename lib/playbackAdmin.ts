@@ -21,13 +21,14 @@ type RecordingAggregateRow = {
 };
 
 type DedupeRow = {
-  member_id: string;
+  member_id: string | null;
   member_email: string | null;
   playback_id: string;
   recording_id: string | null;
   event_type: string;
   milestone_key: string;
   created_at: string;
+  audience: "member" | "anonymous";
 };
 
 function asSafeInt(value: string | number | null | undefined): number {
@@ -70,7 +71,7 @@ export type PlaybackAdminTrackRow = {
 };
 
 export type PlaybackAdminDedupeRow = {
-  memberId: string;
+  memberId: string | null;
   memberEmail: string | null;
   playbackId: string;
   recordingId: string | null;
@@ -78,6 +79,7 @@ export type PlaybackAdminDedupeRow = {
   eventType: string;
   milestoneKey: string;
   createdAt: string;
+  audience: "member" | "anonymous";
 };
 
 export type PlaybackAdminSnapshot = {
@@ -214,29 +216,58 @@ async function getRecentTracks(): Promise<PlaybackAdminTrackRow[]> {
 
 async function getRecentDedupe(): Promise<PlaybackAdminDedupeRow[]> {
   const res = await sql<DedupeRow>`
-    select
-      d.member_id,
-      m.email::text as member_email,
-      d.playback_id,
-      evt.recording_id,
-      d.event_type,
-      d.milestone_key,
-      d.created_at::text as created_at
-    from member_playback_telemetry_dedupe d
-    left join members m
-      on m.id = d.member_id
-        left join lateral (
+    with recent_member_dedupe as (
       select
-        me.payload->>'recording_id' as recording_id
-      from member_events me
-      where
-        me.member_id = d.member_id
-        and me.event_type = d.event_type
-        and me.payload->>'playback_id' = d.playback_id
-      order by me.occurred_at desc
-      limit 1
-    ) evt on true
-    order by d.created_at desc
+        d.member_id,
+        m.email::text as member_email,
+        d.playback_id,
+        evt.recording_id,
+        d.event_type,
+        d.milestone_key,
+        d.created_at::text as created_at,
+        'member'::text as audience
+      from member_playback_telemetry_dedupe d
+      left join members m
+        on m.id = d.member_id
+      left join lateral (
+        select
+          me.payload->>'recording_id' as recording_id
+        from member_events me
+        where
+          me.member_id = d.member_id
+          and me.event_type = d.event_type
+          and me.payload->>'playback_id' = d.playback_id
+        order by me.occurred_at desc
+        limit 1
+      ) evt on true
+    ),
+    recent_anonymous_dedupe as (
+      select
+        null::uuid as member_id,
+        null::text as member_email,
+        d.playback_id,
+        null::text as recording_id,
+        d.event_type,
+        d.milestone_key,
+        d.created_at::text as created_at,
+        'anonymous'::text as audience
+      from anonymous_playback_telemetry_dedupe d
+    )
+    select
+      t.member_id::text as member_id,
+      t.member_email,
+      t.playback_id,
+      t.recording_id,
+      t.event_type,
+      t.milestone_key,
+      t.created_at,
+      t.audience
+    from (
+      select * from recent_member_dedupe
+      union all
+      select * from recent_anonymous_dedupe
+    ) t
+    order by t.created_at desc
     limit 40
   `;
 
@@ -270,6 +301,7 @@ async function getRecentDedupe(): Promise<PlaybackAdminDedupeRow[]> {
     eventType: row.event_type,
     milestoneKey: row.milestone_key,
     createdAt: new Date(row.created_at).toISOString(),
+    audience: row.audience,
   }));
 }
 
