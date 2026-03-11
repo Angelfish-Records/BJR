@@ -1,3 +1,4 @@
+// web/app/home/membershipTier.ts
 import type { Tier } from "@/lib/types";
 
 export function isPatronTier(tier: Tier): boolean {

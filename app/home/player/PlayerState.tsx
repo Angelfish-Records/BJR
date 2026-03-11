@@ -200,16 +200,22 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
         ),
 
       selectTrack: (id?: string) =>
-        setState((s) => ({
-          ...s,
-          selectedRecordingId: id,
-        })),
+        setState((s) => {
+          if (s.selectedRecordingId === id) return s;
+          return {
+            ...s,
+            selectedRecordingId: id,
+          };
+        }),
 
       setPendingRecordingId: (id?: string) =>
-        setState((s) => ({
-          ...s,
-          pendingRecordingId: id,
-        })),
+        setState((s) => {
+          if (s.pendingRecordingId === id) return s;
+          return {
+            ...s,
+            pendingRecordingId: id,
+          };
+        }),
 
       resolvePendingTrack: (id: string) =>
         setState((s) => {

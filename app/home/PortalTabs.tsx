@@ -169,46 +169,49 @@ export default function PortalTabs(props: {
     });
   }, []);
 
-  const measure = React.useCallback(() => {
-    const row = rowRef.current;
-    if (!row) return;
-    if (!tabs.length) return;
+  const measure = React.useCallback(
+    (targetTabId?: string | null) => {
+      const row = rowRef.current;
+      if (!row) return;
+      if (!tabs.length) return;
 
-    const rowRect = row.getBoundingClientRect();
+      const rowRect = row.getBoundingClientRect();
 
-    const btns = tabs
-      .map((t) => btnRefs.current.get(t.id))
-      .filter(Boolean) as HTMLButtonElement[];
+      const btns = tabs
+        .map((t) => btnRefs.current.get(t.id))
+        .filter(Boolean) as HTMLButtonElement[];
 
-    if (!btns.length) return;
+      if (!btns.length) return;
 
-    const first = btns[0];
-    const last = btns[btns.length - 1];
+      const first = btns[0];
+      const last = btns[btns.length - 1];
 
-    const firstRect = first.getBoundingClientRect();
-    const lastRect = last.getBoundingClientRect();
+      const firstRect = first.getBoundingClientRect();
+      const lastRect = last.getBoundingClientRect();
 
-    const railX = firstRect.left - rowRect.left + row.scrollLeft;
-    const railW = lastRect.right - firstRect.left;
+      const railX = firstRect.left - rowRect.left + row.scrollLeft;
+      const railW = lastRect.right - firstRect.left;
 
-    const r = (n: number) =>
-      Math.round(n * (window.devicePixelRatio || 1)) /
-      (window.devicePixelRatio || 1);
+      const r = (n: number) =>
+        Math.round(n * (window.devicePixelRatio || 1)) /
+        (window.devicePixelRatio || 1);
 
-    setRail({ x: r(railX), w: r(railW) });
+      setRail({ x: r(railX), w: r(railW) });
 
-    const id = activeId;
-    if (!id) return;
+      const id = targetTabId ?? activeId;
+      if (!id) return;
 
-    const btn = btnRefs.current.get(id) ?? null;
-    if (!btn) return;
+      const btn = btnRefs.current.get(id) ?? null;
+      if (!btn) return;
 
-    const b = btn.getBoundingClientRect();
-    const x = b.left - rowRect.left + row.scrollLeft;
-    const w = b.width;
+      const b = btn.getBoundingClientRect();
+      const x = b.left - rowRect.left + row.scrollLeft;
+      const w = b.width;
 
-    setIndicator({ x: r(x), w: r(w) });
-  }, [tabs, activeId]);
+      setIndicator({ x: r(x), w: r(w) });
+    },
+    [tabs, activeId],
+  );
 
   React.useLayoutEffect(() => {
     measure();
@@ -340,7 +343,7 @@ export default function PortalTabs(props: {
           scrollbarWidth: "none",
           minWidth: 0,
         }}
-        onScroll={() => measure()}
+        onScroll={() => measure(activeId)}
       >
         {/* rail */}
         <div
@@ -407,8 +410,9 @@ export default function PortalTabs(props: {
                 ensureMounted(t.id);
                 lastExternalPathTabRef.current = t.id;
 
-                // measure after DOM updates / font layout
-                requestAnimationFrame(() => measure());
+                // measure after DOM updates / font layout, but against the
+                // newly selected tab rather than the previous render's activeId
+                requestAnimationFrame(() => measure(t.id));
 
                 try {
                   router.prefetch(href);

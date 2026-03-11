@@ -1,3 +1,4 @@
+// web/app/home/SessionChrome.tsx
 "use client";
 
 import React from "react";

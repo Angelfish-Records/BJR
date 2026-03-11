@@ -1,3 +1,4 @@
+// web/lib/entitlementVocab.ts
 export type StructuredEntitlementKey = string;
 
 function stableStringify(value: unknown): string {

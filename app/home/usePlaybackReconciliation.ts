@@ -110,21 +110,25 @@ export function usePlaybackReconciliation(props: {
     [routerPush],
   );
 
-  const forcedPlayerRef = React.useRef(false);
+  const forcedPlayerKeyRef = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (forcedPlayerRef.current) return;
-
     const playbackIntent = Boolean(qDisplayId) || Boolean(qAutoplay);
-    if (!playbackIntent) return;
-
-    if (isPlayer) {
-      forcedPlayerRef.current = true;
+    if (!playbackIntent) {
+      forcedPlayerKeyRef.current = null;
       return;
     }
 
-    forcedPlayerRef.current = true;
+    const intentKey = `${qAlbum ?? currentAlbumSlug}:${qDisplayId ?? ""}:${qAutoplay ? "autoplay" : ""}`;
+    if (forcedPlayerKeyRef.current === intentKey) return;
+
+    if (isPlayer) {
+      forcedPlayerKeyRef.current = intentKey;
+      return;
+    }
+
+    forcedPlayerKeyRef.current = intentKey;
     forceSurface("player", null, "replace");
-  }, [qDisplayId, qAutoplay, isPlayer, forceSurface]);
+  }, [qAlbum, currentAlbumSlug, qDisplayId, qAutoplay, isPlayer, forceSurface]);
 
   React.useEffect(() => {
     if (!qTrackRecordingId) return;
@@ -132,18 +136,20 @@ export function usePlaybackReconciliation(props: {
     setPendingRecordingId(undefined);
   }, [qTrackRecordingId, selectTrack, setPendingRecordingId]);
 
-  const primedRef = React.useRef(false);
+  const primedAlbumKeyRef = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (primedRef.current) return;
     if (!album || tracks.length === 0) return;
 
+    const primeKey = `${currentAlbumSlug}:${hasSt ? "shared" : "plain"}:${qDisplayId ?? ""}`;
+    if (primedAlbumKeyRef.current === primeKey) return;
+
     if (player.current || player.queue.length > 0) {
-      primedRef.current = true;
+      primedAlbumKeyRef.current = primeKey;
       return;
     }
 
     if (qDisplayId) {
-      primedRef.current = true;
+      primedAlbumKeyRef.current = primeKey;
       return;
     }
 
@@ -167,7 +173,7 @@ export function usePlaybackReconciliation(props: {
     player.selectTrack(first.recordingId);
     player.setPendingRecordingId(undefined);
 
-    primedRef.current = true;
+    primedAlbumKeyRef.current = primeKey;
   }, [album, tracks, hasSt, qAlbum, currentAlbumSlug, qDisplayId, player]);
 
   const autoplayFiredRef = React.useRef<string | null>(null);
