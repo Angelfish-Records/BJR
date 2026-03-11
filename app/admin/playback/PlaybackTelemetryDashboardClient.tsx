@@ -362,7 +362,9 @@ function resolveDedupeTrackLabel(row: DedupeRow): string {
 }
 
 function resolveDedupeMemberLabel(row: DedupeRow): string {
-  return row.memberEmail ?? ellipsisMiddle(row.memberId, 8);
+  if (row.memberEmail) return row.memberEmail;
+  if (row.memberId) return ellipsisMiddle(row.memberId, 8);
+  return "Anonymous";
 }
 
 function DedupeTable(props: { rows: PlaybackAdminSnapshot["recentDedupe"] }) {
@@ -379,7 +381,7 @@ function DedupeTable(props: { rows: PlaybackAdminSnapshot["recentDedupe"] }) {
       >
         <thead>
           <tr>
-            {["When", "Event", "Milestone", "Playback", "Member"].map(
+            {["When", "Event", "Milestone", "Playback", "Audience"].map(
               (label) => (
                 <th
                   key={label}
@@ -418,7 +420,7 @@ function DedupeTable(props: { rows: PlaybackAdminSnapshot["recentDedupe"] }) {
 
           {rows.map((row) => (
             <tr
-              key={`${row.memberId}:${row.playbackId}:${row.eventType}:${row.milestoneKey}:${row.createdAt}`}
+              key={`${row.memberId ?? "anon"}:${row.playbackId}:${row.eventType}:${row.milestoneKey}:${row.createdAt}`}
             >
               <td
                 style={{
@@ -473,7 +475,7 @@ function DedupeTable(props: { rows: PlaybackAdminSnapshot["recentDedupe"] }) {
                   fontSize: FONT_SIZE_DEDUPE,
                   maxWidth: 280,
                   fontFamily:
-                    row.memberEmail == null
+                    row.memberEmail == null && row.memberId != null
                       ? 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace'
                       : undefined,
                 }}
