@@ -1758,7 +1758,7 @@ export default function FullPlayer(props: {
           .afEq i{ animation: none; }
         }
 
-               .afTransportRow{
+                  .afTransportRow{
           width: 100%;
           display: grid;
           grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -1769,9 +1769,10 @@ export default function FullPlayer(props: {
 
         .afTransportBadgeSlot{
           justify-self: start;
-          min-height: 36px;
+          min-height: 20px;
           display: flex;
           align-items: center;
+          min-width: 0;
         }
 
         .afTransportControls{
@@ -1783,33 +1784,55 @@ export default function FullPlayer(props: {
         .afLiveBadge{
           display: inline-flex;
           align-items: center;
-          gap: 8px;
-          min-height: 34px;
-          padding: 0 12px;
-          border-radius: 999px;
-          border: 1px solid rgba(255,255,255,0.14);
-          background: rgba(255,255,255,0.05);
-          color: rgba(255,255,255,0.88);
+          gap: 7px;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          color: rgba(255,255,255,0.56);
           font-size: 12px;
-          font-weight: 650;
+          font-weight: 500;
           letter-spacing: 0.01em;
+          line-height: 1;
           white-space: nowrap;
-          box-shadow: 0 10px 24px rgba(0,0,0,0.16);
+          text-shadow: none;
+          box-shadow: none;
         }
 
         .afLiveBadgeDot{
-          width: 8px;
-          height: 8px;
+          width: 7px;
+          height: 7px;
           border-radius: 999px;
-          background: color-mix(in srgb, var(--accent) 84%, white 16%);
-          box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
-          animation: afLivePulse 1.9s ease-in-out infinite;
+          background: rgba(92, 214, 123, 0.92);
+          box-shadow:
+            0 0 0 0 rgba(92, 214, 123, 0.22),
+            0 0 8px rgba(92, 214, 123, 0.16);
+          animation: afLivePulse 2.4s ease-out infinite;
           flex: 0 0 auto;
+          transform-origin: 50% 50%;
         }
 
         @keyframes afLivePulse{
-          0%, 100%{ transform: scale(0.92); opacity: 0.82; }
-          50%{ transform: scale(1.08); opacity: 1; }
+          0%{
+            transform: scale(0.94);
+            opacity: 0.82;
+            box-shadow:
+              0 0 0 0 rgba(92, 214, 123, 0.22),
+              0 0 8px rgba(92, 214, 123, 0.14);
+          }
+          45%{
+            transform: scale(1.08);
+            opacity: 0.96;
+            box-shadow:
+              0 0 0 4px rgba(92, 214, 123, 0.10),
+              0 0 10px rgba(92, 214, 123, 0.18);
+          }
+          100%{
+            transform: scale(0.94);
+            opacity: 0.82;
+            box-shadow:
+              0 0 0 8px rgba(92, 214, 123, 0),
+              0 0 8px rgba(92, 214, 123, 0.12);
+          }
         }
 
         @media (prefers-reduced-motion: reduce){
@@ -1819,17 +1842,19 @@ export default function FullPlayer(props: {
         @media (max-width: 640px){
           .afTransportRow{
             grid-template-columns: 1fr;
-            justify-items: center;
+            justify-items: stretch;
           }
 
           .afTransportControls{
             grid-row: 1;
+            justify-self: center;
           }
 
           .afTransportBadgeSlot{
             grid-row: 2;
-            justify-self: center;
+            justify-self: start;
             min-height: 0;
+            padding-left: 2px;
           }
         }
 
