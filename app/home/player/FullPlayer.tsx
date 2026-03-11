@@ -1023,6 +1023,7 @@ export default function FullPlayer(props: {
       >
         <div
           style={{
+            position: "relative",
             width: "min(334px, 86vw)",
             height: "min(334px, 86vw)",
             borderRadius: 18,
@@ -1033,7 +1034,19 @@ export default function FullPlayer(props: {
             boxShadow: "0 22px 60px rgba(0,0,0,0.35)",
             overflow: "hidden",
           }}
-        />
+        >
+          {activeListeners > 0 ? (
+            <div
+              className="afArtworkLiveBadge"
+              aria-live="polite"
+              aria-label={fmtActiveListeners(activeListeners)}
+              title={fmtActiveListeners(activeListeners)}
+            >
+              <span className="afLiveBadgeDot" aria-hidden="true" />
+              <span>{fmtActiveListeners(activeListeners)}</span>
+            </div>
+          ) : null}
+        </div>
 
         <div
           style={{
@@ -1104,19 +1117,7 @@ export default function FullPlayer(props: {
         ) : null}
 
         <div className="afTransportRow">
-          <div className="afTransportBadgeSlot">
-            {activeListeners > 0 ? (
-              <div
-                className="afLiveBadge"
-                aria-live="polite"
-                aria-label={fmtActiveListeners(activeListeners)}
-                title={fmtActiveListeners(activeListeners)}
-              >
-                <span className="afLiveBadgeDot" aria-hidden="true" />
-                <span>{fmtActiveListeners(activeListeners)}</span>
-              </div>
-            ) : null}
-          </div>
+          <div className="afTransportBadgeSlot" aria-hidden="true" />
 
           <div className="afTransportControls">
             <IconCircleBtn label="Download" onClick={gotoDownload}>
@@ -1758,7 +1759,7 @@ export default function FullPlayer(props: {
           .afEq i{ animation: none; }
         }
 
-                  .afTransportRow{
+                           .afTransportRow{
           width: 100%;
           display: grid;
           grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -1768,10 +1769,7 @@ export default function FullPlayer(props: {
         }
 
                 .afTransportBadgeSlot{
-          justify-self: center;
-          min-height: 20px;
-          display: flex;
-          align-items: center;
+          min-height: 0;
           min-width: 0;
         }
 
@@ -1781,21 +1779,27 @@ export default function FullPlayer(props: {
           gap: 10px;
         }
 
-        .afLiveBadge{
+        .afArtworkLiveBadge{
+          position: absolute;
+          top: 12px;
+          left: 12px;
+          z-index: 2;
           display: inline-flex;
           align-items: center;
           gap: 7px;
-          padding: 0;
-          border: 0;
-          background: transparent;
-          color: rgba(255,255,255,0.56);
+          padding: 7px 10px;
+          border-radius: 999px;
+          background: rgba(0,0,0,0.34);
+          border: 1px solid rgba(255,255,255,0.10);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          color: rgba(255,255,255,0.82);
           font-size: 12px;
           font-weight: 500;
           letter-spacing: 0.01em;
           line-height: 1;
           white-space: nowrap;
-          text-shadow: none;
-          box-shadow: none;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.20);
         }
 
         .afLiveBadgeDot{
@@ -1839,26 +1843,12 @@ export default function FullPlayer(props: {
           .afLiveBadgeDot{ animation: none; }
         }
 
-                @media (max-width: 640px){
-          .afTransportRow{
-            grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-            grid-template-rows: auto auto;
-            justify-items: stretch;
-          }
-
-          .afTransportControls{
-            grid-column: 2;
-            grid-row: 1;
-            justify-self: center;
-          }
-
-          .afTransportBadgeSlot{
-            grid-column: 2;
-            grid-row: 2;
-            justify-self: start;
-            min-height: 0;
-            padding-left: 0;
-            margin-top: 2px;
+                  @media (max-width: 640px){
+          .afArtworkLiveBadge{
+            top: 10px;
+            left: 10px;
+            padding: 6px 9px;
+            font-size: 11px;
           }
         }
 
