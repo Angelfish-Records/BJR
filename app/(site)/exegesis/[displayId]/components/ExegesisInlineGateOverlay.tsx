@@ -1,4 +1,4 @@
-// web/app/(site)/exegesis/[recordingId]/components/ExegesisInlineGateOverlay.tsx
+// web/app/(site)/exegesis/[displayId]/components/ExegesisInlineGateOverlay.tsx
 "use client";
 
 import React from "react";

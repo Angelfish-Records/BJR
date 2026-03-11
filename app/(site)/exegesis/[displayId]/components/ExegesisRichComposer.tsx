@@ -1,4 +1,4 @@
-// web/app/(site)/exegesis/[recordingId]/components/ExegesisRichComposer.tsx
+// web/app/(site)/exegesis/[displayId]/components/ExegesisRichComposer.tsx
 "use client";
 
 import React from "react";

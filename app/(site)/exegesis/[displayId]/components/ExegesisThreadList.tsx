@@ -1,4 +1,4 @@
-// web/app/(site)/exegesis/[recordingId]/components/ExegesisThreadList.tsx
+// web/app/(site)/exegesis/[displayId]/components/ExegesisThreadList.tsx
 "use client";
 
 import React from "react";
