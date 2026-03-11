@@ -1839,22 +1839,26 @@ export default function FullPlayer(props: {
           .afLiveBadgeDot{ animation: none; }
         }
 
-        @media (max-width: 640px){
+                @media (max-width: 640px){
           .afTransportRow{
-            grid-template-columns: 1fr;
+            grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+            grid-template-rows: auto auto;
             justify-items: stretch;
           }
 
           .afTransportControls{
+            grid-column: 2;
             grid-row: 1;
             justify-self: center;
           }
 
-                    .afTransportBadgeSlot{
+          .afTransportBadgeSlot{
+            grid-column: 2;
             grid-row: 2;
             justify-self: start;
             min-height: 0;
             padding-left: 0;
+            margin-top: 2px;
           }
         }
 
