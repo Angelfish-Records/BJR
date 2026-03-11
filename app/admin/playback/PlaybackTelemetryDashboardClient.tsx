@@ -423,7 +423,9 @@ function TrackTable(props: { rows: TrackRow[]; emptyLabel?: string }) {
 
 function resolveDedupeTrackLabel(row: DedupeRow): string {
   return (
-    row.recordingTitle ?? row.trackTitle ?? ellipsisMiddle(row.playbackId, 10)
+    row.recordingTitle ??
+    row.trackTitle ??
+    `session ${ellipsisMiddle(row.playbackId, 10)}`
   );
 }
 
@@ -446,7 +448,9 @@ function AudienceBadge(props: { audience: "member" | "anonymous" }) {
         padding: "0 8px",
         borderRadius: 999,
         border: "1px solid rgba(255,255,255,0.12)",
-        background: isMember ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
+        background: isMember
+          ? "rgba(255,255,255,0.10)"
+          : "rgba(255,255,255,0.04)",
         color: isMember ? TEXT_PRIMARY : TEXT_MUTED,
         fontSize: 10,
         fontWeight: 700,
@@ -473,7 +477,7 @@ function DedupeTable(props: { rows: PlaybackAdminSnapshot["recentDedupe"] }) {
       >
         <thead>
           <tr>
-            {["When", "Event", "Milestone", "Playback", "Audience", "Identity"].map(
+            {["When", "Event", "Milestone", "Track / Session", "Audience"].map(
               (label) => (
                 <th
                   key={label}
@@ -639,7 +643,10 @@ function QualifiedPlayTrendChart(props: { rows: TrendDay[] }) {
   const paddingBottom = 28;
   const chartHeight = height - paddingTop - paddingBottom;
   const barGap = 6;
-  const barWidth = Math.max(6, Math.floor((width - (rows.length - 1) * barGap) / rows.length));
+  const barWidth = Math.max(
+    6,
+    Math.floor((width - (rows.length - 1) * barGap) / rows.length),
+  );
   const maxCount = Math.max(1, ...rows.map((row) => row.sitePlayCount));
 
   return (
@@ -741,7 +748,9 @@ function QualifiedPlayTrendChart(props: { rows: TrendDay[] }) {
             const memberHeight =
               maxCount > 0 ? (row.memberPlayCount / maxCount) * chartHeight : 0;
             const anonymousHeight =
-              maxCount > 0 ? (row.anonymousPlayCount / maxCount) * chartHeight : 0;
+              maxCount > 0
+                ? (row.anonymousPlayCount / maxCount) * chartHeight
+                : 0;
 
             const anonY = paddingTop + chartHeight - anonymousHeight;
             const memberY = anonY - memberHeight;
@@ -799,7 +808,8 @@ function QualifiedPlayTrendChart(props: { rows: TrendDay[] }) {
 
 function AudienceSplitCard(props: { snapshot: PlaybackAdminSnapshot }) {
   const allTimeMember = props.snapshot.audienceSplit.allTimeMemberPlayCount;
-  const allTimeAnonymous = props.snapshot.audienceSplit.allTimeAnonymousPlayCount;
+  const allTimeAnonymous =
+    props.snapshot.audienceSplit.allTimeAnonymousPlayCount;
   const recentMember = props.snapshot.audienceSplit.recent30dMemberPlayCount;
   const recentAnonymous =
     props.snapshot.audienceSplit.recent30dAnonymousPlayCount;

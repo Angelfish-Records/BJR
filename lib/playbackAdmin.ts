@@ -417,12 +417,12 @@ async function getRecentDedupe(): Promise<PlaybackAdminDedupeRow[]> {
         limit 1
       ) evt on true
     ),
-    recent_anonymous_dedupe as (
+        recent_anonymous_dedupe as (
       select
         null::uuid as member_id,
         null::text as member_email,
         d.playback_id,
-        null::text as recording_id,
+        d.recording_id,
         d.event_type,
         d.milestone_key,
         d.created_at::text as created_at,

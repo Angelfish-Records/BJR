@@ -83,19 +83,22 @@ async function insertDedupeKey(params: {
 
 async function insertAnonymousDedupeKey(params: {
   playbackId: string;
+  recordingId: string;
   eventType: string;
   milestoneKey: string;
 }): Promise<boolean> {
-  const { playbackId, eventType, milestoneKey } = params;
+  const { playbackId, recordingId, eventType, milestoneKey } = params;
 
   const res = await sql<{ inserted: boolean }>`
     insert into anonymous_playback_telemetry_dedupe (
       playback_id,
+      recording_id,
       event_type,
       milestone_key
     )
     values (
       ${playbackId},
+      ${recordingId},
       ${eventType},
       ${milestoneKey}
     )
@@ -561,6 +564,7 @@ export async function POST(req: NextRequest) {
       })
     : await insertAnonymousDedupeKey({
         playbackId,
+        recordingId,
         eventType,
         milestoneKey,
       });
