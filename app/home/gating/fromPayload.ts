@@ -1,6 +1,10 @@
 // web/app/home/gating/fromPayload.ts
 import { gate } from "@/app/home/gating/gate";
-import type { GateAttempt, GateContext, GateResult } from "@/app/home/gating/gate";
+import type {
+  GateAttempt,
+  GateContext,
+  GateResult,
+} from "@/app/home/gating/gate";
 import type { GatePayload, GateDomain } from "@/app/home/gating/gateTypes";
 import { canonicalizeLegacyCapCode } from "@/app/home/gating/gateTypes";
 
@@ -52,7 +56,10 @@ function normalizePayload(payload: GatePayload): GatePayload {
   };
 }
 
-function ctxFromCode(codeRaw: GatePayload["code"], domain: GatePayload["domain"]) {
+function ctxFromCode(
+  codeRaw: GatePayload["code"],
+  domain: GatePayload["domain"],
+) {
   const code = canonicalizeLegacyCapCode(codeRaw, domain);
 
   return {
@@ -77,7 +84,7 @@ function ctxFromCode(codeRaw: GatePayload["code"], domain: GatePayload["domain"]
 export function gateResultFromPayload(opts: {
   payload: GatePayload;
   attempt: GateAttempt;
-  isSignedIn: boolean;
+  isSignedIn?: boolean;
   intent: "passive" | "explicit";
 }): GateResult {
   const payload = normalizePayload(opts.payload);
@@ -85,7 +92,7 @@ export function gateResultFromPayload(opts: {
   const flags = ctxFromCode(payload.code, payload.domain);
 
   const ctx: GateContext = {
-    isSignedIn: opts.isSignedIn,
+    isSignedIn: opts.isSignedIn ?? false,
     intent: opts.intent,
     ...flags,
   };
@@ -116,7 +123,7 @@ export function gateResultFromPayload(opts: {
 export function gateResultFromUnknown(opts: {
   raw: unknown;
   attempt: GateAttempt;
-  isSignedIn: boolean;
+  isSignedIn?: boolean;
   intent: "passive" | "explicit";
 }): GateResult | null {
   const payload = extractGatePayload(opts.raw);

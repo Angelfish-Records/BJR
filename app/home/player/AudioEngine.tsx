@@ -3,7 +3,6 @@
 
 import React from "react";
 import Hls from "hls.js";
-import { useAuth } from "@clerk/nextjs";
 import { usePlayer } from "./PlayerState";
 import { muxSignedHlsUrl } from "@/lib/mux";
 import { mediaSurface } from "./mediaSurface";
@@ -40,9 +39,6 @@ function newPlaybackSessionId(): string {
 export default function AudioEngine() {
   const p = usePlayer();
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
-
-  const { isSignedIn: isSignedInRaw } = useAuth();
-  const isSignedIn = Boolean(isSignedInRaw);
 
   const { reportGate, clearGate } = useGateBroker();
 
@@ -154,7 +150,6 @@ export default function AudioEngine() {
           correlationId: payload.correlationId ?? corrFromHeader ?? null,
         },
         attempt: { verb: "play", domain: "playback" },
-        isSignedIn,
         intent: inferIntentForGate(),
       });
 
@@ -176,7 +171,7 @@ export default function AudioEngine() {
       if (domain === "playback") clearPlaybackGate();
       else clearGate({ domain });
     },
-    [clearGate, clearPlaybackGate, inferIntentForGate, isSignedIn, reportGate],
+    [clearGate, clearPlaybackGate, inferIntentForGate, reportGate],
   );
 
   const reportLocalPlaybackErrorAsGate = React.useCallback(
@@ -731,8 +726,6 @@ export default function AudioEngine() {
       progressMs: number;
       durationMs: number | null;
     }) => {
-      if (!isSignedIn) return;
-
       const { recordingId, playbackId, progressMs, durationMs } = params;
       if (!recordingId || !playbackId) return;
 
@@ -787,8 +780,6 @@ export default function AudioEngine() {
       progressMs: number;
       durationMs: number | null;
     }) => {
-      if (!isSignedIn) return;
-
       const { recordingId, playbackId, progressMs, durationMs } = params;
       const milestoneKey = `${recordingId}:${playbackId}:complete`;
 
@@ -817,8 +808,6 @@ export default function AudioEngine() {
       progressMs: number;
       durationMs: number | null;
     }) => {
-      if (!isSignedIn) return;
-
       const { recordingId, playbackId, progressMs, durationMs } = params;
       const milestoneMs =
         Math.floor(progressMs / TELEMETRY_PROGRESS_STEP_MS) *
@@ -982,7 +971,7 @@ export default function AudioEngine() {
       a.removeEventListener("canplaythrough", clearBuffering);
       a.removeEventListener("ended", onEnded);
     };
-  }, [isSignedIn, hardStopAndDetach]);
+  }, [hardStopAndDetach]);
 
   /* ---------------- Seek: PlayerState -> media element ---------------- */
 

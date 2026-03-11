@@ -81,6 +81,31 @@ async function insertDedupeKey(params: {
   return res.rows[0]?.inserted === true;
 }
 
+async function insertAnonymousDedupeKey(params: {
+  playbackId: string;
+  eventType: string;
+  milestoneKey: string;
+}): Promise<boolean> {
+  const { playbackId, eventType, milestoneKey } = params;
+
+  const res = await sql<{ inserted: boolean }>`
+    insert into anonymous_playback_telemetry_dedupe (
+      playback_id,
+      event_type,
+      milestone_key
+    )
+    values (
+      ${playbackId},
+      ${eventType},
+      ${milestoneKey}
+    )
+    on conflict do nothing
+    returning true as inserted
+  `;
+
+  return res.rows[0]?.inserted === true;
+}
+
 async function upsertPlaybackPlay(params: {
   memberId: string;
   recordingId: string;
@@ -520,16 +545,6 @@ export async function POST(req: NextRequest) {
   const { userId } = await auth();
   const memberId = userId ? await getMemberIdByClerkUserId(userId) : null;
 
-  if (!memberId) {
-    const res = NextResponse.json({
-      ok: true,
-      ignored: true,
-      reason: "anonymous",
-    });
-    res.headers.set("x-correlation-id", correlationId);
-    return res;
-  }
-
   const eventType =
     event === "play"
       ? EVENT_TYPES.PLAYBACK_TELEMETRY_PLAY
@@ -537,12 +552,18 @@ export async function POST(req: NextRequest) {
         ? EVENT_TYPES.PLAYBACK_TELEMETRY_PROGRESS
         : EVENT_TYPES.PLAYBACK_TELEMETRY_COMPLETE;
 
-  const inserted = await insertDedupeKey({
-    memberId,
-    playbackId,
-    eventType,
-    milestoneKey,
-  });
+  const inserted = memberId
+    ? await insertDedupeKey({
+        memberId,
+        playbackId,
+        eventType,
+        milestoneKey,
+      })
+    : await insertAnonymousDedupeKey({
+        playbackId,
+        eventType,
+        milestoneKey,
+      });
 
   if (!inserted) {
     const res = NextResponse.json({ ok: true, deduped: true });
@@ -553,37 +574,43 @@ export async function POST(req: NextRequest) {
   const occurredAtIso = new Date().toISOString();
 
   if (event === "play") {
-    await upsertPlaybackPlay({
-      memberId,
-      recordingId,
-      occurredAtIso,
-    });
+    if (memberId) {
+      await upsertPlaybackPlay({
+        memberId,
+        recordingId,
+        occurredAtIso,
+      });
+    }
 
     await upsertRecordingPlaybackPlay({
       recordingId,
       occurredAtIso,
     });
 
-    await logPlaybackTelemetryPlay({
-      memberId,
-      source: EVENT_SOURCES.SERVER,
-      correlationId,
-      payload: {
-        recording_id: recordingId,
-        playback_id: playbackId,
-        milestone_key: milestoneKey,
-        progress_ms: progressMs,
-        duration_ms: durationMs,
-        clerk_user_id: userId,
-      },
-    });
+    if (memberId) {
+      await logPlaybackTelemetryPlay({
+        memberId,
+        source: EVENT_SOURCES.SERVER,
+        correlationId,
+        payload: {
+          recording_id: recordingId,
+          playback_id: playbackId,
+          milestone_key: milestoneKey,
+          progress_ms: progressMs,
+          duration_ms: durationMs,
+          clerk_user_id: userId,
+        },
+      });
+    }
   } else if (event === "progress") {
-    await upsertPlaybackProgress({
-      memberId,
-      recordingId,
-      listenedMs,
-      occurredAtIso,
-    });
+    if (memberId) {
+      await upsertPlaybackProgress({
+        memberId,
+        recordingId,
+        listenedMs,
+        occurredAtIso,
+      });
+    }
 
     await upsertRecordingPlaybackProgress({
       recordingId,
@@ -591,45 +618,51 @@ export async function POST(req: NextRequest) {
       occurredAtIso,
     });
 
-    await logPlaybackTelemetryProgress({
-      memberId,
-      source: EVENT_SOURCES.SERVER,
-      correlationId,
-      payload: {
-        recording_id: recordingId,
-        playback_id: playbackId,
-        milestone_key: milestoneKey,
-        listened_ms: listenedMs,
-        progress_ms: progressMs,
-        duration_ms: durationMs,
-        clerk_user_id: userId,
-      },
-    });
+    if (memberId) {
+      await logPlaybackTelemetryProgress({
+        memberId,
+        source: EVENT_SOURCES.SERVER,
+        correlationId,
+        payload: {
+          recording_id: recordingId,
+          playback_id: playbackId,
+          milestone_key: milestoneKey,
+          listened_ms: listenedMs,
+          progress_ms: progressMs,
+          duration_ms: durationMs,
+          clerk_user_id: userId,
+        },
+      });
+    }
   } else {
-    await upsertPlaybackComplete({
-      memberId,
-      recordingId,
-      occurredAtIso,
-    });
+    if (memberId) {
+      await upsertPlaybackComplete({
+        memberId,
+        recordingId,
+        occurredAtIso,
+      });
+    }
 
     await upsertRecordingPlaybackComplete({
       recordingId,
       occurredAtIso,
     });
 
-    await logPlaybackTelemetryComplete({
-      memberId,
-      source: EVENT_SOURCES.SERVER,
-      correlationId,
-      payload: {
-        recording_id: recordingId,
-        playback_id: playbackId,
-        milestone_key: milestoneKey,
-        progress_ms: progressMs,
-        duration_ms: durationMs,
-        clerk_user_id: userId,
-      },
-    });
+    if (memberId) {
+      await logPlaybackTelemetryComplete({
+        memberId,
+        source: EVENT_SOURCES.SERVER,
+        correlationId,
+        payload: {
+          recording_id: recordingId,
+          playback_id: playbackId,
+          milestone_key: milestoneKey,
+          progress_ms: progressMs,
+          duration_ms: durationMs,
+          clerk_user_id: userId,
+        },
+      });
+    }
   }
 
   const res = NextResponse.json({ ok: true });
