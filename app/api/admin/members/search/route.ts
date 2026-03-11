@@ -24,7 +24,9 @@ export async function GET(req: Request) {
       select id, email, clerk_user_id, created_at
       from members
       where email ilike ${qNorm + "%"}
-      order by created_at desc
+      order by
+        case when lower(email) = lower(${qNorm}) then 0 else 1 end asc,
+        created_at desc
       limit 25
     `;
 

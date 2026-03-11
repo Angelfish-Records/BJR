@@ -187,6 +187,25 @@ type DedupeRow = DedupeRowBase & {
   memberEmail?: string | null;
 };
 
+type DedupeSessionRow = {
+  groupKey: string;
+  playbackId: string;
+  audience: "member" | "anonymous";
+  memberId: string | null;
+  memberEmail: string | null;
+  recordingId: string | null;
+  recordingTitle: string | null;
+  createdAt: string;
+  latestAt: string;
+  progressMs: number;
+  progressPct: number;
+  creditedMilestoneCount: number;
+  hasPlay: boolean;
+  hasComplete: boolean;
+  statusLabel: string;
+  sourceRows: DedupeRow[];
+};
+
 const PANEL_BORDER = "1px solid rgba(255,255,255,0.12)";
 const ROW_BORDER = "1px solid rgba(255,255,255,0.08)";
 const TEXT_PRIMARY = "rgba(255,255,255,0.92)";
@@ -514,19 +533,124 @@ function TrackTable(props: { rows: TrackRow[]; emptyLabel?: string }) {
   );
 }
 
-function resolveDedupeTrackLabel(row: DedupeRow): string {
-  return (
-    row.recordingTitle ??
-    row.trackTitle ??
-    `session ${ellipsisMiddle(row.playbackId, 10)}`
-  );
-}
-
 function resolveDedupeIdentityLabel(row: DedupeRow): string {
   if (row.audience === "anonymous") return "Anonymous";
   if (row.memberEmail) return row.memberEmail;
   if (row.memberId) return ellipsisMiddle(row.memberId, 8);
   return "Member";
+}
+
+function parseMilestoneMs(milestoneKey: string): number | null {
+  const normalized = milestoneKey.trim();
+
+  if (!/^\d+$/.test(normalized)) return null;
+
+  const milestoneMs = Number(normalized);
+  if (!Number.isFinite(milestoneMs) || milestoneMs < 0) return null;
+
+  return Math.floor(milestoneMs);
+}
+
+function isProgressEvent(eventType: string): boolean {
+  return eventType.toLowerCase().includes("progress");
+}
+
+function isPlayEvent(eventType: string): boolean {
+  const normalized = eventType.toLowerCase();
+  return normalized.includes("play") && !normalized.includes("progress");
+}
+
+function isCompleteEvent(eventType: string): boolean {
+  return eventType.toLowerCase().includes("complete");
+}
+
+function formatProgressLabel(progressMs: number, hasComplete: boolean): string {
+  if (hasComplete) return "Complete";
+  if (progressMs <= 0) return "Started";
+  const wholeSeconds = Math.floor(progressMs / 1000);
+  return `${formatNumber(wholeSeconds)}s credited`;
+}
+
+function buildDedupeSessionRows(rows: DedupeRow[]): DedupeSessionRow[] {
+  const groups = new Map<string, DedupeRow[]>();
+
+  for (const row of rows) {
+    const identityKey =
+      row.audience === "anonymous"
+        ? "anonymous"
+        : (row.memberEmail ?? row.memberId ?? "member");
+    const trackKey = row.recordingId ?? row.recordingTitle ?? "unknown-track";
+    const groupKey = [row.audience, identityKey, trackKey, row.playbackId].join(
+      "::",
+    );
+
+    const existing = groups.get(groupKey);
+    if (existing) {
+      existing.push(row);
+    } else {
+      groups.set(groupKey, [row]);
+    }
+  }
+
+  return Array.from(groups.entries())
+    .map(([groupKey, sourceRows]) => {
+      const ordered = [...sourceRows].sort((a, b) => {
+        return Date.parse(a.createdAt) - Date.parse(b.createdAt);
+      });
+
+      const first = ordered[0];
+      const last = ordered[ordered.length - 1];
+
+      let maxProgressMs = 0;
+      let creditedMilestoneCount = 0;
+      let hasPlay = false;
+      let hasComplete = false;
+
+      for (const row of ordered) {
+        if (isPlayEvent(row.eventType)) hasPlay = true;
+        if (isCompleteEvent(row.eventType)) hasComplete = true;
+
+        if (isProgressEvent(row.eventType)) {
+          creditedMilestoneCount += 1;
+          const milestoneMs = parseMilestoneMs(row.milestoneKey);
+          if (milestoneMs != null) {
+            maxProgressMs = Math.max(maxProgressMs, milestoneMs);
+          }
+        }
+      }
+
+      const progressPct = hasComplete
+        ? 100
+        : Math.max(0, Math.min(100, maxProgressMs / 1000));
+
+      const statusLabel = hasComplete
+        ? "Completed"
+        : maxProgressMs > 0
+          ? "In progress"
+          : hasPlay
+            ? "Started"
+            : "Telemetry";
+
+      return {
+        groupKey,
+        playbackId: first.playbackId,
+        audience: first.audience,
+        memberId: first.memberId ?? null,
+        memberEmail: first.memberEmail ?? null,
+        recordingId: first.recordingId ?? null,
+        recordingTitle: first.recordingTitle ?? null,
+        createdAt: first.createdAt,
+        latestAt: last.createdAt,
+        progressMs: hasComplete ? 100_000 : maxProgressMs,
+        progressPct,
+        creditedMilestoneCount,
+        hasPlay,
+        hasComplete,
+        statusLabel,
+        sourceRows: ordered,
+      };
+    })
+    .sort((a, b) => Date.parse(b.latestAt) - Date.parse(a.latestAt));
 }
 
 function AudienceBadge(props: { audience: "member" | "anonymous" }) {
@@ -557,7 +681,8 @@ function AudienceBadge(props: { audience: "member" | "anonymous" }) {
 }
 
 function DedupeTable(props: { rows: PlaybackAdminSnapshot["recentDedupe"] }) {
-  const rows = props.rows as DedupeRow[];
+  const rawRows = props.rows as DedupeRow[];
+  const rows = React.useMemo(() => buildDedupeSessionRows(rawRows), [rawRows]);
 
   return (
     <TableShell>
@@ -565,29 +690,34 @@ function DedupeTable(props: { rows: PlaybackAdminSnapshot["recentDedupe"] }) {
         style={{
           width: "100%",
           borderCollapse: "collapse",
-          minWidth: 980,
+          minWidth: 1120,
         }}
       >
         <thead>
           <tr>
-            {["When", "Event", "Milestone", "Track / Session", "Audience"].map(
-              (label) => (
-                <th
-                  key={label}
-                  style={{
-                    textAlign: "left",
-                    padding: "8px 10px",
-                    fontSize: FONT_SIZE_DEDUPE,
-                    fontWeight: 700,
-                    color: TEXT_FAINT,
-                    borderBottom: ROW_BORDER,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {label}
-                </th>
-              ),
-            )}
+            {[
+              "When",
+              "Track / Session",
+              "Progress",
+              "Status",
+              "Audience",
+              "Listener",
+            ].map((label) => (
+              <th
+                key={label}
+                style={{
+                  textAlign: "left",
+                  padding: "8px 10px",
+                  fontSize: FONT_SIZE_DEDUPE,
+                  fontWeight: 700,
+                  color: TEXT_FAINT,
+                  borderBottom: ROW_BORDER,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {label}
+              </th>
+            ))}
           </tr>
         </thead>
 
@@ -607,83 +737,191 @@ function DedupeTable(props: { rows: PlaybackAdminSnapshot["recentDedupe"] }) {
             </tr>
           ) : null}
 
-          {rows.map((row) => (
-            <tr
-              key={`${row.memberId ?? "anon"}:${row.playbackId}:${row.eventType}:${row.milestoneKey}:${row.createdAt}`}
-            >
-              <td
-                style={{
-                  padding: "8px 10px",
-                  borderBottom: ROW_BORDER,
-                  color: TEXT_MUTED,
-                  fontSize: FONT_SIZE_DEDUPE,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {formatAgo(row.createdAt)}
-              </td>
-              <td
-                style={{
-                  padding: "8px 10px",
-                  borderBottom: ROW_BORDER,
-                  color: TEXT_PRIMARY,
-                  fontSize: FONT_SIZE_DEDUPE,
-                  fontWeight: 700,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {row.eventType}
-              </td>
-              <td
-                style={{
-                  padding: "8px 10px",
-                  borderBottom: ROW_BORDER,
-                  color: TEXT_MUTED,
-                  fontSize: FONT_SIZE_DEDUPE,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {row.milestoneKey}
-              </td>
-              <td
-                style={{
-                  padding: "8px 10px",
-                  borderBottom: ROW_BORDER,
-                  color: TEXT_STRONG,
-                  fontSize: FONT_SIZE_DEDUPE,
-                  maxWidth: 280,
-                }}
-              >
-                {resolveDedupeTrackLabel(row)}
-              </td>
-              <td
-                style={{
-                  padding: "8px 10px",
-                  borderBottom: ROW_BORDER,
-                  color: TEXT_STRONG,
-                  fontSize: FONT_SIZE_DEDUPE,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <AudienceBadge audience={row.audience} />
-              </td>
-              <td
-                style={{
-                  padding: "8px 10px",
-                  borderBottom: ROW_BORDER,
-                  color: TEXT_STRONG,
-                  fontSize: FONT_SIZE_DEDUPE,
-                  maxWidth: 280,
-                  fontFamily:
-                    row.memberEmail == null && row.memberId != null
+          {rows.map((row) => {
+            const identityLabel = resolveDedupeIdentityLabel({
+              audience: row.audience,
+              memberEmail: row.memberEmail,
+              memberId: row.memberId,
+              playbackId: row.playbackId,
+              recordingTitle: row.recordingTitle,
+              eventType: "",
+              milestoneKey: "",
+              createdAt: row.createdAt,
+              recordingId: row.recordingId,
+            } as DedupeRow);
+
+            const monospaceIdentity =
+              row.memberEmail == null && row.memberId != null;
+
+            return (
+              <tr key={row.groupKey}>
+                <td
+                  style={{
+                    padding: "10px 10px",
+                    borderBottom: ROW_BORDER,
+                    color: TEXT_MUTED,
+                    fontSize: FONT_SIZE_DEDUPE,
+                    whiteSpace: "nowrap",
+                    verticalAlign: "top",
+                  }}
+                >
+                  <div>{formatAgo(row.latestAt)}</div>
+                  <div
+                    style={{
+                      marginTop: 4,
+                      color: TEXT_FAINT,
+                    }}
+                  >
+                    {row.sourceRows.length} events
+                  </div>
+                </td>
+
+                <td
+                  style={{
+                    padding: "10px 10px",
+                    borderBottom: ROW_BORDER,
+                    color: TEXT_STRONG,
+                    fontSize: FONT_SIZE_DEDUPE,
+                    verticalAlign: "top",
+                    minWidth: 220,
+                  }}
+                >
+                  <div
+                    style={{
+                      color: TEXT_PRIMARY,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {row.recordingTitle ??
+                      `session ${ellipsisMiddle(row.playbackId, 10)}`}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 4,
+                      color: TEXT_FAINT,
+                    }}
+                  >
+                    {ellipsisMiddle(row.playbackId, 10)}
+                  </div>
+                </td>
+
+                <td
+                  style={{
+                    padding: "10px 10px",
+                    borderBottom: ROW_BORDER,
+                    fontSize: FONT_SIZE_DEDUPE,
+                    verticalAlign: "top",
+                    minWidth: 300,
+                  }}
+                >
+                  <div
+                    style={{
+                      height: 12,
+                      width: "100%",
+                      borderRadius: 999,
+                      overflow: "hidden",
+                      background: BG_ACCENT,
+                      border: "1px solid rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${row.progressPct}%`,
+                        borderRadius: 999,
+                        background:
+                          row.audience === "member" ? BG_MEMBER : BG_ANON,
+                        transition: "width 180ms ease-out",
+                      }}
+                    />
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 6,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 8,
+                      flexWrap: "wrap",
+                      color: TEXT_MUTED,
+                    }}
+                  >
+                    <span>
+                      {formatProgressLabel(row.progressMs, row.hasComplete)}
+                    </span>
+                    <span>
+                      {row.creditedMilestoneCount > 0
+                        ? `${formatNumber(row.creditedMilestoneCount)} milestones`
+                        : row.hasPlay
+                          ? "Play recorded"
+                          : "No progress milestones"}
+                    </span>
+                  </div>
+                </td>
+
+                <td
+                  style={{
+                    padding: "10px 10px",
+                    borderBottom: ROW_BORDER,
+                    color: TEXT_STRONG,
+                    fontSize: FONT_SIZE_DEDUPE,
+                    whiteSpace: "nowrap",
+                    verticalAlign: "top",
+                  }}
+                >
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      height: 20,
+                      padding: "0 8px",
+                      borderRadius: 999,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: row.hasComplete
+                        ? "rgba(255,255,255,0.12)"
+                        : "rgba(255,255,255,0.06)",
+                      color: TEXT_PRIMARY,
+                      fontSize: 10,
+                      fontWeight: 700,
+                      letterSpacing: "0.02em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {row.statusLabel}
+                  </span>
+                </td>
+
+                <td
+                  style={{
+                    padding: "10px 10px",
+                    borderBottom: ROW_BORDER,
+                    color: TEXT_STRONG,
+                    fontSize: FONT_SIZE_DEDUPE,
+                    whiteSpace: "nowrap",
+                    verticalAlign: "top",
+                  }}
+                >
+                  <AudienceBadge audience={row.audience} />
+                </td>
+
+                <td
+                  style={{
+                    padding: "10px 10px",
+                    borderBottom: ROW_BORDER,
+                    color: TEXT_STRONG,
+                    fontSize: FONT_SIZE_DEDUPE,
+                    maxWidth: 280,
+                    verticalAlign: "top",
+                    fontFamily: monospaceIdentity
                       ? 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace'
                       : undefined,
-                }}
-              >
-                {resolveDedupeIdentityLabel(row)}
-              </td>
-            </tr>
-          ))}
+                  }}
+                >
+                  {identityLabel}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </TableShell>
@@ -1384,8 +1622,8 @@ export default function PlaybackTelemetryDashboardClient(props: {
         </div>
 
         <SectionCard
-          title="Recent telemetry dedupe rows"
-          subtitle="Recent member and anonymous dedupe decisions recorded for playback milestone events."
+          title="Recent telemetry sessions"
+          subtitle="Recent member and anonymous telemetry is rolled up by listener, track, and playback session so progress milestones read as a single session bar rather than many separate rows."
         >
           <DedupeTable rows={snapshot.recentDedupe} />
         </SectionCard>

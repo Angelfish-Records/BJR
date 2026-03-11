@@ -49,16 +49,46 @@ export async function GET(
       entitlement_key: string;
       scope_id: string | null;
       scope_meta: unknown;
+      granted_at: string | null;
+      expires_at: string | null;
     }>`
-      select entitlement_key, scope_id, scope_meta
+      select
+        entitlement_key,
+        scope_id,
+        scope_meta,
+        granted_at,
+        expires_at
       from member_entitlements_current
       where member_id = ${id}
-      order by entitlement_key asc
+      order by entitlement_key asc, scope_id asc nulls first
+    `;
+
+    const member = await sql<{
+      id: string;
+      email: string;
+      clerk_user_id: string | null;
+      stripe_customer_id: string | null;
+      source: string;
+      created_at: string;
+      updated_at: string;
+    }>`
+      select
+        id,
+        email,
+        clerk_user_id,
+        stripe_customer_id,
+        source,
+        created_at,
+        updated_at
+      from members
+      where id = ${id}
+      limit 1
     `;
 
     return NextResponse.json({
       ok: true,
       memberId: id,
+      member: member.rows[0] ?? null,
       grants: grants.rows,
       current: current.rows,
     });
