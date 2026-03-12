@@ -56,6 +56,13 @@ export function PreviewResultsSection(props: Props) {
               <th style={{ textAlign: "right", padding: "8px 10px" }}>
                 Window events
               </th>
+              <th style={{ textAlign: "right", padding: "8px 10px" }}>
+                Exegesis
+              </th>
+              <th style={{ textAlign: "right", padding: "8px 10px" }}>Votes</th>
+              <th style={{ textAlign: "left", padding: "8px 10px" }}>
+                Public name
+              </th>
               <th style={{ textAlign: "left", padding: "8px 10px" }}>
                 Recording
               </th>
@@ -64,7 +71,7 @@ export function PreviewResultsSection(props: Props) {
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ padding: "14px 10px", opacity: 0.7 }}>
+                <td colSpan={11} style={{ padding: "14px 10px", opacity: 0.7 }}>
                   No preview results yet.
                 </td>
               </tr>
@@ -130,6 +137,34 @@ export function PreviewResultsSection(props: Props) {
                     }}
                   >
                     {formatMetric(row.matchedWindowEventCount)}
+                  </td>
+                  <td
+                    style={{
+                      padding: "10px",
+                      borderTop: "1px solid rgba(255,255,255,0.08)",
+                      textAlign: "right",
+                    }}
+                  >
+                    {formatMetric(row.contributionCount)}
+                  </td>
+                  <td
+                    style={{
+                      padding: "10px",
+                      borderTop: "1px solid rgba(255,255,255,0.08)",
+                      textAlign: "right",
+                    }}
+                  >
+                    {formatMetric(row.exegesisVoteCount)}
+                  </td>
+                  <td
+                    style={{
+                      padding: "10px",
+                      borderTop: "1px solid rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    {row.publicNameUnlockedAt
+                      ? formatDateTime(row.publicNameUnlockedAt)
+                      : "—"}
                   </td>
                   <td
                     style={{

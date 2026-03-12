@@ -127,10 +127,7 @@ export function BadgeQualificationFormSection(props: Props) {
           <select
             value={form.mode}
             onChange={(event) =>
-              onFormChange(
-                "mode",
-                event.target.value as BadgeQualificationMode,
-              )
+              onFormChange("mode", event.target.value as BadgeQualificationMode)
             }
           >
             {BADGE_PREVIEW_MODES.map((mode) => (
@@ -219,6 +216,42 @@ export function BadgeQualificationFormSection(props: Props) {
           {modeFieldText.minCompletedCountHelp ? (
             <span style={{ opacity: 0.62, fontSize: 12 }}>
               {modeFieldText.minCompletedCountHelp}
+            </span>
+          ) : null}
+        </label>
+      ) : null}
+
+      {modeInputs.minContributionCount ? (
+        <label style={{ display: "grid", gap: 6 }}>
+          <span>{modeFieldText.minContributionCountLabel}</span>
+          <input
+            value={form.minContributionCount}
+            onChange={(event) =>
+              onFormChange("minContributionCount", event.target.value)
+            }
+            inputMode="numeric"
+          />
+          {modeFieldText.minContributionCountHelp ? (
+            <span style={{ opacity: 0.62, fontSize: 12 }}>
+              {modeFieldText.minContributionCountHelp}
+            </span>
+          ) : null}
+        </label>
+      ) : null}
+
+      {modeInputs.minVoteCount ? (
+        <label style={{ display: "grid", gap: 6 }}>
+          <span>{modeFieldText.minVoteCountLabel}</span>
+          <input
+            value={form.minVoteCount}
+            onChange={(event) =>
+              onFormChange("minVoteCount", event.target.value)
+            }
+            inputMode="numeric"
+          />
+          {modeFieldText.minVoteCountHelp ? (
+            <span style={{ opacity: 0.62, fontSize: 12 }}>
+              {modeFieldText.minVoteCountHelp}
             </span>
           ) : null}
         </label>
@@ -468,7 +501,9 @@ export function BadgeQualificationFormSection(props: Props) {
         </button>
       </div>
 
-      {previewError ? <div style={{ color: "#ff8f8f" }}>{previewError}</div> : null}
+      {previewError ? (
+        <div style={{ color: "#ff8f8f" }}>{previewError}</div>
+      ) : null}
       {awardError ? <div style={{ color: "#ff8f8f" }}>{awardError}</div> : null}
       {awardMessage ? (
         <div style={{ color: "#9ff0b8" }}>{awardMessage}</div>

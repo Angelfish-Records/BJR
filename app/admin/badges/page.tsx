@@ -20,6 +20,7 @@ export default async function Page(props: {
     imageUrl: badge.imageUrl,
     featured: badge.featured,
     shareable: badge.shareable,
+    undisclosed: badge.undisclosed,
   }));
 
   return (

@@ -8,6 +8,7 @@ export type BadgeDefinitionOption = {
   imageUrl: string | null;
   featured: boolean;
   shareable: boolean;
+  undisclosed: boolean;
 };
 
 export type PreviewRow = {
@@ -21,6 +22,9 @@ export type PreviewRow = {
   matchedRecordingId: string | null;
   matchedRecordingTitle: string | null;
   matchedWindowEventCount: number | null;
+  contributionCount: number | null;
+  exegesisVoteCount: number | null;
+  publicNameUnlockedAt: string | null;
 };
 
 export type PreviewResponse = {
@@ -73,6 +77,8 @@ export type FormState = {
   minPlayCount: string;
   minCompletedCount: string;
   minProgressCount: string;
+  minContributionCount: string;
+  minVoteCount: string;
   joinedOnOrAfter: string;
   joinedBefore: string;
   activeOnOrAfter: string;
@@ -87,6 +93,8 @@ export type SelectedModeInputRequirements = {
   minPlayCount: boolean;
   minCompletedCount: boolean;
   minProgressCount: boolean;
+  minContributionCount: boolean;
+  minVoteCount: boolean;
   joinedWindow: boolean;
   activeWindow: boolean;
   recordingId: boolean;
@@ -101,6 +109,10 @@ export type SelectedModeFieldText = {
   minCompletedCountHelp: string | null;
   minProgressCountLabel: string;
   minProgressCountHelp: string | null;
+  minContributionCountLabel: string;
+  minContributionCountHelp: string | null;
+  minVoteCountLabel: string;
+  minVoteCountHelp: string | null;
   joinedOnOrAfterLabel: string;
   joinedBeforeLabel: string;
   joinedWindowHelp: string | null;

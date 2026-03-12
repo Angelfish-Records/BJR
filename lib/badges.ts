@@ -13,6 +13,7 @@ export type BadgeDefinition = {
   displayOrder: number;
   featured: boolean;
   shareable: boolean;
+  undisclosed: boolean;
   active: boolean;
 };
 
@@ -25,6 +26,7 @@ type BadgeDefinitionQueryRow = {
   displayOrder?: number | null;
   featured?: boolean | null;
   shareable?: boolean | null;
+  undisclosed?: boolean | null;
   active?: boolean | null;
 };
 
@@ -38,6 +40,7 @@ const BADGE_DEFINITIONS_QUERY = `
     displayOrder,
     featured,
     shareable,
+    undisclosed,
     active
   }
 `;
@@ -70,6 +73,7 @@ function coerceBadgeDefinition(
         : 100,
     featured: row.featured === true,
     shareable: row.shareable === true,
+    undisclosed: row.undisclosed === true,
     active: row.active !== false,
   };
 }

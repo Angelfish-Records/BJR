@@ -63,6 +63,14 @@ export const badgeDefinition = defineType({
       initialValue: false,
     }),
     defineField({
+      name: "undisclosed",
+      title: "Undisclosed until unlocked",
+      type: "boolean",
+      initialValue: false,
+      description:
+        "Hide this badge from members who have not unlocked it yet. Useful for exclusive, retired, or time-bound badges that should not appear as visible locked promises.",
+    }),
+    defineField({
       name: "active",
       title: "Active",
       type: "boolean",
@@ -91,6 +99,7 @@ export const badgeDefinition = defineType({
       entitlementKey: "entitlementKey",
       media: "image",
       active: "active",
+      undisclosed: "undisclosed",
     },
     prepare(selection) {
       const title =
@@ -104,11 +113,16 @@ export const badgeDefinition = defineType({
           ? selection.entitlementKey.trim()
           : "No entitlement key";
 
+      const stateBits = [
+        selection.active === false ? "inactive" : null,
+        selection.undisclosed === true ? "undisclosed" : null,
+      ].filter((value): value is string => Boolean(value));
+
       return {
         title,
         subtitle:
-          selection.active === false
-            ? `${entitlementKey} · inactive`
+          stateBits.length > 0
+            ? `${entitlementKey} · ${stateBits.join(" · ")}`
             : entitlementKey,
         media: selection.media,
       };

@@ -7,6 +7,8 @@ export const DEFAULT_FORM_STATE: FormState = {
   minPlayCount: "10",
   minCompletedCount: "3",
   minProgressCount: "1",
+  minContributionCount: "10",
+  minVoteCount: "10",
   joinedOnOrAfter: "",
   joinedBefore: "",
   activeOnOrAfter: "",
@@ -118,6 +120,26 @@ export function buildPreviewPayload(
         mode: form.mode,
         recordingId: form.recordingId,
         minCompletedCount: Number(form.minCompletedCount || "0"),
+        limit,
+      };
+
+    case "exegesis_contribution_count":
+      return {
+        mode: form.mode,
+        minContributionCount: Number(form.minContributionCount || "0"),
+        limit,
+      };
+
+    case "exegesis_vote_tally":
+      return {
+        mode: form.mode,
+        minVoteCount: Number(form.minVoteCount || "0"),
+        limit,
+      };
+
+    case "public_name_unlocked":
+      return {
+        mode: form.mode,
         limit,
       };
   }

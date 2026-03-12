@@ -82,6 +82,9 @@ export type BadgePreviewMemberRow = {
   matchedRecordingId: string | null;
   matchedRecordingTitle: string | null;
   matchedWindowEventCount: number | null;
+  contributionCount: number | null;
+  exegesisVoteCount: number | null;
+  publicNameUnlockedAt: string | null;
 };
 
 export type MinutesStreamedPreviewInput = {
@@ -140,6 +143,23 @@ export type RecordingCompleteCountPreviewInput = {
   limit?: number;
 };
 
+export type ExegesisContributionCountPreviewInput = {
+  mode: "exegesis_contribution_count";
+  minContributionCount: number;
+  limit?: number;
+};
+
+export type ExegesisVoteTallyPreviewInput = {
+  mode: "exegesis_vote_tally";
+  minVoteCount: number;
+  limit?: number;
+};
+
+export type PublicNameUnlockedPreviewInput = {
+  mode: "public_name_unlocked";
+  limit?: number;
+};
+
 export type BadgePreviewInput =
   | MinutesStreamedPreviewInput
   | PlayCountPreviewInput
@@ -148,7 +168,10 @@ export type BadgePreviewInput =
   | ActiveWithinWindowPreviewInput
   | RecordingMinutesStreamedPreviewInput
   | RecordingPlayCountPreviewInput
-  | RecordingCompleteCountPreviewInput;
+  | RecordingCompleteCountPreviewInput
+  | ExegesisContributionCountPreviewInput
+  | ExegesisVoteTallyPreviewInput
+  | PublicNameUnlockedPreviewInput;
 
 type BadgePreviewHandlerMap = {
   minutes_streamed: (
@@ -175,6 +198,15 @@ type BadgePreviewHandlerMap = {
   recording_complete_count: (
     input: RecordingCompleteCountPreviewInput,
   ) => Promise<BadgePreviewMemberRow[]>;
+  exegesis_contribution_count: (
+    input: ExegesisContributionCountPreviewInput,
+  ) => Promise<BadgePreviewMemberRow[]>;
+  exegesis_vote_tally: (
+    input: ExegesisVoteTallyPreviewInput,
+  ) => Promise<BadgePreviewMemberRow[]>;
+  public_name_unlocked: (
+    input: PublicNameUnlockedPreviewInput,
+  ) => Promise<BadgePreviewMemberRow[]>;
 };
 
 type MemberBaseRow = {
@@ -192,6 +224,9 @@ type AggregateRow = {
   completed_count: string | number | null;
   recording_id?: string | null;
   matched_window_event_count?: string | number | null;
+  contribution_count?: string | number | null;
+  vote_count?: string | number | null;
+  public_name_unlocked_at?: string | null;
 };
 
 const DEFAULT_PREVIEW_LIMIT = 200;
@@ -243,6 +278,9 @@ function mapAggregateRow(row: AggregateRow): BadgePreviewMemberRow {
     matchedRecordingId: row.recording_id ?? null,
     matchedRecordingTitle: null,
     matchedWindowEventCount,
+    contributionCount: asNumber(row.contribution_count),
+    exegesisVoteCount: asNumber(row.vote_count),
+    publicNameUnlockedAt: row.public_name_unlocked_at ?? null,
   };
 }
 
@@ -258,6 +296,9 @@ function mapMemberBaseRow(row: MemberBaseRow): BadgePreviewMemberRow {
     matchedRecordingId: null,
     matchedRecordingTitle: null,
     matchedWindowEventCount: null,
+    contributionCount: null,
+    exegesisVoteCount: null,
+    publicNameUnlockedAt: null,
   };
 }
 
@@ -270,6 +311,9 @@ const BADGE_PREVIEW_HANDLERS: BadgePreviewHandlerMap = {
   recording_minutes_streamed: previewByRecordingMinutesStreamed,
   recording_play_count: previewByRecordingPlayCount,
   recording_complete_count: previewByRecordingCompleteCount,
+  exegesis_contribution_count: previewByExegesisContributionCount,
+  exegesis_vote_tally: previewByExegesisVoteTally,
+  public_name_unlocked: previewByPublicNameUnlocked,
 };
 
 async function hydratePreviewRecordingTitles(
@@ -574,6 +618,126 @@ async function previewByRecordingCompleteCount(
     order by
       mts.completed_count desc,
       mts.listened_ms desc,
+      m.created_at asc nulls last
+    limit ${limit}
+  `;
+
+  return res.rows.map(mapAggregateRow);
+}
+
+async function previewByExegesisContributionCount(
+  input: ExegesisContributionCountPreviewInput,
+): Promise<BadgePreviewMemberRow[]> {
+  const minContributionCount = Math.max(
+    0,
+    Math.floor(input.minContributionCount),
+  );
+  const limit = clampPreviewLimit(input.limit);
+
+  const res = await sql<AggregateRow>`
+    select
+      ei.member_id,
+      m.email,
+      
+      m.created_at,
+      null::bigint as listened_ms,
+      null::int as play_count,
+      null::int as completed_count,
+      null::text as recording_id,
+      null::int as matched_window_event_count,
+      ei.contribution_count::int as contribution_count,
+      null::int as vote_count,
+      ei.public_name_unlocked_at
+    from exegesis_identity ei
+    join members m
+      on m.id = ei.member_id
+    where ei.contribution_count >= ${minContributionCount}
+    order by
+      ei.contribution_count desc,
+      ei.public_name_unlocked_at desc nulls last,
+      m.created_at asc nulls last
+    limit ${limit}
+  `;
+
+  return res.rows.map(mapAggregateRow);
+}
+
+async function previewByExegesisVoteTally(
+  input: ExegesisVoteTallyPreviewInput,
+): Promise<BadgePreviewMemberRow[]> {
+  const minVoteCount = Math.max(0, Math.floor(input.minVoteCount));
+  const limit = clampPreviewLimit(input.limit);
+
+  const res = await sql<AggregateRow>`
+    with vote_totals as (
+      select
+        c.created_by_member_id as member_id,
+        coalesce(sum(c.vote_count), 0)::int as vote_count
+      from exegesis_comment c
+      where c.status = 'live'
+      group by c.created_by_member_id
+    )
+    select
+      vt.member_id,
+      m.email,
+      
+      m.created_at,
+      null::bigint as listened_ms,
+      null::int as play_count,
+      null::int as completed_count,
+      null::text as recording_id,
+      null::int as matched_window_event_count,
+      coalesce(ei.contribution_count, 0)::int as contribution_count,
+      vt.vote_count,
+      ei.public_name_unlocked_at
+    from vote_totals vt
+    join members m
+      on m.id = vt.member_id
+    left join exegesis_identity ei
+      on ei.member_id = vt.member_id
+    where vt.vote_count >= ${minVoteCount}
+    order by
+      vt.vote_count desc,
+      coalesce(ei.contribution_count, 0) desc,
+      m.created_at asc nulls last
+    limit ${limit}
+  `;
+
+  return res.rows.map(mapAggregateRow);
+}
+
+async function previewByPublicNameUnlocked(
+  input: PublicNameUnlockedPreviewInput,
+): Promise<BadgePreviewMemberRow[]> {
+  const limit = clampPreviewLimit(input.limit);
+
+  const res = await sql<AggregateRow>`
+    select
+      ei.member_id,
+      m.email,
+      
+      m.created_at,
+      null::bigint as listened_ms,
+      null::int as play_count,
+      null::int as completed_count,
+      null::text as recording_id,
+      null::int as matched_window_event_count,
+      ei.contribution_count::int as contribution_count,
+      coalesce(vt.vote_count, 0)::int as vote_count,
+      ei.public_name_unlocked_at
+    from exegesis_identity ei
+    join members m
+      on m.id = ei.member_id
+    left join lateral (
+      select coalesce(sum(c.vote_count), 0)::int as vote_count
+      from exegesis_comment c
+      where c.created_by_member_id = ei.member_id
+        and c.status = 'live'
+    ) vt on true
+    where ei.public_name_unlocked_at is not null
+    order by
+      ei.public_name_unlocked_at asc,
+      ei.contribution_count desc,
       m.created_at asc nulls last
     limit ${limit}
   `;

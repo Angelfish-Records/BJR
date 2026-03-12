@@ -97,7 +97,7 @@ type SortableDashboardBadge = MemberDashboardBadge & {
   displayOrder: number;
 };
 
-async function getUnlockedDashboardBadges(
+async function getDashboardBadges(
   memberId: string,
 ): Promise<MemberDashboardBadge[]> {
   const [entitlements, badgeDefinitionsByKey] = await Promise.all([
@@ -105,27 +105,64 @@ async function getUnlockedDashboardBadges(
     getActiveBadgeDefinitionsByEntitlementKey(),
   ]);
 
-  const unlockedBadges: SortableDashboardBadge[] = [];
+  const ownedBadgeByKey = new Map<
+    string,
+    {
+      grantedAt: string | null;
+    }
+  >();
 
   for (const entitlement of entitlements) {
     if (entitlement.scopeId !== null) continue;
     if (!entitlement.entitlementKey.startsWith("badge_")) continue;
 
-    const definition = badgeDefinitionsByKey.get(entitlement.entitlementKey);
-    if (!definition) continue;
+    const existing = ownedBadgeByKey.get(entitlement.entitlementKey);
 
-    unlockedBadges.push({
+    if (!existing) {
+      ownedBadgeByKey.set(entitlement.entitlementKey, {
+        grantedAt: entitlement.grantedAt,
+      });
+      continue;
+    }
+
+    const existingTime = existing.grantedAt
+      ? new Date(existing.grantedAt).getTime()
+      : Number.POSITIVE_INFINITY;
+    const candidateTime = entitlement.grantedAt
+      ? new Date(entitlement.grantedAt).getTime()
+      : Number.POSITIVE_INFINITY;
+
+    if (candidateTime < existingTime) {
+      ownedBadgeByKey.set(entitlement.entitlementKey, {
+        grantedAt: entitlement.grantedAt,
+      });
+    }
+  }
+
+  const badges: SortableDashboardBadge[] = [];
+
+  for (const definition of badgeDefinitionsByKey.values()) {
+    const owned = ownedBadgeByKey.get(definition.entitlementKey);
+    const unlocked = Boolean(owned);
+
+    if (definition.undisclosed && !unlocked) {
+      continue;
+    }
+
+    badges.push({
       key: definition.entitlementKey,
       label: definition.title,
       description: definition.description ?? undefined,
       imageUrl: definition.imageUrl ?? undefined,
       shareable: definition.shareable,
-      unlockedAt: entitlement.grantedAt,
+      undisclosed: definition.undisclosed,
+      unlocked,
+      unlockedAt: owned?.grantedAt ?? null,
       displayOrder: definition.displayOrder,
     });
   }
 
-  unlockedBadges.sort((a, b) => {
+  badges.sort((a, b) => {
     if (a.displayOrder !== b.displayOrder) {
       return a.displayOrder - b.displayOrder;
     }
@@ -133,12 +170,14 @@ async function getUnlockedDashboardBadges(
     return a.label.localeCompare(b.label);
   });
 
-  return unlockedBadges.map((badge) => ({
+  return badges.map((badge) => ({
     key: badge.key,
     label: badge.label,
     description: badge.description ?? undefined,
     imageUrl: badge.imageUrl ?? undefined,
     shareable: badge.shareable,
+    undisclosed: badge.undisclosed,
+    unlocked: badge.unlocked,
     unlockedAt: badge.unlockedAt,
   }));
 }
@@ -151,7 +190,7 @@ export async function buildPortalMemberSummary(
   const [minutesStreamed, favouriteTrack, badges] = await Promise.all([
     getDashboardMinutesStreamed(memberId),
     getDashboardFavouriteTrack(memberId),
-    getUnlockedDashboardBadges(memberId),
+    getDashboardBadges(memberId),
   ]);
 
   const contributionCount = getDashboardContributionCount(identityState);

@@ -7,6 +7,8 @@ export type MemberDashboardBadge = {
   description?: string | null;
   imageUrl?: string | null;
   shareable?: boolean;
+  undisclosed?: boolean;
+  unlocked: boolean;
   unlockedAt?: string | null;
 };
 
@@ -43,8 +45,8 @@ export type PortalMemberSummary = {
   favouriteTrack: PortalMemberFavouriteTrack | null;
 
   /**
-   * Unlocked badges only.
-   * Locked / undisclosed badge silhouettes are presentation-owned.
+   * Unified badge cabinet projection.
+   * Ordered badge definitions are merged with member possession state.
    */
   badges: MemberDashboardBadge[];
 };

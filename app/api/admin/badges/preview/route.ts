@@ -191,6 +191,39 @@ function parsePreviewInput(body: unknown): BadgePreviewInput {
       };
     }
 
+    case "exegesis_contribution_count": {
+      const minContributionCount = asPositiveNumber(body.minContributionCount);
+      if (minContributionCount === null) {
+        throw new Error("minContributionCount is required.");
+      }
+
+      return {
+        mode,
+        minContributionCount,
+        limit,
+      };
+    }
+
+    case "exegesis_vote_tally": {
+      const minVoteCount = asPositiveNumber(body.minVoteCount);
+      if (minVoteCount === null) {
+        throw new Error("minVoteCount is required.");
+      }
+
+      return {
+        mode,
+        minVoteCount,
+        limit,
+      };
+    }
+
+    case "public_name_unlocked": {
+      return {
+        mode,
+        limit,
+      };
+    }
+
     default: {
       const exhaustiveCheck: never = mode;
       throw new Error(

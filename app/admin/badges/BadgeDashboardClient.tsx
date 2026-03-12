@@ -85,6 +85,8 @@ export default function BadgeDashboardClient({
     minPlayCount: false,
     minCompletedCount: false,
     minProgressCount: false,
+    minContributionCount: false,
+    minVoteCount: false,
     joinedWindow: false,
     activeWindow: false,
     recordingId: false,
@@ -99,6 +101,10 @@ export default function BadgeDashboardClient({
     minCompletedCountHelp: null,
     minProgressCountLabel: "Minimum progress count",
     minProgressCountHelp: null,
+    minContributionCountLabel: "Minimum Exegesis contributions",
+    minContributionCountHelp: null,
+    minVoteCountLabel: "Minimum cumulative vote tally",
+    minVoteCountHelp: null,
     joinedOnOrAfterLabel: "Joined on or after",
     joinedBeforeLabel: "Joined before",
     joinedWindowHelp: null,
@@ -408,14 +414,8 @@ export default function BadgeDashboardClient({
               label="Active badges"
               value={sortedBadges.length.toLocaleString()}
             />
-            <MetricPill
-              label="Selected badge"
-              value={selectedBadgeLabel}
-            />
-            <MetricPill
-              label="Qualification mode"
-              value={selectedModeLabel}
-            />
+            <MetricPill label="Selected badge" value={selectedBadgeLabel} />
+            <MetricPill label="Qualification mode" value={selectedModeLabel} />
             <MetricPill
               label="Preview matches"
               value={previewCount.toLocaleString()}
@@ -431,7 +431,10 @@ export default function BadgeDashboardClient({
           >
             {selectedBadge ? (
               <>
-                Targeting <span style={{ color: TEXT_PRIMARY }}>{selectedBadge.entitlementKey}</span>
+                Targeting{" "}
+                <span style={{ color: TEXT_PRIMARY }}>
+                  {selectedBadge.entitlementKey}
+                </span>
               </>
             ) : (
               "No badge selected"
