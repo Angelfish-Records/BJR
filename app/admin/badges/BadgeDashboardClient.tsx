@@ -6,7 +6,6 @@ import AdminPageFrame from "../AdminPageFrame";
 import { BadgeCatalogueSection } from "./_components/BadgeCatalogueSection";
 import { BadgeQualificationFormSection } from "./_components/BadgeQualificationFormSection";
 import { PreviewResultsSection } from "./_components/PreviewResultsSection";
-import { MetricPill } from "../playback/dashboard/PlaybackDashboardPrimitives";
 import type {
   AwardResponse,
   BadgeDefinitionOption,
@@ -319,9 +318,6 @@ export default function BadgeDashboardClient({
     }
   }, [form.recordingId, modeInputs.recordingId]);
 
-  const selectedModeLabel = selectedMode?.label ?? "—";
-  const selectedBadgeLabel = selectedBadge?.title ?? "—";
-
   return (
     <AdminPageFrame
       embed={embed}
@@ -335,35 +331,6 @@ export default function BadgeDashboardClient({
           gap: 16,
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            gap: 10,
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              gap: 10,
-              flexWrap: "wrap",
-            }}
-          >
-            <MetricPill
-              label="Active badges"
-              value={sortedBadges.length.toLocaleString()}
-            />
-            <MetricPill label="Selected badge" value={selectedBadgeLabel} />
-            <MetricPill label="Qualification mode" value={selectedModeLabel} />
-            <MetricPill
-              label="Preview matches"
-              value={previewCount.toLocaleString()}
-            />
-          </div>
-        </div>
-
         <BadgeCatalogueSection
           badges={sortedBadges}
           selectedEntitlementKey={form.entitlementKey}

@@ -253,7 +253,6 @@ export function BadgeCatalogueSection(props: Props) {
                     }}
                   >
                     #{badge.displayOrder}
-                    {isSelected ? " • selected" : ""}
                   </span>
                 </div>
               </button>

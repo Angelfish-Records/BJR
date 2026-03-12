@@ -112,35 +112,10 @@ function Field(props: {
   );
 }
 
-function FlagPill({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      style={{
-        height: 22,
-        padding: "0 8px",
-        borderRadius: 999,
-        display: "inline-flex",
-        alignItems: "center",
-        border: "1px solid rgba(255,255,255,0.10)",
-        background: "rgba(255,255,255,0.05)",
-        color: TEXT_PRIMARY,
-        fontSize: 11,
-        fontWeight: 700,
-        letterSpacing: 0.2,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
 export function BadgeQualificationFormSection(props: Props) {
   const {
     badges,
     form,
-    selectedBadge,
-    selectedMode,
     modeInputs,
     modeFieldText,
     previewLoading,
@@ -237,50 +212,7 @@ export function BadgeQualificationFormSection(props: Props) {
             ))}
           </select>
         </Field>
-
-        <Field label="Preview limit">
-          <input
-            value={form.limit}
-            onChange={(event) => onFormChange("limit", event.target.value)}
-            inputMode="numeric"
-            style={controlStyle}
-          />
-        </Field>
       </div>
-
-      {selectedMode ? (
-        <div
-          style={{
-            padding: "12px 14px",
-            borderRadius: 14,
-            border: "1px solid rgba(255,255,255,0.08)",
-            background: "rgba(255,255,255,0.035)",
-            display: "grid",
-            gap: 6,
-          }}
-        >
-          <div
-            style={{
-              fontSize: FONT_SIZE_UI,
-              lineHeight: 1.5,
-              color: TEXT_PRIMARY,
-            }}
-          >
-            {selectedMode.description}
-          </div>
-          <div
-            style={{
-              fontSize: 12,
-              lineHeight: 1.45,
-              color: TEXT_MUTED,
-            }}
-          >
-            Metric family: {selectedMode.metricFamily}
-            {selectedMode.requiresRecording ? " • recording-scoped" : ""}
-            {selectedMode.supportsDateWindow ? " • date-windowed" : ""}
-          </div>
-        </div>
-      ) : null}
 
       {modeInputs.minMinutes ? (
         <Field
@@ -511,79 +443,14 @@ export function BadgeQualificationFormSection(props: Props) {
           style={controlStyle}
         />
       </Field>
-
-      {selectedBadge ? (
-        <div
-          style={{
-            padding: 14,
-            borderRadius: 14,
-            border: "1px solid rgba(255,255,255,0.08)",
-            background: "rgba(255,255,255,0.04)",
-            display: "grid",
-            gap: 8,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 10,
-              alignItems: "flex-start",
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ display: "grid", gap: 4 }}>
-              <strong
-                style={{
-                  fontSize: 14,
-                  lineHeight: 1.2,
-                  color: TEXT_PRIMARY,
-                }}
-              >
-                {selectedBadge.title}
-              </strong>
-              <span
-                style={{
-                  fontSize: 12,
-                  lineHeight: 1.4,
-                  color: TEXT_MUTED,
-                }}
-              >
-                {selectedBadge.entitlementKey}
-              </span>
-            </div>
-
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {selectedBadge.featured ? <FlagPill>Featured</FlagPill> : null}
-              {selectedBadge.shareable ? <FlagPill>Shareable</FlagPill> : null}
-            </div>
-          </div>
-
-          {selectedBadge.description ? (
-            <div
-              style={{
-                fontSize: FONT_SIZE_UI,
-                lineHeight: 1.5,
-                color: TEXT_PRIMARY,
-                opacity: 0.88,
-              }}
-            >
-              {selectedBadge.description}
-            </div>
-          ) : null}
-
-          <div
-            style={{
-              fontSize: 12,
-              lineHeight: 1.45,
-              color: TEXT_MUTED,
-            }}
-          >
-            Display order {selectedBadge.displayOrder}
-            {selectedBadge.imageUrl ? " • image present" : " • no image"}
-          </div>
-        </div>
-      ) : null}
+      <Field label="Preview limit">
+        <input
+          value={form.limit}
+          onChange={(event) => onFormChange("limit", event.target.value)}
+          inputMode="numeric"
+          style={controlStyle}
+        />
+      </Field>
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
         <button
