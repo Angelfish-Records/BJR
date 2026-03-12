@@ -12,18 +12,20 @@ export default async function Page(props: {
 
   const badgeDefinitions = await getActiveBadgeDefinitions();
 
+  const badgeDefinitionOptions = badgeDefinitions.map((badge) => ({
+    entitlementKey: badge.entitlementKey,
+    title: badge.title,
+    description: badge.description,
+    displayOrder: badge.displayOrder,
+    imageUrl: badge.imageUrl,
+    featured: badge.featured,
+    shareable: badge.shareable,
+  }));
+
   return (
     <BadgeDashboardClient
       embed={embed}
-      badgeDefinitions={badgeDefinitions.map((badge) => ({
-        entitlementKey: badge.entitlementKey,
-        title: badge.title,
-        description: badge.description,
-        displayOrder: badge.displayOrder,
-        imageUrl: badge.imageUrl,
-        featured: badge.featured,
-        shareable: badge.shareable,
-      }))}
+      badgeDefinitions={badgeDefinitionOptions}
     />
   );
 }

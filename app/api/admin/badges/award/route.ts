@@ -64,17 +64,19 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       result,
+      summary: {
+        attempted: result.attempted,
+        inserted: result.inserted,
+        alreadyHeld: result.alreadyHeld,
+        hasNewGrants: result.inserted > 0,
+      },
     });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unable to award badge.";
 
     const status =
-      message === "Unauthorized"
-        ? 401
-        : message === "Forbidden"
-          ? 403
-          : 400;
+      message === "Unauthorized" ? 401 : message === "Forbidden" ? 403 : 400;
 
     return NextResponse.json(
       {

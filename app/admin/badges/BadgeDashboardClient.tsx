@@ -1,7 +1,12 @@
 // web/app/admin/badges/BadgeDashboardClient.tsx
 "use client";
 
+import Image from "next/image";
 import React from "react";
+import {
+  BADGE_PREVIEW_MODES,
+  type BadgeQualificationMode,
+} from "@/lib/badgeAdmin";
 
 type BadgeDefinitionOption = {
   entitlementKey: string;
@@ -12,16 +17,6 @@ type BadgeDefinitionOption = {
   featured: boolean;
   shareable: boolean;
 };
-
-type BadgePreviewMode =
-  | "minutes_streamed"
-  | "play_count"
-  | "complete_count"
-  | "joined_within_window"
-  | "active_within_window"
-  | "recording_minutes_streamed"
-  | "recording_play_count"
-  | "recording_complete_count";
 
 type PreviewRow = {
   memberId: string;
@@ -47,7 +42,14 @@ type AwardResponse = {
   result?: {
     entitlementKey: string;
     attempted: number;
-    awarded: number;
+    inserted: number;
+    alreadyHeld: number;
+  };
+  summary?: {
+    attempted: number;
+    inserted: number;
+    alreadyHeld: number;
+    hasNewGrants: boolean;
   };
   error?: string;
 };
@@ -59,7 +61,7 @@ type Props = {
 
 type FormState = {
   entitlementKey: string;
-  mode: BadgePreviewMode;
+  mode: BadgeQualificationMode;
   minMinutes: string;
   minPlayCount: string;
   minCompletedCount: string;
@@ -101,6 +103,12 @@ function formatDateTime(value: string | null): string {
 function formatMetric(value: number | null): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
   return value.toLocaleString();
+}
+
+function getBadgeCardBorder(isSelected: boolean, isFeatured: boolean): string {
+  if (isSelected) return "1px solid rgba(255,255,255,0.32)";
+  if (isFeatured) return "1px solid rgba(255,255,255,0.18)";
+  return "1px solid rgba(255,255,255,0.1)";
 }
 
 function buildPreviewPayload(form: FormState): Record<string, string | number> {
@@ -221,6 +229,40 @@ export default function BadgeDashboardClient({
     );
   }, [form.entitlementKey, sortedBadges]);
 
+  const selectedMode = React.useMemo(() => {
+    return BADGE_PREVIEW_MODES.find((mode) => mode.key === form.mode) ?? null;
+  }, [form.mode]);
+
+  const modeInputs = selectedMode?.inputRequirements ?? {
+    minMinutes: false,
+    minPlayCount: false,
+    minCompletedCount: false,
+    minProgressCount: false,
+    joinedWindow: false,
+    activeWindow: false,
+    recordingId: false,
+  };
+
+  const modeFieldText = selectedMode?.fieldText ?? {
+    minMinutesLabel: "Minimum minutes streamed",
+    minMinutesHelp: null,
+    minPlayCountLabel: "Minimum play count",
+    minPlayCountHelp: null,
+    minCompletedCountLabel: "Minimum complete count",
+    minCompletedCountHelp: null,
+    minProgressCountLabel: "Minimum progress count",
+    minProgressCountHelp: null,
+    joinedOnOrAfterLabel: "Joined on or after",
+    joinedBeforeLabel: "Joined before",
+    joinedWindowHelp: null,
+    activeOnOrAfterLabel: "Active on or after",
+    activeBeforeLabel: "Active before",
+    activeWindowHelp: null,
+    recordingIdLabel: "Recording ID",
+    recordingIdPlaceholder: "recording UUID",
+    recordingIdHelp: null,
+  };
+
   const updateForm = React.useCallback(
     <K extends keyof FormState>(key: K, value: FormState[K]) => {
       setForm((current) => ({
@@ -302,9 +344,21 @@ export default function BadgeDashboardClient({
         throw new Error(json.error || "Unable to award badge.");
       }
 
-      setAwardMessage(
-        `Awarded ${json.result.entitlementKey} to ${json.result.awarded} member${json.result.awarded === 1 ? "" : "s"}.`,
-      );
+      const { entitlementKey, attempted, inserted, alreadyHeld } = json.result;
+
+      if (inserted === attempted) {
+        setAwardMessage(
+          `Awarded ${entitlementKey} to ${inserted} member${inserted === 1 ? "" : "s"}.`,
+        );
+      } else if (inserted === 0 && alreadyHeld > 0) {
+        setAwardMessage(
+          `No new grants were created. ${alreadyHeld} member${alreadyHeld === 1 ? "" : "s"} already held ${entitlementKey}.`,
+        );
+      } else {
+        setAwardMessage(
+          `Processed ${attempted} member${attempted === 1 ? "" : "s"} for ${entitlementKey}: ${inserted} new grant${inserted === 1 ? "" : "s"}, ${alreadyHeld} already held.`,
+        );
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unable to award badge.";
@@ -345,9 +399,208 @@ export default function BadgeDashboardClient({
           borderRadius: 16,
           padding: 16,
           display: "grid",
+          gap: 14,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            alignItems: "baseline",
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ display: "grid", gap: 4 }}>
+            <h2 style={{ margin: 0, fontSize: 20 }}>Badge catalogue</h2>
+            <p style={{ margin: 0, opacity: 0.72 }}>
+              Browse active badge definitions and select one to preview or
+              award.
+            </p>
+          </div>
+
+          <span style={{ opacity: 0.72 }}>
+            {sortedBadges.length.toLocaleString()} active badge
+            {sortedBadges.length === 1 ? "" : "s"}
+          </span>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: 12,
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+          }}
+        >
+          {sortedBadges.length === 0 ? (
+            <div
+              style={{
+                padding: 14,
+                borderRadius: 14,
+                border: "1px solid rgba(255,255,255,0.1)",
+                background: "rgba(255,255,255,0.03)",
+                opacity: 0.8,
+              }}
+            >
+              No active badge definitions found.
+            </div>
+          ) : (
+            sortedBadges.map((badge) => {
+              const isSelected = badge.entitlementKey === form.entitlementKey;
+
+              return (
+                <button
+                  key={badge.entitlementKey}
+                  type="button"
+                  onClick={() =>
+                    updateForm("entitlementKey", badge.entitlementKey)
+                  }
+                  style={{
+                    appearance: "none",
+                    background: isSelected
+                      ? "rgba(255,255,255,0.08)"
+                      : "rgba(255,255,255,0.03)",
+                    color: "inherit",
+                    textAlign: "left",
+                    border: getBadgeCardBorder(isSelected, badge.featured),
+                    borderRadius: 16,
+                    padding: 14,
+                    display: "grid",
+                    gap: 10,
+                    cursor: "pointer",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      alignItems: "flex-start",
+                    }}
+                  >
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <strong style={{ lineHeight: 1.2 }}>{badge.title}</strong>
+                      <span style={{ opacity: 0.68, fontSize: 12 }}>
+                        {badge.entitlementKey}
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 6,
+                        flexWrap: "wrap",
+                        justifyContent: "flex-end",
+                      }}
+                    >
+                      {badge.featured ? (
+                        <span
+                          style={{
+                            fontSize: 11,
+                            padding: "3px 7px",
+                            borderRadius: 999,
+                            background: "rgba(255,255,255,0.08)",
+                            opacity: 0.85,
+                          }}
+                        >
+                          Featured
+                        </span>
+                      ) : null}
+
+                      {badge.shareable ? (
+                        <span
+                          style={{
+                            fontSize: 11,
+                            padding: "3px 7px",
+                            borderRadius: 999,
+                            background: "rgba(255,255,255,0.08)",
+                            opacity: 0.85,
+                          }}
+                        >
+                          Shareable
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {badge.imageUrl ? (
+                    <div
+                      style={{
+                        position: "relative",
+                        width: "100%",
+                        aspectRatio: "16 / 9",
+                        borderRadius: 12,
+                        overflow: "hidden",
+                        background: "rgba(255,255,255,0.04)",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                      }}
+                    >
+                      <Image
+                        src={badge.imageUrl}
+                        alt={badge.title}
+                        fill
+                        sizes="(max-width: 768px) 100vw, 33vw"
+                        style={{
+                          objectFit: "cover",
+                          display: "block",
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        width: "100%",
+                        aspectRatio: "16 / 9",
+                        borderRadius: 12,
+                        border: "1px dashed rgba(255,255,255,0.12)",
+                        background: "rgba(255,255,255,0.02)",
+                        display: "grid",
+                        placeItems: "center",
+                        opacity: 0.55,
+                        fontSize: 12,
+                      }}
+                    >
+                      No image
+                    </div>
+                  )}
+
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {badge.description ? (
+                      <span style={{ opacity: 0.8, lineHeight: 1.4 }}>
+                        {badge.description}
+                      </span>
+                    ) : (
+                      <span style={{ opacity: 0.5 }}>No description</span>
+                    )}
+
+                    <span style={{ opacity: 0.6, fontSize: 12 }}>
+                      Display order: {badge.displayOrder}
+                    </span>
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </section>
+
+      <section
+        style={{
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 16,
+          padding: 16,
+          display: "grid",
           gap: 16,
         }}
       >
+        <div style={{ display: "grid", gap: 4 }}>
+          <h2 style={{ margin: 0, fontSize: 20 }}>Award badge</h2>
+          <p style={{ margin: 0, opacity: 0.72, maxWidth: 820 }}>
+            Choose a badge, define a qualifying cohort, preview matching
+            members, and then execute a durable entitlement grant.
+          </p>
+        </div>
+
         <div
           style={{
             display: "grid",
@@ -376,27 +629,14 @@ export default function BadgeDashboardClient({
             <select
               value={form.mode}
               onChange={(event) =>
-                updateForm("mode", event.target.value as BadgePreviewMode)
+                updateForm("mode", event.target.value as BadgeQualificationMode)
               }
             >
-              <option value="minutes_streamed">Total minutes streamed</option>
-              <option value="play_count">Total play count</option>
-              <option value="complete_count">Total complete count</option>
-              <option value="joined_within_window">
-                Joined within date window
-              </option>
-              <option value="active_within_window">
-                Active within playback window
-              </option>
-              <option value="recording_minutes_streamed">
-                Recording-specific minutes streamed
-              </option>
-              <option value="recording_play_count">
-                Recording-specific play count
-              </option>
-              <option value="recording_complete_count">
-                Recording-specific complete count
-              </option>
+              {BADGE_PREVIEW_MODES.map((mode) => (
+                <option key={mode.key} value={mode.key}>
+                  {mode.label}
+                </option>
+              ))}
             </select>
           </label>
 
@@ -410,22 +650,46 @@ export default function BadgeDashboardClient({
           </label>
         </div>
 
-        {(form.mode === "minutes_streamed" ||
-          form.mode === "recording_minutes_streamed") && (
+        {selectedMode ? (
+          <div
+            style={{
+              padding: "10px 12px",
+              borderRadius: 12,
+              background: "rgba(255,255,255,0.035)",
+              opacity: 0.8,
+              lineHeight: 1.45,
+              display: "grid",
+              gap: 6,
+            }}
+          >
+            <span>{selectedMode.description}</span>
+            <span style={{ fontSize: 12, opacity: 0.72 }}>
+              Metric family: {selectedMode.metricFamily}
+              {selectedMode.requiresRecording ? " • recording-scoped" : ""}
+              {selectedMode.supportsDateWindow ? " • date-windowed" : ""}
+            </span>
+          </div>
+        ) : null}
+
+        {modeInputs.minMinutes ? (
           <label style={{ display: "grid", gap: 6 }}>
-            <span>Minimum minutes streamed</span>
+            <span>{modeFieldText.minMinutesLabel}</span>
             <input
               value={form.minMinutes}
               onChange={(event) => updateForm("minMinutes", event.target.value)}
               inputMode="numeric"
             />
+            {modeFieldText.minMinutesHelp ? (
+              <span style={{ opacity: 0.62, fontSize: 12 }}>
+                {modeFieldText.minMinutesHelp}
+              </span>
+            ) : null}
           </label>
-        )}
+        ) : null}
 
-        {(form.mode === "play_count" ||
-          form.mode === "recording_play_count") && (
+        {modeInputs.minPlayCount && !modeInputs.activeWindow ? (
           <label style={{ display: "grid", gap: 6 }}>
-            <span>Minimum play count</span>
+            <span>{modeFieldText.minPlayCountLabel}</span>
             <input
               value={form.minPlayCount}
               onChange={(event) =>
@@ -433,13 +697,17 @@ export default function BadgeDashboardClient({
               }
               inputMode="numeric"
             />
+            {modeFieldText.minPlayCountHelp ? (
+              <span style={{ opacity: 0.62, fontSize: 12 }}>
+                {modeFieldText.minPlayCountHelp}
+              </span>
+            ) : null}
           </label>
-        )}
+        ) : null}
 
-        {(form.mode === "complete_count" ||
-          form.mode === "recording_complete_count") && (
+        {modeInputs.minCompletedCount && !modeInputs.activeWindow ? (
           <label style={{ display: "grid", gap: 6 }}>
-            <span>Minimum complete count</span>
+            <span>{modeFieldText.minCompletedCountLabel}</span>
             <input
               value={form.minCompletedCount}
               onChange={(event) =>
@@ -447,42 +715,15 @@ export default function BadgeDashboardClient({
               }
               inputMode="numeric"
             />
+            {modeFieldText.minCompletedCountHelp ? (
+              <span style={{ opacity: 0.62, fontSize: 12 }}>
+                {modeFieldText.minCompletedCountHelp}
+              </span>
+            ) : null}
           </label>
-        )}
+        ) : null}
 
-        {form.mode === "joined_within_window" && (
-          <div
-            style={{
-              display: "grid",
-              gap: 12,
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            }}
-          >
-            <label style={{ display: "grid", gap: 6 }}>
-              <span>Joined on or after</span>
-              <input
-                type="datetime-local"
-                value={form.joinedOnOrAfter}
-                onChange={(event) =>
-                  updateForm("joinedOnOrAfter", event.target.value)
-                }
-              />
-            </label>
-
-            <label style={{ display: "grid", gap: 6 }}>
-              <span>Joined before</span>
-              <input
-                type="datetime-local"
-                value={form.joinedBefore}
-                onChange={(event) =>
-                  updateForm("joinedBefore", event.target.value)
-                }
-              />
-            </label>
-          </div>
-        )}
-
-        {form.mode === "active_within_window" && (
+        {modeInputs.joinedWindow ? (
           <div style={{ display: "grid", gap: 12 }}>
             <div
               style={{
@@ -492,7 +733,47 @@ export default function BadgeDashboardClient({
               }}
             >
               <label style={{ display: "grid", gap: 6 }}>
-                <span>Active on or after</span>
+                <span>{modeFieldText.joinedOnOrAfterLabel}</span>
+                <input
+                  type="datetime-local"
+                  value={form.joinedOnOrAfter}
+                  onChange={(event) =>
+                    updateForm("joinedOnOrAfter", event.target.value)
+                  }
+                />
+              </label>
+
+              <label style={{ display: "grid", gap: 6 }}>
+                <span>{modeFieldText.joinedBeforeLabel}</span>
+                <input
+                  type="datetime-local"
+                  value={form.joinedBefore}
+                  onChange={(event) =>
+                    updateForm("joinedBefore", event.target.value)
+                  }
+                />
+              </label>
+            </div>
+
+            {modeFieldText.joinedWindowHelp ? (
+              <span style={{ opacity: 0.62, fontSize: 12 }}>
+                {modeFieldText.joinedWindowHelp}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
+        {modeInputs.activeWindow ? (
+          <div style={{ display: "grid", gap: 12 }}>
+            <div
+              style={{
+                display: "grid",
+                gap: 12,
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              }}
+            >
+              <label style={{ display: "grid", gap: 6 }}>
+                <span>{modeFieldText.activeOnOrAfterLabel}</span>
                 <input
                   type="datetime-local"
                   value={form.activeOnOrAfter}
@@ -503,7 +784,7 @@ export default function BadgeDashboardClient({
               </label>
 
               <label style={{ display: "grid", gap: 6 }}>
-                <span>Active before</span>
+                <span>{modeFieldText.activeBeforeLabel}</span>
                 <input
                   type="datetime-local"
                   value={form.activeBefore}
@@ -522,7 +803,7 @@ export default function BadgeDashboardClient({
               }}
             >
               <label style={{ display: "grid", gap: 6 }}>
-                <span>Minimum play count in window</span>
+                <span>{modeFieldText.minPlayCountLabel}</span>
                 <input
                   value={form.minPlayCount}
                   onChange={(event) =>
@@ -530,10 +811,15 @@ export default function BadgeDashboardClient({
                   }
                   inputMode="numeric"
                 />
+                {modeFieldText.minPlayCountHelp ? (
+                  <span style={{ opacity: 0.62, fontSize: 12 }}>
+                    {modeFieldText.minPlayCountHelp}
+                  </span>
+                ) : null}
               </label>
 
               <label style={{ display: "grid", gap: 6 }}>
-                <span>Minimum progress count in window</span>
+                <span>{modeFieldText.minProgressCountLabel}</span>
                 <input
                   value={form.minProgressCount}
                   onChange={(event) =>
@@ -541,10 +827,15 @@ export default function BadgeDashboardClient({
                   }
                   inputMode="numeric"
                 />
+                {modeFieldText.minProgressCountHelp ? (
+                  <span style={{ opacity: 0.62, fontSize: 12 }}>
+                    {modeFieldText.minProgressCountHelp}
+                  </span>
+                ) : null}
               </label>
 
               <label style={{ display: "grid", gap: 6 }}>
-                <span>Minimum complete count in window</span>
+                <span>{modeFieldText.minCompletedCountLabel}</span>
                 <input
                   value={form.minCompletedCount}
                   onChange={(event) =>
@@ -552,25 +843,39 @@ export default function BadgeDashboardClient({
                   }
                   inputMode="numeric"
                 />
+                {modeFieldText.minCompletedCountHelp ? (
+                  <span style={{ opacity: 0.62, fontSize: 12 }}>
+                    {modeFieldText.minCompletedCountHelp}
+                  </span>
+                ) : null}
               </label>
             </div>
-          </div>
-        )}
 
-        {(form.mode === "recording_minutes_streamed" ||
-          form.mode === "recording_play_count" ||
-          form.mode === "recording_complete_count") && (
+            {modeFieldText.activeWindowHelp ? (
+              <span style={{ opacity: 0.62, fontSize: 12 }}>
+                {modeFieldText.activeWindowHelp}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
+        {modeInputs.recordingId ? (
           <label style={{ display: "grid", gap: 6 }}>
-            <span>Recording ID</span>
+            <span>{modeFieldText.recordingIdLabel}</span>
             <input
               value={form.recordingId}
               onChange={(event) =>
                 updateForm("recordingId", event.target.value)
               }
-              placeholder="recording UUID"
+              placeholder={modeFieldText.recordingIdPlaceholder}
             />
+            {modeFieldText.recordingIdHelp ? (
+              <span style={{ opacity: 0.62, fontSize: 12 }}>
+                {modeFieldText.recordingIdHelp}
+              </span>
+            ) : null}
           </label>
-        )}
+        ) : null}
 
         <label style={{ display: "grid", gap: 6 }}>
           <span>Grant reason</span>
@@ -588,16 +893,64 @@ export default function BadgeDashboardClient({
               borderRadius: 12,
               background: "rgba(255,255,255,0.04)",
               display: "grid",
-              gap: 4,
+              gap: 8,
             }}
           >
-            <strong>{selectedBadge.title}</strong>
-            <span style={{ opacity: 0.75 }}>
-              {selectedBadge.entitlementKey}
-            </span>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 10,
+                alignItems: "flex-start",
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ display: "grid", gap: 4 }}>
+                <strong>{selectedBadge.title}</strong>
+                <span style={{ opacity: 0.75 }}>
+                  {selectedBadge.entitlementKey}
+                </span>
+              </div>
+
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {selectedBadge.featured ? (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      padding: "3px 7px",
+                      borderRadius: 999,
+                      background: "rgba(255,255,255,0.08)",
+                      opacity: 0.85,
+                    }}
+                  >
+                    Featured
+                  </span>
+                ) : null}
+
+                {selectedBadge.shareable ? (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      padding: "3px 7px",
+                      borderRadius: 999,
+                      background: "rgba(255,255,255,0.08)",
+                      opacity: 0.85,
+                    }}
+                  >
+                    Shareable
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
             {selectedBadge.description ? (
               <span style={{ opacity: 0.75 }}>{selectedBadge.description}</span>
             ) : null}
+
+            <span style={{ opacity: 0.58, fontSize: 12 }}>
+              Display order {selectedBadge.displayOrder}
+              {selectedBadge.imageUrl ? " • image present" : " • no image"}
+            </span>
           </div>
         )}
 

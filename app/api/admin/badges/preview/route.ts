@@ -2,8 +2,10 @@
 import { NextResponse } from "next/server";
 import { requireAdminMemberId } from "@/lib/adminAuth";
 import {
+  BADGE_PREVIEW_MODE_DESCRIPTORS,
   previewBadgeQualification,
   type BadgePreviewInput,
+  type BadgeQualificationMode,
 } from "@/lib/badgeAdmin";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -37,6 +39,12 @@ function asOptionalLimit(value: unknown): number | undefined {
   return parsed === null ? undefined : Math.floor(parsed);
 }
 
+function isBadgeQualificationMode(
+  value: string,
+): value is BadgeQualificationMode {
+  return value in BADGE_PREVIEW_MODE_DESCRIPTORS;
+}
+
 function parsePreviewInput(body: unknown): BadgePreviewInput {
   if (!isRecord(body)) {
     throw new Error("Invalid request body.");
@@ -45,6 +53,10 @@ function parsePreviewInput(body: unknown): BadgePreviewInput {
   const mode = asString(body.mode);
   if (!mode) {
     throw new Error("Mode is required.");
+  }
+
+  if (!isBadgeQualificationMode(mode)) {
+    throw new Error("Unsupported badge preview mode.");
   }
 
   const limit = asOptionalLimit(body.limit);
@@ -177,8 +189,12 @@ function parsePreviewInput(body: unknown): BadgePreviewInput {
       };
     }
 
-    default:
-      throw new Error("Unsupported badge preview mode.");
+    default: {
+      const exhaustiveCheck: never = mode;
+      throw new Error(
+        `Unhandled badge preview mode: ${String(exhaustiveCheck)}`,
+      );
+    }
   }
 }
 

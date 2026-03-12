@@ -16,7 +16,8 @@ export type AwardBadgeToMembersInput = {
 export type AwardBadgeToMembersResult = {
   entitlementKey: string;
   attempted: number;
-  awarded: number;
+  inserted: number;
+  alreadyHeld: number;
 };
 
 function uniqueMemberIds(memberIds: string[]): string[] {
@@ -39,10 +40,11 @@ export async function awardBadgeToMembers(
   const entitlementKey = input.entitlementKey.trim();
   const memberIds = uniqueMemberIds(input.memberIds);
 
-  let awarded = 0;
+  let inserted = 0;
+  let alreadyHeld = 0;
 
   for (const memberId of memberIds) {
-    await grantEntitlement({
+    const result = await grantEntitlement({
       memberId,
       entitlementKey,
       scopeId: null,
@@ -52,13 +54,19 @@ export async function awardBadgeToMembers(
       grantSourceRef: input.grantSourceRef ?? undefined,
     });
 
-    awarded += 1;
+    if (result.status === "inserted") {
+      inserted += 1;
+      continue;
+    }
+
+    alreadyHeld += 1;
   }
 
   return {
     entitlementKey,
     attempted: memberIds.length,
-    awarded,
+    inserted,
+    alreadyHeld,
   };
 }
 
@@ -150,6 +158,70 @@ export type BadgePreviewInput =
   | RecordingPlayCountPreviewInput
   | RecordingCompleteCountPreviewInput;
 
+export type BadgePreviewModeDescriptor = {
+  key: BadgeQualificationMode;
+  label: string;
+  description: string;
+  requiresRecording: boolean;
+  supportsDateWindow: boolean;
+  metricFamily: "minutes" | "plays" | "completes" | "membership" | "activity";
+  inputRequirements: {
+    minMinutes: boolean;
+    minPlayCount: boolean;
+    minCompletedCount: boolean;
+    minProgressCount: boolean;
+    joinedWindow: boolean;
+    activeWindow: boolean;
+    recordingId: boolean;
+  };
+  fieldText: {
+    minMinutesLabel: string;
+    minMinutesHelp: string | null;
+    minPlayCountLabel: string;
+    minPlayCountHelp: string | null;
+    minCompletedCountLabel: string;
+    minCompletedCountHelp: string | null;
+    minProgressCountLabel: string;
+    minProgressCountHelp: string | null;
+    joinedOnOrAfterLabel: string;
+    joinedBeforeLabel: string;
+    joinedWindowHelp: string | null;
+    activeOnOrAfterLabel: string;
+    activeBeforeLabel: string;
+    activeWindowHelp: string | null;
+    recordingIdLabel: string;
+    recordingIdPlaceholder: string;
+    recordingIdHelp: string | null;
+  };
+};
+
+type BadgePreviewHandlerMap = {
+  minutes_streamed: (
+    input: MinutesStreamedPreviewInput,
+  ) => Promise<BadgePreviewMemberRow[]>;
+  play_count: (
+    input: PlayCountPreviewInput,
+  ) => Promise<BadgePreviewMemberRow[]>;
+  complete_count: (
+    input: CompleteCountPreviewInput,
+  ) => Promise<BadgePreviewMemberRow[]>;
+  joined_within_window: (
+    input: JoinedWithinWindowPreviewInput,
+  ) => Promise<BadgePreviewMemberRow[]>;
+  active_within_window: (
+    input: ActiveWithinWindowPreviewInput,
+  ) => Promise<BadgePreviewMemberRow[]>;
+  recording_minutes_streamed: (
+    input: RecordingMinutesStreamedPreviewInput,
+  ) => Promise<BadgePreviewMemberRow[]>;
+  recording_play_count: (
+    input: RecordingPlayCountPreviewInput,
+  ) => Promise<BadgePreviewMemberRow[]>;
+  recording_complete_count: (
+    input: RecordingCompleteCountPreviewInput,
+  ) => Promise<BadgePreviewMemberRow[]>;
+};
+
 type MemberBaseRow = {
   id: string;
   email: string | null;
@@ -169,6 +241,345 @@ type AggregateRow = {
 
 const DEFAULT_PREVIEW_LIMIT = 200;
 const MAX_PREVIEW_LIMIT = 1000;
+const TELEMETRY_PROGRESS_STEP_MS = 15_000;
+
+const PLAYBACK_TELEMETRY_EVENT_TYPES = {
+  PLAY: "playback_telemetry_play",
+  PROGRESS: "playback_telemetry_progress",
+  COMPLETE: "playback_telemetry_complete",
+} as const;
+
+export const BADGE_PREVIEW_MODE_DESCRIPTORS: Record<
+  BadgeQualificationMode,
+  BadgePreviewModeDescriptor
+> = {
+  minutes_streamed: {
+    key: "minutes_streamed",
+    label: "Total minutes streamed",
+    description: "Qualify members by all-time listening minutes.",
+    requiresRecording: false,
+    supportsDateWindow: false,
+    metricFamily: "minutes",
+    inputRequirements: {
+      minMinutes: true,
+      minPlayCount: false,
+      minCompletedCount: false,
+      minProgressCount: false,
+      joinedWindow: false,
+      activeWindow: false,
+      recordingId: false,
+    },
+    fieldText: {
+      minMinutesLabel: "Minimum minutes streamed",
+      minMinutesHelp:
+        "Qualify members whose all-time listening minutes meet or exceed this threshold.",
+      minPlayCountLabel: "Minimum play count",
+      minPlayCountHelp: null,
+      minCompletedCountLabel: "Minimum complete count",
+      minCompletedCountHelp: null,
+      minProgressCountLabel: "Minimum progress count",
+      minProgressCountHelp: null,
+      joinedOnOrAfterLabel: "Joined on or after",
+      joinedBeforeLabel: "Joined before",
+      joinedWindowHelp: null,
+      activeOnOrAfterLabel: "Active on or after",
+      activeBeforeLabel: "Active before",
+      activeWindowHelp: null,
+      recordingIdLabel: "Recording ID",
+      recordingIdPlaceholder: "recording UUID",
+      recordingIdHelp: null,
+    },
+  },
+  play_count: {
+    key: "play_count",
+    label: "Total play count",
+    description: "Qualify members by all-time credited play count.",
+    requiresRecording: false,
+    supportsDateWindow: false,
+    metricFamily: "plays",
+    inputRequirements: {
+      minMinutes: false,
+      minPlayCount: true,
+      minCompletedCount: false,
+      minProgressCount: false,
+      joinedWindow: false,
+      activeWindow: false,
+      recordingId: false,
+    },
+    fieldText: {
+      minMinutesLabel: "Minimum minutes streamed",
+      minMinutesHelp: null,
+      minPlayCountLabel: "Minimum play count",
+      minPlayCountHelp:
+        "Qualify members whose all-time credited plays meet or exceed this threshold.",
+      minCompletedCountLabel: "Minimum complete count",
+      minCompletedCountHelp: null,
+      minProgressCountLabel: "Minimum progress count",
+      minProgressCountHelp: null,
+      joinedOnOrAfterLabel: "Joined on or after",
+      joinedBeforeLabel: "Joined before",
+      joinedWindowHelp: null,
+      activeOnOrAfterLabel: "Active on or after",
+      activeBeforeLabel: "Active before",
+      activeWindowHelp: null,
+      recordingIdLabel: "Recording ID",
+      recordingIdPlaceholder: "recording UUID",
+      recordingIdHelp: null,
+    },
+  },
+  complete_count: {
+    key: "complete_count",
+    label: "Total complete count",
+    description: "Qualify members by all-time completion count.",
+    requiresRecording: false,
+    supportsDateWindow: false,
+    metricFamily: "completes",
+    inputRequirements: {
+      minMinutes: false,
+      minPlayCount: false,
+      minCompletedCount: true,
+      minProgressCount: false,
+      joinedWindow: false,
+      activeWindow: false,
+      recordingId: false,
+    },
+    fieldText: {
+      minMinutesLabel: "Minimum minutes streamed",
+      minMinutesHelp: null,
+      minPlayCountLabel: "Minimum play count",
+      minPlayCountHelp: null,
+      minCompletedCountLabel: "Minimum complete count",
+      minCompletedCountHelp:
+        "Qualify members whose all-time completion count meets or exceeds this threshold.",
+      minProgressCountLabel: "Minimum progress count",
+      minProgressCountHelp: null,
+      joinedOnOrAfterLabel: "Joined on or after",
+      joinedBeforeLabel: "Joined before",
+      joinedWindowHelp: null,
+      activeOnOrAfterLabel: "Active on or after",
+      activeBeforeLabel: "Active before",
+      activeWindowHelp: null,
+      recordingIdLabel: "Recording ID",
+      recordingIdPlaceholder: "recording UUID",
+      recordingIdHelp: null,
+    },
+  },
+  joined_within_window: {
+    key: "joined_within_window",
+    label: "Joined within date window",
+    description: "Qualify members by membership creation time.",
+    requiresRecording: false,
+    supportsDateWindow: true,
+    metricFamily: "membership",
+    inputRequirements: {
+      minMinutes: false,
+      minPlayCount: false,
+      minCompletedCount: false,
+      minProgressCount: false,
+      joinedWindow: true,
+      activeWindow: false,
+      recordingId: false,
+    },
+    fieldText: {
+      minMinutesLabel: "Minimum minutes streamed",
+      minMinutesHelp: null,
+      minPlayCountLabel: "Minimum play count",
+      minPlayCountHelp: null,
+      minCompletedCountLabel: "Minimum complete count",
+      minCompletedCountHelp: null,
+      minProgressCountLabel: "Minimum progress count",
+      minProgressCountHelp: null,
+      joinedOnOrAfterLabel: "Joined on or after",
+      joinedBeforeLabel: "Joined before",
+      joinedWindowHelp:
+        "Qualify members whose account creation timestamp falls within this date window.",
+      activeOnOrAfterLabel: "Active on or after",
+      activeBeforeLabel: "Active before",
+      activeWindowHelp: null,
+      recordingIdLabel: "Recording ID",
+      recordingIdPlaceholder: "recording UUID",
+      recordingIdHelp: null,
+    },
+  },
+  active_within_window: {
+    key: "active_within_window",
+    label: "Active within playback window",
+    description:
+      "Qualify members by member telemetry activity inside a time window.",
+    requiresRecording: false,
+    supportsDateWindow: true,
+    metricFamily: "activity",
+    inputRequirements: {
+      minMinutes: false,
+      minPlayCount: true,
+      minCompletedCount: true,
+      minProgressCount: true,
+      joinedWindow: false,
+      activeWindow: true,
+      recordingId: false,
+    },
+    fieldText: {
+      minMinutesLabel: "Minimum minutes streamed",
+      minMinutesHelp: null,
+      minPlayCountLabel: "Minimum play count in window",
+      minPlayCountHelp:
+        "Count qualifying play events within the selected playback window.",
+      minCompletedCountLabel: "Minimum complete count in window",
+      minCompletedCountHelp:
+        "Count qualifying completion events within the selected playback window.",
+      minProgressCountLabel: "Minimum progress count in window",
+      minProgressCountHelp:
+        "Progress count reflects credited telemetry progress events, not literal minutes.",
+      joinedOnOrAfterLabel: "Joined on or after",
+      joinedBeforeLabel: "Joined before",
+      joinedWindowHelp: null,
+      activeOnOrAfterLabel: "Active on or after",
+      activeBeforeLabel: "Active before",
+      activeWindowHelp:
+        "Qualify members whose telemetry activity falls within this playback time window.",
+      recordingIdLabel: "Recording ID",
+      recordingIdPlaceholder: "recording UUID",
+      recordingIdHelp: null,
+    },
+  },
+  recording_minutes_streamed: {
+    key: "recording_minutes_streamed",
+    label: "Recording-specific minutes streamed",
+    description: "Qualify members by minutes streamed on a specific recording.",
+    requiresRecording: true,
+    supportsDateWindow: false,
+    metricFamily: "minutes",
+    inputRequirements: {
+      minMinutes: true,
+      minPlayCount: false,
+      minCompletedCount: false,
+      minProgressCount: false,
+      joinedWindow: false,
+      activeWindow: false,
+      recordingId: true,
+    },
+    fieldText: {
+      minMinutesLabel: "Minimum minutes streamed on recording",
+      minMinutesHelp:
+        "Qualify members whose listening minutes on the selected recording meet or exceed this threshold.",
+      minPlayCountLabel: "Minimum play count",
+      minPlayCountHelp: null,
+      minCompletedCountLabel: "Minimum complete count",
+      minCompletedCountHelp: null,
+      minProgressCountLabel: "Minimum progress count",
+      minProgressCountHelp: null,
+      joinedOnOrAfterLabel: "Joined on or after",
+      joinedBeforeLabel: "Joined before",
+      joinedWindowHelp: null,
+      activeOnOrAfterLabel: "Active on or after",
+      activeBeforeLabel: "Active before",
+      activeWindowHelp: null,
+      recordingIdLabel: "Recording ID",
+      recordingIdPlaceholder: "recording UUID",
+      recordingIdHelp:
+        "Use the canonical recording UUID for the work being qualified.",
+    },
+  },
+  recording_play_count: {
+    key: "recording_play_count",
+    label: "Recording-specific play count",
+    description: "Qualify members by play count on a specific recording.",
+    requiresRecording: true,
+    supportsDateWindow: false,
+    metricFamily: "plays",
+    inputRequirements: {
+      minMinutes: false,
+      minPlayCount: true,
+      minCompletedCount: false,
+      minProgressCount: false,
+      joinedWindow: false,
+      activeWindow: false,
+      recordingId: true,
+    },
+    fieldText: {
+      minMinutesLabel: "Minimum minutes streamed",
+      minMinutesHelp: null,
+      minPlayCountLabel: "Minimum play count on recording",
+      minPlayCountHelp:
+        "Qualify members whose credited plays on the selected recording meet or exceed this threshold.",
+      minCompletedCountLabel: "Minimum complete count",
+      minCompletedCountHelp: null,
+      minProgressCountLabel: "Minimum progress count",
+      minProgressCountHelp: null,
+      joinedOnOrAfterLabel: "Joined on or after",
+      joinedBeforeLabel: "Joined before",
+      joinedWindowHelp: null,
+      activeOnOrAfterLabel: "Active on or after",
+      activeBeforeLabel: "Active before",
+      activeWindowHelp: null,
+      recordingIdLabel: "Recording ID",
+      recordingIdPlaceholder: "recording UUID",
+      recordingIdHelp:
+        "Use the canonical recording UUID for the work being qualified.",
+    },
+  },
+  recording_complete_count: {
+    key: "recording_complete_count",
+    label: "Recording-specific complete count",
+    description: "Qualify members by completion count on a specific recording.",
+    requiresRecording: true,
+    supportsDateWindow: false,
+    metricFamily: "completes",
+    inputRequirements: {
+      minMinutes: false,
+      minPlayCount: false,
+      minCompletedCount: true,
+      minProgressCount: false,
+      joinedWindow: false,
+      activeWindow: false,
+      recordingId: true,
+    },
+    fieldText: {
+      minMinutesLabel: "Minimum minutes streamed",
+      minMinutesHelp: null,
+      minPlayCountLabel: "Minimum play count",
+      minPlayCountHelp: null,
+      minCompletedCountLabel: "Minimum complete count on recording",
+      minCompletedCountHelp:
+        "Qualify members whose completion count on the selected recording meets or exceeds this threshold.",
+      minProgressCountLabel: "Minimum progress count",
+      minProgressCountHelp: null,
+      joinedOnOrAfterLabel: "Joined on or after",
+      joinedBeforeLabel: "Joined before",
+      joinedWindowHelp: null,
+      activeOnOrAfterLabel: "Active on or after",
+      activeBeforeLabel: "Active before",
+      activeWindowHelp: null,
+      recordingIdLabel: "Recording ID",
+      recordingIdPlaceholder: "recording UUID",
+      recordingIdHelp:
+        "Use the canonical recording UUID for the work being qualified.",
+    },
+  },
+};
+
+export const BADGE_PREVIEW_MODES: BadgePreviewModeDescriptor[] = [
+  BADGE_PREVIEW_MODE_DESCRIPTORS.minutes_streamed,
+  BADGE_PREVIEW_MODE_DESCRIPTORS.play_count,
+  BADGE_PREVIEW_MODE_DESCRIPTORS.complete_count,
+  BADGE_PREVIEW_MODE_DESCRIPTORS.joined_within_window,
+  BADGE_PREVIEW_MODE_DESCRIPTORS.active_within_window,
+  BADGE_PREVIEW_MODE_DESCRIPTORS.recording_minutes_streamed,
+  BADGE_PREVIEW_MODE_DESCRIPTORS.recording_play_count,
+  BADGE_PREVIEW_MODE_DESCRIPTORS.recording_complete_count,
+];
+
+export function getBadgePreviewModeDescriptor(
+  mode: BadgeQualificationMode,
+): BadgePreviewModeDescriptor {
+  return BADGE_PREVIEW_MODE_DESCRIPTORS[mode];
+}
+
+export function isRecordingScopedBadgePreviewMode(
+  mode: BadgeQualificationMode,
+): boolean {
+  return BADGE_PREVIEW_MODE_DESCRIPTORS[mode].requiresRecording;
+}
 
 function clampPreviewLimit(limit?: number): number {
   if (!Number.isFinite(limit)) return DEFAULT_PREVIEW_LIMIT;
@@ -225,31 +636,25 @@ function mapMemberBaseRow(row: MemberBaseRow): BadgePreviewMemberRow {
   };
 }
 
+const BADGE_PREVIEW_HANDLERS: BadgePreviewHandlerMap = {
+  minutes_streamed: previewByMinutesStreamed,
+  play_count: previewByPlayCount,
+  complete_count: previewByCompleteCount,
+  joined_within_window: previewByJoinedWindow,
+  active_within_window: previewByActiveWithinWindow,
+  recording_minutes_streamed: previewByRecordingMinutesStreamed,
+  recording_play_count: previewByRecordingPlayCount,
+  recording_complete_count: previewByRecordingCompleteCount,
+};
+
 export async function previewBadgeQualification(
   input: BadgePreviewInput,
 ): Promise<BadgePreviewMemberRow[]> {
-  switch (input.mode) {
-    case "minutes_streamed":
-      return previewByMinutesStreamed(input);
-    case "play_count":
-      return previewByPlayCount(input);
-    case "complete_count":
-      return previewByCompleteCount(input);
-    case "joined_within_window":
-      return previewByJoinedWindow(input);
-    case "active_within_window":
-      return previewByActiveWithinWindow(input);
-    case "recording_minutes_streamed":
-      return previewByRecordingMinutesStreamed(input);
-    case "recording_play_count":
-      return previewByRecordingPlayCount(input);
-    case "recording_complete_count":
-      return previewByRecordingCompleteCount(input);
-    default: {
-      const exhaustiveCheck: never = input;
-      return exhaustiveCheck;
-    }
-  }
+  const handler = BADGE_PREVIEW_HANDLERS[input.mode] as (
+    value: BadgePreviewInput,
+  ) => Promise<BadgePreviewMemberRow[]>;
+
+  return handler(input);
 }
 
 async function previewByMinutesStreamed(
@@ -373,14 +778,14 @@ async function previewByActiveWithinWindow(
     with window_counts as (
       select
         d.member_id,
-        count(*) filter (
-          where d.event_type = 'playback_telemetry_play'
+                count(*) filter (
+          where d.event_type = ${PLAYBACK_TELEMETRY_EVENT_TYPES.PLAY}
         )::int as play_count,
         count(*) filter (
-          where d.event_type = 'playback_telemetry_progress'
+          where d.event_type = ${PLAYBACK_TELEMETRY_EVENT_TYPES.PROGRESS}
         )::int as listened_ms_steps,
         count(*) filter (
-          where d.event_type = 'playback_telemetry_complete'
+          where d.event_type = ${PLAYBACK_TELEMETRY_EVENT_TYPES.COMPLETE}
         )::int as completed_count
       from member_playback_telemetry_dedupe d
       where
@@ -396,7 +801,7 @@ async function previewByActiveWithinWindow(
       m.email,
       
       m.created_at,
-      (wc.listened_ms_steps * 15000)::bigint as listened_ms,
+            (wc.listened_ms_steps * ${TELEMETRY_PROGRESS_STEP_MS})::bigint as listened_ms,
       wc.play_count,
       wc.completed_count,
       null::text as recording_id,

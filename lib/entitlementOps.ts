@@ -23,6 +23,14 @@ type GrantParams = {
   eventSource?: EventSource | string;
 };
 
+export type GrantEntitlementResult =
+  | { status: "inserted" }
+  | { status: "already_present" };
+
+export type RevokeEntitlementResult =
+  | { status: "revoked" }
+  | { status: "not_found" };
+
 async function ensureEntitlementType(
   entitlementKey: string,
   scopeId: string | null,
@@ -44,7 +52,9 @@ async function ensureEntitlementType(
   `;
 }
 
-export async function grantEntitlement(params: GrantParams): Promise<void> {
+export async function grantEntitlement(
+  params: GrantParams,
+): Promise<GrantEntitlementResult> {
   if (!uuidOk(params.memberId)) throw new Error("Invalid memberId");
 
   const {
@@ -97,7 +107,9 @@ export async function grantEntitlement(params: GrantParams): Promise<void> {
     returning 1
   `;
 
-  if (!inserted.rowCount) return;
+  if (!inserted.rowCount) {
+    return { status: "already_present" };
+  }
 
   await logEntitlementGranted({
     memberId,
@@ -113,6 +125,8 @@ export async function grantEntitlement(params: GrantParams): Promise<void> {
       expires_at: expiresAt ? expiresAt.toISOString() : null,
     },
   });
+
+  return { status: "inserted" };
 }
 
 export async function revokeEntitlement(params: {
@@ -123,7 +137,7 @@ export async function revokeEntitlement(params: {
   revokeReason?: string | null;
   correlationId?: string | null;
   eventSource?: EventSource | string;
-}): Promise<void> {
+}): Promise<RevokeEntitlementResult> {
   if (!uuidOk(params.memberId)) throw new Error("Invalid memberId");
 
   const {
@@ -136,7 +150,7 @@ export async function revokeEntitlement(params: {
     eventSource = EVENT_SOURCES.SERVER,
   } = params;
 
-  await sql`
+  const revoked = await sql`
     update entitlement_grants
     set revoked_at = now(),
         revoked_by = ${revokedBy},
@@ -146,7 +160,12 @@ export async function revokeEntitlement(params: {
       and coalesce(scope_id,'') = coalesce(${scopeId ?? ""},'')
       and revoked_at is null
       and (expires_at is null or expires_at > now())
+    returning 1
   `;
+
+  if (!revoked.rowCount) {
+    return { status: "not_found" };
+  }
 
   await logEntitlementRevoked({
     memberId,
@@ -156,4 +175,6 @@ export async function revokeEntitlement(params: {
     correlationId,
     payload: { revoked_by: revokedBy, revoke_reason: revokeReason },
   });
+
+  return { status: "revoked" };
 }
