@@ -26,7 +26,6 @@ type BadgePreviewMode =
 type PreviewRow = {
   memberId: string;
   email: string | null;
-  displayName: string | null;
   joinedAt: string | null;
   listenedMs: number | null;
   minutesStreamed: number | null;
@@ -664,7 +663,7 @@ export default function BadgeDashboardClient({
                   Member
                 </th>
                 <th style={{ textAlign: "left", padding: "8px 10px" }}>
-                  Email
+                  Member ID
                 </th>
                 <th style={{ textAlign: "left", padding: "8px 10px" }}>
                   Joined
@@ -705,7 +704,7 @@ export default function BadgeDashboardClient({
                         borderTop: "1px solid rgba(255,255,255,0.08)",
                       }}
                     >
-                      {row.displayName || row.memberId}
+                      {row.email || row.memberId}
                     </td>
                     <td
                       style={{
@@ -713,7 +712,7 @@ export default function BadgeDashboardClient({
                         borderTop: "1px solid rgba(255,255,255,0.08)",
                       }}
                     >
-                      {row.email || "—"}
+                      {row.memberId}
                     </td>
                     <td
                       style={{

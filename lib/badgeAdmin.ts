@@ -75,7 +75,6 @@ export type BadgeQualificationMode =
 export type BadgePreviewMemberRow = {
   memberId: string;
   email: string | null;
-  displayName: string | null;
   joinedAt: string | null;
   listenedMs: number | null;
   minutesStreamed: number | null;
@@ -154,14 +153,12 @@ export type BadgePreviewInput =
 type MemberBaseRow = {
   id: string;
   email: string | null;
-  display_name: string | null;
   created_at: string | null;
 };
 
 type AggregateRow = {
   member_id: string;
   email: string | null;
-  display_name: string | null;
   created_at: string | null;
   listened_ms: string | number | null;
   play_count: string | number | null;
@@ -199,7 +196,6 @@ function mapAggregateRow(row: AggregateRow): BadgePreviewMemberRow {
   return {
     memberId: row.member_id,
     email: row.email,
-    displayName: row.display_name,
     joinedAt: row.created_at,
     listenedMs,
     minutesStreamed:
@@ -219,7 +215,6 @@ function mapMemberBaseRow(row: MemberBaseRow): BadgePreviewMemberRow {
   return {
     memberId: row.id,
     email: row.email,
-    displayName: row.display_name,
     joinedAt: row.created_at,
     listenedMs: null,
     minutesStreamed: null,
@@ -267,7 +262,7 @@ async function previewByMinutesStreamed(
     select
       mlt.member_id,
       m.email,
-      null::text as display_name,
+      
       m.created_at,
       mlt.listened_ms,
       mlt.play_count,
@@ -295,7 +290,7 @@ async function previewByPlayCount(
     select
       mlt.member_id,
       m.email,
-      null::text as display_name,
+      
       m.created_at,
       mlt.listened_ms,
       mlt.play_count,
@@ -323,7 +318,7 @@ async function previewByCompleteCount(
     select
       mlt.member_id,
       m.email,
-      null::text as display_name,
+      
       m.created_at,
       mlt.listened_ms,
       mlt.play_count,
@@ -351,7 +346,7 @@ async function previewByJoinedWindow(
     select
       m.id,
       m.email,
-      null::text as display_name,
+      
       m.created_at
     from members m
     where m.created_at >= ${input.joinedOnOrAfter}
@@ -399,7 +394,7 @@ async function previewByActiveWithinWindow(
     select
       wc.member_id,
       m.email,
-      null::text as display_name,
+      
       m.created_at,
       (wc.listened_ms_steps * 15000)::bigint as listened_ms,
       wc.play_count,
@@ -436,7 +431,7 @@ async function previewByRecordingMinutesStreamed(
     select
       mts.member_id,
       m.email,
-      null::text as display_name,
+      
       m.created_at,
       mts.listened_ms,
       mts.play_count,
@@ -466,7 +461,7 @@ async function previewByRecordingPlayCount(
     select
       mts.member_id,
       m.email,
-      null::text as display_name,
+      
       m.created_at,
       mts.listened_ms,
       mts.play_count,
@@ -496,7 +491,7 @@ async function previewByRecordingCompleteCount(
     select
       mts.member_id,
       m.email,
-      null::text as display_name,
+      
       m.created_at,
       mts.listened_ms,
       mts.play_count,
