@@ -19,29 +19,6 @@ type Props = {
   onSelectEntitlementKey: (entitlementKey: string) => void;
 };
 
-function FlagPill({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      style={{
-        height: 22,
-        padding: "0 8px",
-        borderRadius: 999,
-        display: "inline-flex",
-        alignItems: "center",
-        border: "1px solid rgba(255,255,255,0.10)",
-        background: "rgba(255,255,255,0.05)",
-        color: TEXT_PRIMARY,
-        fontSize: 11,
-        fontWeight: 700,
-        letterSpacing: 0.2,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
 export function BadgeCatalogueSection(props: Props) {
   const { badges, selectedEntitlementKey, onSelectEntitlementKey } = props;
 
@@ -159,19 +136,6 @@ export function BadgeCatalogueSection(props: Props) {
                     "background 160ms ease, border-color 160ms ease, transform 160ms ease",
                 }}
               >
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 4,
-                    flexWrap: "wrap",
-                    justifyContent: "center",
-                    minHeight: 22,
-                  }}
-                >
-                  {badge.featured ? <FlagPill>Featured</FlagPill> : null}
-                  {badge.shareable ? <FlagPill>Shareable</FlagPill> : null}
-                </div>
-
                 {badge.imageUrl ? (
                   <div
                     style={{

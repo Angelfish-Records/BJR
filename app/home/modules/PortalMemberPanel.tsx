@@ -233,7 +233,7 @@ function BadgeRow(props: { badges: PortalMemberSummary["badges"] }) {
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fill, 52px)",
-          gap: 8,
+          gap: 14,
           justifyContent: "flex-start",
           alignItems: "start",
         }}
@@ -396,8 +396,8 @@ function BadgeRow(props: { badges: PortalMemberSummary["badges"] }) {
                         display: "block",
                         filter: badge.unlocked
                           ? "drop-shadow(0 0 6px rgba(255,255,255,0.10))"
-                          : "grayscale(1) saturate(0) brightness(0.72) contrast(0.92)",
-                        opacity: badge.unlocked ? 1 : 0.58,
+                          : "grayscale(1) saturate(0) brightness(0.60) contrast(0.85) blur(0.2px)",
+                        opacity: badge.unlocked ? 1 : 0.42,
                       }}
                     />
                   </>
@@ -425,9 +425,15 @@ function BadgeRow(props: { badges: PortalMemberSummary["badges"] }) {
                     aria-hidden="true"
                     style={{
                       position: "absolute",
-                      inset: 0,
+                      left: "50%",
+                      top: "50%",
+                      width: 40,
+                      height: 40,
+                      transform: "translate(-50%, -50%)",
+                      borderRadius: "50%",
                       background:
-                        "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.015) 44%, rgba(0,0,0,0.10) 100%)",
+                        "radial-gradient(circle, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.035) 42%, rgba(255,255,255,0.00) 76%)",
+                      filter: "blur(3px)",
                       pointerEvents: "none",
                     }}
                   />
@@ -488,7 +494,8 @@ export default function PortalMemberPanel(props: Props) {
           <div
             style={{
               marginTop: 8,
-              fontSize: 24,
+              marginBottom: 4,
+              fontSize: 20,
               lineHeight: 1,
               letterSpacing: -0.02,
               opacity: 0.95,
@@ -508,26 +515,24 @@ export default function PortalMemberPanel(props: Props) {
         <div
           style={{
             display: "grid",
-            gap: 10,
+            gap: 6,
             minWidth: 0,
           }}
         >
-          <MetricRow
-            label="Exegesis contributions"
-            value={contributionCount ?? "—"}
-            muted={contributionCount == null}
-          />
-
           <MetricRow
             label="Minutes streamed"
             value={minutesStreamed ?? "—"}
             muted={minutesStreamed == null}
           />
-
           <MetricRow
             label="Favourite track"
             value={favouriteTrack ? favouriteTrack.title : "—"}
             muted={!favouriteTrack}
+          />
+          <MetricRow
+            label="Exegesis contributions"
+            value={contributionCount ?? "—"}
+            muted={contributionCount == null}
           />
         </div>
       </div>

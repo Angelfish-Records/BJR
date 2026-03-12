@@ -1,3 +1,4 @@
+// web/app/home/AdminRibbon.tsx
 "use client";
 
 import React from "react";
@@ -7,65 +8,41 @@ import { type AdminPanelId } from "./admin/adminPanels";
 
 const ENABLED = process.env.NEXT_PUBLIC_ADMIN_DEBUG === "1";
 
-/**
- * Canonical ribbon colours used by both the bar and the collapsed tab.
- * Keep these shared so the chevron feels like part of the same structure.
- */
 const ADMIN_RIBBON_BG = "rgba(10,10,14,0.92)";
 const ADMIN_RIBBON_GOLD = "rgba(255,215,130,0.95)";
-
-/**
- * Main tuning lever for the collapsed tab position.
- * Increase this number to pull the tab upward further into the ribbon.
- * Decrease it to let the tab hang lower.
- */
-const COLLAPSED_TAB_RAISE_PX = 8;
+const ADMIN_RIBBON_GOLD_SOFT = "rgba(255,215,130,0.2)";
 
 function ChevronIcon(props: { collapsed: boolean }) {
-  if (props.collapsed) {
-    return (
-      <svg
-        width="24"
-        height="20"
-        viewBox="0 0 24 20"
-        aria-hidden="true"
-        style={{
-          display: "block",
-          overflow: "visible",
-        }}
-      >
-        {/* inner dark triangle to make the chevron read as a hollow tab */}
-        <path d="M7.2 5.6 L12 10.2 L16.8 5.6 Z" fill="rgba(60,50,34,0.96)" />
-
-        {/* gold chevron edge, matched to ribbon border tone */}
-        <path
-          d="M6 5.6 12 11.8l6-6.2"
-          fill="none"
-          stroke={ADMIN_RIBBON_GOLD}
-          strokeWidth="2.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    );
-  }
-
-  return (
+  return props.collapsed ? (
     <svg
-      width="24"
-      height="20"
-      viewBox="0 0 24 20"
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
       aria-hidden="true"
-      style={{
-        display: "block",
-        overflow: "visible",
-      }}
+      style={{ display: "block", flex: "0 0 auto" }}
     >
       <path
-        d="M6 12.4 12 6.2l6 6.2"
+        d="M3.5 6 8 10.25 12.5 6"
         fill="none"
-        stroke={ADMIN_RIBBON_GOLD}
-        strokeWidth="2.6"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ) : (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      style={{ display: "block", flex: "0 0 auto" }}
+    >
+      <path
+        d="M3.5 10 8 5.75 12.5 10"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.9"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -86,7 +63,7 @@ export default function AdminRibbon(props: { isAdmin: boolean }) {
   if (!ENABLED) return null;
   if (!props.isAdmin) return null;
 
-  const btn: React.CSSProperties = {
+  const actionBtn: React.CSSProperties = {
     height: 32,
     padding: "0 12px",
     borderRadius: 11,
@@ -100,6 +77,28 @@ export default function AdminRibbon(props: { isAdmin: boolean }) {
     boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
     transition:
       "background 140ms ease, opacity 140ms ease, transform 140ms ease",
+  };
+
+  const toggleBtn: React.CSSProperties = {
+    height: 32,
+    padding: "0 12px 0 10px",
+    borderRadius: 999,
+    border: `1px solid ${ADMIN_RIBBON_GOLD_SOFT}`,
+    background: "rgba(255,215,130,0.08)",
+    color: ADMIN_RIBBON_GOLD,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 12,
+    fontWeight: 800,
+    letterSpacing: 0.3,
+    lineHeight: 1,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+    boxShadow:
+      "inset 0 1px 0 rgba(255,255,255,0.05), 0 0 0 1px rgba(0,0,0,0.16)",
+    transition:
+      "background 140ms ease, border-color 140ms ease, transform 140ms ease, opacity 140ms ease",
   };
 
   const modal = (
@@ -137,144 +136,159 @@ export default function AdminRibbon(props: { isAdmin: boolean }) {
           <div
             className="portalPanelInner--gold"
             style={{
-              height: collapsed ? 6 : 52,
               minHeight: 0,
               borderRadius: 0,
               borderLeft: "none",
               borderRight: "none",
               borderTop: "none",
               borderBottom: "1px solid rgba(255,255,255,0.08)",
-              display: "grid",
-              gridTemplateColumns: "1fr",
-              alignItems: "center",
-              padding: collapsed ? "0 14px" : "9px 14px",
+              padding: collapsed ? "8px 14px" : "9px 14px",
               background: `
                 radial-gradient(circle at 12% 0%, rgba(255,223,160,0.12), transparent 24%),
                 linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015)),
                 ${ADMIN_RIBBON_BG}
               `,
-              overflow: collapsed ? "visible" : "hidden",
               position: "relative",
-              transition:
-                "height 160ms ease, padding 160ms ease, background 160ms ease",
+              transition: "padding 160ms ease, background 160ms ease",
             }}
           >
-            <button
-              type="button"
-              aria-label={
-                collapsed ? "Expand admin ribbon" : "Collapse admin ribbon"
-              }
-              title={collapsed ? "Expand" : "Collapse"}
-              onClick={() => setCollapsed((v) => !v)}
-              style={{
-                width: 34,
-                height: 28,
-                padding: 0,
-                margin: 0,
-                border: "none",
-                outline: "none",
-                background: "transparent",
-                color: ADMIN_RIBBON_GOLD,
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                lineHeight: 0,
-                opacity: 1,
-                position: "absolute",
-                left: 12,
-                top: collapsed ? "100%" : "50%",
-                transform: collapsed
-                  ? `translateY(-${COLLAPSED_TAB_RAISE_PX}px)`
-                  : "translateY(-50%)",
-                zIndex: 3,
-                pointerEvents: "auto",
-              }}
-            >
-              <ChevronIcon collapsed={collapsed} />
-            </button>
-
             <div
               style={{
                 display: "flex",
-                gap: 8,
-                flexWrap: "wrap",
                 alignItems: "center",
-                justifyContent: "flex-end",
+                justifyContent: "space-between",
+                gap: 12,
                 minWidth: 0,
-                paddingLeft: 40,
-                opacity: collapsed ? 0 : 1,
-                pointerEvents: collapsed ? "none" : "auto",
-                transition: "opacity 120ms ease",
-                visibility: collapsed ? "hidden" : "visible",
+                flexWrap: "nowrap",
               }}
             >
-              <button
-                type="button"
-                style={btn}
-                onClick={() => openAdmin("access")}
-              >
-                Member Access
-              </button>
-              <button
-                type="button"
-                style={btn}
-                onClick={() => openAdmin("badges")}
-              >
-                Badges
-              </button>
-              <button
-                type="button"
-                style={btn}
-                onClick={() => openAdmin("playback")}
-              >
-                Playback
-              </button>
-              <button
-                type="button"
-                style={btn}
-                onClick={() => openAdmin("share_tokens")}
-              >
-                Share Tokens
-              </button>
-              <button
-                type="button"
-                style={btn}
-                onClick={() => openAdmin("mailbag")}
-              >
-                Mailbag
-              </button>
-              <button
-                type="button"
-                style={btn}
-                onClick={() => openAdmin("exegesis")}
-              >
-                Exegesis Mod
-              </button>
-              <Link
-                href="/admin/campaigns"
-                target="_blank"
+              <div
                 style={{
-                  ...btn,
-                  display: "inline-flex",
+                  display: "flex",
                   alignItems: "center",
-                  textDecoration: "none",
+                  gap: 10,
+                  minWidth: 0,
+                  flex: "0 0 auto",
                 }}
               >
-                Campaigns
-              </Link>
-              <Link
-                href="/studio"
-                target="_blank"
+                <button
+                  type="button"
+                  aria-expanded={!collapsed}
+                  aria-controls="af-admin-ribbon-actions"
+                  aria-label={
+                    collapsed ? "Expand admin ribbon" : "Collapse admin ribbon"
+                  }
+                  title={collapsed ? "Show admin tools" : "Hide admin tools"}
+                  onClick={() => setCollapsed((value) => !value)}
+                  style={toggleBtn}
+                >
+                  <ChevronIcon collapsed={collapsed} />
+                  <span>Admin tools</span>
+                </button>
+
+                {!collapsed ? (
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: 0.35,
+                      textTransform: "uppercase",
+                      color: "rgba(255,255,255,0.5)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Debug ribbon
+                  </div>
+                ) : null}
+              </div>
+
+              <div
+                id="af-admin-ribbon-actions"
+                aria-hidden={collapsed}
                 style={{
-                  ...btn,
-                  display: "inline-flex",
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
                   alignItems: "center",
-                  textDecoration: "none",
+                  justifyContent: "flex-end",
+                  minWidth: 0,
+                  flex: "1 1 auto",
+                  maxWidth: collapsed ? 0 : "100%",
+                  opacity: collapsed ? 0 : 1,
+                  overflow: "hidden",
+                  pointerEvents: collapsed ? "none" : "auto",
+                  visibility: collapsed ? "hidden" : "visible",
+                  transition:
+                    "opacity 120ms ease, max-width 180ms ease, visibility 120ms ease",
                 }}
               >
-                Sanity Studio
-              </Link>
+                <button
+                  type="button"
+                  style={actionBtn}
+                  onClick={() => openAdmin("access")}
+                >
+                  Member Access
+                </button>
+                <button
+                  type="button"
+                  style={actionBtn}
+                  onClick={() => openAdmin("badges")}
+                >
+                  Badges
+                </button>
+                <button
+                  type="button"
+                  style={actionBtn}
+                  onClick={() => openAdmin("playback")}
+                >
+                  Playback
+                </button>
+                <button
+                  type="button"
+                  style={actionBtn}
+                  onClick={() => openAdmin("share_tokens")}
+                >
+                  Share Tokens
+                </button>
+                <button
+                  type="button"
+                  style={actionBtn}
+                  onClick={() => openAdmin("mailbag")}
+                >
+                  Mailbag
+                </button>
+                <button
+                  type="button"
+                  style={actionBtn}
+                  onClick={() => openAdmin("exegesis")}
+                >
+                  Exegesis Mod
+                </button>
+                <Link
+                  href="/admin/campaigns"
+                  target="_blank"
+                  style={{
+                    ...actionBtn,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    textDecoration: "none",
+                  }}
+                >
+                  Campaigns
+                </Link>
+                <Link
+                  href="/studio"
+                  target="_blank"
+                  style={{
+                    ...actionBtn,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    textDecoration: "none",
+                  }}
+                >
+                  Sanity Studio
+                </Link>
+              </div>
             </div>
           </div>
         </div>
