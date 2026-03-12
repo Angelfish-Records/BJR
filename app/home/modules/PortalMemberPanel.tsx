@@ -267,7 +267,7 @@ export default function PortalMemberPanel(props: Props) {
           <div
             style={{
               marginTop: 8,
-              fontSize: 28,
+              fontSize: 24,
               lineHeight: 1,
               letterSpacing: -0.02,
               opacity: 0.95,
@@ -275,22 +275,10 @@ export default function PortalMemberPanel(props: Props) {
               overflowWrap: "anywhere",
             }}
           >
-            {displayName}
+            Welcome back, {displayName}
           </div>
-
-          <div
-            style={{
-              marginTop: 8,
-              fontSize: 13,
-              lineHeight: 1.5,
-              opacity: 0.68,
-            }}
-          >
-            {summary.identity?.isAdmin
-              ? "Artist account"
-              : summary.identity?.hasClaimedPublicName
-                ? "Public member identity active"
-                : "Community member"}
+          <div style={{ marginTop: 10, minWidth: 0 }}>
+            <BadgeRow badges={badges} />
           </div>
         </div>
 
@@ -346,59 +334,7 @@ export default function PortalMemberPanel(props: Props) {
               overflowWrap: "anywhere",
             }}
           >
-            {favouriteTrack ? (
-              <>
-                {favouriteTrack.title}
-                {favouriteTrack.artist ? ` — ${favouriteTrack.artist}` : ""}
-              </>
-            ) : (
-              "—"
-            )}
-          </div>
-        </div>
-
-        <div
-          style={{
-            borderRadius: 14,
-            border: "1px solid rgba(255,255,255,0.08)",
-            background: "rgba(255,255,255,0.03)",
-            padding: 12,
-            minWidth: 0,
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gap: 6,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                letterSpacing: 0.3,
-                textTransform: "uppercase",
-                opacity: 0.5,
-                lineHeight: 1.2,
-              }}
-            >
-              Badges
-            </div>
-
-            <div
-              style={{
-                fontSize: 13,
-                lineHeight: 1.45,
-                opacity: 0.66,
-              }}
-            >
-              {badges.length > 0
-                ? `${badges.length} unlocked`
-                : "No unlocked badges yet"}
-            </div>
-          </div>
-
-          <div style={{ marginTop: 10, minWidth: 0 }}>
-            <BadgeRow badges={badges} />
+            {favouriteTrack ? <>{favouriteTrack.title}</> : "—"}
           </div>
         </div>
       </div>
