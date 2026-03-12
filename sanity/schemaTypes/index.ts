@@ -12,6 +12,7 @@ import { artistPost } from "./artistPost";
 import { moduleArtistPosts } from "./moduleArtistPosts";
 import { moduleExegesis } from "./moduleExegesis";
 import { moduleMemberPanel } from "./moduleMemberPanel";
+import { badgeDefinition } from "./badgeDefinition";
 import album from "./album";
 import lyrics from "./lyrics";
 
@@ -29,6 +30,7 @@ export const schema: { types: SchemaTypeDefinition[] } = {
     moduleArtistPosts,
     moduleExegesis,
     moduleMemberPanel,
+    badgeDefinition,
     album,
     lyrics,
   ],

@@ -9,6 +9,8 @@ import {
   type PortalMemberFavouriteTrack,
   type PortalMemberSummary,
 } from "@/lib/memberDashboard";
+import { getActiveBadgeDefinitionsByEntitlementKey } from "@/lib/badges";
+import { listCurrentEntitlements } from "@/lib/entitlements";
 import { buildMemberIdentityState } from "@/lib/memberIdentityServer";
 
 type MemberListenTotalsRow = {
@@ -91,10 +93,50 @@ async function getDashboardFavouriteTrack(
   };
 }
 
+type SortableDashboardBadge = MemberDashboardBadge & {
+  displayOrder: number;
+};
+
 async function getUnlockedDashboardBadges(
-  _memberId: string,
+  memberId: string,
 ): Promise<MemberDashboardBadge[]> {
-  return [];
+  const [entitlements, badgeDefinitionsByKey] = await Promise.all([
+    listCurrentEntitlements(memberId),
+    getActiveBadgeDefinitionsByEntitlementKey(),
+  ]);
+
+  const unlockedBadges: SortableDashboardBadge[] = [];
+
+  for (const entitlement of entitlements) {
+    if (entitlement.scopeId !== null) continue;
+    if (!entitlement.entitlementKey.startsWith("badge_")) continue;
+
+    const definition = badgeDefinitionsByKey.get(entitlement.entitlementKey);
+    if (!definition) continue;
+
+    unlockedBadges.push({
+      key: definition.entitlementKey,
+      label: definition.title,
+      description: definition.description ?? undefined,
+      unlockedAt: entitlement.grantedAt,
+      displayOrder: definition.displayOrder,
+    });
+  }
+
+  unlockedBadges.sort((a, b) => {
+    if (a.displayOrder !== b.displayOrder) {
+      return a.displayOrder - b.displayOrder;
+    }
+
+    return a.label.localeCompare(b.label);
+  });
+
+  return unlockedBadges.map((badge) => ({
+    key: badge.key,
+    label: badge.label,
+    description: badge.description ?? undefined,
+    unlockedAt: badge.unlockedAt,
+  }));
 }
 
 export async function buildPortalMemberSummary(

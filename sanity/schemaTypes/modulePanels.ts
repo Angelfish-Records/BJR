@@ -1,3 +1,4 @@
+// sanity/schemaTypes/modulePanels.ts
 import { defineField, defineType } from "sanity";
 
 export const modulePanels = defineType({

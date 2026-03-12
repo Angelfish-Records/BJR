@@ -187,15 +187,10 @@ export function QualifiedPlayTrendChart(props: {
     const prevX = index > 0 ? xForIndex(index - 1) : x;
     const nextX = index < rows.length - 1 ? xForIndex(index + 1) : x;
 
-    const left =
-      index === 0
-        ? paddingLeft
-        : x - (x - prevX) / 2;
+    const left = index === 0 ? paddingLeft : x - (x - prevX) / 2;
 
     const right =
-      index === rows.length - 1
-        ? width - paddingRight
-        : x + (nextX - x) / 2;
+      index === rows.length - 1 ? width - paddingRight : x + (nextX - x) / 2;
 
     return {
       index,
@@ -243,8 +238,6 @@ export function QualifiedPlayTrendChart(props: {
       <div
         style={{
           position: "relative",
-          border: PANEL_BORDER,
-          borderRadius: 12,
           background: BG_INSET,
           padding: "10px 12px 6px",
         }}
