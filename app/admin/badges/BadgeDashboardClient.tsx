@@ -1,3 +1,4 @@
+// web/app/admin/badges/BadgeDashboardClient.tsx
 "use client";
 
 import React from "react";
@@ -17,6 +18,7 @@ type BadgePreviewMode =
   | "play_count"
   | "complete_count"
   | "joined_within_window"
+  | "active_within_window"
   | "recording_minutes_streamed"
   | "recording_play_count"
   | "recording_complete_count";
@@ -31,6 +33,7 @@ type PreviewRow = {
   playCount: number | null;
   completedCount: number | null;
   matchedRecordingId: string | null;
+  matchedWindowEventCount: number | null;
 };
 
 type PreviewResponse = {
@@ -61,8 +64,11 @@ type FormState = {
   minMinutes: string;
   minPlayCount: string;
   minCompletedCount: string;
+  minProgressCount: string;
   joinedOnOrAfter: string;
   joinedBefore: string;
+  activeOnOrAfter: string;
+  activeBefore: string;
   recordingId: string;
   limit: string;
   grantReason: string;
@@ -74,8 +80,11 @@ const DEFAULT_FORM_STATE: FormState = {
   minMinutes: "500",
   minPlayCount: "10",
   minCompletedCount: "3",
+  minProgressCount: "1",
   joinedOnOrAfter: "",
   joinedBefore: "",
+  activeOnOrAfter: "",
+  activeBefore: "",
   recordingId: "",
   limit: "200",
   grantReason: "",
@@ -129,6 +138,23 @@ function buildPreviewPayload(form: FormState): Record<string, string | number> {
 
       if (form.joinedBefore.trim()) {
         payload.joinedBefore = form.joinedBefore.trim();
+      }
+
+      return payload;
+    }
+
+    case "active_within_window": {
+      const payload: Record<string, string | number> = {
+        mode: form.mode,
+        activeOnOrAfter: form.activeOnOrAfter,
+        minPlayCount: Number(form.minPlayCount || "0"),
+        minProgressCount: Number(form.minProgressCount || "0"),
+        minCompleteCount: Number(form.minCompletedCount || "0"),
+        limit,
+      };
+
+      if (form.activeBefore.trim()) {
+        payload.activeBefore = form.activeBefore.trim();
       }
 
       return payload;
@@ -190,8 +216,9 @@ export default function BadgeDashboardClient({
 
   const selectedBadge = React.useMemo(() => {
     return (
-      sortedBadges.find((badge) => badge.entitlementKey === form.entitlementKey) ??
-      null
+      sortedBadges.find(
+        (badge) => badge.entitlementKey === form.entitlementKey,
+      ) ?? null
     );
   }, [form.entitlementKey, sortedBadges]);
 
@@ -230,7 +257,9 @@ export default function BadgeDashboardClient({
       setPreviewCount(typeof json.count === "number" ? json.count : 0);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unable to preview badge cohort.";
+        error instanceof Error
+          ? error.message
+          : "Unable to preview badge cohort.";
       setPreviewRows([]);
       setPreviewCount(0);
       setPreviewError(message);
@@ -331,7 +360,9 @@ export default function BadgeDashboardClient({
             <span>Badge</span>
             <select
               value={form.entitlementKey}
-              onChange={(event) => updateForm("entitlementKey", event.target.value)}
+              onChange={(event) =>
+                updateForm("entitlementKey", event.target.value)
+              }
             >
               {sortedBadges.map((badge) => (
                 <option key={badge.entitlementKey} value={badge.entitlementKey}>
@@ -352,7 +383,12 @@ export default function BadgeDashboardClient({
               <option value="minutes_streamed">Total minutes streamed</option>
               <option value="play_count">Total play count</option>
               <option value="complete_count">Total complete count</option>
-              <option value="joined_within_window">Joined within date window</option>
+              <option value="joined_within_window">
+                Joined within date window
+              </option>
+              <option value="active_within_window">
+                Active within playback window
+              </option>
               <option value="recording_minutes_streamed">
                 Recording-specific minutes streamed
               </option>
@@ -393,7 +429,9 @@ export default function BadgeDashboardClient({
             <span>Minimum play count</span>
             <input
               value={form.minPlayCount}
-              onChange={(event) => updateForm("minPlayCount", event.target.value)}
+              onChange={(event) =>
+                updateForm("minPlayCount", event.target.value)
+              }
               inputMode="numeric"
             />
           </label>
@@ -437,9 +475,86 @@ export default function BadgeDashboardClient({
               <input
                 type="datetime-local"
                 value={form.joinedBefore}
-                onChange={(event) => updateForm("joinedBefore", event.target.value)}
+                onChange={(event) =>
+                  updateForm("joinedBefore", event.target.value)
+                }
               />
             </label>
+          </div>
+        )}
+
+        {form.mode === "active_within_window" && (
+          <div style={{ display: "grid", gap: 12 }}>
+            <div
+              style={{
+                display: "grid",
+                gap: 12,
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              }}
+            >
+              <label style={{ display: "grid", gap: 6 }}>
+                <span>Active on or after</span>
+                <input
+                  type="datetime-local"
+                  value={form.activeOnOrAfter}
+                  onChange={(event) =>
+                    updateForm("activeOnOrAfter", event.target.value)
+                  }
+                />
+              </label>
+
+              <label style={{ display: "grid", gap: 6 }}>
+                <span>Active before</span>
+                <input
+                  type="datetime-local"
+                  value={form.activeBefore}
+                  onChange={(event) =>
+                    updateForm("activeBefore", event.target.value)
+                  }
+                />
+              </label>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gap: 12,
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              }}
+            >
+              <label style={{ display: "grid", gap: 6 }}>
+                <span>Minimum play count in window</span>
+                <input
+                  value={form.minPlayCount}
+                  onChange={(event) =>
+                    updateForm("minPlayCount", event.target.value)
+                  }
+                  inputMode="numeric"
+                />
+              </label>
+
+              <label style={{ display: "grid", gap: 6 }}>
+                <span>Minimum progress count in window</span>
+                <input
+                  value={form.minProgressCount}
+                  onChange={(event) =>
+                    updateForm("minProgressCount", event.target.value)
+                  }
+                  inputMode="numeric"
+                />
+              </label>
+
+              <label style={{ display: "grid", gap: 6 }}>
+                <span>Minimum complete count in window</span>
+                <input
+                  value={form.minCompletedCount}
+                  onChange={(event) =>
+                    updateForm("minCompletedCount", event.target.value)
+                  }
+                  inputMode="numeric"
+                />
+              </label>
+            </div>
           </div>
         )}
 
@@ -450,7 +565,9 @@ export default function BadgeDashboardClient({
             <span>Recording ID</span>
             <input
               value={form.recordingId}
-              onChange={(event) => updateForm("recordingId", event.target.value)}
+              onChange={(event) =>
+                updateForm("recordingId", event.target.value)
+              }
               placeholder="recording UUID"
             />
           </label>
@@ -476,7 +593,9 @@ export default function BadgeDashboardClient({
             }}
           >
             <strong>{selectedBadge.title}</strong>
-            <span style={{ opacity: 0.75 }}>{selectedBadge.entitlementKey}</span>
+            <span style={{ opacity: 0.75 }}>
+              {selectedBadge.entitlementKey}
+            </span>
             {selectedBadge.description ? (
               <span style={{ opacity: 0.75 }}>{selectedBadge.description}</span>
             ) : null}
@@ -491,7 +610,9 @@ export default function BadgeDashboardClient({
           <button
             type="button"
             onClick={runAward}
-            disabled={awardLoading || previewLoading || previewRows.length === 0}
+            disabled={
+              awardLoading || previewLoading || previewRows.length === 0
+            }
           >
             {awardLoading ? "Awarding…" : "Award badge"}
           </button>
@@ -519,7 +640,9 @@ export default function BadgeDashboardClient({
           gap: 12,
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+        <div
+          style={{ display: "flex", justifyContent: "space-between", gap: 12 }}
+        >
           <h2 style={{ margin: 0, fontSize: 20 }}>Preview results</h2>
           <span style={{ opacity: 0.72 }}>
             {previewCount.toLocaleString()} matching member
@@ -537,13 +660,26 @@ export default function BadgeDashboardClient({
           >
             <thead>
               <tr>
-                <th style={{ textAlign: "left", padding: "8px 10px" }}>Member</th>
-                <th style={{ textAlign: "left", padding: "8px 10px" }}>Email</th>
-                <th style={{ textAlign: "left", padding: "8px 10px" }}>Joined</th>
-                <th style={{ textAlign: "right", padding: "8px 10px" }}>Minutes</th>
-                <th style={{ textAlign: "right", padding: "8px 10px" }}>Plays</th>
+                <th style={{ textAlign: "left", padding: "8px 10px" }}>
+                  Member
+                </th>
+                <th style={{ textAlign: "left", padding: "8px 10px" }}>
+                  Email
+                </th>
+                <th style={{ textAlign: "left", padding: "8px 10px" }}>
+                  Joined
+                </th>
+                <th style={{ textAlign: "right", padding: "8px 10px" }}>
+                  Minutes
+                </th>
+                <th style={{ textAlign: "right", padding: "8px 10px" }}>
+                  Plays
+                </th>
                 <th style={{ textAlign: "right", padding: "8px 10px" }}>
                   Completes
+                </th>
+                <th style={{ textAlign: "right", padding: "8px 10px" }}>
+                  Window events
                 </th>
                 <th style={{ textAlign: "left", padding: "8px 10px" }}>
                   Recording
@@ -554,7 +690,7 @@ export default function BadgeDashboardClient({
               {previewRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     style={{ padding: "14px 10px", opacity: 0.7 }}
                   >
                     No preview results yet.
@@ -563,13 +699,28 @@ export default function BadgeDashboardClient({
               ) : (
                 previewRows.map((row) => (
                   <tr key={row.memberId}>
-                    <td style={{ padding: "10px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                    <td
+                      style={{
+                        padding: "10px",
+                        borderTop: "1px solid rgba(255,255,255,0.08)",
+                      }}
+                    >
                       {row.displayName || row.memberId}
                     </td>
-                    <td style={{ padding: "10px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                    <td
+                      style={{
+                        padding: "10px",
+                        borderTop: "1px solid rgba(255,255,255,0.08)",
+                      }}
+                    >
                       {row.email || "—"}
                     </td>
-                    <td style={{ padding: "10px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                    <td
+                      style={{
+                        padding: "10px",
+                        borderTop: "1px solid rgba(255,255,255,0.08)",
+                      }}
+                    >
                       {formatDateTime(row.joinedAt)}
                     </td>
                     <td
@@ -599,7 +750,21 @@ export default function BadgeDashboardClient({
                     >
                       {formatMetric(row.completedCount)}
                     </td>
-                    <td style={{ padding: "10px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                    <td
+                      style={{
+                        padding: "10px",
+                        borderTop: "1px solid rgba(255,255,255,0.08)",
+                        textAlign: "right",
+                      }}
+                    >
+                      {formatMetric(row.matchedWindowEventCount)}
+                    </td>
+                    <td
+                      style={{
+                        padding: "10px",
+                        borderTop: "1px solid rgba(255,255,255,0.08)",
+                      }}
+                    >
                       {row.matchedRecordingId || "—"}
                     </td>
                   </tr>

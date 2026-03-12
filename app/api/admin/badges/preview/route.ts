@@ -1,3 +1,4 @@
+// web/app/api/admin/badges/preview/route.ts
 import { NextResponse } from "next/server";
 import { requireAdminMemberId } from "@/lib/adminAuth";
 import {
@@ -102,6 +103,23 @@ function parsePreviewInput(body: unknown): BadgePreviewInput {
       };
     }
 
+    case "active_within_window": {
+      const activeOnOrAfter = asString(body.activeOnOrAfter);
+      if (!activeOnOrAfter) {
+        throw new Error("activeOnOrAfter is required.");
+      }
+
+      return {
+        mode,
+        activeOnOrAfter,
+        activeBefore: asOptionalString(body.activeBefore),
+        minPlayCount: asPositiveNumber(body.minPlayCount) ?? 0,
+        minProgressCount: asPositiveNumber(body.minProgressCount) ?? 0,
+        minCompleteCount: asPositiveNumber(body.minCompleteCount) ?? 0,
+        limit,
+      };
+    }
+
     case "recording_minutes_streamed": {
       const recordingId = asString(body.recordingId);
       const minMinutes = asPositiveNumber(body.minMinutes);
@@ -179,14 +197,12 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Unable to preview badge cohort.";
+      error instanceof Error
+        ? error.message
+        : "Unable to preview badge cohort.";
 
     const status =
-      message === "Unauthorized"
-        ? 401
-        : message === "Forbidden"
-          ? 403
-          : 400;
+      message === "Unauthorized" ? 401 : message === "Forbidden" ? 403 : 400;
 
     return NextResponse.json(
       {

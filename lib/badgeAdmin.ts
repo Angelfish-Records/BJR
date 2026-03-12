@@ -1,3 +1,4 @@
+// web/lib/badgeAdmin.ts
 import "server-only";
 
 import { sql } from "@vercel/postgres";
@@ -66,6 +67,7 @@ export type BadgeQualificationMode =
   | "play_count"
   | "complete_count"
   | "joined_within_window"
+  | "active_within_window"
   | "recording_minutes_streamed"
   | "recording_play_count"
   | "recording_complete_count";
@@ -80,6 +82,7 @@ export type BadgePreviewMemberRow = {
   playCount: number | null;
   completedCount: number | null;
   matchedRecordingId: string | null;
+  matchedWindowEventCount: number | null;
 };
 
 export type MinutesStreamedPreviewInput = {
@@ -104,6 +107,16 @@ export type JoinedWithinWindowPreviewInput = {
   mode: "joined_within_window";
   joinedOnOrAfter: string;
   joinedBefore?: string | null;
+  limit?: number;
+};
+
+export type ActiveWithinWindowPreviewInput = {
+  mode: "active_within_window";
+  activeOnOrAfter: string;
+  activeBefore?: string | null;
+  minPlayCount?: number;
+  minProgressCount?: number;
+  minCompleteCount?: number;
   limit?: number;
 };
 
@@ -133,6 +146,7 @@ export type BadgePreviewInput =
   | PlayCountPreviewInput
   | CompleteCountPreviewInput
   | JoinedWithinWindowPreviewInput
+  | ActiveWithinWindowPreviewInput
   | RecordingMinutesStreamedPreviewInput
   | RecordingPlayCountPreviewInput
   | RecordingCompleteCountPreviewInput;
@@ -153,6 +167,7 @@ type AggregateRow = {
   play_count: string | number | null;
   completed_count: string | number | null;
   recording_id?: string | null;
+  matched_window_event_count?: string | number | null;
 };
 
 const DEFAULT_PREVIEW_LIMIT = 200;
@@ -179,6 +194,7 @@ function mapAggregateRow(row: AggregateRow): BadgePreviewMemberRow {
   const listenedMs = asNumber(row.listened_ms);
   const playCount = asNumber(row.play_count);
   const completedCount = asNumber(row.completed_count);
+  const matchedWindowEventCount = asNumber(row.matched_window_event_count);
 
   return {
     memberId: row.member_id,
@@ -195,6 +211,7 @@ function mapAggregateRow(row: AggregateRow): BadgePreviewMemberRow {
     playCount,
     completedCount,
     matchedRecordingId: row.recording_id ?? null,
+    matchedWindowEventCount,
   };
 }
 
@@ -209,6 +226,7 @@ function mapMemberBaseRow(row: MemberBaseRow): BadgePreviewMemberRow {
     playCount: null,
     completedCount: null,
     matchedRecordingId: null,
+    matchedWindowEventCount: null,
   };
 }
 
@@ -224,6 +242,8 @@ export async function previewBadgeQualification(
       return previewByCompleteCount(input);
     case "joined_within_window":
       return previewByJoinedWindow(input);
+    case "active_within_window":
+      return previewByActiveWithinWindow(input);
     case "recording_minutes_streamed":
       return previewByRecordingMinutesStreamed(input);
     case "recording_play_count":
@@ -343,6 +363,67 @@ async function previewByJoinedWindow(
   `;
 
   return res.rows.map(mapMemberBaseRow);
+}
+
+async function previewByActiveWithinWindow(
+  input: ActiveWithinWindowPreviewInput,
+): Promise<BadgePreviewMemberRow[]> {
+  const limit = clampPreviewLimit(input.limit);
+  const activeBefore = input.activeBefore ?? null;
+  const minPlayCount = Math.max(0, Math.floor(input.minPlayCount ?? 0));
+  const minProgressCount = Math.max(0, Math.floor(input.minProgressCount ?? 0));
+  const minCompleteCount = Math.max(0, Math.floor(input.minCompleteCount ?? 0));
+
+  const res = await sql<AggregateRow>`
+    with window_counts as (
+      select
+        d.member_id,
+        count(*) filter (
+          where d.event_type = 'playback_telemetry_play'
+        )::int as play_count,
+        count(*) filter (
+          where d.event_type = 'playback_telemetry_progress'
+        )::int as listened_ms_steps,
+        count(*) filter (
+          where d.event_type = 'playback_telemetry_complete'
+        )::int as completed_count
+      from member_playback_telemetry_dedupe d
+      where
+        d.created_at >= ${input.activeOnOrAfter}::timestamptz
+        and (
+          ${activeBefore}::timestamptz is null
+          or d.created_at < ${activeBefore}::timestamptz
+        )
+      group by d.member_id
+    )
+    select
+      wc.member_id,
+      m.email,
+      m.display_name,
+      m.created_at,
+      (wc.listened_ms_steps * 15000)::bigint as listened_ms,
+      wc.play_count,
+      wc.completed_count,
+      null::text as recording_id,
+      (wc.play_count + wc.listened_ms_steps + wc.completed_count)::int as matched_window_event_count
+    from window_counts wc
+    join members m
+      on m.id = wc.member_id
+    where
+      wc.play_count >= ${minPlayCount}
+      and wc.listened_ms_steps >= ${minProgressCount}
+      and wc.completed_count >= ${minCompleteCount}
+      and (wc.play_count + wc.listened_ms_steps + wc.completed_count) > 0
+    order by
+      matched_window_event_count desc,
+      wc.play_count desc,
+      wc.listened_ms_steps desc,
+      wc.completed_count desc,
+      m.created_at asc nulls last
+    limit ${limit}
+  `;
+
+  return res.rows.map(mapAggregateRow);
 }
 
 async function previewByRecordingMinutesStreamed(

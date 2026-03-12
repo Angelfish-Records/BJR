@@ -1,3 +1,4 @@
+// web/app/api/admin/badges/award/route.ts
 import { NextResponse } from "next/server";
 import { requireAdminMemberId } from "@/lib/adminAuth";
 import { awardBadgeToMembers } from "@/lib/badgeAdmin";
