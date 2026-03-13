@@ -274,7 +274,7 @@ export default function BadgeCabinet(props: Props) {
     setFlipLayoutNonce((current) => current + 1);
   }, []);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const nextUnlockedKeys = new Set(
       items.filter((item) => item.unlocked).map((item) => item.key),
     );
