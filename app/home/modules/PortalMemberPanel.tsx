@@ -369,24 +369,25 @@ function BadgeRow(props: { badges: PortalMemberSummary["badges"] }) {
           justify-items: center;
           gap: 0;
           min-width: 0;
+          width: var(--portal-badge-size);
+          flex: 0 0 auto;
+          transition: width 260ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .portal-member-badges--expanded .portal-member-badge-shell {
+          width: calc(var(--portal-badge-size) * 1.5);
         }
 
         .portal-member-badge-visual {
           width: 100%;
-          max-width: var(--portal-badge-size);
-          transition:
-            transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
-            max-width 260ms cubic-bezier(0.22, 1, 0.36, 1);
+          max-width: 100%;
+          transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
           transform-origin: center top;
-        }
-
-        .portal-member-badges--expanded .portal-member-badge-visual {
-          max-width: calc(var(--portal-badge-size) * 1.5);
         }
 
         .portal-member-badge-meta {
           width: 100%;
-          max-width: calc(var(--portal-badge-size) * 1.9);
+          max-width: 100%;
           display: grid;
           grid-template-rows: 0fr;
           margin-top: 0;
@@ -398,6 +399,7 @@ function BadgeRow(props: { badges: PortalMemberSummary["badges"] }) {
             opacity 180ms ease,
             transform 220ms ease,
             margin-top 220ms ease;
+          transition-delay: 0ms, 0ms, 0ms, 0ms;
           text-align: center;
         }
 
@@ -407,11 +409,24 @@ function BadgeRow(props: { badges: PortalMemberSummary["badges"] }) {
           opacity: 1;
           transform: translateY(0);
           pointer-events: auto;
+          transition-delay: 0ms, 110ms, 110ms, 0ms;
         }
 
         .portal-member-badge-meta-inner {
           overflow: hidden;
           min-height: 0;
+          opacity: 0;
+          transform: translateY(-3px);
+          transition:
+            opacity 180ms ease,
+            transform 220ms ease;
+          transition-delay: 0ms, 0ms;
+        }
+
+        .portal-member-badges--expanded .portal-member-badge-meta-inner {
+          opacity: 1;
+          transform: translateY(0);
+          transition-delay: 140ms, 140ms;
         }
 
         .portal-member-badge-wrap:hover .portal-member-badge-burst-a,
@@ -448,9 +463,12 @@ function BadgeRow(props: { badges: PortalMemberSummary["badges"] }) {
             opacity: 0 !important;
           }
 
+          .portal-member-badge-shell,
           .portal-member-badge-visual,
-          .portal-member-badge-meta {
+          .portal-member-badge-meta,
+          .portal-member-badge-meta-inner {
             transition: none !important;
+            transition-delay: 0ms !important;
           }
 
           .portal-member-badge-meta {
@@ -517,15 +535,12 @@ function BadgeRow(props: { badges: PortalMemberSummary["badges"] }) {
         <div
           className={expanded ? "portal-member-badges--expanded" : undefined}
           style={{
-            display: "grid",
-            gridTemplateColumns: expanded
-              ? "repeat(auto-fill, calc(var(--portal-badge-size) * 1.5))"
-              : "repeat(auto-fill, var(--portal-badge-size))",
+            display: "flex",
+            flexWrap: "wrap",
             gap: expanded ? 18 : 14,
             justifyContent: "flex-start",
-            alignItems: "start",
-            transition:
-              "grid-template-columns 260ms cubic-bezier(0.22, 1, 0.36, 1), gap 220ms ease",
+            alignItems: "flex-start",
+            transition: "gap 220ms ease",
           }}
         >
           {badges.map((badge) => {
