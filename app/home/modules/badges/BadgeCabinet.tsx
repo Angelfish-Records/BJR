@@ -82,6 +82,7 @@ export default function BadgeCabinet(props: Props) {
   const debugReplayTimeoutRef = React.useRef<number | null>(null);
   const unlockReleaseTimeoutRef = React.useRef<number | null>(null);
   const unlockCleanupTimeoutRef = React.useRef<number | null>(null);
+  const unlockReleaseRafRef = React.useRef<number | null>(null);
   const [previousStableItems, setPreviousStableItems] = React.useState<
     ReturnType<typeof buildBadgeCabinetItems>
   >([]);
@@ -198,6 +199,11 @@ export default function BadgeCabinet(props: Props) {
         window.clearTimeout(unlockCleanupTimeoutRef.current);
         unlockCleanupTimeoutRef.current = null;
       }
+
+      if (unlockReleaseRafRef.current !== null) {
+        window.cancelAnimationFrame(unlockReleaseRafRef.current);
+        unlockReleaseRafRef.current = null;
+      }
     };
   }, []);
 
@@ -266,6 +272,11 @@ export default function BadgeCabinet(props: Props) {
       unlockCleanupTimeoutRef.current = null;
     }
 
+    if (unlockReleaseRafRef.current !== null) {
+      window.cancelAnimationFrame(unlockReleaseRafRef.current);
+      unlockReleaseRafRef.current = null;
+    }
+
     setDebugUnlockedKey(null);
     setPendingUnlockKeys(new Set());
     setNewlyUnlockedKeys(new Set());
@@ -322,10 +333,19 @@ export default function BadgeCabinet(props: Props) {
     unlockReleaseTimeoutRef.current = window.setTimeout(() => {
       setUnlockPhase("move");
       setPendingUnlockKeys(new Set());
-      setDisplayItemsOverride(null);
       setIsFlipSuspended(false);
       setFlipLayoutNonce((current) => current + 1);
       unlockReleaseTimeoutRef.current = null;
+
+      if (unlockReleaseRafRef.current !== null) {
+        window.cancelAnimationFrame(unlockReleaseRafRef.current);
+      }
+
+      unlockReleaseRafRef.current = window.requestAnimationFrame(() => {
+        setDisplayItemsOverride(null);
+        setFlipLayoutNonce((current) => current + 1);
+        unlockReleaseRafRef.current = null;
+      });
     }, UNLOCK_REVEAL_MS);
 
     unlockCleanupTimeoutRef.current = window.setTimeout(
@@ -350,6 +370,11 @@ export default function BadgeCabinet(props: Props) {
       if (unlockCleanupTimeoutRef.current !== null) {
         window.clearTimeout(unlockCleanupTimeoutRef.current);
         unlockCleanupTimeoutRef.current = null;
+      }
+
+      if (unlockReleaseRafRef.current !== null) {
+        window.cancelAnimationFrame(unlockReleaseRafRef.current);
+        unlockReleaseRafRef.current = null;
       }
     };
   }, [items, previousStableItems]);

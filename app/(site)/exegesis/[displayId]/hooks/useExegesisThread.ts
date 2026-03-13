@@ -1,4 +1,4 @@
-// web/app/(site)/exegesis/[recordingId]/hooks/useExegesisThread.ts
+// web/app/(site)/exegesis/[displayId]/hooks/useExegesisThread.ts
 "use client";
 
 import React from "react";
@@ -27,6 +27,8 @@ import {
   rootRecentTs,
   rootTopScore,
 } from "../exegesisUi";
+import { useBadgeAwardOverlay } from "@/app/home/badges/BadgeAwardOverlayProvider";
+import { normalizeBadgeAwardNotices } from "@/app/home/badges/badgeAwardTypes";
 
 export default function useExegesisThread(props: {
   recordingId: string;
@@ -103,6 +105,7 @@ export default function useExegesisThread(props: {
   const [threadErr, setThreadErr] = React.useState<string>("");
   const [threadLoading, setThreadLoading] = React.useState<boolean>(false);
   const [threadLoadedKey, setThreadLoadedKey] = React.useState<string>("");
+  const { announceBadges } = useBadgeAwardOverlay();
 
   const isAnon = authLoaded ? !userId : false;
   const viewerKey = userId ?? "anon";
@@ -168,6 +171,15 @@ export default function useExegesisThread(props: {
     : "";
 
   const prevUserIdRef = React.useRef<string | null>(null);
+
+  const announceAwardPayload = React.useCallback(
+    (payload: unknown) => {
+      const badges = normalizeBadgeAwardNotices(payload);
+      if (badges.length === 0) return;
+      announceBadges(badges);
+    },
+    [announceBadges],
+  );
 
   React.useEffect(() => {
     const prev = prevUserIdRef.current;
@@ -517,8 +529,13 @@ export default function useExegesisThread(props: {
       });
 
       const j = (await r.json()) as
-        | CommentPostOk
-        | { ok: false; error: string; gate?: ThreadApiErr["gate"] };
+        | (CommentPostOk & { newlyAwardedBadges?: unknown })
+        | {
+            ok: false;
+            error: string;
+            gate?: ThreadApiErr["gate"];
+            newlyAwardedBadges?: unknown;
+          };
 
       if (!j.ok) {
         if (j.gate) {
@@ -542,6 +559,7 @@ export default function useExegesisThread(props: {
 
       setDraft("");
       setDraftDoc(null);
+      announceAwardPayload(j.newlyAwardedBadges);
 
       pendingScrollCommentIdRef.current = j.comment.id;
       setHash({
@@ -660,8 +678,13 @@ export default function useExegesisThread(props: {
       });
 
       const j = (await r.json()) as
-        | CommentPostOk
-        | { ok: false; error: string; gate?: ThreadApiErr["gate"] };
+        | (CommentPostOk & { newlyAwardedBadges?: unknown })
+        | {
+            ok: false;
+            error: string;
+            gate?: ThreadApiErr["gate"];
+            newlyAwardedBadges?: unknown;
+          };
 
       if (!j.ok) {
         if (j.gate) {
@@ -694,6 +717,7 @@ export default function useExegesisThread(props: {
           err: "",
         },
       }));
+      announceAwardPayload(j.newlyAwardedBadges);
 
       pendingScrollCommentIdRef.current = j.comment.id;
       setHash({
@@ -786,7 +810,9 @@ export default function useExegesisThread(props: {
       body: JSON.stringify({ commentId }),
     });
 
-    const j = (await r.json()) as VoteOk | VoteErr;
+    const j = (await r.json()) as
+      | (VoteOk & { newlyAwardedBadges?: unknown })
+      | (VoteErr & { newlyAwardedBadges?: unknown });
 
     if (!j.ok) {
       if (j.gate) {
@@ -835,6 +861,8 @@ export default function useExegesisThread(props: {
       }));
       return { ...prev, roots };
     });
+
+    announceAwardPayload(j.newlyAwardedBadges);
   }
 
   return {

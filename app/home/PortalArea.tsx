@@ -20,6 +20,7 @@ import SessionChrome from "./SessionChrome";
 import PortalSurface from "./PortalSurface";
 import { useSessionSurfaceController } from "./useSessionSurfaceController";
 import { usePlaybackReconciliation } from "./usePlaybackReconciliation";
+import { BadgeAwardOverlayProvider } from "./badges/BadgeAwardOverlayProvider";
 
 export type PortalAreaProps = {
   portalModules: PortalModule[];
@@ -176,58 +177,60 @@ export default function PortalArea(props: PortalAreaProps) {
   );
 
   return (
-    <>
-      {/* ✅ All spotlight overlay mechanics are now owned by GateSpotlightOverlay */}
-      <GateSpotlightOverlay
-        active={spotlightAttention}
-        gateNode={gateNodeModal}
-      />
+    <BadgeAwardOverlayProvider>
+      <>
+        {/* ✅ All spotlight overlay mechanics are now owned by GateSpotlightOverlay */}
+        <GateSpotlightOverlay
+          active={spotlightAttention}
+          gateNode={gateNodeModal}
+        />
 
-      <div
-        style={{ height: "100%", minHeight: 0, minWidth: 0, display: "grid" }}
-      >
-        <PortalViewerProvider
-          initialPortalTabId={props.initialPortalTabId}
-          initialExegesisDisplayId={props.initialExegesisDisplayId}
-          value={{
-            tier,
-            isSignedIn,
-          }}
+        <div
+          style={{ height: "100%", minHeight: 0, minWidth: 0, display: "grid" }}
         >
-          <PortalShell
-            panels={panels}
-            defaultPanelId="player"
-            syncToQueryParam={false}
-            activePanelId={effectiveIsPlayer ? "player" : "portal"}
-            keepMountedPanelIds={["player", "portal"]}
-            onPanelChange={(panelId) => {
-              if (panelId === "player") forceSurface("player");
-              else forceSurface("portal");
+          <PortalViewerProvider
+            initialPortalTabId={props.initialPortalTabId}
+            initialExegesisDisplayId={props.initialExegesisDisplayId}
+            value={{
+              tier,
+              isSignedIn,
             }}
-            headerPortalId="af-portal-topbar-slot"
-            header={() => (
-              <SessionChrome
-                topLogoUrl={props.topLogoUrl}
-                topLogoHeight={props.topLogoHeight}
-                effectiveIsPlayer={effectiveIsPlayer}
-                portalTabId={portalTabId}
-                spotlightAttention={spotlightAttention}
-                attentionMessage={brokerAttentionMessage}
-                canManageBilling={canManageBilling}
-                tier={tier}
-                bannerKind={bannerKind}
-                bannerCode={bannerCode}
-                onDismissBanner={dismissBanner}
-                onPrefetchPlayer={prefetchPlayer}
-                onPrefetchPortal={prefetchPortal}
-                onOpenPlayer={openPlayer}
-                onOpenPortal={openPortal}
-              />
-            )}
-          />
-        </PortalViewerProvider>
-        <MiniPlayerHost onExpand={() => forceSurface("player")} />
-      </div>
-    </>
+          >
+            <PortalShell
+              panels={panels}
+              defaultPanelId="player"
+              syncToQueryParam={false}
+              activePanelId={effectiveIsPlayer ? "player" : "portal"}
+              keepMountedPanelIds={["player", "portal"]}
+              onPanelChange={(panelId) => {
+                if (panelId === "player") forceSurface("player");
+                else forceSurface("portal");
+              }}
+              headerPortalId="af-portal-topbar-slot"
+              header={() => (
+                <SessionChrome
+                  topLogoUrl={props.topLogoUrl}
+                  topLogoHeight={props.topLogoHeight}
+                  effectiveIsPlayer={effectiveIsPlayer}
+                  portalTabId={portalTabId}
+                  spotlightAttention={spotlightAttention}
+                  attentionMessage={brokerAttentionMessage}
+                  canManageBilling={canManageBilling}
+                  tier={tier}
+                  bannerKind={bannerKind}
+                  bannerCode={bannerCode}
+                  onDismissBanner={dismissBanner}
+                  onPrefetchPlayer={prefetchPlayer}
+                  onPrefetchPortal={prefetchPortal}
+                  onOpenPlayer={openPlayer}
+                  onOpenPortal={openPortal}
+                />
+              )}
+            />
+          </PortalViewerProvider>
+          <MiniPlayerHost onExpand={() => forceSurface("player")} />
+        </div>
+      </>
+    </BadgeAwardOverlayProvider>
   );
 }

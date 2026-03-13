@@ -16,6 +16,8 @@ import type {
 import { normalizeGateCodeRaw } from "@/app/home/gating/gateTypes";
 import { gateResultFromPayload } from "@/app/home/gating/fromPayload";
 import { useGateBroker } from "@/app/home/gating/GateBroker";
+import { useBadgeAwardOverlay } from "@/app/home/badges/BadgeAwardOverlayProvider";
+import { normalizeBadgeAwardNotices } from "@/app/home/badges/badgeAwardTypes";
 
 type TokenResponse =
   | { ok: true; token: string; expiresAt: string | number }
@@ -41,6 +43,7 @@ export default function AudioEngine() {
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
   const { reportGate, clearGate } = useGateBroker();
+  const { announceBadges } = useBadgeAwardOverlay();
 
   const hlsRef = React.useRef<Hls | null>(null);
   const tokenAbortRef = React.useRef<AbortController | null>(null);
@@ -701,6 +704,44 @@ export default function AudioEngine() {
     const a = audioRef.current;
     if (!a) return;
 
+    const sendPlaybackTelemetry = (payload: {
+      event: "play" | "progress" | "complete";
+      recordingId: string;
+      playbackId: string;
+      milestoneKey: string;
+      listenedMs?: number;
+      progressMs: number;
+      durationMs: number | null;
+    }) => {
+      fetch("/api/playback/telemetry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        keepalive: true,
+      })
+        .then(async (response) => {
+          let json: unknown = null;
+
+          try {
+            json = await response.json();
+          } catch {
+            json = null;
+          }
+
+          const badges =
+            json && typeof json === "object" && "newlyAwardedBadges" in json
+              ? normalizeBadgeAwardNotices(
+                  (json as { newlyAwardedBadges?: unknown }).newlyAwardedBadges,
+                )
+              : [];
+
+          if (badges.length > 0) {
+            announceBadges(badges);
+          }
+        })
+        .catch(() => {});
+    };
+
     const reportPlaythroughComplete = (pct: number) => {
       const recordingId = pRef.current.current?.recordingId ?? "";
       const playbackId = telemetrySessionIdRef.current ?? "";
@@ -759,19 +800,14 @@ export default function AudioEngine() {
 
       telemetryPlaySentRef.current.add(sentKey);
 
-      fetch("/api/playback/telemetry", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          event: "play",
-          recordingId,
-          playbackId,
-          milestoneKey: "play",
-          progressMs,
-          durationMs,
-        }),
-        keepalive: true,
-      }).catch(() => {});
+      sendPlaybackTelemetry({
+        event: "play",
+        recordingId,
+        playbackId,
+        milestoneKey: "play",
+        progressMs,
+        durationMs,
+      });
     };
 
     const reportTelemetryComplete = (params: {
@@ -787,19 +823,14 @@ export default function AudioEngine() {
 
       telemetryCompleteSentRef.current.add(milestoneKey);
 
-      fetch("/api/playback/telemetry", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          event: "complete",
-          recordingId,
-          playbackId,
-          milestoneKey: "complete",
-          progressMs,
-          durationMs,
-        }),
-        keepalive: true,
-      }).catch(() => {});
+      sendPlaybackTelemetry({
+        event: "complete",
+        recordingId,
+        playbackId,
+        milestoneKey: "complete",
+        progressMs,
+        durationMs,
+      });
     };
 
     const reportTelemetryProgress = (params: {
@@ -821,20 +852,15 @@ export default function AudioEngine() {
 
       telemetryProgressSentRef.current.add(milestoneKey);
 
-      fetch("/api/playback/telemetry", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          event: "progress",
-          recordingId,
-          playbackId,
-          milestoneKey: String(milestoneMs),
-          listenedMs: TELEMETRY_PROGRESS_STEP_MS,
-          progressMs,
-          durationMs,
-        }),
-        keepalive: true,
-      }).catch(() => {});
+      sendPlaybackTelemetry({
+        event: "progress",
+        recordingId,
+        playbackId,
+        milestoneKey: String(milestoneMs),
+        listenedMs: TELEMETRY_PROGRESS_STEP_MS,
+        progressMs,
+        durationMs,
+      });
     };
 
     const onTime = () => {
@@ -971,7 +997,7 @@ export default function AudioEngine() {
       a.removeEventListener("canplaythrough", clearBuffering);
       a.removeEventListener("ended", onEnded);
     };
-  }, [hardStopAndDetach]);
+  }, [hardStopAndDetach, announceBadges]);
 
   /* ---------------- Seek: PlayerState -> media element ---------------- */
 
