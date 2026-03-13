@@ -456,26 +456,6 @@ export default function BadgeCabinet(props: Props) {
         hadReleaseRaf: unlockReleaseRafRef.current !== null,
         hadReleasePaintRaf: unlockReleasePaintRafRef.current !== null,
       });
-
-      if (unlockReleaseTimeoutRef.current !== null) {
-        window.clearTimeout(unlockReleaseTimeoutRef.current);
-        unlockReleaseTimeoutRef.current = null;
-      }
-
-      if (unlockCleanupTimeoutRef.current !== null) {
-        window.clearTimeout(unlockCleanupTimeoutRef.current);
-        unlockCleanupTimeoutRef.current = null;
-      }
-
-      if (unlockReleaseRafRef.current !== null) {
-        window.cancelAnimationFrame(unlockReleaseRafRef.current);
-        unlockReleaseRafRef.current = null;
-      }
-
-      if (unlockReleasePaintRafRef.current !== null) {
-        window.cancelAnimationFrame(unlockReleasePaintRafRef.current);
-        unlockReleasePaintRafRef.current = null;
-      }
     };
   }, [
     items,
