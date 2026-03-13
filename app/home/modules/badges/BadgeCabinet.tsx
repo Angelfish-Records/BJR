@@ -76,7 +76,7 @@ export default function BadgeCabinet(props: Props) {
 
   return (
     <>
-      <style jsx>{`
+      <style jsx global>{`
         :global(:root) {
           --portal-badge-columns-collapsed: 8;
           --portal-badge-columns-expanded: 5;
@@ -435,8 +435,8 @@ export default function BadgeCabinet(props: Props) {
         }
 
         .portal-member-badge-unlock-ring {
-          animation: portalBadgeNewUnlockRing 1200ms cubic-bezier(0.22, 1, 0.36, 1)
-            2;
+          animation: portalBadgeNewUnlockRing 1200ms
+            cubic-bezier(0.22, 1, 0.36, 1) 2;
         }
 
         .portal-member-badge-meta {

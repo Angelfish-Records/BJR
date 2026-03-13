@@ -133,7 +133,7 @@ export default function PortalMemberPanel(props: Props) {
               muted: !favouriteTrack,
             },
             {
-              label: "Exegesis contributions",
+              label: "Exegesis posts",
               value: contributionCount ?? "—",
               muted: contributionCount == null,
             },
