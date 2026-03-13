@@ -93,6 +93,7 @@ export default function BadgeCabinet(props: Props) {
   >("idle");
   const [displayItemsOverride, setDisplayItemsOverride] =
     React.useState<ReturnType<typeof buildBadgeCabinetItems> | null>(null);
+  const [isFlipSuspended, setIsFlipSuspended] = React.useState(false);
   const [flipDurationMs, setFlipDurationMs] = React.useState(
     DEFAULT_FLIP_DURATION_MS,
   );
@@ -156,7 +157,7 @@ export default function BadgeCabinet(props: Props) {
 
   const { registerItemRef } = useFlipGridAnimation({
     keys: itemKeys,
-    disabled: prefersReducedMotion,
+    disabled: prefersReducedMotion || isFlipSuspended,
     durationMs: flipDurationMs,
     layoutDependency: flipLayoutDependency,
   });
@@ -270,6 +271,7 @@ export default function BadgeCabinet(props: Props) {
     setNewlyUnlockedKeys(new Set());
     setUnlockPhase("idle");
     setDisplayItemsOverride(null);
+    setIsFlipSuspended(false);
     setFlipDurationMs(DEFAULT_FLIP_DURATION_MS);
     setFlipLayoutNonce((current) => current + 1);
   }, []);
@@ -307,6 +309,7 @@ export default function BadgeCabinet(props: Props) {
       .map((item) => `New badge unlocked: ${item.label}`)
       .join(". ");
 
+    setIsFlipSuspended(true);
     setDisplayItemsOverride(
       buildStagedUnlockItems(items, previousStableItems, freshUnlockKeySet),
     );
@@ -320,6 +323,7 @@ export default function BadgeCabinet(props: Props) {
       setUnlockPhase("move");
       setPendingUnlockKeys(new Set());
       setDisplayItemsOverride(null);
+      setIsFlipSuspended(false);
       setFlipLayoutNonce((current) => current + 1);
       unlockReleaseTimeoutRef.current = null;
     }, UNLOCK_REVEAL_MS);
@@ -329,6 +333,7 @@ export default function BadgeCabinet(props: Props) {
         setNewlyUnlockedKeys(new Set());
         setUnlockPhase("idle");
         setDisplayItemsOverride(null);
+        setIsFlipSuspended(false);
         setFlipDurationMs(DEFAULT_FLIP_DURATION_MS);
         setFlipLayoutNonce((current) => current + 1);
         unlockCleanupTimeoutRef.current = null;
