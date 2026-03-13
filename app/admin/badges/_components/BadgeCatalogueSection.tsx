@@ -142,10 +142,7 @@ export function BadgeCatalogueSection(props: Props) {
                       position: "relative",
                       width: 72,
                       height: 72,
-                      borderRadius: 999,
                       overflow: "hidden",
-                      background: "rgba(255,255,255,0.04)",
-                      border: "1px solid rgba(255,255,255,0.08)",
                       boxShadow:
                         "inset 0 1px 0 rgba(255,255,255,0.05), 0 6px 18px rgba(0,0,0,0.18)",
                     }}
