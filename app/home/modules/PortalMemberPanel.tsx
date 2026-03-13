@@ -114,18 +114,34 @@ function BadgeRow(props: { badges: PortalMemberSummary["badges"] }) {
     <>
       <style jsx>{`
         :global(:root) {
-          --portal-badge-size: 52px;
+          --portal-badge-columns-collapsed: 8;
+          --portal-badge-columns-expanded: 5;
+          --portal-badge-gap-collapsed: 14px;
+          --portal-badge-gap-expanded: 18px;
+          --portal-badge-art-scale-collapsed: 0.82;
+          --portal-badge-art-scale-expanded: 1;
+          --portal-badge-caption-offset: -3px;
+          --portal-badge-caption-row-gap-collapsed: 10px;
+          --portal-badge-caption-row-gap-expanded: 16px;
         }
 
         @media (max-width: 640px) {
           :global(:root) {
-            --portal-badge-size: 36px;
+            --portal-badge-gap-collapsed: 10px;
+            --portal-badge-gap-expanded: 12px;
+            --portal-badge-art-scale-collapsed: 0.84;
+            --portal-badge-caption-row-gap-collapsed: 8px;
+            --portal-badge-caption-row-gap-expanded: 12px;
           }
         }
 
         @media (max-width: 420px) {
           :global(:root) {
-            --portal-badge-size: 30px;
+            --portal-badge-gap-collapsed: 8px;
+            --portal-badge-gap-expanded: 10px;
+            --portal-badge-art-scale-collapsed: 0.86;
+            --portal-badge-caption-row-gap-collapsed: 6px;
+            --portal-badge-caption-row-gap-expanded: 10px;
           }
         }
 
@@ -291,6 +307,63 @@ function BadgeRow(props: { badges: PortalMemberSummary["badges"] }) {
           }
         }
 
+        .portal-member-badge-grid {
+          display: grid;
+          width: 100%;
+          min-width: 0;
+          grid-template-columns: repeat(
+            var(--portal-badge-columns-collapsed),
+            minmax(0, 1fr)
+          );
+          column-gap: var(--portal-badge-gap-collapsed);
+          row-gap: var(--portal-badge-caption-row-gap-collapsed);
+          align-items: start;
+          transition:
+            grid-template-columns 260ms cubic-bezier(0.22, 1, 0.36, 1),
+            column-gap 220ms ease,
+            row-gap 220ms ease;
+        }
+
+        .portal-member-badge-grid.portal-member-badges--expanded {
+          grid-template-columns: repeat(
+            var(--portal-badge-columns-expanded),
+            minmax(0, 1fr)
+          );
+          column-gap: var(--portal-badge-gap-expanded);
+          row-gap: var(--portal-badge-caption-row-gap-expanded);
+        }
+
+        .portal-member-badge-shell {
+          display: grid;
+          justify-items: center;
+          align-self: start;
+          gap: 0;
+          min-width: 0;
+          width: 100%;
+        }
+
+        .portal-member-badge-visual {
+          position: relative;
+          width: 100%;
+          aspect-ratio: 1 / 1;
+          overflow: visible;
+          outline: none;
+        }
+
+        .portal-member-badge-visual-inner {
+          position: absolute;
+          inset: 0;
+          transform: scale(var(--portal-badge-art-scale-collapsed));
+          transform-origin: center center;
+          transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+          will-change: transform;
+        }
+
+        .portal-member-badge-grid.portal-member-badges--expanded
+          .portal-member-badge-visual-inner {
+          transform: scale(var(--portal-badge-art-scale-expanded));
+        }
+
         .portal-member-badge-core--locked {
           animation: portalBadgeLockedPulse 2400ms ease-in-out infinite;
           transform-origin: center;
@@ -364,25 +437,22 @@ function BadgeRow(props: { badges: PortalMemberSummary["badges"] }) {
           opacity: 0;
         }
 
-        .portal-member-badge-shell {
-          display: grid;
-          justify-items: center;
-          gap: 0;
-          min-width: 0;
-          width: var(--portal-badge-size);
-          flex: 0 0 auto;
-          transition: width 260ms cubic-bezier(0.22, 1, 0.36, 1);
+        .portal-member-badge-wrap:hover .portal-member-badge-burst-a,
+        .portal-member-badge-wrap:focus-within .portal-member-badge-burst-a {
+          animation: portalBadgeEmberBurstA 820ms
+            cubic-bezier(0.2, 0.74, 0.28, 1) infinite 40ms;
         }
 
-        .portal-member-badges--expanded .portal-member-badge-shell {
-          width: calc(var(--portal-badge-size) * 1.5);
+        .portal-member-badge-wrap:hover .portal-member-badge-burst-b,
+        .portal-member-badge-wrap:focus-within .portal-member-badge-burst-b {
+          animation: portalBadgeEmberBurstB 900ms
+            cubic-bezier(0.18, 0.76, 0.3, 1) infinite 180ms;
         }
 
-        .portal-member-badge-visual {
-          width: 100%;
-          max-width: 100%;
-          transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
-          transform-origin: center top;
+        .portal-member-badge-wrap:hover .portal-member-badge-burst-c,
+        .portal-member-badge-wrap:focus-within .portal-member-badge-burst-c {
+          animation: portalBadgeEmberBurstC 860ms
+            cubic-bezier(0.22, 0.72, 0.3, 1) infinite 300ms;
         }
 
         .portal-member-badge-meta {
@@ -403,7 +473,8 @@ function BadgeRow(props: { badges: PortalMemberSummary["badges"] }) {
           text-align: center;
         }
 
-        .portal-member-badges--expanded .portal-member-badge-meta {
+        .portal-member-badge-grid.portal-member-badges--expanded
+          .portal-member-badge-meta {
           grid-template-rows: 1fr;
           margin-top: 10px;
           opacity: 1;
@@ -416,35 +487,18 @@ function BadgeRow(props: { badges: PortalMemberSummary["badges"] }) {
           overflow: hidden;
           min-height: 0;
           opacity: 0;
-          transform: translateY(-3px);
+          transform: translateY(var(--portal-badge-caption-offset));
           transition:
             opacity 180ms ease,
             transform 220ms ease;
           transition-delay: 0ms, 0ms;
         }
 
-        .portal-member-badges--expanded .portal-member-badge-meta-inner {
+        .portal-member-badge-grid.portal-member-badges--expanded
+          .portal-member-badge-meta-inner {
           opacity: 1;
           transform: translateY(0);
           transition-delay: 140ms, 140ms;
-        }
-
-        .portal-member-badge-wrap:hover .portal-member-badge-burst-a,
-        .portal-member-badge-wrap:focus-within .portal-member-badge-burst-a {
-          animation: portalBadgeEmberBurstA 820ms
-            cubic-bezier(0.2, 0.74, 0.28, 1) infinite 40ms;
-        }
-
-        .portal-member-badge-wrap:hover .portal-member-badge-burst-b,
-        .portal-member-badge-wrap:focus-within .portal-member-badge-burst-b {
-          animation: portalBadgeEmberBurstB 900ms
-            cubic-bezier(0.18, 0.76, 0.3, 1) infinite 180ms;
-        }
-
-        .portal-member-badge-wrap:hover .portal-member-badge-burst-c,
-        .portal-member-badge-wrap:focus-within .portal-member-badge-burst-c {
-          animation: portalBadgeEmberBurstC 860ms
-            cubic-bezier(0.22, 0.72, 0.3, 1) infinite 300ms;
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -463,8 +517,8 @@ function BadgeRow(props: { badges: PortalMemberSummary["badges"] }) {
             opacity: 0 !important;
           }
 
-          .portal-member-badge-shell,
-          .portal-member-badge-visual,
+          .portal-member-badge-grid,
+          .portal-member-badge-visual-inner,
           .portal-member-badge-meta,
           .portal-member-badge-meta-inner {
             transition: none !important;
@@ -522,7 +576,7 @@ function BadgeRow(props: { badges: PortalMemberSummary["badges"] }) {
               display: "inline-block",
               fontSize: 12,
               lineHeight: 1,
-              opacity: 0.72,
+              opacity: 0.5,
               transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
               transformOrigin: "50% 50%",
               transition: "transform 220ms ease, opacity 180ms ease",
@@ -533,15 +587,9 @@ function BadgeRow(props: { badges: PortalMemberSummary["badges"] }) {
         </button>
 
         <div
-          className={expanded ? "portal-member-badges--expanded" : undefined}
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: expanded ? 18 : 14,
-            justifyContent: "flex-start",
-            alignItems: "flex-start",
-            transition: "gap 220ms ease",
-          }}
+          className={`portal-member-badge-grid${
+            expanded ? " portal-member-badges--expanded" : ""
+          }`}
         >
           {badges.map((badge) => {
             const unlockedAt = badge.unlocked
@@ -569,216 +617,211 @@ function BadgeRow(props: { badges: PortalMemberSummary["badges"] }) {
                   title={badgeTitle}
                   aria-label={badgeTitle}
                   className="portal-member-badge-visual"
-                  style={{
-                    position: "relative",
-                    width: "100%",
-                    aspectRatio: "1 / 1",
-                    overflow: "visible",
-                    outline: "none",
-                  }}
                 >
-                  <div
-                    className={
-                      badge.unlocked
-                        ? undefined
-                        : "portal-member-badge-core--locked"
-                    }
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                    }}
-                  >
-                    {badge.unlocked ? (
-                      <>
-                        <div
-                          aria-hidden="true"
-                          className="portal-member-badge-idle-glow"
-                          style={{
-                            position: "absolute",
-                            inset: -4,
-                            borderRadius: "50%",
-                            background:
-                              "radial-gradient(circle, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 34%, rgba(255,255,255,0.00) 72%)",
-                            filter: "blur(4px)",
-                            pointerEvents: "none",
-                            transition:
-                              "opacity 180ms ease, transform 180ms ease",
-                          }}
-                        />
-
-                        <div
-                          aria-hidden="true"
-                          className="portal-member-badge-embers"
-                          style={{
-                            position: "absolute",
-                            left: "50%",
-                            bottom: "calc(var(--portal-badge-size) * -0.04)",
-                            width: "calc(var(--portal-badge-size) * 0.65)",
-                            height: "calc(var(--portal-badge-size) * 0.8)",
-                            transform: "translateX(-50%)",
-                            overflow: "visible",
-                          }}
-                        >
+                  <div className="portal-member-badge-visual-inner">
+                    <div
+                      className={
+                        badge.unlocked
+                          ? undefined
+                          : "portal-member-badge-core--locked"
+                      }
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                      }}
+                    >
+                      {badge.unlocked ? (
+                        <>
                           <div
-                            className="portal-member-badge-spark-a"
+                            aria-hidden="true"
+                            className="portal-member-badge-idle-glow"
                             style={{
                               position: "absolute",
-                              left: 6,
-                              bottom: 2,
-                              width: "calc(var(--portal-badge-size) * 0.06)",
-                              height: "calc(var(--portal-badge-size) * 0.06)",
+                              inset: -4,
                               borderRadius: "50%",
-                              background: "rgba(255,255,255,0.82)",
-                              boxShadow: "0 0 8px rgba(255,255,255,0.18)",
+                              background:
+                                "radial-gradient(circle, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 34%, rgba(255,255,255,0.00) 72%)",
+                              filter: "blur(4px)",
+                              pointerEvents: "none",
+                              transition:
+                                "opacity 180ms ease, transform 180ms ease",
                             }}
                           />
 
                           <div
-                            className="portal-member-badge-spark-b"
+                            aria-hidden="true"
+                            className="portal-member-badge-embers"
                             style={{
                               position: "absolute",
-                              left: 16,
-                              bottom: 0,
-                              width: "calc(var(--portal-badge-size) * 0.045)",
-                              height: "calc(var(--portal-badge-size) * 0.045)",
-                              borderRadius: "50%",
-                              background: "rgba(255,255,255,0.76)",
-                              boxShadow: "0 0 7px rgba(255,255,255,0.16)",
+                              left: "50%",
+                              bottom: "-4%",
+                              width: "65%",
+                              height: "80%",
+                              transform: "translateX(-50%)",
+                              overflow: "visible",
                             }}
-                          />
+                          >
+                            <div
+                              className="portal-member-badge-spark-a"
+                              style={{
+                                position: "absolute",
+                                left: "18%",
+                                bottom: "4%",
+                                width: "6%",
+                                height: "6%",
+                                borderRadius: "50%",
+                                background: "rgba(255,255,255,0.82)",
+                                boxShadow: "0 0 8px rgba(255,255,255,0.18)",
+                              }}
+                            />
 
-                          <div
-                            className="portal-member-badge-spark-c"
-                            style={{
-                              position: "absolute",
-                              left: 24,
-                              bottom: 3,
-                              width: "calc(var(--portal-badge-size) * 0.045)",
-                              height: "calc(var(--portal-badge-size) * 0.045)",
-                              borderRadius: "50%",
-                              background: "rgba(255,255,255,0.72)",
-                              boxShadow: "0 0 6px rgba(255,255,255,0.14)",
-                            }}
-                          />
+                            <div
+                              className="portal-member-badge-spark-b"
+                              style={{
+                                position: "absolute",
+                                left: "49%",
+                                bottom: "0%",
+                                width: "4.5%",
+                                height: "4.5%",
+                                borderRadius: "50%",
+                                background: "rgba(255,255,255,0.76)",
+                                boxShadow: "0 0 7px rgba(255,255,255,0.16)",
+                              }}
+                            />
 
-                          <div
-                            className="portal-member-badge-burst-a"
-                            style={{
-                              position: "absolute",
-                              left: 10,
-                              bottom: 1,
-                              width: 2,
-                              height: 2,
-                              borderRadius: "50%",
-                              background: "rgba(255,255,255,0.88)",
-                              boxShadow: "0 0 10px rgba(255,255,255,0.22)",
-                            }}
-                          />
+                            <div
+                              className="portal-member-badge-spark-c"
+                              style={{
+                                position: "absolute",
+                                left: "74%",
+                                bottom: "6%",
+                                width: "4.5%",
+                                height: "4.5%",
+                                borderRadius: "50%",
+                                background: "rgba(255,255,255,0.72)",
+                                boxShadow: "0 0 6px rgba(255,255,255,0.14)",
+                              }}
+                            />
 
-                          <div
-                            className="portal-member-badge-burst-b"
-                            style={{
-                              position: "absolute",
-                              left: 19,
-                              bottom: 2,
-                              width: 2,
-                              height: 2,
-                              borderRadius: "50%",
-                              background: "rgba(255,255,255,0.82)",
-                              boxShadow: "0 0 8px rgba(255,255,255,0.20)",
-                            }}
-                          />
+                            <div
+                              className="portal-member-badge-burst-a"
+                              style={{
+                                position: "absolute",
+                                left: "31%",
+                                bottom: "2%",
+                                width: "3.8%",
+                                height: "3.8%",
+                                borderRadius: "50%",
+                                background: "rgba(255,255,255,0.88)",
+                                boxShadow: "0 0 10px rgba(255,255,255,0.22)",
+                              }}
+                            />
 
-                          <div
-                            className="portal-member-badge-burst-c"
-                            style={{
-                              position: "absolute",
-                              left: 27,
-                              bottom: 1,
-                              width: 1.5,
-                              height: 1.5,
-                              borderRadius: "50%",
-                              background: "rgba(255,255,255,0.78)",
-                              boxShadow: "0 0 7px rgba(255,255,255,0.18)",
-                            }}
-                          />
-                        </div>
-                      </>
-                    ) : null}
+                            <div
+                              className="portal-member-badge-burst-b"
+                              style={{
+                                position: "absolute",
+                                left: "58%",
+                                bottom: "4%",
+                                width: "3.8%",
+                                height: "3.8%",
+                                borderRadius: "50%",
+                                background: "rgba(255,255,255,0.82)",
+                                boxShadow: "0 0 8px rgba(255,255,255,0.20)",
+                              }}
+                            />
 
-                    {badge.imageUrl ? (
-                      <>
-                        {!badge.unlocked ? (
+                            <div
+                              className="portal-member-badge-burst-c"
+                              style={{
+                                position: "absolute",
+                                left: "81%",
+                                bottom: "2%",
+                                width: "2.8%",
+                                height: "2.8%",
+                                borderRadius: "50%",
+                                background: "rgba(255,255,255,0.78)",
+                                boxShadow: "0 0 7px rgba(255,255,255,0.18)",
+                              }}
+                            />
+                          </div>
+                        </>
+                      ) : null}
+
+                      {badge.imageUrl ? (
+                        <>
+                          {!badge.unlocked ? (
+                            <Image
+                              src={badge.imageUrl}
+                              alt=""
+                              aria-hidden="true"
+                              fill
+                              sizes="(max-width: 420px) 22vw, (max-width: 640px) 16vw, 96px"
+                              style={{
+                                objectFit: "contain",
+                                display: "block",
+                                opacity: 0.28,
+                                filter:
+                                  "grayscale(1) saturate(0) brightness(0.95) blur(2px)",
+                                transform: "scale(1.04)",
+                                pointerEvents: "none",
+                              }}
+                            />
+                          ) : null}
+
                           <Image
                             src={badge.imageUrl}
-                            alt=""
-                            aria-hidden="true"
+                            alt={badge.label}
                             fill
-                            sizes="52px"
+                            sizes="(max-width: 420px) 22vw, (max-width: 640px) 16vw, 96px"
                             style={{
                               objectFit: "contain",
                               display: "block",
-                              opacity: 0.28,
-                              filter:
-                                "grayscale(1) saturate(0) brightness(0.95) blur(2px)",
-                              transform: "scale(1.04)",
-                              pointerEvents: "none",
+                              filter: badge.unlocked
+                                ? "drop-shadow(0 0 4px rgba(255,255,255,0.08))"
+                                : "grayscale(1) saturate(0) brightness(0.60) contrast(0.85) blur(0.2px)",
+                              opacity: badge.unlocked ? 1 : 0.35,
                             }}
                           />
-                        ) : null}
-
-                        <Image
-                          src={badge.imageUrl}
-                          alt={badge.label}
-                          fill
-                          sizes="52px"
+                        </>
+                      ) : (
+                        <div
+                          aria-hidden="true"
                           style={{
-                            objectFit: "contain",
-                            display: "block",
+                            position: "absolute",
+                            inset: 0,
+                            display: "grid",
+                            placeItems: "center",
+                            fontSize: 16,
+                            opacity: badge.unlocked ? 0.82 : 0.34,
                             filter: badge.unlocked
-                              ? "drop-shadow(0 0 4px rgba(255,255,255,0.08))"
-                              : "grayscale(1) saturate(0) brightness(0.60) contrast(0.85) blur(0.2px)",
-                            opacity: badge.unlocked ? 1 : 0.35,
+                              ? "drop-shadow(0 0 6px rgba(255,255,255,0.10))"
+                              : "grayscale(1) saturate(0) brightness(0.8)",
+                          }}
+                        >
+                          ✦
+                        </div>
+                      )}
+
+                      {badge.unlocked ? (
+                        <div
+                          aria-hidden="true"
+                          style={{
+                            position: "absolute",
+                            left: "50%",
+                            top: "50%",
+                            width: "46%",
+                            height: "46%",
+                            transform: "translate(-50%, -50%)",
+                            borderRadius: "50%",
+                            background:
+                              "radial-gradient(circle, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.035) 42%, rgba(255,255,255,0.00) 76%)",
+                            filter: "blur(3px)",
+                            pointerEvents: "none",
                           }}
                         />
-                      </>
-                    ) : (
-                      <div
-                        aria-hidden="true"
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          display: "grid",
-                          placeItems: "center",
-                          fontSize: 16,
-                          opacity: badge.unlocked ? 0.82 : 0.34,
-                          filter: badge.unlocked
-                            ? "drop-shadow(0 0 6px rgba(255,255,255,0.10))"
-                            : "grayscale(1) saturate(0) brightness(0.8)",
-                        }}
-                      >
-                        ✦
-                      </div>
-                    )}
-
-                    {badge.unlocked ? (
-                      <div
-                        aria-hidden="true"
-                        style={{
-                          position: "absolute",
-                          left: "50%",
-                          top: "50%",
-                          width: 40,
-                          height: 40,
-                          transform: "translate(-50%, -50%)",
-                          borderRadius: "50%",
-                          background:
-                            "radial-gradient(circle, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.035) 42%, rgba(255,255,255,0.00) 76%)",
-                          filter: "blur(3px)",
-                          pointerEvents: "none",
-                        }}
-                      />
-                    ) : null}
+                      ) : null}
+                    </div>
                   </div>
                 </div>
 
@@ -789,7 +832,7 @@ function BadgeRow(props: { badges: PortalMemberSummary["badges"] }) {
                   <div className="portal-member-badge-meta-inner">
                     <div
                       style={{
-                        fontSize: 12,
+                        fontSize: expanded ? 13 : 12,
                         lineHeight: 1.3,
                         opacity: badge.unlocked ? 0.92 : 0.7,
                         overflowWrap: "anywhere",
