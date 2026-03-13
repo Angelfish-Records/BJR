@@ -133,15 +133,14 @@ export function useFlipGridAnimation(options: Options): {
       node.style.willChange = "transform";
 
       const handleTransitionEnd = (event: TransitionEvent) => {
+        if (event.target !== node) return;
         if (event.propertyName !== "transform") return;
         cleanup();
       };
 
       const cleanup = () => {
         node.removeEventListener("transitionend", handleTransitionEnd);
-        if (node.style.transform === "translate(0px, 0px)") {
-          node.style.transform = "";
-        }
+        node.style.transform = "";
         node.style.transition = "";
         node.style.willChange = "";
         cleanupByKeyRef.current.delete(key);
