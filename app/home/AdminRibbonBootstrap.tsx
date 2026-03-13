@@ -1,3 +1,4 @@
+// web/app/home/AdminRibbonBootstrap.tsx
 "use client";
 
 import React from "react";
