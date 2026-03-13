@@ -102,6 +102,17 @@ export default function BadgeCabinet(props: Props) {
   );
   const [flipBaselineToken, setFlipBaselineToken] = React.useState(0);
 
+  const cabinetDebugLog = React.useCallback(
+    (
+      event: string,
+      payload: Record<string, string | number | boolean | null | undefined>,
+    ) => {
+      if (!isAdminDebug) return;
+      console.log(`[cabinet] ${event}`, payload);
+    },
+    [isAdminDebug],
+  );
+
   const sourceItems = React.useMemo(
     () => buildBadgeCabinetItems(badges),
     [badges],
@@ -165,6 +176,23 @@ export default function BadgeCabinet(props: Props) {
     captureBaselineToken: flipBaselineToken,
     debugLabel: isAdminDebug ? "badge-cabinet" : null,
   });
+
+  React.useEffect(() => {
+    cabinetDebugLog("render-state", {
+      unlockPhase,
+      isFlipSuspended,
+      flipBaselineToken,
+      hasDisplayOverride: displayItemsOverride ? true : false,
+      displayLayoutToken,
+    });
+  }, [
+    cabinetDebugLog,
+    displayItemsOverride,
+    displayLayoutToken,
+    flipBaselineToken,
+    isFlipSuspended,
+    unlockPhase,
+  ]);
 
   React.useEffect(() => {
     if (typeof document === "undefined") return;
@@ -332,17 +360,41 @@ export default function BadgeCabinet(props: Props) {
       .map((item) => `New badge unlocked: ${item.label}`)
       .join(". ");
 
-    setIsFlipSuspended(true);
-    setDisplayItemsOverride(
-      buildStagedUnlockItems(items, previousStableItems, freshUnlockKeySet),
+    const stagedItems = buildStagedUnlockItems(
+      items,
+      previousStableItems,
+      freshUnlockKeySet,
     );
+
+    cabinetDebugLog("fresh-unlock", {
+      freshUnlockCount: freshUnlocks.length,
+      freshUnlockKeys: Array.from(freshUnlockKeySet).join("|"),
+      finalLayout: items.map((item) => item.key).join("|"),
+      stagedLayout: stagedItems.map((item) => item.key).join("|"),
+    });
+
+    setIsFlipSuspended(true);
+    setDisplayItemsOverride(stagedItems);
     setNewlyUnlockedKeys(freshUnlockKeySet);
     setPendingUnlockKeys(freshUnlockKeySet);
     setUnlockPhase("reveal");
     setFlipDurationMs(UNLOCK_FLIP_DURATION_MS);
     setLiveAnnouncement(liveText);
 
+    cabinetDebugLog("schedule-release", {
+      revealMs: UNLOCK_REVEAL_MS,
+      flipMs: UNLOCK_FLIP_DURATION_MS,
+      settleMs: UNLOCK_SETTLE_MS,
+    });
+
     unlockReleaseTimeoutRef.current = window.setTimeout(() => {
+      cabinetDebugLog("release-timeout-fired", {
+        unlockPhaseBefore: unlockPhase,
+        isFlipSuspendedBefore: isFlipSuspended,
+        flipBaselineTokenBefore: flipBaselineToken,
+        hasDisplayOverrideBefore: displayItemsOverride ? true : false,
+      });
+
       unlockReleaseTimeoutRef.current = null;
 
       flushSync(() => {
@@ -363,9 +415,17 @@ export default function BadgeCabinet(props: Props) {
       }
 
       unlockReleaseRafRef.current = window.requestAnimationFrame(() => {
+        cabinetDebugLog("release-raf-1", {
+          unlockPhaseNow: "move",
+        });
+
         unlockReleaseRafRef.current = null;
 
         unlockReleasePaintRafRef.current = window.requestAnimationFrame(() => {
+          cabinetDebugLog("release-raf-2-clear-override", {
+            finalLayout: items.map((item) => item.key).join("|"),
+          });
+
           unlockReleasePaintRafRef.current = null;
           setDisplayItemsOverride(null);
         });
@@ -374,6 +434,11 @@ export default function BadgeCabinet(props: Props) {
 
     unlockCleanupTimeoutRef.current = window.setTimeout(
       () => {
+        cabinetDebugLog("cleanup-timeout-fired", {
+          unlockPhaseBefore: unlockPhase,
+          hasDisplayOverrideBefore: displayItemsOverride ? true : false,
+        });
+
         setNewlyUnlockedKeys(new Set());
         setUnlockPhase("idle");
         setDisplayItemsOverride(null);
@@ -385,6 +450,13 @@ export default function BadgeCabinet(props: Props) {
     );
 
     return () => {
+      cabinetDebugLog("layout-effect-cleanup", {
+        hadReleaseTimeout: unlockReleaseTimeoutRef.current !== null,
+        hadCleanupTimeout: unlockCleanupTimeoutRef.current !== null,
+        hadReleaseRaf: unlockReleaseRafRef.current !== null,
+        hadReleasePaintRaf: unlockReleasePaintRafRef.current !== null,
+      });
+
       if (unlockReleaseTimeoutRef.current !== null) {
         window.clearTimeout(unlockReleaseTimeoutRef.current);
         unlockReleaseTimeoutRef.current = null;
@@ -405,7 +477,15 @@ export default function BadgeCabinet(props: Props) {
         unlockReleasePaintRafRef.current = null;
       }
     };
-  }, [items, previousStableItems]);
+  }, [
+    items,
+    previousStableItems,
+    cabinetDebugLog,
+    displayItemsOverride,
+    flipBaselineToken,
+    isFlipSuspended,
+    unlockPhase,
+  ]);
 
   if (items.length === 0) return null;
 
