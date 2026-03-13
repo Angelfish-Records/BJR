@@ -13,8 +13,10 @@ type Props = {
   badges: MemberDashboardBadge[];
 };
 
-const NEWLY_UNLOCKED_HIGHLIGHT_MS = 3200;
 const DEBUG_REPLAY_RESET_MS = 48;
+const UNLOCK_PRE_MOVE_MS = 960;
+const DEFAULT_FLIP_DURATION_MS = 360;
+const UNLOCK_FLIP_DURATION_MS = 720;
 
 function pickRandomItem<T>(items: T[]): T | null {
   if (items.length === 0) return null;
@@ -39,6 +41,17 @@ export default function BadgeCabinet(props: Props) {
   const prefersReducedMotion = usePrefersReducedMotion();
 
   const debugReplayTimeoutRef = React.useRef<number | null>(null);
+  const unlockReleaseTimeoutRef = React.useRef<number | null>(null);
+  const unlockCleanupTimeoutRef = React.useRef<number | null>(null);
+  const [previousStableItems, setPreviousStableItems] = React.useState<
+    ReturnType<typeof buildBadgeCabinetItems>
+  >([]);
+  const [pendingUnlockKeys, setPendingUnlockKeys] = React.useState<Set<string>>(
+    () => new Set(),
+  );
+  const [flipDurationMs, setFlipDurationMs] = React.useState(
+    DEFAULT_FLIP_DURATION_MS,
+  );
 
   const sourceItems = React.useMemo(
     () => buildBadgeCabinetItems(badges),
@@ -69,13 +82,55 @@ export default function BadgeCabinet(props: Props) {
     [effectiveBadges],
   );
 
-  const itemKeys = React.useMemo(() => items.map((item) => item.key), [items]);
+  const displayItems = React.useMemo(() => {
+    if (pendingUnlockKeys.size === 0) return items;
+
+    const previousByKey = new Map(
+      previousStableItems.map((item) => [item.key, item]),
+    );
+
+    const stagedItems = items.map((item) => {
+      if (!pendingUnlockKeys.has(item.key)) return item;
+
+      const previousItem = previousByKey.get(item.key);
+      if (!previousItem) return item;
+
+      return {
+        ...item,
+        partition: previousItem.partition,
+      };
+    });
+
+    stagedItems.sort((a, b) => {
+      if (a.partition !== b.partition) {
+        return a.partition === "unlocked" ? -1 : 1;
+      }
+
+      if (a.editorialOrder !== b.editorialOrder) {
+        return a.editorialOrder - b.editorialOrder;
+      }
+
+      return a.label.localeCompare(b.label);
+    });
+
+    return stagedItems;
+  }, [items, pendingUnlockKeys, previousStableItems]);
+
+  const itemKeys = React.useMemo(
+    () => displayItems.map((item) => item.key),
+    [displayItems],
+  );
+
+  const displayLayoutToken = React.useMemo(
+    () => displayItems.map((item) => item.key).join("|"),
+    [displayItems],
+  );
 
   const { registerItemRef } = useFlipGridAnimation({
     keys: itemKeys,
     disabled: prefersReducedMotion,
-    durationMs: 360,
-    layoutDependency: `${expanded}:${debugUnlockedKey ?? ""}`,
+    durationMs: flipDurationMs,
+    layoutDependency: `${expanded}:${displayLayoutToken}:${debugUnlockedKey ?? ""}`,
   });
 
   const previousUnlockedKeysRef = React.useRef<Set<string> | null>(null);
@@ -101,18 +156,28 @@ export default function BadgeCabinet(props: Props) {
   }, []);
 
   React.useEffect(() => {
-    if (debugReplayTimeoutRef.current !== null) {
-      window.clearTimeout(debugReplayTimeoutRef.current);
-      debugReplayTimeoutRef.current = null;
-    }
-
     return () => {
       if (debugReplayTimeoutRef.current !== null) {
         window.clearTimeout(debugReplayTimeoutRef.current);
         debugReplayTimeoutRef.current = null;
       }
+
+      if (unlockReleaseTimeoutRef.current !== null) {
+        window.clearTimeout(unlockReleaseTimeoutRef.current);
+        unlockReleaseTimeoutRef.current = null;
+      }
+
+      if (unlockCleanupTimeoutRef.current !== null) {
+        window.clearTimeout(unlockCleanupTimeoutRef.current);
+        unlockCleanupTimeoutRef.current = null;
+      }
     };
   }, []);
+
+  React.useEffect(() => {
+    if (pendingUnlockKeys.size > 0) return;
+    setPreviousStableItems(items);
+  }, [items, pendingUnlockKeys]);
 
   React.useEffect(() => {
     if (debugCandidateItems.length === 0) {
@@ -186,20 +251,50 @@ export default function BadgeCabinet(props: Props) {
       return;
     }
 
+    if (unlockReleaseTimeoutRef.current !== null) {
+      window.clearTimeout(unlockReleaseTimeoutRef.current);
+      unlockReleaseTimeoutRef.current = null;
+    }
+
+    if (unlockCleanupTimeoutRef.current !== null) {
+      window.clearTimeout(unlockCleanupTimeoutRef.current);
+      unlockCleanupTimeoutRef.current = null;
+    }
+
     const freshUnlockKeySet = new Set(freshUnlocks.map((item) => item.key));
     const liveText = freshUnlocks
       .map((item) => `New badge unlocked: ${item.label}`)
       .join(". ");
 
     setNewlyUnlockedKeys(freshUnlockKeySet);
+    setPendingUnlockKeys(freshUnlockKeySet);
+    setFlipDurationMs(UNLOCK_FLIP_DURATION_MS);
     setLiveAnnouncement(liveText);
 
-    const timeoutId = window.setTimeout(() => {
-      setNewlyUnlockedKeys(new Set());
-    }, NEWLY_UNLOCKED_HIGHLIGHT_MS);
+    unlockReleaseTimeoutRef.current = window.setTimeout(() => {
+      setPendingUnlockKeys(new Set());
+      unlockReleaseTimeoutRef.current = null;
+    }, UNLOCK_PRE_MOVE_MS);
+
+    unlockCleanupTimeoutRef.current = window.setTimeout(
+      () => {
+        setNewlyUnlockedKeys(new Set());
+        setFlipDurationMs(DEFAULT_FLIP_DURATION_MS);
+        unlockCleanupTimeoutRef.current = null;
+      },
+      UNLOCK_PRE_MOVE_MS + UNLOCK_FLIP_DURATION_MS + 220,
+    );
 
     return () => {
-      window.clearTimeout(timeoutId);
+      if (unlockReleaseTimeoutRef.current !== null) {
+        window.clearTimeout(unlockReleaseTimeoutRef.current);
+        unlockReleaseTimeoutRef.current = null;
+      }
+
+      if (unlockCleanupTimeoutRef.current !== null) {
+        window.clearTimeout(unlockCleanupTimeoutRef.current);
+        unlockCleanupTimeoutRef.current = null;
+      }
     };
   }, [items]);
 
@@ -402,16 +497,53 @@ export default function BadgeCabinet(props: Props) {
           }
         }
 
-        @keyframes portalBadgeNewUnlockRing {
+        @keyframes portalBadgeUnlockReveal {
           0% {
-            transform: scale(0.86);
-            opacity: 0;
-          }
-          18% {
-            opacity: 0.72;
+            clip-path: circle(0% at 50% 50%);
+            filter: saturate(0.92) brightness(1.08);
           }
           100% {
-            transform: scale(1.16);
+            clip-path: circle(76% at 50% 50%);
+            filter: saturate(1) brightness(1);
+          }
+        }
+
+        @keyframes portalBadgeUnlockSpin {
+          0% {
+            transform: rotateY(0deg) scale(0.9);
+          }
+          38% {
+            transform: rotateY(180deg) scale(1.02);
+          }
+          100% {
+            transform: rotateY(360deg) scale(1);
+          }
+        }
+
+        @keyframes portalBadgeUnlockRingA {
+          0% {
+            transform: scale(0.74);
+            opacity: 0;
+          }
+          12% {
+            opacity: 0.82;
+          }
+          100% {
+            transform: scale(1.22);
+            opacity: 0;
+          }
+        }
+
+        @keyframes portalBadgeUnlockRingB {
+          0% {
+            transform: scale(0.82);
+            opacity: 0;
+          }
+          14% {
+            opacity: 0.56;
+          }
+          100% {
+            transform: scale(1.34);
             opacity: 0;
           }
         }
@@ -454,6 +586,8 @@ export default function BadgeCabinet(props: Props) {
           aspect-ratio: 1 / 1;
           overflow: visible;
           outline: none;
+          perspective: 900px;
+          perspective-origin: 50% 50%;
         }
 
         .portal-member-badge-visual-inner {
@@ -468,6 +602,38 @@ export default function BadgeCabinet(props: Props) {
         .portal-member-badge-grid.portal-member-badges--expanded
           .portal-member-badge-visual-inner {
           transform: scale(var(--portal-badge-art-scale-expanded));
+        }
+
+        .portal-member-badge-art-spin {
+          transform-style: preserve-3d;
+          backface-visibility: hidden;
+          will-change: transform;
+        }
+
+        .portal-member-badge-art-spin--unlocking {
+          animation: portalBadgeUnlockSpin 860ms cubic-bezier(0.22, 1, 0.36, 1)
+            both;
+        }
+
+        .portal-member-badge-colour-reveal {
+          clip-path: circle(0% at 50% 50%);
+          animation: portalBadgeUnlockReveal 760ms
+            cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        .portal-member-badge-unlock-ring-a,
+        .portal-member-badge-unlock-ring-b {
+          opacity: 0;
+        }
+
+        .portal-member-badge-unlock-ring-a {
+          animation: portalBadgeUnlockRingA 760ms cubic-bezier(0.22, 1, 0.36, 1)
+            both;
+        }
+
+        .portal-member-badge-unlock-ring-b {
+          animation: portalBadgeUnlockRingB 980ms cubic-bezier(0.22, 1, 0.36, 1)
+            120ms both;
         }
 
         .portal-member-badge-core--locked {
@@ -561,11 +727,6 @@ export default function BadgeCabinet(props: Props) {
             cubic-bezier(0.22, 0.72, 0.3, 1) infinite 300ms;
         }
 
-        .portal-member-badge-unlock-ring {
-          animation: portalBadgeNewUnlockRing 1200ms
-            cubic-bezier(0.22, 1, 0.36, 1) 2;
-        }
-
         .portal-member-badge-meta {
           width: 100%;
           max-width: 100%;
@@ -633,7 +794,10 @@ export default function BadgeCabinet(props: Props) {
           .portal-member-badge-burst-a,
           .portal-member-badge-burst-b,
           .portal-member-badge-burst-c,
-          .portal-member-badge-unlock-ring {
+          .portal-member-badge-art-spin--unlocking,
+          .portal-member-badge-colour-reveal,
+          .portal-member-badge-unlock-ring-a,
+          .portal-member-badge-unlock-ring-b {
             animation: none !important;
           }
 
@@ -864,12 +1028,13 @@ export default function BadgeCabinet(props: Props) {
         </div>
 
         <BadgeCabinetGrid expanded={expanded}>
-          {items.map((item) => (
+          {displayItems.map((item) => (
             <BadgeCabinetItem
               key={item.key}
               item={item}
               expanded={expanded}
               isNewlyUnlocked={newlyUnlockedKeys.has(item.key)}
+              isUnlocking={pendingUnlockKeys.has(item.key)}
               itemRef={registerItemRef(item.key)}
             />
           ))}

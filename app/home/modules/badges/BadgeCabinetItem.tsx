@@ -9,11 +9,12 @@ type Props = {
   item: BadgeCabinetItemModel;
   expanded: boolean;
   isNewlyUnlocked: boolean;
+  isUnlocking: boolean;
   itemRef?: React.Ref<HTMLDivElement>;
 };
 
 export default function BadgeCabinetItem(props: Props) {
-  const { item, expanded, isNewlyUnlocked, itemRef } = props;
+  const { item, expanded, isNewlyUnlocked, isUnlocking, itemRef } = props;
 
   return (
     <div
@@ -35,7 +36,9 @@ export default function BadgeCabinetItem(props: Props) {
       >
         <div className="portal-member-badge-visual-inner">
           <div
-            className={item.unlocked ? undefined : "portal-member-badge-core--locked"}
+            className={
+              item.unlocked ? undefined : "portal-member-badge-core--locked"
+            }
             style={{
               position: "absolute",
               inset: 0,
@@ -158,92 +161,145 @@ export default function BadgeCabinetItem(props: Props) {
               </>
             ) : null}
 
-            {item.imageUrl ? (
-              <>
-                {!item.unlocked ? (
-                  <Image
-                    src={item.imageUrl}
-                    alt=""
-                    aria-hidden="true"
-                    fill
-                    sizes="(max-width: 420px) 22vw, (max-width: 640px) 16vw, 96px"
-                    style={{
-                      objectFit: "contain",
-                      display: "block",
-                      opacity: 0.28,
-                      filter:
-                        "grayscale(1) saturate(0) brightness(0.95) blur(2px)",
-                      transform: "scale(1.04)",
-                      pointerEvents: "none",
-                    }}
-                  />
-                ) : null}
+            <div
+              className={`portal-member-badge-art-spin${
+                isUnlocking ? " portal-member-badge-art-spin--unlocking" : ""
+              }`}
+              style={{
+                position: "absolute",
+                inset: 0,
+              }}
+            >
+              {item.imageUrl ? (
+                <>
+                  {!item.unlocked || isUnlocking ? (
+                    <Image
+                      src={item.imageUrl}
+                      alt=""
+                      aria-hidden="true"
+                      fill
+                      sizes="(max-width: 420px) 22vw, (max-width: 640px) 16vw, 96px"
+                      style={{
+                        objectFit: "contain",
+                        display: "block",
+                        opacity: isUnlocking ? 0.42 : 0.28,
+                        filter:
+                          "grayscale(1) saturate(0) brightness(0.95) blur(2px)",
+                        transform: "scale(1.04)",
+                        pointerEvents: "none",
+                      }}
+                    />
+                  ) : null}
 
-                <Image
-                  src={item.imageUrl}
-                  alt={item.label}
-                  fill
-                  sizes="(max-width: 420px) 22vw, (max-width: 640px) 16vw, 96px"
+                  {isUnlocking ? (
+                    <div
+                      aria-hidden="true"
+                      className="portal-member-badge-colour-reveal"
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        overflow: "hidden",
+                      }}
+                    >
+                      <Image
+                        src={item.imageUrl}
+                        alt=""
+                        aria-hidden="true"
+                        fill
+                        sizes="(max-width: 420px) 22vw, (max-width: 640px) 16vw, 96px"
+                        style={{
+                          objectFit: "contain",
+                          display: "block",
+                          filter: "drop-shadow(0 0 6px rgba(255,255,255,0.10))",
+                          opacity: 1,
+                          pointerEvents: "none",
+                        }}
+                      />
+                    </div>
+                  ) : null}
+
+                  {!isUnlocking ? (
+                    <Image
+                      src={item.imageUrl}
+                      alt={item.label}
+                      fill
+                      sizes="(max-width: 420px) 22vw, (max-width: 640px) 16vw, 96px"
+                      style={{
+                        objectFit: "contain",
+                        display: "block",
+                        filter: item.unlocked
+                          ? "drop-shadow(0 0 4px rgba(255,255,255,0.08))"
+                          : "grayscale(1) saturate(0) brightness(0.60) contrast(0.85) blur(0.2px)",
+                        opacity: item.unlocked ? 1 : 0.35,
+                      }}
+                    />
+                  ) : null}
+                </>
+              ) : (
+                <div
+                  aria-hidden="true"
                   style={{
-                    objectFit: "contain",
-                    display: "block",
+                    position: "absolute",
+                    inset: 0,
+                    display: "grid",
+                    placeItems: "center",
+                    fontSize: 16,
+                    opacity: item.unlocked ? 0.82 : 0.34,
                     filter: item.unlocked
-                      ? "drop-shadow(0 0 4px rgba(255,255,255,0.08))"
-                      : "grayscale(1) saturate(0) brightness(0.60) contrast(0.85) blur(0.2px)",
-                    opacity: item.unlocked ? 1 : 0.35,
+                      ? "drop-shadow(0 0 6px rgba(255,255,255,0.10))"
+                      : "grayscale(1) saturate(0) brightness(0.8)",
+                  }}
+                >
+                  ✦
+                </div>
+              )}
+
+              {item.unlocked ? (
+                <div
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    left: "50%",
+                    top: "50%",
+                    width: "46%",
+                    height: "46%",
+                    transform: "translate(-50%, -50%)",
+                    borderRadius: "50%",
+                    background:
+                      "radial-gradient(circle, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.035) 42%, rgba(255,255,255,0.00) 76%)",
+                    filter: "blur(3px)",
+                    pointerEvents: "none",
+                  }}
+                />
+              ) : null}
+            </div>
+
+            {isNewlyUnlocked ? (
+              <>
+                <div
+                  aria-hidden="true"
+                  className="portal-member-badge-unlock-ring-a"
+                  style={{
+                    position: "absolute",
+                    inset: "-8%",
+                    borderRadius: "50%",
+                    border: "1px solid rgba(255,255,255,0.30)",
+                    pointerEvents: "none",
+                  }}
+                />
+
+                <div
+                  aria-hidden="true"
+                  className="portal-member-badge-unlock-ring-b"
+                  style={{
+                    position: "absolute",
+                    inset: "-8%",
+                    borderRadius: "50%",
+                    border: "1px solid rgba(255,255,255,0.22)",
+                    pointerEvents: "none",
                   }}
                 />
               </>
-            ) : (
-              <div
-                aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  display: "grid",
-                  placeItems: "center",
-                  fontSize: 16,
-                  opacity: item.unlocked ? 0.82 : 0.34,
-                  filter: item.unlocked
-                    ? "drop-shadow(0 0 6px rgba(255,255,255,0.10))"
-                    : "grayscale(1) saturate(0) brightness(0.8)",
-                }}
-              >
-                ✦
-              </div>
-            )}
-
-            {item.unlocked ? (
-              <div
-                aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  left: "50%",
-                  top: "50%",
-                  width: "46%",
-                  height: "46%",
-                  transform: "translate(-50%, -50%)",
-                  borderRadius: "50%",
-                  background:
-                    "radial-gradient(circle, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.035) 42%, rgba(255,255,255,0.00) 76%)",
-                  filter: "blur(3px)",
-                  pointerEvents: "none",
-                }}
-              />
-            ) : null}
-
-            {isNewlyUnlocked ? (
-              <div
-                aria-hidden="true"
-                className="portal-member-badge-unlock-ring"
-                style={{
-                  position: "absolute",
-                  inset: "-8%",
-                  borderRadius: "50%",
-                  border: "1px solid rgba(255,255,255,0.30)",
-                  pointerEvents: "none",
-                }}
-              />
             ) : null}
           </div>
         </div>
