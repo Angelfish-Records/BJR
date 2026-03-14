@@ -58,9 +58,11 @@ export default function BadgeCabinetItem(props: Props) {
         <div className="portal-member-badge-meta-inner">
           <div
             style={{
-              fontSize: expanded ? 13 : 12,
-              lineHeight: 1.3,
-              opacity: item.unlocked ? 0.92 : 0.7,
+              fontSize: expanded ? 10 : 9,
+              letterSpacing: 0.3,
+              textTransform: "uppercase",
+              lineHeight: 1.2,
+              opacity: item.unlocked ? 0.7 : 0.5,
               overflowWrap: "anywhere",
             }}
           >
@@ -71,8 +73,8 @@ export default function BadgeCabinetItem(props: Props) {
             <div
               style={{
                 marginTop: 4,
-                fontSize: 11,
-                lineHeight: 1.35,
+                fontSize: 9,
+                lineHeight: 1.2,
                 opacity: 0.58,
                 overflowWrap: "anywhere",
               }}
