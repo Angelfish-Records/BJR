@@ -230,9 +230,35 @@ export default function BadgeUnlockVisual(props: Props) {
                       position: "absolute",
                       inset: 0,
                       overflow: "hidden",
+                      WebkitMaskImage: `url(${imageUrl})`,
+                      maskImage: `url(${imageUrl})`,
+                      WebkitMaskRepeat: "no-repeat",
+                      maskRepeat: "no-repeat",
+                      WebkitMaskPosition: "center",
+                      maskPosition: "center",
+                      WebkitMaskSize: "contain",
+                      maskSize: "contain",
                     }}
                   >
-                    <div className="portal-badge-colour-reveal-image-shell">
+                    <div className="portal-badge-colour-island portal-badge-colour-island--core">
+                      <Image
+                        src={imageUrl}
+                        alt=""
+                        aria-hidden="true"
+                        fill
+                        sizes="(max-width: 420px) 22vw, (max-width: 640px) 16vw, 96px"
+                        style={{
+                          objectFit: "contain",
+                          display: "block",
+                          filter:
+                            "saturate(1.05) brightness(1.02) drop-shadow(0 0 10px rgba(255,255,255,0.14))",
+                          opacity: 1,
+                          pointerEvents: "none",
+                        }}
+                      />
+                    </div>
+
+                    <div className="portal-badge-colour-island portal-badge-colour-island--a">
                       <Image
                         src={imageUrl}
                         alt=""
@@ -250,24 +276,7 @@ export default function BadgeUnlockVisual(props: Props) {
                       />
                     </div>
 
-                    <div className="portal-badge-colour-reveal-mask">
-                      <div className="portal-badge-colour-reveal-mask-core" />
-                      <div className="portal-badge-colour-reveal-mask-blob portal-badge-colour-reveal-mask-blob--a" />
-                      <div className="portal-badge-colour-reveal-mask-blob portal-badge-colour-reveal-mask-blob--b" />
-                      <div className="portal-badge-colour-reveal-mask-blob portal-badge-colour-reveal-mask-blob--c" />
-                      <div className="portal-badge-colour-reveal-mask-blob portal-badge-colour-reveal-mask-blob--d" />
-                    </div>
-                  </div>
-
-                  <div
-                    className="portal-badge-colour-reveal portal-badge-colour-reveal--secondary"
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      overflow: "hidden",
-                    }}
-                  >
-                    <div className="portal-badge-colour-reveal-image-shell portal-badge-colour-reveal-image-shell--secondary">
+                    <div className="portal-badge-colour-island portal-badge-colour-island--b">
                       <Image
                         src={imageUrl}
                         alt=""
@@ -278,18 +287,118 @@ export default function BadgeUnlockVisual(props: Props) {
                           objectFit: "contain",
                           display: "block",
                           filter:
-                            "saturate(1.16) brightness(1.05) drop-shadow(0 0 12px rgba(255,255,255,0.16))",
+                            "saturate(1.06) brightness(1.02) drop-shadow(0 0 10px rgba(255,255,255,0.14))",
+                          opacity: 1,
+                          pointerEvents: "none",
+                        }}
+                      />
+                    </div>
+
+                    <div className="portal-badge-colour-island portal-badge-colour-island--c">
+                      <Image
+                        src={imageUrl}
+                        alt=""
+                        aria-hidden="true"
+                        fill
+                        sizes="(max-width: 420px) 22vw, (max-width: 640px) 16vw, 96px"
+                        style={{
+                          objectFit: "contain",
+                          display: "block",
+                          filter:
+                            "saturate(1.06) brightness(1.02) drop-shadow(0 0 10px rgba(255,255,255,0.14))",
+                          opacity: 1,
+                          pointerEvents: "none",
+                        }}
+                      />
+                    </div>
+
+                    <div className="portal-badge-colour-island portal-badge-colour-island--d">
+                      <Image
+                        src={imageUrl}
+                        alt=""
+                        aria-hidden="true"
+                        fill
+                        sizes="(max-width: 420px) 22vw, (max-width: 640px) 16vw, 96px"
+                        style={{
+                          objectFit: "contain",
+                          display: "block",
+                          filter:
+                            "saturate(1.06) brightness(1.02) drop-shadow(0 0 10px rgba(255,255,255,0.14))",
+                          opacity: 1,
+                          pointerEvents: "none",
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div
+                    className="portal-badge-colour-reveal portal-badge-colour-reveal--secondary"
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      overflow: "hidden",
+                      WebkitMaskImage: `url(${imageUrl})`,
+                      maskImage: `url(${imageUrl})`,
+                      WebkitMaskRepeat: "no-repeat",
+                      maskRepeat: "no-repeat",
+                      WebkitMaskPosition: "center",
+                      maskPosition: "center",
+                      WebkitMaskSize: "contain",
+                      maskSize: "contain",
+                    }}
+                  >
+                    <div className="portal-badge-colour-island portal-badge-colour-island--e">
+                      <Image
+                        src={imageUrl}
+                        alt=""
+                        aria-hidden="true"
+                        fill
+                        sizes="(max-width: 420px) 22vw, (max-width: 640px) 16vw, 96px"
+                        style={{
+                          objectFit: "contain",
+                          display: "block",
+                          filter:
+                            "saturate(1.14) brightness(1.05) drop-shadow(0 0 12px rgba(255,255,255,0.16))",
                           opacity: 0.96,
                           pointerEvents: "none",
                         }}
                       />
                     </div>
 
-                    <div className="portal-badge-colour-reveal-mask portal-badge-colour-reveal-mask--secondary">
-                      <div className="portal-badge-colour-reveal-mask-core" />
-                      <div className="portal-badge-colour-reveal-mask-blob portal-badge-colour-reveal-mask-blob--e" />
-                      <div className="portal-badge-colour-reveal-mask-blob portal-badge-colour-reveal-mask-blob--f" />
-                      <div className="portal-badge-colour-reveal-mask-blob portal-badge-colour-reveal-mask-blob--g" />
+                    <div className="portal-badge-colour-island portal-badge-colour-island--f">
+                      <Image
+                        src={imageUrl}
+                        alt=""
+                        aria-hidden="true"
+                        fill
+                        sizes="(max-width: 420px) 22vw, (max-width: 640px) 16vw, 96px"
+                        style={{
+                          objectFit: "contain",
+                          display: "block",
+                          filter:
+                            "saturate(1.14) brightness(1.05) drop-shadow(0 0 12px rgba(255,255,255,0.16))",
+                          opacity: 0.96,
+                          pointerEvents: "none",
+                        }}
+                      />
+                    </div>
+
+                    <div className="portal-badge-colour-island portal-badge-colour-island--g">
+                      <Image
+                        src={imageUrl}
+                        alt=""
+                        aria-hidden="true"
+                        fill
+                        sizes="(max-width: 420px) 22vw, (max-width: 640px) 16vw, 96px"
+                        style={{
+                          objectFit: "contain",
+                          display: "block",
+                          filter:
+                            "saturate(1.14) brightness(1.05) drop-shadow(0 0 12px rgba(255,255,255,0.16))",
+                          opacity: 0.96,
+                          pointerEvents: "none",
+                        }}
+                      />
                     </div>
                   </div>
 
