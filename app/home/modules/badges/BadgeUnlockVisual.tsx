@@ -343,6 +343,22 @@ export default function BadgeUnlockVisual(props: Props) {
                   <BadgeFallbackArt unlocked={unlocked} label={label} />
                 )}
 
+                {isUnlocking ? (
+                  <div
+                    className="portal-badge-edge-profile portal-badge-edge-profile--unlocking"
+                    style={{
+                      position: "absolute",
+                      left: "50%",
+                      top: "50%",
+                      width: "4.2%",
+                      height: "86%",
+                      transform: "translate(-50%, -50%)",
+                      borderRadius: 999,
+                      pointerEvents: "none",
+                    }}
+                  />
+                ) : null}
+
                 {unlocked ? (
                   <div
                     className="portal-badge-centre-radiance"

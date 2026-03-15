@@ -64,16 +64,20 @@ function drawRevealMaskFrame(
 
   const eased = easeOutCubic(progress);
   const softened = easeInOutQuad(progress);
-  const maxRadius = size * 0.72;
-  const baseRadius = size * 0.045 + maxRadius * eased;
+  const stagedGrowth =
+    progress < 0.58
+      ? 0.68 * Math.pow(progress / 0.58, 1.45)
+      : 0.68 + 0.32 * easeOutCubic((progress - 0.58) / 0.42);
 
+  const maxRadius = size * 0.72;
+  const baseRadius = size * 0.028 + maxRadius * stagedGrowth;
   const wavePhaseA = seed * 0.0007;
   const wavePhaseB = seed * 0.0011;
   const wavePhaseC = seed * 0.0017;
   const driftPhase = softened * 2.8;
 
   context.save();
-  context.filter = "blur(7px)";
+  context.filter = "blur(4px)";
   context.fillStyle = "white";
   context.beginPath();
 
@@ -116,14 +120,14 @@ function drawRevealMaskFrame(
   const lobeDistance = baseRadius * 0.42;
 
   const lobeOffsets = [
-    { angle: -0.95 + wavePhaseA, rx: 0.24, ry: 0.18, start: 0.22 },
-    { angle: 0.5 - wavePhaseB, rx: 0.2, ry: 0.24, start: 0.34 },
-    { angle: 2.05 + wavePhaseC, rx: 0.22, ry: 0.16, start: 0.42 },
-    { angle: -2.3 + wavePhaseB, rx: 0.18, ry: 0.2, start: 0.54 },
+    { angle: -0.95 + wavePhaseA, rx: 0.2, ry: 0.14, start: 0.3 },
+    { angle: 0.5 - wavePhaseB, rx: 0.17, ry: 0.21, start: 0.42 },
+    { angle: 2.05 + wavePhaseC, rx: 0.2, ry: 0.14, start: 0.54 },
+    { angle: -2.3 + wavePhaseB, rx: 0.16, ry: 0.18, start: 0.64 },
   ] as const;
 
   context.save();
-  context.filter = "blur(6px)";
+  context.filter = "blur(3.5px)";
   context.fillStyle = "white";
 
   for (const lobe of lobeOffsets) {
@@ -144,7 +148,7 @@ function drawRevealMaskFrame(
   context.restore();
 
   context.save();
-  context.filter = "blur(3px)";
+  context.filter = "blur(1.8px)";
   context.fillStyle = "white";
 
   const coreRadius = size * (0.065 + progress * 0.045);
@@ -155,7 +159,7 @@ function drawRevealMaskFrame(
   context.restore();
 
   context.save();
-  context.filter = "blur(1.5px)";
+  context.filter = "blur(0.9px)";
   context.fillStyle = "white";
   context.beginPath();
 
@@ -212,10 +216,10 @@ export default function BuildRevealMaskCanvas(props: Props) {
   } = props;
 
   const [maskDataUrl, setMaskDataUrl] = React.useState<string>("");
-  const seed = React.useMemo(() => hashString(`${imageUrl}::${label}`), [
-    imageUrl,
-    label,
-  ]);
+  const seed = React.useMemo(
+    () => hashString(`${imageUrl}::${label}`),
+    [imageUrl, label],
+  );
 
   React.useEffect(() => {
     if (!isActive) {
