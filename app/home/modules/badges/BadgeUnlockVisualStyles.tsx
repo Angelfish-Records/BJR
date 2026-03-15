@@ -196,6 +196,21 @@ export default function BadgeUnlockVisualStyles() {
         0% {
           transform: rotateY(0deg);
         }
+        18% {
+          transform: rotateY(54deg);
+        }
+        28% {
+          transform: rotateY(108deg);
+        }
+        50% {
+          transform: rotateY(180deg);
+        }
+        72% {
+          transform: rotateY(252deg);
+        }
+        82% {
+          transform: rotateY(306deg);
+        }
         100% {
           transform: rotateY(360deg);
         }
@@ -204,6 +219,21 @@ export default function BadgeUnlockVisualStyles() {
       @keyframes portalBadgeSpinFaster {
         0% {
           transform: rotateY(0deg);
+        }
+        20% {
+          transform: rotateY(62deg);
+        }
+        30% {
+          transform: rotateY(116deg);
+        }
+        50% {
+          transform: rotateY(180deg);
+        }
+        70% {
+          transform: rotateY(244deg);
+        }
+        80% {
+          transform: rotateY(298deg);
         }
         100% {
           transform: rotateY(360deg);
@@ -214,14 +244,20 @@ export default function BadgeUnlockVisualStyles() {
         0% {
           transform: rotateY(0deg);
         }
-        72% {
-          transform: rotateY(322deg);
+        24% {
+          transform: rotateY(96deg);
         }
-        88% {
+        54% {
+          transform: rotateY(244deg);
+        }
+        76% {
+          transform: rotateY(324deg);
+        }
+        90% {
           transform: rotateY(352deg);
         }
-        96% {
-          transform: rotateY(358deg);
+        97% {
+          transform: rotateY(358.5deg);
         }
         100% {
           transform: rotateY(360deg);
@@ -303,24 +339,24 @@ export default function BadgeUnlockVisualStyles() {
 
       @keyframes portalBadgeEdgeSpinePresence {
         0% {
-          opacity: 0.18;
-          filter: blur(1.1px) brightness(0.9);
+          opacity: 0.24;
+          filter: blur(1px) brightness(0.94);
         }
-        18% {
-          opacity: 0.26;
-          filter: blur(0.95px) brightness(0.98);
+        16% {
+          opacity: 0.38;
+          filter: blur(0.82px) brightness(1.02);
         }
-        46% {
-          opacity: 0.34;
-          filter: blur(0.8px) brightness(1.04);
+        42% {
+          opacity: 0.58;
+          filter: blur(0.58px) brightness(1.12);
         }
-        74% {
-          opacity: 0.3;
-          filter: blur(0.85px) brightness(1);
+        68% {
+          opacity: 0.5;
+          filter: blur(0.66px) brightness(1.08);
         }
         100% {
-          opacity: 0.2;
-          filter: blur(1px) brightness(0.94);
+          opacity: 0.28;
+          filter: blur(0.92px) brightness(0.96);
         }
       }
 
@@ -580,17 +616,17 @@ export default function BadgeUnlockVisualStyles() {
         -webkit-backface-visibility: hidden;
         background: linear-gradient(
           90deg,
-          rgba(255, 255, 255, 0.04) 0%,
-          rgba(255, 255, 255, 0.34) 20%,
-          rgba(255, 255, 255, 0.98) 50%,
-          rgba(255, 255, 255, 0.34) 80%,
-          rgba(255, 255, 255, 0.04) 100%
+          rgba(255, 255, 255, 0.08) 0%,
+          rgba(255, 255, 255, 0.46) 18%,
+          rgba(255, 255, 255, 1) 50%,
+          rgba(255, 255, 255, 0.46) 82%,
+          rgba(255, 255, 255, 0.08) 100%
         );
         box-shadow:
-          0 0 6px rgba(255, 255, 255, 0.16),
-          0 0 14px rgba(255, 255, 255, 0.08);
+          0 0 7px rgba(255, 255, 255, 0.22),
+          0 0 16px rgba(255, 255, 255, 0.11);
         mix-blend-mode: screen;
-        opacity: 0.34;
+        opacity: 0.48;
       }
 
       .portal-badge-edge-spine--left {

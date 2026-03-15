@@ -13,7 +13,7 @@ type Props = {
   variant: "cabinet" | "overlay";
 };
 
-const REVEAL_DELAY_MS = 1110;
+const REVEAL_DELAY_MS = 1210;
 const REVEAL_DURATION_MS = 600;
 
 function BadgeFallbackArt(props: { unlocked: boolean; label: string }) {
@@ -351,7 +351,7 @@ export default function BadgeUnlockVisual(props: Props) {
                         position: "absolute",
                         left: "50%",
                         top: "50%",
-                        width: "2.2%",
+                        width: "2.8%",
                         height: "86%",
                         borderRadius: 999,
                         pointerEvents: "none",
@@ -364,7 +364,7 @@ export default function BadgeUnlockVisual(props: Props) {
                         position: "absolute",
                         left: "50%",
                         top: "50%",
-                        width: "2.2%",
+                        width: "2.8%",
                         height: "86%",
                         borderRadius: 999,
                         pointerEvents: "none",
