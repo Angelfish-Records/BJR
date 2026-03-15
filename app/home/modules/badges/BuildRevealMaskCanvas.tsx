@@ -49,8 +49,6 @@ function drawRevealMaskFrame(
   const centre = size / 2;
 
   context.clearRect(0, 0, size, size);
-  context.fillStyle = "black";
-  context.fillRect(0, 0, size, size);
 
   if (progress <= 0) {
     return;
@@ -62,7 +60,6 @@ function drawRevealMaskFrame(
     return;
   }
 
-  const eased = easeOutCubic(progress);
   const softened = easeInOutQuad(progress);
   const stagedGrowth =
     progress < 0.58
