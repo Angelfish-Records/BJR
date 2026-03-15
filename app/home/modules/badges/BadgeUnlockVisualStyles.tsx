@@ -361,58 +361,58 @@ export default function BadgeUnlockVisualStyles() {
 
       @keyframes portalBadgeQuarterGlintStage1 {
         0%,
-        21%,
-        29%,
-        71%,
-        79%,
+        26.2%,
+        28.6%,
+        71.4%,
+        73.8%,
         100% {
           opacity: 0;
-          transform: translate(-50%, -50%) scaleX(0.55);
-          filter: blur(1.4px);
+          transform: translate(-50%, -50%) scaleX(0.48);
+          filter: blur(1.2px);
         }
-        25%,
-        75% {
-          opacity: 0.72;
+        27.4%,
+        72.6% {
+          opacity: 0.82;
           transform: translate(-50%, -50%) scaleX(1);
-          filter: blur(0.45px);
+          filter: blur(0.24px);
         }
       }
 
       @keyframes portalBadgeQuarterGlintStage2 {
         0%,
-        21%,
-        29%,
-        71%,
-        79%,
+        27.1%,
+        29.4%,
+        70.6%,
+        72.9%,
         100% {
           opacity: 0;
-          transform: translate(-50%, -50%) scaleX(0.55);
-          filter: blur(1.2px);
+          transform: translate(-50%, -50%) scaleX(0.48);
+          filter: blur(1.05px);
         }
-        25%,
-        75% {
-          opacity: 0.9;
+        28.25%,
+        71.75% {
+          opacity: 0.96;
           transform: translate(-50%, -50%) scaleX(1);
-          filter: blur(0.32px);
+          filter: blur(0.18px);
         }
       }
 
       @keyframes portalBadgeQuarterGlintStage3 {
         0%,
-        21%,
-        29%,
-        71%,
-        79%,
+        14.8%,
+        17.0%,
+        49.8%,
+        52.2%,
         100% {
           opacity: 0;
-          transform: translate(-50%, -50%) scaleX(0.55);
-          filter: blur(1px);
+          transform: translate(-50%, -50%) scaleX(0.46);
+          filter: blur(0.95px);
         }
-        25%,
-        75% {
+        15.9%,
+        51.0% {
           opacity: 1;
           transform: translate(-50%, -50%) scaleX(1);
-          filter: blur(0.22px);
+          filter: blur(0.12px);
         }
       }
 
