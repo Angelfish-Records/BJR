@@ -2,6 +2,7 @@
 "use client";
 
 import React from "react";
+import BuildRevealMaskCanvas from "./BuildRevealMaskCanvas";
 
 type Props = {
   imageUrl: string | null;
@@ -11,6 +12,9 @@ type Props = {
   isNewlyUnlocked: boolean;
   variant: "cabinet" | "overlay";
 };
+
+const REVEAL_DELAY_MS = 1080;
+const REVEAL_DURATION_MS = 920;
 
 function BadgeFallbackArt(props: { unlocked: boolean; label: string }) {
   const { unlocked, label } = props;
@@ -32,169 +36,6 @@ function BadgeFallbackArt(props: { unlocked: boolean; label: string }) {
     >
       ✦
     </div>
-  );
-}
-
-function BadgeRevealSvg(props: {
-  imageUrl: string;
-  label: string;
-  celebrating: boolean;
-}) {
-  const { imageUrl, label, celebrating } = props;
-  const reactId = React.useId();
-  const safeId = React.useMemo(
-    () => reactId.replace(/[^a-zA-Z0-9_-]/g, ""),
-    [reactId],
-  );
-
-  const maskId = `portalBadgeRevealMask-${safeId}`;
-  const filterId = `portalBadgeRevealFilter-${safeId}`;
-
-  return (
-    <svg
-      aria-label={label}
-      viewBox="0 0 100 100"
-      preserveAspectRatio="xMidYMid meet"
-      className={`portal-badge-reveal-svg${
-        celebrating ? " portal-badge-reveal-svg--celebrating" : ""
-      }`}
-      style={{
-        position: "absolute",
-        inset: 0,
-        width: "100%",
-        height: "100%",
-        overflow: "visible",
-        pointerEvents: "none",
-      }}
-    >
-      <defs>
-        <filter
-          id={filterId}
-          x="-24%"
-          y="-24%"
-          width="148%"
-          height="148%"
-          colorInterpolationFilters="sRGB"
-        >
-          <feTurbulence
-            type="fractalNoise"
-            baseFrequency="0.075"
-            numOctaves="2"
-            seed="7"
-            result="noise"
-          />
-          <feDisplacementMap
-            in="SourceGraphic"
-            in2="noise"
-            scale="7"
-            xChannelSelector="R"
-            yChannelSelector="G"
-            result="displaced"
-          />
-          <feGaussianBlur in="displaced" stdDeviation="1.25" result="blurred" />
-          <feColorMatrix
-            in="blurred"
-            type="matrix"
-            values="
-              1 0 0 0 0
-              0 1 0 0 0
-              0 0 1 0 0
-              0 0 0 24 -9
-            "
-          />
-        </filter>
-
-        <mask
-          id={maskId}
-          maskUnits="userSpaceOnUse"
-          x="0"
-          y="0"
-          width="100"
-          height="100"
-        >
-          <rect x="0" y="0" width="100" height="100" fill="black" />
-          <g
-            className="portal-badge-reveal-mask-cloud"
-            filter={`url(#${filterId})`}
-          >
-            <circle
-              cx="50"
-              cy="50"
-              r="7"
-              fill="white"
-              className="portal-badge-reveal-blob portal-badge-reveal-blob--core"
-            />
-            <ellipse
-              cx="50"
-              cy="50"
-              rx="6"
-              ry="5"
-              fill="white"
-              className="portal-badge-reveal-blob portal-badge-reveal-blob--a"
-            />
-            <ellipse
-              cx="50"
-              cy="50"
-              rx="5.5"
-              ry="4.8"
-              fill="white"
-              className="portal-badge-reveal-blob portal-badge-reveal-blob--b"
-            />
-            <ellipse
-              cx="50"
-              cy="50"
-              rx="5.4"
-              ry="5.8"
-              fill="white"
-              className="portal-badge-reveal-blob portal-badge-reveal-blob--c"
-            />
-            <ellipse
-              cx="50"
-              cy="50"
-              rx="4.8"
-              ry="4.8"
-              fill="white"
-              className="portal-badge-reveal-blob portal-badge-reveal-blob--d"
-            />
-            <ellipse
-              cx="50"
-              cy="50"
-              rx="4.4"
-              ry="5.2"
-              fill="white"
-              className="portal-badge-reveal-blob portal-badge-reveal-blob--e"
-            />
-            <ellipse
-              cx="50"
-              cy="50"
-              rx="4.6"
-              ry="4.2"
-              fill="white"
-              className="portal-badge-reveal-blob portal-badge-reveal-blob--f"
-            />
-            <ellipse
-              cx="50"
-              cy="50"
-              rx="4.1"
-              ry="4.8"
-              fill="white"
-              className="portal-badge-reveal-blob portal-badge-reveal-blob--g"
-            />
-          </g>
-        </mask>
-      </defs>
-
-      <image
-        href={imageUrl}
-        x="0"
-        y="0"
-        width="100"
-        height="100"
-        preserveAspectRatio="xMidYMid meet"
-        mask={`url(#${maskId})`}
-        className="portal-badge-reveal-colour-image"
-      />
-    </svg>
   );
 }
 
@@ -426,30 +267,24 @@ export default function BadgeUnlockVisual(props: Props) {
                         alt=""
                         className="portal-badge-art-base-greyscale"
                         style={{
-                          opacity: isUnlocking ? 0.4 : 0.32,
+                          opacity: isUnlocking ? 0.42 : 0.32,
                           filter:
-                            "grayscale(1) saturate(0) brightness(0.96) contrast(0.94) blur(1.75px)",
-                          transform: "scale(1.03)",
+                            "grayscale(1) saturate(0) brightness(0.96) contrast(0.94) blur(1.4px)",
+                          transform: "scale(1.02)",
                         }}
                       />
                     ) : null}
 
                     {isUnlocking ? (
                       <>
-                        <div
-                          className="portal-badge-reveal-layer"
-                          style={{
-                            position: "absolute",
-                            inset: 0,
-                            pointerEvents: "none",
-                          }}
-                        >
-                          <BadgeRevealSvg
-                            imageUrl={imageUrl}
-                            label={label}
-                            celebrating={true}
-                          />
-                        </div>
+                        <BuildRevealMaskCanvas
+                          imageUrl={imageUrl}
+                          label={label}
+                          isActive={true}
+                          revealDelayMs={REVEAL_DELAY_MS}
+                          revealDurationMs={REVEAL_DURATION_MS}
+                          className="portal-badge-reveal-canvas-layer portal-badge-reveal-canvas-layer--unlocking"
+                        />
 
                         <div
                           className="portal-badge-unlock-energy-flare"
