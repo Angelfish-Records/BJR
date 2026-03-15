@@ -140,10 +140,10 @@ export default function BadgeUnlockVisual(props: Props) {
                 className="portal-badge-spark-a"
                 style={{
                   position: "absolute",
-                  left: "14%",
-                  bottom: "5%",
-                  width: "7.4%",
-                  height: "12.8%",
+                  left: "31%",
+                  bottom: "3%",
+                  width: "5.6%",
+                  height: "14.4%",
                 }}
               />
 
@@ -151,10 +151,10 @@ export default function BadgeUnlockVisual(props: Props) {
                 className="portal-badge-spark-b"
                 style={{
                   position: "absolute",
-                  left: "44%",
+                  left: "45.5%",
                   bottom: "1%",
-                  width: "6.2%",
-                  height: "10.8%",
+                  width: "4.8%",
+                  height: "12.6%",
                 }}
               />
 
@@ -162,10 +162,10 @@ export default function BadgeUnlockVisual(props: Props) {
                 className="portal-badge-spark-c"
                 style={{
                   position: "absolute",
-                  left: "72%",
-                  bottom: "6%",
-                  width: "5.8%",
-                  height: "10.2%",
+                  left: "59.5%",
+                  bottom: "3.5%",
+                  width: "4.6%",
+                  height: "12.2%",
                 }}
               />
 
@@ -173,10 +173,10 @@ export default function BadgeUnlockVisual(props: Props) {
                 className="portal-badge-burst-a"
                 style={{
                   position: "absolute",
-                  left: "28%",
+                  left: "37.5%",
                   bottom: "2%",
-                  width: "5.2%",
-                  height: "9.8%",
+                  width: "4.2%",
+                  height: "10.8%",
                 }}
               />
 
@@ -184,10 +184,10 @@ export default function BadgeUnlockVisual(props: Props) {
                 className="portal-badge-burst-b"
                 style={{
                   position: "absolute",
-                  left: "55%",
-                  bottom: "4%",
-                  width: "5.2%",
-                  height: "9.6%",
+                  left: "50.5%",
+                  bottom: "2.8%",
+                  width: "4.2%",
+                  height: "10.4%",
                 }}
               />
 
@@ -195,10 +195,10 @@ export default function BadgeUnlockVisual(props: Props) {
                 className="portal-badge-burst-c"
                 style={{
                   position: "absolute",
-                  left: "80%",
-                  bottom: "2%",
-                  width: "4.2%",
-                  height: "8.2%",
+                  left: "62.5%",
+                  bottom: "2.2%",
+                  width: "3.4%",
+                  height: "9.2%",
                 }}
               />
             </div>

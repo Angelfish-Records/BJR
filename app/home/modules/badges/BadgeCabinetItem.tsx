@@ -16,6 +16,9 @@ type Props = {
 export default function BadgeCabinetItem(props: Props) {
   const { item, expanded, isNewlyUnlocked, isUnlocking, itemRef } = props;
 
+  const isMetaRevealing = item.unlocked && (isUnlocking || isNewlyUnlocked);
+  const accessibleTitle = item.unlocked ? item.titleText : "Locked badge";
+
   return (
     <div
       ref={itemRef}
@@ -24,6 +27,8 @@ export default function BadgeCabinetItem(props: Props) {
       data-badge-partition={item.partition}
       data-badge-expanded={expanded ? "true" : "false"}
       data-badge-newly-unlocked={isNewlyUnlocked ? "true" : "false"}
+      data-badge-unlocked={item.unlocked ? "true" : "false"}
+      data-badge-meta-revealing={isMetaRevealing ? "true" : "false"}
       style={{
         position: "relative",
         minWidth: 0,
@@ -31,8 +36,8 @@ export default function BadgeCabinetItem(props: Props) {
     >
       <div
         tabIndex={0}
-        title={item.titleText}
-        aria-label={item.titleText}
+        title={accessibleTitle}
+        aria-label={accessibleTitle}
         className="portal-member-badge-visual"
         style={{
           position: "relative",
@@ -56,30 +61,73 @@ export default function BadgeCabinetItem(props: Props) {
 
       <div className="portal-member-badge-meta" aria-hidden={!expanded}>
         <div className="portal-member-badge-meta-inner">
-          <div
-            style={{
-              fontSize: expanded ? 10 : 9,
-              letterSpacing: 0.3,
-              textTransform: "uppercase",
-              lineHeight: 1.2,
-              opacity: item.unlocked ? 0.7 : 0.5,
-              overflowWrap: "anywhere",
-            }}
-          >
-            {item.label}
-          </div>
-
-          {item.description ? (
+          {(!item.unlocked || isMetaRevealing) && (
             <div
+              className={
+                isMetaRevealing
+                  ? "portal-member-badge-question-mark portal-member-badge-question-mark--dissolving"
+                  : "portal-member-badge-question-mark"
+              }
+              aria-hidden="true"
               style={{
-                marginTop: 4,
-                fontSize: 9,
-                lineHeight: 1.2,
-                opacity: 0.58,
-                overflowWrap: "anywhere",
+                fontSize: expanded ? 14 : 12,
+                lineHeight: 1.1,
+                letterSpacing: 0.12,
+                opacity: 0.3,
+                fontWeight: 300,
+                textAlign: "center",
+                fontFamily:
+                  'Iowan Old Style, "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif',
               }}
             >
-              {item.description}
+              ?
+            </div>
+          )}
+
+          {item.unlocked ? (
+            <div
+              className={
+                isMetaRevealing
+                  ? "portal-member-badge-meta-revealed portal-member-badge-meta-revealed--revealing"
+                  : "portal-member-badge-meta-revealed"
+              }
+            >
+              <div
+                className={
+                  isMetaRevealing
+                    ? "portal-member-badge-title portal-member-badge-title--revealing"
+                    : "portal-member-badge-title"
+                }
+                style={{
+                  fontSize: expanded ? 10 : 9,
+                  letterSpacing: 0.3,
+                  textTransform: "uppercase",
+                  lineHeight: 1.2,
+                  opacity: 0.7,
+                  overflowWrap: "anywhere",
+                }}
+              >
+                {item.label}
+              </div>
+
+              {item.description ? (
+                <div
+                  className={
+                    isMetaRevealing
+                      ? "portal-member-badge-description portal-member-badge-description--revealing"
+                      : "portal-member-badge-description"
+                  }
+                  style={{
+                    marginTop: 4,
+                    fontSize: 9,
+                    lineHeight: 1.2,
+                    opacity: 0.58,
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  {item.description}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
