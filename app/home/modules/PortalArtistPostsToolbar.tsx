@@ -104,13 +104,21 @@ function PostTypeMenu(props: PostTypeMenuProps) {
   const { value, onChange, constrained = false } = props;
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   const buttonRef = React.useRef<HTMLButtonElement | null>(null);
+  const optionRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
   const [open, setOpen] = React.useState(false);
+  const [highlightedIndex, setHighlightedIndex] = React.useState(0);
 
-  const selected =
-    POST_TYPES.find((option) => option.value === value) ?? POST_TYPES[0];
+  const selectedIndex = Math.max(
+    0,
+    POST_TYPES.findIndex((option) => option.value === value),
+  );
+
+  const selected = POST_TYPES[selectedIndex] ?? POST_TYPES[0];
 
   React.useEffect(() => {
     if (!open) return undefined;
+
+    setHighlightedIndex(selectedIndex);
 
     const onPointerDown = (event: MouseEvent) => {
       const node = rootRef.current;
@@ -119,20 +127,22 @@ function PostTypeMenu(props: PostTypeMenuProps) {
       setOpen(false);
     };
 
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-        buttonRef.current?.focus();
-      }
-    };
-
     document.addEventListener("mousedown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("mousedown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
     };
-  }, [open]);
+  }, [open, selectedIndex]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const target = optionRefs.current[highlightedIndex];
+    target?.focus();
+  }, [open, highlightedIndex]);
+
+  const closeMenu = React.useCallback(() => {
+    setOpen(false);
+    buttonRef.current?.focus();
+  }, []);
 
   const onSelect = React.useCallback(
     (next: "" | PostType) => {
@@ -141,6 +151,83 @@ function PostTypeMenu(props: PostTypeMenuProps) {
       buttonRef.current?.focus();
     },
     [onChange],
+  );
+
+  const onTriggerKeyDown = React.useCallback(
+    (event: React.KeyboardEvent<HTMLButtonElement>) => {
+      if (
+        event.key === "ArrowDown" ||
+        event.key === "Enter" ||
+        event.key === " " ||
+        event.key === "Spacebar"
+      ) {
+        event.preventDefault();
+        setHighlightedIndex(selectedIndex);
+        setOpen(true);
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setHighlightedIndex(selectedIndex);
+        setOpen(true);
+      }
+    },
+    [selectedIndex],
+  );
+
+  const onListKeyDown = React.useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeMenu();
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setHighlightedIndex((current) =>
+          current + 1 >= POST_TYPES.length ? 0 : current + 1,
+        );
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setHighlightedIndex((current) =>
+          current - 1 < 0 ? POST_TYPES.length - 1 : current - 1,
+        );
+        return;
+      }
+
+      if (event.key === "Home") {
+        event.preventDefault();
+        setHighlightedIndex(0);
+        return;
+      }
+
+      if (event.key === "End") {
+        event.preventDefault();
+        setHighlightedIndex(POST_TYPES.length - 1);
+        return;
+      }
+
+      if (
+        event.key === "Enter" ||
+        event.key === " " ||
+        event.key === "Spacebar"
+      ) {
+        event.preventDefault();
+        const option = POST_TYPES[highlightedIndex];
+        if (option) onSelect(option.value);
+        return;
+      }
+
+      if (event.key === "Tab") {
+        setOpen(false);
+      }
+    },
+    [closeMenu, highlightedIndex, onSelect],
   );
 
   return (
@@ -160,6 +247,7 @@ function PostTypeMenu(props: PostTypeMenuProps) {
         aria-expanded={open}
         aria-label="Filter posts by type"
         onClick={() => setOpen((current) => !current)}
+        onKeyDown={onTriggerKeyDown}
         style={{
           height: 30,
           minWidth: 118,
@@ -206,6 +294,11 @@ function PostTypeMenu(props: PostTypeMenuProps) {
       <div
         role="listbox"
         aria-label="Post type"
+        aria-activedescendant={
+          open ? `portal-post-type-option-${highlightedIndex}` : undefined
+        }
+        tabIndex={-1}
+        onKeyDown={onListKeyDown}
         style={{
           position: "absolute",
           top: "calc(100% + 8px)",
@@ -229,16 +322,24 @@ function PostTypeMenu(props: PostTypeMenuProps) {
           zIndex: 20,
         }}
       >
-        {POST_TYPES.map((option) => {
+        {POST_TYPES.map((option, index) => {
           const active = option.value === value;
+          const highlighted = index === highlightedIndex;
 
           return (
             <button
               key={option.label}
+              id={`portal-post-type-option-${index}`}
+              ref={(node) => {
+                optionRefs.current[index] = node;
+              }}
               type="button"
               role="option"
               aria-selected={active}
+              tabIndex={highlighted ? 0 : -1}
               onClick={() => onSelect(option.value)}
+              onMouseEnter={() => setHighlightedIndex(index)}
+              onFocus={() => setHighlightedIndex(index)}
               style={{
                 width: "100%",
                 display: "flex",
@@ -249,15 +350,27 @@ function PostTypeMenu(props: PostTypeMenuProps) {
                 padding: "0 10px",
                 border: "none",
                 borderRadius: 10,
-                background: active ? "rgba(255,255,255,0.08)" : "transparent",
+                background: active
+                  ? "rgba(255,255,255,0.10)"
+                  : highlighted
+                    ? "rgba(255,255,255,0.06)"
+                    : "transparent",
                 color: active
-                  ? "rgba(255,255,255,0.94)"
-                  : "rgba(255,255,255,0.78)",
+                  ? "rgba(255,255,255,0.95)"
+                  : highlighted
+                    ? "rgba(255,255,255,0.90)"
+                    : "rgba(255,255,255,0.78)",
                 cursor: "pointer",
                 fontSize: 12,
-                fontWeight: active ? 750 : 650,
+                fontWeight: active ? 750 : highlighted ? 700 : 650,
                 letterSpacing: 0.18,
                 textAlign: "left",
+                outline: "none",
+                boxShadow: highlighted
+                  ? "0 0 0 1px rgba(255,255,255,0.05) inset"
+                  : "none",
+                transition:
+                  "background 120ms ease, color 120ms ease, box-shadow 120ms ease",
               }}
             >
               <span>{option.label}</span>

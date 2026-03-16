@@ -217,17 +217,17 @@ function TypeBadge(props: { t?: PostType | null }) {
       style={{
         display: "inline-flex",
         alignItems: "center",
-        height: 18,
-        padding: "0 8px",
+        height: 12,
+        padding: "0 5px",
         borderRadius: 5,
         border: "none",
         background: theme.background,
         color: theme.color,
         fontSize: 10,
-        fontWeight: 750,
+        fontWeight: 850,
         letterSpacing: 0.35,
         textTransform: "uppercase",
-        lineHeight: "18px",
+        lineHeight: "12px",
         flex: "0 0 auto",
       }}
       title={`Type: ${postTypeLabel(postType)}`}
