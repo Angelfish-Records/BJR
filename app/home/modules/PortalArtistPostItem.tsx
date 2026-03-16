@@ -191,7 +191,7 @@ function ActionBtn(props: {
         display: "inline-flex",
         alignItems: "center",
         gap: 8,
-        border: "1px solid rgba(255,255,255,0.12)",
+        border: "none",
         background: "rgba(255,255,255,0.03)",
         color: "rgba(255,255,255,0.80)",
         borderRadius: 999,

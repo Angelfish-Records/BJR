@@ -1,12 +1,10 @@
+// web/app/home/modules/PortalArtistPostsToolbar.tsx
 "use client";
 
 import React from "react";
 import { usePortalViewer } from "@/app/home/PortalViewerProvider";
 import { useMembershipModal } from "@/app/home/MembershipModalProvider";
-import {
-  POST_TYPES,
-  type PostType,
-} from "./portalArtistPostsTypes";
+import { POST_TYPES, type PostType } from "./portalArtistPostsTypes";
 
 type SubmitQuestionCTAProps = {
   onOpenComposer: () => void;
@@ -36,7 +34,7 @@ function SubmitQuestionCTA(props: SubmitQuestionCTAProps) {
           : "Send a question for the next Q&A post."
       }
       style={{
-        height: 28,
+        height: 30,
         padding: "0 12px",
         borderRadius: 10,
         border: "1px solid rgba(255,255,255,0.14)",
@@ -52,7 +50,8 @@ function SubmitQuestionCTA(props: SubmitQuestionCTAProps) {
         fontWeight: 700,
         letterSpacing: 0.2,
         transition:
-          "transform 160ms ease, opacity 160ms ease, filter 160ms ease",
+          "transform 160ms ease, opacity 160ms ease, filter 160ms ease, background 160ms ease",
+        boxShadow: locked ? "none" : "0 10px 24px rgba(0,0,0,0.18)",
       }}
       onMouseDown={(event) => {
         const element = event.currentTarget;
@@ -67,6 +66,99 @@ function SubmitQuestionCTA(props: SubmitQuestionCTAProps) {
   );
 }
 
+function ChevronIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 20 20"
+      fill="none"
+      aria-hidden="true"
+      style={{ display: "block" }}
+    >
+      <path
+        d="M5.5 7.5L10 12L14.5 7.5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+type PostTypeSelectProps = {
+  value: "" | PostType;
+  onChange: (next: "" | PostType) => void;
+  constrained?: boolean;
+};
+
+function PostTypeSelect(props: PostTypeSelectProps) {
+  const { value, onChange, constrained = false } = props;
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        flex: constrained ? "0 1 auto" : "0 0 auto",
+        minWidth: 0,
+        maxWidth: constrained ? "100%" : undefined,
+      }}
+    >
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value as "" | PostType)}
+        aria-label="Filter posts by type"
+        style={{
+          appearance: "none",
+          WebkitAppearance: "none",
+          MozAppearance: "none",
+          height: 30,
+          minWidth: 118,
+          maxWidth: constrained ? "100%" : undefined,
+          borderRadius: 10,
+          border: "1px solid rgba(255,255,255,0.14)",
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.03))",
+          color: "rgba(255,255,255,0.88)",
+          padding: "0 34px 0 12px",
+          fontSize: 12,
+          fontWeight: 700,
+          letterSpacing: 0.2,
+          outline: "none",
+          cursor: "pointer",
+          boxShadow:
+            "0 10px 24px rgba(0,0,0,0.16), 0 0 0 1px rgba(255,255,255,0.02) inset",
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
+        }}
+      >
+        {POST_TYPES.map((option) => (
+          <option key={option.label} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          top: 0,
+          right: 10,
+          height: "100%",
+          display: "grid",
+          placeItems: "center",
+          color: "rgba(255,255,255,0.62)",
+          pointerEvents: "none",
+        }}
+      >
+        <ChevronIcon />
+      </div>
+    </div>
+  );
+}
+
 type Props = {
   postTypeFilter: "" | PostType;
   composerOpen: boolean;
@@ -75,49 +167,6 @@ type Props = {
   onChangeFilter: (next: "" | PostType) => void;
   onOpenComposer: () => void;
 };
-
-function PostTypeSelect(props: {
-  value: "" | PostType;
-  onChange: (next: "" | PostType) => void;
-  constrained?: boolean;
-}) {
-  const { value, onChange, constrained = false } = props;
-
-  return (
-    <select
-      value={value}
-      onChange={(event) => onChange(event.target.value as "" | PostType)}
-      aria-label="Filter posts by type"
-      style={{
-        height: 28,
-        borderRadius: 10,
-        border: "1px solid rgba(255,255,255,0.14)",
-        background: "rgba(255,255,255,0.035)",
-        color:
-          value === ""
-            ? "rgba(255,255,255,0.5)"
-            : "rgba(255,255,255,0.86)",
-        padding: "0 10px",
-        fontSize: 12,
-        fontWeight: 700,
-        letterSpacing: 0.2,
-        outline: "none",
-        cursor: "pointer",
-        maxWidth: constrained ? "100%" : undefined,
-      }}
-    >
-      <option value="" disabled>
-        Post type
-      </option>
-
-      {POST_TYPES.map((option) => (
-        <option key={option.label} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  );
-}
 
 export default function PortalArtistPostsToolbar(props: Props) {
   const {
@@ -169,15 +218,14 @@ export default function PortalArtistPostsToolbar(props: Props) {
           justifyContent: "flex-end",
         }}
       >
+        {!composerOpen ? (
+          <SubmitQuestionCTA onOpenComposer={onOpenComposer} />
+        ) : null}
         <PostTypeSelect
           value={postTypeFilter}
           onChange={onChangeFilter}
           constrained
         />
-
-        {!composerOpen ? (
-          <SubmitQuestionCTA onOpenComposer={onOpenComposer} />
-        ) : null}
       </div>
     </div>
   );
