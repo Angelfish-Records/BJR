@@ -254,7 +254,7 @@ export default function PortalArtistPostsComposer(props: Props) {
                 value={askerName}
                 onChange={(event) => onChangeAskerName(event.target.value)}
                 maxLength={maxNameChars + 20}
-                placeholder="Your name / city / handle (you can leave this blank, it is totally optional)"
+                placeholder="[Optional] Your name / city / handle"
                 style={{
                   width: "100%",
                   height: 38,

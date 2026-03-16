@@ -286,9 +286,7 @@ export default function PortalArtistPostItem(props: Props) {
     >
       <div
         style={{
-          borderRadius: 18,
           padding: "12px 0px 10px",
-          background: isDeep ? "rgba(255,255,255,0.04)" : "transparent",
           boxShadow: isDeep
             ? "0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent)"
             : undefined,

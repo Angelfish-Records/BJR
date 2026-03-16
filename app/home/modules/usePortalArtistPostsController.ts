@@ -23,6 +23,8 @@ import type {
   SubmitResponse,
 } from "./portalArtistPostsTypes";
 
+const COMPOSER_CLOSE_MS = 280;
+
 function shareUrlFor(slug: string) {
   if (typeof window === "undefined") return "";
 
@@ -198,6 +200,9 @@ export function usePortalArtistPostsController(
   }, [isSignedIn, broker]);
 
   const [composerOpen, setComposerOpen] = React.useState(false);
+  const [composerClosing, setComposerClosing] = React.useState(false);
+  const composerCloseTimerRef = React.useRef<number | null>(null);
+
   const [questionText, setQuestionText] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [submitErr, setSubmitErr] = React.useState<string | null>(null);
@@ -212,20 +217,43 @@ export function usePortalArtistPostsController(
   const canSubmit = isSignedIn && (tier === "patron" || tier === "partner");
 
   const thankTimerRef = React.useRef<number | null>(null);
+
   React.useEffect(() => {
     return () => {
       if (thankTimerRef.current) window.clearTimeout(thankTimerRef.current);
+      if (composerCloseTimerRef.current) {
+        window.clearTimeout(composerCloseTimerRef.current);
+      }
     };
   }, []);
 
   const closeComposer = React.useCallback(() => {
-    setComposerOpen(false);
     setSubmitErr(null);
-  }, []);
+
+    if (!composerOpen || composerClosing) return;
+
+    setComposerClosing(true);
+
+    if (composerCloseTimerRef.current) {
+      window.clearTimeout(composerCloseTimerRef.current);
+    }
+
+    composerCloseTimerRef.current = window.setTimeout(() => {
+      setComposerOpen(false);
+      setComposerClosing(false);
+      composerCloseTimerRef.current = null;
+    }, COMPOSER_CLOSE_MS);
+  }, [composerClosing, composerOpen]);
 
   const openComposer = React.useCallback(() => {
+    if (composerCloseTimerRef.current) {
+      window.clearTimeout(composerCloseTimerRef.current);
+      composerCloseTimerRef.current = null;
+    }
+
     setThanks(false);
     setSubmitErr(null);
+    setComposerClosing(false);
     setComposerOpen(true);
   }, []);
 
@@ -584,8 +612,12 @@ export function usePortalArtistPostsController(
     setPostTypeFilter(next);
   }, []);
 
+  const composerPresent = composerOpen || composerClosing;
+  const composerExpanded = composerOpen && !composerClosing;
+
   const isWideToolbarViewport = useMinWidth(760);
-  const useOverlayToolbar = isWideToolbarViewport && !composerOpen;
+  const useOverlayToolbar =
+    isWideToolbarViewport && !composerPresent;
 
   const [overlayToolbarRef, overlayToolbarWidth] =
     useElementWidth<HTMLDivElement>();
@@ -603,7 +635,8 @@ export function usePortalArtistPostsController(
     cursor,
     copiedSlug,
     toastVisible,
-    composerOpen,
+    composerOpen: composerExpanded,
+    composerPresent,
     questionText,
     submitting,
     submitErr,

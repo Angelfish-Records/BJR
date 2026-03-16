@@ -91,7 +91,7 @@ export default function PortalArtistPosts(props: PortalArtistPostsProps) {
     <div style={{ minWidth: 0, position: "relative" }}>
       <PortalArtistPostsToolbar
         postTypeFilter={controller.postTypeFilter}
-        composerOpen={controller.composerOpen}
+        composerPresent={controller.composerPresent}
         useOverlayToolbar={controller.useOverlayToolbar}
         overlayToolbarRef={controller.overlayToolbarRef}
         onChangeFilter={controller.onChangeFilter}
@@ -132,7 +132,7 @@ export default function PortalArtistPosts(props: PortalArtistPostsProps) {
       <div
         style={{
           marginTop:
-            controller.composerOpen ||
+            controller.composerPresent ||
             controller.thanks ||
             !controller.useOverlayToolbar
               ? 6
