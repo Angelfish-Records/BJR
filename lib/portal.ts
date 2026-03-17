@@ -11,14 +11,22 @@ export type PortalModuleHeading = {
 
 export type PanelStyleVariant = "default" | "gold" | "patternPill";
 
-export type PortalModulePanel = {
+type PortalRuntimePanelKind =
+  | "none"
+  | "memberSummary"
+  | "feedbackSuggestion"
+  | "feedbackBugReport";
+
+type PortalModulePanel = {
   _key: string;
   title: string;
   teaser?: PortableTextBlock[];
   full?: PortableTextBlock[];
-  requiresEntitlement?: string;
-  styleVariant?: PanelStyleVariant;
-  runtimePanelKind?: "none" | "memberSummary";
+  requiresEntitlement?: string | null;
+  styleVariant?: PanelStyleVariant | null;
+  runtimePanelKind?: PortalRuntimePanelKind | null;
+  runtimeDescription?: string | null;
+  runtimeSubmitLabel?: string | null;
 };
 
 export type PortalModulePanels = {

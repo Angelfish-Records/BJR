@@ -97,9 +97,10 @@ export default function BadgeCabinetItem(props: Props) {
                 }
                 style={{
                   fontSize: expanded ? 10 : 9,
-                  letterSpacing: 0.3,
+                  letterSpacing: 0.7,
                   textTransform: "uppercase",
                   lineHeight: 1.2,
+                  fontWeight: 950,
                   opacity: 0.7,
                   overflowWrap: "anywhere",
                 }}

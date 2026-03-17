@@ -15,6 +15,34 @@ export const runtime = "nodejs";
 
 const resend = new Resend(process.env.RESEND_API_KEY ?? "re_dummy");
 
+type Visibility = "public" | "friend" | "patron" | "partner";
+type SubmissionKind = "question" | "suggestion" | "bug_report";
+
+type Body = {
+  questionIds?: unknown;
+  ids?: unknown;
+  selectedIds?: unknown;
+  title?: unknown;
+  answer?: unknown;
+  body?: unknown;
+  content?: unknown;
+  text?: unknown;
+  answerText?: unknown;
+  visibility?: unknown;
+  pinned?: unknown;
+};
+
+type PTSpan = { _type: "span"; _key: string; text: string; marks?: string[] };
+type PTMarkDef = { _key: string; _type: string; href?: string };
+type PTBlock = {
+  _type: "block";
+  _key: string;
+  style: string;
+  children: PTSpan[];
+  markDefs?: PTMarkDef[];
+};
+type PortableText = PTBlock[];
+
 function must(v: string | undefined, name: string) {
   if (!v) throw new Error(`Missing ${name}`);
   return v;
@@ -41,6 +69,19 @@ function normalizeEmail(s: string): string {
   return s.trim().toLowerCase();
 }
 
+function escapeHtml(input: string): string {
+  return input
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function nl2brHtml(input: string): string {
+  return escapeHtml(input).replace(/\n/g, "<br />");
+}
+
 function placeholders(count: number, startAt = 1): string {
   return Array.from({ length: count }, (_, i) => `$${startAt + i}`).join(",");
 }
@@ -63,45 +104,6 @@ function shortId(): string {
     .slice(0, 10)
     .toLowerCase();
 }
-
-type Visibility = "public" | "friend" | "patron" | "partner";
-
-type Body = {
-  // ids (accept multiple keys)
-  questionIds?: unknown;
-  ids?: unknown;
-  selectedIds?: unknown;
-
-  // content (accept multiple keys)
-  title?: unknown;
-  answer?: unknown;
-  body?: unknown;
-  content?: unknown;
-  text?: unknown;
-  answerText?: unknown;
-
-  // options
-  visibility?: unknown;
-  pinned?: unknown;
-};
-
-type PTSpan = { _type: "span"; _key: string; text: string; marks?: string[] };
-
-type PTMarkDef = {
-  _key: string;
-  _type: string;
-  href?: string;
-};
-
-type PTBlock = {
-  _type: "block";
-  _key: string;
-  style: string;
-  children: PTSpan[];
-  markDefs?: PTMarkDef[];
-};
-
-type PortableText = PTBlock[];
 
 function k(prefix = "k"): string {
   const u =
@@ -129,7 +131,6 @@ function answerToPortableTextBlocks(answer: string): PortableText {
     .filter(Boolean);
 
   if (!paras.length) return [block("normal", "—")];
-
   return paras.map((p) => block("normal", p));
 }
 
@@ -174,6 +175,52 @@ function asVisibility(v: unknown): Visibility {
   return "public";
 }
 
+function kindLabel(kind: SubmissionKind): string {
+  if (kind === "suggestion") return "suggestion";
+  if (kind === "bug_report") return "bug report";
+  return "question";
+}
+
+function privateReplySubject(kind: SubmissionKind): string {
+  if (kind === "suggestion") return "Your suggestion received a reply";
+  if (kind === "bug_report") return "Your bug report received a reply";
+  return "Your question was answered";
+}
+
+function buildPrivateReplyHtml(params: {
+  appName: string;
+  kind: SubmissionKind;
+  originalText: string;
+  replyText: string;
+  supportEmail?: string;
+}) {
+  const { appName, kind, originalText, replyText, supportEmail } = params;
+  const kindName = kindLabel(kind);
+
+  return [
+    "<!doctype html>",
+    '<html><body style="margin:0;padding:0;background:#0b0b0d;color:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;">',
+    '<div style="max-width:640px;margin:0 auto;padding:32px 20px;">',
+    `<div style="font-size:22px;font-weight:800;line-height:1.2;margin-bottom:16px;">${escapeHtml(appName)}</div>`,
+    `<div style="font-size:18px;font-weight:700;line-height:1.35;margin-bottom:14px;">We’ve replied to your ${escapeHtml(kindName)}.</div>`,
+    '<div style="font-size:14px;line-height:1.7;opacity:0.95;margin-bottom:18px;">Thank you for helping shape the site.</div>',
+    '<div style="border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:16px;background:rgba(255,255,255,0.04);margin-bottom:14px;">',
+    '<div style="font-size:12px;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;opacity:0.7;margin-bottom:8px;">Your submission</div>',
+    `<div style="font-size:14px;line-height:1.7;white-space:normal;">${nl2brHtml(originalText)}</div>`,
+    "</div>",
+    '<div style="border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:16px;background:rgba(255,255,255,0.04);margin-bottom:14px;">',
+    '<div style="font-size:12px;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;opacity:0.7;margin-bottom:8px;">Reply</div>',
+    `<div style="font-size:14px;line-height:1.7;white-space:normal;">${nl2brHtml(replyText)}</div>`,
+    "</div>",
+    supportEmail
+      ? `<div style="font-size:12px;line-height:1.6;opacity:0.72;">Need help? ${escapeHtml(
+          supportEmail,
+        )}</div>`
+      : "",
+    "</div></body></html>",
+  ].join("");
+}
+
 export async function POST(req: NextRequest) {
   await requireAdminMemberId();
 
@@ -197,17 +244,14 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // De-dupe while preserving order
   const seen = new Set<string>();
   const questionIds = rawList.filter((id) =>
     seen.has(id) ? false : (seen.add(id), true),
   );
 
-  // Title optional (fallback for slug stability)
   const pickedTitle = pickText(body, ["title"]);
   const title = pickedTitle.value;
 
-  // Answer required; accept multiple keys
   const pickedAnswer = pickText(body, [
     "answer",
     "answerText",
@@ -229,17 +273,28 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Load questions
   const inPh1 = placeholders(questionIds.length, 1);
   const qRes = await sql.query<{
     id: string;
     question_text: string;
     asker_name: string | null;
+    kind: SubmissionKind;
+    member_email: string | null;
+    status: string;
+    notify_email_sent_at: string | null;
   }>(
     `
-    select id::text as id, question_text, asker_name
-    from mailbag_questions
-    where id in (${inPh1})
+    SELECT
+      q.id::text AS id,
+      q.question_text,
+      q.asker_name,
+      q.kind::text AS kind,
+      m.email::text AS member_email,
+      q.status::text AS status,
+      q.notify_email_sent_at
+    FROM mailbag_questions q
+    JOIN members m ON m.id = q.member_id
+    WHERE q.id IN (${inPh1})
     `,
     questionIds,
   );
@@ -248,119 +303,259 @@ export async function POST(req: NextRequest) {
     return json(404, { ok: false, code: "NOT_FOUND" });
   }
 
-  // Build Portable Text blocks:
-  // - intro
-  // - all selected questions as blockquotes (question + optional asker line inside SAME blockquote)
-  // - answer body ONCE
-  const blocks: PortableText = [];
-
-  blocks.push({
-    _type: "block",
-    _key: k("intro"),
-    style: "normal",
-    markDefs: [
-      {
-        _key: "mailbagIntro",
-        _type: "mailbagIntro",
-      },
-    ],
-    children: [
-      {
-        _type: "span",
-        _key: k("s"),
-        text: "This post responds to mailbag questions from Patrons and Partners.",
-        marks: ["mailbagIntro"],
-      },
-    ],
-  });
-
-  for (const q of qRes.rows) {
-    const name = (q.asker_name ?? "").trim();
-
-    const children: PTSpan[] = [span((q.question_text || "").trim())];
-
-    if (name) {
-      children.push(span("\n")); // line break inside the same blockquote
-      children.push(span(`— ${name}`, ["mailbagAsker"]));
-    }
-
-    blocks.push({
-      _type: "block",
-      _key: k("bq"),
-      style: "blockquote",
-      children,
+  const selectedKinds = Array.from(new Set(qRes.rows.map((row) => row.kind)));
+  if (selectedKinds.length !== 1) {
+    return json(400, {
+      ok: false,
+      code: "MIXED_KINDS_NOT_ALLOWED",
+      kinds: selectedKinds,
     });
   }
 
-  blocks.push(...answerToPortableTextBlocks(answer));
+  const kind = selectedKinds[0] as SubmissionKind;
 
-  // Force a stable title + explicit slug so Sanity can never “miss” it
-  const fallbackTitle = `Q&A — ${new Date().toISOString().slice(0, 10)}`;
-  const finalTitle = title || fallbackTitle;
-  const slugCurrent = `${slugify(finalTitle)}-${shortId()}`;
-
-  // Create Sanity post
-  const doc: SanityDocumentStub = {
-    _type: "artistPost",
-    title: finalTitle,
-    postType: "qa",
-    slug: { current: slugCurrent },
-    publishedAt: new Date().toISOString(),
-    visibility,
-    pinned,
-    body: blocks,
-  };
-
-  let created: { _id: string; slug?: { current?: string } };
-  try {
-    created = (await sanityWrite.create(doc)) as unknown as {
-      _id: string;
-      slug?: { current?: string };
-    };
-  } catch {
-    return json(500, { ok: false, code: "SANITY_CREATE_FAILED" });
+  if (kind !== "question" && questionIds.length !== 1) {
+    return json(400, {
+      ok: false,
+      code: "PRIVATE_REPLY_REQUIRES_SINGLE_SELECTION",
+    });
   }
 
-  const slug = created?.slug?.current || slugCurrent;
+  if (kind === "question") {
+    const blocks: PortableText = [];
 
-  // Mark answered (IDs start at $3)
-  const inPh3 = placeholders(questionIds.length, 3);
-  await sql.query(
-    `
-    update mailbag_questions
-    set status = 'answered',
-        answered_at = now(),
-        answer_post_id = $1,
-        answer_post_slug = $2,
-        updated_at = now()
-    where id in (${inPh3})
-    `,
-    [created._id, slug, ...questionIds],
-  );
+    blocks.push({
+      _type: "block",
+      _key: k("intro"),
+      style: "normal",
+      markDefs: [
+        {
+          _key: "mailbagIntro",
+          _type: "mailbagIntro",
+        },
+      ],
+      children: [
+        {
+          _type: "span",
+          _key: k("s"),
+          text: "This post responds to mailbag questions from Patrons and Partners.",
+          marks: ["mailbagIntro"],
+        },
+      ],
+    });
 
-  const postUrl = `${appOrigin()}/journal?post=${encodeURIComponent(slug)}`;
+    for (const q of qRes.rows) {
+      const name = (q.asker_name ?? "").trim();
+      const children: PTSpan[] = [span((q.question_text || "").trim())];
 
-  // Eligible notifications: answered + unstamped + not suppressed
-  const notifyRes = await sql.query<{
-    question_id: string;
-    question_text: string;
-    to_email: string;
-  }>(
-    `
-    select
-      q.id::text as question_id,
-      q.question_text,
-      m.email::text as to_email
-    from mailbag_questions q
-    join members m on m.id = q.member_id
-    left join email_suppressions s on s.email = m.email
-    where q.id in (${inPh1})
-      and q.status = 'answered'
-      and q.notify_email_sent_at is null
-      and s.email is null
-    `,
-    questionIds,
-  );
+      if (name) {
+        children.push(span("\n"));
+        children.push(span(`— ${name}`, ["mailbagAsker"]));
+      }
+
+      blocks.push({
+        _type: "block",
+        _key: k("bq"),
+        style: "blockquote",
+        children,
+      });
+    }
+
+    blocks.push(...answerToPortableTextBlocks(answer));
+
+    const fallbackTitle = `Q&A — ${new Date().toISOString().slice(0, 10)}`;
+    const finalTitle = title || fallbackTitle;
+    const slugCurrent = `${slugify(finalTitle)}-${shortId()}`;
+
+    const doc: SanityDocumentStub = {
+      _type: "artistPost",
+      title: finalTitle,
+      postType: "qa",
+      slug: { current: slugCurrent },
+      publishedAt: new Date().toISOString(),
+      visibility,
+      pinned,
+      body: blocks,
+    };
+
+    let created: { _id: string; slug?: { current?: string } };
+    try {
+      created = (await sanityWrite.create(doc)) as unknown as {
+        _id: string;
+        slug?: { current?: string };
+      };
+    } catch {
+      return json(500, { ok: false, code: "SANITY_CREATE_FAILED" });
+    }
+
+    const slug = created?.slug?.current || slugCurrent;
+
+    const inPh3 = placeholders(questionIds.length, 3);
+    await sql.query(
+      `
+      UPDATE mailbag_questions
+      SET status = 'answered',
+          answered_at = now(),
+          answer_post_id = $1,
+          answer_post_slug = $2,
+          admin_reply_text = $3,
+          updated_at = now()
+      WHERE id IN (${inPh3})
+      `,
+      [created._id, slug, answer, ...questionIds],
+    );
+
+    const postUrl = `${appOrigin()}/journal?post=${encodeURIComponent(slug)}`;
+
+    const notifyRes = await sql.query<{
+      question_id: string;
+      question_text: string;
+      to_email: string;
+    }>(
+      `
+      SELECT
+        q.id::text AS question_id,
+        q.question_text,
+        m.email::text AS to_email
+      FROM mailbag_questions q
+      JOIN members m ON m.id = q.member_id
+      LEFT JOIN email_suppressions s ON s.email = m.email
+      WHERE q.id IN (${inPh1})
+        AND q.status = 'answered'
+        AND q.notify_email_sent_at IS NULL
+        AND s.email IS NULL
+      `,
+      questionIds,
+    );
+
+    const fromEmail =
+      (process.env.RESEND_FROM_TRANSACTIONAL &&
+        process.env.RESEND_FROM_TRANSACTIONAL.trim()) ||
+      must(process.env.RESEND_FROM_MARKETING, "RESEND_FROM_MARKETING");
+
+    const appName =
+      (process.env.NEXT_PUBLIC_APP_NAME &&
+        process.env.NEXT_PUBLIC_APP_NAME.trim()) ||
+      "BJR";
+
+    const supportEmail =
+      (process.env.SUPPORT_EMAIL && process.env.SUPPORT_EMAIL.trim()) ||
+      undefined;
+
+    const subject = title
+      ? `Your question was answered: ${title}`
+      : "Your question was answered";
+
+    const sentQuestionIds: string[] = [];
+
+    for (const row of notifyRes.rows) {
+      const toEmail = normalizeEmail(row.to_email || "");
+      if (!toEmail) continue;
+
+      const html = await render(
+        React.createElement(MailbagAnsweredEmail, {
+          appName,
+          toEmail,
+          questionText: row.question_text,
+          postTitle: title || null,
+          postUrl,
+          supportEmail,
+        }),
+      );
+
+      const text = [
+        "Your question was answered.",
+        "",
+        title ? `Post: ${title}` : `Post: ${finalTitle}`,
+        `Link: ${postUrl}`,
+        "",
+        "Your question:",
+        (row.question_text || "").trim(),
+        "",
+        supportEmail ? `Need help? ${supportEmail}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      try {
+        const result = await resend.emails.send({
+          from: fromEmail,
+          to: [toEmail],
+          subject,
+          html,
+          text,
+          tags: [
+            { name: "purpose", value: "mailbag-answered" },
+            { name: "postSlug", value: slug },
+          ],
+        });
+
+        const providerId =
+          (result as { data?: { id?: string } })?.data?.id ?? null;
+
+        await sql`
+          INSERT INTO email_outbox (
+            kind,
+            entity_key,
+            to_email,
+            from_email,
+            subject,
+            provider,
+            provider_email_id,
+            sent_at
+          )
+          VALUES (
+            'mailbag_answered',
+            ${row.question_id},
+            ${toEmail},
+            ${fromEmail},
+            ${subject},
+            'resend',
+            ${providerId},
+            now()
+          )
+        `;
+
+        sentQuestionIds.push(row.question_id);
+      } catch {
+        continue;
+      }
+    }
+
+    if (sentQuestionIds.length) {
+      const sentPh1 = placeholders(sentQuestionIds.length, 1);
+      await sql.query(
+        `
+        UPDATE mailbag_questions
+        SET notify_email_sent_at = now(),
+            updated_at = now()
+        WHERE id IN (${sentPh1})
+          AND notify_email_sent_at IS NULL
+        `,
+        sentQuestionIds,
+      );
+    }
+
+    return json(200, {
+      ok: true,
+      mode: "published_post",
+      kind,
+      post: { id: created._id, slug, url: postUrl },
+      notified: {
+        attempted: notifyRes.rows.length,
+        sent: sentQuestionIds.length,
+      },
+      debug: {
+        acceptedAnswerKey: pickedAnswer.key,
+        acceptedTitleKey: pickedTitle.key,
+        finalTitle,
+      },
+    });
+  }
+
+  const target = qRes.rows[0];
+  const toEmail = normalizeEmail(target.member_email || "");
+  const questionId = target.id;
 
   const fromEmail =
     (process.env.RESEND_FROM_TRANSACTIONAL &&
@@ -376,35 +571,28 @@ export async function POST(req: NextRequest) {
     (process.env.SUPPORT_EMAIL && process.env.SUPPORT_EMAIL.trim()) ||
     undefined;
 
-  const subject = title
-    ? `Your question was answered: ${title}`
-    : "Your question was answered";
+  const subject = privateReplySubject(kind);
 
-  const sentQuestionIds: string[] = [];
+  let sent = false;
+  let providerId: string | null = null;
 
-  for (const row of notifyRes.rows) {
-    const toEmail = normalizeEmail(row.to_email || "");
-    if (!toEmail) continue;
-
-    const html = await render(
-      React.createElement(MailbagAnsweredEmail, {
-        appName,
-        toEmail,
-        questionText: row.question_text,
-        postTitle: title || null,
-        postUrl,
-        supportEmail,
-      }),
-    );
+  if (toEmail) {
+    const html = buildPrivateReplyHtml({
+      appName,
+      kind,
+      originalText: target.question_text,
+      replyText: answer,
+      supportEmail,
+    });
 
     const text = [
-      "Your question was answered.",
+      `We've replied to your ${kindLabel(kind)}.`,
       "",
-      title ? `Post: ${title}` : `Post: ${finalTitle}`,
-      `Link: ${postUrl}`,
+      `Your ${kindLabel(kind)}:`,
+      target.question_text.trim(),
       "",
-      "Your question:",
-      (row.question_text || "").trim(),
+      "Reply:",
+      answer,
       "",
       supportEmail ? `Need help? ${supportEmail}` : "",
     ]
@@ -419,16 +607,22 @@ export async function POST(req: NextRequest) {
         html,
         text,
         tags: [
-          { name: "purpose", value: "mailbag-answered" },
-          { name: "postSlug", value: slug },
+          {
+            name: "purpose",
+            value:
+              kind === "suggestion"
+                ? "suggestion-replied"
+                : "bug-report-replied",
+          },
+          { name: "submissionId", value: questionId },
         ],
       });
 
-      const providerId =
-        (result as unknown as { data?: { id?: string } })?.data?.id ?? null;
+      providerId = (result as { data?: { id?: string } })?.data?.id ?? null;
+      sent = true;
 
       await sql`
-        insert into email_outbox (
+        INSERT INTO email_outbox (
           kind,
           entity_key,
           to_email,
@@ -438,9 +632,9 @@ export async function POST(req: NextRequest) {
           provider_email_id,
           sent_at
         )
-        values (
-          'mailbag_answered',
-          ${row.question_id},
+        VALUES (
+          ${kind === "suggestion" ? "mailbag_suggestion_replied" : "mailbag_bug_report_replied"},
+          ${questionId},
           ${toEmail},
           ${fromEmail},
           ${subject},
@@ -449,38 +643,37 @@ export async function POST(req: NextRequest) {
           now()
         )
       `;
-
-      sentQuestionIds.push(row.question_id);
     } catch {
-      continue;
+      sent = false;
     }
   }
 
-  if (sentQuestionIds.length) {
-    const sentPh1 = placeholders(sentQuestionIds.length, 1);
-    await sql.query(
-      `
-      update mailbag_questions
-      set notify_email_sent_at = now(),
-          updated_at = now()
-      where id in (${sentPh1})
-        and notify_email_sent_at is null
-      `,
-      sentQuestionIds,
-    );
-  }
+  await sql`
+    UPDATE mailbag_questions
+    SET status = 'answered',
+        answered_at = now(),
+        admin_reply_text = ${answer},
+        admin_reply_sent_at = ${sent ? new Date().toISOString() : null}::timestamptz,
+        notify_email_sent_at = CASE
+          WHEN ${sent} THEN now()
+          ELSE notify_email_sent_at
+        END,
+        updated_at = now()
+    WHERE id = ${questionId}::uuid
+  `;
 
   return json(200, {
     ok: true,
-    post: { id: created._id, slug, url: postUrl },
+    mode: "private_reply",
+    kind,
     notified: {
-      attempted: notifyRes.rows.length,
-      sent: sentQuestionIds.length,
+      attempted: toEmail ? 1 : 0,
+      sent: sent ? 1 : 0,
     },
     debug: {
       acceptedAnswerKey: pickedAnswer.key,
       acceptedTitleKey: pickedTitle.key,
-      finalTitle,
+      providerId,
     },
   });
 }

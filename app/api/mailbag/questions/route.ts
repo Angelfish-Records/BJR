@@ -19,6 +19,8 @@ type FailCode =
   | "BAD_REQUEST"
   | "SERVER_ERROR";
 
+type SubmissionKind = "question" | "suggestion" | "bug_report";
+
 function json(status: number, body: unknown, headers?: HeadersInit) {
   return NextResponse.json(body, { status, headers });
 }
@@ -37,11 +39,21 @@ function normalizeAskerName(v: unknown): string | null {
   return t.length > MAX_NAME_CHARS ? t.slice(0, MAX_NAME_CHARS) : t;
 }
 
+function normalizeSubmissionKind(v: unknown): SubmissionKind {
+  const s = typeof v === "string" ? v.trim().toLowerCase() : "";
+  if (s === "suggestion") return "suggestion";
+  if (s === "bug_report" || s === "bug-report" || s === "bug report") {
+    return "bug_report";
+  }
+  return "question";
+}
+
 type MailbagSubmitBody = {
   questionText?: unknown;
   askerName?: unknown;
   name?: unknown;
   displayName?: unknown;
+  kind?: unknown;
 };
 
 /**
@@ -77,7 +89,6 @@ async function resolveOrCreateMemberId(params: {
 }): Promise<string> {
   const { clerkUserId, email } = params;
 
-  // 1) Prefer clerk_user_id match (most stable)
   const byClerk = await sql<{ id: string }>`
     SELECT id
     FROM members
@@ -86,7 +97,6 @@ async function resolveOrCreateMemberId(params: {
   `;
   if (byClerk.rows[0]?.id) return byClerk.rows[0].id;
 
-  // 2) Fall back to email match (members.email is citext)
   const byEmail = await sql<{ id: string }>`
     SELECT id
     FROM members
@@ -96,7 +106,6 @@ async function resolveOrCreateMemberId(params: {
   if (byEmail.rows[0]?.id) {
     const id = byEmail.rows[0].id;
 
-    // attach clerk_user_id for future stability
     await sql`
       UPDATE members
       SET clerk_user_id = ${clerkUserId}, updated_at = now()
@@ -105,7 +114,6 @@ async function resolveOrCreateMemberId(params: {
     return id;
   }
 
-  // 3) Create member row
   const created = await sql<{ id: string }>`
     INSERT INTO members (email, source, source_detail, clerk_user_id)
     VALUES (${email}, 'unknown', '{}'::jsonb, ${clerkUserId})
@@ -131,7 +139,9 @@ export async function POST(req: Request) {
       return json(400, { ok: false, code: "BAD_REQUEST" satisfies FailCode });
     }
 
-    const body = (await req.json().catch(() => null)) as MailbagSubmitBody | null;
+    const body = (await req
+      .json()
+      .catch(() => null)) as MailbagSubmitBody | null;
 
     const questionText =
       typeof body?.questionText === "string" ? body.questionText.trim() : "";
@@ -148,9 +158,9 @@ export async function POST(req: Request) {
       });
     }
 
+    const kind = normalizeSubmissionKind(body?.kind);
     const memberId = await resolveOrCreateMemberId({ clerkUserId, email });
 
-    // Tier gate (patron/partner)
     const tier = await resolveTierForMember(memberId);
     const allowed = tier === "patron" || tier === "partner";
 
@@ -158,7 +168,6 @@ export async function POST(req: Request) {
       return json(403, { ok: false, code: "TIER_REQUIRED" satisfies FailCode });
     }
 
-    // Rate limit: 3 per UTC day
     const countRes = await sql<{ n: number }>`
       SELECT COUNT(*)::int AS n
       FROM mailbag_questions
@@ -180,11 +189,23 @@ export async function POST(req: Request) {
     );
 
     await sql`
-      INSERT INTO mailbag_questions (member_id, question_text, asker_name, status)
-      VALUES (${memberId}::uuid, ${questionText}, ${askerName}, 'open'::mailbag_question_status)
+      INSERT INTO mailbag_questions (
+        member_id,
+        question_text,
+        asker_name,
+        kind,
+        status
+      )
+      VALUES (
+        ${memberId}::uuid,
+        ${questionText},
+        ${askerName},
+        ${kind}::mailbag_submission_kind,
+        'open'::mailbag_question_status
+      )
     `;
 
-    return json(200, { ok: true });
+    return json(200, { ok: true, kind });
   } catch (e) {
     console.error(e);
     return json(500, { ok: false, code: "SERVER_ERROR" satisfies FailCode });

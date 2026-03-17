@@ -54,6 +54,14 @@ export const modulePanels = defineType({
                 list: [
                   { title: "Authored rich text panel", value: "none" },
                   { title: "Member summary panel", value: "memberSummary" },
+                  {
+                    title: "Feedback form: suggestion",
+                    value: "feedbackSuggestion",
+                  },
+                  {
+                    title: "Feedback form: bug report",
+                    value: "feedbackBugReport",
+                  },
                 ],
               },
               description:
@@ -61,12 +69,34 @@ export const modulePanels = defineType({
             }),
 
             defineField({
+              name: "runtimeDescription",
+              title: "Runtime description override",
+              type: "text",
+              rows: 3,
+              hidden: ({ parent }) =>
+                parent?.runtimePanelKind !== "feedbackSuggestion" &&
+                parent?.runtimePanelKind !== "feedbackBugReport",
+              description:
+                "Optional. Overrides the default descriptive copy for feedback runtime panels.",
+            }),
+
+            defineField({
+              name: "runtimeSubmitLabel",
+              title: "Runtime submit label override",
+              type: "string",
+              hidden: ({ parent }) =>
+                parent?.runtimePanelKind !== "feedbackSuggestion" &&
+                parent?.runtimePanelKind !== "feedbackBugReport",
+              description:
+                "Optional. Overrides the submit button label for feedback runtime panels.",
+            }),
+
+            defineField({
               name: "teaser",
               title: "Teaser (locked viewers)",
               type: "array",
               of: [{ type: "block" }],
-              hidden: ({ parent }) =>
-                parent?.runtimePanelKind === "memberSummary",
+              hidden: ({ parent }) => parent?.runtimePanelKind !== "none",
               description:
                 "Shown when viewer is not entitled (if gated). If empty, panel will not render for locked viewers.",
             }),
@@ -76,8 +106,7 @@ export const modulePanels = defineType({
               title: "Full (entitled viewers)",
               type: "array",
               of: [{ type: "block" }],
-              hidden: ({ parent }) =>
-                parent?.runtimePanelKind === "memberSummary",
+              hidden: ({ parent }) => parent?.runtimePanelKind !== "none",
               description:
                 "Shown when viewer is entitled (or always if not gated).",
               validation: (r) =>
@@ -89,7 +118,10 @@ export const modulePanels = defineType({
                       ? (context.parent as { runtimePanelKind?: string })
                       : null;
 
-                  if (parent?.runtimePanelKind === "memberSummary") return true;
+                  if (parent?.runtimePanelKind && parent.runtimePanelKind !== "none") {
+                    return true;
+                  }
+
                   return Array.isArray(value) && value.length > 0
                     ? true
                     : "Full content is required for authored rich text panels.";
@@ -101,7 +133,7 @@ export const modulePanels = defineType({
               title: "Requires entitlement key",
               type: "string",
               description:
-                "Optional entitlement required to reveal full content of this panel",
+                "Optional entitlement required to reveal this panel.",
             }),
 
             defineField({
@@ -128,7 +160,11 @@ export const modulePanels = defineType({
               const kind =
                 runtimePanelKind === "memberSummary"
                   ? "Runtime member panel"
-                  : "Authored panel";
+                  : runtimePanelKind === "feedbackSuggestion"
+                    ? "Runtime suggestion form"
+                    : runtimePanelKind === "feedbackBugReport"
+                      ? "Runtime bug report form"
+                      : "Authored panel";
 
               const access = requiresEntitlement ? "Gated" : "Ungated";
 
@@ -156,6 +192,7 @@ export const modulePanels = defineType({
             : layout === 3
               ? "3-up"
               : "?";
+
       return {
         title: title ?? "Panels",
         subtitle: `${cols} · ${count} panel${count === 1 ? "" : "s"}`,

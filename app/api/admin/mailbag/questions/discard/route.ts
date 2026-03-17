@@ -1,3 +1,4 @@
+// web/app/api/admin/mailbag/questions/discard/route.ts
 import "server-only";
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
@@ -28,25 +29,27 @@ export async function POST(req: Request) {
         ? (body as Record<string, unknown>).ids
         : null;
 
-    const ids = Array.isArray(idsRaw) ? idsRaw.filter(isUuid) : [];
-    if (ids.length === 0) return json(400, { ok: false, code: "NO_IDS" });
+    const ids = Array.isArray(idsRaw)
+      ? Array.from(new Set(idsRaw.filter(isUuid)))
+      : [];
 
-    // Build parameter placeholders: $1::uuid, $2::uuid, ...
+    if (ids.length === 0) {
+      return json(400, { ok: false, code: "NO_IDS" });
+    }
+
     const placeholders = ids.map((_, i) => `$${i + 1}::uuid`).join(", ");
 
-    // Use sql.query so we can pass a dynamic params list safely.
     const r = await sql.query(
       `
-  UPDATE mailbag_questions
-  SET status = 'discarded'::mailbag_question_status, updated_at = now()
-  WHERE id IN (${placeholders})
-    AND status = 'open'::mailbag_question_status
-  RETURNING 1
-  `,
+      UPDATE mailbag_questions
+      SET status = 'discarded'::mailbag_question_status,
+          updated_at = now()
+      WHERE id IN (${placeholders})
+        AND status = 'open'::mailbag_question_status
+      RETURNING 1
+      `,
       ids,
     );
-
-    return json(200, { ok: true, updated: r.rowCount ?? 0 });
 
     return json(200, { ok: true, updated: r.rowCount ?? 0 });
   } catch (e) {

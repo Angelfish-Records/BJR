@@ -18,6 +18,7 @@ import PortalTabs, { type PortalTabSpec } from "./PortalTabs";
 import PortalArtistPosts from "./modules/PortalArtistPosts";
 import PortalExegesis from "./modules/PortalExegesis";
 import PortalMemberPanel from "./modules/PortalMemberPanel";
+import MailbagFeedbackForm from "./modules/MailbagFeedbackForm";
 
 type DownloadAssetSel = NonNullable<PortalModuleDownloads["assets"]>[number];
 
@@ -28,10 +29,6 @@ type Props = {
   memberSummary?: PortalMemberSummary | null;
 };
 
-// --------------------
-// Helpers
-// --------------------
-
 function hasKey(
   entitlementKeys: string[],
   key: string | null | undefined,
@@ -40,16 +37,11 @@ function hasKey(
   return entitlementKeys.includes(key);
 }
 
-/**
- * Tier ladder: higher tiers imply lower tiers.
- * Keep this explicit so it stays readable and hard to misconfigure.
- */
 function expandEntitlementKeys(keys: string[]): string[] {
   if (!Array.isArray(keys) || keys.length === 0) return [];
 
   const set = new Set(keys);
 
-  // Adjust to match your real tier keys
   if (set.has("tier_partner")) {
     set.add("tier_patron");
     set.add("tier_friend");
@@ -109,13 +101,6 @@ function getChildren(x: unknown): readonly unknown[] {
   return Array.isArray(kids) ? kids : [];
 }
 
-/**
- * Treat PortableText as "present" only if:
- * - any non-block node exists (image/custom object), OR
- * - any span contains non-whitespace text.
- *
- * No `any`, and no reliance on non-exported portabletext types.
- */
 function portableTextHasContent(
   blocks: readonly PTNode[] | null | undefined,
 ): boolean {
@@ -124,16 +109,10 @@ function portableTextHasContent(
   for (const b of blocks as readonly unknown[]) {
     if (!hasType(b)) continue;
 
-    // Non-block nodes count as content
     if (b._type !== "block") return true;
 
-    // Block: scan children for text spans
     for (const ch of getChildren(b)) {
       if (isSpan(ch) && ch.text.trim()) return true;
-
-      // Optional: if you want inline non-span children (e.g. inline objects)
-      // to also count as content, uncomment:
-      // if (hasType(ch) && ch._type !== "span") return true;
     }
   }
 
@@ -141,6 +120,18 @@ function portableTextHasContent(
 }
 
 type PanelVariant = "default" | "gold" | "patternPill";
+
+type RuntimePanelKind =
+  | "none"
+  | "memberSummary"
+  | "feedbackSuggestion"
+  | "feedbackBugReport";
+
+function isFeedbackRuntimePanelKind(
+  value: string | null | undefined,
+): value is "feedbackSuggestion" | "feedbackBugReport" {
+  return value === "feedbackSuggestion" || value === "feedbackBugReport";
+}
 
 function PanelShell(props: {
   variant: PanelVariant;
@@ -150,14 +141,12 @@ function PanelShell(props: {
 
   if (variant !== "gold") return <>{children}</>;
 
-  // Exact same structural idea as MembershipModal:
-  // frame (gradient) -> inner surface (opaque) -> content (children)
   return (
     <div
       className="portalPanelFrame portalPanelFrame--gold"
       style={{
         borderRadius: 18,
-        padding: 1, // gradient thickness
+        padding: 1,
         transform: "translateZ(0)",
       }}
     >
@@ -165,7 +154,7 @@ function PanelShell(props: {
         className="portalPanelInner portalPanelInner--gold"
         style={{
           borderRadius: 17,
-          overflow: "hidden", // key: clips the frame completely
+          overflow: "hidden",
         }}
       >
         {children}
@@ -208,12 +197,13 @@ function Panel(props: {
 function RuntimeMemberPanelCard(props: {
   title: string;
   summary: PortalMemberSummary;
+  variant: PanelVariant;
 }) {
-  const { title, summary } = props;
+  const { title, summary, variant } = props;
 
   return (
     <div
-      className="portalPanel portalPanel--default"
+      className={`portalPanel portalPanel--${variant}`}
       style={{
         borderRadius: 16,
         padding: 14,
@@ -233,6 +223,43 @@ function RuntimeMemberPanelCard(props: {
   );
 }
 
+function RuntimeFeedbackPanelCard(props: {
+  title: string;
+  description?: string | null;
+  submitLabel?: string | null;
+  kind: "suggestion" | "bug_report";
+  variant: PanelVariant;
+}) {
+  const { title, description, submitLabel, kind, variant } = props;
+
+  return (
+    <div
+      className={`portalPanel portalPanel--${variant}`}
+      style={{
+        borderRadius: 16,
+        padding: 14,
+        minWidth: 0,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 13,
+          opacity: 0.82,
+          lineHeight: 1.6,
+        }}
+      >
+        <MailbagFeedbackForm
+          kind={kind}
+          title={title}
+          description={description ?? undefined}
+          submitLabel={submitLabel ?? undefined}
+          embedded
+        />
+      </div>
+    </div>
+  );
+}
+
 function buildAssetsToRender(
   offerAssets: AlbumOfferAsset[],
   configured: DownloadAssetSel[] | null,
@@ -245,8 +272,9 @@ function buildAssetsToRender(
   if (configured) {
     for (const sel of configured) {
       const found = offerAssets.find((a) => a.id === sel.assetId);
-      if (found)
+      if (found) {
         assetsToRender.push({ asset: found, labelOverride: sel.label });
+      }
     }
   } else {
     for (const asset of offerAssets) assetsToRender.push({ asset });
@@ -256,12 +284,9 @@ function buildAssetsToRender(
     configured?.filter(
       (sel) => !offerAssets.some((a) => a.id === sel.assetId),
     ) ?? [];
+
   return { assetsToRender, missingConfiguredIds };
 }
-
-// --------------------
-// Single offer card (Bandcamp-style, self-contained)
-// --------------------
 
 function NoteRow(props: { icon: React.ReactNode; children: React.ReactNode }) {
   const { icon, children } = props;
@@ -428,7 +453,6 @@ function DownloadOfferCard(props: {
         </div>
       </div>
 
-      {/* Optional highlights we already support */}
       {highlights && highlights.length > 0 ? (
         <div
           style={{
@@ -446,7 +470,6 @@ function DownloadOfferCard(props: {
         </div>
       ) : null}
 
-      {/* Bandcamp-style icon notes (hard-coded) */}
       <div style={{ marginTop: 14, display: "grid", gap: 10, fontSize: 13 }}>
         <NoteRow icon={ICON_WAVE}>{includesText}</NoteRow>
         <NoteRow icon={ICON_FORMATS}>
@@ -481,7 +504,7 @@ function DownloadOfferCard(props: {
                   display: "grid",
                   gap: 10,
                   width: "100%",
-                  justifyItems: "stretch", // 🔑 same rail behavior as Buy
+                  justifyItems: "stretch",
                 }}
               >
                 {assetsToRender.map(({ asset, labelOverride }, i) => (
@@ -497,7 +520,6 @@ function DownloadOfferCard(props: {
                 ))}
               </div>
 
-              {/* Keep gift available, but visually separated */}
               <div style={{ paddingTop: 2, textAlign: "center" }}>
                 <GiftAlbumButton
                   albumTitle={title}
@@ -532,10 +554,6 @@ function DownloadOfferCard(props: {
   );
 }
 
-// --------------------
-// Module renderer (reused per tab)
-// --------------------
-
 type VisibleAuthoredPanel = {
   key: string;
   title: string;
@@ -554,7 +572,20 @@ type VisibleRuntimeMemberPanel = {
   runtimeSummary: PortalMemberSummary;
 };
 
-type VisiblePanel = VisibleAuthoredPanel | VisibleRuntimeMemberPanel;
+type VisibleRuntimeFeedbackPanel = {
+  key: string;
+  title: string;
+  locked: false;
+  variant: PanelStyleVariant;
+  runtimePanelKind: "feedbackSuggestion" | "feedbackBugReport";
+  runtimeDescription: string | null;
+  runtimeSubmitLabel: string | null;
+};
+
+type VisiblePanel =
+  | VisibleAuthoredPanel
+  | VisibleRuntimeMemberPanel
+  | VisibleRuntimeFeedbackPanel;
 
 function renderModule(
   m: PortalModule,
@@ -580,7 +611,9 @@ function renderModule(
           !!p.requiresEntitlement &&
           !hasKey(entitlementKeys, p.requiresEntitlement);
 
-        if (p.runtimePanelKind === "memberSummary") {
+        const runtimeKind = (p.runtimePanelKind ?? "none") as RuntimePanelKind;
+
+        if (runtimeKind === "memberSummary") {
           if (locked) return [];
           if (!memberSummary) return [];
           if (!hasMeaningfulMemberSummary(memberSummary)) return [];
@@ -593,6 +626,28 @@ function renderModule(
               variant: p.styleVariant ?? "default",
               runtimePanelKind: "memberSummary",
               runtimeSummary: memberSummary,
+            },
+          ];
+        }
+
+        if (isFeedbackRuntimePanelKind(runtimeKind)) {
+          if (locked) return [];
+
+          return [
+            {
+              key: p._key,
+              title: p.title,
+              locked: false,
+              variant: p.styleVariant ?? "default",
+              runtimePanelKind: runtimeKind,
+              runtimeDescription:
+                typeof p.runtimeDescription === "string"
+                  ? p.runtimeDescription
+                  : null,
+              runtimeSubmitLabel:
+                typeof p.runtimeSubmitLabel === "string"
+                  ? p.runtimeSubmitLabel
+                  : null,
             },
           ];
         }
@@ -635,7 +690,7 @@ function renderModule(
               fontSize: 15,
               opacity: 0.92,
               marginBottom: 10,
-              padding: "0 2px", // tiny optical alignment
+              padding: "0 2px",
             }}
           >
             {m.title}
@@ -650,21 +705,47 @@ function renderModule(
                   <RuntimeMemberPanelCard
                     title={p.title}
                     summary={p.runtimeSummary}
+                    variant={p.variant}
                   />
                 </PanelShell>
               );
             }
 
-            return (
-              <PanelShell key={p.key} variant={p.variant}>
-                <Panel
-                  title={p.title}
-                  blocks={p.blocks}
-                  locked={p.locked}
-                  variant={p.variant}
-                />
-              </PanelShell>
-            );
+            if (
+              p.runtimePanelKind === "feedbackSuggestion" ||
+              p.runtimePanelKind === "feedbackBugReport"
+            ) {
+              return (
+                <PanelShell key={p.key} variant={p.variant}>
+                  <RuntimeFeedbackPanelCard
+                    title={p.title}
+                    description={p.runtimeDescription}
+                    submitLabel={p.runtimeSubmitLabel}
+                    kind={
+                      p.runtimePanelKind === "feedbackBugReport"
+                        ? "bug_report"
+                        : "suggestion"
+                    }
+                    variant={p.variant}
+                  />
+                </PanelShell>
+              );
+            }
+
+            if (p.runtimePanelKind === "none") {
+              return (
+                <PanelShell key={p.key} variant={p.variant}>
+                  <Panel
+                    title={p.title}
+                    blocks={p.blocks}
+                    locked={p.locked}
+                    variant={p.variant}
+                  />
+                </PanelShell>
+              );
+            }
+
+            return null;
           })}
         </div>
       </div>
@@ -759,10 +840,6 @@ function renderModule(
   return null;
 }
 
-// --------------------
-// Tab inference
-// --------------------
-
 type BuiltTab = {
   id: string;
   title: string;
@@ -814,8 +891,6 @@ function inferTabs(
     const first = t.modules[0] ?? null;
     if (!first) continue;
 
-    // Optional: mark a tab "locked" if its first module is Panels and *all* panels are gated
-    // and the viewer is not entitled to any of them.
     if (first._type === "modulePanels") {
       const panels = first.panels ?? [];
       if (panels.length === 0) continue;
@@ -835,14 +910,6 @@ function inferTabs(
 
   return out;
 }
-
-// --------------------
-// Main renderer
-// --------------------
-//
-// This file primarily renders authored portal modules fetched from Sanity.
-// Some modules may act as authored runtime markers: Studio controls placement,
-// while runtime code owns the actual data and component behavior.
 
 export default function PortalModules(props: Props) {
   const {
