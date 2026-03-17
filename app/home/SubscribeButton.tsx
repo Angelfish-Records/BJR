@@ -209,18 +209,49 @@ export default function SubscribeButton(props: Props) {
   } = props;
 
   const [hover, setHover] = React.useState(false);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   async function go() {
-    if (disabled) return;
-    const returnTo = `${window.location.pathname}${window.location.search}`;
+    if (disabled || isSubmitting) return;
 
-    const res = await fetch("/api/stripe/create-checkout-session", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ tier, returnTo }),
-    });
-    const data = (await res.json()) as { url?: string };
-    if (data?.url) window.location.assign(data.url);
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      const returnTo = `${window.location.pathname}${window.location.search}`;
+
+      const res = await fetch("/api/stripe/create-checkout-session", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tier, returnTo }),
+      });
+
+      const data = (await res.json().catch(() => null)) as {
+        url?: string;
+        error?: string;
+      } | null;
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Unable to start checkout session");
+      }
+
+      if (!data?.url) {
+        throw new Error("Checkout session did not return a redirect URL");
+      }
+
+      window.location.assign(data.url);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Unable to start checkout";
+      setError(message);
+      console.error("SubscribeButton checkout error", {
+        tier,
+        message,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   if (!loggedIn) return null;

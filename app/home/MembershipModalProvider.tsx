@@ -28,7 +28,7 @@ function getMembershipModalFallback(): Ctx {
           );
         }
 
-        if (prop === "membershipModalOpen") return false;
+        if (prop === "isMembershipOpen") return false;
 
         // default: return a callable no-op so open/close handlers don't explode
         return () => undefined;

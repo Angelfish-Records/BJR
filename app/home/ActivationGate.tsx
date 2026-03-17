@@ -793,7 +793,10 @@ export default function ActivationGate(props: Props) {
 
   const toggleOn = isActive || phase === "code" || isSending || isVerifying;
   const otpOpen = !isActive && phase === "code";
-  const showBillingTrigger = isActive && canManageBilling;
+
+  // Any signed-in user should be able to view membership options.
+  // canManageBilling should govern existing-subscription controls only.
+  const showBillingTrigger = isActive;
 
   // Privacy notice opens briefly while typing (and never when OTP is open)
   const privacyOpen =
@@ -895,7 +898,7 @@ export default function ActivationGate(props: Props) {
     </div>
   );
 
-  const membershipModalOpen = isMembershipOpen && isActive && canManageBilling;
+  const membershipModalOpen = isMembershipOpen && isActive;
 
   const membershipModal = membershipModalOpen ? (
     <div
