@@ -55,12 +55,8 @@ export const modulePanels = defineType({
                   { title: "Authored rich text panel", value: "none" },
                   { title: "Member summary panel", value: "memberSummary" },
                   {
-                    title: "Feedback form: suggestion",
-                    value: "feedbackSuggestion",
-                  },
-                  {
-                    title: "Feedback form: bug report",
-                    value: "feedbackBugReport",
+                    title: "Feedback form",
+                    value: "feedbackForm",
                   },
                 ],
               },
@@ -74,8 +70,7 @@ export const modulePanels = defineType({
               type: "text",
               rows: 3,
               hidden: ({ parent }) =>
-                parent?.runtimePanelKind !== "feedbackSuggestion" &&
-                parent?.runtimePanelKind !== "feedbackBugReport",
+                parent?.runtimePanelKind !== "feedbackForm",
               description:
                 "Optional. Overrides the default descriptive copy for feedback runtime panels.",
             }),
@@ -85,8 +80,7 @@ export const modulePanels = defineType({
               title: "Runtime submit label override",
               type: "string",
               hidden: ({ parent }) =>
-                parent?.runtimePanelKind !== "feedbackSuggestion" &&
-                parent?.runtimePanelKind !== "feedbackBugReport",
+                parent?.runtimePanelKind !== "feedbackForm",
               description:
                 "Optional. Overrides the submit button label for feedback runtime panels.",
             }),
@@ -118,7 +112,10 @@ export const modulePanels = defineType({
                       ? (context.parent as { runtimePanelKind?: string })
                       : null;
 
-                  if (parent?.runtimePanelKind && parent.runtimePanelKind !== "none") {
+                  if (
+                    parent?.runtimePanelKind &&
+                    parent.runtimePanelKind !== "none"
+                  ) {
                     return true;
                   }
 
@@ -160,11 +157,9 @@ export const modulePanels = defineType({
               const kind =
                 runtimePanelKind === "memberSummary"
                   ? "Runtime member panel"
-                  : runtimePanelKind === "feedbackSuggestion"
-                    ? "Runtime suggestion form"
-                    : runtimePanelKind === "feedbackBugReport"
-                      ? "Runtime bug report form"
-                      : "Authored panel";
+                  : runtimePanelKind === "feedbackForm"
+                    ? "Runtime feedback form"
+                    : "Authored panel";
 
               const access = requiresEntitlement ? "Gated" : "Ungated";
 

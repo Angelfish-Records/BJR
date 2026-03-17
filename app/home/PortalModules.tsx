@@ -121,16 +121,12 @@ function portableTextHasContent(
 
 type PanelVariant = "default" | "gold" | "patternPill";
 
-type RuntimePanelKind =
-  | "none"
-  | "memberSummary"
-  | "feedbackSuggestion"
-  | "feedbackBugReport";
+type RuntimePanelKind = "none" | "memberSummary" | "feedbackForm";
 
 function isFeedbackRuntimePanelKind(
   value: string | null | undefined,
-): value is "feedbackSuggestion" | "feedbackBugReport" {
-  return value === "feedbackSuggestion" || value === "feedbackBugReport";
+): value is "feedbackForm" {
+  return value === "feedbackForm";
 }
 
 function PanelShell(props: {
@@ -227,10 +223,9 @@ function RuntimeFeedbackPanelCard(props: {
   title: string;
   description?: string | null;
   submitLabel?: string | null;
-  kind: "suggestion" | "bug_report";
   variant: PanelVariant;
 }) {
-  const { title, description, submitLabel, kind, variant } = props;
+  const { title, description, submitLabel, variant } = props;
 
   return (
     <div
@@ -249,11 +244,11 @@ function RuntimeFeedbackPanelCard(props: {
         }}
       >
         <MailbagFeedbackForm
-          kind={kind}
           title={title}
           description={description ?? undefined}
           submitLabel={submitLabel ?? undefined}
           embedded
+          allowKindSwitch
         />
       </div>
     </div>
@@ -577,7 +572,7 @@ type VisibleRuntimeFeedbackPanel = {
   title: string;
   locked: false;
   variant: PanelStyleVariant;
-  runtimePanelKind: "feedbackSuggestion" | "feedbackBugReport";
+  runtimePanelKind: "feedbackForm";
   runtimeDescription: string | null;
   runtimeSubmitLabel: string | null;
 };
@@ -699,53 +694,47 @@ function renderModule(
 
         <div className={gridClass}>
           {visiblePanels.map((p) => {
-            if (p.runtimePanelKind === "memberSummary") {
-              return (
-                <PanelShell key={p.key} variant={p.variant}>
-                  <RuntimeMemberPanelCard
-                    title={p.title}
-                    summary={p.runtimeSummary}
-                    variant={p.variant}
-                  />
-                </PanelShell>
-              );
-            }
+            switch (p.runtimePanelKind) {
+              case "memberSummary":
+                return (
+                  <PanelShell key={p.key} variant={p.variant}>
+                    <RuntimeMemberPanelCard
+                      title={p.title}
+                      summary={p.runtimeSummary}
+                      variant={p.variant}
+                    />
+                  </PanelShell>
+                );
 
-            if (
-              p.runtimePanelKind === "feedbackSuggestion" ||
-              p.runtimePanelKind === "feedbackBugReport"
-            ) {
-              return (
-                <PanelShell key={p.key} variant={p.variant}>
-                  <RuntimeFeedbackPanelCard
-                    title={p.title}
-                    description={p.runtimeDescription}
-                    submitLabel={p.runtimeSubmitLabel}
-                    kind={
-                      p.runtimePanelKind === "feedbackBugReport"
-                        ? "bug_report"
-                        : "suggestion"
-                    }
-                    variant={p.variant}
-                  />
-                </PanelShell>
-              );
-            }
+              case "feedbackForm":
+                return (
+                  <PanelShell key={p.key} variant={p.variant}>
+                    <RuntimeFeedbackPanelCard
+                      title={p.title}
+                      description={p.runtimeDescription}
+                      submitLabel={p.runtimeSubmitLabel}
+                      variant={p.variant}
+                    />
+                  </PanelShell>
+                );
 
-            if (p.runtimePanelKind === "none") {
-              return (
-                <PanelShell key={p.key} variant={p.variant}>
-                  <Panel
-                    title={p.title}
-                    blocks={p.blocks}
-                    locked={p.locked}
-                    variant={p.variant}
-                  />
-                </PanelShell>
-              );
-            }
+              case "none":
+                return (
+                  <PanelShell key={p.key} variant={p.variant}>
+                    <Panel
+                      title={p.title}
+                      blocks={p.blocks}
+                      locked={p.locked}
+                      variant={p.variant}
+                    />
+                  </PanelShell>
+                );
 
-            return null;
+              default: {
+                const _exhaustive: never = p;
+                return _exhaustive;
+              }
+            }
           })}
         </div>
       </div>

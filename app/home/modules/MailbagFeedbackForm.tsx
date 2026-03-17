@@ -6,12 +6,13 @@ import React from "react";
 type SubmissionKind = "suggestion" | "bug_report";
 
 type Props = {
-  kind: SubmissionKind;
+  kind?: SubmissionKind;
   title?: string;
   description?: string;
   submitLabel?: string;
   className?: string;
   embedded?: boolean;
+  allowKindSwitch?: boolean;
 };
 
 type SubmitState = "idle" | "submitting" | "success" | "error";
@@ -37,10 +38,6 @@ type ApiErr = {
 
 const MAX_CHARS = 800;
 
-function kindHeading(kind: SubmissionKind): string {
-  return kind === "bug_report" ? "Report a bug" : "Suggest a feature";
-}
-
 function kindDescription(kind: SubmissionKind): string {
   return kind === "bug_report"
     ? "Tell us what broke, what you expected, and anything useful about the device or browser."
@@ -61,24 +58,33 @@ function errorMessage(payload: ApiErr | null): string {
   if (payload.code === "TOO_LONG") {
     return `Please keep it under ${payload.maxChars ?? MAX_CHARS} characters.`;
   }
-  if (payload.code === "EMPTY") return "Please write something before submitting.";
+  if (payload.code === "EMPTY")
+    return "Please write something before submitting.";
   return "Something went wrong.";
 }
 
 export default function MailbagFeedbackForm(props: Props) {
   const {
-    kind,
+    kind: kindProp,
     title,
     description,
     submitLabel,
     className,
     embedded = false,
+    allowKindSwitch = false,
   } = props;
 
+  const [kind, setKind] = React.useState<SubmissionKind>(
+    kindProp ?? "suggestion",
+  );
   const [askerName, setAskerName] = React.useState("");
   const [text, setText] = React.useState("");
   const [state, setState] = React.useState<SubmitState>("idle");
   const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (kindProp) setKind(kindProp);
+  }, [kindProp]);
 
   const remaining = Math.max(0, MAX_CHARS - text.length);
 
@@ -132,7 +138,7 @@ export default function MailbagFeedbackForm(props: Props) {
       }
     >
       <div style={{ fontSize: embedded ? 16 : 18, fontWeight: 900 }}>
-        {title ?? kindHeading(kind)}
+        {title ?? "Site feedback"}
       </div>
 
       <div
@@ -143,12 +149,73 @@ export default function MailbagFeedbackForm(props: Props) {
           opacity: 0.72,
         }}
       >
-        {description ?? kindDescription(kind)}
+        {description ??
+          (allowKindSwitch
+            ? "Send a suggestion or report a bug."
+            : kindDescription(kind))}
       </div>
+
+      {allowKindSwitch ? (
+        <div
+          style={{
+            marginTop: 12,
+            display: "inline-flex",
+            gap: 6,
+            padding: 4,
+            borderRadius: 12,
+            border: "1px solid rgba(255,255,255,0.12)",
+            background: "rgba(255,255,255,0.04)",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setKind("suggestion")}
+            aria-pressed={kind === "suggestion"}
+            style={{
+              height: 32,
+              padding: "0 12px",
+              borderRadius: 9,
+              border: "1px solid rgba(255,255,255,0.12)",
+              background:
+                kind === "suggestion"
+                  ? "rgba(255,255,255,0.12)"
+                  : "transparent",
+              color: "rgba(255,255,255,0.94)",
+              fontSize: 12,
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            Suggestion
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setKind("bug_report")}
+            aria-pressed={kind === "bug_report"}
+            style={{
+              height: 32,
+              padding: "0 12px",
+              borderRadius: 9,
+              border: "1px solid rgba(255,255,255,0.12)",
+              background:
+                kind === "bug_report"
+                  ? "rgba(255,255,255,0.12)"
+                  : "transparent",
+              color: "rgba(255,255,255,0.94)",
+              fontSize: 12,
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            Bug report
+          </button>
+        </div>
+      ) : null}
 
       <div style={{ marginTop: 12 }}>
         <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.74 }}>
-          Display name
+          {kind === "bug_report" ? "Bug report" : "Suggestion"}
         </div>
         <input
           value={askerName}
@@ -230,15 +297,15 @@ export default function MailbagFeedbackForm(props: Props) {
         >
           {state === "submitting"
             ? "Sending…"
-            : submitLabel ??
-              (kind === "bug_report" ? "Send bug report" : "Send suggestion")}
+            : (submitLabel ??
+              (kind === "bug_report" ? "Send bug report" : "Send suggestion"))}
         </button>
       </div>
 
       {state === "success" ? (
         <div style={{ marginTop: 10, fontSize: 12, opacity: 0.82 }}>
-          Thanks — your{" "}
-          {kind === "bug_report" ? "bug report" : "suggestion"} has been sent.
+          Thanks — your {kind === "bug_report" ? "bug report" : "suggestion"}{" "}
+          has been sent.
         </div>
       ) : null}
 

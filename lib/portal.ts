@@ -11,11 +11,7 @@ export type PortalModuleHeading = {
 
 export type PanelStyleVariant = "default" | "gold" | "patternPill";
 
-type PortalRuntimePanelKind =
-  | "none"
-  | "memberSummary"
-  | "feedbackSuggestion"
-  | "feedbackBugReport";
+type PortalRuntimePanelKind = "none" | "memberSummary" | "feedbackForm";
 
 type PortalModulePanel = {
   _key: string;
