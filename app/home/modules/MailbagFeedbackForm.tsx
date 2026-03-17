@@ -38,12 +38,6 @@ type ApiErr = {
 
 const MAX_CHARS = 800;
 
-function kindDescription(kind: SubmissionKind): string {
-  return kind === "bug_report"
-    ? "Tell us what broke, what you expected, and anything useful about the device or browser."
-    : "Tell us what you’d love to see added or improved on the site.";
-}
-
 function errorMessage(payload: ApiErr | null): string {
   if (!payload?.code) return "Something went wrong.";
   if (payload.code === "NOT_AUTHED") return "Please sign in first.";
@@ -66,8 +60,6 @@ function errorMessage(payload: ApiErr | null): string {
 export default function MailbagFeedbackForm(props: Props) {
   const {
     kind: kindProp,
-    title,
-    description,
     submitLabel,
     className,
     embedded = false,
@@ -77,7 +69,7 @@ export default function MailbagFeedbackForm(props: Props) {
   const [kind, setKind] = React.useState<SubmissionKind>(
     kindProp ?? "suggestion",
   );
-  const [askerName, setAskerName] = React.useState("");
+  const [askerName] = React.useState("");
   const [text, setText] = React.useState("");
   const [state, setState] = React.useState<SubmitState>("idle");
   const [error, setError] = React.useState<string | null>(null);
@@ -137,104 +129,76 @@ export default function MailbagFeedbackForm(props: Props) {
             }
       }
     >
-      <div style={{ fontSize: embedded ? 16 : 18, fontWeight: 900 }}>
-        {title ?? "Site feedback"}
-      </div>
-
-      <div
-        style={{
-          marginTop: 6,
-          fontSize: 13,
-          lineHeight: 1.6,
-          opacity: 0.72,
-        }}
-      >
-        {description ??
-          (allowKindSwitch
-            ? "Send a suggestion or report a bug."
-            : kindDescription(kind))}
-      </div>
-
       {allowKindSwitch ? (
         <div
           style={{
             marginTop: 12,
-            display: "inline-flex",
-            gap: 6,
-            padding: 4,
-            borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.12)",
-            background: "rgba(255,255,255,0.04)",
+            display: "flex",
+            justifyContent: "flex-end",
           }}
         >
-          <button
-            type="button"
-            onClick={() => setKind("suggestion")}
-            aria-pressed={kind === "suggestion"}
+          <div
+            role="tablist"
+            aria-label="Feedback type"
             style={{
-              height: 32,
-              padding: "0 12px",
-              borderRadius: 9,
-              border: "1px solid rgba(255,255,255,0.12)",
-              background:
-                kind === "suggestion"
-                  ? "rgba(255,255,255,0.12)"
-                  : "transparent",
-              color: "rgba(255,255,255,0.94)",
-              fontSize: 12,
-              fontWeight: 800,
-              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "stretch",
             }}
           >
-            Suggestion
-          </button>
+            <button
+              type="button"
+              onClick={() => setKind("suggestion")}
+              aria-pressed={kind === "suggestion"}
+              style={{
+                height: 32,
+                padding: "0 16px",
+                borderTopLeftRadius: 12,
+                borderBottomLeftRadius: 12,
+                borderTopRightRadius: 0,
+                borderBottomRightRadius: 0,
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderRightWidth: 0.5,
+                background:
+                  kind === "suggestion"
+                    ? "rgba(255,255,255,0.12)"
+                    : "transparent",
+                color: "rgba(255,255,255,0.94)",
+                fontSize: 12,
+                fontWeight: 800,
+                cursor: "pointer",
+              }}
+            >
+              Suggestion
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setKind("bug_report")}
-            aria-pressed={kind === "bug_report"}
-            style={{
-              height: 32,
-              padding: "0 12px",
-              borderRadius: 9,
-              border: "1px solid rgba(255,255,255,0.12)",
-              background:
-                kind === "bug_report"
-                  ? "rgba(255,255,255,0.12)"
-                  : "transparent",
-              color: "rgba(255,255,255,0.94)",
-              fontSize: 12,
-              fontWeight: 800,
-              cursor: "pointer",
-            }}
-          >
-            Bug report
-          </button>
+            <button
+              type="button"
+              onClick={() => setKind("bug_report")}
+              aria-pressed={kind === "bug_report"}
+              style={{
+                height: 32,
+                padding: "0 16px",
+                borderTopLeftRadius: 0,
+                borderBottomLeftRadius: 0,
+                borderTopRightRadius: 12,
+                borderBottomRightRadius: 12,
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderLeftWidth: 0.5,
+                background:
+                  kind === "bug_report"
+                    ? "rgba(255,255,255,0.12)"
+                    : "transparent",
+                color: "rgba(255,255,255,0.94)",
+                fontSize: 12,
+                fontWeight: 800,
+                cursor: "pointer",
+              }}
+            >
+              Bug report
+            </button>
+          </div>
         </div>
       ) : null}
-
-      <div style={{ marginTop: 12 }}>
-        <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.74 }}>
-          {kind === "bug_report" ? "Bug report" : "Suggestion"}
-        </div>
-        <input
-          value={askerName}
-          onChange={(e) => setAskerName(e.target.value)}
-          placeholder="Optional"
-          maxLength={48}
-          style={{
-            marginTop: 6,
-            width: "100%",
-            height: 38,
-            borderRadius: 10,
-            border: "1px solid rgba(255,255,255,0.14)",
-            background: "rgba(255,255,255,0.06)",
-            color: "rgba(255,255,255,0.94)",
-            padding: "0 10px",
-            fontSize: 13,
-          }}
-        />
-      </div>
 
       <div style={{ marginTop: 12 }}>
         <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.74 }}>
@@ -246,7 +210,7 @@ export default function MailbagFeedbackForm(props: Props) {
           placeholder={
             kind === "bug_report"
               ? "Describe what happened, what you expected, and how to reproduce it."
-              : "Describe the feature or improvement you’d like to see."
+              : "What content or features do you want to see here?"
           }
           maxLength={MAX_CHARS}
           style={{
