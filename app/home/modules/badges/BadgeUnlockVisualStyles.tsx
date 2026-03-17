@@ -943,6 +943,11 @@ export default function BadgeUnlockVisualStyles() {
 
       .portal-member-badge-meta-inner {
         position: relative;
+        min-height: 0;
+      }
+
+      .portal-badge-unlock-host[data-badge-expanded="true"]
+        .portal-member-badge-meta-inner {
         min-height: 28px;
       }
 
@@ -952,8 +957,13 @@ export default function BadgeUnlockVisualStyles() {
         display: flex;
         align-items: flex-start;
         justify-content: center;
-        min-height: 28px;
+        min-height: 0;
         will-change: transform, opacity, filter;
+      }
+
+      .portal-badge-unlock-host[data-badge-expanded="true"]
+        .portal-member-badge-question-mark {
+        min-height: 28px;
       }
 
       .portal-member-badge-question-mark--dissolving {
