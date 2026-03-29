@@ -22,17 +22,6 @@ function fmtTime(ms: number) {
   return `${m}:${String(r).padStart(2, "0")}`;
 }
 
-function fmtPlayCount(value: number | undefined): string {
-  const n =
-    typeof value === "number" && Number.isFinite(value) && value > 0
-      ? Math.floor(value)
-      : 0;
-
-  if (n < 1000) return `${n} plays`;
-  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K plays`;
-  return `${(n / 1_000_000).toFixed(1)}M plays`;
-}
-
 function fmtActiveListeners(value: number): string {
   const n = Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
   return n === 1 ? "1 listening now" : `${n} listening now`;
@@ -936,7 +925,6 @@ export default function FullPlayer(props: {
     const ms = getDurMs(t) ?? 0;
     return ms > 0 ? fmtTime(ms) : "—";
   };
-  const renderPlayCount = (t: PlayerTrack) => fmtPlayCount(t.playCount);
 
   const shareCtx = deriveShareContext({
     albumSlug: effAlbumSlug,
@@ -1230,8 +1218,10 @@ export default function FullPlayer(props: {
             const isCur = p.current?.recordingId === t.recordingId;
             const isSelected = selectedRecordingId === t.recordingId;
             const isPending = p.pendingRecordingId === t.recordingId;
+            const isLoadingThisRow =
+              p.status === "loading" && (isPending || isCur);
 
-            const shimmerTitle = isPending || (isCur && p.status === "loading");
+            const shimmerTitle = isLoadingThisRow;
             const isNowPlaying =
               isCur &&
               (p.status === "playing" ||

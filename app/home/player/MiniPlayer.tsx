@@ -671,10 +671,14 @@ export default function MiniPlayer(props: {
 
   const progressPct = durKnown ? (sliderValue / durSec) * 100 : 0;
 
+  const displayRecordingId = displayTrack?.recordingId ?? null;
   const shimmerMeta =
-    // shimmer while loading (pending or current)
-    (Boolean(p.pendingRecordingId) && p.status === "loading") ||
-    (p.status === "loading" && Boolean(p.current));
+    p.status === "loading" &&
+    Boolean(
+      displayRecordingId &&
+      (p.pendingRecordingId === displayRecordingId ||
+        p.current?.recordingId === displayRecordingId),
+    );
 
   const dock = (
     <div

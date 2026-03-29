@@ -51,7 +51,7 @@ export function usePlaybackReconciliation(props: {
     routerPush,
   } = props;
 
-  const { setQueue, play, selectTrack, setPendingRecordingId } = player;
+  const { setQueue, play, selectTrack } = player;
 
   const qAlbum = (isPlayer ? route.albumSlug : null) ?? null;
   const qDisplayId = (isPlayer ? route.displayId : null) ?? null;
@@ -132,9 +132,24 @@ export function usePlaybackReconciliation(props: {
 
   React.useEffect(() => {
     if (!qTrackRecordingId) return;
+
+    const selectedRecordingId = player.selectedRecordingId ?? null;
+    const pendingRecordingId = player.pendingRecordingId ?? null;
+
+    if (
+      selectedRecordingId === qTrackRecordingId ||
+      pendingRecordingId === qTrackRecordingId
+    ) {
+      return;
+    }
+
     selectTrack(qTrackRecordingId);
-    setPendingRecordingId(undefined);
-  }, [qTrackRecordingId, selectTrack, setPendingRecordingId]);
+  }, [
+    qTrackRecordingId,
+    player.selectedRecordingId,
+    player.pendingRecordingId,
+    selectTrack,
+  ]);
 
   const primedAlbumKeyRef = React.useRef<string | null>(null);
   React.useEffect(() => {
@@ -170,11 +185,28 @@ export function usePlaybackReconciliation(props: {
       artworkUrl: album.artworkUrl ?? null,
     });
 
-    player.selectTrack(first.recordingId);
-    player.setPendingRecordingId(undefined);
+    const selectedRecordingId = player.selectedRecordingId ?? null;
+    const pendingRecordingId = player.pendingRecordingId ?? null;
+
+    const alreadySelected = selectedRecordingId === first.recordingId;
+    const alreadyPending = pendingRecordingId === first.recordingId;
+
+    if (!alreadySelected && !alreadyPending) {
+      player.selectTrack(first.recordingId);
+    }
 
     primedAlbumKeyRef.current = primeKey;
-  }, [album, tracks, hasSt, qAlbum, currentAlbumSlug, qDisplayId, player]);
+    }, [
+    album,
+    tracks,
+    hasSt,
+    qAlbum,
+    currentAlbumSlug,
+    qDisplayId,
+    player.selectedRecordingId,
+    player.pendingRecordingId,
+    player,
+  ]);
 
   const autoplayFiredRef = React.useRef<string | null>(null);
   React.useEffect(() => {
