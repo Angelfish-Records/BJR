@@ -94,8 +94,8 @@ export async function POST(req: NextRequest) {
     body = null;
   }
 
-  const playbackId = body?.playbackId;
-  if (!playbackId || typeof playbackId !== "string") {
+  const rawPlaybackId = (body?.playbackId ?? "").trim();
+  if (!rawPlaybackId) {
     return gateError(req, {
       correlationId,
       status: 400,
@@ -106,6 +106,7 @@ export async function POST(req: NextRequest) {
       onResponse: (res) => ensureAnonId(req, res),
     });
   }
+  const playbackId = rawPlaybackId;
 
   const rawAlbumId = (body?.albumId ?? "").trim();
   if (!rawAlbumId) {
