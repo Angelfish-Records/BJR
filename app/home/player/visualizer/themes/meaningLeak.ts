@@ -1,4 +1,5 @@
 // web/app/home/player/visualizer/themes/meaningLeak.ts
+// too jittery but the overall visual is promising
 import type { Theme } from "../types";
 import { createProgram, makeFullscreenTriangle } from "../gl";
 

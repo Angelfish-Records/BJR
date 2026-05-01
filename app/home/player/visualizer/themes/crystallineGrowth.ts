@@ -294,6 +294,10 @@ export function createCrystallineGrowthTheme(): Theme {
     render(gl, opts) {
       if (!simProgram || !displayProgram || !tri || !pingpong) return;
 
+      const outputFramebuffer = gl.getParameter(
+        gl.FRAMEBUFFER_BINDING,
+      ) as WebGLFramebuffer | null;
+
       pingpong.resize(gl, opts.width, opts.height);
 
       gl.bindVertexArray(tri.vao);
@@ -316,7 +320,7 @@ export function createCrystallineGrowthTheme(): Theme {
       pingpong.swap();
 
       gl.useProgram(displayProgram);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, outputFramebuffer);
       gl.viewport(0, 0, opts.width, opts.height);
 
       gl.activeTexture(gl.TEXTURE0);
@@ -332,6 +336,7 @@ export function createCrystallineGrowthTheme(): Theme {
       gl.bindTexture(gl.TEXTURE_2D, null);
       gl.bindVertexArray(null);
       gl.useProgram(null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, outputFramebuffer);
 
       frame += 1;
     },

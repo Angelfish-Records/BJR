@@ -1,4 +1,5 @@
 // web/app/home/player/visualizer/themes/filamentStorm.ts
+// black and white pulsating bacteria vibe; needs to have bigger particles
 import type { Theme } from "../types";
 import { createProgram, makeFullscreenTriangle } from "../gl";
 
