@@ -713,7 +713,7 @@ export default function ExegesisTrackClient(props: {
       {composerStage === "collapsed" ? (
         <button
           type="button"
-          className="w-full bg-black/[0.16] px-4 py-3 text-left text-sm text-white/50 transition hover:text-white/72 focus-visible:outline-none"
+          className="w-full bg-[#2c2431]/40 px-4 py-3 text-left text-sm text-white/50 transition hover:text-white/72 focus-visible:outline-none"
           onClick={() => {
             if (isLocked) return;
 

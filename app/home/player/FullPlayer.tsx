@@ -1355,7 +1355,7 @@ export default function FullPlayer(props: {
                   alignItems: "center",
                   gap: 12,
                   textAlign: "left",
-                  padding: "10px 10px",
+                  padding: "6px 6px",
                   borderRadius: rowRadius,
                   border: "1px solid rgba(255,255,255,0.00)",
                   background: restBg,

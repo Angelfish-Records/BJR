@@ -709,7 +709,7 @@ export default function PortalExegesis(props: { title?: string }) {
       <button
         type="button"
         aria-label="Back to all tracks"
-        className="inline-flex h-9 w-9 items-center justify-center rounded-md opacity-70 transition hover:bg-white/5 hover:opacity-100"
+        className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md opacity-70 transition hover:bg-white/5 hover:opacity-100"
         onMouseEnter={() => prefetchRoute(buildIndexHref(search))}
         onFocus={() => prefetchRoute(buildIndexHref(search))}
         onMouseDown={() => prefetchRoute(buildIndexHref(search))}

@@ -83,7 +83,7 @@ export default function ExegesisLyricsRail({
                 lineBtnByKeyRef.current[cue.lineKey] = el;
               }}
               type="button"
-              className="block w-full py-0.5 text-left"
+              className="block w-full cursor-pointer py-0.5 text-left"
               data-linekey={cue.lineKey}
               data-groupkey={groupKey}
               onFocus={() => onLineFocus({ gk: groupKey, lk: cue.lineKey })}

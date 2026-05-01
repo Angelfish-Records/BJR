@@ -67,6 +67,18 @@ export default function LyricsOverlay(props: {
   const [activeIdx, setActiveIdx] = React.useState(-1);
   const activeIdxRef = React.useRef(-1);
 
+  const [edgeSpacers, setEdgeSpacers] = React.useState({
+    topPx: 0,
+    bottomPx: 0,
+  });
+
+  // Padding: keep breathing room so lines “emerge” into focus.
+  // Edge spacers are measured after render so the first/last lyric can reach
+  // the same reading hotspot as every middle lyric.
+  const padTop = isInline ? 16 : 24;
+  const padBottomBase = isInline ? 20 : 28;
+  const readingCenterRatio = 0.44;
+
   // When user scrolls manually, pause auto-follow briefly.
   const userScrollUntilRef = React.useRef<number>(0);
 
@@ -149,7 +161,23 @@ export default function LyricsOverlay(props: {
     autoScrollClearRef.current = null;
 
     const sc = scrollerRef.current;
-    if (sc) sc.scrollTop = 0;
+    if (sc) {
+      requestAnimationFrame(() => {
+        const firstLine = sc.querySelector<HTMLElement>('[data-lyric-idx="0"]');
+        const viewport = viewportRef.current;
+        if (!firstLine || !viewport) {
+          sc.scrollTop = 0;
+          return;
+        }
+
+        const targetY =
+          firstLine.offsetTop +
+          firstLine.offsetHeight / 2 -
+          viewport.clientHeight * 0.44;
+
+        sc.scrollTop = Math.max(0, Math.round(targetY));
+      });
+    }
 
     lineNodeRefs.current.forEach((el) => {
       el?.style.removeProperty("--af-focus");
@@ -260,6 +288,52 @@ export default function LyricsOverlay(props: {
     scheduleFocusCompute();
   }, [activeIdx, scheduleFocusCompute]);
 
+  React.useLayoutEffect(() => {
+    const sc = scrollerRef.current;
+    if (!sc || !cues || cues.length === 0) return;
+
+    const measure = () => {
+      const lyricRows = Array.from(
+        sc.querySelectorAll<HTMLElement>('[data-af-lyric-real="1"]'),
+      );
+
+      const first = lyricRows[0] ?? null;
+      const last = lyricRows.at(-1) ?? null;
+
+      if (!first || !last) {
+        setEdgeSpacers({ topPx: 0, bottomPx: 0 });
+        return;
+      }
+
+      const vh = sc.clientHeight;
+      if (!vh || vh < 10) return;
+
+      const topPx = Math.max(
+        0,
+        Math.round(vh * readingCenterRatio - padTop - first.offsetHeight / 2),
+      );
+
+      const bottomPx = Math.max(
+        0,
+        Math.round(
+          vh * (1 - readingCenterRatio) -
+            padBottomBase -
+            Math.max(0, Math.floor(reservedBottomPx)) -
+            last.offsetHeight / 2,
+        ),
+      );
+
+      setEdgeSpacers((cur) =>
+        cur.topPx === topPx && cur.bottomPx === bottomPx
+          ? cur
+          : { topPx, bottomPx },
+      );
+    };
+
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [cues, isInline, padTop, padBottomBase, reservedBottomPx]);
   if (!cues || cues.length === 0) {
     return (
       <div
@@ -287,10 +361,6 @@ export default function LyricsOverlay(props: {
   const lineFontSize = isInline
     ? "clamp(11px, 1.15vw, 13px)"
     : "clamp(18px, 2.2vw, 26px)";
-
-  // Padding: keep breathing room so lines “emerge” into focus.
-  const padTop = isInline ? 36 : 120;
-  const padBottomBase = isInline ? 52 : 160;
 
   // Mask geometry: soften the fade "knee" to avoid horizon lines on Android.
   const fadeTopPx = isInline ? 22 : 72;
@@ -436,6 +506,14 @@ export default function LyricsOverlay(props: {
               : "transform, -webkit-mask-image, mask-image",
           }}
         >
+          <div
+            aria-hidden="true"
+            style={{
+              height: edgeSpacers.topPx,
+              minHeight: 0,
+              pointerEvents: "none",
+            }}
+          />
           {cues.map((cue, idx) => {
             if (isParaBreakCue(cue)) {
               // Paragraph break row: spacing only, no seek, no discourse affordance.
@@ -485,6 +563,7 @@ export default function LyricsOverlay(props: {
                 data-af-inline={isInline ? "1" : "0"}
                 data-af-has-track={exegesisPathToken ? "1" : "0"}
                 data-af-reveal={idx === revealIdx ? "1" : "0"}
+                data-af-lyric-real="1"
                 onMouseEnter={() => {
                   if (!isInline) return;
                   setHoverIdx(idx);
@@ -723,6 +802,14 @@ export default function LyricsOverlay(props: {
               </div>
             );
           })}
+          <div
+            aria-hidden="true"
+            style={{
+              height: edgeSpacers.bottomPx,
+              minHeight: 0,
+              pointerEvents: "none",
+            }}
+          />
         </div>
 
         <style>{`

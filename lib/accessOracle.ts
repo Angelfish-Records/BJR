@@ -132,11 +132,9 @@ export async function decideAlbumPlaybackAccess(
 
   // ---- Embargo gate ----
   if (embargoed) {
-    // 1) explicit member override.
-    // Important: a raw share token should not silently bypass embargo here.
-    // If you want press links to bypass embargo, model that as a separate
-    // signed-token capability rather than treating every share token as enough.
-    const overrideAllowed = hasMember
+    // 1) explicit override.
+    // A validated album share token is allowed to bypass embargo for playback.
+    const memberOverrideAllowed = hasMember
       ? (
           await checkAccess(
             memberId,
@@ -149,6 +147,8 @@ export async function decideAlbumPlaybackAccess(
           )
         ).allowed
       : false;
+
+    const overrideAllowed = shareTokenAllowsPlayback || memberOverrideAllowed;
 
     if (!overrideAllowed) {
       // 2) early-access tiers during embargo (if enabled)
