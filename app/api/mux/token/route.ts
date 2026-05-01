@@ -15,6 +15,7 @@ import type {
 import { validateShareToken } from "@/lib/shareTokens";
 import { decideAlbumPlaybackAccess } from "@/lib/accessOracle";
 import { ensureAnonId } from "@/lib/anon";
+import { verifyAlbumPlaybackAsset } from "@/lib/albums";
 
 import { correlationIdFromRequest, gateError, jsonOk } from "@/app/api/_gate";
 
@@ -70,6 +71,17 @@ function toPkcs8Pem(pem: string): string {
   return keyObj.export({ format: "pem", type: "pkcs8" }) as string;
 }
 
+function toTokenGateCode(code: string | null | undefined): GateCodeRaw {
+  if (code === "INVALID_REQUEST") return "INVALID_REQUEST";
+  if (code === "EMBARGO") return "EMBARGO";
+  if (code === "TIER_REQUIRED") return "TIER_REQUIRED";
+  if (code === "PROVISIONING") return "PROVISIONING";
+  if (code === "CAP_REACHED") return "CAP_REACHED";
+  if (code === "ANON_CAP_REACHED") return "PLAYBACK_CAP_REACHED";
+
+  return "ENTITLEMENT_REQUIRED";
+}
+
 async function getMemberIdByClerkUserId(
   userId: string,
 ): Promise<string | null> {
@@ -94,8 +106,10 @@ export async function POST(req: NextRequest) {
     body = null;
   }
 
-  const playbackId = body?.playbackId;
-  if (!playbackId || typeof playbackId !== "string") {
+  const playbackId =
+    typeof body?.playbackId === "string" ? body.playbackId.trim() : "";
+
+  if (!playbackId) {
     return gateError(req, {
       correlationId,
       status: 400,
@@ -133,12 +147,45 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  const playbackAsset = await verifyAlbumPlaybackAsset({
+    albumId,
+    playbackId,
+    trackId: body?.trackId ?? null,
+  });
+
+  if (!playbackAsset.ok) {
+    return gateError(req, {
+      correlationId,
+      status: 403,
+      domain: PLAYBACK_DOMAIN,
+      code: "INVALID_REQUEST",
+      action: "wait",
+      message: "Playback asset does not belong to the requested album.",
+      onResponse: (res) => ensureAnonId(req, res),
+    });
+  }
+
   const albumScopeId = `alb:${albumId}`;
 
   const { userId } = await auth();
 
   // ✅ stable anon id (cookie-backed) — read side
   const { anonId } = ensureAnonId(req);
+
+  const memberId = userId ? await getMemberIdByClerkUserId(userId) : null;
+
+  if (userId && !memberId) {
+    return gateError(req, {
+      correlationId,
+      status: 403,
+      domain: PLAYBACK_DOMAIN,
+      code: "PROVISIONING",
+      action: "wait",
+      message:
+        "Signed in, but your member profile is still being created. Refresh in a moment.",
+      onResponse: (res) => ensureAnonId(req, res),
+    });
+  }
 
   const url = new URL(req.url);
   const st =
@@ -207,51 +254,27 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ---- Logged-in access via oracle ----
-  if (userId && !tokenAllowsPlayback) {
-    const memberId = await getMemberIdByClerkUserId(userId);
-    if (!memberId) {
-      return gateError(req, {
-        correlationId,
-        status: 403,
-        domain: PLAYBACK_DOMAIN,
-        code: "PROVISIONING",
-        action: "wait",
-        message:
-          "Signed in, but your member profile is still being created. Refresh in a moment.",
-        onResponse: (res) => ensureAnonId(req, res),
-      });
-    }
+  // ---- Canonical album access via oracle ----
+  // This is the real server-side playback lock. Share tokens may satisfy
+  // entitlement, but they must not bypass embargo or album policy.
+  const d = await decideAlbumPlaybackAccess({
+    memberId,
+    albumId,
+    correlationId,
+    action: ACCESS_ACTIONS.PLAYBACK_TOKEN_ISSUE,
+    shareTokenAllowsPlayback: tokenAllowsPlayback,
+  });
 
-    const d = await decideAlbumPlaybackAccess({
-      memberId,
-      albumId,
+  if (!d.allowed) {
+    return gateError(req, {
       correlationId,
-      action: ACCESS_ACTIONS.PLAYBACK_TOKEN_ISSUE,
+      status: 403,
+      domain: PLAYBACK_DOMAIN,
+      code: toTokenGateCode(d.code),
+      action: (d.action ?? "wait") as GateAction,
+      message: d.reason,
+      onResponse: (res) => ensureAnonId(req, res),
     });
-
-    if (!d.allowed) {
-      const code: GateCodeRaw =
-        d.code === "INVALID_REQUEST"
-          ? "INVALID_REQUEST"
-          : d.code === "EMBARGO"
-            ? "EMBARGO"
-            : d.code === "TIER_REQUIRED"
-              ? "TIER_REQUIRED"
-              : d.code === "PROVISIONING"
-                ? "PROVISIONING"
-                : "ENTITLEMENT_REQUIRED";
-
-      return gateError(req, {
-        correlationId,
-        status: 403,
-        domain: PLAYBACK_DOMAIN,
-        code,
-        action: (d.action ?? "wait") as GateAction,
-        message: d.reason,
-        onResponse: (res) => ensureAnonId(req, res),
-      });
-    }
   }
 
   // ---- Mux Secure Playback signing ----

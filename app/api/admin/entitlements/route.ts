@@ -2,19 +2,12 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
+import { requireAdminMemberId } from "@/lib/adminAuth";
 import {
   normalizeEmail,
   assertLooksLikeEmail,
   ensureMemberByEmail,
 } from "../../../../lib/members";
-
-function requireAdmin(req: Request) {
-  const got = req.headers.get("x-admin-secret") ?? "";
-  const expected = process.env.ADMIN_API_SECRET ?? "";
-  if (!expected || got !== expected) {
-    throw new Error("Unauthorized");
-  }
-}
 
 type GrantInput = {
   key: string;
@@ -48,7 +41,7 @@ function isBody(x: unknown): x is Body {
 
 export async function POST(req: Request) {
   try {
-    requireAdmin(req);
+    await requireAdminMemberId();
 
     const raw: unknown = await req.json().catch(() => null);
     if (!isBody(raw)) {

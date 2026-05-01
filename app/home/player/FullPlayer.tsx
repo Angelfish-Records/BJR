@@ -208,7 +208,6 @@ function accessKey(catalogueId: string, st: string | null) {
 async function fetchAccessOnce(
   catalogueId: string,
   st: string | null,
-  signal?: AbortSignal,
 ): Promise<AccessState> {
   const key = accessKey(catalogueId, st);
 
@@ -223,7 +222,7 @@ async function fetchAccessOnce(
     u.searchParams.set("albumId", catalogueId);
     if (st) u.searchParams.set("st", st);
 
-    const r = await fetch(u.toString(), { method: "GET", signal });
+    const r = await fetch(u.toString(), { method: "GET", cache: "no-store" });
     const corr = r.headers.get("x-correlation-id") ?? null;
 
     const j = (await r.json()) as {
@@ -736,15 +735,13 @@ export default function FullPlayer(props: {
   React.useEffect(() => {
     if (!catalogueId) return;
 
-    const ac = new AbortController();
+    let alive = true;
 
     const st = stParam;
     const key = accessKey(catalogueId, st);
 
-    // hydrate from module cache instantly (no component-instance cache)
     const cached = accessResultCache.get(key) ?? null;
     setAccess((prev) => {
-      // avoid churn if identical
       if (!cached && !prev) return prev;
       if (cached && prev && JSON.stringify(cached) === JSON.stringify(prev))
         return prev;
@@ -753,7 +750,8 @@ export default function FullPlayer(props: {
 
     (async () => {
       try {
-        const next = await fetchAccessOnce(catalogueId, st, ac.signal);
+        const next = await fetchAccessOnce(catalogueId, st);
+        if (!alive) return;
 
         setAccess((prev) => {
           if (prev && JSON.stringify(prev) === JSON.stringify(next))
@@ -784,8 +782,6 @@ export default function FullPlayer(props: {
             code === "CAP_REACHED" ||
             code === "ANON_CAP_REACHED";
 
-          // "Queue is this album" is not intent — PortalArea primes queue/current on first load.
-          // Only treat as block-worthy when there's an actual play attempt or active playback lifecycle.
           const hasPlaybackIntentForThisAlbum =
             player.intent === "play" ||
             player.status === "loading" ||
@@ -798,14 +794,10 @@ export default function FullPlayer(props: {
             pendingInThisAlbum ||
             (queueIsThisAlbum && hasPlaybackIntentForThisAlbum);
 
-          // Extra hardening: auth/cap blocks should *never* fire from passive hydration.
-          // FullPlayer must not drive gating UI/state.
-          // Access-check denial can disable local UI (canPlay), but gating presentation is AudioEngine→GateBroker.
           if (
             shouldBlockThisAlbum &&
             (!isAuthOrCap || hasPlaybackIntentForThisAlbum)
           ) {
-            // Keep transport sane: don't let a stale loading/play intent spin.
             try {
               player.pause();
             } catch {
@@ -816,13 +808,12 @@ export default function FullPlayer(props: {
             }
           }
         } else {
-          // No PlayerState "blocked UI" semantics here; just clear transient error noise.
           if (player.lastError) {
             player.clearError();
           }
         }
       } catch (e) {
-        if (ac.signal.aborted) return;
+        if (!alive) return;
         console.error("FullPlayer access check failed", e);
 
         const fallback: AccessState = {
@@ -831,7 +822,6 @@ export default function FullPlayer(props: {
           embargoed: false,
           releaseAt: null,
           code: "ACCESS_CHECK_ERROR",
-          // action is optional; don't set it to null
           reason: "Access check failed (client).",
         };
 
@@ -844,7 +834,7 @@ export default function FullPlayer(props: {
     })();
 
     return () => {
-      ac.abort();
+      alive = false;
     };
   }, [catalogueId, albumKey, stParam]);
 
@@ -856,7 +846,16 @@ export default function FullPlayer(props: {
 
   const emb = effAlbum?.embargo;
   const releaseAtMs = emb?.releaseAt ? Date.parse(emb.releaseAt) : NaN;
-  const showEmbargo = Boolean(emb?.embargoed && Number.isFinite(releaseAtMs));
+
+  const accessResolved = accessForAlbum !== null;
+  const accessAllowsEmbargoBypass = accessForAlbum?.allowed === true;
+
+  const showEmbargo = Boolean(
+    emb?.embargoed &&
+    Number.isFinite(releaseAtMs) &&
+    !accessAllowsEmbargoBypass &&
+    (!stParam || accessResolved),
+  );
 
   const isThisAlbumActive = Boolean(albumKey && p.queueContextId === albumKey);
   const playingThisAlbum = playingish && isThisAlbumActive;
@@ -1218,10 +1217,9 @@ export default function FullPlayer(props: {
             const isCur = p.current?.recordingId === t.recordingId;
             const isSelected = selectedRecordingId === t.recordingId;
             const isPending = p.pendingRecordingId === t.recordingId;
-            const isLoadingThisRow =
-              p.status === "loading" && (isPending || isCur);
 
-            const shimmerTitle = isLoadingThisRow;
+            const shimmerTitle = p.status === "loading" && isPending && !isCur;
+
             const isNowPlaying =
               isCur &&
               (p.status === "playing" ||
@@ -1254,9 +1252,11 @@ export default function FullPlayer(props: {
                 : "0";
 
             return (
-              <button
+              <div
                 key={t.recordingId}
-                type="button"
+                role={canPlay ? "button" : undefined}
+                tabIndex={canPlay ? 0 : -1}
+                aria-disabled={canPlay ? undefined : true}
                 className="afTrackRow"
                 onMouseEnter={(e) => {
                   prefetchTrack(t);
@@ -1298,6 +1298,52 @@ export default function FullPlayer(props: {
                   p.play(t);
                   window.dispatchEvent(new Event("af:play-intent"));
                 }}
+                onKeyDown={(e) => {
+                  if (!canPlay) return;
+
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    p.setQueue(effTracks, {
+                      contextId: albumKey ?? undefined,
+                      artworkUrl: effAlbum?.artworkUrl ?? null,
+                      contextSlug: effAlbumSlug,
+                      contextTitle: effAlbum?.title ?? undefined,
+                      contextArtist: effAlbum?.artist ?? undefined,
+                    });
+
+                    goCanonicalTrack(t.displayId, "push");
+
+                    if (isCoarsePointer) {
+                      p.play(t);
+                      window.dispatchEvent(new Event("af:play-intent"));
+                      return;
+                    }
+
+                    setSelectedRecordingId(t.recordingId);
+                  }
+
+                  if (e.key === " ") {
+                    e.preventDefault();
+
+                    p.setQueue(effTracks, {
+                      contextId: albumKey ?? undefined,
+                      artworkUrl: effAlbum?.artworkUrl ?? null,
+                      contextSlug: effAlbumSlug,
+                      contextTitle: effAlbum?.title ?? undefined,
+                      contextArtist: effAlbum?.artist ?? undefined,
+                    });
+
+                    goCanonicalTrack(t.displayId, "push");
+
+                    if (isCoarsePointer) {
+                      p.play(t);
+                      window.dispatchEvent(new Event("af:play-intent"));
+                      return;
+                    }
+
+                    setSelectedRecordingId(t.recordingId);
+                  }
+                }}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   void shareTrack(shareCtx, t);
@@ -1317,6 +1363,7 @@ export default function FullPlayer(props: {
                   transform: "translateZ(0)",
                   transition: "background 120ms ease",
                   opacity: canPlay ? 1 : 0.75,
+                  outline: "none",
                 }}
               >
                 <div
@@ -1445,7 +1492,7 @@ export default function FullPlayer(props: {
                     {renderDur(t)}
                   </div>
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -1866,10 +1913,16 @@ export default function FullPlayer(props: {
           transition: opacity 120ms ease, transform 120ms ease;
         }
 
-        .afTrackRow:hover .afRowShare{
+        .afTrackRow:hover .afRowShare,
+        .afTrackRow:focus-within .afRowShare{
           opacity: 0.95;
           pointer-events: auto;
           transform: translateX(0);
+        }
+
+        .afTrackRow:focus-visible{
+          outline: 1px solid rgba(255,255,255,0.22);
+          outline-offset: -1px;
         }
 
                 .afRowMetaUnder{

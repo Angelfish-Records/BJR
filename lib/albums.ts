@@ -209,6 +209,88 @@ export function normalizeAlbumTracks(
     });
 }
 
+export type AlbumPlaybackAssetVerification = {
+  ok: boolean;
+  albumId: string;
+  playbackId: string;
+  trackId: string | null;
+  matchedRecordingId: string | null;
+};
+
+function normalizeAlbumScopeId(raw: string): string {
+  let s = (raw ?? "").trim();
+  while (s.startsWith("alb:")) s = s.slice(4);
+  return s.trim();
+}
+
+export async function verifyAlbumPlaybackAsset(params: {
+  albumId: string;
+  playbackId: string;
+  trackId?: string | null;
+}): Promise<AlbumPlaybackAssetVerification> {
+  const albumId = normalizeAlbumScopeId(params.albumId);
+  const playbackId = normStr(params.playbackId) ?? "";
+  const trackId = normStr(params.trackId) ?? null;
+
+  if (!albumId || !playbackId) {
+    return {
+      ok: false,
+      albumId,
+      playbackId,
+      trackId,
+      matchedRecordingId: null,
+    };
+  }
+
+  const q = `
+    *[
+      _type == "album" &&
+      (
+        _id == $albumId ||
+        catalogueId == $albumId
+      )
+    ][0]{
+      "matches": tracks[
+        defined(muxPlaybackId) &&
+        muxPlaybackId == $playbackId
+      ]{
+        recordingId,
+        displayId,
+        muxPlaybackId
+      }
+    }
+  `;
+
+  const doc = await client.fetch<{
+    matches?: Array<{
+      recordingId?: string;
+      displayId?: string;
+      muxPlaybackId?: string;
+    }>;
+  } | null>(q, { albumId, playbackId }, { next: { tags: ["albums"] } });
+
+  const matches = Array.isArray(doc?.matches) ? doc.matches : [];
+
+  const matched = matches.find((t) => {
+    const recordingId = normStr(t.recordingId);
+    const displayId = normStr(t.displayId);
+    const muxPlaybackId = normStr(t.muxPlaybackId);
+
+    if (muxPlaybackId !== playbackId) return false;
+    if (!trackId) return true;
+
+    return recordingId === trackId || displayId === trackId;
+  });
+
+  return {
+    ok: Boolean(matched),
+    albumId,
+    playbackId,
+    trackId,
+    matchedRecordingId: normStr(matched?.recordingId) ?? null,
+  };
+}
+
 export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
   const q = `
     *[_type == "album" && slug.current == $slug][0]{

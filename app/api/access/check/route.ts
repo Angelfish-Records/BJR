@@ -58,7 +58,7 @@ async function readAdminDebugCookie(): Promise<{
   tier?: string;
   force?: string;
 } | null> {
-  if (process.env.NEXT_PUBLIC_ADMIN_DEBUG !== "1") return null;
+  if (process.env.ADMIN_DEBUG_ACCESS_OVERRIDES !== "1") return null;
 
   const c = await cookies();
   const raw = c.get("af_dbg")?.value ?? "";

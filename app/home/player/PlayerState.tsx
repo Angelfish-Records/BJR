@@ -133,6 +133,96 @@ function hydrateTracks(
   return changed ? next : ts;
 }
 
+type PlaybackAccessState = {
+  forCatalogueId: string;
+  allowed: boolean;
+  embargoed: boolean;
+  releaseAt: string | null;
+  code?: string;
+  reason?: string;
+};
+
+const playbackAccessCache = new Map<string, PlaybackAccessState>();
+const playbackAccessInFlight = new Map<string, Promise<PlaybackAccessState>>();
+
+function readShareTokenFromLocation(): string | null {
+  if (typeof window === "undefined") return null;
+
+  const sp = new URLSearchParams(window.location.search);
+  const token = (sp.get("st") ?? sp.get("share") ?? "").trim();
+
+  return token || null;
+}
+
+function playbackAccessKey(catalogueId: string, st: string | null): string {
+  return `${catalogueId}::st=${st ?? ""}`;
+}
+
+function blockedPlaybackMessage(access: PlaybackAccessState): string {
+  if (access.embargoed) {
+    return "Playback is disabled while this release is under embargo.";
+  }
+
+  if (access.reason) return access.reason;
+
+  return "Playback is not available for this release.";
+}
+
+async function fetchPlaybackAccess(
+  catalogueId: string,
+): Promise<PlaybackAccessState> {
+  const st = readShareTokenFromLocation();
+  const key = playbackAccessKey(catalogueId, st);
+
+  const cached = playbackAccessCache.get(key);
+  if (cached) return cached;
+
+  const existing = playbackAccessInFlight.get(key);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    const u = new URL("/api/access/check", window.location.origin);
+    u.searchParams.set("albumId", catalogueId);
+    if (st) u.searchParams.set("st", st);
+
+    const res = await fetch(u.toString(), {
+      method: "GET",
+      cache: "no-store",
+    });
+
+    const body = (await res.json()) as {
+      allowed?: boolean;
+      embargoed?: boolean;
+      releaseAt?: string | null;
+      code?: string | null;
+      reason?: string | null;
+    };
+
+    const next: PlaybackAccessState = {
+      forCatalogueId: catalogueId,
+      allowed: body.allowed !== false,
+      embargoed: body.embargoed === true,
+      releaseAt: body.releaseAt ?? null,
+      code:
+        typeof body.code === "string" && body.code.trim()
+          ? body.code
+          : undefined,
+      reason:
+        typeof body.reason === "string" && body.reason.trim()
+          ? body.reason
+          : undefined,
+    };
+
+    playbackAccessCache.set(key, next);
+    return next;
+  })().finally(() => {
+    playbackAccessInFlight.delete(key);
+  });
+
+  playbackAccessInFlight.set(key, promise);
+  return promise;
+}
+
 function primeDurationByRecordingId(
   prev: Record<string, number>,
   tracks: PlayerTrack[],
@@ -185,6 +275,49 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
     durationByRecordingId: {},
   });
 
+  const stateRef = React.useRef(state);
+
+  React.useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  const blockPlayback = React.useCallback((message: string) => {
+    setState((s) => ({
+      ...s,
+      status: s.status === "loading" ? "idle" : s.status,
+      intent: "pause",
+      intentAtMs: Date.now(),
+      loadingReason: undefined,
+      pendingRecordingId: undefined,
+      lastError: message,
+    }));
+  }, []);
+
+  const guardPlayback = React.useCallback(
+    async (onAllowed: () => void): Promise<void> => {
+      const catalogueId = (stateRef.current.queueContextId ?? "").trim();
+
+      if (!catalogueId) {
+        onAllowed();
+        return;
+      }
+
+      try {
+        const access = await fetchPlaybackAccess(catalogueId);
+
+        if (!access.allowed) {
+          blockPlayback(blockedPlaybackMessage(access));
+          return;
+        }
+
+        onAllowed();
+      } catch {
+        blockPlayback("Playback access could not be verified.");
+      }
+    },
+    [blockPlayback],
+  );
+
   const actions: PlayerActions = React.useMemo(() => {
     return {
       setIntent: (i: Intent) =>
@@ -224,60 +357,65 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
         }),
 
       play: (track?: PlayerTrack) => {
-        setState((s) => {
-          const now = Date.now();
+        void guardPlayback(() => {
+          setState((s) => {
+            const now = Date.now();
 
-          const rawNext = track ?? s.current ?? s.queue[0];
-          if (!rawNext) {
-            return {
+            const rawNext = track ?? s.current ?? s.queue[0];
+            if (!rawNext) {
+              return {
+                ...s,
+                status: "idle",
+                current: undefined,
+                positionMs: 0,
+                intent: "play",
+                intentAtMs: now,
+                lastPlayAttemptAtMs: now,
+                lastError: undefined,
+                loadingReason: undefined,
+                pendingRecordingId: undefined,
+              };
+            }
+
+            const nextTrack = hydrateTrack(rawNext, s.durationByRecordingId);
+            const sameTrack = Boolean(
+              s.current && s.current.recordingId === nextTrack.recordingId,
+            );
+
+            const base = {
               ...s,
-              status: "idle",
-              current: undefined,
-              positionMs: 0,
-              intent: "play",
+              intent: "play" as const,
               intentAtMs: now,
               lastPlayAttemptAtMs: now,
               lastError: undefined,
-              loadingReason: undefined,
-              pendingRecordingId: undefined,
+              selectedRecordingId: nextTrack.recordingId,
+              pendingRecordingId: nextTrack.recordingId,
             };
-          }
 
-          const nextTrack = hydrateTrack(rawNext, s.durationByRecordingId);
-          const sameTrack = Boolean(
-            s.current && s.current.recordingId === nextTrack.recordingId,
-          );
+            if (sameTrack && s.status === "paused") {
+              return {
+                ...base,
+                current: hydrateTrack(s.current!, s.durationByRecordingId),
+                status: "paused",
+                loadingReason: undefined,
+              };
+            }
 
-          const base = {
-            ...s,
-            intent: "play" as const,
-            intentAtMs: now,
-            lastPlayAttemptAtMs: now,
-            lastError: undefined,
-            selectedRecordingId: nextTrack.recordingId,
-            pendingRecordingId: nextTrack.recordingId,
-          };
+            if (
+              sameTrack &&
+              (s.status === "playing" || s.status === "loading")
+            ) {
+              return { ...base, loadingReason: s.loadingReason };
+            }
 
-          if (sameTrack && s.status === "paused") {
             return {
               ...base,
-              current: hydrateTrack(s.current!, s.durationByRecordingId),
-              status: "paused",
-              loadingReason: undefined,
+              current: nextTrack,
+              status: "loading",
+              loadingReason: "token",
+              positionMs: 0,
             };
-          }
-
-          if (sameTrack && (s.status === "playing" || s.status === "loading")) {
-            return { ...base, loadingReason: s.loadingReason };
-          }
-
-          return {
-            ...base,
-            current: nextTrack,
-            status: "loading",
-            loadingReason: "token",
-            positionMs: 0,
-          };
+          });
         });
       },
 
@@ -289,80 +427,134 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
         })),
 
       next: () => {
-        setState((s) => {
-          const cur = s.current;
-          if (!cur || s.queue.length === 0) return s;
+        void guardPlayback(() => {
+          setState((s) => {
+            const cur = s.current;
+            if (!cur || s.queue.length === 0) return s;
 
-          const idx = s.queue.findIndex(
-            (t) => t.recordingId === cur.recordingId,
-          );
-          const at = idx >= 0 ? idx : 0;
+            const idx = s.queue.findIndex(
+              (t) => t.recordingId === cur.recordingId,
+            );
+            const at = idx >= 0 ? idx : 0;
 
-          if (s.repeat === "one") {
+            if (s.repeat === "one") {
+              return {
+                ...s,
+                status: "loading",
+                loadingReason: "attach",
+                positionMs: 0,
+                intent: "play",
+                intentAtMs: Date.now(),
+                pendingRecordingId: cur.recordingId,
+                selectedRecordingId: cur.recordingId,
+              };
+            }
+
+            const nextIdx = at + 1;
+            if (nextIdx < s.queue.length) {
+              const t = hydrateTrack(s.queue[nextIdx], s.durationByRecordingId);
+              return {
+                ...s,
+                current: t,
+                status: "loading",
+                loadingReason: "token",
+                positionMs: 0,
+                intent: "play",
+                intentAtMs: Date.now(),
+                pendingRecordingId: t.recordingId,
+                selectedRecordingId: t.recordingId,
+              };
+            }
+
+            if (s.repeat === "all" && s.queue.length > 0) {
+              const t = hydrateTrack(s.queue[0], s.durationByRecordingId);
+              return {
+                ...s,
+                current: t,
+                status: "loading",
+                loadingReason: "token",
+                positionMs: 0,
+                intent: "play",
+                intentAtMs: Date.now(),
+                pendingRecordingId: t.recordingId,
+                selectedRecordingId: t.recordingId,
+              };
+            }
+
             return {
               ...s,
-              status: "loading",
-              loadingReason: "attach",
-              positionMs: 0,
-              intent: "play",
+              status: "paused",
+              intent: "pause",
               intentAtMs: Date.now(),
-              pendingRecordingId: cur.recordingId,
-              selectedRecordingId: cur.recordingId,
-            };
-          }
-
-          const nextIdx = at + 1;
-          if (nextIdx < s.queue.length) {
-            const t = hydrateTrack(s.queue[nextIdx], s.durationByRecordingId);
-            return {
-              ...s,
-              current: t,
-              status: "loading",
-              loadingReason: "token",
               positionMs: 0,
-              intent: "play",
-              intentAtMs: Date.now(),
-              pendingRecordingId: t.recordingId,
-              selectedRecordingId: t.recordingId,
+              pendingSeekMs: 0,
+              seeking: true,
+              seekNonce: s.seekNonce + 1,
+              loadingReason: undefined,
+              pendingRecordingId: undefined,
             };
-          }
-
-          if (s.repeat === "all" && s.queue.length > 0) {
-            const t = hydrateTrack(s.queue[0], s.durationByRecordingId);
-            return {
-              ...s,
-              current: t,
-              status: "loading",
-              loadingReason: "token",
-              positionMs: 0,
-              intent: "play",
-              intentAtMs: Date.now(),
-              pendingRecordingId: t.recordingId,
-              selectedRecordingId: t.recordingId,
-            };
-          }
-
-          return {
-            ...s,
-            status: "paused",
-            intent: "pause",
-            intentAtMs: Date.now(),
-            positionMs: 0,
-            pendingSeekMs: 0,
-            seeking: true,
-            seekNonce: s.seekNonce + 1,
-            loadingReason: undefined,
-            pendingRecordingId: undefined,
-          };
+          });
         });
       },
 
       prev: () => {
-        setState((s) => {
-          const cur = s.current;
-          if (!cur || s.queue.length === 0) return s;
+        void guardPlayback(() => {
+          setState((s) => {
+            const cur = s.current;
+            if (!cur || s.queue.length === 0) return s;
 
-          if (s.status === "playing" && s.positionMs > 3000) {
+            if (s.status === "playing" && s.positionMs > 3000) {
+              return {
+                ...s,
+                positionMs: 0,
+                status: "loading",
+                loadingReason: "attach",
+                intent: "play",
+                intentAtMs: Date.now(),
+                pendingRecordingId: cur.recordingId,
+                selectedRecordingId: cur.recordingId,
+              };
+            }
+
+            const idx = s.queue.findIndex(
+              (t) => t.recordingId === cur.recordingId,
+            );
+            const at = idx >= 0 ? idx : 0;
+            const prevIdx = at - 1;
+
+            if (prevIdx >= 0) {
+              const t = hydrateTrack(s.queue[prevIdx], s.durationByRecordingId);
+              return {
+                ...s,
+                current: t,
+                status: "loading",
+                loadingReason: "token",
+                positionMs: 0,
+                intent: "play",
+                intentAtMs: Date.now(),
+                pendingRecordingId: t.recordingId,
+                selectedRecordingId: t.recordingId,
+              };
+            }
+
+            if (s.repeat === "all" && s.queue.length > 0) {
+              const t = hydrateTrack(
+                s.queue[s.queue.length - 1],
+                s.durationByRecordingId,
+              );
+              return {
+                ...s,
+                current: t,
+                status: "loading",
+                loadingReason: "token",
+                positionMs: 0,
+                intent: "play",
+                intentAtMs: Date.now(),
+                pendingRecordingId: t.recordingId,
+                selectedRecordingId: t.recordingId,
+              };
+            }
+
             return {
               ...s,
               positionMs: 0,
@@ -373,57 +565,7 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
               pendingRecordingId: cur.recordingId,
               selectedRecordingId: cur.recordingId,
             };
-          }
-
-          const idx = s.queue.findIndex(
-            (t) => t.recordingId === cur.recordingId,
-          );
-          const at = idx >= 0 ? idx : 0;
-          const prevIdx = at - 1;
-
-          if (prevIdx >= 0) {
-            const t = hydrateTrack(s.queue[prevIdx], s.durationByRecordingId);
-            return {
-              ...s,
-              current: t,
-              status: "loading",
-              loadingReason: "token",
-              positionMs: 0,
-              intent: "play",
-              intentAtMs: Date.now(),
-              pendingRecordingId: t.recordingId,
-              selectedRecordingId: t.recordingId,
-            };
-          }
-
-          if (s.repeat === "all" && s.queue.length > 0) {
-            const t = hydrateTrack(
-              s.queue[s.queue.length - 1],
-              s.durationByRecordingId,
-            );
-            return {
-              ...s,
-              current: t,
-              status: "loading",
-              loadingReason: "token",
-              positionMs: 0,
-              intent: "play",
-              intentAtMs: Date.now(),
-              pendingRecordingId: t.recordingId,
-              selectedRecordingId: t.recordingId,
-            };
-          }
-
-          return {
-            ...s,
-            positionMs: 0,
-            status: "loading",
-            loadingReason: "attach",
-            intent: "play",
-            intentAtMs: Date.now(),
-            pendingRecordingId: cur.recordingId,
-            selectedRecordingId: cur.recordingId,
-          };
+          });
         });
       },
 
@@ -646,25 +788,29 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
       clearError: () =>
         setState((s) => (s.lastError ? { ...s, lastError: undefined } : s)),
 
-      bumpReload: () =>
-        setState((s) => {
-          if (!s.current?.muxPlaybackId) {
-            return { ...s, reloadNonce: s.reloadNonce + 1 };
-          }
-          return {
-            ...s,
-            reloadNonce: s.reloadNonce + 1,
-            status: "loading",
-            loadingReason: "token",
-            lastError: undefined,
-            intent: "play",
-            intentAtMs: Date.now(),
-            pendingRecordingId: s.current.recordingId,
-            selectedRecordingId: s.current.recordingId,
-          };
-        }),
+      bumpReload: () => {
+        void guardPlayback(() => {
+          setState((s) => {
+            if (!s.current?.muxPlaybackId) {
+              return { ...s, reloadNonce: s.reloadNonce + 1 };
+            }
+
+            return {
+              ...s,
+              reloadNonce: s.reloadNonce + 1,
+              status: "loading",
+              loadingReason: "token",
+              lastError: undefined,
+              intent: "play",
+              intentAtMs: Date.now(),
+              pendingRecordingId: s.current.recordingId,
+              selectedRecordingId: s.current.recordingId,
+            };
+          });
+        });
+      },
     };
-  }, []);
+  }, [guardPlayback]);
 
   const api: PlayerState & PlayerActions = React.useMemo(() => {
     return {

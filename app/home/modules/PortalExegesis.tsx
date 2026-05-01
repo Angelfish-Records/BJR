@@ -110,18 +110,17 @@ function buildCatalogueIndexes(cat: CatalogueOk | null): {
 let CATALOGUE_CACHE: CatalogueOk | null = null;
 let CATALOGUE_PROMISE: Promise<CatalogueOk> | null = null;
 
-function loadCatalogueCached(signal?: AbortSignal): Promise<CatalogueOk> {
+function loadCatalogueCached(): Promise<CatalogueOk> {
   if (CATALOGUE_CACHE) return Promise.resolve(CATALOGUE_CACHE);
   if (CATALOGUE_PROMISE) return CATALOGUE_PROMISE;
 
   CATALOGUE_PROMISE = (async () => {
-    const r = await fetch("/api/lyrics/catalogue", { signal });
+    const r = await fetch("/api/lyrics/catalogue", { cache: "no-store" });
     const j = (await r.json()) as CatalogueOk | CatalogueErr;
     if (!j.ok) throw new Error(j.error || "Failed to load catalogue.");
     CATALOGUE_CACHE = j;
     return j;
   })().finally(() => {
-    // keep cache, clear in-flight
     CATALOGUE_PROMISE = null;
   });
 
@@ -131,7 +130,7 @@ function loadCatalogueCached(signal?: AbortSignal): Promise<CatalogueOk> {
 const TRACK_CACHE = new Map<string, LyricsOk>();
 const TRACK_PROMISES = new Map<string, Promise<LyricsOk>>();
 
-function loadTrackCached(tid: string, signal?: AbortSignal): Promise<LyricsOk> {
+function loadTrackCached(tid: string): Promise<LyricsOk> {
   const key = tid.trim();
   if (!key) return Promise.reject(new Error("Missing recordingId"));
 
@@ -143,7 +142,7 @@ function loadTrackCached(tid: string, signal?: AbortSignal): Promise<LyricsOk> {
 
   const p = (async () => {
     const url = `/api/lyrics/by-track?recordingId=${encodeURIComponent(key)}`;
-    const r = await fetch(url, { cache: "no-store", signal });
+    const r = await fetch(url, { cache: "no-store" });
     const j = (await r.json()) as LyricsOk | LyricsErr;
     if (!j.ok) throw new Error(j.error || "Failed to load lyrics.");
     TRACK_CACHE.set(key, j);
@@ -596,11 +595,10 @@ export default function PortalExegesis(props: { title?: string }) {
   }
 
   React.useEffect(() => {
-    const ac = new AbortController();
+    let alive = true;
 
     setCatalogueErr("");
 
-    // If already cached, set synchronously-ish and avoid a “loading” flash
     if (CATALOGUE_CACHE) {
       setCatalogue(CATALOGUE_CACHE);
       setCatalogueLoading(false);
@@ -609,16 +607,24 @@ export default function PortalExegesis(props: { title?: string }) {
 
     setCatalogueLoading(true);
 
-    loadCatalogueCached(ac.signal)
-      .then((j) => setCatalogue(j))
-      .catch((e: unknown) => {
-        if (e instanceof DOMException && e.name === "AbortError") return;
+    loadCatalogueCached()
+      .then((j) => {
+        if (!alive) return;
+        setCatalogue(j);
+      })
+      .catch(() => {
+        if (!alive) return;
         setCatalogue(null);
         setCatalogueErr("Failed to load catalogue.");
       })
-      .finally(() => setCatalogueLoading(false));
+      .finally(() => {
+        if (!alive) return;
+        setCatalogueLoading(false);
+      });
 
-    return () => ac.abort();
+    return () => {
+      alive = false;
+    };
   }, []);
 
   React.useEffect(() => {
@@ -643,31 +649,40 @@ export default function PortalExegesis(props: { title?: string }) {
       return;
     }
 
-    const ac = new AbortController();
+    let alive = true;
     const tid = recordingId;
 
     setLyricsErr("");
 
-    // If cached, render immediately with zero spinner
     const cached = TRACK_CACHE.get(tid);
     if (cached) {
       setLyrics(cached);
       setLyricsLoading(false);
-      return () => ac.abort();
+      return () => {
+        alive = false;
+      };
     }
 
     setLyricsLoading(true);
     setLyrics(null);
 
-    loadTrackCached(tid, ac.signal)
-      .then((j) => setLyrics(j))
-      .catch((e: unknown) => {
-        if (e instanceof DOMException && e.name === "AbortError") return;
+    loadTrackCached(tid)
+      .then((j) => {
+        if (!alive) return;
+        setLyrics(j);
+      })
+      .catch(() => {
+        if (!alive) return;
         setLyricsErr("Failed to load lyrics.");
       })
-      .finally(() => setLyricsLoading(false));
+      .finally(() => {
+        if (!alive) return;
+        setLyricsLoading(false);
+      });
 
-    return () => ac.abort();
+    return () => {
+      alive = false;
+    };
   }, [catalogue, catalogueLoading, displayId, recordingId]);
 
   // -------- render --------

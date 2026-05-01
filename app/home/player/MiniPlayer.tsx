@@ -185,153 +185,11 @@ function RetryIcon() {
 
 /** Local share UX */
 function useShareUX() {
-  const [fallback, setFallback] = React.useState<{
-    url: string;
-    title?: string;
-  } | null>(null);
-  const close = React.useCallback(() => setFallback(null), []);
-
   const shareTarget = React.useCallback(async (target: ShareTarget) => {
-    const res = await performShare(target);
-    if (!res.ok) setFallback({ url: res.url, title: target.title });
-    return res;
+    return performShare(target);
   }, []);
 
-  const fallbackModal =
-    fallback && typeof document !== "undefined"
-      ? createPortal(
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Share link"
-            onMouseDown={(e) => {
-              if (e.target === e.currentTarget) close();
-            }}
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,0.55)",
-              backdropFilter: "blur(8px)",
-              WebkitBackdropFilter: "blur(8px)",
-              display: "grid",
-              placeItems: "center",
-              zIndex: 100000,
-              padding: 16,
-            }}
-          >
-            <div
-              style={{
-                width: "min(520px, 100%)",
-                borderRadius: 16,
-                border: "1px solid rgba(255,255,255,0.14)",
-                background: "rgba(10,10,10,0.85)",
-                boxShadow: "0 18px 60px rgba(0,0,0,0.45)",
-                padding: 14,
-                color: "rgba(255,255,255,0.92)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 10,
-                }}
-              >
-                <div style={{ minWidth: 0 }}>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 650,
-                      opacity: 0.95,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    {fallback.title ?? "Share link"}
-                  </div>
-                  <div style={{ fontSize: 12, opacity: 0.7 }}>
-                    Copy this URL
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={close}
-                  aria-label="Close"
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: 999,
-                    border: "1px solid rgba(255,255,255,0.14)",
-                    background: "rgba(255,255,255,0.06)",
-                    color: "rgba(255,255,255,0.9)",
-                    cursor: "pointer",
-                  }}
-                >
-                  ×
-                </button>
-              </div>
-
-              <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-                <input
-                  readOnly
-                  value={fallback.url}
-                  onFocus={(e) => e.currentTarget.select()}
-                  style={{
-                    width: "100%",
-                    borderRadius: 12,
-                    border: "1px solid rgba(255,255,255,0.14)",
-                    background: "rgba(255,255,255,0.06)",
-                    padding: "10px 12px",
-                    color: "rgba(255,255,255,0.92)",
-                    fontSize: 12,
-                    outline: "none",
-                  }}
-                />
-
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "flex-end",
-                    gap: 10,
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        if (
-                          typeof navigator !== "undefined" &&
-                          navigator.clipboard?.writeText
-                        ) {
-                          await navigator.clipboard.writeText(fallback.url);
-                        }
-                      } catch {}
-                    }}
-                    style={{
-                      borderRadius: 12,
-                      border: "1px solid rgba(255,255,255,0.14)",
-                      background: "rgba(245,245,245,0.92)",
-                      color: "rgba(0,0,0,0.9)",
-                      padding: "10px 12px",
-                      fontSize: 12,
-                      fontWeight: 650,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )
-      : null;
-
-  return { shareTarget, fallbackModal };
+  return { shareTarget };
 }
 
 function findTrackById(
@@ -340,6 +198,60 @@ function findTrackById(
 ): PlayerTrack | null {
   if (!id) return null;
   return queue.find((t) => t.recordingId === id) ?? null;
+}
+
+type MiniAccessState = {
+  forCatalogueId: string;
+  allowed: boolean;
+  embargoed: boolean;
+  releaseAt: string | null;
+  code?: string;
+  reason?: string;
+};
+
+function readShareTokenFromLocation(): string | null {
+  if (typeof window === "undefined") return null;
+
+  const sp = new URLSearchParams(window.location.search);
+  const token = (sp.get("st") ?? sp.get("share") ?? "").trim();
+
+  return token || null;
+}
+
+async function checkMiniPlayerAccess(
+  catalogueId: string,
+): Promise<MiniAccessState> {
+  const u = new URL("/api/access/check", window.location.origin);
+  u.searchParams.set("albumId", catalogueId);
+
+  const st = readShareTokenFromLocation();
+  if (st) u.searchParams.set("st", st);
+
+  const res = await fetch(u.toString(), {
+    method: "GET",
+    cache: "no-store",
+  });
+
+  const body = (await res.json()) as {
+    allowed?: boolean;
+    embargoed?: boolean;
+    releaseAt?: string | null;
+    code?: string | null;
+    reason?: string | null;
+  };
+
+  return {
+    forCatalogueId: catalogueId,
+    allowed: body.allowed !== false,
+    embargoed: body.embargoed === true,
+    releaseAt: body.releaseAt ?? null,
+    code:
+      typeof body.code === "string" && body.code.trim() ? body.code : undefined,
+    reason:
+      typeof body.reason === "string" && body.reason.trim()
+        ? body.reason
+        : undefined,
+  };
 }
 
 export default function MiniPlayer(props: {
@@ -371,7 +283,7 @@ export default function MiniPlayer(props: {
     onExpand?.();
   };
 
-  const { shareTarget, fallbackModal } = useShareUX();
+  const { shareTarget } = useShareUX();
 
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
@@ -430,6 +342,47 @@ export default function MiniPlayer(props: {
 
   const playingish =
     p.status === "playing" || p.status === "loading" || p.intent === "play";
+
+  const [accessLock, setAccessLock] = React.useState(false);
+
+  const guardPlayback = React.useCallback(
+    async (action: () => void | Promise<void>): Promise<void> => {
+      const catalogueId = (p.queueContextId ?? "").trim();
+
+      if (!catalogueId) {
+        await action();
+        return;
+      }
+
+      setAccessLock(true);
+
+      try {
+        const access = await checkMiniPlayerAccess(catalogueId);
+
+        if (!access.allowed) {
+          p.pause();
+
+          if (p.status === "loading") {
+            p.setStatusExternal("idle");
+          }
+
+          return;
+        }
+
+        await action();
+      } catch {
+        // Fail closed for MiniPlayer transport. FullPlayer can surface richer messaging.
+        p.pause();
+
+        if (p.status === "loading") {
+          p.setStatusExternal("idle");
+        }
+      } finally {
+        setAccessLock(false);
+      }
+    },
+    [p],
+  );
 
   // Pending-first display (truthy UI during transitions)
   const pendingTrack = findTrackById(p.queue, p.pendingRecordingId) ?? null;
@@ -672,13 +625,14 @@ export default function MiniPlayer(props: {
   const progressPct = durKnown ? (sliderValue / durSec) * 100 : 0;
 
   const displayRecordingId = displayTrack?.recordingId ?? null;
+  const isDisplayPending =
+    Boolean(displayRecordingId) && p.pendingRecordingId === displayRecordingId;
+  const isDisplayCurrent =
+    Boolean(displayRecordingId) &&
+    p.current?.recordingId === displayRecordingId;
+
   const shimmerMeta =
-    p.status === "loading" &&
-    Boolean(
-      displayRecordingId &&
-      (p.pendingRecordingId === displayRecordingId ||
-        p.current?.recordingId === displayRecordingId),
-    );
+    p.status === "loading" && isDisplayPending && !isDisplayCurrent;
 
   const dock = (
     <div
@@ -931,10 +885,12 @@ export default function MiniPlayer(props: {
                 label="Previous"
                 onClick={() => {
                   lockFor(350);
-                  window.dispatchEvent(new Event("af:play-intent"));
-                  p.prev();
+                  void guardPlayback(() => {
+                    window.dispatchEvent(new Event("af:play-intent"));
+                    p.prev();
+                  });
                 }}
-                disabled={prevDisabled}
+                disabled={prevDisabled || accessLock}
               >
                 <PrevIcon />
               </IconBtn>
@@ -943,17 +899,22 @@ export default function MiniPlayer(props: {
                 label={playingish ? "Pause" : "Play"}
                 onClick={() => {
                   lockPlayFor(120);
+
                   if (playingish) {
                     window.dispatchEvent(new Event("af:pause-intent"));
                     p.pause();
-                  } else {
+                    return;
+                  }
+
+                  void guardPlayback(() => {
                     const t = p.current ?? p.queue[0];
                     if (!t) return;
+
                     p.play(t);
                     window.dispatchEvent(new Event("af:play-intent"));
-                  }
+                  });
                 }}
-                disabled={!displayTrack || playLock}
+                disabled={!displayTrack || playLock || accessLock}
               >
                 <PlayPauseIcon playing={playingish} />
               </IconBtn>
@@ -962,10 +923,12 @@ export default function MiniPlayer(props: {
                 label="Next"
                 onClick={() => {
                   lockFor(350);
-                  window.dispatchEvent(new Event("af:play-intent"));
-                  p.next();
+                  void guardPlayback(() => {
+                    window.dispatchEvent(new Event("af:play-intent"));
+                    p.next();
+                  });
                 }}
-                disabled={nextDisabled}
+                disabled={nextDisabled || accessLock}
               >
                 <NextIcon />
               </IconBtn>
@@ -1158,9 +1121,12 @@ export default function MiniPlayer(props: {
                   label="Retry"
                   title="Retry"
                   onClick={() => {
-                    window.dispatchEvent(new Event("af:play-intent"));
-                    p.bumpReload();
+                    void guardPlayback(() => {
+                      window.dispatchEvent(new Event("af:play-intent"));
+                      p.bumpReload();
+                    });
                   }}
+                  disabled={accessLock}
                 >
                   <RetryIcon />
                 </IconBtn>
@@ -1328,10 +1294,5 @@ export default function MiniPlayer(props: {
   );
 
   if (!mounted) return null;
-  return (
-    <>
-      {createPortal(dock, document.body)}
-      {fallbackModal}
-    </>
-  );
+  return createPortal(dock, document.body);
 }

@@ -11,6 +11,7 @@ import { structureTool } from "sanity/structure";
 
 import { schema } from "./sanity/schemaTypes";
 import { structure } from "./sanity/structure";
+import { apiVersion, dataset, projectId } from "./sanity/lib/env";
 
 // Singleton docs: visible in Structure, but should not be creatable as new documents globally.
 const SINGLETON_TEMPLATE_IDS = new Set(["landingPage", "siteFlags"]);
@@ -31,9 +32,9 @@ export default defineConfig({
 
   basePath: "/studio",
 
-  projectId: "c16lgt95",
-  dataset: "production",
-  apiVersion: "2025-01-01",
+  projectId,
+  dataset,
+  apiVersion,
 
   schema,
 
@@ -51,7 +52,12 @@ export default defineConfig({
 
     // Lock down singleton actions (no delete/duplicate).
     actions: (prev, context) => {
-      if (isSingleton({ schemaType: context.schemaType, documentId: context.documentId })) {
+      if (
+        isSingleton({
+          schemaType: context.schemaType,
+          documentId: context.documentId,
+        })
+      ) {
         return prev.filter(
           (a) => a.action !== "delete" && a.action !== "duplicate",
         );
@@ -62,6 +68,6 @@ export default defineConfig({
 
   plugins: [
     structureTool({ structure }),
-    visionTool({ defaultApiVersion: "2025-01-01" }),
+    visionTool({ defaultApiVersion: apiVersion }),
   ],
 });

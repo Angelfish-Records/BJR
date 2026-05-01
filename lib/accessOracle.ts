@@ -25,6 +25,14 @@ export type AccessOracleCode =
 
 export type AccessOracleAction = "login" | "subscribe" | "buy" | "wait" | null;
 
+export type AlbumPlaybackOracleParams = {
+  memberId: string | null;
+  albumId: string;
+  correlationId: string;
+  action?: AccessAction | string;
+  shareTokenAllowsPlayback?: boolean;
+};
+
 export type AlbumPlaybackOracleDecision =
   | {
       ok: true;
@@ -82,12 +90,9 @@ function normalizeAlbumId(raw: string): string {
   return s.trim();
 }
 
-export async function decideAlbumPlaybackAccess(params: {
-  memberId: string;
-  albumId: string;
-  correlationId: string;
-  action?: AccessAction | string;
-}): Promise<AlbumPlaybackOracleDecision> {
+export async function decideAlbumPlaybackAccess(
+  params: AlbumPlaybackOracleParams,
+): Promise<AlbumPlaybackOracleDecision> {
   const albumId = normalizeAlbumId(params.albumId);
   const correlationId = params.correlationId;
   const action = params.action ?? ACCESS_ACTIONS.ACCESS_CHECK;
@@ -115,24 +120,37 @@ export async function decideAlbumPlaybackAccess(params: {
   const releaseAt = safeParseReleaseAt(policy?.releaseAt ?? null);
   const embargoed = isEmbargoed(policy);
 
-  // Load entitlement keys once (used for tier checks)
-  const keys = await listCurrentEntitlementKeys(params.memberId);
+  const memberId = params.memberId;
+  const hasMember = typeof memberId === "string" && memberId.trim().length > 0;
+  const shareTokenAllowsPlayback = params.shareTokenAllowsPlayback === true;
+
+  // Load entitlement keys once when a member exists.
+  // Anonymous listeners may still be allowed later by the public/free playback lane,
+  // but they cannot satisfy tier or member-only override checks.
+  const keys = hasMember ? await listCurrentEntitlementKeys(memberId) : [];
   const keySet = new Set(keys);
 
   // ---- Embargo gate ----
   if (embargoed) {
-    // 1) explicit override (share/press links etc.)
-    const override = await checkAccess(
-      params.memberId,
-      {
-        kind: "album",
-        albumScopeId,
-        required: [ENTITLEMENTS.ALBUM_SHARE_GRANT],
-      },
-      { log: true, action, correlationId },
-    );
+    // 1) explicit member override.
+    // Important: a raw share token should not silently bypass embargo here.
+    // If you want press links to bypass embargo, model that as a separate
+    // signed-token capability rather than treating every share token as enough.
+    const overrideAllowed = hasMember
+      ? (
+          await checkAccess(
+            memberId,
+            {
+              kind: "album",
+              albumScopeId,
+              required: [ENTITLEMENTS.ALBUM_SHARE_GRANT],
+            },
+            { log: true, action, correlationId },
+          )
+        ).allowed
+      : false;
 
-    if (!override.allowed) {
+    if (!overrideAllowed) {
       // 2) early-access tiers during embargo (if enabled)
       if (
         policy?.earlyAccessEnabled &&
@@ -198,30 +216,52 @@ export async function decideAlbumPlaybackAccess(params: {
   }
 
   // ---- Entitlement gate (play_album) ----
-  const decision = await checkAccess(
-    params.memberId,
-    albumScopeId === SCOPE_CATALOGUE
-      ? {
-          kind: "global",
-          scopeId: SCOPE_CATALOGUE,
-          required: [ENTITLEMENTS.PLAY_ALBUM],
-        }
-      : { kind: "album", albumScopeId, required: [ENTITLEMENTS.PLAY_ALBUM] },
-    { log: true, action, correlationId },
-  );
+  // Share tokens can satisfy ordinary playback access, but not embargo or tier policy.
+  if (!shareTokenAllowsPlayback && hasMember) {
+    const decision = await checkAccess(
+      memberId,
+      albumScopeId === SCOPE_CATALOGUE
+        ? {
+            kind: "global",
+            scopeId: SCOPE_CATALOGUE,
+            required: [ENTITLEMENTS.PLAY_ALBUM],
+          }
+        : { kind: "album", albumScopeId, required: [ENTITLEMENTS.PLAY_ALBUM] },
+      { log: true, action, correlationId },
+    );
 
-  if (!decision.allowed) {
+    if (!decision.allowed) {
+      return {
+        ok: true,
+        allowed: false,
+        code: "ENTITLEMENT_REQUIRED",
+        action: "subscribe",
+        reason: "You do not have access to play this album.",
+        albumId,
+        albumScopeId,
+        embargoed,
+        releaseAt,
+        requiredTier: policy?.minTierForPlayback ?? null,
+        correlationId,
+      };
+    }
+  }
+
+  // Anonymous public/free playback is allowed here after embargo and tier policy
+  // have already been enforced. The anonymous completion cap remains enforced
+  // by the Mux token route before this oracle call.
+  if (!shareTokenAllowsPlayback && !hasMember && policy?.minTierForPlayback) {
     return {
       ok: true,
       allowed: false,
-      code: "ENTITLEMENT_REQUIRED",
-      action: "subscribe",
-      reason: "You do not have access to play this album.",
+      code: "TIER_REQUIRED",
+      action: "login",
+      reason: `This album requires ${policy.minTierForPlayback} tier or higher.`,
       albumId,
       albumScopeId,
       embargoed,
       releaseAt,
-      requiredTier: policy?.minTierForPlayback ?? null,
+      requiredTier: policy.minTierForPlayback,
       correlationId,
     };
   }

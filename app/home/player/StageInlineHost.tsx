@@ -93,11 +93,13 @@ export default function StageInlineHost(props: {
     [props.height],
   );
 
-  // Create the stable host element exactly once (client-only).
-  const [hostEl] = React.useState<HTMLElement | null>(() => {
-    if (typeof document === "undefined") return null;
-    return ensureStableHostEl();
-  });
+  // Important: first client render must match the server render.
+  // So we start with null and only create the host after mount.
+  const [hostEl, setHostEl] = React.useState<HTMLElement | null>(null);
+
+  React.useEffect(() => {
+    setHostEl(ensureStableHostEl());
+  }, []);
 
   // Config is stateful (allowed to change), but portal container is NOT.
   const [cfg, setCfg] = React.useState<SlotConfig>(fallback);

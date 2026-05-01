@@ -1,3 +1,4 @@
+// web/app/home/modules/PortalArtistPosts.tsx
 "use client";
 
 import React from "react";
@@ -81,9 +82,7 @@ export default function PortalArtistPosts(props: PortalArtistPostsProps) {
 
   const portableTextComponents = React.useMemo(
     () =>
-      buildPortalArtistPostPortableTextComponents(
-        defaultInlineImageMaxWidthPx,
-      ),
+      buildPortalArtistPostPortableTextComponents(defaultInlineImageMaxWidthPx),
     [defaultInlineImageMaxWidthPx],
   );
 
@@ -237,8 +236,15 @@ export default function PortalArtistPosts(props: PortalArtistPostsProps) {
           </div>
         ) : null}
 
+        {!controller.loading && !controller.refreshing && controller.err ? (
+          <div style={{ fontSize: 13, opacity: 0.85, padding: "12px 0" }}>
+            {controller.err}
+          </div>
+        ) : null}
+
         {!controller.loading &&
         !controller.refreshing &&
+        !controller.err &&
         controller.posts.length === 0 ? (
           <div style={{ fontSize: 13, opacity: 0.75, padding: "12px 0" }}>
             No posts yet.

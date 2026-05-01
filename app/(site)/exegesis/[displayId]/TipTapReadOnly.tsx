@@ -8,7 +8,9 @@ import Link from "@tiptap/extension-link";
 import type { JSONContent } from "@tiptap/core";
 
 function isJsonDoc(v: unknown): v is JSONContent {
-  return !!v && typeof v === "object" && (v as { type?: unknown }).type === "doc";
+  return (
+    !!v && typeof v === "object" && (v as { type?: unknown }).type === "doc"
+  );
 }
 
 function makeLinkSafe(href: string): string | null {
@@ -32,6 +34,7 @@ export default function TipTapReadOnly(props: { doc: unknown }) {
   const { doc } = props;
 
   const editor = useEditor({
+    immediatelyRender: false,
     editable: false,
     extensions: [
       StarterKit.configure({
@@ -70,7 +73,7 @@ export default function TipTapReadOnly(props: { doc: unknown }) {
     editor.commands.setContent(doc, { emitUpdate: false });
   }, [editor, doc]);
 
-  if (!isJsonDoc(doc)) return null;
+  if (!isJsonDoc(doc) || !editor) return null;
 
   return <EditorContent editor={editor} />;
 }

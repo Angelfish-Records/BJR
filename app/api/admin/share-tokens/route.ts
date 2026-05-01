@@ -1,14 +1,9 @@
 // web/app/api/admin/share-tokens/route.ts
 import "server-only";
 import { NextResponse } from "next/server";
+import { requireAdminMemberId } from "@/lib/adminAuth";
 import { ENTITLEMENTS } from "@/lib/vocab";
 import { createShareToken, type TokenGrant } from "@/lib/shareTokens";
-
-function requireAdmin(req: Request) {
-  const got = req.headers.get("x-admin-secret") ?? "";
-  const expected = process.env.ADMIN_API_SECRET ?? "";
-  if (!expected || got !== expected) throw new Error("Unauthorized");
-}
 
 type Body = {
   albumId: string;
@@ -45,7 +40,7 @@ function parseExpiresAt(expiresAt: string | null | undefined): string | null {
 
 export async function POST(req: Request) {
   try {
-    requireAdmin(req);
+    const adminMemberId = await requireAdminMemberId();
 
     const raw: unknown = await req.json().catch(() => null);
     if (!isBody(raw)) {
@@ -86,7 +81,7 @@ export async function POST(req: Request) {
       grants,
       expiresAt: expiresIso,
       maxRedemptions,
-      createdByMemberId: null,
+      createdByMemberId: adminMemberId,
     });
 
     return NextResponse.json({

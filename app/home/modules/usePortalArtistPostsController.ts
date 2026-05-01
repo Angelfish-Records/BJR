@@ -1,3 +1,4 @@
+// web/app/home/modules/usePortalArtistPostsController.ts
 "use client";
 
 import React from "react";
@@ -167,8 +168,10 @@ export function usePortalArtistPostsController(
 
   const searchParams = useClientSearchParams();
   const deepSlug = (searchParams.get("post") ?? "").trim() || null;
+  const urlPostType = searchParams.get("postType");
+  const urlPt = searchParams.get("pt");
 
-  const urlType = (searchParams.get("postType") ?? "").trim().toLowerCase();
+  const urlType = (urlPostType ?? urlPt ?? "").trim().toLowerCase();
   const initialFilter: "" | PostType =
     urlType === "qa" ||
     urlType === "creative" ||
@@ -180,6 +183,10 @@ export function usePortalArtistPostsController(
   const [postTypeFilter, setPostTypeFilter] = React.useState<"" | PostType>(
     initialFilter,
   );
+
+  React.useEffect(() => {
+    setPostTypeFilter(initialFilter);
+  }, [initialFilter]);
 
   const { share, fallbackModal } = useShareAction();
   const shareBuilders = useShareBuilders();
@@ -261,7 +268,8 @@ export function usePortalArtistPostsController(
   const [loading, setLoading] = React.useState(false);
   const [refreshing, setRefreshing] = React.useState(false);
   const [cursor, setCursor] = React.useState<string | null>("0");
-  const [, setErr] = React.useState<string | null>(null);
+  const [err, setErr] = React.useState<string | null>(null);
+  const postsLengthRef = React.useRef(0);
 
   const [copiedSlug, setCopiedSlug] = React.useState<string | null>(null);
   const [toastVisible, setToastVisible] = React.useState(false);
@@ -280,9 +288,14 @@ export function usePortalArtistPostsController(
   const loadingRef = React.useRef(false);
   const inflightRef = React.useRef<AbortController | null>(null);
   const inflightKeyRef = React.useRef("");
+  const latestRequestIdRef = React.useRef(0);
 
   const isSignedInRef = React.useRef<boolean>(isSignedIn);
   const requireAuthAfterRef = React.useRef<number>(requireAuthAfter);
+
+  React.useEffect(() => {
+    postsLengthRef.current = posts.length;
+  }, [posts.length]);
 
   React.useEffect(() => {
     isSignedInRef.current = isSignedIn;
@@ -375,11 +388,12 @@ export function usePortalArtistPostsController(
       const abortController = new AbortController();
       inflightRef.current = abortController;
       inflightKeyRef.current = requestKey;
+      const requestId = ++latestRequestIdRef.current;
 
       const isFirstPage = nextCursor === "0";
 
       loadingRef.current = true;
-      if (isFirstPage && posts.length > 0) setRefreshing(true);
+      if (isFirstPage && postsLengthRef.current > 0) setRefreshing(true);
       else setLoading(true);
 
       const filterAtCall = postTypeFilter;
@@ -397,6 +411,7 @@ export function usePortalArtistPostsController(
           pageSize,
           minVisibility,
           postTypeFilter,
+          url: url.toString(),
         });
 
         const correlationId = crypto.randomUUID();
@@ -414,12 +429,36 @@ export function usePortalArtistPostsController(
 
         const parsed = parsePostsResponse(await response.json());
 
-        if (filterAtCall !== postTypeFilter) return;
+        if (filterAtCall !== postTypeFilter) {
+          console.log(
+            `[PortalArtistPosts ${mountIdRef.current}] stale response ignored`,
+            {
+              filterAtCall,
+              currentFilter: postTypeFilter,
+              nextCursor,
+            },
+          );
+          return;
+        }
 
         const nextPosts = Array.isArray(parsed.posts) ? parsed.posts : [];
-        setPosts((current) =>
-          nextCursor !== "0" ? [...current, ...nextPosts] : nextPosts,
+
+        console.log(
+          `[PortalArtistPosts ${mountIdRef.current}] fetchPage success`,
+          {
+            nextCursor,
+            receivedPosts: nextPosts.length,
+            nextCursorFromResponse: parsed.nextCursor,
+            correlationId: parsed.correlationId ?? null,
+          },
         );
+
+        setPosts((current) => {
+          const updated =
+            nextCursor !== "0" ? [...current, ...nextPosts] : nextPosts;
+          postsLengthRef.current = updated.length;
+          return updated;
+        });
         setCursor(parsed.nextCursor);
 
         if (!isSignedInRef.current && requireAuthAfterRef.current > 0) {
@@ -432,21 +471,42 @@ export function usePortalArtistPostsController(
           void markSeen(slugs, parsed.correlationId ?? correlationId);
         }
       } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") return;
+        if (error instanceof DOMException && error.name === "AbortError") {
+          console.log(
+            `[PortalArtistPosts ${mountIdRef.current}] fetchPage aborted`,
+            {
+              nextCursor,
+            },
+          );
+          return;
+        }
+
         const message =
           error instanceof Error ? error.message : "Failed to load posts";
+
+        console.log(
+          `[PortalArtistPosts ${mountIdRef.current}] fetchPage error`,
+          {
+            nextCursor,
+            message,
+          },
+        );
+
         setErr(message);
       } finally {
         if (inflightRef.current === abortController) {
           inflightRef.current = null;
           inflightKeyRef.current = "";
+        }
+
+        if (latestRequestIdRef.current === requestId) {
           loadingRef.current = false;
           setLoading(false);
           setRefreshing(false);
         }
       }
     },
-    [pageSize, minVisibility, postTypeFilter, markSeen, posts.length],
+    [pageSize, minVisibility, postTypeFilter, markSeen],
   );
 
   React.useEffect(() => {
@@ -459,6 +519,16 @@ export function usePortalArtistPostsController(
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
+
+    console.log(
+      `[PortalArtistPosts ${mountIdRef.current}] initial-load effect`,
+      {
+        postTypeFilter,
+        pageSize,
+        minVisibility,
+      },
+    );
+
     setCursor("0");
     setErr(null);
     void fetchPage("0");
@@ -470,6 +540,34 @@ export function usePortalArtistPostsController(
     if (!element) return;
     element.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [deepSlug, posts.length]);
+
+  React.useEffect(() => {
+    console.log(`[PortalArtistPosts ${mountIdRef.current}] render-state`, {
+      loading,
+      refreshing,
+      postsLength: posts.length,
+      cursor,
+      err,
+      inlineGateActive,
+      deepSlug,
+      postTypeFilter,
+      urlPostType,
+      urlPt,
+      isSignedIn,
+    });
+  }, [
+    loading,
+    refreshing,
+    posts.length,
+    cursor,
+    err,
+    inlineGateActive,
+    deepSlug,
+    postTypeFilter,
+    urlPostType,
+    urlPt,
+    isSignedIn,
+  ]);
 
   const registerPostElement = React.useCallback(
     (slug: string, node: HTMLDivElement | null) => {
@@ -580,13 +678,7 @@ export function usePortalArtistPostsController(
     } finally {
       setSubmitting(false);
     }
-  }, [
-    askerName,
-    canSubmit,
-    closeComposer,
-    openMembershipModal,
-    questionText,
-  ]);
+  }, [askerName, canSubmit, closeComposer, openMembershipModal, questionText]);
 
   const onShare = React.useCallback(
     async (post: { slug: string; title?: string }) => {
@@ -616,8 +708,7 @@ export function usePortalArtistPostsController(
   const composerExpanded = composerOpen && !composerClosing;
 
   const isWideToolbarViewport = useMinWidth(760);
-  const useOverlayToolbar =
-    isWideToolbarViewport && !composerPresent;
+  const useOverlayToolbar = isWideToolbarViewport && !composerPresent;
 
   const [overlayToolbarRef, overlayToolbarWidth] =
     useElementWidth<HTMLDivElement>();
@@ -633,6 +724,7 @@ export function usePortalArtistPostsController(
     loading,
     refreshing,
     cursor,
+    err,
     copiedSlug,
     toastVisible,
     composerOpen: composerExpanded,
