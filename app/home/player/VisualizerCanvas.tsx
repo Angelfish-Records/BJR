@@ -1,4 +1,4 @@
-//web/app/home/player/VisualizerCanvas.tsx
+// web/app/home/player/VisualizerCanvas.tsx
 "use client";
 
 import React from "react";
@@ -19,9 +19,20 @@ type OrbitalMod = typeof import("./visualizer/themes/orbitalScript");
 type MhdMod = typeof import("./visualizer/themes/mhdSilk");
 type PressureMod = typeof import("./visualizer/themes/pressureGlass");
 type VeinsMod = typeof import("./visualizer/themes/reactionVeins");
+type Veins2Mod = typeof import("./visualizer/themes/reactionVeins2");
 type FilamentMod = typeof import("./visualizer/themes/filamentStorm");
 type MosaicMod = typeof import("./visualizer/themes/mosaicDrift");
 type MeaningMod = typeof import("./visualizer/themes/meaningLeak");
+
+type LidarMod = typeof import("./visualizer/themes/lidarCathedral");
+type PhaseMod = typeof import("./visualizer/themes/phaseInterferenceFabric");
+type TopographicMod = typeof import("./visualizer/themes/topographicMemory");
+type MagneticMod = typeof import("./visualizer/themes/magneticParticulate");
+type CausticsMod = typeof import("./visualizer/themes/opticalCaustics");
+type HorizonMod = typeof import("./visualizer/themes/eventHorizon");
+type SignalMod = typeof import("./visualizer/themes/signalDecay");
+type FractureMod = typeof import("./visualizer/themes/fracturePropagation");
+type CrystalMod = typeof import("./visualizer/themes/crystallineGrowth");
 
 type ThemeName =
   | "nebula"
@@ -32,7 +43,17 @@ type ThemeName =
   | "orbital-script"
   | "mhd-silk"
   | "pressure-glass"
-  | "reaction-veins";
+  | "reaction-veins"
+  | "reaction-veins-2"
+  | "lidar-cathedral"
+  | "phase-interference-fabric"
+  | "topographic-memory"
+  | "magnetic-particulate"
+  | "optical-caustics"
+  | "event-horizon"
+  | "signal-decay"
+  | "fracture-propagation"
+  | "crystalline-growth";
 
 const themeCache = new Map<ThemeName, ThemeFactory>();
 
@@ -42,31 +63,104 @@ function normThemeKey(key: string | undefined | null): string {
 
 function canonicalThemeName(raw: string | undefined | null): ThemeName {
   const k = normThemeKey(raw);
+
   switch (k) {
     case "gravitational-lattice":
     case "lattice":
       return "gravitational-lattice";
+
     case "filament-storm":
     case "filament":
       return "filament-storm";
+
     case "mosaic-drift":
     case "mosaic":
       return "mosaic-drift";
+
     case "meaning-leak":
     case "meaning":
       return "meaning-leak";
+
     case "orbital-script":
     case "orbital":
       return "orbital-script";
+
     case "mhd-silk":
     case "mhd":
       return "mhd-silk";
+
     case "pressure-glass":
     case "pressure":
       return "pressure-glass";
+
+    case "reaction-veins-2":
+    case "reaction-veins-v2":
+    case "veins-2":
+    case "veins-v2":
+    case "memory-skin":
+      return "reaction-veins-2";
+
     case "reaction-veins":
     case "veins":
       return "reaction-veins";
+
+    case "lidar-cathedral":
+    case "lidar":
+    case "point-cloud":
+    case "point-cloud-rendering":
+    case "pointcloud":
+      return "lidar-cathedral";
+
+    case "phase-interference-fabric":
+    case "phase-interference":
+    case "interference-fabric":
+    case "phase-fabric":
+    case "interference":
+      return "phase-interference-fabric";
+
+    case "topographic-memory":
+    case "topographic":
+    case "topography":
+    case "contour":
+    case "contours":
+      return "topographic-memory";
+
+    case "magnetic-particulate":
+    case "magnetic":
+    case "particulate":
+    case "iron-filings":
+      return "magnetic-particulate";
+
+    case "optical-caustics":
+    case "caustics":
+    case "caustic":
+      return "optical-caustics";
+
+    case "event-horizon":
+    case "horizon":
+    case "black-hole":
+    case "singularity":
+      return "event-horizon";
+
+    case "signal-decay":
+    case "ghost-trails":
+    case "ghost-trail":
+    case "decay":
+      return "signal-decay";
+
+    case "fracture-propagation":
+    case "fracture":
+    case "crack":
+    case "cracks":
+      return "fracture-propagation";
+
+    case "crystalline-growth":
+    case "crystal-growth":
+    case "crystalline":
+    case "crystal":
+    case "crystals":
+      return "crystalline-growth";
+
     case "nebula":
     default:
       return "nebula";
@@ -77,37 +171,87 @@ const THEME_LOADERS: Record<ThemeName, () => Promise<ThemeFactory>> = {
   nebula: async () =>
     ((await import("./visualizer/themes/nebula")) as NebulaMod)
       .createNebulaTheme,
+
   "gravitational-lattice": async () =>
     ((await import("./visualizer/themes/gravitationalLattice")) as LatticeMod)
       .createGravitationalLatticeTheme,
+
   "filament-storm": async () =>
     ((await import("./visualizer/themes/filamentStorm")) as FilamentMod)
       .createFilamentStormTheme,
+
   "mosaic-drift": async () =>
     ((await import("./visualizer/themes/mosaicDrift")) as MosaicMod)
       .createMosaicDriftTheme,
+
   "meaning-leak": async () =>
     ((await import("./visualizer/themes/meaningLeak")) as MeaningMod)
       .createMeaningLeakTheme,
+
   "orbital-script": async () =>
     ((await import("./visualizer/themes/orbitalScript")) as OrbitalMod)
       .createOrbitalScriptTheme,
+
   "mhd-silk": async () =>
     ((await import("./visualizer/themes/mhdSilk")) as MhdMod)
       .createMHDSilkTheme,
+
   "pressure-glass": async () =>
     ((await import("./visualizer/themes/pressureGlass")) as PressureMod)
       .createPressureGlassTheme,
+
   "reaction-veins": async () =>
     ((await import("./visualizer/themes/reactionVeins")) as VeinsMod)
       .createReactionVeinsTheme,
+
+  "reaction-veins-2": async () =>
+    ((await import("./visualizer/themes/reactionVeins2")) as Veins2Mod)
+      .createReactionVeins2Theme,
+
+  "lidar-cathedral": async () =>
+    ((await import("./visualizer/themes/lidarCathedral")) as LidarMod)
+      .createLidarCathedralTheme,
+
+  "phase-interference-fabric": async () =>
+    ((await import("./visualizer/themes/phaseInterferenceFabric")) as PhaseMod)
+      .createPhaseInterferenceFabricTheme,
+
+  "topographic-memory": async () =>
+    ((await import("./visualizer/themes/topographicMemory")) as TopographicMod)
+      .createTopographicMemoryTheme,
+
+  "magnetic-particulate": async () =>
+    ((await import("./visualizer/themes/magneticParticulate")) as MagneticMod)
+      .createMagneticParticulateTheme,
+
+  "optical-caustics": async () =>
+    ((await import("./visualizer/themes/opticalCaustics")) as CausticsMod)
+      .createOpticalCausticsTheme,
+
+  "event-horizon": async () =>
+    ((await import("./visualizer/themes/eventHorizon")) as HorizonMod)
+      .createEventHorizonTheme,
+
+  "signal-decay": async () =>
+    ((await import("./visualizer/themes/signalDecay")) as SignalMod)
+      .createSignalDecayTheme,
+
+  "fracture-propagation": async () =>
+    ((await import("./visualizer/themes/fracturePropagation")) as FractureMod)
+      .createFracturePropagationTheme,
+
+  "crystalline-growth": async () =>
+    ((await import("./visualizer/themes/crystallineGrowth")) as CrystalMod)
+      .createCrystallineGrowthTheme,
 };
 
 async function loadThemeFactory(themeName: ThemeName): Promise<ThemeFactory> {
   const cached = themeCache.get(themeName);
   if (cached) return cached;
+
   const factory = await THEME_LOADERS[themeName]();
   themeCache.set(themeName, factory);
+
   return factory;
 }
 
@@ -135,11 +279,11 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
   const themeName: ThemeName = canonicalThemeName(player.current?.visualTheme);
 
   const themeNameRef = React.useRef<ThemeName>(themeName);
+
   React.useEffect(() => {
     themeNameRef.current = themeName;
   }, [themeName]);
 
-  // Mount engine once per canvas instance / stage variant.
   React.useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -164,18 +308,21 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
     engine.setIdleTheme(createIdleMistTheme());
     engineRef.current = engine;
 
-    // Prime target theme once for the freshly mounted engine.
     let cancelled = false;
+
     (async () => {
       const nextThemeName = themeNameRef.current;
       const factory = await loadThemeFactory(nextThemeName);
+
       if (cancelled || engineRef.current !== engine) return;
+
       engine.setThemeDebugName(nextThemeName);
       engine.setTargetTheme(factory());
     })().catch(() => {});
 
     return () => {
       cancelled = true;
+
       try {
         engine.stop();
         engine.dispose();
@@ -185,23 +332,22 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
     };
   }, [variant]);
 
-  // IMPORTANT: only register the canvas as the visual source when this variant
-  // is the authoritative stage. Otherwise samplers may lock onto a blank/stopped canvas.
   const unregRef = React.useRef<null | (() => void)>(null);
 
   React.useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // cleanup any previous registration before changing
     try {
       unregRef.current?.();
     } catch {}
+
     unregRef.current = null;
 
     if (activeStage === variant) {
       const snapshotCanvas =
         engineRef.current?.getStableSnapshotCanvas?.() ?? null;
+
       unregRef.current = visualSurface.registerCanvas(
         variant,
         canvas,
@@ -213,19 +359,19 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
       try {
         unregRef.current?.();
       } catch {}
+
       unregRef.current = null;
     };
   }, [activeStage, variant]);
 
-  // Start/stop rendering based on stage authority.
   React.useEffect(() => {
     const engine = engineRef.current;
     if (!engine) return;
+
     if (activeStage === variant) engine.start();
     else engine.stop();
   }, [activeStage, variant]);
 
-  // Feed wantPlaying into engine.
   const wantPlaying =
     player.status === "playing" ||
     player.status === "loading" ||
@@ -235,10 +381,10 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
   React.useEffect(() => {
     const engine = engineRef.current;
     if (!engine) return;
+
     engine.setWantPlaying(wantPlaying, { toIdleTransition: true });
   }, [wantPlaying]);
 
-  // Swap target theme lazily when key changes.
   React.useEffect(() => {
     const engine = engineRef.current;
     if (!engine) return;
@@ -246,9 +392,12 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
     engine.setThemeDebugName(themeName);
 
     let cancelled = false;
+
     (async () => {
       const factory = await loadThemeFactory(themeName);
+
       if (cancelled || engineRef.current !== engine) return;
+
       engine.setTargetTheme(factory());
     })().catch(() => {});
 

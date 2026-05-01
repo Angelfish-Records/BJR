@@ -11,6 +11,16 @@ const THEME_OPTIONS = [
   { title: "Filament Storm", value: "filament-storm" },
   { title: "Mosaic Drift", value: "mosaic-drift" },
   { title: "MeaningLeak", value: "meaning-leak" },
+  { title: "Crystalline Growth", value: "crystalline-growth" },
+  { title: "Event Horizon", value: "event-horizon" },
+  { title: "Fracture Propagation", value: "fracture-propagation" },
+  { title: "Lidar Cathedral", value: "lidar-cathedral" },
+  { title: "Magnetic Particulate", value: "magnetic-particulate" },
+  { title: "Optical Caustics", value: "optical-caustics" },
+  { title: "Phase Interference Fabric", value: "phase-interference-fabric" },
+  { title: "Reaction Veins 2", value: "reaction-veins-2" },
+  { title: "Signal Decay", value: "signal-decay" },
+  { title: "Topographic Memory", value: "topographic-memory" },
 ];
 
 const TIER_OPTIONS = [
