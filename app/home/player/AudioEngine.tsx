@@ -493,6 +493,12 @@ export default function AudioEngine() {
       return;
     }
 
+    // Critical invariant:
+    // when switching to a new track/source, silence the old media element
+    // before any async token fetch or HLS attachment work begins.
+    // Otherwise the previous track can continue audibly during the server round-trip.
+    hardStopAndDetach();
+
     attachedKeyRef.current = null;
     telemetrySessionIdRef.current = newPlaybackSessionId();
 

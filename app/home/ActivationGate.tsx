@@ -467,49 +467,6 @@ function OverlayPanel(props: {
   );
 }
 
-function CrossfadeSwap(props: {
-  mode: "privacy" | "otp";
-  privacy: React.ReactNode;
-  otp: React.ReactNode;
-}) {
-  const { mode, privacy, otp } = props;
-  const isOtp = mode === "otp";
-
-  return (
-    <div style={{ position: "relative", width: "100%" }}>
-      <div
-        aria-hidden={isOtp}
-        style={{
-          position: isOtp ? "absolute" : "relative",
-          inset: isOtp ? 0 : undefined,
-          opacity: isOtp ? 0 : 1,
-          transform: isOtp ? "translateY(-3px)" : "translateY(0px)",
-          transition: "opacity 140ms ease, transform 180ms ease",
-          pointerEvents: isOtp ? "none" : "auto",
-          width: "100%",
-        }}
-      >
-        {privacy}
-      </div>
-
-      <div
-        aria-hidden={!isOtp}
-        style={{
-          position: isOtp ? "relative" : "absolute",
-          inset: isOtp ? undefined : 0,
-          opacity: isOtp ? 1 : 0,
-          transform: isOtp ? "translateY(0px)" : "translateY(3px)",
-          transition: "opacity 140ms ease, transform 180ms ease",
-          pointerEvents: isOtp ? "auto" : "none",
-          width: "100%",
-        }}
-      >
-        {otp}
-      </div>
-    </div>
-  );
-}
-
 export default function ActivationGate(props: Props) {
   const {
     children,
@@ -620,10 +577,6 @@ export default function ActivationGate(props: Props) {
     useMembershipModal();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const emailInputRef = useRef<HTMLInputElement | null>(null);
-
-  // “briefly while typing” privacy notice timer
-  const [isTypingEmail, setIsTypingEmail] = useState(false);
-  const typingTimerRef = useRef<number | null>(null);
 
   const emailValid = useMemo(
     () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),
@@ -775,11 +728,6 @@ export default function ActivationGate(props: Props) {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, []);
 
-  // If we leave idle/email phase, stop the “typing” state
-  useEffect(() => {
-    if (phase !== "idle") setIsTypingEmail(false);
-  }, [phase]);
-
   // Modal UX: when the gate is demanding attention, focus email input
   useEffect(() => {
     if (placement !== "modal") return;
@@ -798,35 +746,11 @@ export default function ActivationGate(props: Props) {
   // canManageBilling should govern existing-subscription controls only.
   const showBillingTrigger = isActive;
 
-  // Privacy notice opens briefly while typing (and never when OTP is open)
-  const privacyOpen =
-    !isActive &&
-    phase === "idle" &&
-    !otpOpen &&
-    !!email &&
-    (isTypingEmail || needsAttention);
-
-  const overlayOpen = otpOpen || privacyOpen; // billing no longer lives in the topbar overlay stack
-
-  const overlayMode: "otp" | "privacy" | "none" = otpOpen
-    ? "otp"
-    : privacyOpen
-      ? "privacy"
-      : "none";
-
-  function scheduleTypingFade() {
-    if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
-    typingTimerRef.current = window.setTimeout(() => {
-      setIsTypingEmail(false);
-      typingTimerRef.current = null;
-    }, 2600);
-  }
+  const overlayOpen = otpOpen; // billing no longer lives in the topbar overlay stack
+  const showSignupPrivacy = otpOpen && flow === "signup";
 
   function onEmailChange(nextRaw: string) {
-    const next = nextRaw.trim();
-    setEmail(next);
-    setIsTypingEmail(true);
-    scheduleTypingFade();
+    setEmail(nextRaw.trim());
   }
 
   function submitFromEnter() {
@@ -836,39 +760,48 @@ export default function ActivationGate(props: Props) {
 
   const modalCentered = placement === "modal";
 
-  const inlinePanelOpen = overlayMode === "otp" || overlayMode === "privacy";
-  const inlineMaxHeight =
-    overlayMode === "otp" ? 520 : overlayMode === "privacy" ? 160 : 0;
+  const inlinePanelOpen = otpOpen;
+  const inlineMaxHeight = showSignupPrivacy ? 620 : 520;
 
   const privacyNode = (
-    <div style={{ width: "100%", display: "grid", gap: 8 }}>
+    <div
+      style={{
+        width: "100%",
+        maxWidth: EMAIL_W,
+        display: "grid",
+        gap: 10,
+        boxSizing: "border-box",
+      }}
+    >
       <div
         style={{
-          width: "100%",
-          border: "none",
-          background: "rgba(0,0,0,0.32)",
-          boxShadow: "0 12px 26px rgba(0,0,0,0.24)",
-          padding: "0px",
-          boxSizing: "border-box",
+          fontSize: 11,
+          lineHeight: "15px",
+          opacity: 0.82,
+          textAlign: "left",
+          padding: "0 2px",
         }}
       >
-        <div
-          style={{
-            fontSize: 11,
-            lineHeight: "15px",
-            opacity: 0.82,
-            textAlign: "left",
-          }}
-        >
-          By signing up, you agree to receive occasional emails about releases,
-          events, and account activity. Unsubscribe anytime.
-        </div>
+        By entering, you agree to receive occasional emails about
+        releases, events, and account activity. Unsubscribe anytime.
       </div>
+
+      <div
+        aria-hidden
+        style={{
+          height: 1,
+          width: "100%",
+          background:
+            "linear-gradient(90deg, transparent, rgba(255,255,255,0.18) 18%, rgba(255,255,255,0.18) 82%, transparent)",
+        }}
+      />
     </div>
   );
 
   const otpNode = (
     <div style={{ display: "grid", gap: 10, justifyItems: "center" }}>
+      {showSignupPrivacy && privacyNode}
+
       <OtpBoxes
         maxWidth={EMAIL_W}
         value={code}
@@ -1521,11 +1454,7 @@ export default function ActivationGate(props: Props) {
                       boxSizing: "border-box",
                     }}
                   >
-                    <CrossfadeSwap
-                      mode={overlayMode === "otp" ? "otp" : "privacy"}
-                      privacy={privacyNode}
-                      otp={otpNode}
-                    />
+                    {otpNode}
                   </div>
                 </OverlayPanel>
               </div>
@@ -1551,14 +1480,10 @@ export default function ActivationGate(props: Props) {
               {!isActive && (
                 <div style={{ width: OTP_W, maxWidth: "92vw" }}>
                   <OverlayPanel
-                    open={overlayMode === "otp" || overlayMode === "privacy"}
-                    maxHeightOpen={overlayMode === "otp" ? 520 : 140}
+                    open={otpOpen}
+                    maxHeightOpen={showSignupPrivacy ? 620 : 520}
                   >
-                    <CrossfadeSwap
-                      mode={overlayMode === "otp" ? "otp" : "privacy"}
-                      privacy={privacyNode}
-                      otp={otpNode}
-                    />
+                    {otpNode}
                   </OverlayPanel>
                 </div>
               )}

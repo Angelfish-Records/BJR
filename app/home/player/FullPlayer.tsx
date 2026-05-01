@@ -176,6 +176,14 @@ function NowPlayingPip() {
   );
 }
 
+function TrackInlinePlayIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+      <polygon points="7.5,5.5 19,12 7.5,18.5" />
+    </svg>
+  );
+}
+
 // ---- access-check single-flight cache (module scope) ----
 const BLOCK_ACTIONS = ["login", "subscribe", "buy", "wait"] as const;
 type BlockAction = (typeof BLOCK_ACTIONS)[number];
@@ -1380,17 +1388,38 @@ export default function FullPlayer(props: {
                 >
                   {isNowPlaying ? (
                     <NowPlayingPip />
-                  ) : (
-                    <span
-                      style={{
-                        width: 16,
-                        display: "inline-grid",
-                        placeItems: "center",
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    >
-                      {i + 1}
+                  ) : canPlay && !isCur ? (
+                    <span className="afTrackIndexSwap">
+                      <span className="afTrackIndexNumber">{i + 1}</span>
+
+                      <button
+                        type="button"
+                        className="afTrackInlinePlay"
+                        aria-label={`Play ${t.title ?? `track ${i + 1}`}`}
+                        title="Play"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+
+                          p.setQueue(effTracks, {
+                            contextId: albumKey ?? undefined,
+                            artworkUrl: effAlbum?.artworkUrl ?? null,
+                            contextSlug: effAlbumSlug,
+                            contextTitle: effAlbum?.title ?? undefined,
+                            contextArtist: effAlbum?.artist ?? undefined,
+                          });
+
+                          goCanonicalTrack(t.displayId, "push");
+
+                          p.play(t);
+                          window.dispatchEvent(new Event("af:play-intent"));
+                        }}
+                      >
+                        <TrackInlinePlayIcon />
+                      </button>
                     </span>
+                  ) : (
+                    <span className="afTrackIndexNumber">{i + 1}</span>
                   )}
                 </div>
 
@@ -1924,6 +1953,70 @@ export default function FullPlayer(props: {
           outline: 1px solid rgba(255,255,255,0.22);
           outline-offset: -1px;
         }
+
+        .afTrackIndexNumber{
+  width: 16px;
+  display: inline-grid;
+  place-items: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.afTrackIndexSwap{
+  position: relative;
+  width: 16px;
+  height: 16px;
+  display: inline-grid;
+  place-items: center;
+}
+
+.afTrackIndexSwap .afTrackIndexNumber{
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.afTrackInlinePlay{
+  position: absolute;
+  inset: -6px;                 /* slightly larger hit area */
+  border: 0;
+  background: transparent;
+  color: currentColor;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 120ms ease, transform 120ms ease;
+  padding: 0;
+  line-height: 0;
+}
+
+.afTrackRow:hover .afTrackIndexSwap .afTrackIndexNumber,
+.afTrackRow:focus-within .afTrackIndexSwap .afTrackIndexNumber{
+  opacity: 0;
+  transform: scale(0.88);
+}
+
+.afTrackRow:hover .afTrackInlinePlay,
+.afTrackRow:focus-within .afTrackInlinePlay{
+  opacity: 1;
+  transform: scale(1);
+}
+
+.afTrackInlinePlay:focus-visible{
+  outline: 1px solid rgba(255,255,255,0.28);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse){
+  .afTrackInlinePlay{
+    display: none;
+  }
+
+  .afTrackRow:hover .afTrackIndexSwap .afTrackIndexNumber,
+  .afTrackRow:focus-within .afTrackIndexSwap .afTrackIndexNumber{
+    opacity: 1;
+    transform: none;
+  }
+}
 
                 .afRowMetaUnder{
           display: none;
