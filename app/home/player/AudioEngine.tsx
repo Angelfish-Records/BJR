@@ -1388,7 +1388,24 @@ export default function AudioEngine() {
       pRef.current.clearPendingSeek();
     };
 
+    const debugMediaEvent = (event: string, detail?: string) => {
+      sendAudioDebug({
+        event,
+        albumId: pRef.current.queueContextId ?? null,
+        recordingId: pRef.current.current?.recordingId ?? null,
+        playbackId: pRef.current.current?.muxPlaybackId ?? null,
+        source: "AudioEngine.media",
+        detail:
+          detail ??
+          `readyState=${a.readyState};networkState=${a.networkState};currentTime=${a.currentTime.toFixed(
+            2,
+          )};duration=${Number.isFinite(a.duration) ? a.duration.toFixed(2) : "NaN"}`,
+      });
+    };
+
     const markPlaying = () => {
+      debugMediaEvent("media-playing");
+
       if (engineBlockedRef.current) {
         hardStopAndDetach();
         mediaSurface.setStatus("blocked");
@@ -1410,6 +1427,7 @@ export default function AudioEngine() {
     };
 
     const markPaused = () => {
+      debugMediaEvent("media-paused");
       if (engineBlockedRef.current) return;
       mediaSurface.setStatus("paused");
       if (hasMediaSession()) {
@@ -1423,6 +1441,7 @@ export default function AudioEngine() {
     };
 
     const markBuffering = () => {
+      debugMediaEvent("media-buffering");
       if (engineBlockedRef.current) return;
 
       const s = pRef.current;
@@ -1436,12 +1455,15 @@ export default function AudioEngine() {
     };
 
     const clearBuffering = () => {
+      debugMediaEvent("media-buffering-cleared");
       if (engineBlockedRef.current) return;
       pRef.current.setLoadingReasonExternal(undefined);
       applyPendingSeek();
     };
 
     const onEnded = () => {
+      debugMediaEvent("media-ended");
+
       const s = pRef.current;
       const cur = s.current;
 
@@ -1475,9 +1497,25 @@ export default function AudioEngine() {
     a.addEventListener("pause", markPaused);
     a.addEventListener("waiting", markBuffering);
     a.addEventListener("stalled", markBuffering);
+    const onMediaError = () => {
+      const err = a.error;
+      debugMediaEvent(
+        "media-error",
+        err ? `code=${err.code};message=${err.message}` : "unknown",
+      );
+    };
+
+    const onSuspend = () => debugMediaEvent("media-suspend");
+    const onAbort = () => debugMediaEvent("media-abort");
+    const onEmptied = () => debugMediaEvent("media-emptied");
+
     a.addEventListener("canplay", clearBuffering);
     a.addEventListener("canplaythrough", clearBuffering);
     a.addEventListener("ended", onEnded);
+    a.addEventListener("error", onMediaError);
+    a.addEventListener("suspend", onSuspend);
+    a.addEventListener("abort", onAbort);
+    a.addEventListener("emptied", onEmptied);
 
     return () => {
       a.removeEventListener("timeupdate", onTime);
@@ -1489,6 +1527,10 @@ export default function AudioEngine() {
       a.removeEventListener("canplay", clearBuffering);
       a.removeEventListener("canplaythrough", clearBuffering);
       a.removeEventListener("ended", onEnded);
+      a.removeEventListener("error", onMediaError);
+      a.removeEventListener("suspend", onSuspend);
+      a.removeEventListener("abort", onAbort);
+      a.removeEventListener("emptied", onEmptied);
     };
   }, [hardStopAndDetach, announceBadges, prefetchCurrentQueueAlbumSession]);
 
