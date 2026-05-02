@@ -18,6 +18,12 @@ function norm(v: unknown): string | null {
 }
 
 export async function POST(req: NextRequest) {
+  console.info("[audio-debug]", {
+    event: "debug-route-hit",
+    enabled: process.env.AUDIO_DEBUG_SERVER_LOGS === "1",
+    ua: req.headers.get("user-agent") ?? null,
+  });
+
   if (process.env.AUDIO_DEBUG_SERVER_LOGS !== "1") {
     return NextResponse.json({ ok: true, skipped: true });
   }
