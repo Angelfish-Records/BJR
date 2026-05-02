@@ -1428,6 +1428,18 @@ export default function AudioEngine() {
 
     const markPaused = () => {
       debugMediaEvent("media-paused");
+
+      if (a.ended) {
+        sendAudioDebug({
+          event: "media-paused-at-ended-ignored",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId: pRef.current.current?.recordingId ?? null,
+          playbackId: pRef.current.current?.muxPlaybackId ?? null,
+          source: "AudioEngine.media",
+        });
+        return;
+      }
+
       if (engineBlockedRef.current) return;
       mediaSurface.setStatus("paused");
       if (hasMediaSession()) {
@@ -1467,12 +1479,21 @@ export default function AudioEngine() {
       const s = pRef.current;
       const cur = s.current;
 
+      const idx = cur
+        ? s.queue.findIndex((t) => t.recordingId === cur.recordingId)
+        : -1;
+      const nextTrack =
+        idx >= 0 && idx + 1 < s.queue.length ? s.queue[idx + 1] : null;
+
       sendAudioDebug({
         event: "ended-fired",
         albumId: s.queueContextId ?? null,
         recordingId: cur?.recordingId ?? null,
         playbackId: cur?.muxPlaybackId ?? null,
         source: "AudioEngine",
+        detail: nextTrack
+          ? `next=${nextTrack.recordingId}`
+          : `next=null;idx=${idx};queue=${s.queue.length};repeat=${s.repeat}`,
       });
 
       reportPlaythroughComplete(1);
