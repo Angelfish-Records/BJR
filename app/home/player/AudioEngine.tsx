@@ -70,6 +70,34 @@ function hasMediaSession(): boolean {
   );
 }
 
+function audioDebugEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_AUDIO_DEBUG === "1";
+}
+
+function sendAudioDebug(payload: {
+  event: string;
+  albumId?: string | null;
+  recordingId?: string | null;
+  playbackId?: string | null;
+  source?: string | null;
+  detail?: string | null;
+}): void {
+  if (!audioDebugEnabled()) return;
+
+  try {
+    console.info("[audio-debug]", payload);
+  } catch {}
+
+  try {
+    fetch("/api/playback/debug", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {}
+}
+
 function setMediaSessionPositionStateSafe(args: {
   durationSec: number;
   positionSec: number;
@@ -311,6 +339,12 @@ export default function AudioEngine() {
 
       const promise = (async () => {
         try {
+          sendAudioDebug({
+            event: "album-session-requested",
+            albumId,
+            source: "AudioEngine",
+          });
+
           const res = await fetch("/api/mux/album-session", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -329,8 +363,21 @@ export default function AudioEngine() {
           }
 
           if (!res.ok || !data || !("ok" in data) || data.ok !== true) {
+            sendAudioDebug({
+              event: "album-session-failed",
+              albumId,
+              source: "AudioEngine",
+              detail: `status=${res.status}`,
+            });
             return false;
           }
+
+          sendAudioDebug({
+            event: "album-session-received",
+            albumId: data.albumId || albumId,
+            source: "AudioEngine",
+            detail: `tracks=${data.tracks.length}`,
+          });
 
           return cacheAlbumSessionTokens({
             albumId: data.albumId || albumId,
@@ -893,6 +940,14 @@ export default function AudioEngine() {
         const cached =
           cachedBeforeAttach ?? getCachedTokenForPlaybackId(playbackId);
         if (cached) {
+          sendAudioDebug({
+            event: "cached-token-attach",
+            albumId: s.queueContextId ?? null,
+            recordingId: s.current?.recordingId ?? null,
+            playbackId,
+            source: "AudioEngine",
+          });
+
           attachSrc(muxSignedHlsUrl(playbackId, cached.token));
           return;
         }
@@ -908,9 +963,25 @@ export default function AudioEngine() {
 
           const albumCached = getCachedTokenForPlaybackId(playbackId);
           if (albumCached) {
+            sendAudioDebug({
+              event: "album-session-token-attach",
+              albumId: s.queueContextId ?? null,
+              recordingId: s.current?.recordingId ?? null,
+              playbackId,
+              source: "AudioEngine",
+            });
+
             attachSrc(muxSignedHlsUrl(playbackId, albumCached.token));
             return;
           }
+
+          sendAudioDebug({
+            event: "album-session-miss-fallback-single-token",
+            albumId: s.queueContextId ?? null,
+            recordingId: s.current?.recordingId ?? null,
+            playbackId,
+            source: "AudioEngine",
+          });
         }
 
         const res = await fetch("/api/mux/token", {
@@ -993,6 +1064,14 @@ export default function AudioEngine() {
 
         // Token success implies we’re no longer blocked (broker channel).
         clearPlaybackGate();
+
+        sendAudioDebug({
+          event: "single-token-attach",
+          albumId: s.queueContextId ?? null,
+          recordingId: s.current?.recordingId ?? null,
+          playbackId,
+          source: "AudioEngine",
+        });
 
         attachSrc(muxSignedHlsUrl(playbackId, data.token));
       } catch {

@@ -146,11 +146,23 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  if (process.env.AUDIO_DEBUG_SERVER_LOGS === "1") {
+    console.info("[audio-debug]", {
+      event: "album-session-route-requested",
+      albumId: requestedAlbumId,
+      ua: req.headers.get("user-agent") ?? null,
+    });
+  }
+
   const sessionAssets = await getAlbumPlaybackAssetsForSession({
     albumId: requestedAlbumId,
   });
 
-  if (!sessionAssets.ok || !sessionAssets.albumId || !sessionAssets.albumScopeId) {
+  if (
+    !sessionAssets.ok ||
+    !sessionAssets.albumId ||
+    !sessionAssets.albumScopeId
+  ) {
     return gateError(req, {
       correlationId,
       status: 404,
@@ -299,6 +311,16 @@ export async function POST(req: NextRequest) {
       expiresAt: exp,
     })),
   );
+
+  if (process.env.AUDIO_DEBUG_SERVER_LOGS === "1") {
+    console.info("[audio-debug]", {
+      event: "album-session-route-issued",
+      albumId: sessionAssets.albumId,
+      tracks: tracks.length,
+      expiresAt: exp,
+      correlationId,
+    });
+  }
 
   const out: AlbumSessionOk = {
     ok: true,
