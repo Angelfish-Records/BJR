@@ -19,6 +19,10 @@ const ALLOW_KEYS = new Set([
 
 const ALLOW_PREFIXES = ["utm_"];
 
+// Secondary query keys that should survive internal navigation.
+// `st` is durable access context for share-token playback rehydration.
+const PERSIST_KEYS = new Set(["st"]);
+
 // Explicitly forbidden legacy/state keys (must never persist).
 const FORBIDDEN_KEYS = new Set(["p", "album", "track", "t"]);
 
@@ -63,6 +67,57 @@ export function pickSecondaryQueryFromLocation(): URLSearchParams {
   return params;
 }
 
+function pickPersistentSecondaryQueryFromParams(
+  params: URLSearchParams,
+): URLSearchParams {
+  const clean = new URLSearchParams(params);
+  sanitizeSecondaryQuery(clean);
+
+  for (const k of Array.from(clean.keys())) {
+    if (!PERSIST_KEYS.has(k)) clean.delete(k);
+  }
+
+  return clean;
+}
+
+/** Read current location query and return only durable query state. */
+export function pickPersistentSecondaryQueryFromLocation(): URLSearchParams {
+  const params = new URLSearchParams(safeGetSearch().replace(/^\?/, ""));
+  return pickPersistentSecondaryQueryFromParams(params);
+}
+
+/**
+ * Appends durable secondary query state to same-origin internal hrefs.
+ *
+ * Preserves hash fragments, so:
+ *   /exegesis/foo#l=bar
+ * becomes:
+ *   /exegesis/foo?st=TOKEN#l=bar
+ */
+export function appendPersistentSecondaryQueryToHref(href: string): string {
+  if (typeof window === "undefined") return href;
+
+  const persistent = pickPersistentSecondaryQueryFromLocation();
+  if (Array.from(persistent.keys()).length === 0) return href;
+
+  const url = new URL(href, window.location.href);
+  if (url.origin !== window.location.origin) return href;
+
+  const params = new URLSearchParams(url.search);
+  sanitizeSecondaryQuery(params);
+
+  for (const [k, v] of persistent.entries()) {
+    if (!params.has(k)) params.set(k, v);
+  }
+
+  sanitizeSecondaryQuery(params);
+
+  const next = params.toString();
+  url.search = next ? `?${next}` : "";
+
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
 export function useClientSearchParams(): URLSearchParams {
   const [qs, setQs] = React.useState<string>(() => safeGetSearch());
 
@@ -88,6 +143,16 @@ export function useClientSearchParams(): URLSearchParams {
 export function getAutoplayFlag(sp: URLSearchParams): boolean {
   const v = (sp.get("autoplay") ?? "").trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes";
+}
+
+export function usePersistentSecondaryHref(href: string): string {
+  const sp = useClientSearchParams();
+  const qs = React.useMemo(() => sp.toString(), [sp]);
+
+  return React.useMemo(() => {
+    void qs;
+    return appendPersistentSecondaryQueryToHref(href);
+  }, [href, qs]);
 }
 
 /**

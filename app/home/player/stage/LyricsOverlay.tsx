@@ -4,6 +4,7 @@
 import React from "react";
 import { mediaSurface } from "../mediaSurface";
 import { useRouter } from "next/navigation";
+import { appendPersistentSecondaryQueryToHref } from "@/app/home/urlState";
 import type { LyricCue } from "@/lib/types";
 import { isParaBreakCue } from "@/app/home/player/lyrics/lyricBreaks";
 
@@ -126,9 +127,10 @@ export default function LyricsOverlay(props: {
   function openExegesis(cue: LyricCue) {
     if (!exegesisPathToken) return;
 
-    const path =
+    const path = appendPersistentSecondaryQueryToHref(
       `/exegesis/${encodeURIComponent(exegesisPathToken)}` +
-      `#l=${encodeURIComponent(cue.lineKey)}`;
+        `#l=${encodeURIComponent(cue.lineKey)}`,
+    );
 
     router.push(path, { scroll: false });
   }

@@ -136,7 +136,7 @@ export async function decideAlbumPlaybackAccess(
     // A validated album share token is allowed to bypass embargo for playback.
     const memberOverrideAllowed = hasMember
       ? (
-          await checkAccess(
+          await checkAccess( 
             memberId,
             {
               kind: "album",
