@@ -74,6 +74,61 @@ function audioDebugEnabled(): boolean {
   return process.env.NEXT_PUBLIC_AUDIO_DEBUG === "1";
 }
 
+type AudioDebugEvent = {
+  t: number;
+  event: string;
+  albumId?: string | null;
+  recordingId?: string | null;
+  playbackId?: string | null;
+  source?: string | null;
+  detail?: string | null;
+};
+
+const audioDebugSessionId =
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+const audioDebugBuffer: AudioDebugEvent[] = [];
+let audioDebugFlushTimer: number | null = null;
+
+function flushAudioDebugSoon(force = false): void {
+  if (!audioDebugEnabled()) return;
+  if (!audioDebugBuffer.length) return;
+
+  const flush = () => {
+    audioDebugFlushTimer = null;
+    if (!audioDebugBuffer.length) return;
+
+    const events = audioDebugBuffer.splice(0, audioDebugBuffer.length);
+
+    try {
+      fetch("/api/playback/debug", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: audioDebugSessionId,
+          href: window.location.href,
+          events,
+        }),
+        keepalive: true,
+      }).catch(() => {});
+    } catch {}
+  };
+
+  if (force) {
+    if (audioDebugFlushTimer != null) {
+      window.clearTimeout(audioDebugFlushTimer);
+      audioDebugFlushTimer = null;
+    }
+    flush();
+    return;
+  }
+
+  if (audioDebugFlushTimer != null) return;
+  audioDebugFlushTimer = window.setTimeout(flush, 5000);
+}
+
 function sendAudioDebug(payload: {
   event: string;
   albumId?: string | null;
@@ -84,18 +139,28 @@ function sendAudioDebug(payload: {
 }): void {
   if (!audioDebugEnabled()) return;
 
-  try {
-    console.info("[audio-debug]", payload);
-  } catch {}
+  const event: AudioDebugEvent = {
+    t: Math.floor(performance.now()),
+    ...payload,
+  };
+
+  audioDebugBuffer.push(event);
 
   try {
-    fetch("/api/playback/debug", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      keepalive: true,
-    }).catch(() => {});
+    console.info("[audio-debug]", {
+      sessionId: audioDebugSessionId,
+      ...event,
+    });
   } catch {}
+
+  const urgent =
+    payload.event.includes("ended") ||
+    payload.event.includes("rejected") ||
+    payload.event.includes("error") ||
+    payload.event.includes("next") ||
+    payload.event.includes("attach");
+
+  flushAudioDebugSoon(urgent);
 }
 
 function setMediaSessionPositionStateSafe(args: {
@@ -751,6 +816,19 @@ export default function AudioEngine() {
     a.volume = Math.max(0, Math.min(1, p.volume));
     a.muted = p.muted;
   }, [p.volume, p.muted]);
+
+  React.useEffect(() => {
+    const flush = () => flushAudioDebugSoon(true);
+
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", flush);
+
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", flush);
+      flush();
+    };
+  }, []);
 
   /* ---------------- Active queue album-session prefetch ---------------- */
 
