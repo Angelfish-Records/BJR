@@ -724,7 +724,24 @@ export default function AudioEngine() {
 
   React.useEffect(() => {
     nearEndWarmKeyRef.current = null;
-  }, [p.current?.recordingId, p.current?.muxPlaybackId]);
+
+    const player = pRef.current;
+
+    sendAudioDebug({
+      event: "current-track-changed",
+      albumId: player.queueContextId ?? null,
+      recordingId: player.current?.recordingId ?? null,
+      playbackId: player.current?.muxPlaybackId ?? null,
+      source: "AudioEngine",
+      detail: `status=${player.status};intent=${player.intent ?? "null"}`,
+    });
+  }, [
+    p.current?.recordingId,
+    p.current?.muxPlaybackId,
+    p.queueContextId,
+    p.status,
+    p.intent,
+  ]);
 
   /* ---------------- Volume / mute ---------------- */
 
@@ -889,6 +906,15 @@ export default function AudioEngine() {
     };
 
     const attachSrc = (srcUrl: string) => {
+      sendAudioDebug({
+        event: "attach-src-called",
+        albumId: s.queueContextId ?? null,
+        recordingId: s.current?.recordingId ?? null,
+        playbackId,
+        source: "AudioEngine",
+        detail: `seq=${seq};active=${loadSeq.current}`,
+      });
+
       if (seq !== loadSeq.current) return;
 
       hardResetElement();
@@ -929,9 +955,32 @@ export default function AudioEngine() {
       attachedKeyRef.current = attachKey;
 
       if (playIntentRef.current) {
-        void a.play().finally(() => {
-          playIntentRef.current = false;
-        });
+        void a.play().then(
+          () => {
+            sendAudioDebug({
+              event: "attach-play-resolved",
+              albumId: s.queueContextId ?? null,
+              recordingId: s.current?.recordingId ?? null,
+              playbackId,
+              source: "AudioEngine",
+            });
+            playIntentRef.current = false;
+          },
+          (err: unknown) => {
+            sendAudioDebug({
+              event: "attach-play-rejected",
+              albumId: s.queueContextId ?? null,
+              recordingId: s.current?.recordingId ?? null,
+              playbackId,
+              source: "AudioEngine",
+              detail:
+                err instanceof Error
+                  ? `${err.name}: ${err.message}`
+                  : "unknown",
+            });
+            playIntentRef.current = true;
+          },
+        );
       }
     };
 
@@ -1393,8 +1442,31 @@ export default function AudioEngine() {
     };
 
     const onEnded = () => {
+      const s = pRef.current;
+      const cur = s.current;
+
+      sendAudioDebug({
+        event: "ended-fired",
+        albumId: s.queueContextId ?? null,
+        recordingId: cur?.recordingId ?? null,
+        playbackId: cur?.muxPlaybackId ?? null,
+        source: "AudioEngine",
+      });
+
       reportPlaythroughComplete(1);
-      pRef.current.next();
+
+      playIntentRef.current = true;
+      void prefetchCurrentQueueAlbumSession();
+
+      s.next();
+
+      sendAudioDebug({
+        event: "next-dispatched-from-ended",
+        albumId: s.queueContextId ?? null,
+        recordingId: cur?.recordingId ?? null,
+        playbackId: cur?.muxPlaybackId ?? null,
+        source: "AudioEngine",
+      });
     };
 
     a.addEventListener("timeupdate", onTime);
