@@ -1,4 +1,3 @@
-// web/app/api/artist-posts/route.ts
 import { NextResponse, type NextRequest } from "next/server";
 import { client } from "@/sanity/lib/client";
 import { urlFor } from "@/sanity/lib/image";
@@ -50,7 +49,6 @@ type OkResponse = {
   ok: true;
   posts: ApiPost[];
   nextCursor: string | null;
-  correlationId: string;
 };
 
 function clampInt(v: string | null, def: number, min: number, max: number) {
@@ -72,8 +70,8 @@ function visibilityRank(v: Visibility): number {
   return 0;
 }
 
-function canSee(min: Visibility, viewer: Visibility): boolean {
-  return visibilityRank(viewer) >= visibilityRank(min);
+function meetsMinVisibility(postVisibility: Visibility, minVisibility: Visibility) {
+  return visibilityRank(postVisibility) >= visibilityRank(minVisibility);
 }
 
 function asPostType(v: unknown): PostType {
@@ -86,8 +84,7 @@ function asPostType(v: unknown): PostType {
 
 function parsePostTypeFilter(v: string | null): PostType | null {
   const s = (v ?? "").trim().toLowerCase();
-  if (!s) return null;
-  if (s === "all") return null;
+  if (!s || s === "all") return null;
   if (VALID_POST_TYPES.includes(s as PostType)) return s as PostType;
   return null;
 }
@@ -111,9 +108,6 @@ function isImageBlock(
 type UrlForSource = Parameters<typeof urlFor>[0];
 
 export async function GET(req: NextRequest) {
-  const correlationId =
-    req.headers.get("x-correlation-id") ?? globalThis.crypto.randomUUID();
-
   const url = new URL(req.url);
   const limit = clampInt(url.searchParams.get("limit"), 10, 1, 30);
   const offset = clampInt(url.searchParams.get("offset"), 0, 0, 10_000);
@@ -122,37 +116,34 @@ export async function GET(req: NextRequest) {
 
   const typeClause = postTypeFilter ? " && postType == $postType" : "";
 
-  const postsQuery = `
-    *[_type == "artistPost" && defined(slug.current)${typeClause}]
-      | order(pinned desc, publishedAt desc)[$offset...$end]{
-        _id,
-        title,
-        slug,
-        publishedAt,
-        pinned,
-        visibility,
-        postType,
-        body
-      }
-  `;
-
   const docs = await client.fetch<SanityPostDoc[]>(
-    postsQuery,
+    `
+      *[_type == "artistPost" && defined(slug.current)${typeClause}]
+        | order(pinned desc, publishedAt desc)[$offset...$end]{
+          _id,
+          title,
+          slug,
+          publishedAt,
+          pinned,
+          visibility,
+          postType,
+          body
+        }
+    `,
     postTypeFilter
       ? { offset, end: offset + limit, postType: postTypeFilter }
       : { offset, end: offset + limit },
     { next: { tags: ["artistPost"] } },
   );
 
-  // With gating removed, treat visibility as a pure content filter:
-  // only return posts at/above the configured minVisibility.
   const posts: ApiPost[] = [];
+
   for (const d of docs) {
     const slug = d.slug?.current?.trim() ?? "";
     if (!slug) continue;
 
-    const vis: Visibility = d.visibility ?? "public";
-    if (!canSee(minVisibility, vis)) continue;
+    const visibility = d.visibility ?? "public";
+    if (!meetsMinVisibility(visibility, minVisibility)) continue;
 
     const body = Array.isArray(d.body) ? d.body : [];
 
@@ -162,11 +153,11 @@ export async function GET(req: NextRequest) {
       const maxWidth = clampMaxWidthPx(node["maxWidth"]);
 
       try {
-        const u = urlFor(node as UrlForSource).width(1600).quality(80).url();
-        const out: ApiImageValue = { _type: "image", url: u, maxWidth };
+        const url = urlFor(node as UrlForSource).width(1600).quality(80).url();
+        const out: ApiImageValue = { _type: "image", url, maxWidth };
         return out;
       } catch {
-        if (maxWidth !== undefined) return { ...(node as object), maxWidth };
+        if (maxWidth !== undefined) return { ...node, maxWidth };
         return node;
       }
     });
@@ -179,16 +170,18 @@ export async function GET(req: NextRequest) {
           ? d.publishedAt
           : new Date().toISOString(),
       pinned: Boolean(d.pinned),
-      visibility: vis,
+      visibility,
       postType: asPostType(d.postType),
       body: mappedBody,
     });
   }
 
-  const nextCursor = docs.length === limit ? String(offset + limit) : null;
-
   return NextResponse.json<OkResponse>(
-    { ok: true, posts, nextCursor, correlationId },
+    {
+      ok: true,
+      posts,
+      nextCursor: docs.length === limit ? String(offset + limit) : null,
+    },
     { status: 200 },
   );
 }
