@@ -217,10 +217,107 @@ export type AlbumPlaybackAssetVerification = {
   matchedRecordingId: string | null;
 };
 
+export type AlbumPlaybackSessionAsset = {
+  recordingId: string;
+  displayId: string;
+  playbackId: string;
+  durationMs?: number;
+};
+
 function normalizeAlbumScopeId(raw: string): string {
   let s = (raw ?? "").trim();
   while (s.startsWith("alb:")) s = s.slice(4);
   return s.trim();
+}
+
+export async function getAlbumPlaybackAssetsForSession(params: {
+  albumId: string;
+}): Promise<{
+  ok: boolean;
+  albumId: string;
+  albumScopeId: string;
+  tracks: AlbumPlaybackSessionAsset[];
+}> {
+  const albumId = normalizeAlbumScopeId(params.albumId);
+
+  if (!albumId) {
+    return {
+      ok: false,
+      albumId,
+      albumScopeId: "",
+      tracks: [],
+    };
+  }
+
+  const q = `
+    *[
+      _type == "album" &&
+      (
+        _id == $albumId ||
+        catalogueId == $albumId
+      )
+    ][0]{
+      _id,
+      catalogueId,
+      "tracks": tracks[
+        defined(recordingId) &&
+        defined(displayId) &&
+        defined(muxPlaybackId)
+      ]{
+        recordingId,
+        displayId,
+        muxPlaybackId,
+        durationMs
+      }
+    }
+  `;
+
+  const doc = await client.fetch<{
+    _id?: string;
+    catalogueId?: string | null;
+    tracks?: Array<{
+      recordingId?: string;
+      displayId?: string;
+      muxPlaybackId?: string;
+      durationMs?: number;
+    }>;
+  } | null>(q, { albumId }, { next: { tags: ["albums"] } });
+
+  const resolvedAlbumId = normStr(doc?.catalogueId) ?? normStr(doc?._id) ?? "";
+  const albumScopeId = resolvedAlbumId ? `alb:${resolvedAlbumId}` : "";
+
+  const tracks: AlbumPlaybackSessionAsset[] = [];
+
+  if (Array.isArray(doc?.tracks)) {
+    for (const t of doc.tracks) {
+      const recordingId = normStr(t.recordingId);
+      const displayId = normStr(t.displayId);
+      const playbackId = normStr(t.muxPlaybackId);
+
+      if (!recordingId || !displayId || !playbackId) continue;
+
+      const durationMs =
+        typeof t.durationMs === "number" &&
+        Number.isFinite(t.durationMs) &&
+        t.durationMs > 0
+          ? Math.floor(t.durationMs)
+          : undefined;
+
+      tracks.push({
+        recordingId,
+        displayId,
+        playbackId,
+        ...(typeof durationMs === "number" ? { durationMs } : {}),
+      });
+    }
+  }
+
+  return {
+    ok: Boolean(resolvedAlbumId && tracks.length > 0),
+    albumId: resolvedAlbumId,
+    albumScopeId,
+    tracks,
+  };
 }
 
 export async function verifyAlbumPlaybackAsset(params: {

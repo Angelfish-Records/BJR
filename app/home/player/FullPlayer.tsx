@@ -880,13 +880,17 @@ export default function FullPlayer(props: {
     window.setTimeout(() => setTransportLock(false), ms);
   };
 
-  const prefetchTrack = (t?: PlayerTrack) => {
-    const playbackId = t?.muxPlaybackId;
-    if (!playbackId) return;
+  const prefetchAlbumSession = React.useCallback(() => {
+    if (!albumKey) return;
     window.dispatchEvent(
-      new CustomEvent("af:prefetch-token", { detail: { playbackId } }),
+      new CustomEvent("af:prefetch-album-session", {
+        detail: {
+          albumId: albumKey,
+          ...(stParam ? { st: stParam } : {}),
+        },
+      }),
     );
-  };
+  }, [albumKey, stParam]);
 
   const prefetchAlbumArt = (url?: string | null) => {
     if (!url) return;
@@ -908,6 +912,8 @@ export default function FullPlayer(props: {
 
     const firstTrack = effTracks[0];
     if (!firstTrack) return;
+
+    prefetchAlbumSession();
 
     p.setQueue(effTracks, {
       contextId: albumKey ?? undefined,
@@ -983,6 +989,8 @@ export default function FullPlayer(props: {
   function playAlbumIndex(i: number) {
     const t = effTracks[i];
     if (!t) return;
+
+    prefetchAlbumSession();
     ensureAlbumQueue();
     if (isPublicAlbumRoute) {
       // User-initiated navigation; preserve history.
@@ -1135,8 +1143,6 @@ export default function FullPlayer(props: {
               <button
                 type="button"
                 onClick={canPlay && !playLock ? onTogglePlay : undefined}
-                onMouseEnter={() => prefetchTrack(effTracks[0])}
-                onFocus={() => prefetchTrack(effTracks[0])}
                 disabled={!canPlay || playLock}
                 aria-label={playingThisAlbum ? "Pause" : "Play"}
                 title={playingThisAlbum ? "Pause" : "Play"}
@@ -1267,7 +1273,6 @@ export default function FullPlayer(props: {
                 aria-disabled={canPlay ? undefined : true}
                 className="afTrackRow"
                 onMouseEnter={(e) => {
-                  prefetchTrack(t);
                   if (!canPlay) return;
                   if (!isCoarsePointer && !isSelected)
                     e.currentTarget.style.background = "rgba(255,255,255,0.08)";
@@ -1275,7 +1280,6 @@ export default function FullPlayer(props: {
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = restBg;
                 }}
-                onFocus={() => prefetchTrack(t)}
                 onClick={() => {
                   if (!canPlay) return;
 
@@ -1290,6 +1294,7 @@ export default function FullPlayer(props: {
                   goCanonicalTrack(t.displayId, "push");
 
                   if (isCoarsePointer) {
+                    prefetchAlbumSession();
                     p.play(t);
                     window.dispatchEvent(new Event("af:play-intent"));
                     return;
@@ -1303,6 +1308,7 @@ export default function FullPlayer(props: {
 
                   goCanonicalTrack(t.displayId, "push");
 
+                  prefetchAlbumSession();
                   p.play(t);
                   window.dispatchEvent(new Event("af:play-intent"));
                 }}
@@ -1322,6 +1328,7 @@ export default function FullPlayer(props: {
                     goCanonicalTrack(t.displayId, "push");
 
                     if (isCoarsePointer) {
+                      prefetchAlbumSession();
                       p.play(t);
                       window.dispatchEvent(new Event("af:play-intent"));
                       return;
@@ -1344,6 +1351,7 @@ export default function FullPlayer(props: {
                     goCanonicalTrack(t.displayId, "push");
 
                     if (isCoarsePointer) {
+                      prefetchAlbumSession();
                       p.play(t);
                       window.dispatchEvent(new Event("af:play-intent"));
                       return;
@@ -1411,6 +1419,7 @@ export default function FullPlayer(props: {
 
                           goCanonicalTrack(t.displayId, "push");
 
+                          prefetchAlbumSession();
                           p.play(t);
                           window.dispatchEvent(new Event("af:play-intent"));
                         }}

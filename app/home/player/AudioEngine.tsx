@@ -23,6 +23,30 @@ type TokenResponse =
   | { ok: true; token: string; expiresAt: string | number }
   | { ok: false; error: string; gate?: GatePayload };
 
+type AlbumSessionToken = {
+  recordingId: string;
+  playbackId: string;
+  token: string;
+  expiresAt: string | number;
+};
+
+type AlbumSessionResponse =
+  | {
+      ok: true;
+      albumId: string;
+      expiresAt: string | number;
+      tracks: AlbumSessionToken[];
+      correlationId?: string;
+    }
+  | { ok: false; error: string; gate?: GatePayload };
+
+type AlbumSessionCacheEntry = {
+  albumId: string;
+  st: string | null;
+  expiresAtMs: number;
+  byPlaybackId: Map<string, { token: string; expiresAtMs: number }>;
+};
+
 function canPlayNativeHls(a: HTMLMediaElement) {
   return a.canPlayType("application/vnd.apple.mpegurl") !== "";
 }
@@ -38,6 +62,46 @@ function newPlaybackSessionId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function hasMediaSession(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    "mediaSession" in navigator &&
+    typeof navigator.mediaSession !== "undefined"
+  );
+}
+
+function setMediaSessionPositionStateSafe(args: {
+  durationSec: number;
+  positionSec: number;
+  playbackRate?: number;
+}): void {
+  if (!hasMediaSession()) return;
+  if (typeof navigator.mediaSession.setPositionState !== "function") return;
+
+  const duration = Number.isFinite(args.durationSec)
+    ? Math.max(0, args.durationSec)
+    : 0;
+  const position = Number.isFinite(args.positionSec)
+    ? Math.max(0, Math.min(args.positionSec, duration || args.positionSec))
+    : 0;
+  const playbackRate =
+    typeof args.playbackRate === "number" &&
+    Number.isFinite(args.playbackRate) &&
+    args.playbackRate > 0
+      ? args.playbackRate
+      : 1;
+
+  try {
+    navigator.mediaSession.setPositionState({
+      duration,
+      position,
+      playbackRate,
+    });
+  } catch {
+    // Some browsers throw if duration is missing/zero or state is unsupported.
+  }
+}
+
 export default function AudioEngine() {
   const p = usePlayer();
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
@@ -47,6 +111,7 @@ export default function AudioEngine() {
 
   const hlsRef = React.useRef<Hls | null>(null);
   const tokenAbortRef = React.useRef<AbortController | null>(null);
+  const albumSessionAbortRef = React.useRef<AbortController | null>(null);
   const loadSeq = React.useRef(0);
 
   // Distinct from muxPlaybackId:
@@ -60,6 +125,8 @@ export default function AudioEngine() {
   );
   const telemetryProgressSentRef = React.useRef(new Set<string>());
   const telemetryCompleteSentRef = React.useRef(new Set<string>());
+
+  const nearEndWarmKeyRef = React.useRef<string | null>(null);
 
   const srcNodeRef = React.useRef<MediaElementAudioSourceNode | null>(null);
 
@@ -80,6 +147,12 @@ export default function AudioEngine() {
   const attachedKeyRef = React.useRef<string | null>(null);
   const tokenCacheRef = React.useRef(
     new Map<string, { token: string; expiresAtMs: number }>(),
+  );
+  const albumSessionCacheRef = React.useRef(
+    new Map<string, AlbumSessionCacheEntry>(),
+  );
+  const albumSessionInFlightRef = React.useRef(
+    new Map<string, Promise<boolean>>(),
   );
   const blockedNonceRef = React.useRef(new Map<string, number>()); // playbackId -> reloadNonce at time of block
 
@@ -142,6 +215,157 @@ export default function AudioEngine() {
     clearGate({ domain: "playback" });
   }, [clearGate]);
 
+  const getShareTokenFromLocation = React.useCallback((): string | null => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      return (sp.get("st") ?? sp.get("share") ?? "").trim() || null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const albumSessionKey = React.useCallback(
+    (albumId: string, st: string | null): string => {
+      return `${albumId.trim()}::st=${st ?? ""}`;
+    },
+    [],
+  );
+
+  const cacheAlbumSessionTokens = React.useCallback(
+    (args: {
+      albumId: string;
+      st: string | null;
+      expiresAt: string | number;
+      tracks: AlbumSessionToken[];
+    }): boolean => {
+      const expiresAtMs =
+        typeof args.expiresAt === "number"
+          ? args.expiresAt * 1000
+          : Date.parse(String(args.expiresAt));
+
+      if (!Number.isFinite(expiresAtMs)) return false;
+
+      const byPlaybackId = new Map<
+        string,
+        { token: string; expiresAtMs: number }
+      >();
+
+      for (const t of args.tracks) {
+        const playbackId = (t.playbackId ?? "").trim();
+        const token = (t.token ?? "").trim();
+
+        const trackExpiresAtMs =
+          typeof t.expiresAt === "number"
+            ? t.expiresAt * 1000
+            : Date.parse(String(t.expiresAt));
+
+        if (!playbackId || !token || !Number.isFinite(trackExpiresAtMs)) {
+          continue;
+        }
+
+        const entry = { token, expiresAtMs: trackExpiresAtMs };
+        byPlaybackId.set(playbackId, entry);
+        tokenCacheRef.current.set(playbackId, entry);
+      }
+
+      if (byPlaybackId.size === 0) return false;
+
+      albumSessionCacheRef.current.set(albumSessionKey(args.albumId, args.st), {
+        albumId: args.albumId,
+        st: args.st,
+        expiresAtMs,
+        byPlaybackId,
+      });
+
+      return true;
+    },
+    [albumSessionKey],
+  );
+
+  const getCachedTokenForPlaybackId = React.useCallback(
+    (playbackId: string): { token: string; expiresAtMs: number } | null => {
+      const direct = tokenCacheRef.current.get(playbackId);
+      if (direct && Date.now() < direct.expiresAtMs - 5000) return direct;
+      return null;
+    },
+    [],
+  );
+
+  const prefetchAlbumSession = React.useCallback(
+    async (args: {
+      albumId: string | null | undefined;
+      st?: string | null;
+      signal?: AbortSignal;
+    }): Promise<boolean> => {
+      const albumId = (args.albumId ?? "").trim();
+      if (!albumId) return false;
+
+      const st = args.st ?? getShareTokenFromLocation();
+      const key = albumSessionKey(albumId, st);
+
+      const cached = albumSessionCacheRef.current.get(key);
+      if (cached && Date.now() < cached.expiresAtMs - 5000) return true;
+
+      const existing = albumSessionInFlightRef.current.get(key);
+      if (existing) return existing;
+
+      const promise = (async () => {
+        try {
+          const res = await fetch("/api/mux/album-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              albumId,
+              ...(st ? { st } : {}),
+            }),
+            signal: args.signal,
+          });
+
+          let data: AlbumSessionResponse | null = null;
+          try {
+            data = (await res.json()) as AlbumSessionResponse;
+          } catch {
+            data = null;
+          }
+
+          if (!res.ok || !data || !("ok" in data) || data.ok !== true) {
+            return false;
+          }
+
+          return cacheAlbumSessionTokens({
+            albumId: data.albumId || albumId,
+            st,
+            expiresAt: data.expiresAt,
+            tracks: data.tracks,
+          });
+        } catch {
+          return false;
+        }
+      })().finally(() => {
+        albumSessionInFlightRef.current.delete(key);
+      });
+
+      albumSessionInFlightRef.current.set(key, promise);
+      return promise;
+    },
+    [albumSessionKey, cacheAlbumSessionTokens, getShareTokenFromLocation],
+  );
+
+  const prefetchCurrentQueueAlbumSession = React.useCallback(
+    async (signal?: AbortSignal): Promise<boolean> => {
+      const s = pRef.current;
+      const albumId = (s.queueContextId ?? "").trim();
+      if (!albumId) return false;
+
+      return prefetchAlbumSession({
+        albumId,
+        st: getShareTokenFromLocation(),
+        signal,
+      });
+    },
+    [getShareTokenFromLocation, prefetchAlbumSession],
+  );
+
   const reportPlaybackGate = React.useCallback(
     (payload: GatePayload, corrFromHeader: string | null) => {
       const domain: GateDomain = (payload.domain ?? "playback") as GateDomain;
@@ -203,6 +427,8 @@ export default function AudioEngine() {
     const ctx = audioCtxRef.current;
 
     const tokenCache = tokenCacheRef.current;
+    const albumSessionCache = albumSessionCacheRef.current;
+    const albumSessionInFlight = albumSessionInFlightRef.current;
     const blockedNonce = blockedNonceRef.current;
     const playthroughSent = playthroughSentRef.current;
     const telemetryPlaySent = telemetryPlaySentRef.current;
@@ -218,6 +444,11 @@ export default function AudioEngine() {
         tokenAbort?.abort();
       } catch {}
       tokenAbortRef.current = null;
+
+      try {
+        albumSessionAbortRef.current?.abort();
+      } catch {}
+      albumSessionAbortRef.current = null;
 
       if (hls) {
         try {
@@ -258,6 +489,8 @@ export default function AudioEngine() {
       }
 
       tokenCache.clear();
+      albumSessionCache.clear();
+      albumSessionInFlight.clear();
       blockedNonce.clear();
       playthroughSent.clear();
       telemetryPlaySent.clear();
@@ -442,6 +675,10 @@ export default function AudioEngine() {
     };
   }, []);
 
+  React.useEffect(() => {
+    nearEndWarmKeyRef.current = null;
+  }, [p.current?.recordingId, p.current?.muxPlaybackId]);
+
   /* ---------------- Volume / mute ---------------- */
 
   React.useEffect(() => {
@@ -450,6 +687,67 @@ export default function AudioEngine() {
     a.volume = Math.max(0, Math.min(1, p.volume));
     a.muted = p.muted;
   }, [p.volume, p.muted]);
+
+  /* ---------------- Active queue album-session prefetch ---------------- */
+
+  React.useEffect(() => {
+    const albumId = (p.queueContextId ?? "").trim();
+    if (!albumId) return;
+    if (engineBlockedRef.current) return;
+
+    const ac = new AbortController();
+
+    void prefetchAlbumSession({
+      albumId,
+      st: getShareTokenFromLocation(),
+      signal: ac.signal,
+    });
+
+    return () => ac.abort();
+  }, [p.queueContextId, getShareTokenFromLocation, prefetchAlbumSession]);
+
+  /* ---------------- Album-session prefetch bridge ---------------- */
+
+  React.useEffect(() => {
+    const onPrefetchAlbumSession = (event: Event) => {
+      const detail =
+        event instanceof CustomEvent && typeof event.detail === "object"
+          ? (event.detail as {
+              albumId?: unknown;
+              st?: unknown;
+            })
+          : null;
+
+      const albumId =
+        typeof detail?.albumId === "string" ? detail.albumId.trim() : "";
+      const st =
+        typeof detail?.st === "string" ? detail.st.trim() || null : null;
+
+      if (!albumId) return;
+
+      albumSessionAbortRef.current?.abort();
+      const ac = new AbortController();
+      albumSessionAbortRef.current = ac;
+
+      void prefetchAlbumSession({
+        albumId,
+        st,
+        signal: ac.signal,
+      });
+    };
+
+    window.addEventListener(
+      "af:prefetch-album-session",
+      onPrefetchAlbumSession,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "af:prefetch-album-session",
+        onPrefetchAlbumSession,
+      );
+    };
+  }, [prefetchAlbumSession]);
 
   /* ---------------- Track attach (HLS / native) ---------------- */
 
@@ -514,7 +812,11 @@ export default function AudioEngine() {
 
     mediaSurface.setStatus("loading");
     pRef.current.setStatusExternal("loading");
-    pRef.current.setLoadingReasonExternal("attach");
+
+    const cachedBeforeAttach = getCachedTokenForPlaybackId(playbackId);
+    pRef.current.setLoadingReasonExternal(
+      cachedBeforeAttach ? "attach" : "token",
+    );
 
     if (hlsRef.current) {
       try {
@@ -588,19 +890,27 @@ export default function AudioEngine() {
 
     const load = async () => {
       try {
-        const cached = tokenCacheRef.current.get(playbackId);
-        if (cached && Date.now() < cached.expiresAtMs - 5000) {
+        const cached =
+          cachedBeforeAttach ?? getCachedTokenForPlaybackId(playbackId);
+        if (cached) {
           attachSrc(muxSignedHlsUrl(playbackId, cached.token));
           return;
         }
 
-        // Pull st/share from current URL if present (client-side only)
-        let st: string | null = null;
-        try {
-          const sp = new URLSearchParams(window.location.search);
-          st = (sp.get("st") ?? sp.get("share") ?? "").trim() || null;
-        } catch {
-          st = null;
+        const st = getShareTokenFromLocation();
+
+        if (s.queueContextId) {
+          await prefetchAlbumSession({
+            albumId: s.queueContextId,
+            st,
+            signal: ac.signal,
+          });
+
+          const albumCached = getCachedTokenForPlaybackId(playbackId);
+          if (albumCached) {
+            attachSrc(muxSignedHlsUrl(playbackId, albumCached.token));
+            return;
+          }
         }
 
         const res = await fetch("/api/mux/token", {
@@ -702,6 +1012,9 @@ export default function AudioEngine() {
     clearPlaybackGate,
     reportPlaybackGate,
     reportLocalPlaybackErrorAsGate,
+    getCachedTokenForPlaybackId,
+    getShareTokenFromLocation,
+    prefetchAlbumSession,
   ]);
 
   /* ---------------- Media element -> time + duration + state ---------------- */
@@ -888,6 +1201,12 @@ export default function AudioEngine() {
       const durMs = durFromState || durFromEl;
 
       if (durMs > 0) {
+        setMediaSessionPositionStateSafe({
+          durationSec: durMs / 1000,
+          positionSec: ms / 1000,
+          playbackRate: 1,
+        });
+
         reportTelemetryPlay({
           recordingId: curId,
           playbackId: telemetrySessionIdRef.current ?? "",
@@ -901,6 +1220,15 @@ export default function AudioEngine() {
           progressMs: ms,
           durationMs: durMs,
         });
+
+        const remainingMs = durMs - ms;
+        if (remainingMs > 0 && remainingMs <= 30_000) {
+          const warmKey = `${curId}:${telemetrySessionIdRef.current ?? ""}`;
+          if (warmKey && nearEndWarmKeyRef.current !== warmKey) {
+            nearEndWarmKeyRef.current = warmKey;
+            void prefetchCurrentQueueAlbumSession();
+          }
+        }
 
         const pct = ms / durMs;
         reportPlaythroughComplete(pct);
@@ -940,6 +1268,11 @@ export default function AudioEngine() {
       }
 
       mediaSurface.setStatus("playing");
+      if (hasMediaSession()) {
+        try {
+          navigator.mediaSession.playbackState = "playing";
+        } catch {}
+      }
       pRef.current.setStatusExternal("playing");
       pRef.current.setLoadingReasonExternal(undefined);
       pRef.current.clearIntent();
@@ -951,6 +1284,11 @@ export default function AudioEngine() {
     const markPaused = () => {
       if (engineBlockedRef.current) return;
       mediaSurface.setStatus("paused");
+      if (hasMediaSession()) {
+        try {
+          navigator.mediaSession.playbackState = "paused";
+        } catch {}
+      }
       pRef.current.setStatusExternal("paused");
       pRef.current.setLoadingReasonExternal(undefined);
       pRef.current.clearIntent();
@@ -977,8 +1315,6 @@ export default function AudioEngine() {
 
     const onEnded = () => {
       reportPlaythroughComplete(1);
-      hardStopAndDetach();
-      window.dispatchEvent(new Event("af:play-intent"));
       pRef.current.next();
     };
 
@@ -1003,7 +1339,7 @@ export default function AudioEngine() {
       a.removeEventListener("canplaythrough", clearBuffering);
       a.removeEventListener("ended", onEnded);
     };
-  }, [hardStopAndDetach, announceBadges]);
+  }, [hardStopAndDetach, announceBadges, prefetchCurrentQueueAlbumSession]);
 
   /* ---------------- Seek: PlayerState -> media element ---------------- */
 
@@ -1054,6 +1390,159 @@ export default function AudioEngine() {
     }
   }, [p.intent]);
 
+  /* ---------------- Media Session metadata / lock-screen controls ---------------- */
+
+  React.useEffect(() => {
+    if (!hasMediaSession()) return;
+
+    const player = pRef.current;
+    const cur = player.current;
+
+    const title = cur?.title?.trim() || cur?.recordingId || "Angelfish Records";
+    const artist =
+      cur?.artist?.trim() ||
+      player.queueContextArtist?.trim() ||
+      "Angelfish Records";
+    const album = player.queueContextTitle?.trim() || undefined;
+    const artworkUrl = player.queueContextArtworkUrl?.trim() || "";
+
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title,
+        artist,
+        album,
+        artwork: artworkUrl
+          ? [
+              {
+                src: artworkUrl,
+                sizes: "512x512",
+                type: "image/jpeg",
+              },
+            ]
+          : [],
+      });
+    } catch {
+      // Metadata is enhancement-only.
+    }
+
+    try {
+      navigator.mediaSession.playbackState =
+        p.status === "playing"
+          ? "playing"
+          : p.status === "paused" || p.status === "idle"
+            ? "paused"
+            : "none";
+    } catch {}
+
+    const setHandler = (
+      action: MediaSessionAction,
+      handler: MediaSessionActionHandler | null,
+    ) => {
+      try {
+        navigator.mediaSession.setActionHandler(action, handler);
+      } catch {
+        // Unsupported action on this browser.
+      }
+    };
+
+    setHandler("play", () => {
+      if (engineBlockedRef.current) return;
+      void prefetchCurrentQueueAlbumSession();
+      pRef.current.play();
+      window.dispatchEvent(new Event("af:play-intent"));
+    });
+
+    setHandler("pause", () => {
+      pRef.current.pause();
+    });
+
+    setHandler("previoustrack", () => {
+      if (engineBlockedRef.current) return;
+      void prefetchCurrentQueueAlbumSession();
+      pRef.current.prev();
+      window.dispatchEvent(new Event("af:play-intent"));
+    });
+
+    setHandler("nexttrack", () => {
+      if (engineBlockedRef.current) return;
+      void prefetchCurrentQueueAlbumSession();
+      pRef.current.next();
+      window.dispatchEvent(new Event("af:play-intent"));
+    });
+
+    setHandler("seekbackward", (details) => {
+      const offsetSec =
+        typeof details.seekOffset === "number" &&
+        Number.isFinite(details.seekOffset)
+          ? details.seekOffset
+          : 10;
+      pRef.current.seek(
+        Math.max(0, pRef.current.positionMs - offsetSec * 1000),
+      );
+    });
+
+    setHandler("seekforward", (details) => {
+      const offsetSec =
+        typeof details.seekOffset === "number" &&
+        Number.isFinite(details.seekOffset)
+          ? details.seekOffset
+          : 10;
+      pRef.current.seek(pRef.current.positionMs + offsetSec * 1000);
+    });
+
+    setHandler("seekto", (details) => {
+      if (
+        typeof details.seekTime !== "number" ||
+        !Number.isFinite(details.seekTime)
+      ) {
+        return;
+      }
+
+      pRef.current.seek(Math.max(0, Math.floor(details.seekTime * 1000)));
+    });
+
+    return () => {
+      setHandler("play", null);
+      setHandler("pause", null);
+      setHandler("previoustrack", null);
+      setHandler("nexttrack", null);
+      setHandler("seekbackward", null);
+      setHandler("seekforward", null);
+      setHandler("seekto", null);
+    };
+  }, [
+    p.current?.recordingId,
+    p.current?.title,
+    p.current?.artist,
+    p.status,
+    p.queueContextTitle,
+    p.queueContextArtist,
+    p.queueContextArtworkUrl,
+    prefetchCurrentQueueAlbumSession,
+  ]);
+
+  React.useEffect(() => {
+    const player = pRef.current;
+    const curId = player.current?.recordingId ?? "";
+    const durMs =
+      (curId ? player.durationByRecordingId[curId] : 0) ||
+      player.current?.durationMs ||
+      0;
+
+    if (durMs <= 0) return;
+
+    setMediaSessionPositionStateSafe({
+      durationSec: durMs / 1000,
+      positionSec: p.positionMs / 1000,
+      playbackRate: 1,
+    });
+  }, [
+    p.current?.recordingId,
+    p.current?.durationMs,
+    p.durationByRecordingId,
+    p.positionMs,
+  ]);
+
   /* ---------------- User gesture bridge ---------------- */
 
   React.useEffect(() => {
@@ -1062,6 +1551,8 @@ export default function AudioEngine() {
 
     const resume = () => {
       if (engineBlockedRef.current) return;
+
+      void prefetchCurrentQueueAlbumSession();
 
       if (audioCtxRef.current?.state === "suspended") {
         audioCtxRef.current.resume().catch(() => {});
@@ -1072,7 +1563,7 @@ export default function AudioEngine() {
 
     window.addEventListener("af:play-intent", resume);
     return () => window.removeEventListener("af:play-intent", resume);
-  }, []);
+  }, [prefetchCurrentQueueAlbumSession]);
 
   return (
     <audio
