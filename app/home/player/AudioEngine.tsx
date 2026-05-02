@@ -158,7 +158,8 @@ function sendAudioDebug(payload: {
     payload.event.includes("rejected") ||
     payload.event.includes("error") ||
     payload.event.includes("next") ||
-    payload.event.includes("attach");
+    payload.event.includes("attach") ||
+    payload.event === "media-paused-at-ended-ignored";
 
   flushAudioDebugSoon(urgent);
 }
@@ -1507,7 +1508,13 @@ export default function AudioEngine() {
     const markPaused = () => {
       debugMediaEvent("media-paused");
 
-      if (a.ended) {
+      const effectivelyEnded =
+        a.ended ||
+        (Number.isFinite(a.duration) &&
+          a.duration > 0 &&
+          a.currentTime >= a.duration - 0.25);
+
+      if (effectivelyEnded) {
         sendAudioDebug({
           event: "media-paused-at-ended-ignored",
           albumId: pRef.current.queueContextId ?? null,
@@ -1531,6 +1538,15 @@ export default function AudioEngine() {
     };
 
     const markBuffering = () => {
+      const falsePositiveWhilePlaying =
+        !a.paused &&
+        !a.ended &&
+        a.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA;
+
+      if (falsePositiveWhilePlaying) {
+        return;
+      }
+
       debugMediaEvent("media-buffering");
       if (engineBlockedRef.current) return;
 
