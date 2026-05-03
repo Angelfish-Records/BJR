@@ -1,4 +1,3 @@
-// web/app/home/player/AudioEngine.tsx
 "use client";
 
 import React from "react";
@@ -48,7 +47,34 @@ type AlbumSessionCacheEntry = {
   byPlaybackId: Map<string, { token: string; expiresAtMs: number }>;
 };
 
-function canPlayNativeHls(a: HTMLMediaElement) {
+type DeckId = "a" | "b";
+
+type DeckMeta = {
+  deckId: DeckId;
+  recordingId: string;
+  playbackId: string;
+  attachKey: string;
+  prepared: boolean;
+};
+
+type PreparedStandby = {
+  deckId: DeckId;
+  recordingId: string;
+  playbackId: string;
+  attachKey: string;
+};
+
+type AudioDebugEvent = {
+  t: number;
+  event: string;
+  albumId?: string | null;
+  recordingId?: string | null;
+  playbackId?: string | null;
+  source?: string | null;
+  detail?: string | null;
+};
+
+function shouldUseNativeHls(a: HTMLMediaElement): boolean {
   if (typeof navigator === "undefined") return false;
 
   const ua = navigator.userAgent;
@@ -83,16 +109,6 @@ function hasMediaSession(): boolean {
 function audioDebugEnabled(): boolean {
   return process.env.NEXT_PUBLIC_AUDIO_DEBUG === "1";
 }
-
-type AudioDebugEvent = {
-  t: number;
-  event: string;
-  albumId?: string | null;
-  recordingId?: string | null;
-  playbackId?: string | null;
-  source?: string | null;
-  detail?: string | null;
-};
 
 const audioDebugSessionId =
   typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
@@ -170,6 +186,8 @@ function sendAudioDebug(payload: {
     payload.event.includes("next") ||
     payload.event.includes("attach") ||
     payload.event.includes("handoff") ||
+    payload.event.includes("standby") ||
+    payload.event.includes("promote") ||
     payload.event === "media-paused-at-ended-ignored" ||
     payload.event === "playback-progress-heartbeat";
 
@@ -203,27 +221,45 @@ function setMediaSessionPositionStateSafe(args: {
       position,
       playbackRate,
     });
-  } catch {
-    // Some browsers throw if duration is missing/zero or state is unsupported.
-  }
+  } catch {}
+}
+
+function otherDeck(deckId: DeckId): DeckId {
+  return deckId === "a" ? "b" : "a";
+}
+
+function normalizeAlbumId(raw: string | null | undefined): string {
+  let s = (raw ?? "").trim();
+  while (s.startsWith("alb:")) s = s.slice(4);
+  return s.trim();
 }
 
 export default function AudioEngine() {
   const p = usePlayer();
-  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+
+  const audioARef = React.useRef<HTMLAudioElement | null>(null);
+  const audioBRef = React.useRef<HTMLAudioElement | null>(null);
 
   const { reportGate, clearGate } = useGateBroker();
   const { announceBadges } = useBadgeAwardOverlay();
 
-  const hlsRef = React.useRef<Hls | null>(null);
+  const hlsByDeckRef = React.useRef<Record<DeckId, Hls | null>>({
+    a: null,
+    b: null,
+  });
+  const metaByDeckRef = React.useRef<Record<DeckId, DeckMeta | null>>({
+    a: null,
+    b: null,
+  });
+
+  const activeDeckRef = React.useRef<DeckId>("a");
+  const standbyRef = React.useRef<PreparedStandby | null>(null);
+
   const tokenAbortRef = React.useRef<AbortController | null>(null);
   const albumSessionAbortRef = React.useRef<AbortController | null>(null);
   const loadSeq = React.useRef(0);
 
-  // Distinct from muxPlaybackId:
-  // this is a fresh per-listen session id used for telemetry dedupe.
   const telemetrySessionIdRef = React.useRef<string | null>(null);
-
   const telemetryPlaySentRef = React.useRef(new Set<string>());
   const telemetryPlayAccumulatedMsRef = React.useRef(new Map<string, number>());
   const telemetryPlayLastProgressMsRef = React.useRef(
@@ -235,25 +271,26 @@ export default function AudioEngine() {
   const nearEndWarmKeyRef = React.useRef<string | null>(null);
   const debugProgressHeartbeatRef = React.useRef<string | null>(null);
   const autoAdvanceKeyRef = React.useRef<string | null>(null);
-  const suppressNextPauseRef = React.useRef(false);
+  const suppressPauseDeckRef = React.useRef<DeckId | null>(null);
 
-  const srcNodeRef = React.useRef<MediaElementAudioSourceNode | null>(null);
+  const srcNodeByDeckRef = React.useRef<
+    Record<DeckId, MediaElementAudioSourceNode | null>
+  >({
+    a: null,
+    b: null,
+  });
 
-  // ---- Audio analysis ----
   const audioCtxRef = React.useRef<AudioContext | null>(null);
   const analyserRef = React.useRef<AnalyserNode | null>(null);
   type U8AB = Uint8Array<ArrayBuffer>;
   const freqDataRef = React.useRef<U8AB | null>(null);
   const timeDataRef = React.useRef<U8AB | null>(null);
 
-  // ---- Playback intent ----
   const playIntentRef = React.useRef(false);
-  const playthroughSentRef = React.useRef(new Set<string>()); // key: `${recordingId}:${playbackId}`
+  const playthroughSentRef = React.useRef(new Set<string>());
   const TELEMETRY_PLAY_THRESHOLD_MS = 5_000;
   const TELEMETRY_PROGRESS_STEP_MS = 15_000;
 
-  // Track attachment bookkeeping
-  const attachedKeyRef = React.useRef<string | null>(null);
   const tokenCacheRef = React.useRef(
     new Map<string, { token: string; expiresAtMs: number }>(),
   );
@@ -263,9 +300,8 @@ export default function AudioEngine() {
   const albumSessionInFlightRef = React.useRef(
     new Map<string, Promise<boolean>>(),
   );
-  const blockedNonceRef = React.useRef(new Map<string, number>()); // playbackId -> reloadNonce at time of block
+  const blockedNonceRef = React.useRef(new Map<string, number>());
 
-  // NEW: local invariant flag (since PlayerState is no longer the gating channel)
   const engineBlockedRef = React.useRef(false);
 
   const pRef = React.useRef(p);
@@ -273,40 +309,29 @@ export default function AudioEngine() {
     pRef.current = p;
   }, [p]);
 
-  /* ---------------- helpers ---------------- */
-
-  const hardStopAndDetach = React.useCallback(() => {
-    const a = audioRef.current;
-    if (!a) return;
-
-    // stop any in-flight token request
-    try {
-      tokenAbortRef.current?.abort();
-    } catch {}
-    tokenAbortRef.current = null;
-
-    try {
-      a.pause();
-    } catch {}
-
-    // teardown HLS instance
-    if (hlsRef.current) {
-      try {
-        hlsRef.current.destroy();
-      } catch {}
-      hlsRef.current = null;
-    }
-
-    attachedKeyRef.current = null;
-    telemetrySessionIdRef.current = null;
-
-    try {
-      a.removeAttribute("src");
-    } catch {}
-    try {
-      a.load();
-    } catch {}
+  const getAudio = React.useCallback((deckId: DeckId) => {
+    return deckId === "a" ? audioARef.current : audioBRef.current;
   }, []);
+
+  const getActiveAudio = React.useCallback(() => {
+    return getAudio(activeDeckRef.current);
+  }, [getAudio]);
+
+  const getShareTokenFromLocation = React.useCallback((): string | null => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      return (sp.get("st") ?? sp.get("share") ?? "").trim() || null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const albumSessionKey = React.useCallback(
+    (albumId: string, st: string | null): string => {
+      return `${normalizeAlbumId(albumId)}::st=${st ?? ""}`;
+    },
+    [],
+  );
 
   const inferIntentForGate = React.useCallback(() => {
     const s = pRef.current;
@@ -324,21 +349,96 @@ export default function AudioEngine() {
     clearGate({ domain: "playback" });
   }, [clearGate]);
 
-  const getShareTokenFromLocation = React.useCallback((): string | null => {
-    try {
-      const sp = new URLSearchParams(window.location.search);
-      return (sp.get("st") ?? sp.get("share") ?? "").trim() || null;
-    } catch {
-      return null;
-    }
-  }, []);
+  const reportPlaybackGate = React.useCallback(
+    (payload: GatePayload, corrFromHeader: string | null) => {
+      const domain: GateDomain = (payload.domain ?? "playback") as GateDomain;
 
-  const albumSessionKey = React.useCallback(
-    (albumId: string, st: string | null): string => {
-      return `${albumId.trim()}::st=${st ?? ""}`;
+      const decision = gateResultFromPayload({
+        payload: {
+          ...payload,
+          domain,
+          correlationId: payload.correlationId ?? corrFromHeader ?? null,
+        },
+        attempt: { verb: "play", domain: "playback" },
+        intent: inferIntentForGate(),
+      });
+
+      if (!decision.ok) {
+        engineBlockedRef.current = true;
+
+        reportGate({
+          code: decision.reason.code,
+          action: decision.reason.action,
+          domain: decision.reason.domain,
+          correlationId: decision.reason.correlationId ?? null,
+          message: decision.reason.message,
+          uiMode: decision.uiMode,
+        });
+        return;
+      }
+
+      if (domain === "playback") clearPlaybackGate();
+      else clearGate({ domain });
     },
-    [],
+    [clearGate, clearPlaybackGate, inferIntentForGate, reportGate],
   );
+
+  const reportLocalPlaybackErrorAsGate = React.useCallback(
+    (code: GateCodeRaw, message: string, corr?: string | null) => {
+      const payload: GatePayload = {
+        domain: "playback",
+        code,
+        action: "wait",
+        message,
+        correlationId: corr ?? null,
+      };
+      reportPlaybackGate(payload, corr ?? null);
+    },
+    [reportPlaybackGate],
+  );
+
+  const stopDeck = React.useCallback(
+    (deckId: DeckId, opts?: { destroyHls?: boolean; clearSrc?: boolean }) => {
+      const a = getAudio(deckId);
+      if (!a) return;
+
+      try {
+        a.pause();
+      } catch {}
+
+      if (opts?.destroyHls !== false && hlsByDeckRef.current[deckId]) {
+        try {
+          hlsByDeckRef.current[deckId]?.destroy();
+        } catch {}
+        hlsByDeckRef.current[deckId] = null;
+      }
+
+      if (opts?.clearSrc !== false) {
+        try {
+          a.removeAttribute("src");
+        } catch {}
+        try {
+          a.load();
+        } catch {}
+        metaByDeckRef.current[deckId] = null;
+      }
+    },
+    [getAudio],
+  );
+
+  const hardStopAll = React.useCallback(() => {
+    try {
+      tokenAbortRef.current?.abort();
+    } catch {}
+    tokenAbortRef.current = null;
+
+    stopDeck("a");
+    stopDeck("b");
+
+    standbyRef.current = null;
+    telemetrySessionIdRef.current = null;
+    playIntentRef.current = false;
+  }, [stopDeck]);
 
   const cacheAlbumSessionTokens = React.useCallback(
     (args: {
@@ -406,7 +506,7 @@ export default function AudioEngine() {
       st?: string | null;
       signal?: AbortSignal;
     }): Promise<boolean> => {
-      const albumId = (args.albumId ?? "").trim();
+      const albumId = normalizeAlbumId(args.albumId);
       if (!albumId) return false;
 
       const st = args.st ?? getShareTokenFromLocation();
@@ -482,7 +582,7 @@ export default function AudioEngine() {
   const prefetchCurrentQueueAlbumSession = React.useCallback(
     async (signal?: AbortSignal): Promise<boolean> => {
       const s = pRef.current;
-      const albumId = (s.queueContextId ?? "").trim();
+      const albumId = normalizeAlbumId(s.queueContextId);
       if (!albumId) return false;
 
       return prefetchAlbumSession({
@@ -494,65 +594,636 @@ export default function AudioEngine() {
     [getShareTokenFromLocation, prefetchAlbumSession],
   );
 
-  const reportPlaybackGate = React.useCallback(
-    (payload: GatePayload, corrFromHeader: string | null) => {
-      const domain: GateDomain = (payload.domain ?? "playback") as GateDomain;
+  const fetchSingleToken = React.useCallback(
+    async (args: {
+      playbackId: string;
+      track: PlayerTrack;
+      signal: AbortSignal;
+    }): Promise<{ token: string; expiresAtMs: number } | null> => {
+      const s = pRef.current;
+      const st = getShareTokenFromLocation();
 
-      const decision = gateResultFromPayload({
-        payload: {
-          ...payload,
-          domain,
-          correlationId: payload.correlationId ?? corrFromHeader ?? null,
-        },
-        attempt: { verb: "play", domain: "playback" },
-        intent: inferIntentForGate(),
+      const res = await fetch("/api/mux/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          playbackId: args.playbackId,
+          recordingId: args.track.recordingId,
+          albumId: s.queueContextId,
+          albumSlug: s.queueContextSlug,
+          durationMs:
+            args.track.durationMs ??
+            s.durationByRecordingId?.[args.track.recordingId],
+          ...(st ? { st } : {}),
+        }),
+        signal: args.signal,
       });
 
-      if (!decision.ok) {
-        engineBlockedRef.current = true;
+      const corr = res.headers.get("x-correlation-id") ?? null;
 
-        reportGate({
-          code: decision.reason.code,
-          action: decision.reason.action,
-          domain: decision.reason.domain,
-          correlationId: decision.reason.correlationId ?? null,
-          message: decision.reason.message,
-          uiMode: decision.uiMode,
-        });
-        return;
+      let data: TokenResponse | null = null;
+      try {
+        data = (await res.json()) as TokenResponse;
+      } catch {
+        data = null;
       }
 
-      // If engine says ok, clear only the relevant domain channel.
-      if (domain === "playback") clearPlaybackGate();
-      else clearGate({ domain });
+      if (!res.ok || !data || !("ok" in data) || data.ok !== true) {
+        const gatePayloadRaw =
+          data && "ok" in data && data.ok === false ? (data.gate ?? null) : null;
+
+        const msg =
+          gatePayloadRaw?.message?.trim() ||
+          (data && "ok" in data && data.ok === false ? data.error : "") ||
+          `Token error (${res.status})`;
+
+        blockedNonceRef.current.set(args.playbackId, s.reloadNonce);
+        playIntentRef.current = false;
+
+        if (gatePayloadRaw) {
+          const rawCode =
+            normalizeGateCodeRaw(gatePayloadRaw.code) ?? "INVALID_REQUEST";
+          const action: GateAction = gatePayloadRaw.action ?? "wait";
+          const payload: GatePayload = {
+            domain: (gatePayloadRaw.domain ?? "playback") as GateDomain,
+            code: rawCode,
+            action,
+            message: gatePayloadRaw.message ?? msg,
+            correlationId: gatePayloadRaw.correlationId ?? corr ?? null,
+            reason: gatePayloadRaw.reason,
+          };
+          reportPlaybackGate(payload, corr);
+        } else {
+          clearPlaybackGate();
+        }
+
+        mediaSurface.setStatus("blocked");
+        return null;
+      }
+
+      const expiresAtMs =
+        typeof data.expiresAt === "number"
+          ? data.expiresAt * 1000
+          : Date.parse(String(data.expiresAt));
+
+      if (!Number.isFinite(expiresAtMs)) return null;
+
+      const token = { token: data.token, expiresAtMs };
+      tokenCacheRef.current.set(args.playbackId, token);
+      blockedNonceRef.current.delete(args.playbackId);
+      clearPlaybackGate();
+
+      return token;
     },
-    [clearGate, clearPlaybackGate, inferIntentForGate, reportGate],
+    [clearPlaybackGate, getShareTokenFromLocation, reportPlaybackGate],
   );
 
-  const reportLocalPlaybackErrorAsGate = React.useCallback(
-    (code: GateCodeRaw, message: string, corr?: string | null) => {
-      // This is a client-only failure (unsupported HLS / fatal decode).
-      // We still route it through GateBroker so PortalArea can spotlight/blur consistently.
-      const payload: GatePayload = {
-        domain: "playback",
-        code,
-        action: "wait",
-        message,
-        correlationId: corr ?? null,
+  const ensureTokenForTrack = React.useCallback(
+    async (args: {
+      track: PlayerTrack;
+      signal: AbortSignal;
+    }): Promise<{ token: string; expiresAtMs: number } | null> => {
+      const playbackId = (args.track.muxPlaybackId ?? "").trim();
+      if (!playbackId) return null;
+
+      const cached = getCachedTokenForPlaybackId(playbackId);
+      if (cached) return cached;
+
+      const s = pRef.current;
+      const albumId = normalizeAlbumId(s.queueContextId);
+      const st = getShareTokenFromLocation();
+
+      if (albumId) {
+        await prefetchAlbumSession({
+          albumId,
+          st,
+          signal: args.signal,
+        });
+
+        const albumCached = getCachedTokenForPlaybackId(playbackId);
+        if (albumCached) return albumCached;
+      }
+
+      return fetchSingleToken({
+        playbackId,
+        track: args.track,
+        signal: args.signal,
+      });
+    },
+    [
+      fetchSingleToken,
+      getCachedTokenForPlaybackId,
+      getShareTokenFromLocation,
+      prefetchAlbumSession,
+    ],
+  );
+
+  const attachTrackToDeck = React.useCallback(
+    async (args: {
+      deckId: DeckId;
+      track: PlayerTrack;
+      token: string;
+      seq: number;
+      reason: "active" | "standby";
+    }): Promise<boolean> => {
+      const a = getAudio(args.deckId);
+      if (!a) return false;
+
+      const playbackId = (args.track.muxPlaybackId ?? "").trim();
+      const recordingId = args.track.recordingId;
+      if (!playbackId || !recordingId) return false;
+
+      const attachKey = `${playbackId}:${pRef.current.reloadNonce}`;
+      const srcUrl = muxSignedHlsUrl(playbackId, args.token);
+
+      sendAudioDebug({
+        event:
+          args.reason === "standby"
+            ? "standby-attach-start"
+            : "active-attach-start",
+        albumId: pRef.current.queueContextId ?? null,
+        recordingId,
+        playbackId,
+        source: `AudioEngine.${args.deckId}`,
+        detail: `seq=${args.seq}`,
+      });
+
+      stopDeck(args.deckId);
+
+      if (args.seq !== loadSeq.current && args.reason === "active") {
+        return false;
+      }
+
+      a.crossOrigin = "anonymous";
+      a.preload = args.reason === "standby" ? "auto" : "metadata";
+
+      metaByDeckRef.current[args.deckId] = {
+        deckId: args.deckId,
+        recordingId,
+        playbackId,
+        attachKey,
+        prepared: false,
       };
-      reportPlaybackGate(payload, corr ?? null);
+
+      if (shouldUseNativeHls(a)) {
+        sendAudioDebug({
+          event:
+            args.reason === "standby"
+              ? "standby-native-hls-safari"
+              : "active-native-hls-safari",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId,
+          playbackId,
+          source: `AudioEngine.${args.deckId}`,
+        });
+
+        return new Promise<boolean>((resolve) => {
+          let settled = false;
+
+          const cleanup = () => {
+            a.removeEventListener("loadedmetadata", onReady);
+            a.removeEventListener("canplay", onReady);
+            a.removeEventListener("error", onError);
+          };
+
+          const finish = (ok: boolean) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            const meta = metaByDeckRef.current[args.deckId];
+            if (ok && meta?.attachKey === attachKey) {
+              metaByDeckRef.current[args.deckId] = {
+                ...meta,
+                prepared: true,
+              };
+            }
+            resolve(ok);
+          };
+
+          const onReady = () => finish(true);
+          const onError = () => finish(false);
+
+          a.addEventListener("loadedmetadata", onReady);
+          a.addEventListener("canplay", onReady);
+          a.addEventListener("error", onError);
+
+          try {
+            a.src = srcUrl;
+            a.load();
+          } catch {
+            finish(false);
+          }
+
+          window.setTimeout(() => finish(true), 2500);
+        });
+      }
+
+      if (!Hls.isSupported()) {
+        sendAudioDebug({
+          event: "hls-unsupported",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId,
+          playbackId,
+          source: `AudioEngine.${args.deckId}`,
+        });
+
+        return false;
+      }
+
+      sendAudioDebug({
+        event:
+          args.reason === "standby" ? "standby-hlsjs-attach" : "hlsjs-attach",
+        albumId: pRef.current.queueContextId ?? null,
+        recordingId,
+        playbackId,
+        source: `AudioEngine.${args.deckId}`,
+      });
+
+      return new Promise<boolean>((resolve) => {
+        let settled = false;
+
+        const hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: false,
+          backBufferLength: 30,
+        });
+
+        hlsByDeckRef.current[args.deckId] = hls;
+
+        const finish = (ok: boolean) => {
+          if (settled) return;
+          settled = true;
+
+          const meta = metaByDeckRef.current[args.deckId];
+          if (ok && meta?.attachKey === attachKey) {
+            metaByDeckRef.current[args.deckId] = {
+              ...meta,
+              prepared: true,
+            };
+          }
+
+          resolve(ok);
+        };
+
+        hls.on(Hls.Events.ERROR, (_event, err) => {
+          if (!err?.fatal) return;
+
+          sendAudioDebug({
+            event:
+              args.reason === "standby"
+                ? "standby-hls-fatal"
+                : "active-hls-fatal",
+            albumId: pRef.current.queueContextId ?? null,
+            recordingId,
+            playbackId,
+            source: `AudioEngine.${args.deckId}.hls`,
+            detail: `${err.type ?? "unknown"}:${err.details ?? "error"}`,
+          });
+
+          finish(false);
+
+          if (args.reason === "active") {
+            reportLocalPlaybackErrorAsGate(
+              "INVALID_REQUEST",
+              `HLS fatal: ${err.details ?? "error"}`,
+            );
+          }
+        });
+
+        hls.once(Hls.Events.MANIFEST_PARSED, () => {
+          sendAudioDebug({
+            event:
+              args.reason === "standby"
+                ? "standby-manifest-parsed"
+                : "hls-manifest-parsed",
+            albumId: pRef.current.queueContextId ?? null,
+            recordingId,
+            playbackId,
+            source: `AudioEngine.${args.deckId}.hls`,
+          });
+
+          finish(true);
+        });
+
+        try {
+          hls.attachMedia(a);
+          hls.loadSource(srcUrl);
+        } catch {
+          finish(false);
+        }
+
+        window.setTimeout(() => finish(false), 10_000);
+      });
     },
-    [reportPlaybackGate],
+    [getAudio, reportLocalPlaybackErrorAsGate, stopDeck],
   );
 
-  // ---- Final unmount cleanup (tab-lifetime leaks: AudioContext + WebAudio graph + HLS) ----
+  const playDeck = React.useCallback(
+    async (deckId: DeckId, reason: "active" | "promote"): Promise<boolean> => {
+      const a = getAudio(deckId);
+      const meta = metaByDeckRef.current[deckId];
+      if (!a || !meta) return false;
+
+      try {
+        await a.play();
+
+        sendAudioDebug({
+          event: reason === "promote" ? "standby-promote-play-resolved" : "attach-play-resolved",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId: meta.recordingId,
+          playbackId: meta.playbackId,
+          source: `AudioEngine.${deckId}`,
+        });
+
+        return true;
+      } catch (err: unknown) {
+        sendAudioDebug({
+          event: reason === "promote" ? "standby-promote-play-rejected" : "attach-play-rejected",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId: meta.recordingId,
+          playbackId: meta.playbackId,
+          source: `AudioEngine.${deckId}`,
+          detail:
+            err instanceof Error ? `${err.name}: ${err.message}` : "unknown",
+        });
+
+        return false;
+      }
+    },
+    [getAudio],
+  );
+
+  const prepareStandbyForTrack = React.useCallback(
+    async (track: PlayerTrack): Promise<boolean> => {
+      const playbackId = (track.muxPlaybackId ?? "").trim();
+      if (!track.recordingId || !playbackId) return false;
+
+      const currentStandby = standbyRef.current;
+      if (
+        currentStandby?.recordingId === track.recordingId &&
+        currentStandby.playbackId === playbackId
+      ) {
+        return true;
+      }
+
+      const deckId = otherDeck(activeDeckRef.current);
+      const existing = metaByDeckRef.current[deckId];
+
+      if (
+        existing?.recordingId === track.recordingId &&
+        existing.playbackId === playbackId &&
+        existing.prepared
+      ) {
+        standbyRef.current = {
+          deckId,
+          recordingId: track.recordingId,
+          playbackId,
+          attachKey: existing.attachKey,
+        };
+        return true;
+      }
+
+      const ac = new AbortController();
+      const token = await ensureTokenForTrack({
+        track,
+        signal: ac.signal,
+      });
+
+      if (!token) return false;
+
+      const seq = loadSeq.current;
+
+      const ok = await attachTrackToDeck({
+        deckId,
+        track,
+        token: token.token,
+        seq,
+        reason: "standby",
+      });
+
+      const meta = metaByDeckRef.current[deckId];
+
+      if (!ok || !meta) {
+        sendAudioDebug({
+          event: "standby-prepare-failed",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId: track.recordingId,
+          playbackId,
+          source: `AudioEngine.${deckId}`,
+        });
+        return false;
+      }
+
+      standbyRef.current = {
+        deckId,
+        recordingId: track.recordingId,
+        playbackId,
+        attachKey: meta.attachKey,
+      };
+
+      sendAudioDebug({
+        event: "standby-prepared",
+        albumId: pRef.current.queueContextId ?? null,
+        recordingId: track.recordingId,
+        playbackId,
+        source: `AudioEngine.${deckId}`,
+      });
+
+      return true;
+    },
+    [attachTrackToDeck, ensureTokenForTrack],
+  );
+
+  const getNextTrack = React.useCallback((): PlayerTrack | null => {
+    const s = pRef.current;
+    const cur = s.current;
+    if (!cur) return null;
+
+    const idx = s.queue.findIndex((t) => t.recordingId === cur.recordingId);
+
+    if (s.repeat === "one") return cur;
+
+    if (idx >= 0 && idx + 1 < s.queue.length) {
+      return s.queue[idx + 1] ?? null;
+    }
+
+    if (s.repeat === "all" && s.queue.length > 0) {
+      return s.queue[0] ?? null;
+    }
+
+    return null;
+  }, []);
+
+  const promoteStandby = React.useCallback(
+    async (nextTrack: PlayerTrack): Promise<boolean> => {
+      const playbackId = (nextTrack.muxPlaybackId ?? "").trim();
+      if (!playbackId) return false;
+
+      const prepared = standbyRef.current;
+
+      if (
+        !prepared ||
+        prepared.recordingId !== nextTrack.recordingId ||
+        prepared.playbackId !== playbackId
+      ) {
+        sendAudioDebug({
+          event: "standby-promote-missing-prepared-deck",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId: nextTrack.recordingId,
+          playbackId,
+          source: "AudioEngine",
+        });
+
+        return false;
+      }
+
+      const oldDeck = activeDeckRef.current;
+      const newDeck = prepared.deckId;
+
+      sendAudioDebug({
+        event: "standby-promote-start",
+        albumId: pRef.current.queueContextId ?? null,
+        recordingId: nextTrack.recordingId,
+        playbackId,
+        source: `AudioEngine.${newDeck}`,
+        detail: `old=${oldDeck};new=${newDeck}`,
+      });
+
+      suppressPauseDeckRef.current = oldDeck;
+
+      const ok = await playDeck(newDeck, "promote");
+
+      if (!ok) {
+        suppressPauseDeckRef.current = null;
+        return false;
+      }
+
+      activeDeckRef.current = newDeck;
+      standbyRef.current = null;
+      telemetrySessionIdRef.current = newPlaybackSessionId();
+
+      mediaSurface.setTrack(nextTrack.recordingId);
+      mediaSurface.setStatus("playing");
+      mediaSurface.setTime(0);
+
+      if (hasMediaSession()) {
+        try {
+          navigator.mediaSession.playbackState = "playing";
+        } catch {}
+      }
+
+      pRef.current.advanceFromEngine();
+
+      window.setTimeout(() => {
+        stopDeck(oldDeck);
+        suppressPauseDeckRef.current = null;
+      }, 250);
+
+      sendAudioDebug({
+        event: "standby-promote-complete",
+        albumId: pRef.current.queueContextId ?? null,
+        recordingId: nextTrack.recordingId,
+        playbackId,
+        source: `AudioEngine.${newDeck}`,
+      });
+
+      return true;
+    },
+    [playDeck, stopDeck],
+  );
+
+  const attachActiveTrack = React.useCallback(async () => {
+    const s = pRef.current;
+    const track = s.current;
+    const playbackId = (track?.muxPlaybackId ?? "").trim();
+
+    if (!track || !playbackId) return;
+    if (engineBlockedRef.current) return;
+
+    const activeDeck = activeDeckRef.current;
+    const activeMeta = metaByDeckRef.current[activeDeck];
+
+    if (
+      activeMeta?.recordingId === track.recordingId &&
+      activeMeta.playbackId === playbackId
+    ) {
+      if (s.intent === "play" || playIntentRef.current) {
+        const played = await playDeck(activeDeck, "active");
+        if (played) {
+          playIntentRef.current = false;
+          pRef.current.clearIntent();
+        }
+      }
+      return;
+    }
+
+    const blockedAt = blockedNonceRef.current.get(playbackId);
+    if (blockedAt === s.reloadNonce) {
+      playIntentRef.current = false;
+      hardStopAll();
+      mediaSurface.setStatus("blocked");
+      return;
+    }
+
+    const seq = ++loadSeq.current;
+
+    standbyRef.current = null;
+    telemetrySessionIdRef.current = newPlaybackSessionId();
+
+    mediaSurface.setTrack(track.recordingId);
+    mediaSurface.setStatus("loading");
+    pRef.current.setStatusExternal("loading");
+
+    const cachedBeforeAttach = getCachedTokenForPlaybackId(playbackId);
+    pRef.current.setLoadingReasonExternal(
+      cachedBeforeAttach ? "attach" : "token",
+    );
+
+    tokenAbortRef.current?.abort();
+    const ac = new AbortController();
+    tokenAbortRef.current = ac;
+
+    const token =
+      cachedBeforeAttach ??
+      (await ensureTokenForTrack({
+        track,
+        signal: ac.signal,
+      }));
+
+    if (!token) return;
+    if (seq !== loadSeq.current) return;
+
+    const ok = await attachTrackToDeck({
+      deckId: activeDeck,
+      track,
+      token: token.token,
+      seq,
+      reason: "active",
+    });
+
+    if (!ok || seq !== loadSeq.current) return;
+
+    if (s.intent === "play" || playIntentRef.current || s.status === "loading") {
+      const played = await playDeck(activeDeck, "active");
+      if (played) {
+        playIntentRef.current = false;
+        pRef.current.clearIntent();
+      } else {
+        playIntentRef.current = true;
+      }
+    }
+  }, [
+    attachTrackToDeck,
+    ensureTokenForTrack,
+    getCachedTokenForPlaybackId,
+    hardStopAll,
+    playDeck,
+  ]);
+
   React.useEffect(() => {
-    // Snapshot ref values NOW so cleanup doesn’t read mutable .current later.
-    const a = audioRef.current;
-    const hls = hlsRef.current;
-    const analyser = analyserRef.current;
-    const srcNode = srcNodeRef.current;
-    const ctx = audioCtxRef.current;
+    const a = audioARef.current;
+    const b = audioBRef.current;
+    if (!a || !b) return;
 
     const tokenCache = tokenCacheRef.current;
     const albumSessionCache = albumSessionCacheRef.current;
@@ -565,11 +1236,9 @@ export default function AudioEngine() {
     const telemetryProgressSent = telemetryProgressSentRef.current;
     const telemetryCompleteSent = telemetryCompleteSentRef.current;
 
-    const tokenAbort = tokenAbortRef.current;
-
     return () => {
       try {
-        tokenAbort?.abort();
+        tokenAbortRef.current?.abort();
       } catch {}
       tokenAbortRef.current = null;
 
@@ -578,39 +1247,29 @@ export default function AudioEngine() {
       } catch {}
       albumSessionAbortRef.current = null;
 
-      if (hls) {
-        try {
-          hls.destroy();
-        } catch {}
-      }
-      hlsRef.current = null;
-      telemetrySessionIdRef.current = null;
+      stopDeck("a");
+      stopDeck("b");
 
-      if (a) {
-        try {
-          a.pause();
-        } catch {}
-        try {
-          a.removeAttribute("src");
-        } catch {}
-        try {
-          a.load();
-        } catch {}
-      }
+      telemetrySessionIdRef.current = null;
+      standbyRef.current = null;
 
       try {
-        analyser?.disconnect();
+        analyserRef.current?.disconnect();
       } catch {}
       analyserRef.current = null;
 
       try {
-        srcNode?.disconnect();
+        srcNodeByDeckRef.current.a?.disconnect();
       } catch {}
-      srcNodeRef.current = null;
+      try {
+        srcNodeByDeckRef.current.b?.disconnect();
+      } catch {}
 
+      srcNodeByDeckRef.current = { a: null, b: null };
       freqDataRef.current = null;
       timeDataRef.current = null;
 
+      const ctx = audioCtxRef.current;
       audioCtxRef.current = null;
       if (ctx) {
         ctx.close().catch(() => {});
@@ -637,47 +1296,42 @@ export default function AudioEngine() {
           energy: 0,
         });
       } catch {}
+
       try {
         mediaSurface.setStatus("idle");
       } catch {}
     };
-  }, []);
+  }, [stopDeck]);
 
-  /* ---------------- global "blocked means SILENCE" invariant ---------------- */
   React.useEffect(() => {
     if (!engineBlockedRef.current) return;
-    playIntentRef.current = false;
-    hardStopAndDetach();
+    hardStopAll();
     mediaSurface.setStatus("blocked");
-  }, [hardStopAndDetach]);
-
-  /* ---------------- AudioContext + analyser (ONCE) ---------------- */
+  }, [hardStopAll]);
 
   React.useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-
-    let ctx: AudioContext | null = null;
-    let src: MediaElementAudioSourceNode | null = null;
-    let analyser: AnalyserNode | null = null;
-
     const ensureAudioGraph = async () => {
+      const a = audioARef.current;
+      const b = audioBRef.current;
+      if (!a || !b) return;
       if (audioCtxRef.current) return;
 
-      ctx = new AudioContext();
+      const ctx = new AudioContext();
       audioCtxRef.current = ctx;
 
-      src = ctx.createMediaElementSource(a);
-      srcNodeRef.current = src;
-      analyser = ctx.createAnalyser();
-
+      const analyser = ctx.createAnalyser();
       analyser.fftSize = 2048;
       analyser.smoothingTimeConstant = 0.8;
-
-      src.connect(analyser);
       analyser.connect(ctx.destination);
-
       analyserRef.current = analyser;
+
+      const srcA = ctx.createMediaElementSource(a);
+      srcA.connect(analyser);
+      srcNodeByDeckRef.current.a = srcA;
+
+      const srcB = ctx.createMediaElementSource(b);
+      srcB.connect(analyser);
+      srcNodeByDeckRef.current.b = srcB;
 
       freqDataRef.current = new Uint8Array(
         new ArrayBuffer(analyser.frequencyBinCount),
@@ -695,12 +1349,8 @@ export default function AudioEngine() {
     };
 
     window.addEventListener("af:play-intent", onUserGesture);
-    return () => {
-      window.removeEventListener("af:play-intent", onUserGesture);
-    };
+    return () => window.removeEventListener("af:play-intent", onUserGesture);
   }, []);
-
-  /* ---------------- Audio feature pump ---------------- */
 
   React.useEffect(() => {
     let raf: number | null = null;
@@ -761,9 +1411,10 @@ export default function AudioEngine() {
       const bassEnd = Math.floor(n * 0.08);
       const midEnd = Math.floor(n * 0.35);
 
-      let bass = 0,
-        mid = 0,
-        treble = 0;
+      let bass = 0;
+      let mid = 0;
+      let treble = 0;
+
       for (let i = 0; i < n; i++) {
         const v = freq[i]! / 255;
         if (i < bassEnd) bass += v;
@@ -775,13 +1426,15 @@ export default function AudioEngine() {
       mid /= midEnd - bassEnd || 1;
       treble /= n - midEnd || 1;
 
-      let weighted = 0,
-        total = 0;
+      let weighted = 0;
+      let total = 0;
+
       for (let i = 0; i < n; i++) {
         const v = freq[i]! / 255;
         weighted += i * v;
         total += v;
       }
+
       const centroid = total > 0 ? weighted / total / n : 0;
 
       audioSurface.set({
@@ -797,6 +1450,7 @@ export default function AudioEngine() {
     };
 
     raf = window.requestAnimationFrame(tick);
+
     return () => {
       if (raf) window.cancelAnimationFrame(raf);
       if (to) window.clearTimeout(to);
@@ -826,14 +1480,14 @@ export default function AudioEngine() {
     p.intent,
   ]);
 
-  /* ---------------- Volume / mute ---------------- */
-
   React.useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    a.volume = Math.max(0, Math.min(1, p.volume));
-    a.muted = p.muted;
-  }, [p.volume, p.muted]);
+    for (const deckId of ["a", "b"] as const) {
+      const a = getAudio(deckId);
+      if (!a) continue;
+      a.volume = Math.max(0, Math.min(1, p.volume));
+      a.muted = p.muted;
+    }
+  }, [getAudio, p.volume, p.muted]);
 
   React.useEffect(() => {
     const flush = () => flushAudioDebugSoon(true);
@@ -848,10 +1502,8 @@ export default function AudioEngine() {
     };
   }, []);
 
-  /* ---------------- Active queue album-session prefetch ---------------- */
-
   React.useEffect(() => {
-    const albumId = (p.queueContextId ?? "").trim();
+    const albumId = normalizeAlbumId(p.queueContextId);
     if (!albumId) return;
     if (engineBlockedRef.current) return;
 
@@ -866,8 +1518,6 @@ export default function AudioEngine() {
     return () => ac.abort();
   }, [p.queueContextId, getShareTokenFromLocation, prefetchAlbumSession]);
 
-  /* ---------------- Album-session prefetch bridge ---------------- */
-
   React.useEffect(() => {
     const onPrefetchAlbumSession = (event: Event) => {
       const detail =
@@ -879,7 +1529,7 @@ export default function AudioEngine() {
           : null;
 
       const albumId =
-        typeof detail?.albumId === "string" ? detail.albumId.trim() : "";
+        typeof detail?.albumId === "string" ? normalizeAlbumId(detail.albumId) : "";
       const st =
         typeof detail?.st === "string" ? detail.st.trim() || null : null;
 
@@ -909,22 +1559,10 @@ export default function AudioEngine() {
     };
   }, [prefetchAlbumSession]);
 
-  /* ---------------- Track attach (HLS / native) ---------------- */
-
   React.useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-
-    a.crossOrigin = "anonymous";
-
     const s = pRef.current;
     const playbackId = s.current?.muxPlaybackId;
     if (!playbackId) return;
-
-    mediaSurface.setTrack(s.current?.recordingId ?? null);
-
-    // If the engine is blocked, never attach.
-    if (engineBlockedRef.current) return;
 
     const armed =
       s.status === "loading" ||
@@ -935,357 +1573,17 @@ export default function AudioEngine() {
 
     if (!armed) return;
 
-    const blockedAt = blockedNonceRef.current.get(playbackId);
-    if (blockedAt === s.reloadNonce) {
-      playIntentRef.current = false;
-      hardStopAndDetach();
-      mediaSurface.setStatus("blocked");
-      return;
-    }
-
-    const attachKey = `${playbackId}:${s.reloadNonce}`;
-    if (
-      attachedKeyRef.current === attachKey &&
-      (a.currentSrc || hlsRef.current)
-    ) {
-      return;
-    }
-
-    // Critical invariant:
-    // when switching to a new track/source, silence the old media element
-    // before any async token fetch or HLS attachment work begins.
-    // Otherwise the previous track can continue audibly during the server round-trip.
-    hardStopAndDetach();
-
-    attachedKeyRef.current = null;
-    telemetrySessionIdRef.current = newPlaybackSessionId();
-
-    const recordingId = s.current?.recordingId ?? "";
-    const sessionId = telemetrySessionIdRef.current;
-    if (recordingId && sessionId) {
-      const sessionKey = `${recordingId}:${sessionId}`;
-      telemetryPlayAccumulatedMsRef.current.delete(sessionKey);
-      telemetryPlayLastProgressMsRef.current.delete(sessionKey);
-    }
-
-    const seq = ++loadSeq.current;
-
-    mediaSurface.setStatus("loading");
-    pRef.current.setStatusExternal("loading");
-
-    const cachedBeforeAttach = getCachedTokenForPlaybackId(playbackId);
-    pRef.current.setLoadingReasonExternal(
-      cachedBeforeAttach ? "attach" : "token",
-    );
-
-    if (hlsRef.current) {
-      try {
-        hlsRef.current.destroy();
-      } catch {}
-      hlsRef.current = null;
-    }
-
-    tokenAbortRef.current?.abort();
-    const ac = new AbortController();
-    tokenAbortRef.current = ac;
-
-    const hardResetElement = () => {
-      try {
-        a.pause();
-      } catch {}
-      try {
-        a.removeAttribute("src");
-      } catch {}
-      try {
-        a.load();
-      } catch {}
-    };
-
-    const attachSrc = (srcUrl: string) => {
-      const playAttachedSource = () => {
-        if (!playIntentRef.current) return;
-
-        void a.play().then(
-          () => {
-            sendAudioDebug({
-              event: "attach-play-resolved",
-              albumId: s.queueContextId ?? null,
-              recordingId: s.current?.recordingId ?? null,
-              playbackId,
-              source: "AudioEngine",
-            });
-            playIntentRef.current = false;
-          },
-          (err: unknown) => {
-            sendAudioDebug({
-              event: "attach-play-rejected",
-              albumId: s.queueContextId ?? null,
-              recordingId: s.current?.recordingId ?? null,
-              playbackId,
-              source: "AudioEngine",
-              detail:
-                err instanceof Error
-                  ? `${err.name}: ${err.message}`
-                  : "unknown",
-            });
-            playIntentRef.current = true;
-          },
-        );
-      };
-
-      sendAudioDebug({
-        event: "attach-src-called",
-        albumId: s.queueContextId ?? null,
-        recordingId: s.current?.recordingId ?? null,
-        playbackId,
-        source: "AudioEngine",
-        detail: `seq=${seq};active=${loadSeq.current}`,
-      });
-
-      if (seq !== loadSeq.current) return;
-
-      hardResetElement();
-      if (seq !== loadSeq.current) return;
-
-      if (canPlayNativeHls(a)) {
-        sendAudioDebug({
-          event: "native-hls-safari-attach",
-          albumId: s.queueContextId ?? null,
-          recordingId: s.current?.recordingId ?? null,
-          playbackId,
-          source: "AudioEngine",
-        });
-
-        a.src = srcUrl;
-        a.load();
-        playAttachedSource();
-      } else {
-        sendAudioDebug({
-          event: "hlsjs-attach",
-          albumId: s.queueContextId ?? null,
-          recordingId: s.current?.recordingId ?? null,
-          playbackId,
-          source: "AudioEngine",
-        });
-        if (!Hls.isSupported()) {
-          reportLocalPlaybackErrorAsGate(
-            "INVALID_REQUEST",
-            "This browser cannot play HLS.",
-          );
-          mediaSurface.setStatus("blocked");
-          hardStopAndDetach();
-          return;
-        }
-
-        const hls = new Hls({ enableWorker: true });
-        hlsRef.current = hls;
-
-        hls.on(Hls.Events.ERROR, (_e, err) => {
-          if (err?.fatal) {
-            sendAudioDebug({
-              event: "hls-fatal",
-              albumId: s.queueContextId ?? null,
-              recordingId: s.current?.recordingId ?? null,
-              playbackId,
-              source: "AudioEngine.hls",
-              detail: `${err.type ?? "unknown"}:${err.details ?? "error"}`,
-            });
-
-            reportLocalPlaybackErrorAsGate(
-              "INVALID_REQUEST",
-              `HLS fatal: ${err.details ?? "error"}`,
-            );
-            mediaSurface.setStatus("blocked");
-            hardStopAndDetach();
-          }
-        });
-
-        hls.once(Hls.Events.MANIFEST_PARSED, () => {
-          sendAudioDebug({
-            event: "hls-manifest-parsed",
-            albumId: s.queueContextId ?? null,
-            recordingId: s.current?.recordingId ?? null,
-            playbackId,
-            source: "AudioEngine.hls",
-          });
-
-          playAttachedSource();
-        });
-
-        hls.loadSource(srcUrl);
-        hls.attachMedia(a);
-      }
-
-      attachedKeyRef.current = attachKey;
-    };
-
-    const load = async () => {
-      try {
-        const cached =
-          cachedBeforeAttach ?? getCachedTokenForPlaybackId(playbackId);
-        if (cached) {
-          sendAudioDebug({
-            event: "cached-token-attach",
-            albumId: s.queueContextId ?? null,
-            recordingId: s.current?.recordingId ?? null,
-            playbackId,
-            source: "AudioEngine",
-          });
-
-          attachSrc(muxSignedHlsUrl(playbackId, cached.token));
-          return;
-        }
-
-        const st = getShareTokenFromLocation();
-
-        if (s.queueContextId) {
-          await prefetchAlbumSession({
-            albumId: s.queueContextId,
-            st,
-            signal: ac.signal,
-          });
-
-          const albumCached = getCachedTokenForPlaybackId(playbackId);
-          if (albumCached) {
-            sendAudioDebug({
-              event: "album-session-token-attach",
-              albumId: s.queueContextId ?? null,
-              recordingId: s.current?.recordingId ?? null,
-              playbackId,
-              source: "AudioEngine",
-            });
-
-            attachSrc(muxSignedHlsUrl(playbackId, albumCached.token));
-            return;
-          }
-
-          sendAudioDebug({
-            event: "album-session-miss-fallback-single-token",
-            albumId: s.queueContextId ?? null,
-            recordingId: s.current?.recordingId ?? null,
-            playbackId,
-            source: "AudioEngine",
-          });
-        }
-
-        const res = await fetch("/api/mux/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            playbackId,
-            recordingId: s.current?.recordingId,
-            albumId: s.queueContextId,
-            albumSlug: s.queueContextSlug,
-            durationMs:
-              s.current?.durationMs ??
-              s.durationByRecordingId?.[s.current?.recordingId ?? ""],
-            ...(st ? { st } : {}),
-          }),
-          signal: ac.signal,
-        });
-
-        const corr = res.headers.get("x-correlation-id") ?? null;
-
-        let data: TokenResponse | null = null;
-        try {
-          data = (await res.json()) as TokenResponse;
-        } catch {
-          data = null;
-        }
-
-        // ----- GATED / ERROR PATH -----
-        if (!res.ok || !data || !("ok" in data) || data.ok !== true) {
-          const gatePayloadRaw =
-            data && "ok" in data && data.ok === false
-              ? (data.gate ?? null)
-              : null;
-
-          const msg =
-            gatePayloadRaw?.message?.trim() ||
-            (data && "ok" in data && data.ok === false ? data.error : "") ||
-            `Token error (${res.status})`;
-
-          hardStopAndDetach();
-          blockedNonceRef.current.set(playbackId, s.reloadNonce);
-          playIntentRef.current = false;
-
-          if (gatePayloadRaw) {
-            // Be defensive: payload from server might have drift during migration.
-            const rawCode =
-              normalizeGateCodeRaw(gatePayloadRaw.code) ?? "INVALID_REQUEST";
-            const action: GateAction = gatePayloadRaw.action ?? "wait";
-            const payload: GatePayload = {
-              domain: (gatePayloadRaw.domain ?? "playback") as GateDomain,
-              code: rawCode,
-              action,
-              message: gatePayloadRaw.message ?? msg,
-              correlationId: gatePayloadRaw.correlationId ?? corr ?? null,
-              reason: gatePayloadRaw.reason,
-            };
-            reportPlaybackGate(payload, corr);
-          } else {
-            // No payload => don’t invent policy; just clear broker.
-            clearPlaybackGate();
-          }
-
-          mediaSurface.setStatus("blocked");
-          return;
-        }
-
-        const expiresAtMs =
-          typeof data.expiresAt === "number"
-            ? data.expiresAt * 1000
-            : Date.parse(String(data.expiresAt));
-
-        if (Number.isFinite(expiresAtMs)) {
-          tokenCacheRef.current.set(playbackId, {
-            token: data.token,
-            expiresAtMs,
-          });
-        }
-
-        blockedNonceRef.current.delete(playbackId);
-
-        // Token success implies we’re no longer blocked (broker channel).
-        clearPlaybackGate();
-
-        sendAudioDebug({
-          event: "single-token-attach",
-          albumId: s.queueContextId ?? null,
-          recordingId: s.current?.recordingId ?? null,
-          playbackId,
-          source: "AudioEngine",
-        });
-
-        attachSrc(muxSignedHlsUrl(playbackId, data.token));
-      } catch {
-        // ignore (abort / transient)
-      }
-    };
-
-    void load();
-    return () => ac.abort();
+    void attachActiveTrack();
   }, [
     p.current?.recordingId,
     p.current?.muxPlaybackId,
     p.reloadNonce,
     p.intent,
     p.status,
-    hardStopAndDetach,
-    clearPlaybackGate,
-    reportPlaybackGate,
-    reportLocalPlaybackErrorAsGate,
-    getCachedTokenForPlaybackId,
-    getShareTokenFromLocation,
-    prefetchAlbumSession,
+    attachActiveTrack,
   ]);
 
-  /* ---------------- Media element -> time + duration + state ---------------- */
-
   React.useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-
     const sendPlaybackTelemetry = (payload: {
       event: "play" | "progress" | "complete";
       recordingId: string;
@@ -1445,181 +1743,52 @@ export default function AudioEngine() {
       });
     };
 
-    const attachCachedTrackForEngineHandoff = (nextTrack: PlayerTrack) => {
-      const playbackId = (nextTrack.muxPlaybackId ?? "").trim();
-      if (!playbackId) {
-        sendAudioDebug({
-          event: "engine-handoff-missing-playback-id",
-          albumId: pRef.current.queueContextId ?? null,
-          recordingId: nextTrack.recordingId,
-          source: "AudioEngine.media",
-        });
-        return false;
-      }
-
-      const cached = getCachedTokenForPlaybackId(playbackId);
-      if (!cached) {
-        sendAudioDebug({
-          event: "engine-handoff-missing-cached-token",
-          albumId: pRef.current.queueContextId ?? null,
-          recordingId: nextTrack.recordingId,
-          playbackId,
-          source: "AudioEngine.media",
-        });
-        return false;
-      }
-
-      const seq = ++loadSeq.current;
-      const srcUrl = muxSignedHlsUrl(playbackId, cached.token);
-      const attachKey = `${playbackId}:${pRef.current.reloadNonce}`;
+    const debugMediaEvent = (
+      deckId: DeckId,
+      event: string,
+      detail?: string,
+    ) => {
+      const a = getAudio(deckId);
+      const meta = metaByDeckRef.current[deckId];
 
       sendAudioDebug({
-        event: "engine-handoff-attach-start",
+        event,
         albumId: pRef.current.queueContextId ?? null,
-        recordingId: nextTrack.recordingId,
-        playbackId,
-        source: "AudioEngine.media",
-        detail: `seq=${seq}`,
+        recordingId: meta?.recordingId ?? pRef.current.current?.recordingId ?? null,
+        playbackId: meta?.playbackId ?? pRef.current.current?.muxPlaybackId ?? null,
+        source: `AudioEngine.${deckId}`,
+        detail:
+          detail ??
+          (a
+            ? `readyState=${a.readyState};networkState=${a.networkState};currentTime=${a.currentTime.toFixed(
+                2,
+              )};duration=${
+                Number.isFinite(a.duration) ? a.duration.toFixed(2) : "NaN"
+              }`
+            : "missing-audio"),
       });
-
-      suppressNextPauseRef.current = true;
-      playIntentRef.current = true;
-
-      try {
-        a.pause();
-      } catch {}
-
-      if (hlsRef.current) {
-        try {
-          hlsRef.current.destroy();
-        } catch {}
-        hlsRef.current = null;
-      }
-
-      try {
-        a.removeAttribute("src");
-      } catch {}
-
-      try {
-        a.load();
-      } catch {}
-
-      if (seq !== loadSeq.current) return false;
-
-      const playHandoffSource = () => {
-        if (seq !== loadSeq.current) return;
-
-        void a.play().then(
-          () => {
-            sendAudioDebug({
-              event: "engine-handoff-play-resolved",
-              albumId: pRef.current.queueContextId ?? null,
-              recordingId: nextTrack.recordingId,
-              playbackId,
-              source: "AudioEngine.media",
-            });
-            playIntentRef.current = false;
-          },
-          (err: unknown) => {
-            sendAudioDebug({
-              event: "engine-handoff-play-rejected",
-              albumId: pRef.current.queueContextId ?? null,
-              recordingId: nextTrack.recordingId,
-              playbackId,
-              source: "AudioEngine.media",
-              detail:
-                err instanceof Error
-                  ? `${err.name}: ${err.message}`
-                  : "unknown",
-            });
-            playIntentRef.current = true;
-          },
-        );
-      };
-
-      if (canPlayNativeHls(a)) {
-        sendAudioDebug({
-          event: "engine-handoff-native-hls-safari",
-          albumId: pRef.current.queueContextId ?? null,
-          recordingId: nextTrack.recordingId,
-          playbackId,
-          source: "AudioEngine.media",
-        });
-
-        a.src = srcUrl;
-        a.load();
-        attachedKeyRef.current = attachKey;
-        playHandoffSource();
-        return true;
-      }
-
-      if (!Hls.isSupported()) {
-        sendAudioDebug({
-          event: "engine-handoff-hls-unsupported",
-          albumId: pRef.current.queueContextId ?? null,
-          recordingId: nextTrack.recordingId,
-          playbackId,
-          source: "AudioEngine.media",
-        });
-        return false;
-      }
-
-      const hls = new Hls({ enableWorker: true });
-      hlsRef.current = hls;
-
-      hls.on(Hls.Events.ERROR, (_event, err) => {
-        if (!err?.fatal) return;
-
-        sendAudioDebug({
-          event: "engine-handoff-hls-fatal",
-          albumId: pRef.current.queueContextId ?? null,
-          recordingId: nextTrack.recordingId,
-          playbackId,
-          source: "AudioEngine.hls",
-          detail: `${err.type ?? "unknown"}:${err.details ?? "error"}`,
-        });
-
-        reportLocalPlaybackErrorAsGate(
-          "INVALID_REQUEST",
-          `HLS fatal: ${err.details ?? "error"}`,
-        );
-      });
-
-      hls.once(Hls.Events.MANIFEST_PARSED, () => {
-        sendAudioDebug({
-          event: "engine-handoff-manifest-parsed",
-          albumId: pRef.current.queueContextId ?? null,
-          recordingId: nextTrack.recordingId,
-          playbackId,
-          source: "AudioEngine.hls",
-        });
-
-        playHandoffSource();
-      });
-
-      hls.loadSource(srcUrl);
-      hls.attachMedia(a);
-      attachedKeyRef.current = attachKey;
-
-      return true;
     };
 
-    const autoAdvanceFromMediaClock = () => {
+    const applyPendingSeek = (deckId: DeckId) => {
+      const a = getAudio(deckId);
+      if (!a) return;
+
+      const ms = pRef.current.pendingSeekMs;
+      if (ms == null) return;
+
+      try {
+        a.currentTime = Math.max(0, ms / 1000);
+      } catch {}
+
+      pRef.current.clearPendingSeek();
+    };
+
+    const handleAutoAdvance = async () => {
       const s = pRef.current;
       const cur = s.current;
-      if (!cur) return;
+      const nextTrack = getNextTrack();
 
-      const idx = s.queue.findIndex((t) => t.recordingId === cur.recordingId);
-      const nextTrack =
-        s.repeat === "one"
-          ? cur
-          : idx >= 0 && idx + 1 < s.queue.length
-            ? s.queue[idx + 1]
-            : s.repeat === "all" && s.queue.length > 0
-              ? s.queue[0]
-              : null;
-
-      if (!nextTrack) return;
+      if (!cur || !nextTrack) return;
 
       const key = `${cur.recordingId}:${telemetrySessionIdRef.current ?? cur.muxPlaybackId ?? ""}`;
       if (autoAdvanceKeyRef.current === key) return;
@@ -1630,31 +1799,52 @@ export default function AudioEngine() {
         albumId: s.queueContextId ?? null,
         recordingId: cur.recordingId,
         playbackId: cur.muxPlaybackId ?? null,
-        source: "AudioEngine.media",
+        source: "AudioEngine",
         detail: `next=${nextTrack.recordingId}`,
       });
 
       reportPlaythroughComplete(1);
 
-      const handoffStarted = attachCachedTrackForEngineHandoff(nextTrack);
+      const standbyReady = await prepareStandbyForTrack(nextTrack);
 
-      sendAudioDebug({
-        event: handoffStarted
-          ? "engine-handoff-started-before-state"
-          : "engine-handoff-failed-before-state",
-        albumId: s.queueContextId ?? null,
-        recordingId: cur.recordingId,
-        playbackId: cur.muxPlaybackId ?? null,
-        source: "AudioEngine.media",
-        detail: `next=${nextTrack.recordingId}`,
-      });
+      if (!standbyReady) {
+        sendAudioDebug({
+          event: "standby-not-ready-fallback-state-advance",
+          albumId: s.queueContextId ?? null,
+          recordingId: cur.recordingId,
+          playbackId: cur.muxPlaybackId ?? null,
+          source: "AudioEngine",
+          detail: `next=${nextTrack.recordingId}`,
+        });
 
-      void prefetchCurrentQueueAlbumSession();
+        playIntentRef.current = true;
+        pRef.current.advanceFromEngine();
+        return;
+      }
 
-      s.advanceFromEngine();
+      const promoted = await promoteStandby(nextTrack);
+
+      if (!promoted) {
+        sendAudioDebug({
+          event: "standby-promote-failed-fallback-state-advance",
+          albumId: s.queueContextId ?? null,
+          recordingId: cur.recordingId,
+          playbackId: cur.muxPlaybackId ?? null,
+          source: "AudioEngine",
+          detail: `next=${nextTrack.recordingId}`,
+        });
+
+        playIntentRef.current = true;
+        pRef.current.advanceFromEngine();
+      }
     };
 
-    const onTime = () => {
+    const onTime = (deckId: DeckId) => {
+      if (deckId !== activeDeckRef.current) return;
+
+      const a = getAudio(deckId);
+      if (!a) return;
+
       const ms = Math.floor(a.currentTime * 1000);
       mediaSurface.setTime(ms);
       pRef.current.setPositionMs(ms);
@@ -1672,140 +1862,137 @@ export default function AudioEngine() {
 
       const durMs = durFromState || durFromEl;
 
-      if (durMs > 0) {
-        const heartbeatBucket = Math.floor(ms / 60_000);
-        const heartbeatKey = `${curId}:${heartbeatBucket}`;
+      if (durMs <= 0) return;
 
-        if (
-          heartbeatBucket > 0 &&
-          debugProgressHeartbeatRef.current !== heartbeatKey
-        ) {
-          debugProgressHeartbeatRef.current = heartbeatKey;
-          sendAudioDebug({
-            event: "playback-progress-heartbeat",
-            albumId: pRef.current.queueContextId ?? null,
-            recordingId: curId,
-            playbackId: pRef.current.current?.muxPlaybackId ?? null,
-            source: "AudioEngine.media",
-            detail: `progress=${ms};duration=${durMs}`,
-          });
-        }
+      const heartbeatBucket = Math.floor(ms / 60_000);
+      const heartbeatKey = `${curId}:${heartbeatBucket}`;
 
-        setMediaSessionPositionStateSafe({
-          durationSec: durMs / 1000,
-          positionSec: ms / 1000,
-          playbackRate: 1,
+      if (
+        heartbeatBucket > 0 &&
+        debugProgressHeartbeatRef.current !== heartbeatKey
+      ) {
+        debugProgressHeartbeatRef.current = heartbeatKey;
+        sendAudioDebug({
+          event: "playback-progress-heartbeat",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId: curId,
+          playbackId: pRef.current.current?.muxPlaybackId ?? null,
+          source: `AudioEngine.${deckId}`,
+          detail: `progress=${ms};duration=${durMs}`,
         });
+      }
 
-        reportTelemetryPlay({
+      setMediaSessionPositionStateSafe({
+        durationSec: durMs / 1000,
+        positionSec: ms / 1000,
+        playbackRate: 1,
+      });
+
+      reportTelemetryPlay({
+        recordingId: curId,
+        playbackId: telemetrySessionIdRef.current ?? "",
+        progressMs: ms,
+        durationMs: durMs,
+      });
+
+      reportTelemetryProgress({
+        recordingId: curId,
+        playbackId: telemetrySessionIdRef.current ?? "",
+        progressMs: ms,
+        durationMs: durMs,
+      });
+
+      const remainingMs = durMs - ms;
+      const nextTrack = getNextTrack();
+
+      if (nextTrack && remainingMs > 0 && remainingMs <= 35_000) {
+        const warmKey = `${curId}:${nextTrack.recordingId}:${
+          telemetrySessionIdRef.current ?? ""
+        }`;
+
+        if (nearEndWarmKeyRef.current !== warmKey) {
+          nearEndWarmKeyRef.current = warmKey;
+          void prefetchCurrentQueueAlbumSession();
+          void prepareStandbyForTrack(nextTrack);
+        }
+      }
+
+      if (nextTrack && remainingMs > 0 && remainingMs <= 1_500) {
+        void handleAutoAdvance();
+      }
+
+      const pct = ms / durMs;
+      reportPlaythroughComplete(pct);
+
+      if (pct >= 0.9) {
+        reportTelemetryComplete({
           recordingId: curId,
           playbackId: telemetrySessionIdRef.current ?? "",
           progressMs: ms,
           durationMs: durMs,
         });
-
-        reportTelemetryProgress({
-          recordingId: curId,
-          playbackId: telemetrySessionIdRef.current ?? "",
-          progressMs: ms,
-          durationMs: durMs,
-        });
-
-        const remainingMs = durMs - ms;
-        if (remainingMs > 0 && remainingMs <= 30_000) {
-          const warmKey = `${curId}:${telemetrySessionIdRef.current ?? ""}`;
-          if (warmKey && nearEndWarmKeyRef.current !== warmKey) {
-            nearEndWarmKeyRef.current = warmKey;
-            void prefetchCurrentQueueAlbumSession();
-          }
-        }
-
-        if (remainingMs > 0 && remainingMs <= 1_250) {
-          autoAdvanceFromMediaClock();
-        }
-
-        const pct = ms / durMs;
-        reportPlaythroughComplete(pct);
-
-        if (pct >= 0.9) {
-          reportTelemetryComplete({
-            recordingId: curId,
-            playbackId: telemetrySessionIdRef.current ?? "",
-            progressMs: ms,
-            durationMs: durMs,
-          });
-        }
       }
     };
 
-    const onLoadedMeta = () => {
+    const onLoadedMeta = (deckId: DeckId) => {
+      if (deckId !== activeDeckRef.current) return;
+
+      const a = getAudio(deckId);
+      if (!a) return;
+
       const d = a.duration;
       if (Number.isFinite(d) && d > 0) {
         pRef.current.setDurationMs(Math.floor(d * 1000));
       }
     };
 
-    const applyPendingSeek = () => {
-      const ms = pRef.current.pendingSeekMs;
-      if (ms == null) return;
-      try {
-        a.currentTime = Math.max(0, ms / 1000);
-      } catch {}
-      pRef.current.clearPendingSeek();
-    };
+    const markPlaying = (deckId: DeckId) => {
+      debugMediaEvent(deckId, "media-playing");
 
-    const debugMediaEvent = (event: string, detail?: string) => {
-      sendAudioDebug({
-        event,
-        albumId: pRef.current.queueContextId ?? null,
-        recordingId: pRef.current.current?.recordingId ?? null,
-        playbackId: pRef.current.current?.muxPlaybackId ?? null,
-        source: "AudioEngine.media",
-        detail:
-          detail ??
-          `readyState=${a.readyState};networkState=${a.networkState};currentTime=${a.currentTime.toFixed(
-            2,
-          )};duration=${Number.isFinite(a.duration) ? a.duration.toFixed(2) : "NaN"}`,
-      });
-    };
-
-    const markPlaying = () => {
-      debugMediaEvent("media-playing");
+      if (deckId !== activeDeckRef.current) return;
 
       if (engineBlockedRef.current) {
-        hardStopAndDetach();
+        hardStopAll();
         mediaSurface.setStatus("blocked");
         return;
       }
 
       mediaSurface.setStatus("playing");
+
       if (hasMediaSession()) {
         try {
           navigator.mediaSession.playbackState = "playing";
         } catch {}
       }
+
       pRef.current.setStatusExternal("playing");
       pRef.current.setLoadingReasonExternal(undefined);
       pRef.current.clearIntent();
-      applyPendingSeek();
+
+      applyPendingSeek(deckId);
+
       const curId = pRef.current.current?.recordingId;
       if (curId) pRef.current.resolvePendingTrack(curId);
     };
 
-    const markPaused = () => {
-      debugMediaEvent("media-paused");
+    const markPaused = (deckId: DeckId) => {
+      debugMediaEvent(deckId, "media-paused");
 
-      if (suppressNextPauseRef.current) {
-        suppressNextPauseRef.current = false;
+      if (suppressPauseDeckRef.current === deckId) {
         sendAudioDebug({
-          event: "media-paused-during-auto-next-ignored",
+          event: "media-paused-during-deck-promotion-ignored",
           albumId: pRef.current.queueContextId ?? null,
-          recordingId: pRef.current.current?.recordingId ?? null,
-          playbackId: pRef.current.current?.muxPlaybackId ?? null,
-          source: "AudioEngine.media",
+          recordingId: metaByDeckRef.current[deckId]?.recordingId ?? null,
+          playbackId: metaByDeckRef.current[deckId]?.playbackId ?? null,
+          source: `AudioEngine.${deckId}`,
         });
         return;
       }
+
+      if (deckId !== activeDeckRef.current) return;
+
+      const a = getAudio(deckId);
+      if (!a) return;
 
       const effectivelyEnded =
         a.ended ||
@@ -1819,39 +2006,47 @@ export default function AudioEngine() {
           albumId: pRef.current.queueContextId ?? null,
           recordingId: pRef.current.current?.recordingId ?? null,
           playbackId: pRef.current.current?.muxPlaybackId ?? null,
-          source: "AudioEngine.media",
+          source: `AudioEngine.${deckId}`,
         });
         return;
       }
 
       if (engineBlockedRef.current) return;
+
       mediaSurface.setStatus("paused");
+
       if (hasMediaSession()) {
         try {
           navigator.mediaSession.playbackState = "paused";
         } catch {}
       }
+
       pRef.current.setStatusExternal("paused");
       pRef.current.setLoadingReasonExternal(undefined);
       pRef.current.clearIntent();
     };
 
-    const markBuffering = () => {
+    const markBuffering = (deckId: DeckId) => {
+      if (deckId !== activeDeckRef.current) return;
+
+      const a = getAudio(deckId);
+      if (!a) return;
+
       const falsePositiveWhilePlaying =
         !a.paused &&
         !a.ended &&
         a.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA;
 
-      if (falsePositiveWhilePlaying) {
-        return;
-      }
+      if (falsePositiveWhilePlaying) return;
 
-      debugMediaEvent("media-buffering");
+      debugMediaEvent(deckId, "media-buffering");
+
       if (engineBlockedRef.current) return;
 
       const s = pRef.current;
       const shouldBePlaying =
         s.intent === "play" || s.status === "playing" || s.status === "loading";
+
       if (!shouldBePlaying) return;
 
       mediaSurface.setStatus("loading");
@@ -1859,105 +2054,121 @@ export default function AudioEngine() {
       s.setLoadingReasonExternal("buffering");
     };
 
-    const clearBuffering = () => {
-      debugMediaEvent("media-buffering-cleared");
+    const clearBuffering = (deckId: DeckId) => {
+      if (deckId !== activeDeckRef.current) return;
+
+      debugMediaEvent(deckId, "media-buffering-cleared");
+
       if (engineBlockedRef.current) return;
+
       pRef.current.setLoadingReasonExternal(undefined);
-      applyPendingSeek();
+      applyPendingSeek(deckId);
     };
 
-    const onEnded = () => {
-      debugMediaEvent("media-ended");
+    const onEnded = (deckId: DeckId) => {
+      if (deckId !== activeDeckRef.current) return;
 
-      const s = pRef.current;
-      const cur = s.current;
+      debugMediaEvent(deckId, "media-ended");
 
-      const idx = cur
-        ? s.queue.findIndex((t) => t.recordingId === cur.recordingId)
-        : -1;
-      const nextTrack =
-        idx >= 0 && idx + 1 < s.queue.length ? s.queue[idx + 1] : null;
+      const nextTrack = getNextTrack();
 
       sendAudioDebug({
         event: "ended-fired",
-        albumId: s.queueContextId ?? null,
-        recordingId: cur?.recordingId ?? null,
-        playbackId: cur?.muxPlaybackId ?? null,
-        source: "AudioEngine",
+        albumId: pRef.current.queueContextId ?? null,
+        recordingId: pRef.current.current?.recordingId ?? null,
+        playbackId: pRef.current.current?.muxPlaybackId ?? null,
+        source: `AudioEngine.${deckId}`,
         detail: nextTrack
           ? `next=${nextTrack.recordingId}`
-          : `next=null;idx=${idx};queue=${s.queue.length};repeat=${s.repeat}`,
+          : `next=null;queue=${pRef.current.queue.length};repeat=${pRef.current.repeat}`,
       });
 
       reportPlaythroughComplete(1);
 
-      playIntentRef.current = true;
-      void prefetchCurrentQueueAlbumSession();
-
-      s.advanceFromEngine();
-
-      sendAudioDebug({
-        event: "next-dispatched-from-ended",
-        albumId: s.queueContextId ?? null,
-        recordingId: cur?.recordingId ?? null,
-        playbackId: cur?.muxPlaybackId ?? null,
-        source: "AudioEngine",
-      });
+      if (nextTrack) {
+        void handleAutoAdvance();
+      } else {
+        pRef.current.advanceFromEngine();
+      }
     };
 
-    a.addEventListener("timeupdate", onTime);
-    a.addEventListener("loadedmetadata", onLoadedMeta);
-    a.addEventListener("playing", markPlaying);
-    a.addEventListener("pause", markPaused);
-    a.addEventListener("waiting", markBuffering);
-    a.addEventListener("stalled", markBuffering);
-    const onMediaError = () => {
-      const err = a.error;
-      debugMediaEvent(
-        "media-error",
-        err ? `code=${err.code};message=${err.message}` : "unknown",
-      );
+    const makeHandlers = (deckId: DeckId) => {
+      const a = getAudio(deckId);
+      if (!a) return null;
+
+      const handlers = {
+        timeupdate: () => onTime(deckId),
+        loadedmetadata: () => onLoadedMeta(deckId),
+        playing: () => markPlaying(deckId),
+        pause: () => markPaused(deckId),
+        waiting: () => markBuffering(deckId),
+        stalled: () => markBuffering(deckId),
+        canplay: () => clearBuffering(deckId),
+        canplaythrough: () => clearBuffering(deckId),
+        ended: () => onEnded(deckId),
+        error: () => {
+          const err = a.error;
+          debugMediaEvent(
+            deckId,
+            "media-error",
+            err ? `code=${err.code};message=${err.message}` : "unknown",
+          );
+        },
+        suspend: () => debugMediaEvent(deckId, "media-suspend"),
+        abort: () => debugMediaEvent(deckId, "media-abort"),
+        emptied: () => debugMediaEvent(deckId, "media-emptied"),
+      };
+
+      a.addEventListener("timeupdate", handlers.timeupdate);
+      a.addEventListener("loadedmetadata", handlers.loadedmetadata);
+      a.addEventListener("playing", handlers.playing);
+      a.addEventListener("pause", handlers.pause);
+      a.addEventListener("waiting", handlers.waiting);
+      a.addEventListener("stalled", handlers.stalled);
+      a.addEventListener("canplay", handlers.canplay);
+      a.addEventListener("canplaythrough", handlers.canplaythrough);
+      a.addEventListener("ended", handlers.ended);
+      a.addEventListener("error", handlers.error);
+      a.addEventListener("suspend", handlers.suspend);
+      a.addEventListener("abort", handlers.abort);
+      a.addEventListener("emptied", handlers.emptied);
+
+      return () => {
+        a.removeEventListener("timeupdate", handlers.timeupdate);
+        a.removeEventListener("loadedmetadata", handlers.loadedmetadata);
+        a.removeEventListener("playing", handlers.playing);
+        a.removeEventListener("pause", handlers.pause);
+        a.removeEventListener("waiting", handlers.waiting);
+        a.removeEventListener("stalled", handlers.stalled);
+        a.removeEventListener("canplay", handlers.canplay);
+        a.removeEventListener("canplaythrough", handlers.canplaythrough);
+        a.removeEventListener("ended", handlers.ended);
+        a.removeEventListener("error", handlers.error);
+        a.removeEventListener("suspend", handlers.suspend);
+        a.removeEventListener("abort", handlers.abort);
+        a.removeEventListener("emptied", handlers.emptied);
+      };
     };
 
-    const onSuspend = () => debugMediaEvent("media-suspend");
-    const onAbort = () => debugMediaEvent("media-abort");
-    const onEmptied = () => debugMediaEvent("media-emptied");
-
-    a.addEventListener("canplay", clearBuffering);
-    a.addEventListener("canplaythrough", clearBuffering);
-    a.addEventListener("ended", onEnded);
-    a.addEventListener("error", onMediaError);
-    a.addEventListener("suspend", onSuspend);
-    a.addEventListener("abort", onAbort);
-    a.addEventListener("emptied", onEmptied);
+    const cleanupA = makeHandlers("a");
+    const cleanupB = makeHandlers("b");
 
     return () => {
-      a.removeEventListener("timeupdate", onTime);
-      a.removeEventListener("loadedmetadata", onLoadedMeta);
-      a.removeEventListener("playing", markPlaying);
-      a.removeEventListener("pause", markPaused);
-      a.removeEventListener("waiting", markBuffering);
-      a.removeEventListener("stalled", markBuffering);
-      a.removeEventListener("canplay", clearBuffering);
-      a.removeEventListener("canplaythrough", clearBuffering);
-      a.removeEventListener("ended", onEnded);
-      a.removeEventListener("error", onMediaError);
-      a.removeEventListener("suspend", onSuspend);
-      a.removeEventListener("abort", onAbort);
-      a.removeEventListener("emptied", onEmptied);
+      cleanupA?.();
+      cleanupB?.();
     };
   }, [
-    hardStopAndDetach,
     announceBadges,
+    getAudio,
+    getNextTrack,
+    hardStopAll,
+    prepareStandbyForTrack,
     prefetchCurrentQueueAlbumSession,
-    getCachedTokenForPlaybackId,
-    reportLocalPlaybackErrorAsGate,
+    promoteStandby,
   ]);
 
-  /* ---------------- Seek: PlayerState -> media element ---------------- */
-
   React.useEffect(() => {
-    const a = audioRef.current;
+    const a = getActiveAudio();
     if (!a) return;
 
     const ms = p.pendingSeekMs;
@@ -1970,12 +2181,10 @@ export default function AudioEngine() {
     }
 
     pRef.current.clearPendingSeek();
-  }, [p.seekNonce, p.pendingSeekMs]);
-
-  /* ---------------- Intent -> media element ---------------- */
+  }, [getActiveAudio, p.seekNonce, p.pendingSeekMs]);
 
   React.useEffect(() => {
-    const a = audioRef.current;
+    const a = getActiveAudio();
     if (!a) return;
 
     if (engineBlockedRef.current) {
@@ -1994,16 +2203,20 @@ export default function AudioEngine() {
         audioCtxRef.current.resume().catch(() => {});
       }
 
+      playIntentRef.current = true;
+
       void a.play().then(
-        () => pRef.current.clearIntent(),
+        () => {
+          playIntentRef.current = false;
+          pRef.current.clearIntent();
+        },
         () => {
           playIntentRef.current = true;
+          void attachActiveTrack();
         },
       );
     }
-  }, [p.intent]);
-
-  /* ---------------- Media Session metadata / lock-screen controls ---------------- */
+  }, [attachActiveTrack, getActiveAudio, p.intent]);
 
   React.useEffect(() => {
     if (!hasMediaSession()) return;
@@ -2034,9 +2247,7 @@ export default function AudioEngine() {
             ]
           : [],
       });
-    } catch {
-      // Metadata is enhancement-only.
-    }
+    } catch {}
 
     try {
       navigator.mediaSession.playbackState =
@@ -2053,9 +2264,7 @@ export default function AudioEngine() {
     ) => {
       try {
         navigator.mediaSession.setActionHandler(action, handler);
-      } catch {
-        // Unsupported action on this browser.
-      }
+      } catch {}
     };
 
     setHandler("play", () => {
@@ -2156,12 +2365,7 @@ export default function AudioEngine() {
     p.positionMs,
   ]);
 
-  /* ---------------- User gesture bridge ---------------- */
-
   React.useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-
     const resume = () => {
       if (engineBlockedRef.current) return;
 
@@ -2170,21 +2374,37 @@ export default function AudioEngine() {
       if (audioCtxRef.current?.state === "suspended") {
         audioCtxRef.current.resume().catch(() => {});
       }
+
       playIntentRef.current = true;
-      void a.play().catch(() => {});
+
+      const a = getActiveAudio();
+      if (a) {
+        void a.play().catch(() => {
+          void attachActiveTrack();
+        });
+      }
     };
 
     window.addEventListener("af:play-intent", resume);
     return () => window.removeEventListener("af:play-intent", resume);
-  }, [prefetchCurrentQueueAlbumSession]);
+  }, [attachActiveTrack, getActiveAudio, prefetchCurrentQueueAlbumSession]);
 
   return (
-    <audio
-      ref={audioRef}
-      crossOrigin="anonymous"
-      preload="metadata"
-      playsInline
-      style={{ display: "none" }}
-    />
+    <>
+      <audio
+        ref={audioARef}
+        crossOrigin="anonymous"
+        preload="metadata"
+        playsInline
+        style={{ display: "none" }}
+      />
+      <audio
+        ref={audioBRef}
+        crossOrigin="anonymous"
+        preload="metadata"
+        playsInline
+        style={{ display: "none" }}
+      />
+    </>
   );
 }
