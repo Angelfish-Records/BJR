@@ -1470,7 +1470,7 @@ export default function AudioEngine() {
       playIntentRef.current = true;
       void prefetchCurrentQueueAlbumSession();
 
-      s.next();
+      s.advanceFromEngine();
     };
 
     const onTime = () => {
@@ -1713,7 +1713,7 @@ export default function AudioEngine() {
       playIntentRef.current = true;
       void prefetchCurrentQueueAlbumSession();
 
-      s.next();
+      s.advanceFromEngine();
 
       sendAudioDebug({
         event: "next-dispatched-from-ended",

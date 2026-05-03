@@ -56,6 +56,7 @@ type PlayerActions = {
   play: (track?: PlayerTrack) => void;
   pause: () => void;
   next: () => void;
+  advanceFromEngine: () => void;
   prev: () => void;
 
   setQueue: (tracks: PlayerTrack[], opts?: QueueContext) => void;
@@ -496,6 +497,75 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
           });
         });
       },
+
+      advanceFromEngine: () =>
+        setState((s) => {
+          const cur = s.current;
+          if (!cur || s.queue.length === 0) return s;
+
+          const idx = s.queue.findIndex(
+            (t) => t.recordingId === cur.recordingId,
+          );
+          const at = idx >= 0 ? idx : 0;
+
+          if (s.repeat === "one") {
+            return {
+              ...s,
+              status: "loading",
+              loadingReason: "attach",
+              positionMs: 0,
+              intent: "play",
+              intentAtMs: Date.now(),
+              pendingRecordingId: cur.recordingId,
+              selectedRecordingId: cur.recordingId,
+            };
+          }
+
+          const nextIdx = at + 1;
+
+          if (nextIdx < s.queue.length) {
+            const t = hydrateTrack(s.queue[nextIdx], s.durationByRecordingId);
+            return {
+              ...s,
+              current: t,
+              status: "loading",
+              loadingReason: "attach",
+              positionMs: 0,
+              intent: "play",
+              intentAtMs: Date.now(),
+              pendingRecordingId: t.recordingId,
+              selectedRecordingId: t.recordingId,
+            };
+          }
+
+          if (s.repeat === "all" && s.queue.length > 0) {
+            const t = hydrateTrack(s.queue[0], s.durationByRecordingId);
+            return {
+              ...s,
+              current: t,
+              status: "loading",
+              loadingReason: "attach",
+              positionMs: 0,
+              intent: "play",
+              intentAtMs: Date.now(),
+              pendingRecordingId: t.recordingId,
+              selectedRecordingId: t.recordingId,
+            };
+          }
+
+          return {
+            ...s,
+            status: "paused",
+            intent: null,
+            intentAtMs: undefined,
+            positionMs: 0,
+            pendingSeekMs: 0,
+            seeking: true,
+            seekNonce: s.seekNonce + 1,
+            loadingReason: undefined,
+            pendingRecordingId: undefined,
+          };
+        }),
 
       prev: () => {
         void guardPlayback(() => {
