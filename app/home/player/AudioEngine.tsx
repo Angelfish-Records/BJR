@@ -159,7 +159,8 @@ function sendAudioDebug(payload: {
     payload.event.includes("error") ||
     payload.event.includes("next") ||
     payload.event.includes("attach") ||
-    payload.event === "media-paused-at-ended-ignored";
+    payload.event === "media-paused-at-ended-ignored" ||
+    payload.event === "playback-progress-heartbeat";
 
   flushAudioDebugSoon(urgent);
 }
@@ -221,6 +222,7 @@ export default function AudioEngine() {
   const telemetryCompleteSentRef = React.useRef(new Set<string>());
 
   const nearEndWarmKeyRef = React.useRef<string | null>(null);
+  const debugProgressHeartbeatRef = React.useRef<string | null>(null);
 
   const srcNodeRef = React.useRef<MediaElementAudioSourceNode | null>(null);
 
@@ -790,6 +792,7 @@ export default function AudioEngine() {
 
   React.useEffect(() => {
     nearEndWarmKeyRef.current = null;
+    debugProgressHeartbeatRef.current = null;
 
     const player = pRef.current;
 
@@ -1031,10 +1034,25 @@ export default function AudioEngine() {
       if (seq !== loadSeq.current) return;
 
       if (canPlayNativeHls(a)) {
+        sendAudioDebug({
+          event: "native-hls-attach",
+          albumId: s.queueContextId ?? null,
+          recordingId: s.current?.recordingId ?? null,
+          playbackId,
+          source: "AudioEngine",
+        });
+
         a.src = srcUrl;
         a.load();
         playAttachedSource();
       } else {
+        sendAudioDebug({
+          event: "hlsjs-attach",
+          albumId: s.queueContextId ?? null,
+          recordingId: s.current?.recordingId ?? null,
+          playbackId,
+          source: "AudioEngine",
+        });
         if (!Hls.isSupported()) {
           reportLocalPlaybackErrorAsGate(
             "INVALID_REQUEST",
@@ -1432,6 +1450,24 @@ export default function AudioEngine() {
       const durMs = durFromState || durFromEl;
 
       if (durMs > 0) {
+        const heartbeatBucket = Math.floor(ms / 60_000);
+        const heartbeatKey = `${curId}:${heartbeatBucket}`;
+
+        if (
+          heartbeatBucket > 0 &&
+          debugProgressHeartbeatRef.current !== heartbeatKey
+        ) {
+          debugProgressHeartbeatRef.current = heartbeatKey;
+          sendAudioDebug({
+            event: "playback-progress-heartbeat",
+            albumId: pRef.current.queueContextId ?? null,
+            recordingId: curId,
+            playbackId: pRef.current.current?.muxPlaybackId ?? null,
+            source: "AudioEngine.media",
+            detail: `progress=${ms};duration=${durMs}`,
+          });
+        }
+
         setMediaSessionPositionStateSafe({
           durationSec: durMs / 1000,
           positionSec: ms / 1000,
