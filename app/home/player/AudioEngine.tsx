@@ -985,55 +985,9 @@ export default function AudioEngine() {
     };
 
     const attachSrc = (srcUrl: string) => {
-      sendAudioDebug({
-        event: "attach-src-called",
-        albumId: s.queueContextId ?? null,
-        recordingId: s.current?.recordingId ?? null,
-        playbackId,
-        source: "AudioEngine",
-        detail: `seq=${seq};active=${loadSeq.current}`,
-      });
+      const playAttachedSource = () => {
+        if (!playIntentRef.current) return;
 
-      if (seq !== loadSeq.current) return;
-
-      hardResetElement();
-      if (seq !== loadSeq.current) return;
-
-      if (canPlayNativeHls(a)) {
-        a.src = srcUrl;
-        a.load();
-      } else {
-        if (!Hls.isSupported()) {
-          reportLocalPlaybackErrorAsGate(
-            "INVALID_REQUEST",
-            "This browser cannot play HLS.",
-          );
-          mediaSurface.setStatus("blocked");
-          hardStopAndDetach();
-          return;
-        }
-
-        const hls = new Hls({ enableWorker: true });
-        hlsRef.current = hls;
-
-        hls.on(Hls.Events.ERROR, (_e, err) => {
-          if (err?.fatal) {
-            reportLocalPlaybackErrorAsGate(
-              "INVALID_REQUEST",
-              `HLS fatal: ${err.details ?? "error"}`,
-            );
-            mediaSurface.setStatus("blocked");
-            hardStopAndDetach();
-          }
-        });
-
-        hls.loadSource(srcUrl);
-        hls.attachMedia(a);
-      }
-
-      attachedKeyRef.current = attachKey;
-
-      if (playIntentRef.current) {
         void a.play().then(
           () => {
             sendAudioDebug({
@@ -1060,7 +1014,77 @@ export default function AudioEngine() {
             playIntentRef.current = true;
           },
         );
+      };
+
+      sendAudioDebug({
+        event: "attach-src-called",
+        albumId: s.queueContextId ?? null,
+        recordingId: s.current?.recordingId ?? null,
+        playbackId,
+        source: "AudioEngine",
+        detail: `seq=${seq};active=${loadSeq.current}`,
+      });
+
+      if (seq !== loadSeq.current) return;
+
+      hardResetElement();
+      if (seq !== loadSeq.current) return;
+
+      if (canPlayNativeHls(a)) {
+        a.src = srcUrl;
+        a.load();
+        playAttachedSource();
+      } else {
+        if (!Hls.isSupported()) {
+          reportLocalPlaybackErrorAsGate(
+            "INVALID_REQUEST",
+            "This browser cannot play HLS.",
+          );
+          mediaSurface.setStatus("blocked");
+          hardStopAndDetach();
+          return;
+        }
+
+        const hls = new Hls({ enableWorker: true });
+        hlsRef.current = hls;
+
+        hls.on(Hls.Events.ERROR, (_e, err) => {
+          if (err?.fatal) {
+            sendAudioDebug({
+              event: "hls-fatal",
+              albumId: s.queueContextId ?? null,
+              recordingId: s.current?.recordingId ?? null,
+              playbackId,
+              source: "AudioEngine.hls",
+              detail: `${err.type ?? "unknown"}:${err.details ?? "error"}`,
+            });
+
+            reportLocalPlaybackErrorAsGate(
+              "INVALID_REQUEST",
+              `HLS fatal: ${err.details ?? "error"}`,
+            );
+            mediaSurface.setStatus("blocked");
+            hardStopAndDetach();
+          }
+        });
+
+        hls.once(Hls.Events.MANIFEST_PARSED, () => {
+          sendAudioDebug({
+            event: "hls-manifest-parsed",
+            albumId: s.queueContextId ?? null,
+            recordingId: s.current?.recordingId ?? null,
+            playbackId,
+            source: "AudioEngine.hls",
+          });
+
+          playAttachedSource();
+        });
+
+        hls.loadSource(srcUrl);
+        hls.attachMedia(a);
       }
+
+      attachedKeyRef.current = attachKey;
     };
 
     const load = async () => {
