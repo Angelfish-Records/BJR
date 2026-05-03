@@ -4,6 +4,7 @@
 import React from "react";
 import Hls from "hls.js";
 import { usePlayer } from "./PlayerState";
+import type { PlayerTrack } from "@/lib/types";
 import { muxSignedHlsUrl } from "@/lib/mux";
 import { mediaSurface } from "./mediaSurface";
 import { audioSurface } from "./audioSurface";
@@ -159,6 +160,7 @@ function sendAudioDebug(payload: {
     payload.event.includes("error") ||
     payload.event.includes("next") ||
     payload.event.includes("attach") ||
+    payload.event.includes("handoff") ||
     payload.event === "media-paused-at-ended-ignored" ||
     payload.event === "playback-progress-heartbeat";
 
@@ -1434,6 +1436,165 @@ export default function AudioEngine() {
       });
     };
 
+    const attachCachedTrackForEngineHandoff = (nextTrack: PlayerTrack) => {
+      const playbackId = (nextTrack.muxPlaybackId ?? "").trim();
+      if (!playbackId) {
+        sendAudioDebug({
+          event: "engine-handoff-missing-playback-id",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId: nextTrack.recordingId,
+          source: "AudioEngine.media",
+        });
+        return false;
+      }
+
+      const cached = getCachedTokenForPlaybackId(playbackId);
+      if (!cached) {
+        sendAudioDebug({
+          event: "engine-handoff-missing-cached-token",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId: nextTrack.recordingId,
+          playbackId,
+          source: "AudioEngine.media",
+        });
+        return false;
+      }
+
+      const seq = ++loadSeq.current;
+      const srcUrl = muxSignedHlsUrl(playbackId, cached.token);
+      const attachKey = `${playbackId}:${pRef.current.reloadNonce}`;
+
+      sendAudioDebug({
+        event: "engine-handoff-attach-start",
+        albumId: pRef.current.queueContextId ?? null,
+        recordingId: nextTrack.recordingId,
+        playbackId,
+        source: "AudioEngine.media",
+        detail: `seq=${seq}`,
+      });
+
+      suppressNextPauseRef.current = true;
+      playIntentRef.current = true;
+
+      try {
+        a.pause();
+      } catch {}
+
+      if (hlsRef.current) {
+        try {
+          hlsRef.current.destroy();
+        } catch {}
+        hlsRef.current = null;
+      }
+
+      try {
+        a.removeAttribute("src");
+      } catch {}
+
+      try {
+        a.load();
+      } catch {}
+
+      if (seq !== loadSeq.current) return false;
+
+      const playHandoffSource = () => {
+        if (seq !== loadSeq.current) return;
+
+        void a.play().then(
+          () => {
+            sendAudioDebug({
+              event: "engine-handoff-play-resolved",
+              albumId: pRef.current.queueContextId ?? null,
+              recordingId: nextTrack.recordingId,
+              playbackId,
+              source: "AudioEngine.media",
+            });
+            playIntentRef.current = false;
+          },
+          (err: unknown) => {
+            sendAudioDebug({
+              event: "engine-handoff-play-rejected",
+              albumId: pRef.current.queueContextId ?? null,
+              recordingId: nextTrack.recordingId,
+              playbackId,
+              source: "AudioEngine.media",
+              detail:
+                err instanceof Error
+                  ? `${err.name}: ${err.message}`
+                  : "unknown",
+            });
+            playIntentRef.current = true;
+          },
+        );
+      };
+
+      if (canPlayNativeHls(a)) {
+        sendAudioDebug({
+          event: "engine-handoff-native-hls",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId: nextTrack.recordingId,
+          playbackId,
+          source: "AudioEngine.media",
+        });
+
+        a.src = srcUrl;
+        a.load();
+        attachedKeyRef.current = attachKey;
+        playHandoffSource();
+        return true;
+      }
+
+      if (!Hls.isSupported()) {
+        sendAudioDebug({
+          event: "engine-handoff-hls-unsupported",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId: nextTrack.recordingId,
+          playbackId,
+          source: "AudioEngine.media",
+        });
+        return false;
+      }
+
+      const hls = new Hls({ enableWorker: true });
+      hlsRef.current = hls;
+
+      hls.on(Hls.Events.ERROR, (_event, err) => {
+        if (!err?.fatal) return;
+
+        sendAudioDebug({
+          event: "engine-handoff-hls-fatal",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId: nextTrack.recordingId,
+          playbackId,
+          source: "AudioEngine.hls",
+          detail: `${err.type ?? "unknown"}:${err.details ?? "error"}`,
+        });
+
+        reportLocalPlaybackErrorAsGate(
+          "INVALID_REQUEST",
+          `HLS fatal: ${err.details ?? "error"}`,
+        );
+      });
+
+      hls.once(Hls.Events.MANIFEST_PARSED, () => {
+        sendAudioDebug({
+          event: "engine-handoff-manifest-parsed",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId: nextTrack.recordingId,
+          playbackId,
+          source: "AudioEngine.hls",
+        });
+
+        playHandoffSource();
+      });
+
+      hls.loadSource(srcUrl);
+      hls.attachMedia(a);
+      attachedKeyRef.current = attachKey;
+
+      return true;
+    };
+
     const autoAdvanceFromMediaClock = () => {
       const s = pRef.current;
       const cur = s.current;
@@ -1466,8 +1627,19 @@ export default function AudioEngine() {
 
       reportPlaythroughComplete(1);
 
-      suppressNextPauseRef.current = true;
-      playIntentRef.current = true;
+      const handoffStarted = attachCachedTrackForEngineHandoff(nextTrack);
+
+      sendAudioDebug({
+        event: handoffStarted
+          ? "engine-handoff-started-before-state"
+          : "engine-handoff-failed-before-state",
+        albumId: s.queueContextId ?? null,
+        recordingId: cur.recordingId,
+        playbackId: cur.muxPlaybackId ?? null,
+        source: "AudioEngine.media",
+        detail: `next=${nextTrack.recordingId}`,
+      });
+
       void prefetchCurrentQueueAlbumSession();
 
       s.advanceFromEngine();
@@ -1765,7 +1937,13 @@ export default function AudioEngine() {
       a.removeEventListener("abort", onAbort);
       a.removeEventListener("emptied", onEmptied);
     };
-  }, [hardStopAndDetach, announceBadges, prefetchCurrentQueueAlbumSession]);
+  }, [
+    hardStopAndDetach,
+    announceBadges,
+    prefetchCurrentQueueAlbumSession,
+    getCachedTokenForPlaybackId,
+    reportLocalPlaybackErrorAsGate,
+  ]);
 
   /* ---------------- Seek: PlayerState -> media element ---------------- */
 
