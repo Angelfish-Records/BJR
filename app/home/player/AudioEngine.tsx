@@ -49,7 +49,16 @@ type AlbumSessionCacheEntry = {
 };
 
 function canPlayNativeHls(a: HTMLMediaElement) {
-  return a.canPlayType("application/vnd.apple.mpegurl") !== "";
+  if (typeof navigator === "undefined") return false;
+
+  const ua = navigator.userAgent;
+  const isAndroid = /Android/i.test(ua);
+  const isChrome = /Chrome|CriOS|Chromium/i.test(ua);
+  const isSafari = /Safari/i.test(ua) && !isChrome;
+
+  if (isAndroid) return false;
+
+  return isSafari && a.canPlayType("application/vnd.apple.mpegurl") !== "";
 }
 
 function newPlaybackSessionId(): string {
@@ -1040,7 +1049,7 @@ export default function AudioEngine() {
 
       if (canPlayNativeHls(a)) {
         sendAudioDebug({
-          event: "native-hls-attach",
+          event: "native-hls-safari-attach",
           albumId: s.queueContextId ?? null,
           recordingId: s.current?.recordingId ?? null,
           playbackId,
@@ -1530,7 +1539,7 @@ export default function AudioEngine() {
 
       if (canPlayNativeHls(a)) {
         sendAudioDebug({
-          event: "engine-handoff-native-hls",
+          event: "engine-handoff-native-hls-safari",
           albumId: pRef.current.queueContextId ?? null,
           recordingId: nextTrack.recordingId,
           playbackId,
