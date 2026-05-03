@@ -223,6 +223,8 @@ export default function AudioEngine() {
 
   const nearEndWarmKeyRef = React.useRef<string | null>(null);
   const debugProgressHeartbeatRef = React.useRef<string | null>(null);
+  const autoAdvanceKeyRef = React.useRef<string | null>(null);
+  const suppressNextPauseRef = React.useRef(false);
 
   const srcNodeRef = React.useRef<MediaElementAudioSourceNode | null>(null);
 
@@ -793,6 +795,7 @@ export default function AudioEngine() {
   React.useEffect(() => {
     nearEndWarmKeyRef.current = null;
     debugProgressHeartbeatRef.current = null;
+    autoAdvanceKeyRef.current = null;
 
     const player = pRef.current;
 
@@ -1431,6 +1434,45 @@ export default function AudioEngine() {
       });
     };
 
+    const autoAdvanceFromMediaClock = () => {
+      const s = pRef.current;
+      const cur = s.current;
+      if (!cur) return;
+
+      const idx = s.queue.findIndex((t) => t.recordingId === cur.recordingId);
+      const nextTrack =
+        s.repeat === "one"
+          ? cur
+          : idx >= 0 && idx + 1 < s.queue.length
+            ? s.queue[idx + 1]
+            : s.repeat === "all" && s.queue.length > 0
+              ? s.queue[0]
+              : null;
+
+      if (!nextTrack) return;
+
+      const key = `${cur.recordingId}:${telemetrySessionIdRef.current ?? cur.muxPlaybackId ?? ""}`;
+      if (autoAdvanceKeyRef.current === key) return;
+      autoAdvanceKeyRef.current = key;
+
+      sendAudioDebug({
+        event: "auto-next-from-timeupdate",
+        albumId: s.queueContextId ?? null,
+        recordingId: cur.recordingId,
+        playbackId: cur.muxPlaybackId ?? null,
+        source: "AudioEngine.media",
+        detail: `next=${nextTrack.recordingId}`,
+      });
+
+      reportPlaythroughComplete(1);
+
+      suppressNextPauseRef.current = true;
+      playIntentRef.current = true;
+      void prefetchCurrentQueueAlbumSession();
+
+      s.next();
+    };
+
     const onTime = () => {
       const ms = Math.floor(a.currentTime * 1000);
       mediaSurface.setTime(ms);
@@ -1495,6 +1537,10 @@ export default function AudioEngine() {
             nearEndWarmKeyRef.current = warmKey;
             void prefetchCurrentQueueAlbumSession();
           }
+        }
+
+        if (remainingMs > 0 && remainingMs <= 1_250) {
+          autoAdvanceFromMediaClock();
         }
 
         const pct = ms / durMs;
@@ -1567,6 +1613,18 @@ export default function AudioEngine() {
 
     const markPaused = () => {
       debugMediaEvent("media-paused");
+
+      if (suppressNextPauseRef.current) {
+        suppressNextPauseRef.current = false;
+        sendAudioDebug({
+          event: "media-paused-during-auto-next-ignored",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId: pRef.current.current?.recordingId ?? null,
+          playbackId: pRef.current.current?.muxPlaybackId ?? null,
+          source: "AudioEngine.media",
+        });
+        return;
+      }
 
       const effectivelyEnded =
         a.ended ||
