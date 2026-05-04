@@ -112,8 +112,16 @@ async function unlockCampaign(campaignId: string) {
   `;
 }
 
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
 function buildUnsubscribeUrl(siteUrl: string, token: string): string {
-  const base = siteUrl.replace(/\/+$/, "");
+  const base = trimTrailingSlashes(siteUrl);
   return `${base}/unsubscribe?t=${encodeURIComponent(token)}`;
 }
 
@@ -254,7 +262,7 @@ export async function POST(req: NextRequest) {
       } satisfies DrainOk);
     }
 
-    const siteUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
+    const siteUrl = trimTrailingSlashes(process.env.NEXT_PUBLIC_APP_URL ?? "");
     const emails = await Promise.all(
       claimed.rows.map(async (row) => {
         const to = asString(row.to_email).trim().toLowerCase();

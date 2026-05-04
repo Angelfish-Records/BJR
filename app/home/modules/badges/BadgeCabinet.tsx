@@ -18,7 +18,7 @@ import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 type Props = {
   badges: MemberDashboardBadge[];
 };
-
+const SHOW_DEBUG_PANEL = false;
 const DEBUG_REPLAY_RESET_MS = 72;
 
 function pickRandomItem<T>(items: T[]): T | null {
@@ -315,7 +315,7 @@ export default function BadgeCabinet(props: Props) {
             </span>
           </button>
 
-          {isAdminDebug ? (
+          {isAdminDebug && SHOW_DEBUG_PANEL ? (
             <div
               style={{
                 display: "grid",

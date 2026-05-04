@@ -70,7 +70,9 @@ export default function MailbagFeedbackForm(props: Props) {
     kindProp ?? "suggestion",
   );
   const [askerName] = React.useState("");
+  const rootRef = React.useRef<HTMLFormElement | null>(null);
   const [text, setText] = React.useState("");
+  const [expanded, setExpanded] = React.useState(false);
   const [state, setState] = React.useState<SubmitState>("idle");
   const [error, setError] = React.useState<string | null>(null);
 
@@ -78,7 +80,24 @@ export default function MailbagFeedbackForm(props: Props) {
     if (kindProp) setKind(kindProp);
   }, [kindProp]);
 
-  const remaining = Math.max(0, MAX_CHARS - text.length);
+  React.useEffect(() => {
+    if (!expanded || text.length > 0) return;
+
+    function onPointerDown(e: PointerEvent) {
+      const root = rootRef.current;
+      const target = e.target;
+
+      if (!root || !(target instanceof Node)) return;
+      if (root.contains(target)) return;
+
+      setExpanded(false);
+      setError(null);
+      if (state !== "submitting") setState("idle");
+    }
+
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [expanded, state, text.length]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -116,167 +135,201 @@ export default function MailbagFeedbackForm(props: Props) {
 
   return (
     <form
+      ref={rootRef}
       onSubmit={onSubmit}
       className={className}
       style={
         embedded
           ? undefined
           : {
-              border: "1px solid rgba(255,255,255,0.12)",
+              border: "1px solid rgba(255,255,255,0.08)",
               borderRadius: 18,
-              padding: 16,
-              background: "rgba(255,255,255,0.04)",
+              padding: 10,
+              background: "rgba(255,255,255,0.025)",
             }
       }
     >
-      {allowKindSwitch ? (
-        <div
+      {!expanded ? (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
           style={{
-            marginTop: 12,
-            display: "flex",
-            justifyContent: "flex-end",
+            width: "100%",
+            minHeight: 42,
+            border: embedded ? 0 : "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 14,
+            background: embedded ? "transparent" : "rgba(255,255,255,0.035)",
+            color: "rgba(255,255,255,0.76)",
+            fontSize: 12,
+            fontWeight: 800,
+            cursor: "pointer",
+            textAlign: "left",
+            padding: "0 14px",
           }}
         >
-          <div
-            role="tablist"
-            aria-label="Feedback type"
+          {props.title ??
+            (kind === "bug_report"
+              ? "Report a small problem"
+              : "Leave a suggestion")}
+        </button>
+      ) : (
+        <div
+          style={{
+            overflow: "hidden",
+            border: embedded ? 0 : "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 16,
+            background: embedded ? "transparent" : "rgba(255,255,255,0.045)",
+          }}
+        >
+          {allowKindSwitch ? (
+            <div
+              role="tablist"
+              aria-label="Feedback type"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                borderBottom: "1px solid rgba(255,255,255,0.08)",
+                background: "rgba(0,0,0,0.12)",
+              }}
+            >
+              {(["suggestion", "bug_report"] as const).map((nextKind) => {
+                const active = kind === nextKind;
+
+                return (
+                  <button
+                    key={nextKind}
+                    type="button"
+                    onClick={() => setKind(nextKind)}
+                    aria-pressed={active}
+                    style={{
+                      height: 36,
+                      border: 0,
+                      borderRight:
+                        nextKind === "suggestion"
+                          ? "1px solid rgba(255,255,255,0.08)"
+                          : 0,
+                      background: active
+                        ? "rgba(255,255,255,0.1)"
+                        : "transparent",
+                      color: active
+                        ? "rgba(255,255,255,0.94)"
+                        : "rgba(255,255,255,0.58)",
+                      fontSize: 11,
+                      fontWeight: 900,
+                      letterSpacing: "0.04em",
+                      textTransform: "uppercase",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {nextKind === "bug_report" ? "Bug report" : "Suggestion"}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value.slice(0, MAX_CHARS))}
+            placeholder={
+              props.description ??
+              (kind === "bug_report"
+                ? "What happened? What did you expect? How can I reproduce it?"
+                : "What content or features would you like to see here?")
+            }
+            maxLength={MAX_CHARS}
+            autoFocus
             style={{
-              display: "inline-flex",
-              alignItems: "stretch",
+              display: "block",
+              width: "100%",
+              minHeight: 132,
+              border: 0,
+              outline: "none",
+              background: "transparent",
+              color: "rgba(255,255,255,0.94)",
+              padding: "12px 12px 8px",
+              fontSize: 13,
+              lineHeight: 1.6,
+              resize: "vertical",
+            }}
+          />
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 8,
+              alignItems: "center",
+              padding: "0 8px 8px",
             }}
           >
             <button
               type="button"
-              onClick={() => setKind("suggestion")}
-              aria-pressed={kind === "suggestion"}
+              onClick={() => {
+                setExpanded(false);
+                setError(null);
+                if (state !== "submitting") setState("idle");
+              }}
               style={{
                 height: 32,
-                padding: "0 16px",
-                borderTopLeftRadius: 12,
-                borderBottomLeftRadius: 12,
-                borderTopRightRadius: 0,
-                borderBottomRightRadius: 0,
-                border: "1px solid rgba(255,255,255,0.12)",
-                borderRightWidth: 0.5,
-                background:
-                  kind === "suggestion"
-                    ? "rgba(255,255,255,0.12)"
-                    : "transparent",
-                color: "rgba(255,255,255,0.94)",
+                padding: "0 11px",
+                borderRadius: 10,
+                border: "1px solid rgba(255,255,255,0.08)",
+                background: "transparent",
+                color: "rgba(255,255,255,0.52)",
                 fontSize: 12,
                 fontWeight: 800,
                 cursor: "pointer",
               }}
             >
-              Suggestion
+              Close
             </button>
 
             <button
-              type="button"
-              onClick={() => setKind("bug_report")}
-              aria-pressed={kind === "bug_report"}
+              type="submit"
+              disabled={state === "submitting" || text.trim().length === 0}
               style={{
                 height: 32,
-                padding: "0 16px",
-                borderTopLeftRadius: 0,
-                borderBottomLeftRadius: 0,
-                borderTopRightRadius: 12,
-                borderBottomRightRadius: 12,
-                border: "1px solid rgba(255,255,255,0.12)",
-                borderLeftWidth: 0.5,
+                padding: "0 13px",
+                borderRadius: 10,
+                border: "1px solid rgba(255,255,255,0.14)",
                 background:
-                  kind === "bug_report"
-                    ? "rgba(255,255,255,0.12)"
-                    : "transparent",
-                color: "rgba(255,255,255,0.94)",
+                  text.trim().length === 0
+                    ? "rgba(255,255,255,0.055)"
+                    : "rgba(255,255,255,0.13)",
+                color:
+                  text.trim().length === 0
+                    ? "rgba(255,255,255,0.42)"
+                    : "rgba(255,255,255,0.94)",
                 fontSize: 12,
-                fontWeight: 800,
-                cursor: "pointer",
+                fontWeight: 900,
+                cursor:
+                  state === "submitting" || text.trim().length === 0
+                    ? "default"
+                    : "pointer",
+                opacity: state === "submitting" ? 0.72 : 1,
               }}
             >
-              Bug report
+              {state === "submitting"
+                ? "Sending…"
+                : (submitLabel ??
+                  (kind === "bug_report"
+                    ? "Send bug report"
+                    : "Send suggestion"))}
             </button>
           </div>
         </div>
-      ) : null}
-
-      <div style={{ marginTop: 12 }}>
-        <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.74 }}>
-          {kind === "bug_report" ? "Bug report" : "Suggestion"}
-        </div>
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value.slice(0, MAX_CHARS))}
-          placeholder={
-            kind === "bug_report"
-              ? "Describe what happened, what you expected, and how to reproduce it."
-              : "What content or features do you want to see here?"
-          }
-          maxLength={MAX_CHARS}
-          style={{
-            marginTop: 6,
-            width: "100%",
-            minHeight: 160,
-            borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.14)",
-            background: "rgba(255,255,255,0.06)",
-            color: "rgba(255,255,255,0.94)",
-            padding: "10px",
-            fontSize: 13,
-            lineHeight: 1.6,
-            resize: "vertical",
-          }}
-        />
-      </div>
-
-      <div
-        style={{
-          marginTop: 8,
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 12,
-          alignItems: "center",
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ fontSize: 12, opacity: 0.65 }}>
-          {remaining} characters remaining
-        </div>
-
-        <button
-          type="submit"
-          disabled={state === "submitting" || text.trim().length === 0}
-          style={{
-            height: 36,
-            padding: "0 14px",
-            borderRadius: 10,
-            border: "1px solid rgba(255,255,255,0.16)",
-            background: "rgba(255,255,255,0.12)",
-            color: "rgba(255,255,255,0.96)",
-            fontSize: 12,
-            fontWeight: 900,
-            cursor: "pointer",
-            opacity: state === "submitting" ? 0.7 : 1,
-          }}
-        >
-          {state === "submitting"
-            ? "Sending…"
-            : (submitLabel ??
-              (kind === "bug_report" ? "Send bug report" : "Send suggestion"))}
-        </button>
-      </div>
+      )}
 
       {state === "success" ? (
-        <div style={{ marginTop: 10, fontSize: 12, opacity: 0.82 }}>
+        <div style={{ marginTop: 8, fontSize: 12, opacity: 0.72 }}>
           Thanks — your {kind === "bug_report" ? "bug report" : "suggestion"}{" "}
           has been sent.
         </div>
       ) : null}
 
       {state === "error" && error ? (
-        <div style={{ marginTop: 10, fontSize: 12, opacity: 0.82 }}>
-          {error}
-        </div>
+        <div style={{ marginTop: 8, fontSize: 12, opacity: 0.72 }}>{error}</div>
       ) : null}
     </form>
   );

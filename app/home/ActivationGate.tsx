@@ -578,10 +578,23 @@ export default function ActivationGate(props: Props) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const emailInputRef = useRef<HTMLInputElement | null>(null);
 
-  const emailValid = useMemo(
-    () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),
-    [email],
-  );
+  const emailValid = useMemo(() => {
+    const value = email.trim();
+    if (!value || value.length > 254) return false;
+
+    const atIndex = value.indexOf("@");
+    if (atIndex <= 0) return false;
+    if (atIndex !== value.lastIndexOf("@")) return false;
+
+    const localPart = value.slice(0, atIndex);
+    const domain = value.slice(atIndex + 1);
+    if (!localPart || !domain || domain.length > 253) return false;
+
+    const dotIndex = domain.lastIndexOf(".");
+    if (dotIndex <= 0 || dotIndex === domain.length - 1) return false;
+
+    return !value.includes(" ");
+  }, [email]);
 
   const displayEmail =
     (user?.primaryEmailAddress?.emailAddress ??
@@ -782,8 +795,8 @@ export default function ActivationGate(props: Props) {
           padding: "0 2px",
         }}
       >
-        By entering, you agree to receive occasional emails about
-        releases, events, and account activity. Unsubscribe anytime.
+        By entering, you agree to receive occasional emails about releases,
+        events, and account activity. Unsubscribe anytime.
       </div>
 
       <div

@@ -11,8 +11,20 @@ export default function EarlyAccessForm() {
 
   const emailIsValid = useMemo(() => {
     const value = email.trim();
-    if (!value) return false;
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+    if (!value || value.length > 254) return false;
+
+    const atIndex = value.indexOf("@");
+    if (atIndex <= 0) return false;
+    if (atIndex !== value.lastIndexOf("@")) return false;
+
+    const localPart = value.slice(0, atIndex);
+    const domain = value.slice(atIndex + 1);
+    if (!localPart || !domain || domain.length > 253) return false;
+
+    const dotIndex = domain.lastIndexOf(".");
+    if (dotIndex <= 0 || dotIndex === domain.length - 1) return false;
+
+    return !value.includes(" ");
   }, [email]);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {

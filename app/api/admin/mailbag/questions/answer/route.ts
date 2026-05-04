@@ -87,28 +87,45 @@ function placeholders(count: number, startAt = 1): string {
 }
 
 function slugify(input: string): string {
-  return input
-    .trim()
-    .toLowerCase()
-    .replace(/['"]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
+  const normalized = input.trim().toLowerCase();
+  let slug = "";
+  let pendingDash = false;
+
+  for (const char of normalized) {
+    const code = char.charCodeAt(0);
+    const isAlphaNumeric =
+      (code >= 97 && code <= 122) || (code >= 48 && code <= 57);
+
+    if (isAlphaNumeric) {
+      if (pendingDash && slug.length > 0) slug += "-";
+      slug += char;
+      pendingDash = false;
+    } else if (char !== "'" && char !== '"') {
+      pendingDash = slug.length > 0;
+    }
+
+    if (slug.length >= 80) return slug.slice(0, 80);
+  }
+
+  return slug;
+}
+
+function secureUuid(label: string): string {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  if (uuid) return uuid;
+
+  throw new Error(`Unable to create secure ${label}`);
 }
 
 function shortId(): string {
-  const u =
-    globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
-  return u
+  return secureUuid("mailbag short id")
     .replace(/[^a-z0-9]/gi, "")
     .slice(0, 10)
     .toLowerCase();
 }
 
 function k(prefix = "k"): string {
-  const u =
-    globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
-  return `${prefix}_${u
+  return `${prefix}_${secureUuid("portable text key")
     .replace(/[^a-z0-9]/gi, "")
     .slice(0, 16)
     .toLowerCase()}`;

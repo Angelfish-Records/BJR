@@ -32,7 +32,11 @@ export type ShareTarget =
     };
 
 function stripTrailingSlash(s: string) {
-  return s.replace(/\/+$/, "");
+  let end = s.length;
+  while (end > 0 && s.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return s.slice(0, end);
 }
 
 export function getOrigin(explicitOrigin?: string) {

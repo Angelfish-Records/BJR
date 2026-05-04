@@ -24,12 +24,22 @@ export function correlationIdFromRequest(req: Request): string {
 
   if (h && h.trim()) return h.trim();
 
-  const c = (globalThis as unknown as { crypto?: { randomUUID?: () => string } })
-    .crypto;
-  const uuid = c?.randomUUID?.();
+  const cryptoObj = globalThis.crypto;
+  const uuid = cryptoObj?.randomUUID?.();
   if (typeof uuid === "string" && uuid.length > 0) return uuid;
 
-  return `corr_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
+  if (!cryptoObj?.getRandomValues) {
+    throw new Error("Unable to create secure correlation id");
+  }
+
+  const bytes = new Uint8Array(16);
+  cryptoObj.getRandomValues(bytes);
+
+  const hex = Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+
+  return `corr_${Date.now()}_${hex}`;
 }
 
 export function withCorrelationId<T extends Response>(

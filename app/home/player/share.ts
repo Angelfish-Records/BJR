@@ -34,6 +34,14 @@ type AlbumResolveOk = {
 type AlbumResolveErr = { ok: false; error: string };
 type AlbumResolveResponse = AlbumResolveOk | AlbumResolveErr;
 
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
 async function resolveAlbumMeta(
   ctx: PlayerShareContext,
   opts?: { origin?: string },
@@ -49,8 +57,10 @@ async function resolveAlbumMeta(
   }
 
   const base = clean(opts?.origin);
-  const url = base
-    ? `${base.replace(/\/+$/, "")}/api/albums/by-id?albumId=${encodeURIComponent(albumId)}`
+  const trimmedBase = base ? trimTrailingSlashes(base) : "";
+
+  const url = trimmedBase
+    ? `${trimmedBase}/api/albums/by-id?albumId=${encodeURIComponent(albumId)}`
     : `/api/albums/by-id?albumId=${encodeURIComponent(albumId)}`;
 
   const res = await fetch(url, { method: "GET" });

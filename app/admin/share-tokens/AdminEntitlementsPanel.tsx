@@ -206,9 +206,9 @@ export default function AdminEntitlementsPanel(props: {
 
       if (!res.ok || !isDashboardResponseOk(json)) {
         throw new Error(
-          isDashboardResponseOk(json)
-            ? "Dashboard load failed"
-            : (json.error ?? "Dashboard load failed"),
+          !isDashboardResponseOk(json) && json.error
+            ? json.error
+            : "Dashboard load failed",
         );
       }
 

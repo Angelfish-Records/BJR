@@ -32,7 +32,7 @@ function pickRect(
   }
 
   // deterministic “random”
-  let x = rect.seed | 0;
+  let x = Math.trunc(rect.seed);
   const rand = () => {
     // xorshift32
     x ^= x << 13;
@@ -284,16 +284,8 @@ function VisualizerRingGlowCanvas(props: {
   active: boolean;
   sourceRect: SourceRect;
 }) {
-  const {
-    size,
-    ringPx,
-    glowPx,
-    blurPx,
-    opacity,
-    fps,
-    active,
-    sourceRect,
-  } = props;
+  const { size, ringPx, glowPx, blurPx, opacity, fps, active, sourceRect } =
+    props;
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const srcRef = React.useRef<HTMLCanvasElement | null>(null);
@@ -656,7 +648,9 @@ export function PatternRail(props: {
           overflow: "hidden",
         }}
       >
-        <div style={{ position: "absolute", inset: 0, transform: "scaleY(18)" }}>
+        <div
+          style={{ position: "absolute", inset: 0, transform: "scaleY(18)" }}
+        >
           <VisualizerSnapshotCanvas
             active={active}
             fps={14}

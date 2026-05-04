@@ -95,7 +95,7 @@ function newPlaybackSessionId(): string {
     return crypto.randomUUID();
   }
 
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  throw new Error("Unable to create secure playback session id");
 }
 
 function hasMediaSession(): boolean {
@@ -133,7 +133,7 @@ function shouldSendAudioDebugEvent(event: string): boolean {
 const audioDebugSessionId =
   typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
     ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    : `debug-${Date.now().toString(36)}`;
 
 const audioDebugBuffer: AudioDebugEvent[] = [];
 let audioDebugFlushTimer: number | null = null;

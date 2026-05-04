@@ -1016,7 +1016,7 @@ export default function ExegesisGroupTool() {
                   </div>
                   <div className="mt-1 text-xs opacity-60">
                     {activeGroup.count} lines ·{" "}
-                    {activeGroup.isCanonical ? "canonical" : "implicit"}{" "}
+                    {activeGroup.isCanonical ? "canonical" : "implicit"}
                     {activeGroup.updatedAt
                       ? `· updated ${activeGroup.updatedAt}`
                       : ""}
@@ -1101,8 +1101,9 @@ export default function ExegesisGroupTool() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <div className="text-xs opacity-60">
-                              {c ? fmtTimeMs(c.tMs) : ""}{" "}
-                              <span className="opacity-50">·</span> {lk}
+                              {c ? fmtTimeMs(c.tMs) : ""}
+                              <span className="opacity-50"> · </span>
+                              {lk}
                             </div>
                             <div className="mt-1 text-sm opacity-90 line-clamp-2">
                               {c ? c.text : "(Missing cue text)"}

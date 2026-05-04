@@ -533,7 +533,10 @@ const FILTER_KIND_LABEL: Record<AudienceFilterKind, string> = {
 };
 
 function newId(): string {
-  return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const uuid = globalThis.crypto?.randomUUID?.();
+  if (uuid) return uuid;
+
+  throw new Error("Unable to create secure campaign composer id");
 }
 
 function isAudienceFilterKind(x: unknown): x is AudienceFilterKind {

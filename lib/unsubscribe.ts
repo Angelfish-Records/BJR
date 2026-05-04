@@ -17,12 +17,18 @@ function mustEnv(name: string): string {
   return v;
 }
 
+function stripTrailingEquals(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 61) {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
 function base64UrlEncode(buf: Buffer): string {
-  return buf
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
+  return stripTrailingEquals(
+    buf.toString("base64").replaceAll("+", "-").replaceAll("/", "_"),
+  );
 }
 
 function base64UrlDecode(s: string): Buffer {

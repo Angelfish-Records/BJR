@@ -81,7 +81,15 @@ export default function BadgeAwardOverlay(props: Props) {
     <BodyPortal>
       <div
         aria-hidden="true"
+        role="button"
+        tabIndex={0}
         onClick={onDismiss}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onDismiss();
+          }
+        }}
         style={{
           position: "fixed",
           inset: 0,
@@ -89,9 +97,7 @@ export default function BadgeAwardOverlay(props: Props) {
           pointerEvents: "auto",
           backdropFilter: "blur(10px)",
           WebkitBackdropFilter: "blur(10px)",
-          background: visible
-            ? "rgba(0,0,0,0.24)"
-            : "rgba(0,0,0,0.00)",
+          background: visible ? "rgba(0,0,0,0.24)" : "rgba(0,0,0,0.00)",
           opacity: visible ? 1 : 0,
           transition:
             "opacity 220ms ease, background-color 220ms ease, backdrop-filter 220ms ease",
@@ -99,7 +105,9 @@ export default function BadgeAwardOverlay(props: Props) {
       />
 
       <div
-        onClick={onDismiss}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onDismiss();
+        }}
         style={{
           position: "fixed",
           inset: 0,
@@ -123,10 +131,7 @@ export default function BadgeAwardOverlay(props: Props) {
             placeItems: "center",
           }}
         >
-          <BadgeAwardRevealCard
-            badge={badge}
-            dismissHintVisible={visible}
-          />
+          <BadgeAwardRevealCard badge={badge} dismissHintVisible={visible} />
         </div>
       </div>
     </BodyPortal>

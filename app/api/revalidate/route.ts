@@ -13,10 +13,24 @@ type SanityWebhookPayload = {
 
 const CACHE_PROFILE = "default" as const;
 
+function getBearerToken(authHeader: string): string {
+  const trimmed = authHeader.trim();
+  const prefix = "bearer";
+
+  if (trimmed.length <= prefix.length) return "";
+  if (trimmed.slice(0, prefix.length).toLowerCase() !== prefix) return "";
+
+  const separator = trimmed.charAt(prefix.length);
+  if (separator !== " " && separator !== "\t") return "";
+
+  const token = trimmed.slice(prefix.length + 1).trim();
+  return token;
+}
+
 function getAuthSecret(req: Request): string {
   const auth = req.headers.get("authorization") || "";
-  const m = auth.match(/^Bearer\s+(.+)$/i);
-  if (m?.[1]) return m[1].trim();
+  const bearerToken = getBearerToken(auth);
+  if (bearerToken) return bearerToken;
 
   const headerSecret = req.headers.get("x-webhook-secret");
   if (headerSecret) return headerSecret.trim();

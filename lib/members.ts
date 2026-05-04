@@ -11,7 +11,21 @@ export function normalizeEmail(input: string): string {
 }
 
 export function assertLooksLikeEmail(email: string): void {
-  const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const value = email.trim();
+  const atIndex = value.indexOf("@");
+
+  const ok =
+    value.length > 0 &&
+    value.length <= 254 &&
+    atIndex > 0 &&
+    atIndex === value.lastIndexOf("@") &&
+    value.slice(0, atIndex).length > 0 &&
+    value.slice(atIndex + 1).length <= 253 &&
+    value.slice(atIndex + 1).lastIndexOf(".") > 0 &&
+    value.slice(atIndex + 1).lastIndexOf(".") <
+      value.slice(atIndex + 1).length - 1 &&
+    !value.includes(" ");
+
   if (!ok) throw new Error("Invalid email");
 }
 

@@ -126,7 +126,10 @@ function tryParseJson(text: string): ImportPayload | null {
 }
 
 function makeKey() {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  const uuid = globalThis.crypto?.randomUUID?.();
+  if (uuid) return uuid;
+
+  throw new Error("Unable to create secure lyrics import key");
 }
 
 export default function LyricsImportInput(props: ArrayOfObjectsInputProps) {
