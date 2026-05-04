@@ -34,32 +34,7 @@ import { isTipTapDoc, parseHash } from "./exegesisUi";
 import { resolveViewerDisplayIdentity } from "@/lib/memberIdentity";
 import { identityFactsFromDTO } from "./exegesisIdentity";
 
-function useMediaQuery(query: string): boolean {
-  const get = () =>
-    typeof window !== "undefined" ? window.matchMedia(query).matches : false;
-
-  const [matches, setMatches] = React.useState<boolean>(get);
-
-  React.useEffect(() => {
-    if (typeof window === "undefined") return;
-    const m = window.matchMedia(query);
-    const onChange = () => setMatches(m.matches);
-
-    setMatches(m.matches);
-
-    if (typeof m.addEventListener === "function") {
-      m.addEventListener("change", onChange);
-      return () => m.removeEventListener("change", onChange);
-    } else {
-      m.addListener(onChange);
-      return () => m.removeListener(onChange);
-    }
-  }, [query]);
-
-  return matches;
-}
-
-export default function ExegesisTrackClient(props: {
+type ExegesisTrackClientProps = Readonly<{
   recordingId: string;
   lyrics: LyricsApiOk;
   canonicalPath?: string;
@@ -67,18 +42,59 @@ export default function ExegesisTrackClient(props: {
   trackArtist?: string | null;
   headerLeading?: React.ReactNode;
   headerArtwork?: React.ReactNode;
-}) {
+}>;
+
+type InlineGateState = Readonly<{
+  open: boolean;
+  message: string;
+  correlationId: string | null;
+  dismissible: boolean;
+}>;
+
+function hasBrowserWindow(): boolean {
+  return typeof globalThis.window !== "undefined";
+}
+
+function getBrowserWindow(): Window | null {
+  return hasBrowserWindow() ? globalThis.window : null;
+}
+
+function prefersReducedMotion(): boolean {
+  const browserWindow = getBrowserWindow();
+  if (!browserWindow) return true;
+
+  return (
+    browserWindow.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ??
+    false
+  );
+}
+
+function useMediaQuery(query: string): boolean {
+  const get = () => getBrowserWindow()?.matchMedia(query).matches ?? false;
+
+  const [matches, setMatches] = React.useState<boolean>(get);
+
+  React.useEffect(() => {
+    const browserWindow = getBrowserWindow();
+    if (!browserWindow) return;
+
+    const mediaQueryList = browserWindow.matchMedia(query);
+    const onChange = () => setMatches(mediaQueryList.matches);
+
+    setMatches(mediaQueryList.matches);
+    mediaQueryList.addEventListener("change", onChange);
+
+    return () => mediaQueryList.removeEventListener("change", onChange);
+  }, [query]);
+
+  return matches;
+}
+
+export default function ExegesisTrackClient(props: ExegesisTrackClientProps) {
   const { openMembershipModal } = useMembershipModal();
   const broker = useGateBroker();
 
   const EXEGESIS_DOMAIN: GateDomain = "exegesis";
-
-  type InlineGateState = {
-    open: boolean;
-    message: string;
-    correlationId: string | null;
-    dismissible: boolean;
-  };
 
   const [inlineGate, setInlineGate] = React.useState<InlineGateState>({
     open: false,
@@ -138,11 +154,16 @@ export default function ExegesisTrackClient(props: {
       dismissible?: boolean;
       ctxExtra?: Omit<GateContext, "isSignedIn" | "intent">;
     }) => {
-      const baseCtx: GateContext = {
-        isSignedIn: Boolean(userId),
-        intent: opts.intent,
-        ...(opts.ctxExtra ?? {}),
-      };
+      const baseCtx: GateContext = opts.ctxExtra
+        ? {
+            isSignedIn: Boolean(userId),
+            intent: opts.intent,
+            ...opts.ctxExtra,
+          }
+        : {
+            isSignedIn: Boolean(userId),
+            intent: opts.intent,
+          };
 
       const res0 = gate(opts.attempt, baseCtx);
 
@@ -176,7 +197,8 @@ export default function ExegesisTrackClient(props: {
     commentId?: string;
     rootId?: string;
   }) {
-    if (typeof window === "undefined") return;
+    const browserWindow = getBrowserWindow();
+    if (!browserWindow) return;
 
     const sp = new URLSearchParams();
     if (next.lineKey) sp.set("l", next.lineKey);
@@ -184,11 +206,11 @@ export default function ExegesisTrackClient(props: {
     if (next.rootId) sp.set("root", next.rootId);
     const h = sp.toString();
 
-    const base = canonicalPath
-      ? canonicalPath
-      : window.location.pathname + window.location.search;
+    const base =
+      canonicalPath ||
+      browserWindow.location.pathname + browserWindow.location.search;
 
-    window.history.replaceState(null, "", h ? `${base}#${h}` : base);
+    browserWindow.history.replaceState(null, "", h ? `${base}#${h}` : base);
   }
 
   const [selected, setSelected] = React.useState<ExegesisSelectedLine | null>(
@@ -218,7 +240,7 @@ export default function ExegesisTrackClient(props: {
   const [desktopPanelH, setDesktopPanelH] = React.useState<number>(0);
 
   function measureDesktopPanelH() {
-    if (typeof window === "undefined") return;
+    if (!getBrowserWindow()) return;
     if (isMobile) return;
     const wrapEl = lyricsWrapRef.current;
     if (!wrapEl) return;
@@ -254,7 +276,7 @@ export default function ExegesisTrackClient(props: {
     if (selected?.lineKey) setHash({ lineKey: selected.lineKey });
     else setHash({});
 
-    window.requestAnimationFrame(() => {
+    globalThis.window.requestAnimationFrame(() => {
       const el = threadScrollRef.current;
       if (el) el.scrollTop = panelScrollTopRef.current || 0;
     });
@@ -263,13 +285,6 @@ export default function ExegesisTrackClient(props: {
   const rootElByIdRef = React.useRef<Record<string, HTMLDivElement | null>>({});
   const flipRectsRef = React.useRef<Record<string, DOMRect>>({});
   const flipPendingRef = React.useRef(false);
-
-  function prefersReducedMotion(): boolean {
-    if (typeof window === "undefined") return true;
-    return (
-      window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false
-    );
-  }
 
   function beginFlip() {
     if (prefersReducedMotion()) return;
@@ -299,7 +314,7 @@ export default function ExegesisTrackClient(props: {
   });
 
   const [draft, setDraft] = React.useState<string>("");
-  const [draftDoc, setDraftDoc] = React.useState<unknown | null>(null);
+  const [draftDoc, setDraftDoc] = React.useState<unknown>(null);
   const [posting, setPosting] = React.useState<boolean>(false);
 
   const [composerStage, setComposerStage] =
@@ -463,6 +478,33 @@ export default function ExegesisTrackClient(props: {
     });
   }
 
+  function deleteReplyDraft(commentId: string) {
+    setReplyByCommentId((prev) => {
+      if (!prev[commentId]) return prev;
+      const next = { ...prev };
+      delete next[commentId];
+      return next;
+    });
+  }
+
+  function deleteEditDraft(commentId: string) {
+    setEditByCommentId((prev) => {
+      if (!prev[commentId]) return prev;
+      const next = { ...prev };
+      delete next[commentId];
+      return next;
+    });
+  }
+
+  function deleteReportDraft(commentId: string) {
+    setReportByCommentId((prev) => {
+      if (!prev[commentId]) return prev;
+      const next = { ...prev };
+      delete next[commentId];
+      return next;
+    });
+  }
+
   function openEdit(c: CommentDTO) {
     if (!canPost || isLocked) return;
     if (!viewerMemberId) return;
@@ -494,76 +536,80 @@ export default function ExegesisTrackClient(props: {
   }
 
   React.useEffect(() => {
-    function onMouseDown(e: MouseEvent) {
-      const t = e.target as Node | null;
-      if (!t) return;
+    function targetNodeFromEvent(e: MouseEvent): Node | null {
+      return e.target instanceof Node ? e.target : null;
+    }
 
-      const currentDraft = draftRef.current;
-      const replyById = replyDraftsRef.current;
-      const editById = editDraftsRef.current;
-      const reportById = reportDraftsRef.current;
-
+    function closeComposerIfEmpty(target: Node) {
       const composerEl = composerWrapRef.current;
-      const clickedInComposer = !!composerEl && composerEl.contains(t);
+      const clickedInComposer = Boolean(composerEl?.contains(target));
+      const hasDraft = Boolean(draftRef.current.trim());
 
-      if (!clickedInComposer) {
-        if (!(currentDraft ?? "").trim()) {
-          setComposerStage("collapsed");
-        }
-      }
-
-      for (const [commentId, d] of Object.entries(replyById)) {
-        if (!d?.open) continue;
-        const el = replyWrapByIdRef.current[commentId];
-        if (!el) continue;
-
-        if (!el.contains(t) && !(d.plain ?? "").trim()) {
-          setReplyByCommentId((prev) => {
-            if (!prev[commentId]) return prev;
-            const next = { ...prev };
-            delete next[commentId];
-            return next;
-          });
-        }
-      }
-
-      for (const [commentId, d] of Object.entries(editById)) {
-        if (!d?.open) continue;
-        const el = editWrapByIdRef.current[commentId];
-        if (!el) continue;
-
-        if (!el.contains(t) && !(d.plain ?? "").trim()) {
-          setEditByCommentId((prev) => {
-            if (!prev[commentId]) return prev;
-            const next = { ...prev };
-            delete next[commentId];
-            return next;
-          });
-        }
-      }
-
-      for (const [commentId, d] of Object.entries(reportById)) {
-        if (!d?.open) continue;
-        const el = reportWrapByIdRef.current[commentId];
-        if (!el) continue;
-
-        const reason = (d.reason ?? "").trim();
-        const isEmpty = !reason;
-        const canAutoClose = Boolean(d.done) || isEmpty;
-
-        if (!el.contains(t) && canAutoClose) {
-          setReportByCommentId((prev) => {
-            if (!prev[commentId]) return prev;
-            const next = { ...prev };
-            delete next[commentId];
-            return next;
-          });
-        }
+      if (!clickedInComposer && !hasDraft) {
+        setComposerStage("collapsed");
       }
     }
 
-    document.addEventListener("mousedown", onMouseDown, true);
-    return () => document.removeEventListener("mousedown", onMouseDown, true);
+    function closeEmptyReplies(target: Node) {
+      for (const [commentId, draftState] of Object.entries(
+        replyDraftsRef.current,
+      )) {
+        const wrapper = replyWrapByIdRef.current[commentId];
+        const shouldClose =
+          Boolean(draftState?.open) &&
+          Boolean(wrapper) &&
+          !wrapper?.contains(target) &&
+          !draftState.plain.trim();
+
+        if (shouldClose) deleteReplyDraft(commentId);
+      }
+    }
+
+    function closeEmptyEdits(target: Node) {
+      for (const [commentId, draftState] of Object.entries(
+        editDraftsRef.current,
+      )) {
+        const wrapper = editWrapByIdRef.current[commentId];
+        const shouldClose =
+          Boolean(draftState?.open) &&
+          Boolean(wrapper) &&
+          !wrapper?.contains(target) &&
+          !draftState.plain.trim();
+
+        if (shouldClose) deleteEditDraft(commentId);
+      }
+    }
+
+    function closeAutoClosableReports(target: Node) {
+      for (const [commentId, draftState] of Object.entries(
+        reportDraftsRef.current,
+      )) {
+        const wrapper = reportWrapByIdRef.current[commentId];
+        const canAutoClose =
+          Boolean(draftState.done) || !draftState.reason.trim();
+        const shouldClose =
+          draftState.open &&
+          Boolean(wrapper) &&
+          !wrapper?.contains(target) &&
+          canAutoClose;
+
+        if (shouldClose) deleteReportDraft(commentId);
+      }
+    }
+
+    function onMouseDown(e: MouseEvent) {
+      const target = targetNodeFromEvent(e);
+      if (!target) return;
+
+      closeComposerIfEmpty(target);
+      closeEmptyReplies(target);
+      closeEmptyEdits(target);
+      closeAutoClosableReports(target);
+    }
+
+    globalThis.document.addEventListener("mousedown", onMouseDown, true);
+    return () =>
+      globalThis.document.removeEventListener("mousedown", onMouseDown, true);
   }, []);
 
   React.useEffect(() => {
@@ -596,7 +642,7 @@ export default function ExegesisTrackClient(props: {
       el.style.transform = `translateY(${dy}px)`;
       el.style.transition = "transform 0s";
 
-      requestAnimationFrame(() => {
+      globalThis.window.requestAnimationFrame(() => {
         el.style.transition = "transform 220ms ease-out";
         el.style.transform = "translateY(0)";
       });
@@ -615,7 +661,7 @@ export default function ExegesisTrackClient(props: {
     if (!cid) return;
     if (!threadKey) return;
 
-    const t = window.setTimeout(() => {
+    const t = globalThis.window.setTimeout(() => {
       const el = document.getElementById(`exegesis-c-${cid}`);
       if (el) {
         el.scrollIntoView({ block: "start", behavior: "smooth" });
@@ -623,7 +669,7 @@ export default function ExegesisTrackClient(props: {
       }
     }, 40);
 
-    return () => window.clearTimeout(t);
+    return () => globalThis.window.clearTimeout(t);
   }, [threadKey, pendingScrollCommentIdRef]);
 
   const viewerAuthorIdentity = React.useMemo(
@@ -652,15 +698,15 @@ export default function ExegesisTrackClient(props: {
     if (!isMobile) return;
     if (!drawerOpen) return;
 
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const prev = globalThis.document.body.style.overflow;
+    globalThis.document.body.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow = prev;
+      globalThis.document.body.style.overflow = prev;
     };
   }, [isMobile, drawerOpen]);
 
   function measurePanelY() {
-    if (typeof window === "undefined") return;
+    if (!getBrowserWindow()) return;
     if (isMobile) return;
     const lk = (selected?.lineKey ?? "").trim();
     if (!lk) return;
@@ -684,16 +730,16 @@ export default function ExegesisTrackClient(props: {
   React.useEffect(() => {
     if (isMobile) return;
 
-    const raf1 = window.requestAnimationFrame(() => {
+    const raf1 = globalThis.window.requestAnimationFrame(() => {
       measureDesktopPanelH();
       measurePanelY();
-      window.requestAnimationFrame(() => {
+      globalThis.window.requestAnimationFrame(() => {
         measureDesktopPanelH();
         measurePanelY();
       });
     });
 
-    return () => window.cancelAnimationFrame(raf1);
+    return () => globalThis.window.cancelAnimationFrame(raf1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMobile, selected?.lineKey, selected?.groupKey, threadKey]);
 
@@ -703,10 +749,27 @@ export default function ExegesisTrackClient(props: {
       measureDesktopPanelH();
       measurePanelY();
     }
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    globalThis.window.addEventListener("resize", onResize);
+    return () => globalThis.window.removeEventListener("resize", onResize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMobile, selected?.lineKey]);
+
+  const composerPromptLabel = canPost
+    ? "Join the conversation"
+    : isAnon
+      ? "Become a member to find out how to join the discussion"
+      : "Become a Patron to join the discussion";
+
+  const composerHelperText =
+    thread?.viewer.kind === "anon"
+      ? "Tip: sign in to vote; upgrade to post."
+      : !canPost
+        ? "Posting requires Patron or Partner."
+        : "";
+
+  const mobileDrawerTransform = drawerOpen
+    ? "translateX(0)"
+    : "translateX(100%)";
 
   const Composer = (
     <div ref={composerWrapRef} className="mt-3">
@@ -736,11 +799,7 @@ export default function ExegesisTrackClient(props: {
             openMembershipModal();
           }}
         >
-          {canPost
-            ? "Join the conversation"
-            : isAnon
-              ? "Become a member to find out how to join the discussion"
-              : "Become a Patron to join the discussion"}
+          {composerPromptLabel}
         </button>
       ) : null}
 
@@ -767,14 +826,8 @@ export default function ExegesisTrackClient(props: {
             onSubmit={() => void postComment()}
           />
 
-          {thread?.viewer.kind === "anon" ? (
-            <div className="mt-2 text-xs opacity-60">
-              Tip: sign in to vote; upgrade to post.
-            </div>
-          ) : !canPost ? (
-            <div className="mt-2 text-xs opacity-60">
-              Posting requires Patron or Partner.
-            </div>
+          {composerHelperText ? (
+            <div className="mt-2 text-xs opacity-60">{composerHelperText}</div>
           ) : null}
         </>
       ) : null}
@@ -1090,9 +1143,7 @@ export default function ExegesisTrackClient(props: {
                     className="fixed right-0 top-0 z-[61] h-[100dvh] md:hidden will-change-transform transition-transform duration-200 ease-out"
                     style={{
                       width: "calc(100vw - 56px)",
-                      transform: drawerOpen
-                        ? "translateX(0)"
-                        : "translateX(100%)",
+                      transform: mobileDrawerTransform,
                       pointerEvents: drawerOpen ? "auto" : "none",
                     }}
                   >

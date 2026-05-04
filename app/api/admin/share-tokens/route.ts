@@ -29,13 +29,24 @@ function cleanStr(v: unknown): string | null {
   return s.length ? s : null;
 }
 
-function parseExpiresAt(expiresAt: string | null | undefined): string | null {
+function parseExpiresAt(expiresAt: string | null | undefined):
+  | {
+      ok: true;
+      value: string | null;
+    }
+  | {
+      ok: false;
+      error: string;
+    } {
   const s = cleanStr(expiresAt);
-  if (!s) return null;
+  if (!s) return { ok: true, value: null };
+
   const t = Date.parse(s);
-  if (!Number.isFinite(t))
-    throw new Error("expiresAt must be an ISO date string");
-  return new Date(t).toISOString();
+  if (!Number.isFinite(t)) {
+    return { ok: false, error: "expiresAt must be an ISO date string" };
+  }
+
+  return { ok: true, value: new Date(t).toISOString() };
 }
 
 export async function POST(req: Request) {
@@ -62,7 +73,16 @@ export async function POST(req: Request) {
       raw.maxRedemptions == null
         ? null
         : Math.max(1, Math.floor(raw.maxRedemptions));
-    const expiresIso = parseExpiresAt(raw.expiresAt);
+
+    const expiresResult = parseExpiresAt(raw.expiresAt);
+    if (!expiresResult.ok) {
+      return NextResponse.json(
+        { ok: false, error: expiresResult.error },
+        { status: 400 },
+      );
+    }
+
+    const expiresIso = expiresResult.value;
     const scopeId = `alb:${albumId}`;
 
     const note = cleanStr(raw.note);

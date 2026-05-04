@@ -302,6 +302,11 @@ export default function AudioEngine() {
   const TELEMETRY_PLAY_THRESHOLD_MS = 5_000;
   const TELEMETRY_PROGRESS_STEP_MS = 15_000;
 
+  // Mobile data needs a much longer runway than Wi-Fi for HLS standby preparation.
+  // This also makes locked-screen handoff less dependent on late timeupdate events.
+  const STANDBY_PREPARE_WINDOW_MS = 90_000;
+  const AUTO_ADVANCE_WINDOW_MS = 1_500;
+
   const tokenCacheRef = React.useRef(
     new Map<string, { token: string; expiresAtMs: number }>(),
   );
@@ -1931,7 +1936,11 @@ export default function AudioEngine() {
       const remainingMs = durMs - ms;
       const nextTrack = getNextTrack();
 
-      if (nextTrack && remainingMs > 0 && remainingMs <= 35_000) {
+      if (
+        nextTrack &&
+        remainingMs > 0 &&
+        remainingMs <= STANDBY_PREPARE_WINDOW_MS
+      ) {
         const warmKey = `${curId}:${nextTrack.recordingId}:${
           telemetrySessionIdRef.current ?? ""
         }`;
@@ -1943,7 +1952,11 @@ export default function AudioEngine() {
         }
       }
 
-      if (nextTrack && remainingMs > 0 && remainingMs <= 1_500) {
+      if (
+        nextTrack &&
+        remainingMs > 0 &&
+        remainingMs <= AUTO_ADVANCE_WINDOW_MS
+      ) {
         void handleAutoAdvance();
       }
 

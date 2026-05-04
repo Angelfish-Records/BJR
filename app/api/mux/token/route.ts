@@ -34,9 +34,30 @@ type TokenOk = {
   correlationId: string;
 };
 
+type MuxGateErrorInput = {
+  correlationId: string;
+  status: number;
+  code: GateCodeRaw;
+  action: GateAction;
+  message: string;
+};
+
 const AUD = "v";
 const ANON_DISTINCT_TRACK_CAP = 1;
 const ANON_WINDOW_DAYS = 30;
+const PLAYBACK_DOMAIN: GateDomain = "playback";
+
+function muxGateError(req: NextRequest, input: MuxGateErrorInput) {
+  return gateError(req, {
+    correlationId: input.correlationId,
+    status: input.status,
+    domain: PLAYBACK_DOMAIN,
+    code: input.code,
+    action: input.action,
+    message: input.message,
+    onResponse: (res) => ensureAnonId(req, res),
+  });
+}
 
 function mustEnv(...names: string[]) {
   for (const n of names) {
@@ -52,8 +73,6 @@ function normalizeAlbumId(raw: string): string {
   while (s.startsWith("alb:")) s = s.slice(4);
   return s.trim();
 }
-
-const PLAYBACK_DOMAIN: GateDomain = "playback";
 
 function normalizePemMaybe(input: string): string {
   const raw = (input ?? "").trim();
@@ -110,40 +129,34 @@ export async function POST(req: NextRequest) {
     typeof body?.playbackId === "string" ? body.playbackId.trim() : "";
 
   if (!playbackId) {
-    return gateError(req, {
+    return muxGateError(req, {
       correlationId,
       status: 400,
-      domain: PLAYBACK_DOMAIN,
       code: "INVALID_REQUEST",
       action: "wait",
       message: "Missing playbackId",
-      onResponse: (res) => ensureAnonId(req, res),
     });
   }
 
   const rawAlbumId = (body?.albumId ?? "").trim();
   if (!rawAlbumId) {
-    return gateError(req, {
+    return muxGateError(req, {
       correlationId,
       status: 400,
-      domain: PLAYBACK_DOMAIN,
       code: "INVALID_REQUEST",
       action: "wait",
       message: "Missing albumId (canonical album context)",
-      onResponse: (res) => ensureAnonId(req, res),
     });
   }
 
   const albumId = normalizeAlbumId(rawAlbumId);
   if (!albumId) {
-    return gateError(req, {
+    return muxGateError(req, {
       correlationId,
       status: 400,
-      domain: PLAYBACK_DOMAIN,
       code: "INVALID_REQUEST",
       action: "wait",
       message: "Missing albumId (canonical album context)",
-      onResponse: (res) => ensureAnonId(req, res),
     });
   }
 
@@ -154,14 +167,12 @@ export async function POST(req: NextRequest) {
   });
 
   if (!playbackAsset.ok) {
-    return gateError(req, {
+    return muxGateError(req, {
       correlationId,
       status: 403,
-      domain: PLAYBACK_DOMAIN,
       code: "INVALID_REQUEST",
       action: "wait",
       message: "Playback asset does not belong to the requested album.",
-      onResponse: (res) => ensureAnonId(req, res),
     });
   }
 
@@ -169,21 +180,19 @@ export async function POST(req: NextRequest) {
 
   const { userId } = await auth();
 
-  // ✅ stable anon id (cookie-backed) — read side
+  // Stable anon id, cookie-backed on the response path.
   const { anonId } = ensureAnonId(req);
 
   const memberId = userId ? await getMemberIdByClerkUserId(userId) : null;
 
   if (userId && !memberId) {
-    return gateError(req, {
+    return muxGateError(req, {
       correlationId,
       status: 403,
-      domain: PLAYBACK_DOMAIN,
       code: "PROVISIONING",
       action: "wait",
       message:
         "Signed in, but your member profile is still being created. Refresh in a moment.",
-      onResponse: (res) => ensureAnonId(req, res),
     });
   }
 
@@ -193,7 +202,7 @@ export async function POST(req: NextRequest) {
     (url.searchParams.get("st") ?? "").trim() ||
     (url.searchParams.get("share") ?? "").trim();
 
-  // NOTE: Share tokens grant album *access*. Playback is a consequence of access.
+  // Share tokens grant album access. Playback is a consequence of access.
   let tokenAllowsPlayback = false;
 
   if (st) {
@@ -210,25 +219,21 @@ export async function POST(req: NextRequest) {
 
     if (!v.ok) {
       if (v.code === "CAP_REACHED") {
-        return gateError(req, {
+        return muxGateError(req, {
           correlationId,
           status: 403,
-          domain: PLAYBACK_DOMAIN,
           code: "CAP_REACHED",
           action: "login",
           message: "Share link cap reached.",
-          onResponse: (res) => ensureAnonId(req, res),
         });
       }
 
-      return gateError(req, {
+      return muxGateError(req, {
         correlationId,
         status: 403,
-        domain: PLAYBACK_DOMAIN,
         code: "ENTITLEMENT_REQUIRED",
         action: "login",
         message: "Invalid or expired share token.",
-        onResponse: (res) => ensureAnonId(req, res),
       });
     }
   }
@@ -241,15 +246,13 @@ export async function POST(req: NextRequest) {
     });
 
     if (distinctCompleted >= ANON_DISTINCT_TRACK_CAP) {
-      return gateError(req, {
+      return muxGateError(req, {
         correlationId,
         status: 403,
-        domain: PLAYBACK_DOMAIN,
         code: "PLAYBACK_CAP_REACHED",
         action: "login",
         message:
           "Please enter an email address to continue listening for free.",
-        onResponse: (res) => ensureAnonId(req, res),
       });
     }
   }
@@ -266,14 +269,12 @@ export async function POST(req: NextRequest) {
   });
 
   if (!d.allowed) {
-    return gateError(req, {
+    return muxGateError(req, {
       correlationId,
       status: 403,
-      domain: PLAYBACK_DOMAIN,
       code: toTokenGateCode(d.code),
       action: (d.action ?? "wait") as GateAction,
       message: d.reason,
-      onResponse: (res) => ensureAnonId(req, res),
     });
   }
 
@@ -319,6 +320,6 @@ export async function POST(req: NextRequest) {
   const out: TokenOk = { ok: true, token: jwt, expiresAt: exp, correlationId };
 
   const res = jsonOk(out, { correlationId });
-  ensureAnonId(req, res); // ✅ persist cookie if missing/invalid
+  ensureAnonId(req, res);
   return res;
 }
