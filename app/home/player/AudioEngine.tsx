@@ -110,6 +110,26 @@ function audioDebugEnabled(): boolean {
   return process.env.NEXT_PUBLIC_AUDIO_DEBUG === "1";
 }
 
+function audioDebugVerboseEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_AUDIO_DEBUG_VERBOSE === "1";
+}
+
+function shouldSendAudioDebugEvent(event: string): boolean {
+  if (audioDebugVerboseEnabled()) return true;
+
+  return (
+    event.includes("failed") ||
+    event.includes("fatal") ||
+    event.includes("rejected") ||
+    event.includes("error") ||
+    event.includes("missing") ||
+    event.includes("unsupported") ||
+    event === "album-session-failed" ||
+    event === "standby-not-ready-fallback-state-advance" ||
+    event === "standby-promote-failed-fallback-state-advance"
+  );
+}
+
 const audioDebugSessionId =
   typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
     ? crypto.randomUUID()
@@ -164,6 +184,7 @@ function sendAudioDebug(payload: {
   detail?: string | null;
 }): void {
   if (!audioDebugEnabled()) return;
+  if (!shouldSendAudioDebugEvent(payload.event)) return;
 
   const event: AudioDebugEvent = {
     t: Math.floor(performance.now()),
@@ -172,26 +193,16 @@ function sendAudioDebug(payload: {
 
   audioDebugBuffer.push(event);
 
-  try {
-    console.info("[audio-debug]", {
-      sessionId: audioDebugSessionId,
-      ...event,
-    });
-  } catch {}
+  if (audioDebugVerboseEnabled()) {
+    try {
+      console.info("[audio-debug]", {
+        sessionId: audioDebugSessionId,
+        ...event,
+      });
+    } catch {}
+  }
 
-  const urgent =
-    payload.event.includes("ended") ||
-    payload.event.includes("rejected") ||
-    payload.event.includes("error") ||
-    payload.event.includes("next") ||
-    payload.event.includes("attach") ||
-    payload.event.includes("handoff") ||
-    payload.event.includes("standby") ||
-    payload.event.includes("promote") ||
-    payload.event === "media-paused-at-ended-ignored" ||
-    payload.event === "playback-progress-heartbeat";
-
-  flushAudioDebugSoon(urgent);
+  flushAudioDebugSoon(true);
 }
 
 function setMediaSessionPositionStateSafe(args: {
@@ -630,7 +641,9 @@ export default function AudioEngine() {
 
       if (!res.ok || !data || !("ok" in data) || data.ok !== true) {
         const gatePayloadRaw =
-          data && "ok" in data && data.ok === false ? (data.gate ?? null) : null;
+          data && "ok" in data && data.ok === false
+            ? (data.gate ?? null)
+            : null;
 
         const msg =
           gatePayloadRaw?.message?.trim() ||
@@ -928,7 +941,10 @@ export default function AudioEngine() {
         await a.play();
 
         sendAudioDebug({
-          event: reason === "promote" ? "standby-promote-play-resolved" : "attach-play-resolved",
+          event:
+            reason === "promote"
+              ? "standby-promote-play-resolved"
+              : "attach-play-resolved",
           albumId: pRef.current.queueContextId ?? null,
           recordingId: meta.recordingId,
           playbackId: meta.playbackId,
@@ -938,7 +954,10 @@ export default function AudioEngine() {
         return true;
       } catch (err: unknown) {
         sendAudioDebug({
-          event: reason === "promote" ? "standby-promote-play-rejected" : "attach-play-rejected",
+          event:
+            reason === "promote"
+              ? "standby-promote-play-rejected"
+              : "attach-play-rejected",
           albumId: pRef.current.queueContextId ?? null,
           recordingId: meta.recordingId,
           playbackId: meta.playbackId,
@@ -1098,6 +1117,8 @@ export default function AudioEngine() {
         return false;
       }
 
+      stopDeck(oldDeck);
+
       activeDeckRef.current = newDeck;
       standbyRef.current = null;
       telemetrySessionIdRef.current = newPlaybackSessionId();
@@ -1114,10 +1135,7 @@ export default function AudioEngine() {
 
       pRef.current.advanceFromEngine();
 
-      window.setTimeout(() => {
-        stopDeck(oldDeck);
-        suppressPauseDeckRef.current = null;
-      }, 250);
+      suppressPauseDeckRef.current = null;
 
       sendAudioDebug({
         event: "standby-promote-complete",
@@ -1203,7 +1221,11 @@ export default function AudioEngine() {
 
     if (!ok || seq !== loadSeq.current) return;
 
-    if (s.intent === "play" || playIntentRef.current || s.status === "loading") {
+    if (
+      s.intent === "play" ||
+      playIntentRef.current ||
+      s.status === "loading"
+    ) {
       const played = await playDeck(activeDeck, "active");
       if (played) {
         playIntentRef.current = false;
@@ -1529,7 +1551,9 @@ export default function AudioEngine() {
           : null;
 
       const albumId =
-        typeof detail?.albumId === "string" ? normalizeAlbumId(detail.albumId) : "";
+        typeof detail?.albumId === "string"
+          ? normalizeAlbumId(detail.albumId)
+          : "";
       const st =
         typeof detail?.st === "string" ? detail.st.trim() || null : null;
 
@@ -1754,8 +1778,10 @@ export default function AudioEngine() {
       sendAudioDebug({
         event,
         albumId: pRef.current.queueContextId ?? null,
-        recordingId: meta?.recordingId ?? pRef.current.current?.recordingId ?? null,
-        playbackId: meta?.playbackId ?? pRef.current.current?.muxPlaybackId ?? null,
+        recordingId:
+          meta?.recordingId ?? pRef.current.current?.recordingId ?? null,
+        playbackId:
+          meta?.playbackId ?? pRef.current.current?.muxPlaybackId ?? null,
         source: `AudioEngine.${deckId}`,
         detail:
           detail ??
