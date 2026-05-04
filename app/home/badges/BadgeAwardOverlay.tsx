@@ -105,8 +105,18 @@ export default function BadgeAwardOverlay(props: Props) {
       />
 
       <div
+        role="button"
+        tabIndex={0}
+        aria-label="Dismiss badge award overlay"
         onClick={(e) => {
           if (e.target === e.currentTarget) onDismiss();
+        }}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onDismiss();
+          }
         }}
         style={{
           position: "fixed",

@@ -157,10 +157,7 @@ export default function AdminEntitlementsPanel(props: {
 
     const areaPath = [
       `M ${coords[0]?.x.toFixed(2) ?? "0"} ${height}`,
-      ...coords.map(
-        (point, index) =>
-          `${index === 0 ? "L" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`,
-      ),
+      ...coords.map((point) => `L ${point.x.toFixed(2)} ${point.y.toFixed(2)}`),
       `L ${coords[coords.length - 1]?.x.toFixed(2) ?? "100"} ${height}`,
       "Z",
     ].join(" ");
