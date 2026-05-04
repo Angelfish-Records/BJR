@@ -33,6 +33,36 @@ const AUTO_QUALIFICATION_MODE_OPTIONS = [
   },
 ] as const;
 
+type BadgeDefinitionParent = {
+  awardMode?: unknown;
+  autoQualificationMode?: unknown;
+};
+
+function parentObject(parent: unknown): BadgeDefinitionParent | null {
+  return parent && typeof parent === "object"
+    ? (parent as BadgeDefinitionParent)
+    : null;
+}
+
+function isAutomaticBadge(parent: unknown): boolean {
+  return parentObject(parent)?.awardMode === "automatic";
+}
+
+function autoQualificationMode(parent: unknown): string {
+  return String(parentObject(parent)?.autoQualificationMode ?? "");
+}
+
+function hiddenUnlessAutomatic(props: { parent: unknown }): boolean {
+  return !isAutomaticBadge(props.parent);
+}
+
+function hiddenUnlessMode(
+  parent: unknown,
+  modes: readonly string[],
+): boolean {
+  return !modes.includes(autoQualificationMode(parent));
+}
+
 export const badgeDefinition = defineType({
   name: "badgeDefinition",
   title: "Badge Definition",
@@ -127,10 +157,7 @@ export const badgeDefinition = defineType({
       title: "Auto-award enabled",
       type: "boolean",
       initialValue: true,
-      hidden: ({ parent }) =>
-        !parent ||
-        typeof parent !== "object" ||
-        (parent as { awardMode?: unknown }).awardMode !== "automatic",
+      hidden: hiddenUnlessAutomatic,
     }),
     defineField({
       name: "autoQualificationMode",
@@ -142,17 +169,11 @@ export const badgeDefinition = defineType({
           value: option.value,
         })),
       },
-      hidden: ({ parent }) =>
-        !parent ||
-        typeof parent !== "object" ||
-        (parent as { awardMode?: unknown }).awardMode !== "automatic",
+      hidden: hiddenUnlessAutomatic,
       validation: (rule) =>
         rule.custom((value, context) => {
-          const parent = context.parent;
           if (
-            parent &&
-            typeof parent === "object" &&
-            (parent as { awardMode?: unknown }).awardMode === "automatic" &&
+            isAutomaticBadge(context.parent) &&
             (typeof value !== "string" || !value.trim())
           ) {
             return "Automatic badges require an automatic qualification mode.";
@@ -166,18 +187,11 @@ export const badgeDefinition = defineType({
       title: "Recording ID",
       type: "string",
       hidden: ({ parent }) =>
-        !parent ||
-        typeof parent !== "object" ||
-        ![
+        hiddenUnlessMode(parent, [
           "recording_minutes_streamed",
           "recording_play_count",
           "recording_complete_count",
-        ].includes(
-          String(
-            (parent as { autoQualificationMode?: unknown })
-              .autoQualificationMode ?? "",
-          ),
-        ),
+        ]),
     }),
     defineField({
       name: "minMinutes",
@@ -185,14 +199,10 @@ export const badgeDefinition = defineType({
       type: "number",
       validation: (rule) => rule.min(0),
       hidden: ({ parent }) =>
-        !parent ||
-        typeof parent !== "object" ||
-        !["minutes_streamed", "recording_minutes_streamed"].includes(
-          String(
-            (parent as { autoQualificationMode?: unknown })
-              .autoQualificationMode ?? "",
-          ),
-        ),
+        hiddenUnlessMode(parent, [
+          "minutes_streamed",
+          "recording_minutes_streamed",
+        ]),
     }),
     defineField({
       name: "minPlayCount",
@@ -200,18 +210,11 @@ export const badgeDefinition = defineType({
       type: "number",
       validation: (rule) => rule.min(0),
       hidden: ({ parent }) =>
-        !parent ||
-        typeof parent !== "object" ||
-        ![
+        hiddenUnlessMode(parent, [
           "play_count",
           "recording_play_count",
           "active_within_window",
-        ].includes(
-          String(
-            (parent as { autoQualificationMode?: unknown })
-              .autoQualificationMode ?? "",
-          ),
-        ),
+        ]),
     }),
     defineField({
       name: "minCompletedCount",
@@ -219,18 +222,11 @@ export const badgeDefinition = defineType({
       type: "number",
       validation: (rule) => rule.min(0),
       hidden: ({ parent }) =>
-        !parent ||
-        typeof parent !== "object" ||
-        ![
+        hiddenUnlessMode(parent, [
           "complete_count",
           "recording_complete_count",
           "active_within_window",
-        ].includes(
-          String(
-            (parent as { autoQualificationMode?: unknown })
-              .autoQualificationMode ?? "",
-          ),
-        ),
+        ]),
     }),
     defineField({
       name: "minProgressCount",
@@ -238,12 +234,7 @@ export const badgeDefinition = defineType({
       type: "number",
       validation: (rule) => rule.min(0),
       hidden: ({ parent }) =>
-        !parent ||
-        typeof parent !== "object" ||
-        String(
-          (parent as { autoQualificationMode?: unknown })
-            .autoQualificationMode ?? "",
-        ) !== "active_within_window",
+        hiddenUnlessMode(parent, ["active_within_window"]),
     }),
     defineField({
       name: "minContributionCount",
@@ -251,73 +242,42 @@ export const badgeDefinition = defineType({
       type: "number",
       validation: (rule) => rule.min(0),
       hidden: ({ parent }) =>
-        !parent ||
-        typeof parent !== "object" ||
-        String(
-          (parent as { autoQualificationMode?: unknown })
-            .autoQualificationMode ?? "",
-        ) !== "exegesis_contribution_count",
+        hiddenUnlessMode(parent, ["exegesis_contribution_count"]),
     }),
     defineField({
       name: "minVoteCount",
       title: "Minimum vote count",
       type: "number",
       validation: (rule) => rule.min(0),
-      hidden: ({ parent }) =>
-        !parent ||
-        typeof parent !== "object" ||
-        String(
-          (parent as { autoQualificationMode?: unknown })
-            .autoQualificationMode ?? "",
-        ) !== "exegesis_vote_tally",
+      hidden: ({ parent }) => hiddenUnlessMode(parent, ["exegesis_vote_tally"]),
     }),
     defineField({
       name: "joinedOnOrAfter",
       title: "Joined on or after",
       type: "datetime",
       hidden: ({ parent }) =>
-        !parent ||
-        typeof parent !== "object" ||
-        String(
-          (parent as { autoQualificationMode?: unknown })
-            .autoQualificationMode ?? "",
-        ) !== "joined_within_window",
+        hiddenUnlessMode(parent, ["joined_within_window"]),
     }),
     defineField({
       name: "joinedBefore",
       title: "Joined before",
       type: "datetime",
       hidden: ({ parent }) =>
-        !parent ||
-        typeof parent !== "object" ||
-        String(
-          (parent as { autoQualificationMode?: unknown })
-            .autoQualificationMode ?? "",
-        ) !== "joined_within_window",
+        hiddenUnlessMode(parent, ["joined_within_window"]),
     }),
     defineField({
       name: "activeOnOrAfter",
       title: "Active on or after",
       type: "datetime",
       hidden: ({ parent }) =>
-        !parent ||
-        typeof parent !== "object" ||
-        String(
-          (parent as { autoQualificationMode?: unknown })
-            .autoQualificationMode ?? "",
-        ) !== "active_within_window",
+        hiddenUnlessMode(parent, ["active_within_window"]),
     }),
     defineField({
       name: "activeBefore",
       title: "Active before",
       type: "datetime",
       hidden: ({ parent }) =>
-        !parent ||
-        typeof parent !== "object" ||
-        String(
-          (parent as { autoQualificationMode?: unknown })
-            .autoQualificationMode ?? "",
-        ) !== "active_within_window",
+        hiddenUnlessMode(parent, ["active_within_window"]),
     }),
     defineField({
       name: "internalNote",

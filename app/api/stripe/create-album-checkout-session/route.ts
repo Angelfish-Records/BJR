@@ -4,164 +4,25 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { ensureStripeCustomerForClerkUser } from "@/lib/stripeCustomer";
+import {
+  buildCheckoutReturnUrl,
+  safeCheckoutReturnTo,
+  sameOriginOrAllowed,
+} from "@/lib/checkoutReturnUrl";
 import { getAlbumOffer } from "../../../../lib/albumOffers";
 import { normalizeEmail, ensureMemberByEmail } from "../../../../lib/members";
 
 export const runtime = "nodejs";
 
-function must(v: string, name: string) {
-  if (!v) throw new Error(`Missing ${name}`);
-  return v;
-}
-
-function sameOriginOrAllowed(req: Request, appUrl: string): boolean {
-  const origin = req.headers.get("origin");
-  if (!origin) return true;
-
-  let app: URL;
-  let o: URL;
-  try {
-    app = new URL(appUrl);
-    o = new URL(origin);
-  } catch {
-    return false;
-  }
-
-  if (o.origin === app.origin) return true;
-
-  const stripWww = (h: string) => h.replace(/^www\./, "");
-  if (
-    stripWww(o.hostname) === stripWww(app.hostname) &&
-    o.protocol === app.protocol
-  )
-    return true;
-
-  if (o.hostname.endsWith(".vercel.app")) return true;
-  return false;
-}
-
-// --- returnTo sanitization (local + deterministic) ---
-const PRESERVE_PREFIXES = ["utm_"];
-const PRESERVE_KEYS = new Set<string>([
-  "st",
-  "share",
-  "autoplay",
-  "post",
-  "pt",
-  "gift",
-  "checkout",
-]);
-const STRIP_KEYS = new Set<string>(["p", "panel", "album", "track", "t"]);
-
-function looksLikeSafeRelativePath(s: string): boolean {
-  if (!s.startsWith("/")) return false;
-  if (s.startsWith("//")) return false;
-  const lower = s.toLowerCase();
-  if (lower.includes("://")) return false;
-  return true;
-}
-
-function isDisallowedPath(pathname: string): boolean {
-  return (
-    pathname.startsWith("/api") ||
-    pathname.startsWith("/admin") ||
-    pathname.startsWith("/studio") ||
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/trpc")
-  );
-}
-
-function pickPreservedParams(u: URL): URLSearchParams {
-  const out = new URLSearchParams();
-
-  const st = (
-    u.searchParams.get("st") ??
-    u.searchParams.get("share") ??
-    ""
-  ).trim();
-  if (st) out.set("st", st);
-
-  const autoplay = (u.searchParams.get("autoplay") ?? "").trim();
-  if (autoplay) out.set("autoplay", autoplay);
-
-  for (const k of ["post", "pt", "gift", "checkout"] as const) {
-    const v = (u.searchParams.get(k) ?? "").trim();
-    if (v) out.set(k, v);
-  }
-
-  for (const [k, v] of u.searchParams.entries()) {
-    if (PRESERVE_PREFIXES.some((p) => k.startsWith(p)) && v) out.set(k, v);
-  }
-
-  return out;
-}
-
-function safeReturnTo(
-  appUrl: string,
-  raw: unknown,
-  fallbackPath: string,
-): { pathname: string; params: URLSearchParams } {
-  const fallback = { pathname: fallbackPath, params: new URLSearchParams() };
-
-  if (typeof raw !== "string") return fallback;
-  const s = raw.trim();
-  if (!s) return fallback;
-  if (!looksLikeSafeRelativePath(s)) return fallback;
-
-  let u: URL;
-  try {
-    u = new URL(s, appUrl);
-  } catch {
-    return fallback;
-  }
-
-  if (isDisallowedPath(u.pathname)) return fallback;
-
-  const out = new URLSearchParams();
-  const preserved = pickPreservedParams(u);
-
-  for (const [k, v] of preserved.entries()) {
-    if (STRIP_KEYS.has(k)) continue;
-    if (
-      PRESERVE_KEYS.has(k) ||
-      PRESERVE_PREFIXES.some((p) => k.startsWith(p))
-    ) {
-      const vv = (v ?? "").trim();
-      if (vv) out.set(k, vv);
-    }
-  }
-
-  const st = (out.get("st") ?? out.get("share") ?? "").trim();
-  out.delete("share");
-  if (st) out.set("st", st);
-
-  return { pathname: u.pathname, params: out };
-}
-
-function buildReturnUrl(
-  appUrl: string,
-  pathname: string,
-  params: URLSearchParams,
-  patch: Record<string, string | null | undefined>,
-): string {
-  const dest = new URL(pathname, appUrl);
-  for (const [k, v] of params.entries()) dest.searchParams.set(k, v);
-
-  for (const [k, v] of Object.entries(patch)) {
-    if (v === null || v === undefined || String(v).trim() === "") {
-      dest.searchParams.delete(k);
-    } else {
-      dest.searchParams.set(k, String(v));
-    }
-  }
-
-  return dest.toString();
+function must(value: string, name: string): string {
+  if (!value) throw new Error(`Missing ${name}`);
+  return value;
 }
 
 type Body = {
   albumSlug?: unknown;
   email?: unknown;
-  returnTo?: unknown; // NEW
+  returnTo?: unknown;
 };
 
 export async function POST(req: Request) {
@@ -183,6 +44,7 @@ export async function POST(req: Request) {
 
   const body = (await req.json().catch(() => null)) as Body | null;
   const albumSlug = (body?.albumSlug ?? "").toString().trim().toLowerCase();
+
   if (!albumSlug) {
     return NextResponse.json(
       { ok: false, error: "Missing albumSlug" },
@@ -209,7 +71,6 @@ export async function POST(req: Request) {
   const emailFromBody = typeof body?.email === "string" ? body.email : "";
   const email = normalizeEmail(emailFromClerk || emailFromBody);
 
-  // Logged-out buyers: require an email so the purchase can be reconciled deterministically.
   if (!userId && !email) {
     return NextResponse.json(
       { ok: false, error: "Email required when logged out" },
@@ -217,7 +78,6 @@ export async function POST(req: Request) {
     );
   }
 
-  // Pre-create member for logged-out path (makes webhook linking less brittle)
   if (!userId && email) {
     await ensureMemberByEmail({
       email,
@@ -230,7 +90,6 @@ export async function POST(req: Request) {
     });
   }
 
-  // Logged-in: ensure we have a Stripe customer (prevents dupes + prefilled Checkout)
   let customer: string | undefined;
   if (userId) {
     if (!email) {
@@ -248,18 +107,27 @@ export async function POST(req: Request) {
     customer = customerId;
   }
 
-  // returnTo drives everything; fallback is neutral canonical surface.
-  const rt = safeReturnTo(APP_URL, body?.returnTo, "/player");
+  const returnTarget = safeCheckoutReturnTo(APP_URL, body?.returnTo, "/player");
 
-  // checkout result banners should not mix with gift banners
-  const success_url = buildReturnUrl(APP_URL, rt.pathname, rt.params, {
-    gift: null,
-    checkout: "success",
-  });
-  const cancel_url = buildReturnUrl(APP_URL, rt.pathname, rt.params, {
-    gift: null,
-    checkout: "cancel",
-  });
+  const success_url = buildCheckoutReturnUrl(
+    APP_URL,
+    returnTarget.pathname,
+    returnTarget.params,
+    {
+      gift: null,
+      checkout: "success",
+    },
+  );
+
+  const cancel_url = buildCheckoutReturnUrl(
+    APP_URL,
+    returnTarget.pathname,
+    returnTarget.params,
+    {
+      gift: null,
+      checkout: "cancel",
+    },
+  );
 
   const session = await stripe.checkout.sessions.create({
     mode: "payment",

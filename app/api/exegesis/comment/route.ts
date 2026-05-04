@@ -1,11 +1,9 @@
 // web/app/api/exegesis/comment/route.ts
 import "server-only";
 import crypto from "crypto";
-import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { NextRequest } from "next/server";
 import { sql } from "@vercel/postgres";
 
-import type { GatePayload } from "@/app/home/gating/gateTypes";
 import type { IdentityDTO } from "@/lib/exegesisIdentityDto";
 
 import { hasAnyEntitlement } from "@/lib/entitlements";
@@ -22,12 +20,15 @@ import { markOverlayAnnouncedForAwardedBadges } from "@/lib/badgeAwardAnnounceme
 
 import { resolveGroupKeyForAnchor } from "@/lib/exegesis/resolveGroupKey";
 import { validateAndSanitizeTipTapDoc } from "@/lib/exegesis/richText";
+import { correlationIdFromRequest, gateError, jsonOk } from "@/app/api/_gate";
 import {
-  correlationIdFromRequest,
-  gateError,
-  jsonOk,
-  withCorrelationId,
-} from "@/app/api/_gate";
+  bodyRecord,
+  isUuid,
+  jsonExegesisErr,
+  normString,
+  requireExegesisMemberId,
+  type ExegesisApiErr,
+} from "@/lib/exegesis/apiRouteHelpers";
 
 export const runtime = "nodejs";
 
@@ -41,10 +42,10 @@ type ApiOk = {
   newlyAwardedBadges: NewlyAwardedBadge[];
 };
 
-type ApiErr = { ok: false; error: string; gate?: GatePayload };
+type ApiErr = ExegesisApiErr;
 
 function jsonErr(correlationId: string, status: number, body: ApiErr) {
-  return withCorrelationId(NextResponse.json(body, { status }), correlationId);
+  return jsonExegesisErr(correlationId, status, body);
 }
 
 type CommentDTO = {
@@ -80,36 +81,12 @@ type ThreadMetaDTO = {
   updatedAt: string;
 };
 
-function norm(s: unknown): string {
-  return typeof s === "string" ? s.trim() : "";
-}
-
-function isUuid(v: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    v,
-  );
-}
-
 function clampInt(v: unknown, min: number, max: number): number | null {
   if (typeof v !== "number" || !Number.isFinite(v)) return null;
   const n = Math.trunc(v);
   if (n < min) return min;
   if (n > max) return max;
   return n;
-}
-
-async function requireMemberId(): Promise<string | null> {
-  const { userId } = await auth();
-  if (!userId) return null;
-
-  const r = await sql<{ id: string }>`
-    select id
-    from members
-    where clerk_user_id = ${userId}
-    limit 1
-  `;
-  const memberId = r.rows?.[0]?.id ?? "";
-  return memberId || null;
 }
 
 async function requireCanPost(memberId: string): Promise<boolean> {
@@ -185,10 +162,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const b =
-    typeof body === "object" && body !== null
-      ? (body as Record<string, unknown>)
-      : null;
+  const b = bodyRecord(body);
 
   if (!b) {
     return jsonErr(correlationId, 400, {
@@ -197,19 +171,19 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const recordingId = norm(b.recordingId);
-  const lineKey = norm(b.lineKey);
-  const groupKeyClient = norm(b.groupKey);
+  const recordingId = normString(b.recordingId);
+  const lineKey = normString(b.lineKey);
+  const groupKeyClient = normString(b.groupKey);
 
   function normNullableId(v: unknown): string | null {
-    const s = norm(v);
+    const s = normString(v);
     if (!s) return null;
     if (s === "null" || s === "undefined") return null;
     return s;
   }
 
   const parentId = normNullableId(b.parentId);
-  const legacyBodyPlain = norm(b.bodyPlain);
+  const legacyBodyPlain = normString(b.bodyPlain);
   const hasBodyRich = "bodyRich" in b;
   const bodyRichInput: unknown = hasBodyRich ? (b.bodyRich ?? null) : null;
 
@@ -255,8 +229,8 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const lineTextSnapshot = norm(b.lineTextSnapshot);
-  const lyricsVersion = norm(b.lyricsVersion) || null;
+  const lineTextSnapshot = normString(b.lineTextSnapshot);
+  const lyricsVersion = normString(b.lyricsVersion) || null;
 
   const tMs = clampInt(b.tMs, 0, 60 * 60 * 1000);
   const tMsOrNull = tMs === null ? null : tMs;
@@ -322,7 +296,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const memberId = await requireMemberId();
+  const memberId = await requireExegesisMemberId();
   if (!memberId) {
     return gateError(req, {
       correlationId,

@@ -1,20 +1,20 @@
 // web/app/api/exegesis/comment/edit/route.ts
 import "server-only";
-import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { NextRequest } from "next/server";
 import { sql } from "@vercel/postgres";
-
-import type { GatePayload } from "@/app/home/gating/gateTypes";
 
 import { hasAnyEntitlement } from "@/lib/entitlements";
 import { ENTITLEMENTS } from "@/lib/vocab";
 import { validateAndSanitizeTipTapDoc } from "@/lib/exegesis/richText";
+import { correlationIdFromRequest, gateError, jsonOk } from "@/app/api/_gate";
 import {
-  correlationIdFromRequest,
-  gateError,
-  jsonOk,
-  withCorrelationId,
-} from "@/app/api/_gate";
+  bodyRecord,
+  isUuid,
+  jsonExegesisErr,
+  normString,
+  requireExegesisMemberId,
+  type ExegesisApiErr,
+} from "@/lib/exegesis/apiRouteHelpers";
 
 export const runtime = "nodejs";
 
@@ -52,38 +52,10 @@ type ThreadMetaDTO = {
 };
 
 type ApiOk = { ok: true; comment: CommentDTO; meta: ThreadMetaDTO };
-type ApiErr = {
-  ok: false;
-  error: string;
-  gate?: GatePayload;
-};
+type ApiErr = ExegesisApiErr;
 
 function jsonErr(correlationId: string, status: number, body: ApiErr) {
-  return withCorrelationId(NextResponse.json(body, { status }), correlationId);
-}
-
-function norm(v: unknown): string {
-  return typeof v === "string" ? v.trim() : "";
-}
-
-function isUuid(v: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    v,
-  );
-}
-
-async function requireMemberId(): Promise<string | null> {
-  const { userId } = await auth();
-  if (!userId) return null;
-
-  const r = await sql<{ id: string }>`
-    select id
-    from members
-    where clerk_user_id = ${userId}
-    limit 1
-  `;
-  const memberId = r.rows?.[0]?.id ?? "";
-  return memberId || null;
+  return jsonExegesisErr(correlationId, status, body);
 }
 
 async function requireCanPost(memberId: string): Promise<boolean> {
@@ -106,10 +78,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const b =
-    typeof raw === "object" && raw !== null
-      ? (raw as Record<string, unknown>)
-      : null;
+  const b = bodyRecord(raw);
   if (!b) {
     return jsonErr(correlationId, 400, {
       ok: false,
@@ -117,7 +86,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const commentId = norm(b.commentId);
+  const commentId = normString(b.commentId);
   if (!commentId || !isUuid(commentId)) {
     return jsonErr(correlationId, 400, {
       ok: false,
@@ -157,7 +126,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const memberId = await requireMemberId();
+  const memberId = await requireExegesisMemberId();
   if (!memberId) {
     return gateError(req, {
       correlationId,
