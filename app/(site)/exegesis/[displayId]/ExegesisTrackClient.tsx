@@ -307,7 +307,6 @@ export default function ExegesisTrackClient(props: ExegesisTrackClientProps) {
     lyrics,
     setSelected,
     setFocusedRootId,
-    threadKey: "",
     isMobile,
     selectedLineKey: (selected?.lineKey ?? "").trim(),
     setDrawerOpen,
