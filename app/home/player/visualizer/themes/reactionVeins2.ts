@@ -1,16 +1,5 @@
 import type { Theme } from "../types";
-import { createProgram, makeFullscreenTriangle } from "../gl";
-import { createPingPong, type PingPong } from "../gl/pingpong";
-
-const VS = `#version 300 es
-layout(location=0) in vec2 aPos;
-out vec2 vUv;
-
-void main() {
-  vUv = aPos * 0.5 + 0.5;
-  gl_Position = vec4(aPos, 0.0, 1.0);
-}
-`;
+import { createPingPongTheme } from "./themeFactory";
 
 const SIM_FS = `#version 300 es
 precision highp float;
@@ -268,111 +257,9 @@ void main() {
 `;
 
 export function createReactionVeins2Theme(): Theme {
-  let simProgram: WebGLProgram | null = null;
-  let displayProgram: WebGLProgram | null = null;
-  let tri: {
-    vao: WebGLVertexArrayObject | null;
-    buf: WebGLBuffer | null;
-  } | null = null;
-  let pingpong: PingPong | null = null;
-  let frame = 0;
-
-  let simPrev: WebGLUniformLocation | null = null;
-  let simRes: WebGLUniformLocation | null = null;
-  let simTime: WebGLUniformLocation | null = null;
-  let simEnergy: WebGLUniformLocation | null = null;
-  let simFrame: WebGLUniformLocation | null = null;
-
-  let displayState: WebGLUniformLocation | null = null;
-  let displayRes: WebGLUniformLocation | null = null;
-  let displayTime: WebGLUniformLocation | null = null;
-  let displayEnergy: WebGLUniformLocation | null = null;
-
-  return {
+  return createPingPongTheme({
     name: "reaction-veins-2",
-
-    init(gl) {
-      simProgram = createProgram(gl, VS, SIM_FS);
-      displayProgram = createProgram(gl, VS, DISPLAY_FS);
-      tri = makeFullscreenTriangle(gl);
-      pingpong = createPingPong(gl, 1, 1);
-      frame = 0;
-
-      simPrev = gl.getUniformLocation(simProgram, "uPrev");
-      simRes = gl.getUniformLocation(simProgram, "uRes");
-      simTime = gl.getUniformLocation(simProgram, "uTime");
-      simEnergy = gl.getUniformLocation(simProgram, "uEnergy");
-      simFrame = gl.getUniformLocation(simProgram, "uFrame");
-
-      displayState = gl.getUniformLocation(displayProgram, "uState");
-      displayRes = gl.getUniformLocation(displayProgram, "uRes");
-      displayTime = gl.getUniformLocation(displayProgram, "uTime");
-      displayEnergy = gl.getUniformLocation(displayProgram, "uEnergy");
-    },
-
-    render(gl, opts) {
-      if (!simProgram || !displayProgram || !tri || !pingpong) return;
-
-      const outputFramebuffer = gl.getParameter(
-        gl.FRAMEBUFFER_BINDING,
-      ) as WebGLFramebuffer | null;
-
-      pingpong.resize(gl, opts.width, opts.height);
-
-      gl.bindVertexArray(tri.vao);
-
-      gl.useProgram(simProgram);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, pingpong.dstFbo());
-      gl.viewport(0, 0, opts.width, opts.height);
-
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, pingpong.srcTex());
-
-      gl.uniform1i(simPrev, 0);
-      gl.uniform2f(simRes, opts.width, opts.height);
-      gl.uniform1f(simTime, opts.time);
-      gl.uniform1f(simEnergy, opts.audio.energy);
-      gl.uniform1f(simFrame, frame);
-
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-      pingpong.swap();
-
-      gl.useProgram(displayProgram);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, outputFramebuffer);
-      gl.viewport(0, 0, opts.width, opts.height);
-
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, pingpong.srcTex());
-
-      gl.uniform1i(displayState, 0);
-      gl.uniform2f(displayRes, opts.width, opts.height);
-      gl.uniform1f(displayTime, opts.time);
-      gl.uniform1f(displayEnergy, opts.audio.energy);
-
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-      gl.bindTexture(gl.TEXTURE_2D, null);
-      gl.bindVertexArray(null);
-      gl.useProgram(null);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, outputFramebuffer);
-
-      frame += 1;
-    },
-
-    dispose(gl) {
-      pingpong?.dispose(gl);
-      pingpong = null;
-
-      if (tri?.buf) gl.deleteBuffer(tri.buf);
-      if (tri?.vao) gl.deleteVertexArray(tri.vao);
-      tri = null;
-
-      if (simProgram) gl.deleteProgram(simProgram);
-      simProgram = null;
-
-      if (displayProgram) gl.deleteProgram(displayProgram);
-      displayProgram = null;
-    },
-  };
+    simFragmentShader: SIM_FS,
+    displayFragmentShader: DISPLAY_FS,
+  });
 }
