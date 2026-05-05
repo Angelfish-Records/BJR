@@ -180,8 +180,8 @@ export default function StageTransportBar() {
           label="Previous"
           onClick={() => {
             lockFor(320);
-            window.dispatchEvent(new Event("af:play-intent"));
             p.prev();
+            window.dispatchEvent(new Event("af:play-intent"));
           }}
           disabled={prevDisabled}
         >
@@ -192,17 +192,18 @@ export default function StageTransportBar() {
           label={playingish ? "Pause" : "Play"}
           onClick={() => {
             lockFor(180);
+
             if (playingish) {
               window.dispatchEvent(new Event("af:pause-intent"));
-              p.setIntent("pause");
               p.pause();
-            } else {
-              const t = p.current ?? p.queue[0];
-              if (!t) return;
-              window.dispatchEvent(new Event("af:play-intent"));
-              p.setIntent("play");
-              p.play(t);
+              return;
             }
+
+            const t = p.current ?? p.queue[0];
+            if (!t) return;
+
+            p.play(t);
+            window.dispatchEvent(new Event("af:play-intent"));
           }}
           disabled={playDisabled}
         >
@@ -213,8 +214,8 @@ export default function StageTransportBar() {
           label="Next"
           onClick={() => {
             lockFor(320);
-            window.dispatchEvent(new Event("af:play-intent"));
             p.next();
+            window.dispatchEvent(new Event("af:play-intent"));
           }}
           disabled={nextDisabled}
         >

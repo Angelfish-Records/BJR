@@ -386,7 +386,7 @@ export default function LyricsOverlay(props: {
   const lineMaxPx = isInline ? 820 : 980;
   const lineMax = `${lineMaxPx}px`;
 
-  const discourseYOffsetPx = isInline ? 3 : 0;
+  const discourseYOffsetPx = isInline ? 1 : 0;
 
   const styleVars: React.CSSProperties & Record<`--af-${string}`, string> = {
     "--af-lyrics-side-pad": `${sidePadPx}px`,

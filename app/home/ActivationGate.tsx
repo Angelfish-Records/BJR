@@ -1034,7 +1034,7 @@ export default function ActivationGate(props: Props) {
                     "All Patron benefits",
                     "Release credits",
                     "Creative livestreams",
-                    "Something else",
+                    "Demo recordings",
                   ],
                 }}
               />

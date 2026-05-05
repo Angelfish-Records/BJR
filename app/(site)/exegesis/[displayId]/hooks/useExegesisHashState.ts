@@ -13,7 +13,9 @@ export type ExegesisSelectedLine = {
 
 export default function useExegesisHashState(props: {
   lyrics: LyricsApiOk;
-  setSelected: React.Dispatch<React.SetStateAction<ExegesisSelectedLine | null>>;
+  setSelected: React.Dispatch<
+    React.SetStateAction<ExegesisSelectedLine | null>
+  >;
   setFocusedRootId: React.Dispatch<React.SetStateAction<string>>;
   threadKey: string;
   isMobile: boolean;
@@ -38,39 +40,49 @@ export default function useExegesisHashState(props: {
   React.useEffect(() => {
     if (!cues || cues.length === 0) return;
 
-    const h = parseHash();
+    function applyHashState() {
+      const h = parseHash();
 
-    if (!h.lineKey) {
-      setSelected(null);
-      return;
+      const rid = (h.rootId ?? "").trim();
+      setFocusedRootId(rid);
+
+      if (!h.lineKey) {
+        setSelected(null);
+        return;
+      }
+
+      const pick = cues.find((c) => c.lineKey === h.lineKey);
+      if (!pick) {
+        setSelected(null);
+        return;
+      }
+
+      setSelected({
+        lineKey: pick.lineKey,
+        lineText: pick.text,
+        tMs: pick.tMs,
+        groupKey:
+          (groupMap?.[pick.lineKey]?.canonicalGroupKey ??
+            pick.canonicalGroupKey ??
+            "") ||
+          undefined,
+      });
+
+      if (h.commentId) pendingScrollCommentIdRef.current = h.commentId;
+
+      openFromHashRef.current = true;
     }
 
-    const pick = cues.find((c) => c.lineKey === h.lineKey);
-    if (!pick) {
-      setSelected(null);
-      return;
-    }
+    applyHashState();
 
-    setSelected({
-      lineKey: pick.lineKey,
-      lineText: pick.text,
-      tMs: pick.tMs,
-      groupKey:
-        (groupMap?.[pick.lineKey]?.canonicalGroupKey ??
-          pick.canonicalGroupKey ??
-          "") || undefined,
-    });
+    globalThis.window.addEventListener("hashchange", applyHashState);
+    globalThis.window.addEventListener("popstate", applyHashState);
 
-    if (h.commentId) pendingScrollCommentIdRef.current = h.commentId;
-
-    openFromHashRef.current = true;
-  }, [lyricsRecordingId, cues, groupMap, setSelected]);
-
-  React.useEffect(() => {
-    const h = parseHash();
-    const rid = (h.rootId ?? "").trim();
-    setFocusedRootId(rid);
-  }, [threadKey, setFocusedRootId]);
+    return () => {
+      globalThis.window.removeEventListener("hashchange", applyHashState);
+      globalThis.window.removeEventListener("popstate", applyHashState);
+    };
+  }, [lyricsRecordingId, cues, groupMap, setSelected, setFocusedRootId]);
 
   React.useEffect(() => {
     if (!isMobile) return;
