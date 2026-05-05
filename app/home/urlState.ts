@@ -26,6 +26,19 @@ const PERSIST_KEYS = new Set(["st"]);
 // Explicitly forbidden legacy/state keys (must never persist).
 const FORBIDDEN_KEYS = new Set(["p", "album", "track", "t"]);
 
+function isJournalPath(pathname: string): boolean {
+  return pathname === "/journal" || pathname.startsWith("/journal/");
+}
+
+function safeGetPathname(): string {
+  if (typeof window === "undefined") return "";
+  return window.location.pathname || "";
+}
+
+function stripPathScopedKeys(params: URLSearchParams, pathname: string): void {
+  if (!isJournalPath(pathname)) params.delete("post");
+}
+
 function safeGetSearch(): string {
   if (typeof window === "undefined") return "";
   return window.location.search || "";
@@ -38,6 +51,14 @@ function isAllowedKey(k: string): boolean {
 
 /** Mutates params to enforce the secondary-query policy. */
 export function sanitizeSecondaryQuery(params: URLSearchParams): void {
+  sanitizeSecondaryQueryForPath(params, safeGetPathname());
+}
+
+/** Mutates params to enforce the secondary-query policy for a destination path. */
+export function sanitizeSecondaryQueryForPath(
+  params: URLSearchParams,
+  pathname: string,
+): void {
   // 1) kill forbidden keys always
   for (const k of Array.from(params.keys())) {
     if (FORBIDDEN_KEYS.has(k)) params.delete(k);
@@ -54,7 +75,10 @@ export function sanitizeSecondaryQuery(params: URLSearchParams): void {
   if (!st && share) params.set("st", share);
   if (params.has("share")) params.delete("share");
 
-  // 4) trim empties
+  // 4) remove query keys that only make sense on specific routes
+  stripPathScopedKeys(params, pathname);
+
+  // 5) trim empties
   for (const [k, v] of Array.from(params.entries())) {
     if (!String(v ?? "").trim()) params.delete(k);
   }
@@ -104,13 +128,13 @@ export function appendPersistentSecondaryQueryToHref(href: string): string {
   if (url.origin !== window.location.origin) return href;
 
   const params = new URLSearchParams(url.search);
-  sanitizeSecondaryQuery(params);
+  sanitizeSecondaryQueryForPath(params, url.pathname);
 
   for (const [k, v] of persistent.entries()) {
     if (!params.has(k)) params.set(k, v);
   }
 
-  sanitizeSecondaryQuery(params);
+  sanitizeSecondaryQueryForPath(params, url.pathname);
 
   const next = params.toString();
   url.search = next ? `?${next}` : "";
@@ -184,7 +208,7 @@ export function replaceQuery(patch: Record<string, string | null | undefined>) {
   }
 
   // Enforce policy after patch
-  sanitizeSecondaryQuery(params);
+  sanitizeSecondaryQueryForPath(params, url.pathname);
 
   const next = params.toString();
   const cur = url.searchParams.toString();
