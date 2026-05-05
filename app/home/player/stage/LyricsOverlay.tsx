@@ -29,6 +29,8 @@ function findActiveIndex(cues: LyricCue[], tMs: number) {
   return best;
 }
 
+const EXEGESIS_HASH_NAV_EVENT = "af:exegesis-hash-navigation";
+
 export default function LyricsOverlay(props: {
   recordingId?: string | null;
   displayId?: string | null;
@@ -127,12 +129,24 @@ export default function LyricsOverlay(props: {
   function openExegesis(cue: LyricCue) {
     if (!exegesisPathToken) return;
 
+    const lineKey = cue.lineKey;
+
     const path = appendPersistentSecondaryQueryToHref(
       `/exegesis/${encodeURIComponent(exegesisPathToken)}` +
-        `#l=${encodeURIComponent(cue.lineKey)}`,
+        `#l=${encodeURIComponent(lineKey)}`,
     );
 
     router.push(path, { scroll: false });
+
+    globalThis.window.dispatchEvent(
+      new CustomEvent(EXEGESIS_HASH_NAV_EVENT, {
+        detail: {
+          lineKey,
+          rootId: "",
+          commentId: "",
+        },
+      }),
+    );
   }
 
   // Fade-in whenever a new lyrics set becomes available.

@@ -11,13 +11,34 @@ export type ExegesisSelectedLine = {
   groupKey?: string;
 };
 
+const EXEGESIS_HASH_NAV_EVENT = "af:exegesis-hash-navigation";
+
+type ExegesisHashNavigationDetail = Readonly<{
+  lineKey?: string;
+  commentId?: string;
+  rootId?: string;
+}>;
+
+function isHashNavigationDetail(
+  value: unknown,
+): value is ExegesisHashNavigationDetail {
+  if (!value || typeof value !== "object") return false;
+
+  const record = value as Record<string, unknown>;
+
+  return (
+    (record.lineKey == null || typeof record.lineKey === "string") &&
+    (record.commentId == null || typeof record.commentId === "string") &&
+    (record.rootId == null || typeof record.rootId === "string")
+  );
+}
+
 export default function useExegesisHashState(props: {
   lyrics: LyricsApiOk;
   setSelected: React.Dispatch<
     React.SetStateAction<ExegesisSelectedLine | null>
   >;
   setFocusedRootId: React.Dispatch<React.SetStateAction<string>>;
-  threadKey: string;
   isMobile: boolean;
   selectedLineKey: string;
   setDrawerOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -26,7 +47,6 @@ export default function useExegesisHashState(props: {
     lyrics,
     setSelected,
     setFocusedRootId,
-    threadKey,
     isMobile,
     selectedLineKey,
     setDrawerOpen,
@@ -40,18 +60,21 @@ export default function useExegesisHashState(props: {
   React.useEffect(() => {
     if (!cues || cues.length === 0) return;
 
-    function applyHashState() {
+    function applyHashState(detail?: ExegesisHashNavigationDetail) {
       const h = parseHash();
 
-      const rid = (h.rootId ?? "").trim();
-      setFocusedRootId(rid);
+      const lineKey = (detail?.lineKey ?? h.lineKey ?? "").trim();
+      const commentId = (detail?.commentId ?? h.commentId ?? "").trim();
+      const rootId = (detail?.rootId ?? h.rootId ?? "").trim();
 
-      if (!h.lineKey) {
+      setFocusedRootId(rootId);
+
+      if (!lineKey) {
         setSelected(null);
         return;
       }
 
-      const pick = cues.find((c) => c.lineKey === h.lineKey);
+      const pick = cues.find((c) => c.lineKey === lineKey);
       if (!pick) {
         setSelected(null);
         return;
@@ -68,19 +91,42 @@ export default function useExegesisHashState(props: {
           undefined,
       });
 
-      if (h.commentId) pendingScrollCommentIdRef.current = h.commentId;
-
+      pendingScrollCommentIdRef.current = commentId;
       openFromHashRef.current = true;
+    }
+
+    function onNativeHashNavigation() {
+      applyHashState();
+    }
+
+    function onAppHashNavigation(event: Event) {
+      const detail =
+        event instanceof CustomEvent && isHashNavigationDetail(event.detail)
+          ? event.detail
+          : undefined;
+
+      applyHashState(detail);
     }
 
     applyHashState();
 
-    globalThis.window.addEventListener("hashchange", applyHashState);
-    globalThis.window.addEventListener("popstate", applyHashState);
+    globalThis.window.addEventListener("hashchange", onNativeHashNavigation);
+    globalThis.window.addEventListener("popstate", onNativeHashNavigation);
+    globalThis.window.addEventListener(
+      EXEGESIS_HASH_NAV_EVENT,
+      onAppHashNavigation,
+    );
 
     return () => {
-      globalThis.window.removeEventListener("hashchange", applyHashState);
-      globalThis.window.removeEventListener("popstate", applyHashState);
+      globalThis.window.removeEventListener(
+        "hashchange",
+        onNativeHashNavigation,
+      );
+      globalThis.window.removeEventListener("popstate", onNativeHashNavigation);
+      globalThis.window.removeEventListener(
+        EXEGESIS_HASH_NAV_EVENT,
+        onAppHashNavigation,
+      );
     };
   }, [lyricsRecordingId, cues, groupMap, setSelected, setFocusedRootId]);
 
