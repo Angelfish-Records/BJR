@@ -305,7 +305,7 @@ export default function AudioEngine() {
   // Mobile data needs a much longer runway than Wi-Fi for HLS standby preparation.
   // This also makes locked-screen handoff less dependent on late timeupdate events.
   const STANDBY_PREPARE_WINDOW_MS = 90_000;
-  const AUTO_ADVANCE_WINDOW_MS = 1_500;
+  const AUTO_ADVANCE_WINDOW_MS = 250;
 
   const tokenCacheRef = React.useRef(
     new Map<string, { token: string; expiresAtMs: number }>(),
@@ -774,6 +774,8 @@ export default function AudioEngine() {
 
       a.crossOrigin = "anonymous";
       a.preload = args.reason === "standby" ? "auto" : "metadata";
+      a.volume = Math.max(0, Math.min(1, pRef.current.volume));
+      a.muted = pRef.current.muted;
 
       metaByDeckRef.current[args.deckId] = {
         deckId: args.deckId,
@@ -1115,6 +1117,9 @@ export default function AudioEngine() {
 
       suppressPauseDeckRef.current = oldDeck;
 
+      const oldAudio = getAudio(oldDeck);
+      if (oldAudio) oldAudio.volume = 0;
+
       const ok = await playDeck(newDeck, "promote");
 
       if (!ok) {
@@ -1152,7 +1157,7 @@ export default function AudioEngine() {
 
       return true;
     },
-    [playDeck, stopDeck],
+    [getAudio, playDeck, stopDeck],
   );
 
   const attachActiveTrack = React.useCallback(async () => {
