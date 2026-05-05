@@ -469,14 +469,15 @@ export default function PortalExegesis(props: { title?: string }) {
       : (
           (isReturningToIndex
             ? exegesisDisplayId
-            : (exegesisDisplayId ?? displayIdFromPath)) ?? ""
+            : (displayIdFromPath ?? exegesisDisplayId)) ?? ""
         ).trim() || null;
 
   // If we had to fall back to pathname parsing, persist it into context so other
   // components (and subsequent renders) have a stable single source of truth.
   React.useEffect(() => {
     if (isReturningToIndex) return;
-    if (!exegesisDisplayId && displayIdFromPath) {
+
+    if (displayIdFromPath && exegesisDisplayId !== displayIdFromPath) {
       setExegesisDisplayId(displayIdFromPath);
     }
   }, [
