@@ -12,12 +12,35 @@ export type ExegesisSelectedLine = {
 };
 
 const EXEGESIS_HASH_NAV_EVENT = "af:exegesis-hash-navigation";
+const EXEGESIS_PENDING_LINE_KEY = "af:exegesis-pending-line";
 
 type ExegesisHashNavigationDetail = Readonly<{
   lineKey?: string;
   commentId?: string;
   rootId?: string;
 }>;
+
+function readPendingLineKey(): string {
+  const raw = globalThis.window.sessionStorage.getItem(
+    EXEGESIS_PENDING_LINE_KEY,
+  );
+
+  if (!raw) return "";
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return "";
+
+    const record = parsed as Record<string, unknown>;
+    return typeof record.lineKey === "string" ? record.lineKey.trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+function clearPendingLineKey() {
+  globalThis.window.sessionStorage.removeItem(EXEGESIS_PENDING_LINE_KEY);
+}
 
 function isHashNavigationDetail(
   value: unknown,
@@ -62,8 +85,14 @@ export default function useExegesisHashState(props: {
 
     function applyHashState(detail?: ExegesisHashNavigationDetail) {
       const h = parseHash();
+      const pendingLineKey = readPendingLineKey();
 
-      const lineKey = (detail?.lineKey ?? h.lineKey ?? "").trim();
+      const lineKey = (
+        detail?.lineKey ??
+        pendingLineKey ??
+        h.lineKey ??
+        ""
+      ).trim();
       const commentId = (detail?.commentId ?? h.commentId ?? "").trim();
       const rootId = (detail?.rootId ?? h.rootId ?? "").trim();
 
@@ -78,6 +107,10 @@ export default function useExegesisHashState(props: {
       if (!pick) {
         setSelected(null);
         return;
+      }
+
+      if (pendingLineKey === lineKey) {
+        clearPendingLineKey();
       }
 
       setSelected({

@@ -30,6 +30,14 @@ function findActiveIndex(cues: LyricCue[], tMs: number) {
 }
 
 const EXEGESIS_HASH_NAV_EVENT = "af:exegesis-hash-navigation";
+const EXEGESIS_PENDING_LINE_KEY = "af:exegesis-pending-line";
+
+function writePendingExegesisLine(lineKey: string) {
+  globalThis.window.sessionStorage.setItem(
+    EXEGESIS_PENDING_LINE_KEY,
+    JSON.stringify({ lineKey }),
+  );
+}
 
 export default function LyricsOverlay(props: {
   recordingId?: string | null;
@@ -136,17 +144,25 @@ export default function LyricsOverlay(props: {
         `#l=${encodeURIComponent(lineKey)}`,
     );
 
+    writePendingExegesisLine(lineKey);
+
     router.push(path, { scroll: false });
 
+    const detail = {
+      lineKey,
+      rootId: "",
+      commentId: "",
+    };
+
     globalThis.window.dispatchEvent(
-      new CustomEvent(EXEGESIS_HASH_NAV_EVENT, {
-        detail: {
-          lineKey,
-          rootId: "",
-          commentId: "",
-        },
-      }),
+      new CustomEvent(EXEGESIS_HASH_NAV_EVENT, { detail }),
     );
+
+    globalThis.window.setTimeout(() => {
+      globalThis.window.dispatchEvent(
+        new CustomEvent(EXEGESIS_HASH_NAV_EVENT, { detail }),
+      );
+    }, 0);
   }
 
   // Fade-in whenever a new lyrics set becomes available.
