@@ -1,15 +1,5 @@
 import type { Theme } from "../types";
-import { createProgram, makeFullscreenTriangle } from "../gl";
-
-const VS = `#version 300 es
-layout(location=0) in vec2 aPos;
-out vec2 vUv;
-
-void main() {
-  vUv = aPos * 0.5 + 0.5;
-  gl_Position = vec4(aPos, 0.0, 1.0);
-}
-`;
+import { createSinglePassTheme } from "./themeFactory";
 
 // Phase Interference Fabric
 // Standing-wave moiré cloth: nodal lines, phase drift, spectral shimmer.
@@ -128,49 +118,8 @@ void main() {
 `;
 
 export function createPhaseInterferenceFabricTheme(): Theme {
-  let program: WebGLProgram | null = null;
-  let tri: {
-    vao: WebGLVertexArrayObject | null;
-    buf: WebGLBuffer | null;
-  } | null = null;
-  let uRes: WebGLUniformLocation | null = null;
-  let uTime: WebGLUniformLocation | null = null;
-  let uEnergy: WebGLUniformLocation | null = null;
-
-  return {
+  return createSinglePassTheme({
     name: "phase-interference-fabric",
-
-    init(gl) {
-      program = createProgram(gl, VS, FS);
-      tri = makeFullscreenTriangle(gl);
-      uRes = gl.getUniformLocation(program, "uRes");
-      uTime = gl.getUniformLocation(program, "uTime");
-      uEnergy = gl.getUniformLocation(program, "uEnergy");
-    },
-
-    render(gl, opts) {
-      if (!program || !tri) return;
-
-      gl.useProgram(program);
-      gl.bindVertexArray(tri.vao);
-
-      gl.uniform2f(uRes, opts.width, opts.height);
-      gl.uniform1f(uTime, opts.time);
-      gl.uniform1f(uEnergy, opts.audio.energy);
-
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-      gl.bindVertexArray(null);
-      gl.useProgram(null);
-    },
-
-    dispose(gl) {
-      if (tri?.buf) gl.deleteBuffer(tri.buf);
-      if (tri?.vao) gl.deleteVertexArray(tri.vao);
-      tri = null;
-
-      if (program) gl.deleteProgram(program);
-      program = null;
-    },
-  };
+    fragmentShader: FS,
+  });
 }
