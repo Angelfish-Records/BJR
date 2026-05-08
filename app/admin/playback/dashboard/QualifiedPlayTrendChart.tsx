@@ -16,55 +16,28 @@ import {
   formatNumber,
 } from "./playbackTelemetryDashboardFormatters";
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
+function buildLinearCommands(points: ChartPoint[]): string {
+  return points
+    .slice(1)
+    .map((point) => ` L ${point.x} ${point.y}`)
+    .join("");
 }
 
-function buildSmoothCommands(points: ChartPoint[]): string {
-  if (points.length < 2) return "";
-
-  let d = "";
-
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const p0 = points[index - 1] ?? points[index];
-    const p1 = points[index];
-    const p2 = points[index + 1];
-    const p3 = points[index + 2] ?? p2;
-
-    const rawCp1x = p1.x + (p2.x - p0.x) / 6;
-    const rawCp1y = p1.y + (p2.y - p0.y) / 6;
-    const rawCp2x = p2.x - (p3.x - p1.x) / 6;
-    const rawCp2y = p2.y - (p3.y - p1.y) / 6;
-
-    const minY = Math.min(p1.y, p2.y);
-    const maxY = Math.max(p1.y, p2.y);
-
-    const cp1x = rawCp1x;
-    const cp1y = clamp(rawCp1y, minY, maxY);
-    const cp2x = rawCp2x;
-    const cp2y = clamp(rawCp2y, minY, maxY);
-
-    d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
-  }
-
-  return d;
-}
-
-function buildSmoothLinePath(points: ChartPoint[]): string {
+function buildLinearLinePath(points: ChartPoint[]): string {
   if (points.length === 0) return "";
-  return `M ${points[0].x} ${points[0].y}${buildSmoothCommands(points)}`;
+  return `M ${points[0].x} ${points[0].y}${buildLinearCommands(points)}`;
 }
 
-function buildSmoothAreaPath(upper: ChartPoint[], lower: ChartPoint[]): string {
+function buildLinearAreaPath(upper: ChartPoint[], lower: ChartPoint[]): string {
   if (upper.length === 0 || lower.length === 0) return "";
 
   const reversedLower = [...lower].reverse();
 
   return [
     `M ${upper[0].x} ${upper[0].y}`,
-    buildSmoothCommands(upper),
+    buildLinearCommands(upper),
     ` L ${reversedLower[0].x} ${reversedLower[0].y}`,
-    buildSmoothCommands(reversedLower),
+    buildLinearCommands(reversedLower),
     " Z",
   ].join("");
 }
@@ -168,8 +141,8 @@ export function QualifiedPlayTrendChart(props: {
       fill: layer.fill,
       lowerPoints,
       upperPoints,
-      areaPath: buildSmoothAreaPath(upperPoints, lowerPoints),
-      linePath: buildSmoothLinePath(upperPoints),
+      areaPath: buildLinearAreaPath(upperPoints, lowerPoints),
+      linePath: buildLinearLinePath(upperPoints),
     };
   });
 
@@ -290,18 +263,41 @@ export function QualifiedPlayTrendChart(props: {
             />
           ))}
 
-          {stackedLayers.map((layer) => (
-            <path
-              key={`${layer.key}:line`}
-              d={layer.linePath}
-              fill="none"
-              stroke="rgba(255,255,255,0.78)"
-              strokeWidth={activeIndex === null ? "1" : "1.15"}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              opacity={activeIndex === null ? 1 : 0.88}
-            />
-          ))}
+          {stackedLayers.map((layer, layerIndex) => {
+            const isTopLayer = layerIndex === stackedLayers.length - 1;
+
+            return (
+              <path
+                key={`${layer.key}:line`}
+                d={layer.linePath}
+                fill="none"
+                stroke={
+                  isTopLayer
+                    ? "rgba(255,255,255,0.88)"
+                    : "rgba(255,255,255,0.38)"
+                }
+                strokeWidth={isTopLayer ? "1.6" : "1"}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                opacity={activeIndex === null ? 1 : 0.9}
+              />
+            );
+          })}
+
+          {stackedLayers[stackedLayers.length - 1]?.upperPoints.map(
+            (point, index) => (
+              <circle
+                key={`point:${index}`}
+                cx={point.x}
+                cy={point.y}
+                r="2"
+                fill="rgba(255,255,255,0.72)"
+                opacity={
+                  activeIndex === null || activeIndex === index ? 1 : 0.32
+                }
+              />
+            ),
+          )}
 
           {activeZone ? (
             <line

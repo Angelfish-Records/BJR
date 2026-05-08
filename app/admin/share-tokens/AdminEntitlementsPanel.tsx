@@ -74,6 +74,22 @@ type DashboardResponseError = {
 
 type DashboardResponse = DashboardResponseOk | DashboardResponseError;
 
+type MembersSearchResponse =
+  | {
+      ok: true;
+      members: MemberRow[];
+    }
+  | {
+      ok?: false;
+      error?: string;
+    };
+
+function isMembersSearchResponseOk(
+  value: MembersSearchResponse,
+): value is Extract<MembersSearchResponse, { ok: true }> {
+  return value.ok === true;
+}
+
 export default function AdminEntitlementsPanel(props: {
   albums: AlbumForScope[];
 }) {
@@ -226,31 +242,35 @@ export default function AdminEntitlementsPanel(props: {
     void loadDashboard(periodDays);
   }, [loadDashboard, periodDays]);
 
-  async function runSearch() {
-    const query = q.trim();
+  const loadMembers = React.useCallback(async (queryValue: string) => {
+    const query = queryValue.trim();
     setError(null);
     setSearchBusy(true);
 
     try {
-      if (!query) {
-        setMembers([]);
-        return;
+      const suffix = query ? `?q=${encodeURIComponent(query)}` : "";
+      const res = await fetch(`/api/admin/members/search${suffix}`);
+      const json = (await res.json()) as MembersSearchResponse;
+
+      if (!res.ok || !isMembersSearchResponseOk(json)) {
+        throw new Error(
+          !isMembersSearchResponseOk(json) && json.error
+            ? json.error
+            : "Member list load failed",
+        );
       }
 
-      const res = await fetch(
-        `/api/admin/members/search?q=${encodeURIComponent(query)}`,
-      );
-      const json = await res.json();
-      if (!res.ok || !json?.ok) {
-        throw new Error(json?.error ?? "Search failed");
-      }
       setMembers(Array.isArray(json.members) ? json.members : []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Search failed");
+      setError(e instanceof Error ? e.message : "Member list load failed");
     } finally {
       setSearchBusy(false);
     }
-  }
+  }, []);
+
+  React.useEffect(() => {
+    void loadMembers("");
+  }, [loadMembers]);
 
   async function loadMember(memberId: string) {
     setError(null);
@@ -624,7 +644,7 @@ export default function AdminEntitlementsPanel(props: {
 
       <div style={cardStyle}>
         <div style={{ fontSize: 12, letterSpacing: "0.04em", opacity: 0.56 }}>
-          MEMBER SEARCH
+          MEMBERS
         </div>
 
         <div
@@ -642,10 +662,10 @@ export default function AdminEntitlementsPanel(props: {
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
-                void runSearch();
+                void loadMembers(q);
               }
             }}
-            placeholder="Search member email prefix…"
+            placeholder="Filter members by email…"
             style={{
               ...fieldStyle,
               flex: "1 1 320px",
@@ -654,7 +674,7 @@ export default function AdminEntitlementsPanel(props: {
           <button
             type="button"
             onClick={() => {
-              void runSearch();
+              void loadMembers(q);
             }}
             disabled={searchBusy}
             style={{
@@ -664,50 +684,88 @@ export default function AdminEntitlementsPanel(props: {
               cursor: searchBusy ? "default" : "pointer",
             }}
           >
-            {searchBusy ? "Searching…" : "Search"}
+            {searchBusy ? "Loading…" : q.trim() ? "Filter" : "Refresh"}
           </button>
+
+          {q.trim() ? (
+            <button
+              type="button"
+              onClick={() => {
+                setQ("");
+                void loadMembers("");
+              }}
+              disabled={searchBusy}
+              style={{
+                ...subtleButtonStyle,
+                minWidth: 72,
+                opacity: searchBusy ? 0.6 : 1,
+                cursor: searchBusy ? "default" : "pointer",
+              }}
+            >
+              Clear
+            </button>
+          ) : null}
         </div>
 
-        {members.length > 0 ? (
-          <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
-            {members.map((m) => {
-              const isActive = selected?.id === m.id;
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={async () => {
-                    setSelected(m);
-                    await loadMember(m.id);
-                  }}
-                  style={{
-                    textAlign: "left",
-                    padding: "12px 14px",
-                    borderRadius: 14,
-                    border: "1px solid rgba(255,255,255,0.14)",
-                    background: isActive
-                      ? "rgba(255,255,255,0.10)"
-                      : "rgba(255,255,255,0.04)",
-                    color: "rgba(255,255,255,0.92)",
-                    cursor: "pointer",
-                  }}
-                >
-                  <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.96 }}>
-                    {m.email}
-                  </div>
-                  <div style={{ marginTop: 4, fontSize: 12, opacity: 0.62 }}>
-                    member_id: {m.id}
-                  </div>
-                </button>
-              );
-            })}
-            {q.trim() && !searchBusy && members.length === 0 ? (
-              <div style={{ marginTop: 12, fontSize: 12, opacity: 0.58 }}>
-                No matching members found.
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        <div
+          style={{
+            display: "grid",
+            gap: 4,
+            marginTop: 12,
+            maxHeight: 360,
+            overflowY: "auto",
+            paddingRight: 4,
+          }}
+        >
+          {searchBusy && !members.length ? (
+            <div style={{ fontSize: 12, opacity: 0.58 }}>Loading members…</div>
+          ) : null}
+
+          {members.length > 0 ? (
+            <>
+              {members.map((m, index) => {
+                const isActive = selected?.id === m.id;
+                const isEven = index % 2 === 0;
+
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={async () => {
+                      setSelected(m);
+                      await loadMember(m.id);
+                    }}
+                    style={{
+                      textAlign: "left",
+                      padding: "7px 10px",
+                      borderRadius: 10,
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      background: isActive
+                        ? "rgba(255,255,255,0.12)"
+                        : isEven
+                          ? "rgba(255,255,255,0.035)"
+                          : "rgba(255,255,255,0.055)",
+                      color: "rgba(255,255,255,0.92)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div
+                      style={{ fontSize: 12, fontWeight: 700, opacity: 0.96 }}
+                    >
+                      {m.email}
+                    </div>
+                  </button>
+                );
+              })}
+            </>
+          ) : null}
+
+          {!searchBusy && members.length === 0 ? (
+            <div style={{ fontSize: 12, opacity: 0.58 }}>
+              {q.trim() ? "No matching members found." : "No members found."}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {error ? (

@@ -756,7 +756,9 @@ export default function LyricsOverlay(props: {
                     transition:
                       "opacity 120ms linear, transform 140ms ease, filter 140ms ease",
                     transform: isActive
-                      ? `translateZ(0) scale(${isInline ? 1.012 : 1.02})`
+                      ? isInline
+                        ? `scale(1.006)`
+                        : `translateZ(0) scale(1.02)`
                       : `translateZ(0)
                          translateY(calc((1 - var(--af-focus, 0)) * ${
                            isInline ? 0.25 : 0.55
@@ -820,11 +822,16 @@ export default function LyricsOverlay(props: {
                     ) : null}
 
                     <span
+                      className="af-lyric-text"
                       style={{
                         position: "relative",
                         zIndex: 1,
                         textShadow,
-                        filter: "blur(calc((1 - var(--af-focus, 0)) * 0.15px))",
+                        filter: isInline
+                          ? "none"
+                          : "blur(calc((1 - var(--af-focus, 0)) * 0.12px))",
+                        WebkitFontSmoothing: "antialiased",
+                        MozOsxFontSmoothing: "grayscale",
                       }}
                     >
                       {cue.text}
@@ -858,7 +865,26 @@ export default function LyricsOverlay(props: {
           }
 
           .af-lyrics-scroll::-webkit-scrollbar { width: 0px; height: 0px; }
-          .af-lyrics-scroll::-webkit-scrollbar-thumb { background: transparent; }
+.af-lyrics-scroll::-webkit-scrollbar-thumb { background: transparent; }
+
+.af-lyric-text {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+/* iOS Safari is very prone to rasterising transformed/masked text layers softly. */
+@supports (-webkit-touch-callout: none) {
+  .af-lyrics-scroll {
+    transform: none !important;
+    will-change: auto !important;
+  }
+
+  .af-lyric-text {
+    filter: none !important;
+    transform: none !important;
+    text-rendering: optimizeLegibility;
+  }
+}
 
                     /* Inline-only: reveal discourse affordance on hover even if React hover state misses. */
           .af-lyric-row[data-af-inline="1"][data-af-has-track="1"]:hover .af-discourse-btn {

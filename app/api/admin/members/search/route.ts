@@ -11,24 +11,33 @@ export async function GET(req: Request) {
 
     const url = new URL(req.url);
     const q = (url.searchParams.get("q") ?? "").trim();
-    if (!q) return NextResponse.json({ ok: true, members: [] });
 
-    const qNorm = normalizeEmail(q);
-
-    const r = await sql<{
-      id: string;
-      email: string;
-      clerk_user_id: string | null;
-      created_at: string;
-    }>`
-      select id, email, clerk_user_id, created_at
-      from members
-      where email ilike ${qNorm + "%"}
-      order by
-        case when lower(email) = lower(${qNorm}) then 0 else 1 end asc,
-        created_at desc
-      limit 25
-    `;
+    const r = q
+      ? await sql<{
+          id: string;
+          email: string;
+          clerk_user_id: string | null;
+          created_at: string;
+        }>`
+          select id, email, clerk_user_id, created_at
+          from members
+          where email ilike ${normalizeEmail(q) + "%"}
+          order by
+            case when lower(email) = lower(${normalizeEmail(q)}) then 0 else 1 end asc,
+            created_at desc
+          limit 25
+        `
+      : await sql<{
+          id: string;
+          email: string;
+          clerk_user_id: string | null;
+          created_at: string;
+        }>`
+          select id, email, clerk_user_id, created_at
+          from members
+          order by created_at desc
+          limit 100
+        `;
 
     return NextResponse.json({ ok: true, members: r.rows });
   } catch (e) {
