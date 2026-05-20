@@ -9,15 +9,6 @@ import { auth } from "@clerk/nextjs/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const STRIPE_SECRET_KEY = assertStripeSecretKey(
-  process.env.STRIPE_SECRET_KEY ?? "",
-);
-
-function must(v: string, name: string) {
-  if (!v) throw new Error(`Missing ${name}`);
-  return v;
-}
-
 function unwrapStripeResponse<T>(res: T | Stripe.Response<T>): T {
   if (res && typeof res === "object") {
     const r = res as unknown as { data?: T; lastResponse?: unknown };
@@ -47,7 +38,9 @@ function toIsoFromUnixSeconds(s: number | null): string | null {
 }
 
 export async function GET() {
-  must(STRIPE_SECRET_KEY, "STRIPE_SECRET_KEY");
+  const STRIPE_SECRET_KEY = assertStripeSecretKey(
+    process.env.STRIPE_SECRET_KEY ?? "",
+  );
 
   const { userId } = await auth();
   if (!userId) {

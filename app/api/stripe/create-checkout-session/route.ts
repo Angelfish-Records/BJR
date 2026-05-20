@@ -10,9 +10,7 @@ import { assertStripePriceId, assertStripeSecretKey } from "@/lib/stripeEnv";
 
 export const runtime = "nodejs";
 
-const STRIPE_SECRET_KEY = assertStripeSecretKey(
-  process.env.STRIPE_SECRET_KEY ?? "",
-);
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY ?? "";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
 const PRICE_PATRON = process.env.STRIPE_PRICE_PATRON ?? "";
@@ -111,7 +109,7 @@ async function customerHasActiveSubscription(
 }
 
 export async function POST(req: Request) {
-  must(STRIPE_SECRET_KEY, "STRIPE_SECRET_KEY");
+  const stripeSecretKey = assertStripeSecretKey(STRIPE_SECRET_KEY);
   must(APP_URL, "NEXT_PUBLIC_APP_URL");
 
   if (!sameOriginOrAllowed(req, APP_URL)) {
@@ -121,7 +119,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const stripe = new Stripe(STRIPE_SECRET_KEY);
+  const stripe = new Stripe(stripeSecretKey);
   const { userId } = await auth();
 
   const body = (await req.json().catch(() => ({}))) as Body;

@@ -8,9 +8,7 @@ import { auth } from "@clerk/nextjs/server";
 
 export const runtime = "nodejs";
 
-const STRIPE_SECRET_KEY = assertStripeSecretKey(
-  process.env.STRIPE_SECRET_KEY ?? "",
-);
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY ?? "";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? ""; // used only for same-origin guard
 
 function must(v: string, name: string) {
@@ -101,7 +99,7 @@ function isDebug(req: Request): boolean {
 }
 
 export async function POST(req: Request) {
-  must(STRIPE_SECRET_KEY, "STRIPE_SECRET_KEY");
+  const stripeSecretKey = assertStripeSecretKey(STRIPE_SECRET_KEY);
   must(APP_URL, "NEXT_PUBLIC_APP_URL");
 
   const debug = isDebug(req);
@@ -138,7 +136,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const stripe = new Stripe(STRIPE_SECRET_KEY);
+  const stripe = new Stripe(stripeSecretKey);
 
   // List subs for this customer
   const subsRes = await stripe.subscriptions.list({
@@ -187,7 +185,7 @@ export async function POST(req: Request) {
       debug: true,
       userId,
       customerId,
-      stripeKeyHint: (STRIPE_SECRET_KEY ?? "").slice(0, 7) + "...", // proves which env key is in use
+      stripeKeyHint: stripeSecretKey.slice(0, 7) + "...", // proves which env key is in use
       subsShape: {
         isArray: Array.isArray(subs),
         hasDataProp: !!(
