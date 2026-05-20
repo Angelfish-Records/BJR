@@ -6,6 +6,7 @@ import { sql } from "@vercel/postgres";
 import { auth, currentUser } from "@clerk/nextjs/server";
 
 import { getAlbumOffer } from "@/lib/albumOffers";
+import { assertStripePriceId } from "@/lib/stripeEnv";
 import { assertLooksLikeEmail, normalizeEmail } from "@/lib/members";
 import { newCorrelationId } from "@/lib/events";
 import { sameOriginOrAllowed } from "@/lib/checkoutReturnUrl";
@@ -275,9 +276,14 @@ export async function POST(req: NextRequest) {
     gift: "cancel",
   });
 
+  const priceId = assertStripePriceId(
+    offer.stripePriceId,
+    `stripe price for album ${offer.albumSlug}`,
+  );
+
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
-    line_items: [{ price: offer.stripePriceId, quantity: 1 }],
+    line_items: [{ price: priceId, quantity: 1 }],
     allow_promotion_codes: true,
     success_url,
     cancel_url,

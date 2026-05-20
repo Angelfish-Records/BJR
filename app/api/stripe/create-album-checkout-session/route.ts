@@ -11,7 +11,7 @@ import {
 } from "@/lib/checkoutReturnUrl";
 import { getAlbumOffer } from "../../../../lib/albumOffers";
 import { normalizeEmail, ensureMemberByEmail } from "../../../../lib/members";
-import { assertStripeSecretKey } from "@/lib/stripeEnv";
+import { assertStripePriceId, assertStripeSecretKey } from "@/lib/stripeEnv";
 
 export const runtime = "nodejs";
 
@@ -129,9 +129,14 @@ export async function POST(req: Request) {
     },
   );
 
+  const priceId = assertStripePriceId(
+    offer.stripePriceId,
+    `stripe price for album ${offer.albumSlug}`,
+  );
+
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
-    line_items: [{ price: offer.stripePriceId, quantity: 1 }],
+    line_items: [{ price: priceId, quantity: 1 }],
     allow_promotion_codes: true,
 
     success_url,

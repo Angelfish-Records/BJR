@@ -1,11 +1,7 @@
 // web/lib/albumOffers.ts
-import { assertStripePriceId } from "@/lib/stripeEnv";
 import { ENT } from "./entitlementVocab";
 
-const GOD_DEFEND_PRICE_ID = assertStripePriceId(
-  process.env.STRIPE_PRICE_ALBUM_GOD_DEFEND ?? "",
-  "STRIPE_PRICE_ALBUM_GOD_DEFEND",
-);
+const GOD_DEFEND_PRICE_ID = process.env.STRIPE_PRICE_ALBUM_GOD_DEFEND ?? "";
 
 export type AlbumOfferAsset = {
   id: "bundle_zip" | string;
