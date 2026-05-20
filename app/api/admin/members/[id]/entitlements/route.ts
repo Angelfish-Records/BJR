@@ -85,12 +85,45 @@ export async function GET(
       limit 1
     `;
 
+    const memberRow = member.rows[0] ?? null;
+    const stripeCustomerId = memberRow?.stripe_customer_id ?? null;
+
+    const stripeWebhookEvents = stripeCustomerId
+      ? await sql<{
+          event_id: string;
+          type: string;
+          stripe_object_id: string | null;
+          stripe_customer_id: string | null;
+          checkout_session_id: string | null;
+          subscription_id: string | null;
+          handled_at: string | null;
+          handler_error: string | null;
+          handler_error_at: string | null;
+        }>`
+          select
+            event_id,
+            type,
+            stripe_object_id,
+            stripe_customer_id,
+            checkout_session_id,
+            subscription_id,
+            handled_at,
+            handler_error,
+            handler_error_at
+          from stripe_webhook_events
+          where stripe_customer_id = ${stripeCustomerId}
+          order by coalesce(handler_error_at, handled_at) desc nulls last
+          limit 50
+        `
+      : { rows: [] };
+
     return NextResponse.json({
       ok: true,
       memberId: id,
-      member: member.rows[0] ?? null,
+      member: memberRow,
       grants: grants.rows,
       current: current.rows,
+      stripeWebhookEvents: stripeWebhookEvents.rows,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "error";

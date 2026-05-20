@@ -12,6 +12,8 @@ import { reconcileStripeSubscription } from "../../../../lib/stripeSubscriptions
 import { Resend } from "resend";
 import { GiftCreatedEmail } from "@/emails";
 import { getAlbumEmailMetaBySlug } from "@/lib/albums";
+import { EVENT_SOURCES } from "@/lib/vocab";
+import { assertStripeSecretKey } from "@/lib/stripeEnv";
 
 export const runtime = "nodejs";
 
@@ -27,6 +29,29 @@ function safeErrMessage(err: unknown): string {
   return String(err);
 }
 
+async function recordStripeWebhookHandled(eventId: string) {
+  await sql`
+    update stripe_webhook_events
+    set handled_at = coalesce(handled_at, now())
+    where event_id = ${eventId}
+  `;
+}
+
+async function recordStripeWebhookFailure(params: {
+  eventId: string;
+  eventType: string;
+  message: string;
+}) {
+  await sql`
+    update stripe_webhook_events
+    set
+      handler_error = ${params.message},
+      handler_error_at = now()
+    where event_id = ${params.eventId}
+      and handler_error is null
+  `;
+}
+
 function must(v: string | undefined, name: string) {
   const s = (v ?? "").trim();
   if (!s) throw new Error(`Missing ${name}`);
@@ -35,6 +60,49 @@ function must(v: string | undefined, name: string) {
 
 function sha256Hex(s: string): string {
   return crypto.createHash("sha256").update(s).digest("hex");
+}
+
+function readObjectField(source: unknown, key: string): unknown {
+  if (!source || typeof source !== "object") return null;
+  return (source as Record<string, unknown>)[key] ?? null;
+}
+
+function readStripeId(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value.trim();
+
+  if (value && typeof value === "object") {
+    const id = (value as Record<string, unknown>).id;
+    if (typeof id === "string" && id.trim()) return id.trim();
+  }
+
+  return null;
+}
+
+function refsFromStripeEvent(event: Stripe.Event): {
+  stripeObjectId: string | null;
+  stripeCustomerId: string | null;
+  checkoutSessionId: string | null;
+  subscriptionId: string | null;
+} {
+  const object = event.data.object as unknown;
+
+  const objectId = readStripeId(readObjectField(object, "id"));
+  const customerId = readStripeId(readObjectField(object, "customer"));
+
+  const subscriptionId = event.type.startsWith("customer.subscription.")
+    ? objectId
+    : readStripeId(readObjectField(object, "subscription"));
+
+  const checkoutSessionId = event.type.startsWith("checkout.session.")
+    ? objectId
+    : null;
+
+  return {
+    stripeObjectId: objectId,
+    stripeCustomerId: customerId,
+    checkoutSessionId,
+    subscriptionId,
+  };
 }
 
 function appOrigin(): string {
@@ -87,11 +155,28 @@ async function attachStripeCustomerId(
   customerId: string,
 ): Promise<void> {
   if (!memberId || !customerId) return;
+
+  const existing = await sql`
+    select stripe_customer_id
+    from members
+    where id = ${memberId}::uuid
+    limit 1
+  `;
+
+  const current =
+    (existing.rows[0]?.stripe_customer_id as string | null | undefined) ?? null;
+
+  if (current && current !== customerId) {
+    throw new Error(
+      `Stripe customer conflict for member ${memberId}: existing=${current}, incoming=${customerId}`,
+    );
+  }
+
   await sql`
     update members
     set stripe_customer_id = ${customerId}
     where id = ${memberId}::uuid
-      and (stripe_customer_id is null or stripe_customer_id = ${customerId})
+      and stripe_customer_id is null
   `;
 }
 
@@ -190,7 +275,7 @@ async function sendGiftCreatedEmail(args: {
   personalNote?: string | null;
   senderName?: string | null;
 }) {
-  const resend = new Resend(process.env.RESEND_API_KEY ?? "re_dummy");
+  const resend = new Resend(must(process.env.RESEND_API_KEY, "RESEND_API_KEY"));
   const from = must(process.env.RESEND_FROM_GIFTS, "RESEND_FROM_GIFTS");
   const subject = `🎁 You’ve been gifted ${args.albumTitle || "a release"}`;
 
@@ -234,7 +319,7 @@ async function finalizeGiftPurchase(
     expand: ["payment_intent"],
   });
 
-  const md = ((session.metadata ?? {}) as Record<string, string>) ?? {};
+  const md = (session.metadata ?? {}) as Record<string, string>;
   const mergedMd: Record<string, string> = { ...mdHint, ...md }; // real session wins
 
   if (!sessionIsPaid(session)) return;
@@ -332,7 +417,7 @@ async function finalizeGiftPurchase(
     grantSourceRef: session.id,
     expiresAt: null,
     correlationId: session.id,
-    eventSource: "server",
+    eventSource: EVENT_SOURCES.STRIPE,
   });
 
   // Email dedupe gate: send once
@@ -391,10 +476,12 @@ async function finalizeGiftPurchase(
 }
 
 export async function POST(req: Request) {
-  const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY ?? "";
+  const STRIPE_SECRET_KEY = assertStripeSecretKey(
+    process.env.STRIPE_SECRET_KEY ?? "",
+  );
   const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 
-  if (!STRIPE_SECRET_KEY || !STRIPE_WEBHOOK_SECRET) {
+  if (!STRIPE_WEBHOOK_SECRET) {
     return NextResponse.json(
       { ok: false, error: "Missing Stripe env vars" },
       { status: 500 },
@@ -420,10 +507,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: msg }, { status: 400 });
   }
 
+  const refs = refsFromStripeEvent(event);
+
   // Idempotency: dedupe by event.id
   const dedupe = await sql`
-    insert into stripe_webhook_events (event_id, type)
-    values (${event.id}, ${event.type})
+    insert into stripe_webhook_events (
+      event_id,
+      type,
+      stripe_object_id,
+      stripe_customer_id,
+      checkout_session_id,
+      subscription_id
+    )
+    values (
+      ${event.id},
+      ${event.type},
+      ${refs.stripeObjectId},
+      ${refs.stripeCustomerId},
+      ${refs.checkoutSessionId},
+      ${refs.subscriptionId}
+    )
     on conflict (event_id) do nothing
     returning event_id
   `;
@@ -440,6 +543,7 @@ export async function POST(req: Request) {
     ) {
       const sub = event.data.object as Stripe.Subscription;
       await reconcileStripeSubscription({ stripe, subscription: sub });
+      await recordStripeWebhookHandled(event.id);
       return NextResponse.json({ ok: true });
     }
 
@@ -457,24 +561,30 @@ export async function POST(req: Request) {
 
       if (looksGift) {
         await finalizeGiftPurchase(stripe, s.id, md);
+        await recordStripeWebhookHandled(event.id);
         return NextResponse.json({ ok: true });
       }
       // fall through to normal checkout logic (completed only)
     }
 
     if (event.type === "checkout.session.async_payment_failed") {
+      await recordStripeWebhookHandled(event.id);
       return NextResponse.json({ ok: true });
     }
 
     // Non-gift: only act on checkout.session.completed
     if (event.type !== "checkout.session.completed") {
+      await recordStripeWebhookHandled(event.id);
       return NextResponse.json({ ok: true });
     }
 
     const session = event.data.object as Stripe.Checkout.Session;
 
     const { memberId, customerId } = await resolveMemberIdFromSession(session);
-    if (!memberId) return NextResponse.json({ ok: true });
+    if (!memberId) {
+      await recordStripeWebhookHandled(event.id);
+      return NextResponse.json({ ok: true });
+    }
 
     if (customerId) await attachStripeCustomerId(memberId, customerId);
 
@@ -485,6 +595,7 @@ export async function POST(req: Request) {
         });
         await reconcileStripeSubscription({ stripe, subscription: sub });
       }
+      await recordStripeWebhookHandled(event.id);
       return NextResponse.json({ ok: true });
     }
 
@@ -496,7 +607,10 @@ export async function POST(req: Request) {
     const priceIds = items
       .map((li) => li.price?.id)
       .filter((v): v is string => !!v);
-    if (priceIds.length === 0) return NextResponse.json({ ok: true });
+    if (priceIds.length === 0) {
+      await recordStripeWebhookHandled(event.id);
+      return NextResponse.json({ ok: true });
+    }
 
     const mapped = await sql`
       select price_id, entitlement_key, scope_id, scope_meta
@@ -506,6 +620,23 @@ export async function POST(req: Request) {
       )
     `;
     const rows = mapped.rows as PriceEntitlementRow[];
+
+    const mappedPriceIds = new Set(rows.map((row) => row.price_id));
+    const unmappedPriceIds = priceIds.filter(
+      (priceId) => !mappedPriceIds.has(priceId),
+    );
+
+    if (unmappedPriceIds.length > 0) {
+      throw new Error(
+        `Stripe checkout session ${session.id} has unmapped price IDs: ${unmappedPriceIds.join(", ")}`,
+      );
+    }
+
+    if (rows.length === 0) {
+      throw new Error(
+        `Stripe checkout session ${session.id} completed with no mapped entitlements`,
+      );
+    }
 
     for (const r of rows) {
       await grantEntitlement({
@@ -519,18 +650,28 @@ export async function POST(req: Request) {
         grantSourceRef: session.id,
         expiresAt: null,
         correlationId: session.id,
-        eventSource: "server",
+        eventSource: EVENT_SOURCES.STRIPE,
       });
     }
 
+    await recordStripeWebhookHandled(event.id);
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const message = safeErrMessage(err);
+
     console.error("stripe webhook handler error", {
       eventId: event.id,
       type: event.type,
-      message: safeErrMessage(err),
+      message,
     });
+
+    await recordStripeWebhookFailure({
+      eventId: event.id,
+      eventType: event.type,
+      message,
+    });
+
     // Avoid Stripe retry storms while we inspect logs.
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, recordedFailure: true });
   }
 }

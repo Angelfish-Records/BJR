@@ -12,6 +12,13 @@ const PRESERVE_KEYS = new Set<string>([
 ]);
 const STRIP_KEYS = new Set<string>(["p", "panel", "album", "track", "t"]);
 
+function allowsVercelPreviewOrigin(): boolean {
+  return (
+    process.env.NODE_ENV !== "production" ||
+    process.env.ALLOW_VERCEL_PREVIEW_CHECKOUT_ORIGINS === "true"
+  );
+}
+
 export function sameOriginOrAllowed(req: Request, appUrl: string): boolean {
   const origin = req.headers.get("origin");
   if (!origin) return true;
@@ -36,7 +43,10 @@ export function sameOriginOrAllowed(req: Request, appUrl: string): boolean {
     return true;
   }
 
-  return requestOrigin.hostname.endsWith(".vercel.app");
+  return (
+    allowsVercelPreviewOrigin() &&
+    requestOrigin.hostname.endsWith(".vercel.app")
+  );
 }
 
 function looksLikeSafeRelativePath(value: string): boolean {

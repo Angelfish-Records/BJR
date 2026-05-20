@@ -8,6 +8,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { getAlbumOffer } from "@/lib/albumOffers";
 import { assertLooksLikeEmail, normalizeEmail } from "@/lib/members";
 import { newCorrelationId } from "@/lib/events";
+import { sameOriginOrAllowed } from "@/lib/checkoutReturnUrl";
 
 export const runtime = "nodejs";
 
@@ -21,12 +22,6 @@ type Req = {
 function must(v: string, name: string) {
   if (!v) throw new Error(`Missing ${name}`);
   return v;
-}
-
-function safeOrigin(req: NextRequest): string {
-  const env = (process.env.NEXT_PUBLIC_APP_URL ?? "").trim();
-  if (env) return env.replace(/\/$/, "");
-  return req.nextUrl.origin;
 }
 
 // --- returnTo sanitization (local + deterministic) ---
@@ -153,6 +148,17 @@ function buildReturnUrl(
 
 export async function POST(req: NextRequest) {
   const correlationId = newCorrelationId();
+  const appUrl = must(
+    process.env.NEXT_PUBLIC_APP_URL ?? "",
+    "NEXT_PUBLIC_APP_URL",
+  );
+
+  if (!sameOriginOrAllowed(req, appUrl)) {
+    return NextResponse.json(
+      { ok: false, error: "BAD_ORIGIN", correlationId },
+      { status: 403 },
+    );
+  }
 
   const body = (await req.json().catch(() => null)) as Req | null;
   if (!body?.albumSlug || !body?.recipientEmail) {
@@ -245,7 +251,7 @@ export async function POST(req: NextRequest) {
   );
   const stripe = new Stripe(STRIPE_SECRET_KEY);
 
-  const origin = safeOrigin(req);
+  const origin = appUrl.replace(/\/$/, "");
 
   // returnTo drives everything; fallback is neutral canonical surface.
   const rt = safeReturnTo(origin, body.returnTo, "/player");

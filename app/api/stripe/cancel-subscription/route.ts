@@ -3,16 +3,26 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import Stripe from "stripe";
+import { assertStripeSecretKey } from "@/lib/stripeEnv";
 import { auth } from "@clerk/nextjs/server";
 
 export const runtime = "nodejs";
 
-const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY ?? "";
+const STRIPE_SECRET_KEY = assertStripeSecretKey(
+  process.env.STRIPE_SECRET_KEY ?? "",
+);
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? ""; // used only for same-origin guard
 
 function must(v: string, name: string) {
   if (!v) throw new Error(`Missing ${name}`);
   return v;
+}
+
+function allowsVercelPreviewOrigin(): boolean {
+  return (
+    process.env.NODE_ENV !== "production" ||
+    process.env.ALLOW_VERCEL_PREVIEW_CHECKOUT_ORIGINS === "true"
+  );
 }
 
 function safeOrigin(req: Request): string | null {
@@ -46,7 +56,9 @@ function sameOriginOrAllowed(req: Request): boolean {
   )
     return true;
 
-  if (o.hostname.endsWith(".vercel.app")) return true;
+  if (allowsVercelPreviewOrigin() && o.hostname.endsWith(".vercel.app")) {
+    return true;
+  }
 
   return false;
 }

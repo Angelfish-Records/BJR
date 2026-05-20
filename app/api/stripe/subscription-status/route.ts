@@ -3,12 +3,15 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import Stripe from "stripe";
+import { assertStripeSecretKey } from "@/lib/stripeEnv";
 import { auth } from "@clerk/nextjs/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY ?? "";
+const STRIPE_SECRET_KEY = assertStripeSecretKey(
+  process.env.STRIPE_SECRET_KEY ?? "",
+);
 
 function must(v: string, name: string) {
   if (!v) throw new Error(`Missing ${name}`);

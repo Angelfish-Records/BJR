@@ -6,22 +6,28 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { normalizeEmail, ensureMemberByEmail } from "../../../../lib/members";
 import { ensureStripeCustomerForClerkUser } from "@/lib/stripeCustomer";
 import { safeReturnToFromBody, buildReturnUrl } from "@/lib/returnTo";
+import { assertStripePriceId, assertStripeSecretKey } from "@/lib/stripeEnv";
 
 export const runtime = "nodejs";
 
-const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY ?? "";
+const STRIPE_SECRET_KEY = assertStripeSecretKey(
+  process.env.STRIPE_SECRET_KEY ?? "",
+);
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
-// New (recommended) explicit prices:
 const PRICE_PATRON = process.env.STRIPE_PRICE_PATRON ?? "";
 const PRICE_PARTNER = process.env.STRIPE_PRICE_PARTNER ?? "";
-
-// Back-compat fallback (your current env):
-const LEGACY_PRICE = process.env.STRIPE_TEST_SUB_PRICE_ID ?? "";
 
 function must(v: string, name: string) {
   if (!v) throw new Error(`Missing ${name}`);
   return v;
+}
+
+function allowsVercelPreviewOrigin(): boolean {
+  return (
+    process.env.NODE_ENV !== "production" ||
+    process.env.ALLOW_VERCEL_PREVIEW_CHECKOUT_ORIGINS === "true"
+  );
 }
 
 function sameOriginOrAllowed(req: Request, appUrl: string): boolean {
@@ -46,7 +52,9 @@ function sameOriginOrAllowed(req: Request, appUrl: string): boolean {
   )
     return true;
 
-  if (o.hostname.endsWith(".vercel.app")) return true;
+  if (allowsVercelPreviewOrigin() && o.hostname.endsWith(".vercel.app")) {
+    return true;
+  }
 
   return false;
 }
@@ -62,9 +70,11 @@ function pickTier(raw: unknown): "patron" | "partner" {
 }
 
 function priceForTier(tier: "patron" | "partner"): string {
-  // Prefer explicit tier prices; fall back to legacy for patron if present.
-  if (tier === "partner") return PRICE_PARTNER;
-  return PRICE_PATRON || LEGACY_PRICE;
+  if (tier === "partner") {
+    return assertStripePriceId(PRICE_PARTNER, "STRIPE_PRICE_PARTNER");
+  }
+
+  return assertStripePriceId(PRICE_PATRON, "STRIPE_PRICE_PATRON");
 }
 
 function unwrapStripeResponse<T>(res: T | Stripe.Response<T>): T {
@@ -127,20 +137,6 @@ export async function POST(req: Request) {
 
   const tier = pickTier(body.tier);
   const priceId = priceForTier(tier);
-
-  if (!priceId) {
-    // Make the missing env explicit (avoid silent mis-billing)
-    return NextResponse.json(
-      {
-        ok: false,
-        error:
-          tier === "partner"
-            ? "Missing STRIPE_PRICE_PARTNER"
-            : "Missing STRIPE_PRICE_PATRON (or STRIPE_TEST_SUB_PRICE_ID legacy)",
-      },
-      { status: 500 },
-    );
-  }
 
   // Logged out: require email so we can attach to canonical member row.
   if (!userId && !email) {

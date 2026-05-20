@@ -11,6 +11,7 @@ import {
 } from "@/lib/checkoutReturnUrl";
 import { getAlbumOffer } from "../../../../lib/albumOffers";
 import { normalizeEmail, ensureMemberByEmail } from "../../../../lib/members";
+import { assertStripeSecretKey } from "@/lib/stripeEnv";
 
 export const runtime = "nodejs";
 
@@ -26,9 +27,8 @@ type Body = {
 };
 
 export async function POST(req: Request) {
-  const STRIPE_SECRET_KEY = must(
+  const STRIPE_SECRET_KEY = assertStripeSecretKey(
     process.env.STRIPE_SECRET_KEY ?? "",
-    "STRIPE_SECRET_KEY",
   );
   const APP_URL = must(
     process.env.NEXT_PUBLIC_APP_URL ?? "",

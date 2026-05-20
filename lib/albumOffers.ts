@@ -1,5 +1,11 @@
 // web/lib/albumOffers.ts
+import { assertStripePriceId } from "@/lib/stripeEnv";
 import { ENT } from "./entitlementVocab";
+
+const GOD_DEFEND_PRICE_ID = assertStripePriceId(
+  process.env.STRIPE_PRICE_ALBUM_GOD_DEFEND ?? "",
+  "STRIPE_PRICE_ALBUM_GOD_DEFEND",
+);
 
 export type AlbumOfferAsset = {
   id: "bundle_zip" | string;
@@ -21,27 +27,26 @@ export type AlbumOffer = {
 };
 
 export const ALBUM_OFFERS: Record<string, AlbumOffer> = {
-  afterglow: {
-    albumSlug: "afterglow",
-    title: "Afterglow [Test]",
-    artistName: "Brendan Jolly Roger",
+  "god-defend": {
+    albumSlug: "god-defend",
+    title: "GOD DEFEND",
+    artistName: "Brendan John Roch",
     priceLabel: "$10 NZD",
-    stripePriceId: "price_1SmNcsQVwozbpzk4awZ9x12h",
-    entitlementKey: ENT.downloadAlbum("afterglow"),
+    stripePriceId: GOD_DEFEND_PRICE_ID,
+    entitlementKey: ENT.downloadAlbum("god-defend"),
     includes: ["FLAC", "WAV", "MP3", "Lyrics PDF"],
     assets: [
       {
         id: "bundle_zip",
-        label: "Afterglow (ZIP bundle)",
-        r2Key: "albums/afterglow/afterglow.zip",
-        filename: "Afterglow.zip",
+        label: "GOD DEFEND (ZIP bundle)",
+        r2Key: "albums/god-defend/god-defend.zip",
+        filename: "GOD DEFEND.zip",
         contentType: "application/zip",
       },
     ],
   },
 };
 
-// dev-only self-consistency check
 if (process.env.NODE_ENV !== "production") {
   for (const [k, v] of Object.entries(ALBUM_OFFERS)) {
     const key = k.trim().toLowerCase();

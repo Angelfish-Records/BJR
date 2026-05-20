@@ -69,7 +69,17 @@ export async function ensureStripeCustomerForClerkUser(args: {
   const winner =
     (r3.rows[0]?.stripe_customer_id as string | null | undefined) ?? null;
 
-  if (winner) return { memberId: m1.id, customerId: winner };
+  if (winner) {
+    await stripe.customers.update(newCid, {
+      metadata: {
+        clerk_user_id: clerkId,
+        source: "duplicate_after_customer_attach_race",
+        canonical_customer_id: winner,
+      },
+    });
+
+    return { memberId: m1.id, customerId: winner };
+  }
 
   // Extremely unlikely, but don’t silently proceed.
   throw new Error("Failed to persist stripe_customer_id");

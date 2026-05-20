@@ -41,6 +41,18 @@ type SelectedMemberDetails = {
   updated_at: string;
 };
 
+type StripeWebhookEventRow = {
+  event_id: string;
+  type: string;
+  stripe_object_id: string | null;
+  stripe_customer_id: string | null;
+  checkout_session_id: string | null;
+  subscription_id: string | null;
+  handled_at: string | null;
+  handler_error: string | null;
+  handler_error_at: string | null;
+};
+
 type DashboardTierStat = {
   entitlement_key: string;
   count: number;
@@ -101,6 +113,9 @@ export default function AdminEntitlementsPanel(props: {
 
   const [grants, setGrants] = React.useState<GrantRow[]>([]);
   const [current, setCurrent] = React.useState<CurrentEntitlementRow[]>([]);
+  const [stripeWebhookEvents, setStripeWebhookEvents] = React.useState<
+    StripeWebhookEventRow[]
+  >([]);
   const [memberDetails, setMemberDetails] =
     React.useState<SelectedMemberDetails | null>(null);
 
@@ -115,6 +130,7 @@ export default function AdminEntitlementsPanel(props: {
   const [searchBusy, setSearchBusy] = React.useState(false);
   const [memberBusy, setMemberBusy] = React.useState(false);
   const [grantBusy, setGrantBusy] = React.useState(false);
+  const [reconcileBusy, setReconcileBusy] = React.useState(false);
   const [revokeBusyId, setRevokeBusyId] = React.useState<string | null>(null);
 
   const [error, setError] = React.useState<string | null>(null);
@@ -285,6 +301,7 @@ export default function AdminEntitlementsPanel(props: {
         member?: SelectedMemberDetails | null;
         grants?: GrantRow[];
         current?: CurrentEntitlementRow[];
+        stripeWebhookEvents?: StripeWebhookEventRow[];
       };
 
       if (!res.ok || !json?.ok) {
@@ -297,6 +314,9 @@ export default function AdminEntitlementsPanel(props: {
         Array.isArray(json.current)
           ? (json.current as CurrentEntitlementRow[])
           : [],
+      );
+      setStripeWebhookEvents(
+        Array.isArray(json.stripeWebhookEvents) ? json.stripeWebhookEvents : [],
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
@@ -351,6 +371,31 @@ export default function AdminEntitlementsPanel(props: {
       setError(e instanceof Error ? e.message : "Revoke failed");
     } finally {
       setRevokeBusyId(null);
+    }
+  }
+
+  async function reconcileStripe() {
+    if (!selected) return;
+
+    setReconcileBusy(true);
+    setError(null);
+
+    try {
+      const res = await fetch(
+        `/api/admin/members/${encodeURIComponent(selected.id)}/stripe-reconcile`,
+        { method: "POST" },
+      );
+      const json = (await res.json()) as { ok?: boolean; error?: string };
+
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error ?? "Stripe reconcile failed");
+      }
+
+      await Promise.all([loadMember(selected.id), loadDashboard(periodDays)]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Stripe reconcile failed");
+    } finally {
+      setReconcileBusy(false);
     }
   }
 
@@ -866,6 +911,51 @@ export default function AdminEntitlementsPanel(props: {
 
             <div
               style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 10,
+                alignItems: "center",
+                flexWrap: "wrap",
+                marginTop: 14,
+                padding: "10px 12px",
+                borderRadius: 12,
+                border: "1px solid rgba(255,255,255,0.10)",
+                background: "rgba(255,255,255,0.03)",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.72 }}>
+                  Stripe reconciliation
+                </div>
+                <div style={{ marginTop: 3, fontSize: 11, opacity: 0.56 }}>
+                  Pull active Stripe subscriptions and reconcile entitlements.
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  void reconcileStripe();
+                }}
+                disabled={reconcileBusy || !memberDetails?.stripe_customer_id}
+                style={{
+                  ...primaryButtonStyle,
+                  opacity:
+                    reconcileBusy || !memberDetails?.stripe_customer_id
+                      ? 0.45
+                      : 1,
+                  cursor:
+                    reconcileBusy || !memberDetails?.stripe_customer_id
+                      ? "default"
+                      : "pointer",
+                }}
+              >
+                {reconcileBusy ? "Reconciling…" : "Reconcile Stripe"}
+              </button>
+            </div>
+
+            <div
+              style={{
                 display: "grid",
                 gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 0.9fr)",
                 gap: 14,
@@ -1000,6 +1090,97 @@ export default function AdminEntitlementsPanel(props: {
                   ) : null}
                 </div>
               </div>
+            </div>
+          </div>
+
+          <div style={cardStyle}>
+            <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.72 }}>
+              Stripe webhook ledger
+            </div>
+
+            <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+              {stripeWebhookEvents.map((event) => {
+                const failed = Boolean(event.handler_error);
+
+                return (
+                  <div
+                    key={event.event_id}
+                    style={{
+                      padding: "11px 12px",
+                      borderRadius: 12,
+                      border: failed
+                        ? "1px solid rgba(255,120,120,0.28)"
+                        : "1px solid rgba(255,255,255,0.10)",
+                      background: failed
+                        ? "rgba(120,0,0,0.16)"
+                        : "rgba(255,255,255,0.03)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 10,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 800 }}>
+                          {event.type}
+                        </div>
+                        <div
+                          style={{ marginTop: 4, fontSize: 11, opacity: 0.58 }}
+                        >
+                          {event.event_id}
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: 11,
+                          opacity: 0.68,
+                          textAlign: "right",
+                        }}
+                      >
+                        {failed
+                          ? `failed ${formatDateTime(event.handler_error_at)}`
+                          : event.handled_at
+                            ? `handled ${formatDateTime(event.handled_at)}`
+                            : "received"}
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 8, fontSize: 11, opacity: 0.64 }}>
+                      {event.checkout_session_id
+                        ? `checkout ${event.checkout_session_id}`
+                        : event.subscription_id
+                          ? `subscription ${event.subscription_id}`
+                          : event.stripe_object_id
+                            ? `object ${event.stripe_object_id}`
+                            : "object —"}
+                    </div>
+
+                    {event.handler_error ? (
+                      <div
+                        style={{
+                          marginTop: 8,
+                          fontSize: 11,
+                          color: "#ffd0d0",
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        {event.handler_error}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+
+              {!stripeWebhookEvents.length ? (
+                <div style={{ fontSize: 12, opacity: 0.58 }}>
+                  No Stripe webhook events linked to this member.
+                </div>
+              ) : null}
             </div>
           </div>
 

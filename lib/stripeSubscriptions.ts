@@ -25,11 +25,28 @@ async function attachStripeCustomerId(
   customerId: string,
 ): Promise<void> {
   if (!memberId || !customerId) return;
+
+  const existing = await sql`
+    select stripe_customer_id
+    from members
+    where id = ${memberId}::uuid
+    limit 1
+  `;
+
+  const current =
+    (existing.rows[0]?.stripe_customer_id as string | null | undefined) ?? null;
+
+  if (current && current !== customerId) {
+    throw new Error(
+      `Stripe customer conflict for member ${memberId}: existing=${current}, incoming=${customerId}`,
+    );
+  }
+
   await sql`
     update members
     set stripe_customer_id = ${customerId}
     where id = ${memberId}::uuid
-      and (stripe_customer_id is null or stripe_customer_id = ${customerId})
+      and stripe_customer_id is null
   `;
 }
 
@@ -120,6 +137,17 @@ export async function reconcileStripeSubscription(params: {
     )
   `;
   const desiredRows = mapped.rows as PriceEntitlementRow[];
+  const mappedPriceIds = new Set(desiredRows.map((row) => row.price_id));
+  const unmappedPriceIds = priceIds.filter(
+    (priceId) => !mappedPriceIds.has(priceId),
+  );
+
+  if (unmappedPriceIds.length > 0) {
+    throw new Error(
+      `Stripe subscription ${sub.id} has unmapped price IDs: ${unmappedPriceIds.join(", ")}`,
+    );
+  }
+
   const desiredKeys = new Set(
     desiredRows.map((r) => keyOf(r.entitlement_key, r.scope_id)),
   );
