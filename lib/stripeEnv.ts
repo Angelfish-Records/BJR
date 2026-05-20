@@ -1,5 +1,3 @@
-import "server-only";
-
 type StripeMode = "live" | "test" | "unknown";
 
 function keyMode(value: string): StripeMode {
