@@ -4,6 +4,9 @@
 import type { Theme, AudioFeatures } from "./types";
 import { PresentPass } from "./core/PresentPass";
 import { RenderTarget } from "./core/RenderTarget";
+import { VisualizerFrameRenderer } from "./core/VisualizerFrameRenderer";
+import { SnapshotReadback } from "./core/SnapshotReadback";
+import { TransitionCompositor } from "./core/TransitionCompositor";
 import { createPortalWipe, type PortalWipe } from "./transition/portalWipe";
 import type { StageVariant } from "../mediaSurface";
 import { visualizerPerfSurface } from "./visualizerPerfSurface";
@@ -128,12 +131,15 @@ export class VisualizerEngine {
   private fromFbo: RenderTarget | null = null;
   private toFbo: RenderTarget | null = null;
   private wipe: PortalWipe | null = null;
+  private transitionCompositor: TransitionCompositor | null = null;
 
   // Present plumbing (Route B core)
+  private frameRenderer: VisualizerFrameRenderer | null = null;
   private presentFbo: RenderTarget | null = null;
   private presentPass: PresentPass | null = null;
 
   // Snapshot plumbing (stable sip source)
+  private snapReadback: SnapshotReadback | null = null;
   private snapFbo: RenderTarget | null = null;
   private snapCanvas: HTMLCanvasElement;
   private snapCtx: CanvasRenderingContext2D;
@@ -155,10 +161,6 @@ export class VisualizerEngine {
   private didLogPresentFailure = false;
   private contextLost = false;
   private disposed = false;
-
-  // Always create ImageData by dimensions (avoids TypedArray overload issues in TS)
-  private snapImageData: ImageData = new ImageData(2, 2);
-  private snapBufClamp: Uint8ClampedArray = this.snapImageData.data;
 
   // Targets requested by UI
   private wantPlaying = false;
@@ -458,7 +460,7 @@ export class VisualizerEngine {
       // Ensure FBO sizes match backing store
       this.ensurePresentFboSized();
 
-      if (!this.presentPass || !this.presentFbo) {
+      if (!this.presentPass || !this.presentFbo || !this.frameRenderer) {
         this.raf = window.requestAnimationFrame(loop);
         return;
       }
@@ -485,41 +487,30 @@ export class VisualizerEngine {
             ? this.idleTheme
             : (this.targetTheme ?? this.currentTheme);
 
-        gl.bindFramebuffer(gl.FRAMEBUFFER, toFbo.fbo);
-        gl.viewport(0, 0, toFbo.w, toFbo.h);
-        gl.clearColor(0, 0, 0, 1);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-        (toTheme ?? this.currentTheme).render(gl, {
+        toFbo.clear(0, 0, 0, 1);
+
+        this.frameRenderer.renderFrame({
+          theme: toTheme ?? this.currentTheme,
           time,
-          width: toFbo.w,
-          height: toFbo.h,
-          dpr: this.appliedDpr || this.baseDpr * this.dprScale,
           audio,
+          target: toFbo,
+          presentToScreen: false,
         });
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
         const p01 = easeInOut(
           (tNowMs - this.mode.startMs) / Math.max(1, this.mode.durMs),
         );
         const onset01 = clamp(this.mode.onset01, 0, 1);
 
-        // Render wipe into presentFbo
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.presentFbo!.fbo);
-        gl.viewport(0, 0, this.presentFbo!.w, this.presentFbo!.h);
-        gl.clearColor(0, 0, 0, 1);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-
-        wipe.render(gl, {
-          fromTex: fromFbo.tex,
-          toTex: toFbo.tex,
-          width: this.presentFbo!.w,
-          height: this.presentFbo!.h,
+        this.transitionCompositor?.renderPortalWipe({
+          wipe,
+          from: fromFbo,
+          to: toFbo,
+          target: this.presentFbo,
           time,
           progress01: p01,
           onset01,
         });
-
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
         // onset decay
         const decay = dtSec * 2.5;
@@ -544,26 +535,20 @@ export class VisualizerEngine {
           ? (this.idleTheme ?? this.currentTheme)
           : this.currentTheme;
 
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.presentFbo!.fbo);
-        gl.viewport(0, 0, this.presentFbo!.w, this.presentFbo!.h);
-        gl.clearColor(0, 0, 0, 1);
-        gl.clear(gl.COLOR_BUFFER_BIT);
+        this.frameRenderer.clear(0, 0, 0, 1);
 
-        theme.render(gl, {
+        this.frameRenderer.renderFrame({
+          theme,
           time,
-          width: this.presentFbo!.w,
-          height: this.presentFbo!.h,
-          dpr: this.appliedDpr || this.baseDpr * this.dprScale,
           audio,
+          presentToScreen: false,
         });
-
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       }
 
       // Present pass: draw presentFbo.tex to the default framebuffer
       this.presentToScreen();
 
-      // Snapshot pass: occasionally downsample + readPixels into stable 2D canvas
+      // Snapshot pass: occasionally refresh the stable 2D canvas
       this.maybeUpdateSnapshot(tNowMs);
 
       // Adaptive DPR target (quality signal)
@@ -647,13 +632,15 @@ export class VisualizerEngine {
     this.freeTransitionResources();
 
     try {
-      this.presentFbo?.dispose();
+      this.frameRenderer?.dispose();
     } catch {}
+    this.frameRenderer = null;
     this.presentFbo = null;
 
     try {
-      this.snapFbo?.dispose();
+      this.snapReadback?.dispose();
     } catch {}
+    this.snapReadback = null;
     this.snapFbo = null;
 
     try {
@@ -756,18 +743,18 @@ export class VisualizerEngine {
           ? (this.idleTheme ?? this.currentTheme)
           : this.currentTheme;
 
-      gl.bindFramebuffer(gl.FRAMEBUFFER, fromFbo.fbo);
-      gl.viewport(0, 0, fromFbo.w, fromFbo.h);
-      gl.clearColor(0, 0, 0, 1);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      snapshotTheme.render(gl, {
+      const frameRenderer = this.frameRenderer;
+      if (!frameRenderer) return;
+
+      fromFbo.clear(0, 0, 0, 1);
+
+      frameRenderer.renderFrame({
+        theme: snapshotTheme,
         time,
-        width: fromFbo.w,
-        height: fromFbo.h,
-        dpr: this.appliedDpr || this.baseDpr * this.dprScale,
         audio,
+        target: fromFbo,
+        presentToScreen: false,
       });
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
 
     this.mode = {
@@ -781,6 +768,10 @@ export class VisualizerEngine {
 
   private ensureTransitionResources() {
     const gl = this.gl;
+    if (!this.transitionCompositor) {
+      this.transitionCompositor = new TransitionCompositor(gl);
+    }
+
     if (!this.wipe) {
       this.wipe = createPortalWipe();
       this.wipe.init(gl);
@@ -812,6 +803,11 @@ export class VisualizerEngine {
       this.wipe?.dispose(gl);
     } catch {}
     this.wipe = null;
+
+    try {
+      this.transitionCompositor?.dispose();
+    } catch {}
+    this.transitionCompositor = null;
   }
 
   private ensurePresentResources() {
@@ -839,9 +835,21 @@ export class VisualizerEngine {
 
     const W = Math.max(2, this.canvas.width);
     const H = Math.max(2, this.canvas.height);
+    const dpr = this.appliedDpr || this.baseDpr * this.dprScale;
 
-    if (!this.presentFbo) this.presentFbo = new RenderTarget(gl, W, H);
-    else this.presentFbo.resize(W, H);
+    if (!this.frameRenderer) {
+      this.frameRenderer = new VisualizerFrameRenderer({
+        gl,
+        width: W,
+        height: H,
+        dpr,
+        mode: "realtime",
+      });
+    } else {
+      this.frameRenderer.setSize(W, H, dpr);
+    }
+
+    this.presentFbo = this.frameRenderer.renderTarget;
   }
 
   private presentToScreen() {
@@ -879,8 +887,20 @@ export class VisualizerEngine {
     const H = Math.max(2, Math.floor(srcH * scale));
 
     // Lazily allocate/resize snap FBO + CPU buffers.
-    if (!this.snapFbo) this.snapFbo = new RenderTarget(gl, W, H);
-    else this.snapFbo.resize(W, H);
+    if (!this.snapReadback) {
+      this.snapReadback = new SnapshotReadback({
+        gl,
+        presentPass: this.presentPass,
+        source: this.presentFbo,
+        width: W,
+        height: H,
+      });
+
+      this.snapFbo = this.snapReadback.target;
+    } else {
+      this.snapReadback.target.resize(W, H);
+      this.snapFbo = this.snapReadback.target;
+    }
 
     if (W !== this.snapW || H !== this.snapH) {
       this.snapW = W;
@@ -891,38 +911,14 @@ export class VisualizerEngine {
 
       this.snapBufAB = new ArrayBuffer(W * H * 4);
       this.snapBufU8 = new Uint8Array(this.snapBufAB);
-
-      // Create ImageData using dimensions (typed correctly everywhere)
-      this.snapImageData = new ImageData(W, H);
-
-      // We'll copy bytes into ImageData.data (Uint8ClampedArray)
-      this.snapBufClamp = this.snapImageData.data;
     }
 
-    // Downsample present -> snap (flip in shader so readPixels buffer is already top-left oriented)
-    this.presentPass.render({
-      texture: this.presentFbo.tex,
-      target: {
-        framebuffer: this.snapFbo.fbo,
-        width: this.snapFbo.w,
-        height: this.snapFbo.h,
-      },
-      flipY: true,
-    });
+    if (!this.snapReadback) return;
 
-    // Read pixels from snapFbo
-    gl.readPixels(
-      0,
-      0,
-      this.snapFbo.w,
-      this.snapFbo.h,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      this.snapBufU8,
-    );
+    const snapshotCanvas = this.getStableSnapshotCanvas();
+    if (!snapshotCanvas) return;
 
-    this.snapBufClamp.set(this.snapBufU8);
-    this.snapCtx.putImageData(this.snapImageData, 0, 0);
+    this.snapReadback.readToCanvas(snapshotCanvas);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }

@@ -106,11 +106,25 @@ export class RenderTarget {
 
     const gl = this.gl;
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
-    gl.viewport(0, 0, this.w, this.h);
-    gl.clearColor(r, g, b, a);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    const prevFramebuffer = gl.getParameter(
+      gl.FRAMEBUFFER_BINDING,
+    ) as WebGLFramebuffer | null;
+    const prevViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
+
+    try {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+      gl.viewport(0, 0, this.w, this.h);
+      gl.clearColor(r, g, b, a);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+    } finally {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, prevFramebuffer);
+      gl.viewport(
+        prevViewport[0],
+        prevViewport[1],
+        prevViewport[2],
+        prevViewport[3],
+      );
+    }
   }
 
   dispose(): void {

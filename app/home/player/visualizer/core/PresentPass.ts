@@ -66,23 +66,38 @@ export class PresentPass {
 
     const gl = this.gl;
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, args.target.framebuffer);
-    gl.viewport(0, 0, args.target.width, args.target.height);
+    const prevFramebuffer = gl.getParameter(
+      gl.FRAMEBUFFER_BINDING,
+    ) as WebGLFramebuffer | null;
+    const prevViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
 
-    gl.useProgram(this.program);
-    gl.bindVertexArray(this.tri.vao);
+    try {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, args.target.framebuffer);
+      gl.viewport(0, 0, args.target.width, args.target.height);
 
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, args.texture);
+      gl.useProgram(this.program);
+      gl.bindVertexArray(this.tri.vao);
 
-    gl.uniform1i(this.uTex, 0);
-    gl.uniform1f(this.uFlipY, args.flipY ? 1.0 : 0.0);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, args.texture);
 
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.uniform1i(this.uTex, 0);
+      gl.uniform1f(this.uFlipY, args.flipY ? 1.0 : 0.0);
 
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    gl.bindVertexArray(null);
-    gl.useProgram(null);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      gl.bindVertexArray(null);
+      gl.useProgram(null);
+    } finally {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, prevFramebuffer);
+      gl.viewport(
+        prevViewport[0],
+        prevViewport[1],
+        prevViewport[2],
+        prevViewport[3],
+      );
+    }
   }
 
   dispose(): void {

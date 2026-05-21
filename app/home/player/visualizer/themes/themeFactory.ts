@@ -1,3 +1,5 @@
+// web/app/home/player/visualizer/themes/themeFactory.ts
+
 import type { Theme } from "../types";
 import { createProgram, makeFullscreenTriangle } from "../gl";
 import { createPingPong, type PingPong } from "../gl/pingpong";

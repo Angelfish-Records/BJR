@@ -1,10 +1,6 @@
 // web/app/home/player/visualizer/core/VisualizerFrameRenderer.ts
 
-import type {
-  AudioFeatures,
-  Theme,
-  VisualizerRenderMode,
-} from "../types";
+import type { AudioFeatures, Theme, VisualizerRenderMode } from "../types";
 
 import { RenderTarget } from "./RenderTarget";
 import { PresentPass } from "./PresentPass";
@@ -24,6 +20,7 @@ export type RenderFrameArgs = {
   audio: AudioFeatures;
   seed?: number;
   presentToScreen?: boolean;
+  target?: RenderTarget;
 };
 
 export class VisualizerFrameRenderer {
@@ -50,11 +47,7 @@ export class VisualizerFrameRenderer {
     this.presentPass = new PresentPass(this.gl);
     this.presentPass.init();
 
-    this.presentTarget = new RenderTarget(
-      this.gl,
-      this.width,
-      this.height,
-    );
+    this.presentTarget = new RenderTarget(this.gl, this.width, this.height);
   }
 
   setSize(width: number, height: number, dpr: number): void {
@@ -83,15 +76,17 @@ export class VisualizerFrameRenderer {
     const prevViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
 
     try {
-      gl.bindFramebuffer(gl.FRAMEBUFFER, this.presentTarget.fbo);
+      const target = args.target ?? this.presentTarget;
 
-      gl.viewport(0, 0, this.width, this.height);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+
+      gl.viewport(0, 0, target.w, target.h);
 
       args.theme.render(gl, {
         time: args.time,
         frameIndex: args.frameIndex,
-        width: this.width,
-        height: this.height,
+        width: target.w,
+        height: target.h,
         dpr: this.dpr,
         audio: args.audio,
         seed: args.seed,
@@ -100,11 +95,11 @@ export class VisualizerFrameRenderer {
 
       if (args.presentToScreen) {
         this.presentPass.render({
-          texture: this.presentTarget.tex,
+          texture: target.tex,
           target: {
             framebuffer: null,
-            width: this.width,
-            height: this.height,
+            width: target.w,
+            height: target.h,
           },
           flipY: false,
         });
@@ -138,21 +133,34 @@ export class VisualizerFrameRenderer {
       throw new Error("VisualizerFrameRenderer has been disposed");
     }
 
+    const expectedLength = this.width * this.height * 4;
+    if (target.byteLength < expectedLength) {
+      throw new Error(
+        `readPixelsInto target too small: expected at least ${expectedLength} bytes, got ${target.byteLength}`,
+      );
+    }
+
     const gl = this.gl;
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.presentTarget.fbo);
+    const prevFramebuffer = gl.getParameter(
+      gl.FRAMEBUFFER_BINDING,
+    ) as WebGLFramebuffer | null;
 
-    gl.readPixels(
-      0,
-      0,
-      this.width,
-      this.height,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      target,
-    );
+    try {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.presentTarget.fbo);
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.readPixels(
+        0,
+        0,
+        this.width,
+        this.height,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        target,
+      );
+    } finally {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, prevFramebuffer);
+    }
   }
 
   clear(r = 0, g = 0, b = 0, a = 0): void {
