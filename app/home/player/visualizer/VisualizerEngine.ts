@@ -336,6 +336,12 @@ export class VisualizerEngine {
       }
     } catch (err) {
       console.error("[VisualizerEngine] target theme init failed", err);
+
+      if (this.mode.mode === "transition") {
+        this.mode = this.wantPlaying ? { mode: "playing" } : { mode: "idle" };
+        this.tier = this.wantPlaying ? "active" : "idle";
+        this.freeTransitionResources();
+      }
       this.targetTheme = prevTarget ?? null;
       try {
         next.dispose?.(gl);

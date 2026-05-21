@@ -118,9 +118,7 @@ void main() {
   vec2 cellId, cellCenter;
   float edgeDist;
 
-  // GLSL ES: cannot cast to void; store return value instead.
-  float _dist = voronoi(x, cellId, cellCenter, edgeDist);
-  (void)_dist; // harmless in TS string; GLSL ignores this line if removed by compiler
+  float _dist = length(p);
 
   float resMin = min(uRes.x, uRes.y);
   float soft = clamp((520.0 / max(240.0, resMin)), 0.9, 1.7);
