@@ -2,7 +2,8 @@
 "use client";
 
 import type { Theme, AudioFeatures } from "./types";
-import { createProgram, makeFullscreenTriangle } from "./gl";
+import { PresentPass } from "./core/PresentPass";
+import { RenderTarget } from "./core/RenderTarget";
 import { createPortalWipe, type PortalWipe } from "./transition/portalWipe";
 import type { StageVariant } from "../mediaSurface";
 import { visualizerPerfSurface } from "./visualizerPerfSurface";
@@ -68,119 +69,6 @@ function easeInOut(x: number) {
   return x * x * (3 - 2 * x);
 }
 
-type FboTex8 = {
-  fbo: WebGLFramebuffer;
-  tex: WebGLTexture;
-  w: number;
-  h: number;
-  resize: (gl: WebGL2RenderingContext, w: number, h: number) => void;
-  dispose: (gl: WebGL2RenderingContext) => void;
-};
-
-function createFboTexRGBA8(
-  gl: WebGL2RenderingContext,
-  w: number,
-  h: number,
-): FboTex8 {
-  const tex = gl.createTexture();
-  if (!tex) throw new Error("createTexture failed");
-  gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texImage2D(
-    gl.TEXTURE_2D,
-    0,
-    gl.RGBA8,
-    Math.max(2, w),
-    Math.max(2, h),
-    0,
-    gl.RGBA,
-    gl.UNSIGNED_BYTE,
-    null,
-  );
-
-  const fbo = gl.createFramebuffer();
-  if (!fbo) throw new Error("createFramebuffer failed");
-  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-  gl.framebufferTexture2D(
-    gl.FRAMEBUFFER,
-    gl.COLOR_ATTACHMENT0,
-    gl.TEXTURE_2D,
-    tex,
-    0,
-  );
-
-  const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  gl.bindTexture(gl.TEXTURE_2D, null);
-
-  if (status !== gl.FRAMEBUFFER_COMPLETE) {
-    gl.deleteFramebuffer(fbo);
-    gl.deleteTexture(tex);
-    throw new Error(`RGBA8 FBO incomplete: ${status}`);
-  }
-
-  const out: FboTex8 = {
-    fbo,
-    tex,
-    w: Math.max(2, w),
-    h: Math.max(2, h),
-    resize(gl2, w2, h2) {
-      const W = Math.max(2, w2);
-      const H = Math.max(2, h2);
-      if (W === out.w && H === out.h) return;
-      out.w = W;
-      out.h = H;
-      gl2.bindTexture(gl2.TEXTURE_2D, out.tex);
-      gl2.texImage2D(
-        gl2.TEXTURE_2D,
-        0,
-        gl2.RGBA8,
-        W,
-        H,
-        0,
-        gl2.RGBA,
-        gl2.UNSIGNED_BYTE,
-        null,
-      );
-      gl2.bindTexture(gl2.TEXTURE_2D, null);
-    },
-    dispose(gl2) {
-      gl2.deleteFramebuffer(out.fbo);
-      gl2.deleteTexture(out.tex);
-    },
-  };
-
-  return out;
-}
-
-const PRESENT_VS = `#version 300 es
-layout(location=0) in vec2 aPos;
-out vec2 vUv;
-void main() {
-  vUv = aPos * 0.5 + 0.5;
-  gl_Position = vec4(aPos, 0.0, 1.0);
-}
-`;
-
-const PRESENT_FS = `#version 300 es
-precision highp float;
-
-in vec2 vUv;
-out vec4 fragColor;
-
-uniform sampler2D uTex;
-uniform float uFlipY; // 0 or 1
-
-void main() {
-  vec2 uv = vUv;
-  if (uFlipY > 0.5) uv.y = 1.0 - uv.y;
-  fragColor = texture(uTex, uv);
-}
-`;
-
 function isLikelyMobile(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent || "";
@@ -237,22 +125,16 @@ export class VisualizerEngine {
 
   // Transition plumbing
   private mode: StageMode = { mode: "idle" };
-  private fromFbo: FboTex8 | null = null;
-  private toFbo: FboTex8 | null = null;
+  private fromFbo: RenderTarget | null = null;
+  private toFbo: RenderTarget | null = null;
   private wipe: PortalWipe | null = null;
 
   // Present plumbing (Route B core)
-  private presentFbo: FboTex8 | null = null;
-  private presentProg: WebGLProgram | null = null;
-  private presentTri: {
-    vao: WebGLVertexArrayObject | null;
-    buf: WebGLBuffer | null;
-  } | null = null;
-  private uPresentTex: WebGLUniformLocation | null = null;
-  private uPresentFlipY: WebGLUniformLocation | null = null;
+  private presentFbo: RenderTarget | null = null;
+  private presentPass: PresentPass | null = null;
 
   // Snapshot plumbing (stable sip source)
-  private snapFbo: FboTex8 | null = null;
+  private snapFbo: RenderTarget | null = null;
   private snapCanvas: HTMLCanvasElement;
   private snapCtx: CanvasRenderingContext2D;
   private performanceProfile: PerformanceProfile;
@@ -576,7 +458,7 @@ export class VisualizerEngine {
       // Ensure FBO sizes match backing store
       this.ensurePresentFboSized();
 
-      if (!this.presentProg || !this.presentTri || !this.presentFbo) {
+      if (!this.presentPass || !this.presentFbo) {
         this.raf = window.requestAnimationFrame(loop);
         return;
       }
@@ -765,28 +647,19 @@ export class VisualizerEngine {
     this.freeTransitionResources();
 
     try {
-      this.presentFbo?.dispose(gl);
+      this.presentFbo?.dispose();
     } catch {}
     this.presentFbo = null;
 
     try {
-      this.snapFbo?.dispose(gl);
+      this.snapFbo?.dispose();
     } catch {}
     this.snapFbo = null;
 
     try {
-      try {
-        if (this.presentTri?.buf) gl.deleteBuffer(this.presentTri.buf);
-        if (this.presentTri?.vao) gl.deleteVertexArray(this.presentTri.vao);
-      } catch {}
-      this.presentTri = null;
+      this.presentPass?.dispose();
     } catch {}
-    this.presentTri = null;
-
-    try {
-      if (this.presentProg) gl.deleteProgram(this.presentProg);
-    } catch {}
-    this.presentProg = null;
+    this.presentPass = null;
 
     try {
       this.currentTheme.dispose(gl);
@@ -845,7 +718,7 @@ export class VisualizerEngine {
     }
 
     this.ensurePresentFboSized();
-    if (!this.presentProg || !this.presentTri || !this.presentFbo) {
+    if (!this.presentPass || !this.presentFbo) {
       this.mode = this.wantPlaying ? { mode: "playing" } : { mode: "idle" };
       return;
     }
@@ -858,27 +731,20 @@ export class VisualizerEngine {
 
     // Capture "from" as the *last fully rendered frame* (presentFbo),
     // not a one-off re-render of the theme (which can be blank during swaps/resizes).
-    if (this.presentFbo && this.presentProg && this.presentTri) {
-      gl.bindFramebuffer(gl.FRAMEBUFFER, fromFbo.fbo);
-      gl.viewport(0, 0, fromFbo.w, fromFbo.h);
+    if (this.presentFbo && this.presentPass) {
       gl.disable(gl.DEPTH_TEST);
       gl.disable(gl.BLEND);
 
-      gl.useProgram(this.presentProg);
-      gl.bindVertexArray(this.presentTri.vao);
+      this.presentPass.render({
+        texture: this.presentFbo.tex,
+        target: {
+          framebuffer: fromFbo.fbo,
+          width: fromFbo.w,
+          height: fromFbo.h,
+        },
+        flipY: false,
+      });
 
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, this.presentFbo.tex);
-
-      // Present shader uniforms
-      if (this.uPresentTex) gl.uniform1i(this.uPresentTex, 0);
-      if (this.uPresentFlipY) gl.uniform1f(this.uPresentFlipY, 0.0);
-
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-      gl.bindTexture(gl.TEXTURE_2D, null);
-      gl.bindVertexArray(null);
-      gl.useProgram(null);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     } else {
       // Fallback: render the theme once (should be rare; mainly during very first frames).
@@ -919,27 +785,26 @@ export class VisualizerEngine {
       this.wipe = createPortalWipe();
       this.wipe.init(gl);
     }
-    if (!this.fromFbo) this.fromFbo = createFboTexRGBA8(gl, 2, 2);
-    if (!this.toFbo) this.toFbo = createFboTexRGBA8(gl, 2, 2);
+    if (!this.fromFbo) this.fromFbo = new RenderTarget(gl, 2, 2);
+    if (!this.toFbo) this.toFbo = new RenderTarget(gl, 2, 2);
   }
 
   private resizeTransitionResources(w: number, h: number) {
-    const gl = this.gl;
     const W = Math.max(2, w);
     const H = Math.max(2, h);
-    this.fromFbo?.resize(gl, W, H);
-    this.toFbo?.resize(gl, W, H);
+    this.fromFbo?.resize(W, H);
+    this.toFbo?.resize(W, H);
   }
 
   private freeTransitionResources() {
     const gl = this.gl;
     try {
-      this.fromFbo?.dispose(gl);
+      this.fromFbo?.dispose();
     } catch {}
     this.fromFbo = null;
 
     try {
-      this.toFbo?.dispose(gl);
+      this.toFbo?.dispose();
     } catch {}
     this.toFbo = null;
 
@@ -950,36 +815,18 @@ export class VisualizerEngine {
   }
 
   private ensurePresentResources() {
-    const gl = this.gl;
-
     if (this.disposed || this.contextLost) return;
 
-    if (!this.presentProg) {
+    if (!this.presentPass) {
       try {
-        this.presentProg = createProgram(gl, PRESENT_VS, PRESENT_FS);
-        this.uPresentTex = gl.getUniformLocation(this.presentProg, "uTex");
-        this.uPresentFlipY = gl.getUniformLocation(this.presentProg, "uFlipY");
+        this.presentPass = new PresentPass(this.gl);
+        this.presentPass.init();
       } catch (err) {
         if (!this.didLogPresentFailure) {
-          console.error("[VisualizerEngine] present shader setup failed", err);
+          console.error("[VisualizerEngine] present pass setup failed", err);
           this.didLogPresentFailure = true;
         }
-        this.presentProg = null;
-        this.uPresentTex = null;
-        this.uPresentFlipY = null;
-        return;
-      }
-    }
-
-    if (!this.presentTri) {
-      try {
-        this.presentTri = makeFullscreenTriangle(gl);
-      } catch (err) {
-        console.error(
-          "[VisualizerEngine] fullscreen triangle setup failed",
-          err,
-        );
-        this.presentTri = null;
+        this.presentPass = null;
       }
     }
   }
@@ -988,40 +835,32 @@ export class VisualizerEngine {
     const gl = this.gl;
     this.ensurePresentResources();
 
-    if (!this.presentProg || !this.presentTri) return;
+    if (!this.presentPass) return;
 
     const W = Math.max(2, this.canvas.width);
     const H = Math.max(2, this.canvas.height);
 
-    if (!this.presentFbo) this.presentFbo = createFboTexRGBA8(gl, W, H);
-    else this.presentFbo.resize(gl, W, H);
+    if (!this.presentFbo) this.presentFbo = new RenderTarget(gl, W, H);
+    else this.presentFbo.resize(W, H);
   }
 
   private presentToScreen() {
-    const gl = this.gl;
-    if (!this.presentFbo || !this.presentProg || !this.presentTri) return;
+    if (!this.presentFbo || !this.presentPass) return;
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-
-    gl.useProgram(this.presentProg);
-    gl.bindVertexArray(this.presentTri.vao);
-
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.presentFbo.tex);
-    gl.uniform1i(this.uPresentTex, 0);
-    gl.uniform1f(this.uPresentFlipY, 0.0);
-
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    gl.bindVertexArray(null);
-    gl.useProgram(null);
+    this.presentPass.render({
+      texture: this.presentFbo.tex,
+      target: {
+        framebuffer: null,
+        width: this.canvas.width,
+        height: this.canvas.height,
+      },
+      flipY: false,
+    });
   }
 
   private maybeUpdateSnapshot(nowMs: number) {
     const gl = this.gl;
-    if (!this.presentFbo || !this.presentProg || !this.presentTri) return;
+    if (!this.presentFbo || !this.presentPass) return;
 
     const minFrame = 1000 / Math.max(1, this.snapFps);
     if (this.lastSnapAtMs && nowMs - this.lastSnapAtMs < minFrame) return;
@@ -1040,8 +879,8 @@ export class VisualizerEngine {
     const H = Math.max(2, Math.floor(srcH * scale));
 
     // Lazily allocate/resize snap FBO + CPU buffers.
-    if (!this.snapFbo) this.snapFbo = createFboTexRGBA8(gl, W, H);
-    else this.snapFbo.resize(gl, W, H);
+    if (!this.snapFbo) this.snapFbo = new RenderTarget(gl, W, H);
+    else this.snapFbo.resize(W, H);
 
     if (W !== this.snapW || H !== this.snapH) {
       this.snapW = W;
@@ -1061,18 +900,15 @@ export class VisualizerEngine {
     }
 
     // Downsample present -> snap (flip in shader so readPixels buffer is already top-left oriented)
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.snapFbo.fbo);
-    gl.viewport(0, 0, this.snapFbo.w, this.snapFbo.h);
-
-    gl.useProgram(this.presentProg);
-    gl.bindVertexArray(this.presentTri.vao);
-
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.presentFbo.tex);
-    gl.uniform1i(this.uPresentTex, 0);
-    gl.uniform1f(this.uPresentFlipY, 1.0);
-
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    this.presentPass.render({
+      texture: this.presentFbo.tex,
+      target: {
+        framebuffer: this.snapFbo.fbo,
+        width: this.snapFbo.w,
+        height: this.snapFbo.h,
+      },
+      flipY: true,
+    });
 
     // Read pixels from snapFbo
     gl.readPixels(
@@ -1088,9 +924,6 @@ export class VisualizerEngine {
     this.snapBufClamp.set(this.snapBufU8);
     this.snapCtx.putImageData(this.snapImageData, 0, 0);
 
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    gl.bindVertexArray(null);
-    gl.useProgram(null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 

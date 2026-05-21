@@ -179,7 +179,18 @@ export function createPingPongTheme(config: PingPongThemeConfig): Theme {
       gl.uniform2f(simRes, opts.width, opts.height);
       gl.uniform1f(simTime, opts.time);
       gl.uniform1f(simEnergy, opts.audio.energy);
-      gl.uniform1f(simFrame, frame);
+      const renderFrame = opts.frameIndex ?? frame;
+
+      if (renderFrame === 0) {
+        pingpong.reset();
+        pingpong.clear(gl);
+        gl.bindVertexArray(tri.vao);
+        gl.useProgram(simProgram);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, pingpong.dstFbo());
+        gl.viewport(0, 0, opts.width, opts.height);
+      }
+
+      gl.uniform1f(simFrame, renderFrame);
 
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
@@ -204,7 +215,7 @@ export function createPingPongTheme(config: PingPongThemeConfig): Theme {
       gl.useProgram(null);
       gl.bindFramebuffer(gl.FRAMEBUFFER, outputFramebuffer);
 
-      frame += 1;
+      frame = renderFrame + 1;
     },
 
     dispose(gl) {
