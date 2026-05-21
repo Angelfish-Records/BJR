@@ -1,3 +1,4 @@
+// web/app/home/player/visualizer/gl.ts
 const VERBOSE_GL_DEBUG = false;
 
 export type FullscreenTriangle = {

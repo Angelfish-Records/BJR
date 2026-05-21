@@ -133,6 +133,9 @@ export default function AdminEntitlementsPanel(props: {
   const [reconcileBusy, setReconcileBusy] = React.useState(false);
   const [revokeBusyId, setRevokeBusyId] = React.useState<string | null>(null);
 
+  const [manualOpen, setManualOpen] = React.useState(false);
+  const [auditOpen, setAuditOpen] = React.useState(false);
+
   const [error, setError] = React.useState<string | null>(null);
 
   const dashboardRangeOptions = React.useMemo(
@@ -256,7 +259,40 @@ export default function AdminEntitlementsPanel(props: {
 
   React.useEffect(() => {
     void loadDashboard(periodDays);
-  }, [loadDashboard, periodDays]);
+  }, [periodDays, loadDashboard]);
+
+  const accessHealth = React.useMemo(() => {
+    const keys = new Set(current.map((row) => row.entitlement_key));
+    const scoped = new Set(
+      current.map(
+        (row) => `${row.entitlement_key}::${row.scope_id ?? "global"}`,
+      ),
+    );
+
+    const tier = keys.has("tier_partner")
+      ? "partner"
+      : keys.has("tier_patron")
+        ? "patron"
+        : keys.has("tier_friend")
+          ? "friend"
+          : "none";
+
+    const failedWebhookCount = stripeWebhookEvents.filter((event) =>
+      Boolean(event.handler_error),
+    ).length;
+
+    return {
+      tier,
+      hasStripeCustomer: Boolean(memberDetails?.stripe_customer_id),
+      hasClerkUser: Boolean(
+        memberDetails?.clerk_user_id ?? selected?.clerk_user_id,
+      ),
+      hasCataloguePlayback:
+        scoped.has("play_album::catalogue") || keys.has("play_album"),
+      hasGodDefendDownload: keys.has("download_album_god-defend"),
+      failedWebhookCount,
+    };
+  }, [current, memberDetails, selected, stripeWebhookEvents]);
 
   const loadMembers = React.useCallback(async (queryValue: string) => {
     const query = queryValue.trim();
@@ -434,6 +470,22 @@ export default function AdminEntitlementsPanel(props: {
     color: "rgba(255,255,255,0.94)",
     fontWeight: 800,
     cursor: "pointer",
+  };
+
+  const sectionHeaderStyle: React.CSSProperties = {
+    fontSize: 12,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+    fontWeight: 900,
+    opacity: 0.56,
+  };
+
+  const healthCardStyle: React.CSSProperties = {
+    padding: "12px 13px",
+    borderRadius: 14,
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(255,255,255,0.035)",
+    minWidth: 0,
   };
 
   const albumScopeButtons = (
@@ -830,16 +882,54 @@ export default function AdminEntitlementsPanel(props: {
       {selected ? (
         <div style={{ display: "grid", gap: 12 }}>
           <div style={cardStyle}>
+            <div style={sectionHeaderStyle}>Access operations</div>
+
             <div
-              style={{ fontSize: 12, letterSpacing: "0.04em", opacity: 0.56 }}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                gap: 14,
+                flexWrap: "wrap",
+                marginTop: 8,
+              }}
             >
-              SELECTED MEMBER
-            </div>
-            <div style={{ marginTop: 6, fontSize: 14, fontWeight: 700 }}>
-              {selected.email}
-            </div>
-            <div style={{ marginTop: 4, fontSize: 12, opacity: 0.6 }}>
-              member_id: {selected.id}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 18, fontWeight: 900 }}>
+                  {selected.email}
+                </div>
+                <div
+                  style={{
+                    marginTop: 5,
+                    fontSize: 11,
+                    opacity: 0.56,
+                    wordBreak: "break-all",
+                  }}
+                >
+                  {selected.id}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  void reconcileStripe();
+                }}
+                disabled={reconcileBusy || !memberDetails?.stripe_customer_id}
+                style={{
+                  ...primaryButtonStyle,
+                  opacity:
+                    reconcileBusy || !memberDetails?.stripe_customer_id
+                      ? 0.45
+                      : 1,
+                  cursor:
+                    reconcileBusy || !memberDetails?.stripe_customer_id
+                      ? "default"
+                      : "pointer",
+                }}
+              >
+                {reconcileBusy ? "Reconciling…" : "Reconcile Stripe"}
+              </button>
             </div>
 
             <div
@@ -908,120 +998,147 @@ export default function AdminEntitlementsPanel(props: {
                 </div>
               </div>
             </div>
-
             <div
               style={{
-                display: "flex",
-                justifyContent: "space-between",
+                display: "grid",
+                gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
                 gap: 10,
-                alignItems: "center",
-                flexWrap: "wrap",
                 marginTop: 14,
-                padding: "10px 12px",
-                borderRadius: 12,
-                border: "1px solid rgba(255,255,255,0.10)",
-                background: "rgba(255,255,255,0.03)",
               }}
             >
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.72 }}>
-                  Stripe reconciliation
+              {[
+                ["Tier", accessHealth.tier],
+                [
+                  "Playback",
+                  accessHealth.hasCataloguePlayback ? "ready" : "missing",
+                ],
+                [
+                  "GOD DEFEND",
+                  accessHealth.hasGodDefendDownload ? "download" : "missing",
+                ],
+                [
+                  "Stripe",
+                  accessHealth.hasStripeCustomer ? "linked" : "not linked",
+                ],
+                [
+                  "Webhooks",
+                  accessHealth.failedWebhookCount > 0
+                    ? `${accessHealth.failedWebhookCount} failed`
+                    : "clean",
+                ],
+              ].map(([label, value]) => (
+                <div key={label} style={healthCardStyle}>
+                  <div style={{ fontSize: 11, opacity: 0.56 }}>{label}</div>
+                  <div
+                    style={{
+                      marginTop: 5,
+                      fontSize: 14,
+                      fontWeight: 900,
+                      color:
+                        value === "missing" || String(value).includes("failed")
+                          ? "#ffd0d0"
+                          : "rgba(255,255,255,0.94)",
+                    }}
+                  >
+                    {value}
+                  </div>
                 </div>
-                <div style={{ marginTop: 3, fontSize: 11, opacity: 0.56 }}>
-                  Pull active Stripe subscriptions and reconcile entitlements.
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  void reconcileStripe();
-                }}
-                disabled={reconcileBusy || !memberDetails?.stripe_customer_id}
-                style={{
-                  ...primaryButtonStyle,
-                  opacity:
-                    reconcileBusy || !memberDetails?.stripe_customer_id
-                      ? 0.45
-                      : 1,
-                  cursor:
-                    reconcileBusy || !memberDetails?.stripe_customer_id
-                      ? "default"
-                      : "pointer",
-                }}
-              >
-                {reconcileBusy ? "Reconciling…" : "Reconcile Stripe"}
-              </button>
+              ))}
             </div>
 
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 0.9fr)",
+                gridTemplateColumns: "minmax(0, 1fr)",
                 gap: 14,
                 marginTop: 14,
               }}
             >
               <div style={{ display: "grid", gap: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.72 }}>
-                  Grant entitlement
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setManualOpen((value) => !value)}
+                  style={{
+                    ...subtleButtonStyle,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    width: "100%",
+                    padding: "11px 12px",
+                    fontWeight: 900,
+                  }}
+                >
+                  <span>Manual override</span>
+                  <span style={{ opacity: 0.6 }}>{manualOpen ? "−" : "+"}</span>
+                </button>
 
-                <div style={{ display: "grid", gap: 6 }}>
-                  <div style={{ fontSize: 12, opacity: 0.66 }}>
-                    Entitlement key
-                  </div>
-                  <input
-                    value={key}
-                    onChange={(e) => setKey(e.target.value)}
-                    placeholder="e.g. tier_patron, play_album"
-                    style={fieldStyle}
-                  />
-                </div>
+                {manualOpen ? (
+                  <>
+                    <div
+                      style={{ fontSize: 12, fontWeight: 800, opacity: 0.72 }}
+                    >
+                      Grant entitlement
+                    </div>
 
-                <div style={{ display: "grid", gap: 6 }}>
-                  <div style={{ fontSize: 12, opacity: 0.66 }}>Scope ID</div>
-                  <input
-                    value={scopeId}
-                    onChange={(e) => setScopeId(e.target.value)}
-                    placeholder="catalogue OR alb:<albumId>"
-                    style={fieldStyle}
-                  />
-                </div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <div style={{ fontSize: 12, opacity: 0.66 }}>
+                        Entitlement key
+                      </div>
+                      <input
+                        value={key}
+                        onChange={(e) => setKey(e.target.value)}
+                        placeholder="e.g. tier_patron, play_album"
+                        style={fieldStyle}
+                      />
+                    </div>
 
-                <div style={{ display: "grid", gap: 6 }}>
-                  <div style={{ fontSize: 12, opacity: 0.66 }}>
-                    Quick scope helpers
-                  </div>
-                  {albumScopeButtons}
-                </div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <div style={{ fontSize: 12, opacity: 0.66 }}>
+                        Scope ID
+                      </div>
+                      <input
+                        value={scopeId}
+                        onChange={(e) => setScopeId(e.target.value)}
+                        placeholder="catalogue OR alb:<albumId>"
+                        style={fieldStyle}
+                      />
+                    </div>
 
-                <div style={{ display: "grid", gap: 6 }}>
-                  <div style={{ fontSize: 12, opacity: 0.66 }}>Reason</div>
-                  <input
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder="reason"
-                    style={fieldStyle}
-                  />
-                </div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <div style={{ fontSize: 12, opacity: 0.66 }}>
+                        Quick scope helpers
+                      </div>
+                      {albumScopeButtons}
+                    </div>
 
-                <div style={{ paddingTop: 2 }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void grant();
-                    }}
-                    disabled={grantBusy}
-                    style={{
-                      ...primaryButtonStyle,
-                      opacity: grantBusy ? 0.6 : 1,
-                      cursor: grantBusy ? "default" : "pointer",
-                    }}
-                  >
-                    {grantBusy ? "Granting…" : "Grant"}
-                  </button>
-                </div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <div style={{ fontSize: 12, opacity: 0.66 }}>Reason</div>
+                      <input
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                        placeholder="reason"
+                        style={fieldStyle}
+                      />
+                    </div>
+
+                    <div style={{ paddingTop: 2 }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void grant();
+                        }}
+                        disabled={grantBusy}
+                        style={{
+                          ...primaryButtonStyle,
+                          opacity: grantBusy ? 0.6 : 1,
+                          cursor: grantBusy ? "default" : "pointer",
+                        }}
+                      >
+                        {grantBusy ? "Granting…" : "Grant"}
+                      </button>
+                    </div>
+                  </>
+                ) : null}
               </div>
 
               <div style={{ display: "grid", gap: 10 }}>
@@ -1185,83 +1302,101 @@ export default function AdminEntitlementsPanel(props: {
           </div>
 
           <div style={cardStyle}>
-            <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.72 }}>
-              Grants (raw history)
-            </div>
+            <button
+              type="button"
+              onClick={() => setAuditOpen((value) => !value)}
+              style={{
+                ...subtleButtonStyle,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                width: "100%",
+                padding: "11px 12px",
+                fontWeight: 900,
+              }}
+            >
+              <span>Audit history ({grants.length} grants)</span>
+              <span style={{ opacity: 0.6 }}>{auditOpen ? "−" : "+"}</span>
+            </button>
 
-            <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
-              {grants.map((g) => {
-                const active =
-                  !g.revoked_at &&
-                  (!g.expires_at ||
-                    new Date(g.expires_at).getTime() > Date.now());
+            {auditOpen ? (
+              <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+                {grants.map((g) => {
+                  const active =
+                    !g.revoked_at &&
+                    (!g.expires_at ||
+                      new Date(g.expires_at).getTime() > Date.now());
 
-                const revokeBusy = revokeBusyId === g.id;
+                  const revokeBusy = revokeBusyId === g.id;
 
-                return (
-                  <div
-                    key={g.id}
-                    style={{
-                      display: "flex",
-                      gap: 12,
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      padding: "11px 12px",
-                      borderRadius: 12,
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      background: "rgba(255,255,255,0.03)",
-                    }}
-                  >
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 12, opacity: 0.94 }}>
-                        <span style={{ fontWeight: 700 }}>
-                          {g.entitlement_key}
-                        </span>
-                        {g.scope_id ? (
-                          <span style={{ opacity: 0.62 }}> — {g.scope_id}</span>
-                        ) : null}
-                      </div>
-                      <div
-                        style={{ marginTop: 4, fontSize: 11, opacity: 0.56 }}
-                      >
-                        {active ? "active" : "inactive"} · created{" "}
-                        {formatDateTime(g.created_at)}
-                        {g.expires_at
-                          ? ` · expires ${formatDateTime(g.expires_at)}`
-                          : ""}
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      disabled={!active || revokeBusy}
-                      onClick={() => {
-                        void revoke(g.id);
-                      }}
+                  return (
+                    <div
+                      key={g.id}
                       style={{
-                        padding: "8px 10px",
-                        borderRadius: 10,
-                        border: "1px solid rgba(255,120,120,0.22)",
-                        background: active
-                          ? "rgba(120,0,0,0.16)"
-                          : "rgba(255,255,255,0.03)",
-                        color: "rgba(255,255,255,0.92)",
-                        opacity: !active ? 0.35 : revokeBusy ? 0.6 : 1,
-                        cursor: !active || revokeBusy ? "default" : "pointer",
-                        flex: "0 0 auto",
-                        fontWeight: 700,
+                        display: "flex",
+                        gap: 12,
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "11px 12px",
+                        borderRadius: 12,
+                        border: "1px solid rgba(255,255,255,0.10)",
+                        background: "rgba(255,255,255,0.03)",
                       }}
                     >
-                      {revokeBusy ? "Revoking…" : "Revoke"}
-                    </button>
-                  </div>
-                );
-              })}
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 12, opacity: 0.94 }}>
+                          <span style={{ fontWeight: 700 }}>
+                            {g.entitlement_key}
+                          </span>
+                          {g.scope_id ? (
+                            <span style={{ opacity: 0.62 }}>
+                              {" "}
+                              — {g.scope_id}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div
+                          style={{ marginTop: 4, fontSize: 11, opacity: 0.56 }}
+                        >
+                          {active ? "active" : "inactive"} · created{" "}
+                          {formatDateTime(g.created_at)}
+                          {g.expires_at
+                            ? ` · expires ${formatDateTime(g.expires_at)}`
+                            : ""}
+                        </div>
+                      </div>
 
-              {!grants.length ? (
-                <div style={{ fontSize: 12, opacity: 0.58 }}>No grants.</div>
-              ) : null}
-            </div>
+                      <button
+                        type="button"
+                        disabled={!active || revokeBusy}
+                        onClick={() => {
+                          void revoke(g.id);
+                        }}
+                        style={{
+                          padding: "8px 10px",
+                          borderRadius: 10,
+                          border: "1px solid rgba(255,120,120,0.22)",
+                          background: active
+                            ? "rgba(120,0,0,0.16)"
+                            : "rgba(255,255,255,0.03)",
+                          color: "rgba(255,255,255,0.92)",
+                          opacity: !active ? 0.35 : revokeBusy ? 0.6 : 1,
+                          cursor: !active || revokeBusy ? "default" : "pointer",
+                          flex: "0 0 auto",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {revokeBusy ? "Revoking…" : "Revoke"}
+                      </button>
+                    </div>
+                  );
+                })}
+
+                {!grants.length ? (
+                  <div style={{ fontSize: 12, opacity: 0.58 }}>No grants.</div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

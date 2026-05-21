@@ -18,18 +18,22 @@ export type AudioFeatures = {
   centroid?: number;
 };
 
+export type VisualizerRenderMode = "realtime" | "offline";
+
+export type ThemeRenderOptions = {
+  time: number;
+  frameIndex?: number;
+  width: number;
+  height: number;
+  dpr: number;
+  audio: AudioFeatures;
+  seed?: number;
+  mode?: VisualizerRenderMode;
+};
+
 export type Theme = {
   name: string;
   init(gl: WebGL2RenderingContext): void;
-  render(
-    gl: WebGL2RenderingContext,
-    opts: {
-      time: number;
-      width: number;
-      height: number;
-      dpr: number;
-      audio: AudioFeatures;
-    },
-  ): void;
+  render(gl: WebGL2RenderingContext, opts: ThemeRenderOptions): void;
   dispose(gl: WebGL2RenderingContext): void;
 };

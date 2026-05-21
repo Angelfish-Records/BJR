@@ -214,7 +214,13 @@ async function resolveMemberIdFromSession(
     const ensured = await ensureMemberByEmail({
       email,
       source: "stripe",
-      sourceDetail: { checkout_session_id: session.id },
+      sourceDetail: {
+        checkout_session_id: session.id,
+        stripe_customer_id: customerId || null,
+        mode: session.mode ?? null,
+        kind: (session.metadata?.kind ?? "") || null,
+        album_slug: (session.metadata?.albumSlug ?? "") || null,
+      },
       marketingOptIn: true,
     });
     return { memberId: ensured.id, customerId };
@@ -582,8 +588,9 @@ export async function POST(req: Request) {
 
     const { memberId, customerId } = await resolveMemberIdFromSession(session);
     if (!memberId) {
-      await recordStripeWebhookHandled(event.id);
-      return NextResponse.json({ ok: true });
+      throw new Error(
+        `Paid checkout session ${session.id} could not resolve or create a member`,
+      );
     }
 
     if (customerId) await attachStripeCustomerId(memberId, customerId);

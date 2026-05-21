@@ -10,7 +10,7 @@ import {
   sameOriginOrAllowed,
 } from "@/lib/checkoutReturnUrl";
 import { getAlbumOffer } from "../../../../lib/albumOffers";
-import { normalizeEmail, ensureMemberByEmail } from "../../../../lib/members";
+import { normalizeEmail } from "../../../../lib/members";
 import { assertStripePriceId, assertStripeSecretKey } from "@/lib/stripeEnv";
 
 export const runtime = "nodejs";
@@ -71,25 +71,6 @@ export async function POST(req: Request) {
   const emailFromBody = typeof body?.email === "string" ? body.email : "";
   const email = normalizeEmail(emailFromClerk || emailFromBody);
 
-  if (!userId && !email) {
-    return NextResponse.json(
-      { ok: false, error: "Email required when logged out" },
-      { status: 400 },
-    );
-  }
-
-  if (!userId && email) {
-    await ensureMemberByEmail({
-      email,
-      source: "album_checkout",
-      sourceDetail: {
-        intent: "stripe_album_checkout",
-        albumSlug: offer.albumSlug,
-      },
-      marketingOptIn: true,
-    });
-  }
-
   let customer: string | undefined;
   if (userId) {
     if (!email) {
@@ -144,9 +125,15 @@ export async function POST(req: Request) {
 
     client_reference_id: userId ?? undefined,
     customer,
+    customer_creation: customer ? undefined : "always",
     customer_email: !customer && email ? email : undefined,
 
-    metadata: { albumSlug: offer.albumSlug, offer: "digital_album" },
+    metadata: {
+      kind: "album_purchase",
+      albumSlug: offer.albumSlug,
+      offer: "digital_album",
+      clerk_user_id: userId ?? "",
+    },
   });
 
   return NextResponse.json({ ok: true, url: session.url });

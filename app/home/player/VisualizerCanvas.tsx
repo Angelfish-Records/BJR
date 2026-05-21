@@ -6,62 +6,17 @@ import { usePlayerVisual } from "./PlayerState";
 import { VisualizerEngine } from "./visualizer/VisualizerEngine";
 import { audioSurface } from "./audioSurface";
 import { mediaSurface, type StageVariant } from "./mediaSurface";
-import type { Theme } from "./visualizer/types";
 import { visualSurface } from "./visualSurface";
 
 import { createIdleMistTheme } from "./visualizer/themes/idleMist";
+import {
+  canonicalThemeName,
+  createBlankTheme,
+  loadThemeFactory,
+  type ThemeName,
+} from "./visualizer/core/themeRegistry";
 
-type ThemeFactory = () => Theme;
-
-type NebulaMod = typeof import("./visualizer/themes/nebula");
-type LatticeMod = typeof import("./visualizer/themes/gravitationalLattice");
-type OrbitalMod = typeof import("./visualizer/themes/orbitalScript");
-type MhdMod = typeof import("./visualizer/themes/mhdSilk");
-type PressureMod = typeof import("./visualizer/themes/pressureGlass");
-type VeinsMod = typeof import("./visualizer/themes/reactionVeins");
-type Veins2Mod = typeof import("./visualizer/themes/reactionVeins2");
-type FilamentMod = typeof import("./visualizer/themes/filamentStorm");
-type MosaicMod = typeof import("./visualizer/themes/mosaicDrift");
-type MeaningMod = typeof import("./visualizer/themes/meaningLeak");
-
-type LidarMod = typeof import("./visualizer/themes/lidarCathedral");
-type PhaseMod = typeof import("./visualizer/themes/phaseInterferenceFabric");
-type TopographicMod = typeof import("./visualizer/themes/topographicMemory");
-type MagneticMod = typeof import("./visualizer/themes/magneticParticulate");
-type CausticsMod = typeof import("./visualizer/themes/opticalCaustics");
-type HorizonMod = typeof import("./visualizer/themes/eventHorizon");
-type SignalMod = typeof import("./visualizer/themes/signalDecay");
-type FractureMod = typeof import("./visualizer/themes/fracturePropagation");
-type CrystalMod = typeof import("./visualizer/themes/crystallineGrowth");
-
-type ThemeName =
-  | "nebula"
-  | "gravitational-lattice"
-  | "filament-storm"
-  | "mosaic-drift"
-  | "meaning-leak"
-  | "orbital-script"
-  | "mhd-silk"
-  | "pressure-glass"
-  | "reaction-veins"
-  | "reaction-veins-2"
-  | "lidar-cathedral"
-  | "phase-interference-fabric"
-  | "topographic-memory"
-  | "magnetic-particulate"
-  | "optical-caustics"
-  | "event-horizon"
-  | "signal-decay"
-  | "fracture-propagation"
-  | "crystalline-growth";
-
-const themeCache = new Map<ThemeName, ThemeFactory>();
-
-function normThemeKey(key: string | undefined | null): string {
-  return (key ?? "").trim().toLowerCase();
-}
-
-function canonicalThemeName(raw: string | undefined | null): ThemeName {
+/*
   const k = normThemeKey(raw);
 
   switch (k) {
@@ -255,9 +210,7 @@ async function loadThemeFactory(themeName: ThemeName): Promise<ThemeFactory> {
   return factory;
 }
 
-function createBlankTheme(): Theme {
-  return { name: "blank", init() {}, render() {}, dispose() {} };
-}
+*/
 
 export default function VisualizerCanvas(props: { variant: StageVariant }) {
   const { variant } = props;

@@ -1,3 +1,4 @@
+// web/app/home/player/visualizer/themes/nebula.ts
 import type { Theme } from "../types";
 import { createSinglePassTheme } from "./themeFactory";
 
