@@ -13,17 +13,29 @@ export type SnapshotReadbackOptions = {
 
 export class SnapshotReadback {
   readonly target: RenderTarget;
-  readonly pixels: Uint8Array;
+  private pixels: Uint8Array;
 
   constructor(private readonly opts: SnapshotReadbackOptions) {
     this.target = new RenderTarget(opts.gl, opts.width, opts.height);
-    this.pixels = new Uint8Array(opts.width * opts.height * 4);
+    this.pixels = new Uint8Array(this.target.w * this.target.h * 4);
+  }
+
+  resize(width: number, height: number): void {
+    this.target.resize(width, height);
+
+    const requiredLength = this.target.w * this.target.h * 4;
+    if (this.pixels.byteLength !== requiredLength) {
+      this.pixels = new Uint8Array(requiredLength);
+    }
   }
 
   readToCanvas(canvas: HTMLCanvasElement): void {
     const { gl, presentPass, source } = this.opts;
 
-    this.target.resize(this.target.w, this.target.h);
+    const requiredLength = this.target.w * this.target.h * 4;
+    if (this.pixels.byteLength !== requiredLength) {
+      this.pixels = new Uint8Array(requiredLength);
+    }
 
     presentPass.render({
       texture: source.tex,
