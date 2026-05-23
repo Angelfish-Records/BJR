@@ -11,10 +11,10 @@
 # testing
 /coverage
 
-# offline visualiser generated outputs
+# offline visualiser local assets / generated outputs
+/public/render-test/*
+!/public/render-test/.gitkeep
 /exports/
-/web/public/render-test/*
-!/web/public/render-test/.gitkeep
 
 # next.js
 /.next/
