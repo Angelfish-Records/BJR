@@ -3,7 +3,7 @@
 import { loadThemeFactory } from "../core/themeRegistry";
 import { VisualizerFrameRenderer } from "../core/VisualizerFrameRenderer";
 import type { Theme } from "../types";
-import type { AudioFeatureFrame, OfflineRenderConfig } from "./offlineTypes";
+import type { OfflineFrame, OfflineRenderConfig } from "./offlineTypes";
 
 export class OfflineVisualizerRenderer {
   private frameRenderer: VisualizerFrameRenderer | null = null;
@@ -36,7 +36,7 @@ export class OfflineVisualizerRenderer {
     });
   }
 
-  renderFrame(frame: AudioFeatureFrame): void {
+  renderFrame(frame: OfflineFrame, opts?: { presentToScreen?: boolean }): void {
     if (this.disposed) {
       throw new Error("OfflineVisualizerRenderer has been disposed");
     }
@@ -57,9 +57,9 @@ export class OfflineVisualizerRenderer {
       theme: this.theme,
       time: frame.time,
       frameIndex: frame.frameIndex,
-      audio: frame,
+      audio: frame.audio,
       seed: this.config.seed,
-      presentToScreen: false,
+      presentToScreen: opts?.presentToScreen ?? false,
     });
 
     this.nextFrameIndex += 1;

@@ -1,3 +1,4 @@
+// web/app/home/player/visualizer/offline/audioFeatureBake.ts
 import type { AudioFeatures } from "../types";
 import type { AudioFeatureFrame } from "./offlineTypes";
 
@@ -20,6 +21,22 @@ type BandBins = {
 
 const DEFAULT_FFT_SIZE = 2048;
 const DEFAULT_SMOOTHING = 0.72;
+const MIN_FFT_SIZE = 256;
+const MAX_FFT_SIZE = 16384;
+
+function nextPowerOfTwo(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_FFT_SIZE;
+
+  let n = 1;
+  while (n < value) n *= 2;
+  return n;
+}
+
+function normalizeFftSize(value: number | undefined): number {
+  const requested = value ?? DEFAULT_FFT_SIZE;
+  const pow2 = nextPowerOfTwo(Math.max(MIN_FFT_SIZE, requested));
+  return Math.min(MAX_FFT_SIZE, pow2);
+}
 
 function clamp01(value: number): number {
   if (!Number.isFinite(value)) return 0;
@@ -39,7 +56,11 @@ function averageChannels(buffer: AudioBuffer): Float32Array {
   return out;
 }
 
-function rmsForWindow(samples: Float32Array, start: number, end: number): number {
+function rmsForWindow(
+  samples: Float32Array,
+  start: number,
+  end: number,
+): number {
   let sum = 0;
   let count = 0;
 
@@ -65,7 +86,9 @@ function makeWindowedFrame(
   for (let i = 0; i < fftSize; i += 1) {
     const sourceIndex = start + i;
     const sample =
-      sourceIndex >= 0 && sourceIndex < samples.length ? samples[sourceIndex] : 0;
+      sourceIndex >= 0 && sourceIndex < samples.length
+        ? samples[sourceIndex]
+        : 0;
 
     const hann = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (fftSize - 1));
     frame[i] = sample * hann;
@@ -74,21 +97,69 @@ function makeWindowedFrame(
   return frame;
 }
 
+function reverseBits(value: number, bits: number): number {
+  let reversed = 0;
+
+  for (let i = 0; i < bits; i += 1) {
+    reversed = (reversed << 1) | (value & 1);
+    value >>= 1;
+  }
+
+  return reversed;
+}
+
 function magnitudeSpectrum(frame: Float32Array): Float32Array {
-  const bins = Math.floor(frame.length / 2);
+  const n = frame.length;
+  const bits = Math.log2(n);
+
+  if (!Number.isInteger(bits)) {
+    throw new Error(`FFT size must be a power of two, got ${n}`);
+  }
+
+  const real = new Float32Array(n);
+  const imag = new Float32Array(n);
+
+  for (let i = 0; i < n; i += 1) {
+    real[reverseBits(i, bits)] = frame[i] ?? 0;
+  }
+
+  for (let size = 2; size <= n; size *= 2) {
+    const halfSize = size / 2;
+    const tableStep = (-2 * Math.PI) / size;
+
+    for (let start = 0; start < n; start += size) {
+      for (let j = 0; j < halfSize; j += 1) {
+        const angle = tableStep * j;
+        const wr = Math.cos(angle);
+        const wi = Math.sin(angle);
+
+        const evenIndex = start + j;
+        const oddIndex = evenIndex + halfSize;
+
+        const oddReal = real[oddIndex] ?? 0;
+        const oddImag = imag[oddIndex] ?? 0;
+
+        const tr = wr * oddReal - wi * oddImag;
+        const ti = wr * oddImag + wi * oddReal;
+
+        const evenReal = real[evenIndex] ?? 0;
+        const evenImag = imag[evenIndex] ?? 0;
+
+        real[oddIndex] = evenReal - tr;
+        imag[oddIndex] = evenImag - ti;
+        real[evenIndex] = evenReal + tr;
+        imag[evenIndex] = evenImag + ti;
+      }
+    }
+  }
+
+  const bins = Math.floor(n / 2);
   const spectrum = new Float32Array(bins);
 
-  for (let k = 0; k < bins; k += 1) {
-    let real = 0;
-    let imag = 0;
-
-    for (let n = 0; n < frame.length; n += 1) {
-      const phase = (-2 * Math.PI * k * n) / frame.length;
-      real += frame[n] * Math.cos(phase);
-      imag += frame[n] * Math.sin(phase);
-    }
-
-    spectrum[k] = Math.sqrt(real * real + imag * imag) / frame.length;
+  for (let i = 0; i < bins; i += 1) {
+    const r = real[i] ?? 0;
+    const im = imag[i] ?? 0;
+    spectrum[i] = Math.sqrt(r * r + im * im) / n;
   }
 
   return spectrum;
@@ -149,7 +220,11 @@ function spectralCentroid01(
   return clamp01(weighted / total / nyquist);
 }
 
-function smoothValue(previous: number, next: number, smoothing: number): number {
+function smoothValue(
+  previous: number,
+  next: number,
+  smoothing: number,
+): number {
   return previous * smoothing + next * (1 - smoothing);
 }
 
@@ -162,7 +237,7 @@ export function bakeAudioFeatureFrames(
     throw new Error(`Invalid FPS for audio feature bake: ${fps}`);
   }
 
-  const fftSize = config.fftSize ?? DEFAULT_FFT_SIZE;
+  const fftSize = normalizeFftSize(config.fftSize);
   const smoothing = clamp01(config.smoothing ?? DEFAULT_SMOOTHING);
   const durationSec = config.durationSec ?? audioBuffer.duration;
   const frameCount = Math.ceil(durationSec * fps);
@@ -191,7 +266,11 @@ export function bakeAudioFeatureFrames(
       makeWindowedFrame(samples, centerSample, fftSize),
     );
 
-    const rawBass = averageSpectrumRange(spectrum, bins.bassStart, bins.bassEnd);
+    const rawBass = averageSpectrumRange(
+      spectrum,
+      bins.bassStart,
+      bins.bassEnd,
+    );
     const rawMid = averageSpectrumRange(spectrum, bins.midStart, bins.midEnd);
     const rawTreble = averageSpectrumRange(
       spectrum,

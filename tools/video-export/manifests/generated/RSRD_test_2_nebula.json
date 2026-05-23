@@ -1,0 +1,18 @@
+{
+  "recordingId": "RSRD_test_2",
+  "themeName": "nebula",
+  "seed": 1,
+  "width": 1280,
+  "height": 720,
+  "fps": 30,
+  "audioUrl": "/render-test/RSRD_test.wav",
+  "audioPath": "/Users/brendan/Projects/Angelfish-Records/BJR/web/public/render-test/RSRD_test.wav",
+  "lrcUrl": "/render-test/track.lrc",
+  "lrcPath": "/Users/brendan/Projects/Angelfish-Records/BJR/web/public/render-test/track.lrc",
+  "outputDir": "exports/RSRD_test_2_nebula",
+  "crf": 18,
+  "cleanFrames": true,
+  "writeFrameHashes": true,
+  "reuseAudioFeatures": true,
+  "writeProRes": false
+}
