@@ -49,7 +49,7 @@ export default function BuyAlbumButton(props: Props) {
     setJustPurchased(
       params.get("checkout") === "success" &&
         params.get("purchase") === "album" &&
-        params.get("album") === albumSlug,
+        params.get("purchaseAlbum") === albumSlug,
     );
   }, [albumSlug]);
 

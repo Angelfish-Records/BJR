@@ -61,19 +61,19 @@ function FullWidthBanner(props: {
   const { kind, code, onDismiss } = props;
   const [checkoutMeta, setCheckoutMeta] = React.useState<{
     purchase: string | null;
-    album: string | null;
-  }>({ purchase: null, album: null });
+    purchaseAlbum: string | null;
+  }>({ purchase: null, purchaseAlbum: null });
 
   React.useEffect(() => {
     if (kind !== "checkout") {
-      setCheckoutMeta({ purchase: null, album: null });
+      setCheckoutMeta({ purchase: null, purchaseAlbum: null });
       return;
     }
 
     const params = new URLSearchParams(window.location.search);
     setCheckoutMeta({
       purchase: params.get("purchase"),
-      album: params.get("album"),
+      purchaseAlbum: params.get("purchaseAlbum"),
     });
   }, [kind, code]);
 

@@ -98,7 +98,7 @@ export async function POST(req: Request) {
       gift: null,
       checkout: "success",
       purchase: "album",
-      album: offer.albumSlug,
+      purchaseAlbum: offer.albumSlug,
     },
   );
 
@@ -116,6 +116,12 @@ export async function POST(req: Request) {
     offer.stripePriceId,
     `stripe price for album ${offer.albumSlug}`,
   );
+
+  console.log("album checkout success_url", {
+    albumSlug: offer.albumSlug,
+    success_url,
+    cancel_url,
+  });
 
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
