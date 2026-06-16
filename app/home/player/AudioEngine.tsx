@@ -2,6 +2,7 @@
 
 import React from "react";
 import Hls from "hls.js";
+import { useUser } from "@clerk/nextjs";
 import { usePlayer } from "./PlayerState";
 import type { PlayerTrack } from "@/lib/types";
 import { muxSignedHlsUrl } from "@/lib/mux";
@@ -247,6 +248,7 @@ function normalizeAlbumId(raw: string | null | undefined): string {
 
 export default function AudioEngine() {
   const p = usePlayer();
+  const { isSignedIn } = useUser();
 
   const audioARef = React.useRef<HTMLAudioElement | null>(null);
   const audioBRef = React.useRef<HTMLAudioElement | null>(null);
@@ -299,6 +301,9 @@ export default function AudioEngine() {
 
   const playIntentRef = React.useRef(false);
   const playthroughSentRef = React.useRef(new Set<string>());
+  const playthroughCompleteInFlightRef = React.useRef(
+    new Map<string, Promise<boolean>>(),
+  );
   const TELEMETRY_PLAY_THRESHOLD_MS = 5_000;
   const TELEMETRY_PROGRESS_STEP_MS = 15_000;
 
@@ -341,6 +346,17 @@ export default function AudioEngine() {
       return null;
     }
   }, []);
+
+  const canUseContinuousPlaybackCache = React.useCallback((): boolean => {
+    return isSignedIn === true || Boolean(getShareTokenFromLocation());
+  }, [getShareTokenFromLocation, isSignedIn]);
+
+  const canUseAlbumSessionTokens = React.useCallback(
+    (st: string | null): boolean => {
+      return isSignedIn === true || Boolean(st);
+    },
+    [isSignedIn],
+  );
 
   const albumSessionKey = React.useCallback(
     (albumId: string, st: string | null): string => {
@@ -526,6 +542,9 @@ export default function AudioEngine() {
       if (!albumId) return false;
 
       const st = args.st ?? getShareTokenFromLocation();
+
+      if (!canUseContinuousPlaybackCache()) return false;
+
       const key = albumSessionKey(albumId, st);
 
       const cached = albumSessionCacheRef.current.get(key);
@@ -592,7 +611,12 @@ export default function AudioEngine() {
       albumSessionInFlightRef.current.set(key, promise);
       return promise;
     },
-    [albumSessionKey, cacheAlbumSessionTokens, getShareTokenFromLocation],
+    [
+      albumSessionKey,
+      cacheAlbumSessionTokens,
+      canUseContinuousPlaybackCache,
+      getShareTokenFromLocation,
+    ],
   );
 
   const prefetchCurrentQueueAlbumSession = React.useCallback(
@@ -711,7 +735,7 @@ export default function AudioEngine() {
       const albumId = normalizeAlbumId(s.queueContextId);
       const st = getShareTokenFromLocation();
 
-      if (albumId) {
+      if (albumId && canUseContinuousPlaybackCache()) {
         await prefetchAlbumSession({
           albumId,
           st,
@@ -729,6 +753,7 @@ export default function AudioEngine() {
       });
     },
     [
+      canUseContinuousPlaybackCache,
       fetchSingleToken,
       getCachedTokenForPlaybackId,
       getShareTokenFromLocation,
@@ -981,6 +1006,8 @@ export default function AudioEngine() {
 
   const prepareStandbyForTrack = React.useCallback(
     async (track: PlayerTrack): Promise<boolean> => {
+      if (!canUseContinuousPlaybackCache()) return false;
+
       const playbackId = (track.muxPlaybackId ?? "").trim();
       if (!track.recordingId || !playbackId) return false;
 
@@ -1057,7 +1084,7 @@ export default function AudioEngine() {
 
       return true;
     },
-    [attachTrackToDeck, ensureTokenForTrack],
+    [attachTrackToDeck, canUseContinuousPlaybackCache, ensureTokenForTrack],
   );
 
   const getNextTrack = React.useCallback((): PlayerTrack | null => {
@@ -1262,6 +1289,7 @@ export default function AudioEngine() {
     const albumSessionInFlight = albumSessionInFlightRef.current;
     const blockedNonce = blockedNonceRef.current;
     const playthroughSent = playthroughSentRef.current;
+    const playthroughCompleteInFlight = playthroughCompleteInFlightRef.current;
     const telemetryPlaySent = telemetryPlaySentRef.current;
     const telemetryPlayAccumulated = telemetryPlayAccumulatedMsRef.current;
     const telemetryPlayLastProgress = telemetryPlayLastProgressMsRef.current;
@@ -1312,6 +1340,7 @@ export default function AudioEngine() {
       albumSessionInFlight.clear();
       blockedNonce.clear();
       playthroughSent.clear();
+      playthroughCompleteInFlight.clear();
       telemetryPlaySent.clear();
       telemetryPlayAccumulated.clear();
       telemetryPlayLastProgress.clear();
@@ -1656,23 +1685,40 @@ export default function AudioEngine() {
         .catch(() => {});
     };
 
-    const reportPlaythroughComplete = (pct: number) => {
+    const reportPlaythroughComplete = (pct: number): Promise<boolean> => {
       const recordingId = pRef.current.current?.recordingId ?? "";
       const playbackId = telemetrySessionIdRef.current ?? "";
-      if (!recordingId || !playbackId) return;
+
+      if (!recordingId || !playbackId) return Promise.resolve(false);
+      if (pct < 0.9) return Promise.resolve(false);
 
       const key = `${recordingId}:${playbackId}`;
-      if (playthroughSentRef.current.has(key)) return;
-      if (pct < 0.9) return;
 
-      playthroughSentRef.current.add(key);
+      if (playthroughSentRef.current.has(key)) {
+        return Promise.resolve(true);
+      }
 
-      fetch("/api/playthrough/complete", {
+      const inFlight = playthroughCompleteInFlightRef.current.get(key);
+      if (inFlight) return inFlight;
+
+      const request = fetch("/api/playthrough/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ recordingId, playbackId, pct }),
         keepalive: true,
-      }).catch(() => {});
+      })
+        .then((response) => {
+          if (!response.ok) return false;
+          playthroughSentRef.current.add(key);
+          return true;
+        })
+        .catch(() => false)
+        .finally(() => {
+          playthroughCompleteInFlightRef.current.delete(key);
+        });
+
+      playthroughCompleteInFlightRef.current.set(key, request);
+      return request;
     };
 
     const reportTelemetryPlay = (params: {
@@ -1839,9 +1885,11 @@ export default function AudioEngine() {
         detail: `next=${nextTrack.recordingId}`,
       });
 
-      reportPlaythroughComplete(1);
+      await reportPlaythroughComplete(1);
 
-      const standbyReady = await prepareStandbyForTrack(nextTrack);
+      const standbyReady = canUseContinuousPlaybackCache()
+        ? await prepareStandbyForTrack(nextTrack)
+        : false;
 
       if (!standbyReady) {
         sendAudioDebug({
@@ -1966,7 +2014,7 @@ export default function AudioEngine() {
       }
 
       const pct = ms / durMs;
-      reportPlaythroughComplete(pct);
+      void reportPlaythroughComplete(pct);
 
       if (pct >= 0.9) {
         reportTelemetryComplete({
@@ -2205,6 +2253,7 @@ export default function AudioEngine() {
     announceBadges,
     getAudio,
     getNextTrack,
+    canUseContinuousPlaybackCache,
     hardStopAll,
     prepareStandbyForTrack,
     prefetchCurrentQueueAlbumSession,
@@ -2261,6 +2310,18 @@ export default function AudioEngine() {
       );
     }
   }, [attachActiveTrack, getActiveAudio, p.intent]);
+
+  React.useEffect(() => {
+    if (canUseContinuousPlaybackCache()) return;
+
+    albumSessionAbortRef.current?.abort();
+    albumSessionAbortRef.current = null;
+
+    albumSessionCacheRef.current.clear();
+    albumSessionInFlightRef.current.clear();
+    tokenCacheRef.current.clear();
+    standbyRef.current = null;
+  }, [canUseContinuousPlaybackCache]);
 
   React.useEffect(() => {
     if (!hasMediaSession()) return;

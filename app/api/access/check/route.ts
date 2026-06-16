@@ -12,6 +12,10 @@ import {
   newCorrelationId,
 } from "@/lib/events";
 import {
+  ANON_PLAYBACK_POLICY,
+  hasReachedAnonPlaybackCap,
+} from "@/lib/anonPlaybackPolicy";
+import {
   redeemShareTokenForMember,
   validateShareToken,
 } from "@/lib/shareTokens";
@@ -21,9 +25,6 @@ import {
   type TierName,
 } from "@/lib/albumPolicy";
 import { listCurrentEntitlementKeys } from "@/lib/entitlements";
-
-const ANON_DISTINCT_TRACK_CAP = 1;
-const ANON_WINDOW_DAYS = 30;
 
 type Action = "login" | "subscribe" | "buy" | "wait" | null;
 
@@ -221,9 +222,13 @@ export async function GET(req: NextRequest) {
     // No token: anon sampling cap
     const distinctCompleted = await countAnonDistinctCompletedTracks({
       anonId,
-      sinceDays: ANON_WINDOW_DAYS,
+      sinceDays: ANON_PLAYBACK_POLICY.windowDays,
     });
-    if (distinctCompleted >= ANON_DISTINCT_TRACK_CAP) {
+    if (
+      hasReachedAnonPlaybackCap({
+        distinctCompletedTracks: distinctCompleted,
+      })
+    ) {
       return anonJsonWithId(
         anonId,
         {
@@ -239,8 +244,8 @@ export async function GET(req: NextRequest) {
           redeemed: null,
           cap: {
             used: distinctCompleted,
-            max: ANON_DISTINCT_TRACK_CAP,
-            windowDays: ANON_WINDOW_DAYS,
+            max: ANON_PLAYBACK_POLICY.distinctTrackCap,
+            windowDays: ANON_PLAYBACK_POLICY.windowDays,
           },
         },
         { correlationId },
@@ -261,8 +266,8 @@ export async function GET(req: NextRequest) {
         redeemed: null,
         cap: {
           used: distinctCompleted,
-          max: ANON_DISTINCT_TRACK_CAP,
-          windowDays: ANON_WINDOW_DAYS,
+          max: ANON_PLAYBACK_POLICY.distinctTrackCap,
+          windowDays: ANON_PLAYBACK_POLICY.windowDays,
         },
       },
       { correlationId },

@@ -93,6 +93,16 @@ export default function PortalArea(props: PortalAreaProps) {
   const checkoutPurchase = (sp.get("purchase") ?? "").trim() || null;
   const checkoutPurchaseAlbum = (sp.get("purchaseAlbum") ?? "").trim() || null;
 
+  const albumPurchaseSuccessBanner =
+    bannerKind === "checkout" &&
+    bannerCode === "success" &&
+    checkoutPurchase === "album";
+
+  React.useEffect(() => {
+    if (!isSignedIn || !albumPurchaseSuccessBanner) return;
+    dismissBanner();
+  }, [albumPurchaseSuccessBanner, dismissBanner, isSignedIn]);
+
   const isBrowsingAlbum = false;
 
   const { onSelectAlbum } = usePlaybackReconciliation({

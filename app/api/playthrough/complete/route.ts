@@ -68,11 +68,12 @@ export async function POST(req: NextRequest) {
     source: EVENT_SOURCES.SERVER,
     correlationId,
     payload: {
+      recording_id: recordingId,
       track_id: recordingId,
       playback_id: playbackId,
       pct,
       anon_id: anonId,
-      clerk_user_id: userId,
+      clerk_user_id: userId ?? null,
     },
   });
 

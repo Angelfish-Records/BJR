@@ -6,6 +6,10 @@ import { importPKCS8, SignJWT } from "jose";
 import crypto from "crypto";
 
 import { countAnonDistinctCompletedTracks } from "@/lib/events";
+import {
+  ANON_PLAYBACK_POLICY,
+  hasReachedAnonPlaybackCap,
+} from "@/lib/anonPlaybackPolicy";
 import { ACCESS_ACTIONS } from "@/lib/vocab";
 import type {
   GateDomain,
@@ -43,8 +47,6 @@ type MuxGateErrorInput = {
 };
 
 const AUD = "v";
-const ANON_DISTINCT_TRACK_CAP = 1;
-const ANON_WINDOW_DAYS = 30;
 const PLAYBACK_DOMAIN: GateDomain = "playback";
 
 function muxGateError(req: NextRequest, input: MuxGateErrorInput) {
@@ -242,10 +244,14 @@ export async function POST(req: NextRequest) {
   if (!userId && !tokenAllowsPlayback) {
     const distinctCompleted = await countAnonDistinctCompletedTracks({
       anonId,
-      sinceDays: ANON_WINDOW_DAYS,
+      sinceDays: ANON_PLAYBACK_POLICY.windowDays,
     });
 
-    if (distinctCompleted >= ANON_DISTINCT_TRACK_CAP) {
+    if (
+      hasReachedAnonPlaybackCap({
+        distinctCompletedTracks: distinctCompleted,
+      })
+    ) {
       return muxGateError(req, {
         correlationId,
         status: 403,

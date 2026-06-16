@@ -5,7 +5,6 @@ import { auth } from "@clerk/nextjs/server";
 import { importPKCS8, SignJWT } from "jose";
 import crypto from "crypto";
 
-import { countAnonDistinctCompletedTracks } from "@/lib/events";
 import { ACCESS_ACTIONS } from "@/lib/vocab";
 import type {
   GateAction,
@@ -41,8 +40,6 @@ type AlbumSessionOk = {
 
 const AUD = "v";
 const PLAYBACK_DOMAIN: GateDomain = "playback";
-const ANON_DISTINCT_TRACK_CAP = 1;
-const ANON_WINDOW_DAYS = 30;
 
 function mustEnv(...names: string[]): string {
   for (const n of names) {
@@ -237,23 +234,15 @@ export async function POST(req: NextRequest) {
   }
 
   if (!userId && !tokenAllowsPlayback) {
-    const distinctCompleted = await countAnonDistinctCompletedTracks({
-      anonId,
-      sinceDays: ANON_WINDOW_DAYS,
+    return gateError(req, {
+      correlationId,
+      status: 403,
+      domain: PLAYBACK_DOMAIN,
+      code: "ENTITLEMENT_REQUIRED",
+      action: "login",
+      message: "Sign in to preload album playback.",
+      onResponse: (res) => ensureAnonId(req, res),
     });
-
-    if (distinctCompleted >= ANON_DISTINCT_TRACK_CAP) {
-      return gateError(req, {
-        correlationId,
-        status: 403,
-        domain: PLAYBACK_DOMAIN,
-        code: "PLAYBACK_CAP_REACHED",
-        action: "login",
-        message:
-          "Please enter an email address to continue listening for free.",
-        onResponse: (res) => ensureAnonId(req, res),
-      });
-    }
   }
 
   const d = await decideAlbumPlaybackAccess({

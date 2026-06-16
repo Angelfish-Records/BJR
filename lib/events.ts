@@ -110,13 +110,22 @@ export async function countAnonDistinctCompletedTracks(params: {
   ).toISOString();
 
   const r = await sql<{ n: number }>`
-    select count(distinct payload->>'recording_id')::int as n
+    select count(
+      distinct coalesce(
+        nullif(payload->>'recording_id', ''),
+        nullif(payload->>'track_id', '')
+      )
+    )::int as n
     from member_events
     where event_type = 'track_play_completed'
       and payload->>'anon_id' = ${anonId}
       and occurred_at >= ${sinceIso}::timestamptz
-      and coalesce(payload->>'recording_id','') <> ''
+      and coalesce(
+        nullif(payload->>'recording_id', ''),
+        nullif(payload->>'track_id', '')
+      ) is not null
   `;
+
   return r.rows?.[0]?.n ?? 0;
 }
 
