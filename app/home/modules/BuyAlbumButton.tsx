@@ -42,6 +42,16 @@ export default function BuyAlbumButton(props: Props) {
 
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
+  const [justPurchased, setJustPurchased] = React.useState(false);
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setJustPurchased(
+      params.get("checkout") === "success" &&
+        params.get("purchase") === "album" &&
+        params.get("album") === albumSlug,
+    );
+  }, [albumSlug]);
 
   const onClick = async () => {
     if (busy || disabled) return;
@@ -126,6 +136,29 @@ export default function BuyAlbumButton(props: Props) {
   };
 
   const computed = mergeStyle(mergeStyle(base, variants[variant]), buttonStyle);
+
+  if (justPurchased) {
+    return (
+      <div
+        className={className}
+        style={{
+          ...(style ?? {}),
+          display: "grid",
+          gap: 8,
+          padding: "12px 14px",
+          borderRadius: 14,
+          border: "1px solid rgba(255,255,255,0.14)",
+          background: "rgba(255,255,255,0.055)",
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 800 }}>Purchase received.</div>
+        <div style={{ fontSize: 12, lineHeight: 1.5, opacity: 0.76 }}>
+          Sign in with the email you used at checkout to unlock the download.
+          You do not need to buy this album again.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={className} style={style}>

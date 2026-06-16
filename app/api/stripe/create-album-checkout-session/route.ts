@@ -97,6 +97,8 @@ export async function POST(req: Request) {
     {
       gift: null,
       checkout: "success",
+      purchase: "album",
+      album: offer.albumSlug,
     },
   );
 

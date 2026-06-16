@@ -59,6 +59,24 @@ function FullWidthBanner(props: {
   onDismiss: () => void;
 }) {
   const { kind, code, onDismiss } = props;
+  const [checkoutMeta, setCheckoutMeta] = React.useState<{
+    purchase: string | null;
+    album: string | null;
+  }>({ purchase: null, album: null });
+
+  React.useEffect(() => {
+    if (kind !== "checkout") {
+      setCheckoutMeta({ purchase: null, album: null });
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    setCheckoutMeta({
+      purchase: params.get("purchase"),
+      album: params.get("album"),
+    });
+  }, [kind, code]);
+
   if (!kind || !code) return null;
 
   let tone: BannerTone = "neutral";
@@ -67,12 +85,22 @@ function FullWidthBanner(props: {
   if (kind === "checkout") {
     if (code === "success") {
       tone = "success";
-      text = (
-        <>
-          Your account has been updated. Thank you for supporting future work on
-          this independent platform.
-        </>
-      );
+
+      if (checkoutMeta.purchase === "album") {
+        text = (
+          <>
+            Payment received. Sign in with the email you used at checkout to
+            access your download. You do not need to purchase this album again.
+          </>
+        );
+      } else {
+        text = (
+          <>
+            Your account has been updated. Thank you for supporting future work
+            on this independent platform.
+          </>
+        );
+      }
     } else if (code === "cancel") {
       tone = "neutral";
       text = <>Checkout cancelled.</>;
