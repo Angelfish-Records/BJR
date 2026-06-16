@@ -9,6 +9,8 @@ const PRESERVE_KEYS = new Set([
   "pt",
   "gift",
   "checkout",
+  "purchase",
+  "purchaseAlbum",
 ]);
 const STRIP_KEYS = new Set(["p", "panel", "album", "track", "t", "share"]);
 

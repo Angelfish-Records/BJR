@@ -9,6 +9,8 @@ const PRESERVE_KEYS = new Set<string>([
   "pt",
   "gift",
   "checkout",
+  "purchase",
+  "purchaseAlbum",
 ]);
 const STRIP_KEYS = new Set<string>(["p", "panel", "album", "track", "t"]);
 
@@ -78,7 +80,14 @@ function pickPreservedParams(url: URL): URLSearchParams {
   const autoplay = (url.searchParams.get("autoplay") ?? "").trim();
   if (autoplay) out.set("autoplay", autoplay);
 
-  for (const key of ["post", "pt", "gift", "checkout"] as const) {
+  for (const key of [
+    "post",
+    "pt",
+    "gift",
+    "checkout",
+    "purchase",
+    "purchaseAlbum",
+  ] as const) {
     const value = (url.searchParams.get(key) ?? "").trim();
     if (value) out.set(key, value);
   }

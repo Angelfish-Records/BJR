@@ -12,6 +12,8 @@ const DIRECT_PRESERVED_KEYS = [
   "pt",
   "gift",
   "checkout",
+  "purchase",
+  "purchaseAlbum",
 ] as const;
 
 function first(sp: PageSearchParams | undefined, key: string): string {

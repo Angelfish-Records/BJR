@@ -56,26 +56,12 @@ function IconPortal() {
 function FullWidthBanner(props: {
   kind: "gift" | "checkout" | null;
   code: string | null;
+  checkoutPurchase?: string | null;
+  checkoutPurchaseAlbum?: string | null;
   onDismiss: () => void;
 }) {
-  const { kind, code, onDismiss } = props;
-  const [checkoutMeta, setCheckoutMeta] = React.useState<{
-    purchase: string | null;
-    purchaseAlbum: string | null;
-  }>({ purchase: null, purchaseAlbum: null });
-
-  React.useEffect(() => {
-    if (kind !== "checkout") {
-      setCheckoutMeta({ purchase: null, purchaseAlbum: null });
-      return;
-    }
-
-    const params = new URLSearchParams(window.location.search);
-    setCheckoutMeta({
-      purchase: params.get("purchase"),
-      purchaseAlbum: params.get("purchaseAlbum"),
-    });
-  }, [kind, code]);
+  const { kind, code, checkoutPurchase, checkoutPurchaseAlbum, onDismiss } =
+    props;
 
   if (!kind || !code) return null;
 
@@ -86,7 +72,7 @@ function FullWidthBanner(props: {
     if (code === "success") {
       tone = "success";
 
-      if (checkoutMeta.purchase === "album") {
+      if (checkoutPurchase === "album") {
         text = (
           <>
             Payment received. Sign in with the email you used at checkout to
@@ -201,6 +187,8 @@ export type SessionChromeProps = {
   tier: Tier;
   bannerKind: "gift" | "checkout" | null;
   bannerCode: string | null;
+  checkoutPurchase?: string | null;
+  checkoutPurchaseAlbum?: string | null;
   onDismissBanner: () => void;
   onPrefetchPlayer: () => void;
   onPrefetchPortal: () => void;
@@ -220,6 +208,8 @@ export default function SessionChrome(props: SessionChromeProps) {
     tier,
     bannerKind,
     bannerCode,
+    checkoutPurchase,
+    checkoutPurchaseAlbum,
     onDismissBanner,
     onPrefetchPlayer,
     onPrefetchPortal,
@@ -242,6 +232,8 @@ export default function SessionChrome(props: SessionChromeProps) {
       <FullWidthBanner
         kind={bannerKind}
         code={bannerCode}
+        checkoutPurchase={checkoutPurchase}
+        checkoutPurchaseAlbum={checkoutPurchaseAlbum}
         onDismiss={onDismissBanner}
       />
     ) : null;

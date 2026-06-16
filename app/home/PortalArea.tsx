@@ -90,6 +90,9 @@ export default function PortalArea(props: PortalAreaProps) {
     brokerGate.uiMode === "spotlight" &&
     !isSignedIn;
 
+  const checkoutPurchase = (sp.get("purchase") ?? "").trim() || null;
+  const checkoutPurchaseAlbum = (sp.get("purchaseAlbum") ?? "").trim() || null;
+
   const isBrowsingAlbum = false;
 
   const { onSelectAlbum } = usePlaybackReconciliation({
@@ -217,6 +220,8 @@ export default function PortalArea(props: PortalAreaProps) {
                 tier={tier}
                 bannerKind={bannerKind}
                 bannerCode={bannerCode}
+                checkoutPurchase={checkoutPurchase}
+                checkoutPurchaseAlbum={checkoutPurchaseAlbum}
                 onDismissBanner={dismissBanner}
                 onPrefetchPlayer={prefetchPlayer}
                 onPrefetchPortal={prefetchPortal}

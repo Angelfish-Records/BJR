@@ -13,6 +13,8 @@ const ALLOW_KEYS = new Set([
   "autoplay",
   "gift",
   "checkout",
+  "purchase",
+  "purchaseAlbum",
   "post",
   "pt",
 ]);
