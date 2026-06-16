@@ -58,10 +58,17 @@ function FullWidthBanner(props: {
   code: string | null;
   checkoutPurchase?: string | null;
   checkoutPurchaseAlbum?: string | null;
+  onSignInClick?: () => void;
   onDismiss: () => void;
 }) {
-  const { kind, code, checkoutPurchase, checkoutPurchaseAlbum, onDismiss } =
-    props;
+  const {
+    kind,
+    code,
+    checkoutPurchase,
+    checkoutPurchaseAlbum,
+    onSignInClick,
+    onDismiss,
+  } = props;
 
   if (!kind || !code) return null;
 
@@ -75,8 +82,25 @@ function FullWidthBanner(props: {
       if (checkoutPurchase === "album") {
         text = (
           <>
-            Payment received. Sign in with the email you used at checkout to
-            access your download. You do not need to purchase this album again.
+            Payment confirmed, thank you.{" "}
+            <button
+              type="button"
+              onClick={onSignInClick}
+              style={{
+                border: "none",
+                background: "transparent",
+                color: "rgba(255,255,255,0.95)",
+                padding: 0,
+                font: "inherit",
+                fontWeight: 800,
+                textDecoration: "underline",
+                textUnderlineOffset: 3,
+                cursor: "pointer",
+              }}
+            >
+              Sign in
+            </button>{" "}
+            with the email you used at checkout to access your download.
           </>
         );
       } else {
@@ -217,6 +241,13 @@ export default function SessionChrome(props: SessionChromeProps) {
     onOpenPortal,
   } = props;
 
+  const [bannerGateOpen, setBannerGateOpen] = React.useState(false);
+
+  const albumPurchaseSuccess =
+    bannerKind === "checkout" &&
+    bannerCode === "success" &&
+    checkoutPurchase === "album";
+
   const gateNodeTopRight = (
     <ActivationGate
       attentionMessage={attentionMessage}
@@ -229,13 +260,38 @@ export default function SessionChrome(props: SessionChromeProps) {
 
   const bannerNode =
     bannerKind && bannerCode ? (
-      <FullWidthBanner
-        kind={bannerKind}
-        code={bannerCode}
-        checkoutPurchase={checkoutPurchase}
-        checkoutPurchaseAlbum={checkoutPurchaseAlbum}
-        onDismiss={onDismissBanner}
-      />
+      <div style={{ display: "grid", gap: 10 }}>
+        <FullWidthBanner
+          kind={bannerKind}
+          code={bannerCode}
+          checkoutPurchase={checkoutPurchase}
+          checkoutPurchaseAlbum={checkoutPurchaseAlbum}
+          onSignInClick={
+            albumPurchaseSuccess ? () => setBannerGateOpen(true) : undefined
+          }
+          onDismiss={onDismissBanner}
+        />
+
+        {albumPurchaseSuccess && bannerGateOpen ? (
+          <div
+            style={{
+              borderRadius: 18,
+              border: "1px solid rgba(255,255,255,0.12)",
+              background: "rgba(255,255,255,0.045)",
+              padding: 12,
+            }}
+          >
+            <ActivationGate
+              placement="modal"
+              attentionMessage="Sign in with the email you used at checkout to unlock your download."
+              canManageBilling={canManageBilling}
+              tier={tier}
+            >
+              <div />
+            </ActivationGate>
+          </div>
+        ) : null}
+      </div>
     ) : null;
 
   return (
