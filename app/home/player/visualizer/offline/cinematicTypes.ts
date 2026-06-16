@@ -1,3 +1,4 @@
+// web/app/home/player/visualizer/offline/cinematicTypes.ts
 export type CameraFrameState = {
   zoom: number;
   rotationRad: number;

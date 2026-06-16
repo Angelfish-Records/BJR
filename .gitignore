@@ -13,6 +13,7 @@
 
 # offline visualiser local assets / generated outputs
 /public/render-test/*
+/public/fonts/*
 !/public/render-test/.gitkeep
 /exports/
 

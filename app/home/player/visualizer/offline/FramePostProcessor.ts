@@ -1,3 +1,4 @@
+// web/app/home/player/visualizer/offline/FramePostProcessor.ts
 import type { CameraFrameState } from "./cinematicTypes";
 import type { PostProcessStyle } from "./postStyles";
 

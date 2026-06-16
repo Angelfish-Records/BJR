@@ -1,3 +1,4 @@
+// web/app/home/player/visualizer/offline/postStyles.ts
 export type PostPresetName =
   | "none"
   | "gold-devotional"

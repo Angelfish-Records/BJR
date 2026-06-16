@@ -1,3 +1,4 @@
+// web/app/home/player/visualizer/offline/LyricTextRenderer.ts
 import type { LyricFrameState } from "./lyricTypes";
 
 export type LyricTextStyle = {
@@ -18,7 +19,9 @@ export type LyricTextStyle = {
   opacity: number;
 
   previousGhostOpacity: number;
+  previousGhostYOffsetEm: number;
   nextEchoOpacity: number;
+  nextEchoYOffsetEm: number;
 
   trailDecay: number;
   trailOpacity: number;
@@ -31,6 +34,7 @@ export type LyricTextStyle = {
   revealMode: "none" | "line-wipe";
   backgroundVeilOpacity: number;
   backgroundVeilRadiusPx: number;
+  backgroundVeilMode: "box" | "aura" | "none";
 };
 
 const DEFAULT_STYLE: LyricTextStyle = {
@@ -52,7 +56,9 @@ const DEFAULT_STYLE: LyricTextStyle = {
   opacity: 1,
 
   previousGhostOpacity: 0.18,
+  previousGhostYOffsetEm: -1.45,
   nextEchoOpacity: 0.08,
+  nextEchoYOffsetEm: 1.45,
 
   trailDecay: 0.88,
   trailOpacity: 0.34,
@@ -63,8 +69,9 @@ const DEFAULT_STYLE: LyricTextStyle = {
   lineStartShakePx: 1.8,
 
   revealMode: "line-wipe",
-  backgroundVeilOpacity: 0.14,
-  backgroundVeilRadiusPx: 18,
+  backgroundVeilOpacity: 0,
+  backgroundVeilRadiusPx: 28,
+  backgroundVeilMode: "none",
 };
 
 type TextLayerInput = {
@@ -217,7 +224,7 @@ export class LyricTextRenderer {
           this.style.previousGhostOpacity *
           this.style.opacity *
           clamp01(1 - lyric.lineProgress01 * 0.72),
-        yOffsetPx: -this.style.fontSizePx * 1.25,
+        yOffsetPx: this.style.fontSizePx * this.style.previousGhostYOffsetEm,
         scale: 0.92,
         blurPx: 1.6,
       });
@@ -252,7 +259,7 @@ export class LyricTextRenderer {
       this.drawTextLayer(this.layerCtx, {
         text: lyric.nextText,
         opacity: this.style.nextEchoOpacity * this.style.opacity * echoWindow01,
-        yOffsetPx: this.style.fontSizePx * 1.35,
+        yOffsetPx: this.style.fontSizePx * this.style.nextEchoYOffsetEm,
         scale: 0.9,
         blurPx: 2.4,
       });
@@ -324,7 +331,10 @@ export class LyricTextRenderer {
       ctx.filter = `blur(${blurPx}px)`;
     }
 
-    if (this.style.backgroundVeilOpacity > 0) {
+    if (
+      this.style.backgroundVeilOpacity > 0 &&
+      this.style.backgroundVeilMode !== "none"
+    ) {
       this.drawBackgroundVeil(ctx, block, opacity, revealProgress);
     }
 
@@ -395,16 +405,34 @@ export class LyricTextRenderer {
 
     ctx.save();
     ctx.globalAlpha = this.style.backgroundVeilOpacity * opacity;
-    ctx.fillStyle = "rgba(0,0,0,0.62)";
-    this.roundRect(
-      ctx,
-      x,
-      y,
-      visibleWidth,
-      h,
-      this.style.backgroundVeilRadiusPx,
-    );
-    ctx.fill();
+    if (this.style.backgroundVeilMode === "aura") {
+      const gradient = ctx.createRadialGradient(
+        block.anchorX,
+        y + h / 2,
+        Math.max(1, visibleWidth * 0.08),
+        block.anchorX,
+        y + h / 2,
+        Math.max(1, visibleWidth * 0.72),
+      );
+
+      gradient.addColorStop(0, "rgba(0,0,0,0.62)");
+      gradient.addColorStop(0.58, "rgba(0,0,0,0.28)");
+      gradient.addColorStop(1, "rgba(0,0,0,0)");
+
+      ctx.fillStyle = gradient;
+      ctx.fillRect(x, y, visibleWidth, h);
+    } else {
+      ctx.fillStyle = "rgba(0,0,0,0.62)";
+      this.roundRect(
+        ctx,
+        x,
+        y,
+        visibleWidth,
+        h,
+        this.style.backgroundVeilRadiusPx,
+      );
+      ctx.fill();
+    }
     ctx.restore();
   }
 

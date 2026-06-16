@@ -134,6 +134,10 @@ export default function InternalVisualizerRenderPage() {
             throw new Error("WebGL2 is unavailable");
           }
 
+          if ("fonts" in document) {
+            await document.fonts.ready;
+          }
+
           const renderer = new OfflineVisualizerRenderer(gl, config);
           await renderer.init();
 

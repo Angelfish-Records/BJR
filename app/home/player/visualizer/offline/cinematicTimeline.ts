@@ -1,3 +1,4 @@
+// web/app/home/player/visualizer/offline/cinematicTimeline.ts
 import type { AudioFeatureFrame } from "./offlineTypes";
 import type { CameraFrameState } from "./cinematicTypes";
 import type { LyricFrameState } from "./lyricTypes";

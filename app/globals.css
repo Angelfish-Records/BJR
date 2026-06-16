@@ -1,8 +1,25 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f5f2ec;
+  --foreground: #171716;
+
+  --af-page-bg: #171716;
+  --af-page-bg-deep: #0f0f0e;
+  --af-surface: rgba(31, 31, 30, 0.72);
+  --af-surface-raised: rgba(38, 38, 36, 0.76);
+  --af-surface-soft: rgba(255, 255, 255, 0.035);
+
+  --af-border-outer: rgba(255, 255, 255, 0.13);
+  --af-border-inner: rgba(255, 255, 255, 0.065);
+  --af-border-hairline: rgba(255, 255, 255, 0.085);
+
+  --af-text-main: rgba(244, 241, 235, 0.92);
+  --af-text-muted: rgba(244, 241, 235, 0.58);
+  --af-text-faint: rgba(244, 241, 235, 0.38);
+
+  --af-radius-panel: 28px;
+  --af-radius-panel-inner: 22px;
 }
 
 @theme inline {
@@ -20,9 +37,15 @@
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(
+      circle at 50% 0%,
+      rgba(255, 255, 255, 0.035),
+      transparent 34rem
+    ),
+    linear-gradient(180deg, var(--af-page-bg) 0%, var(--af-page-bg-deep) 100%);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
 *,
@@ -188,4 +211,39 @@ html[data-af-surface="portal"][data-af-portal-tab="exegesis"]
   .portalDownloadGrid2up {
     grid-template-columns: 1fr;
   }
+}
+
+@font-face {
+  font-family: "Cormorant Garamond";
+  src: url("/fonts/CormorantGaramond-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Cormorant Garamond";
+  src: url("/fonts/CormorantGaramond-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Fraunces";
+  src: url("/fonts/Fraunces-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("/fonts/SpaceGrotesk-SemiBold.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Archivo Black";
+  src: url("/fonts/ArchivoBlack-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
 }
