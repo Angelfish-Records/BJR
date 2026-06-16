@@ -128,8 +128,8 @@ export default function FooterDrawer(props: {
         title: "Security",
         body: (
           <>
-            If you believe you’ve found a vulnerability or rights issue, report
-            it. We respond quickly and prefer private disclosure.{" "}
+            If you believe you’ve found a vulnerability or rights issue, please
+            report it. We respond quickly and prefer private disclosure.{" "}
             <a
               href={`mailto:${emailTo}`}
               style={{
