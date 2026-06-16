@@ -92,13 +92,13 @@ function defaultMessageFor(code: GateCode, verb: GateVerb): string {
 function defaultActionFor(code: GateCode): GateAction {
   switch (code) {
     case "AUTH_REQUIRED":
+    case "PLAYBACK_CAP_REACHED":
+    case "EXEGESIS_THREAD_READ_CAP_REACHED":
       return "login";
     case "ENTITLEMENT_REQUIRED":
     case "TIER_REQUIRED":
     case "READ_RECEIPTS_CAP_REACHED":
-    case "PLAYBACK_CAP_REACHED":
     case "JOURNAL_READ_CAP_REACHED":
-    case "EXEGESIS_THREAD_READ_CAP_REACHED":
       return "subscribe";
     case "EMBARGO":
     case "PROVISIONING":
@@ -119,9 +119,16 @@ function defaultUiModeFor(
   if (code === "JOURNAL_READ_CAP_REACHED") return "inline";
   if (code === "EXEGESIS_THREAD_READ_CAP_REACHED") return "inline";
 
-  // Playback cap is the canonical “spotlight eligible” gate when intent is explicit.
-  if (code === "PLAYBACK_CAP_REACHED" && intent === "explicit")
+  // Playback cap is the canonical blocking playback gate.
+  // If a play attempt is being denied, surface the full-screen prompt even when
+  // the denial arose from auto-advance rather than a fresh click/tap.
+  if (
+    domain === "playback" &&
+    verb === "play" &&
+    code === "PLAYBACK_CAP_REACHED"
+  ) {
     return "spotlight";
+  }
 
   // Primary intent blocks tend to be global (but non-spotlight).
   if (domain === "playback" && verb === "play") return "global";

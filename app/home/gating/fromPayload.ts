@@ -104,9 +104,14 @@ export function gateResultFromPayload(opts: {
   if (!res.ok) {
     return {
       ...res,
+      cta: {
+        ...res.cta,
+        action: payload.action || res.cta.action,
+      },
       reason: {
         ...res.reason,
-        // keep canonical code/action/domain from engine, but message from server
+        // Keep engine code/domain/uiMode, but preserve server-authored action/message.
+        action: payload.action || res.reason.action,
         message: payload.message || res.reason.message,
         correlationId: payload.correlationId ?? null,
       },

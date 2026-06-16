@@ -368,11 +368,16 @@ export default function AudioEngine() {
   const inferIntentForGate = React.useCallback(() => {
     const s = pRef.current;
     const lastAttempt = s.lastPlayAttemptAtMs;
+
     const explicitIntent =
+      playIntentRef.current ||
       s.intent === "play" ||
+      s.status === "playing" ||
+      s.status === "loading" ||
       (typeof lastAttempt === "number" &&
         Number.isFinite(lastAttempt) &&
         Date.now() - lastAttempt < 12_000);
+
     return explicitIntent ? ("explicit" as const) : ("passive" as const);
   }, []);
 
