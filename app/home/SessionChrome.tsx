@@ -5,6 +5,7 @@ import React from "react";
 import Image from "next/image";
 import type { Tier } from "@/lib/types";
 import ActivationGate from "@/app/home/ActivationGate";
+import { useGateBroker } from "@/app/home/gating/GateBroker";
 import { getLastPortalTab } from "./portalLastTab";
 
 type BannerTone = "success" | "neutral" | "warn";
@@ -241,12 +242,24 @@ export default function SessionChrome(props: SessionChromeProps) {
     onOpenPortal,
   } = props;
 
-  const [bannerGateOpen, setBannerGateOpen] = React.useState(false);
+  const { reportGate } = useGateBroker();
 
   const albumPurchaseSuccess =
     bannerKind === "checkout" &&
     bannerCode === "success" &&
     checkoutPurchase === "album";
+
+  function openAlbumPurchaseSignInGate() {
+    reportGate({
+      code: "AUTH_REQUIRED",
+      action: "login",
+      domain: "downloads",
+      correlationId: null,
+      message:
+        "Sign in with the email you used at checkout to unlock your download.",
+      uiMode: "spotlight",
+    });
+  }
 
   const gateNodeTopRight = (
     <ActivationGate
@@ -260,38 +273,16 @@ export default function SessionChrome(props: SessionChromeProps) {
 
   const bannerNode =
     bannerKind && bannerCode ? (
-      <div style={{ display: "grid", gap: 10 }}>
-        <FullWidthBanner
-          kind={bannerKind}
-          code={bannerCode}
-          checkoutPurchase={checkoutPurchase}
-          checkoutPurchaseAlbum={checkoutPurchaseAlbum}
-          onSignInClick={
-            albumPurchaseSuccess ? () => setBannerGateOpen(true) : undefined
-          }
-          onDismiss={onDismissBanner}
-        />
-
-        {albumPurchaseSuccess && bannerGateOpen ? (
-          <div
-            style={{
-              borderRadius: 18,
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.045)",
-              padding: 12,
-            }}
-          >
-            <ActivationGate
-              placement="modal"
-              attentionMessage="Sign in with the email you used at checkout to unlock your download."
-              canManageBilling={canManageBilling}
-              tier={tier}
-            >
-              <div />
-            </ActivationGate>
-          </div>
-        ) : null}
-      </div>
+      <FullWidthBanner
+        kind={bannerKind}
+        code={bannerCode}
+        checkoutPurchase={checkoutPurchase}
+        checkoutPurchaseAlbum={checkoutPurchaseAlbum}
+        onSignInClick={
+          albumPurchaseSuccess ? openAlbumPurchaseSignInGate : undefined
+        }
+        onDismiss={onDismissBanner}
+      />
     ) : null;
 
   return (
