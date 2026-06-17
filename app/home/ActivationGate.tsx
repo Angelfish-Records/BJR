@@ -611,7 +611,11 @@ export default function ActivationGate(props: Props) {
   const BILLING_MODAL_MAX_W = 860;
   const BILLING_MODAL_MIN_W = 640;
 
-  const needsAttention = !isActive && !!attentionMessage;
+  const attentionText =
+    !isActive && attentionMessage?.trim() ? attentionMessage.trim() : null;
+
+  const needsAttention = attentionText !== null;
+
   const toggleClickable =
     !isActive && phase === "idle" && emailValid && clerkLoaded;
 
@@ -1145,6 +1149,24 @@ export default function ActivationGate(props: Props) {
               }}
             >
               <div style={{ flex: "1 1 auto", minWidth: 0, maxWidth: EMAIL_W }}>
+                {attentionText && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    style={{
+                      margin: modalCentered ? "0 0 14px" : "0 0 10px",
+                      padding: modalCentered ? "0 4px" : "0 2px",
+                      color: "rgba(255,255,255,0.86)",
+                      fontSize: modalCentered ? 15 : 13,
+                      lineHeight: 1.45,
+                      textAlign: modalCentered ? "center" : "right",
+                      textWrap: "balance",
+                    }}
+                  >
+                    {attentionText}
+                  </div>
+                )}
+
                 {!isActive ? (
                   <PatternRingOutline
                     ringPx={2}
