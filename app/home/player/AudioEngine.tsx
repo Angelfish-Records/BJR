@@ -324,6 +324,7 @@ export default function AudioEngine() {
   const blockedNonceRef = React.useRef(new Map<string, number>());
 
   const engineBlockedRef = React.useRef(false);
+  const lastPlaybackGateRef = React.useRef<GatePayload | null>(null);
 
   const pRef = React.useRef(p);
   React.useEffect(() => {
@@ -383,6 +384,7 @@ export default function AudioEngine() {
 
   const clearPlaybackGate = React.useCallback(() => {
     engineBlockedRef.current = false;
+    lastPlaybackGateRef.current = null;
     clearGate({ domain: "playback" });
   }, [clearGate]);
 
@@ -402,6 +404,7 @@ export default function AudioEngine() {
 
       if (!decision.ok) {
         engineBlockedRef.current = true;
+        lastPlaybackGateRef.current = payload;
 
         reportGate({
           code: decision.reason.code,
@@ -419,6 +422,26 @@ export default function AudioEngine() {
     },
     [clearGate, clearPlaybackGate, inferIntentForGate, reportGate],
   );
+
+  const resurfacePlaybackGate = React.useCallback(() => {
+    const lastGate = lastPlaybackGateRef.current;
+
+    if (lastGate) {
+      reportPlaybackGate(lastGate, lastGate.correlationId ?? null);
+      return;
+    }
+
+    reportPlaybackGate(
+      {
+        domain: "playback",
+        code: "PLAYBACK_CAP_REACHED",
+        action: "login",
+        message: "Enter your email address to continue listening.",
+        correlationId: null,
+      },
+      null,
+    );
+  }, [reportPlaybackGate]);
 
   const reportLocalPlaybackErrorAsGate = React.useCallback(
     (code: GateCodeRaw, message: string, corr?: string | null) => {
@@ -1222,6 +1245,7 @@ export default function AudioEngine() {
       playIntentRef.current = false;
       hardStopAll();
       mediaSurface.setStatus("blocked");
+      resurfacePlaybackGate();
       return;
     }
 
@@ -1282,6 +1306,7 @@ export default function AudioEngine() {
     getCachedTokenForPlaybackId,
     hardStopAll,
     playDeck,
+    resurfacePlaybackGate,
   ]);
 
   React.useEffect(() => {
@@ -2286,6 +2311,11 @@ export default function AudioEngine() {
     if (!a) return;
 
     if (engineBlockedRef.current) {
+      if (p.intent === "play") {
+        resurfacePlaybackGate();
+        pRef.current.clearIntent();
+      }
+
       playIntentRef.current = false;
       return;
     }
@@ -2314,7 +2344,7 @@ export default function AudioEngine() {
         },
       );
     }
-  }, [attachActiveTrack, getActiveAudio, p.intent]);
+  }, [attachActiveTrack, getActiveAudio, p.intent, resurfacePlaybackGate]);
 
   React.useEffect(() => {
     if (canUseContinuousPlaybackCache()) return;
@@ -2477,7 +2507,10 @@ export default function AudioEngine() {
 
   React.useEffect(() => {
     const resume = () => {
-      if (engineBlockedRef.current) return;
+      if (engineBlockedRef.current) {
+        resurfacePlaybackGate();
+        return;
+      }
 
       void prefetchCurrentQueueAlbumSession();
 
@@ -2497,7 +2530,12 @@ export default function AudioEngine() {
 
     window.addEventListener("af:play-intent", resume);
     return () => window.removeEventListener("af:play-intent", resume);
-  }, [attachActiveTrack, getActiveAudio, prefetchCurrentQueueAlbumSession]);
+  }, [
+    attachActiveTrack,
+    getActiveAudio,
+    prefetchCurrentQueueAlbumSession,
+    resurfacePlaybackGate,
+  ]);
 
   return (
     <>

@@ -4,6 +4,8 @@
 import React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { usePlayer } from "./PlayerState";
+import { useGateBroker } from "@/app/home/gating/GateBroker";
+import type { GateAction, GateCodeRaw } from "@/app/home/gating/gateTypes";
 import type {
   AlbumPlayerBundle,
   AlbumNavItem,
@@ -192,6 +194,29 @@ function isBlockAction(v: unknown): v is BlockAction {
   return (
     typeof v === "string" && (BLOCK_ACTIONS as readonly string[]).includes(v)
   );
+}
+
+const PLAYBACK_GATE_CODES = [
+  "AUTH_REQUIRED",
+  "PLAYBACK_CAP_REACHED",
+  "ANON_CAP_REACHED",
+  "CAP_REACHED",
+] as const;
+
+function isPlaybackGateCode(v: unknown): v is GateCodeRaw {
+  return (
+    typeof v === "string" &&
+    (PLAYBACK_GATE_CODES as readonly string[]).includes(v)
+  );
+}
+
+function toGateAction(v: unknown): GateAction {
+  return isBlockAction(v) ? v : "login";
+}
+
+function playbackGateMessage(reason: string | null | undefined): string {
+  const trimmed = reason?.trim();
+  return trimmed || "Enter your email address to continue listening.";
 }
 
 type AccessState = {
@@ -539,6 +564,7 @@ export default function FullPlayer(props: {
 
   const { albumSlug, album, tracks, albumLyrics } = bundle;
   const p = usePlayer();
+  const { reportGate } = useGateBroker();
 
   // near your other hooks
   const searchParams = useSearchParams();
@@ -720,15 +746,7 @@ export default function FullPlayer(props: {
     };
   }, []);
 
-  const [access, setAccess] = React.useState<{
-    forCatalogueId: string;
-    allowed: boolean;
-    embargoed: boolean;
-    releaseAt: string | null;
-    code?: string;
-    action?: string | null;
-    reason?: string;
-  } | null>(null);
+  const [access, setAccess] = React.useState<AccessState | null>(null);
 
   // Canonical album key used in queue context + gating
   const albumKey = effAlbum?.catalogueId ?? effAlbum?.id ?? null;
@@ -846,11 +864,21 @@ export default function FullPlayer(props: {
     };
   }, [catalogueId, albumKey, stParam]);
 
-  // ✅ “unknown access” disables play/glow until check resolves (prevents stale UI)
+  // Unknown access still disables the transport until the access check resolves.
+  // A resolved auth/cap block remains clickable so the user can summon the gate.
+  const accessKnown = accessForAlbum !== null;
+  const hasPlayableTracks = effTracks.length > 0;
+
+  const isPlaybackGate =
+    hasPlayableTracks &&
+    accessKnown &&
+    accessForAlbum?.allowed === false &&
+    isPlaybackGateCode(accessForAlbum.code);
+
   const canPlay =
-    effTracks.length > 0 &&
-    accessForAlbum?.allowed !== false &&
-    accessForAlbum !== null;
+    hasPlayableTracks && accessKnown && accessForAlbum?.allowed !== false;
+
+  const canAttemptPlay = canPlay || isPlaybackGate;
 
   const emb = effAlbum?.embargo;
   const releaseAtMs = emb?.releaseAt ? Date.parse(emb.releaseAt) : NaN;
@@ -900,8 +928,33 @@ export default function FullPlayer(props: {
     } catch {}
   };
 
+  const openPlaybackGate = React.useCallback(() => {
+    reportGate({
+      code: isPlaybackGateCode(accessForAlbum?.code)
+        ? accessForAlbum.code
+        : "PLAYBACK_CAP_REACHED",
+      action: toGateAction(accessForAlbum?.action),
+      domain: "playback",
+      correlationId: accessForAlbum?.corr ?? null,
+      message: playbackGateMessage(accessForAlbum?.reason),
+      uiMode: "spotlight",
+    });
+  }, [
+    accessForAlbum?.action,
+    accessForAlbum?.code,
+    accessForAlbum?.corr,
+    accessForAlbum?.reason,
+    reportGate,
+  ]);
+
   const onTogglePlay = () => {
     lockPlayFor(120);
+
+    if (isPlaybackGate) {
+      openPlaybackGate();
+      return;
+    }
+
     if (!canPlay) return;
 
     if (playingThisAlbum) {
@@ -1142,8 +1195,8 @@ export default function FullPlayer(props: {
             <div style={{ position: "relative", width: 64, height: 64 }}>
               <button
                 type="button"
-                onClick={canPlay && !playLock ? onTogglePlay : undefined}
-                disabled={!canPlay || playLock}
+                onClick={canAttemptPlay && !playLock ? onTogglePlay : undefined}
+                disabled={!canAttemptPlay || playLock}
                 aria-label={playingThisAlbum ? "Pause" : "Play"}
                 title={playingThisAlbum ? "Pause" : "Play"}
                 style={{
@@ -1155,8 +1208,8 @@ export default function FullPlayer(props: {
                   color: "rgba(0,0,0,0.92)",
                   display: "grid",
                   placeItems: "center",
-                  cursor: canPlay ? "pointer" : "default",
-                  opacity: canPlay ? 1 : 0.55,
+                  cursor: canAttemptPlay ? "pointer" : "default",
+                  opacity: canAttemptPlay ? 1 : 0.55,
                   boxShadow: playingThisAlbum
                     ? "0 18px 50px rgba(0,0,0,0.35)"
                     : "0 18px 50px rgba(0,0,0,0.30)",
@@ -1268,12 +1321,12 @@ export default function FullPlayer(props: {
             return (
               <div
                 key={t.recordingId}
-                role={canPlay ? "button" : undefined}
-                tabIndex={canPlay ? 0 : -1}
+                role={canAttemptPlay ? "button" : undefined}
+                tabIndex={canAttemptPlay ? 0 : -1}
                 aria-disabled={canPlay ? undefined : true}
                 className="afTrackRow"
                 onMouseEnter={(e) => {
-                  if (!canPlay) return;
+                  if (!canAttemptPlay) return;
                   if (!isCoarsePointer && !isSelected)
                     e.currentTarget.style.background = "rgba(255,255,255,0.08)";
                 }}
@@ -1281,6 +1334,11 @@ export default function FullPlayer(props: {
                   e.currentTarget.style.background = restBg;
                 }}
                 onClick={() => {
+                  if (isPlaybackGate) {
+                    openPlaybackGate();
+                    return;
+                  }
+
                   if (!canPlay) return;
 
                   p.setQueue(effTracks, {
@@ -1304,6 +1362,12 @@ export default function FullPlayer(props: {
                 }}
                 onDoubleClick={() => {
                   if (isCoarsePointer) return;
+
+                  if (isPlaybackGate) {
+                    openPlaybackGate();
+                    return;
+                  }
+
                   if (!canPlay) return;
 
                   goCanonicalTrack(t.displayId, "push");
@@ -1313,6 +1377,14 @@ export default function FullPlayer(props: {
                   window.dispatchEvent(new Event("af:play-intent"));
                 }}
                 onKeyDown={(e) => {
+                  if (!canAttemptPlay) return;
+
+                  if (isPlaybackGate && (e.key === "Enter" || e.key === " ")) {
+                    e.preventDefault();
+                    openPlaybackGate();
+                    return;
+                  }
+
                   if (!canPlay) return;
 
                   if (e.key === "Enter") {
@@ -1375,7 +1447,7 @@ export default function FullPlayer(props: {
                   borderRadius: rowRadius,
                   border: "1px solid rgba(255,255,255,0.00)",
                   background: restBg,
-                  cursor: canPlay ? "pointer" : "default",
+                  cursor: canAttemptPlay ? "pointer" : "default",
                   transform: "translateZ(0)",
                   transition: "background 120ms ease",
                   opacity: canPlay ? 1 : 0.75,
@@ -1396,7 +1468,7 @@ export default function FullPlayer(props: {
                 >
                   {isNowPlaying ? (
                     <NowPlayingPip />
-                  ) : canPlay && !isCur ? (
+                  ) : canAttemptPlay && !isCur ? (
                     <span className="afTrackIndexSwap">
                       <span className="afTrackIndexNumber">{i + 1}</span>
 
@@ -1408,6 +1480,11 @@ export default function FullPlayer(props: {
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
+
+                          if (isPlaybackGate) {
+                            openPlaybackGate();
+                            return;
+                          }
 
                           p.setQueue(effTracks, {
                             contextId: albumKey ?? undefined,
