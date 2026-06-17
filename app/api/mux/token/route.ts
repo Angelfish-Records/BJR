@@ -257,8 +257,7 @@ export async function POST(req: NextRequest) {
         status: 403,
         code: "PLAYBACK_CAP_REACHED",
         action: "login",
-        message:
-          "Please enter an email address to continue listening for free.",
+        message: "Enter your email address to continue listening.",
       });
     }
   }

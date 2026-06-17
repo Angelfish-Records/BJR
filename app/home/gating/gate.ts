@@ -79,7 +79,7 @@ function defaultMessageFor(code: GateCode, verb: GateVerb): string {
     case "READ_RECEIPTS_CAP_REACHED":
       return "You’ve reached the anonymous activity limit.";
     case "PLAYBACK_CAP_REACHED":
-      return "You’ve reached the anonymous playback limit.";
+      return "Enter your email address to continue listening.";
     case "JOURNAL_READ_CAP_REACHED":
       return "You’ve reached the anonymous reading limit.";
     case "EXEGESIS_THREAD_READ_CAP_REACHED":

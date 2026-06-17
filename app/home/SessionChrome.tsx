@@ -242,7 +242,25 @@ export default function SessionChrome(props: SessionChromeProps) {
     onOpenPortal,
   } = props;
 
-  const { reportGate } = useGateBroker();
+  const { gate, reportGate } = useGateBroker();
+
+  const brokerSpotlightAttention =
+    gate.uiMode === "spotlight" && gate.active !== null;
+
+  const brokerAttentionMessage =
+    brokerSpotlightAttention && gate.active?.message?.trim()
+      ? gate.active.message.trim()
+      : null;
+
+  const effectiveSpotlightAttention =
+    spotlightAttention || brokerSpotlightAttention;
+
+  const effectiveAttentionMessage =
+    brokerAttentionMessage ??
+    (attentionMessage?.trim() ? attentionMessage.trim() : null) ??
+    (brokerSpotlightAttention
+      ? "Enter your email address to continue listening."
+      : null);
 
   const albumPurchaseSuccess =
     bannerKind === "checkout" &&
@@ -263,7 +281,7 @@ export default function SessionChrome(props: SessionChromeProps) {
 
   const gateNodeTopRight = (
     <ActivationGate
-      attentionMessage={attentionMessage}
+      attentionMessage={effectiveAttentionMessage}
       canManageBilling={canManageBilling}
       tier={tier}
     >
@@ -657,8 +675,10 @@ export default function SessionChrome(props: SessionChromeProps) {
               <div
                 style={{
                   position: "relative",
-                  visibility: spotlightAttention ? "hidden" : "visible",
-                  pointerEvents: spotlightAttention ? "none" : "auto",
+                  visibility: effectiveSpotlightAttention
+                    ? "hidden"
+                    : "visible",
+                  pointerEvents: effectiveSpotlightAttention ? "none" : "auto",
                 }}
               >
                 {gateNodeTopRight}

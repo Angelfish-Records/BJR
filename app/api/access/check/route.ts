@@ -238,8 +238,7 @@ export async function GET(req: NextRequest) {
           releaseAt,
           code: "ANON_CAP_REACHED",
           action: "login" as const,
-          reason:
-            "Please enter an email address to continue listening for free.",
+          reason: "Enter your email address to continue listening.",
           correlationId,
           redeemed: null,
           cap: {
