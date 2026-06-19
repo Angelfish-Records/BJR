@@ -9,7 +9,7 @@ import {
 } from "./urlState";
 import { getLastPortalTab } from "./portalLastTab";
 
-const DEFAULT_PORTAL_TAB = "portal";
+const DEFAULT_PORTAL_TAB = "journal";
 
 // Keep aligned with middleware + returnTo.
 const RESERVED_ROOTS = new Set<string>([
