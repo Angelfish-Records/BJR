@@ -612,7 +612,9 @@ export default function ActivationGate(props: Props) {
   const BILLING_MODAL_MIN_W = 640;
 
   const attentionText =
-    !isActive && attentionMessage?.trim() ? attentionMessage.trim() : null;
+    placement === "modal" && !isActive && attentionMessage?.trim()
+      ? attentionMessage.trim()
+      : null;
 
   const needsAttention = attentionText !== null;
 

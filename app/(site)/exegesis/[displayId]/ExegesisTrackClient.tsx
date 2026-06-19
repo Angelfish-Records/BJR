@@ -788,7 +788,7 @@ export default function ExegesisTrackClient(props: ExegesisTrackClientProps) {
               gateInlineFromEngine({
                 attempt: { verb: "openComposer", domain: EXEGESIS_DOMAIN },
                 intent: "explicit",
-                messageOverride: "Discussion is exclusive to members.",
+                messageOverride: "Discussion is open to Patrons.",
                 correlationId: null,
                 dismissible: true,
               });

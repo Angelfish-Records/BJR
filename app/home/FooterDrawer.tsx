@@ -42,17 +42,27 @@ export default function FooterDrawer(props: {
         title: "Privacy",
         body: (
           <>
-            Identity is email-only (authenticated with Clerk); we will never ask
-            you for your name, location, phone number, or social handles. We use
-            your email to authenticate access and to send opt-out first-party
-            communications about releases, events, and account activity. Access
-            decisions, entitlements, and playthrough telemetry are stored
-            first-party in Neon Postgres. Streaming is delivered via Mux using
-            short-lived signed tokens. We don’t sell personal data, share it
-            with advertisers, or embed ad-tracking pixels. Cookies are used only
-            for session/authentication and basic anti-abuse controls. Logs are
-            retained only as long as necessary for access control, security,
-            communications delivery, and accounting.
+            Account access is email-based and authenticated through Clerk. We do
+            not require a legal name, phone number, social handles, or precise
+            location. Public participation is pseudonymous by default; members
+            may optionally claim a public display name for use in community
+            surfaces. We use your email to authenticate access, manage your
+            account, send necessary account and transactional notices, and send
+            first-party release or event communications where permitted. Access
+            decisions, entitlements, member identity records, community
+            participation, and playback telemetry are stored first-party in Neon
+            Postgres. Streaming is delivered through Mux using short-lived
+            signed tokens. Email delivery is handled through Resend as a
+            transport provider. We do not sell personal data, share it with
+            advertisers, or embed advertising pixels. Cookies are used for
+            session/authentication, account security, and basic anti-abuse
+            controls. Operational logs are retained only as long as reasonably
+            necessary for access control, security, communications delivery,
+            accounting, abuse prevention, and legal or operational
+            record-keeping. Payments and subscriptions are processed through
+            Stripe, which may collect payment and billing information needed to
+            complete the transaction; we store only the account, entitlement,
+            and transaction references needed to operate access and accounting.
           </>
         ),
       },
@@ -61,11 +71,10 @@ export default function FooterDrawer(props: {
         title: "Terms",
         body: (
           <>
-            Streams and downloads are licensed, not sold, unless explicitly
-            stated. Access is entitlement-bound (membership/purchase) and may be
-            revoked for fraud, abuse, or policy violations. You may not
-            redistribute, mirror, scrape, or automate access. Sharing
-            links/tokens is permitted only where the UI explicitly enables it.
+            Purchases grant a personal licence to access and enjoy the content.
+            You may not redistribute, mirror, scrape, automate access to, or
+            commercially exploit the content without permission. Platform access
+            may be suspended for fraud, abuse, or policy violations.
           </>
         ),
       },

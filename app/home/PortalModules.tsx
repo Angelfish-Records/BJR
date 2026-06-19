@@ -389,7 +389,7 @@ function DownloadOfferCard(props: {
     : null;
 
   const includesText = offerCfg?.includes?.length
-    ? `Includes ${offerCfg.includes.join(", ")}.`
+    ? `${offerCfg.includes.join(", ")}`
     : "Includes streaming + multiple download formats.";
 
   return (
@@ -468,10 +468,10 @@ function DownloadOfferCard(props: {
       <div style={{ marginTop: 14, display: "grid", gap: 10, fontSize: 13 }}>
         <NoteRow icon={ICON_WAVE}>{includesText}</NoteRow>
         <NoteRow icon={ICON_FORMATS}>
-          {techSpec ?? "Download available in 24-bit / 96kHz."}
+          {techSpec ?? "Original 24-bit studio masters"}
         </NoteRow>
         <NoteRow icon={ICON_DOLLAR}>
-          Your money goes directly to the artist.
+          Your money goes directly to the artist
         </NoteRow>
       </div>
 
