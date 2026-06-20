@@ -26,14 +26,10 @@ type ThemeName =
   | "pressure-glass"
   | "reaction-veins"
   | "reaction-veins-2"
-  | "lidar-cathedral"
-  | "phase-interference-fabric"
   | "topographic-memory"
   | "magnetic-particulate"
-  | "optical-caustics"
   | "event-horizon"
   | "signal-decay"
-  | "fracture-propagation"
   | "crystalline-growth";
 
 type RenderRequest = {
@@ -70,14 +66,10 @@ const THEMES: ThemeName[] = [
   "pressure-glass",
   "reaction-veins",
   "reaction-veins-2",
-  "lidar-cathedral",
-  "phase-interference-fabric",
   "topographic-memory",
   "magnetic-particulate",
-  "optical-caustics",
   "event-horizon",
   "signal-decay",
-  "fracture-propagation",
   "crystalline-growth",
 ];
 
