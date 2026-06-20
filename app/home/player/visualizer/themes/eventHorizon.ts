@@ -23,6 +23,7 @@ out vec4 fragColor;
 
 uniform vec2 uRes;
 uniform float uTime;
+uniform float uAge;
 uniform float uEnergy;
 
 float hash(vec2 p) {
@@ -94,21 +95,23 @@ float band(float value, float centre, float innerWidth, float outerWidth) {
 }
 
 void main() {
-  float time = max(uTime, 0.0);
+    float time = max(uTime, 0.0);
+  float age = min(max(uAge, 0.0), 600.0);
   float t = time * 0.10;
   float e = clamp(uEnergy, 0.0, 1.0);
 
-  // This is deliberately true camera movement, not radial parameter drift.
+  // Theme-lifetime camera move, independent of track time.
   //
-  // At 60 sec:  1.08x
-  // At 3 min:   1.26x
-  // At 5 min:   1.48x
-  // At 7 min+:  1.73x
+  // 1 min  ≈ 1.31x
+  // 3 min  ≈ 1.72x
+  // 5 min  ≈ 1.95x
+  // 7 min  ≈ 2.07x
+  // 10 min ≈ 2.17x
   //
-  // The cap prevents an endlessly running player from eventually filling
-  // the screen with nothing but the inner void.
-  float travelTime = min(time, 420.0);
-  float cameraZoom = exp(travelTime * 0.00130);
+  // This is intentionally substantial: the ring and shadow should feel
+  // increasingly enormous rather than merely breathing in place.
+  float cameraProgress = 1.0 - exp(-age * 0.0048);
+  float cameraZoom = 1.0 + 1.24 * cameraProgress;
 
   vec2 p = (vUv - 0.5) * vec2(uRes.x / uRes.y, 1.0);
   p *= cameraZoom;
@@ -174,18 +177,22 @@ void main() {
   // the two shoulders rise out around it.
   // ---------------------------------------------------------------------------
 
-  float rearExtent = 0.435;
+    float rearExtent = 0.435;
   float rearX = d.x / rearExtent;
   float rearArcHeight = sqrt(max(0.0, 1.0 - rearX * rearX));
 
-  float rearArcY = -0.016 - rearArcHeight * 0.152;
+  // Keep the faint rear lensed material in the lower hemisphere.
+  // It should support the near-side ribbon, not form a second orbit over
+  // the top of the shadow.
+  float rearArcY = 0.054 + rearArcHeight * 0.094;
 
   float rearArc = 1.0 - smoothstep(
-    0.010,
-    0.052,
+    0.012,
+    0.054,
     abs(d.y - rearArcY)
   );
 
+  rearArc *= smoothstep(0.012, 0.142, d.y);
   rearArc *= 1.0 - smoothstep(0.345, 0.455, abs(d.x));
 
   float rearTexture = ridged(
@@ -205,16 +212,21 @@ void main() {
   // "matter passing across the face" relationship.
   // ---------------------------------------------------------------------------
 
-  float foregroundOffset = 0.040;
+    // A more strongly compressed disc, positioned below the centreline.
+  //
+  // Its upper rim begins just below the midpoint of the shadow rather than
+  // climbing toward the top edge, while the dense lower body reads as matter
+  // passing across the observer-facing side of the horizon.
+  float foregroundOffset = 0.118;
   vec2 foregroundPlane = vec2(
     d.x,
-    (d.y - foregroundOffset) * 3.35
+    (d.y - foregroundOffset) * 4.25
   );
 
   float foregroundRadius = length(foregroundPlane);
   float foregroundAngle = atan(foregroundPlane.y, foregroundPlane.x);
 
-  float lowerHemisphere = smoothstep(-0.020, 0.205, d.y);
+  float lowerHemisphere = smoothstep(0.012, 0.105, d.y);
 
   float foregroundTorus = band(
     foregroundRadius,
@@ -249,15 +261,21 @@ void main() {
 
   // Fine lensed bridge across the near side of the shadow.
   // It is curved rather than ruler-straight, so it reads as depth rather than UI.
-  float bridgeCurve = 0.026
-    + 0.108 * pow(abs(d.x) / 0.345, 2.0);
+    // The luminous near-side bridge sits below centre and bows farther
+  // downward toward its outer shoulders.
+  float bridgeCurve = 0.072
+    + 0.075 * pow(abs(d.x) / 0.345, 2.0);
+
+  float bridgeHalfWidth = 0.014
+    + 0.010 * (1.0 - smoothstep(0.0, 0.345, abs(d.x)));
 
   float foregroundBridge = 1.0 - smoothstep(
-    0.011,
-    0.047,
+    bridgeHalfWidth,
+    bridgeHalfWidth + 0.032,
     abs(d.y - bridgeCurve)
   );
 
+  foregroundBridge *= smoothstep(0.020, 0.070, d.y);
   foregroundBridge *= 1.0 - smoothstep(0.295, 0.375, abs(d.x));
 
   float bridgeTexture = fbm(
@@ -326,9 +344,9 @@ void main() {
   col += white * lensGlow * (0.040 + 0.15 * e);
   col += vec3(0.18, 0.36, 0.72) * corona * (0.12 + 0.24 * e);
 
-  col += mix(blue, amber, 0.48 + 0.52 * sin(t + d.x * 3.0))
+   col += mix(blue, amber, 0.48 + 0.52 * sin(t + d.x * 3.0))
     * rearArc
-    * (0.30 + 0.34 * e);
+    * (0.14 + 0.20 * e);
 
   col += white * starField * (0.16 + 0.28 * e);
 
@@ -363,9 +381,9 @@ void main() {
     * foregroundCore
     * (0.09 + 0.22 * e + 0.22 * approachingSide);
 
-  col += mix(copper, white, 0.35 + 0.45 * approachingSide)
+    col += mix(copper, white, 0.35 + 0.45 * approachingSide)
     * foregroundBridge
-    * (0.12 + 0.20 * e);
+    * (0.24 + 0.26 * e);
 
   float edgeVignette = 1.0 - smoothstep(0.78, 1.45, length(p));
   col *= 0.52 + 0.84 * edgeVignette;
@@ -384,7 +402,9 @@ export function createEventHorizonTheme(): Theme {
   } | null = null;
   let uRes: WebGLUniformLocation | null = null;
   let uTime: WebGLUniformLocation | null = null;
+  let uAge: WebGLUniformLocation | null = null;
   let uEnergy: WebGLUniformLocation | null = null;
+  let themeStartedAtMs: number | null = null;
 
   return {
     name: "event-horizon",
@@ -392,8 +412,12 @@ export function createEventHorizonTheme(): Theme {
     init(gl) {
       program = createProgram(gl, VS, FS);
       tri = makeFullscreenTriangle(gl);
+
+      themeStartedAtMs = performance.now();
+
       uRes = gl.getUniformLocation(program, "uRes");
       uTime = gl.getUniformLocation(program, "uTime");
+      uAge = gl.getUniformLocation(program, "uAge");
       uEnergy = gl.getUniformLocation(program, "uEnergy");
     },
 
@@ -403,8 +427,14 @@ export function createEventHorizonTheme(): Theme {
       gl.useProgram(program);
       gl.bindVertexArray(tri.vao);
 
+      const themeAgeSeconds =
+        themeStartedAtMs === null
+          ? 0
+          : (performance.now() - themeStartedAtMs) / 1000;
+
       gl.uniform2f(uRes, opts.width, opts.height);
       gl.uniform1f(uTime, opts.time);
+      gl.uniform1f(uAge, themeAgeSeconds);
       gl.uniform1f(uEnergy, opts.audio.energy);
 
       gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -420,6 +450,7 @@ export function createEventHorizonTheme(): Theme {
 
       if (program) gl.deleteProgram(program);
       program = null;
+      themeStartedAtMs = null;
     },
   };
 }

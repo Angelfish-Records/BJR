@@ -88,6 +88,18 @@ float pressureWell(vec2 p, vec2 c, float radius) {
   return exp(-d * d * 2.6);
 }
 
+vec3 oceanIridescence(float x) {
+  vec3 teal = vec3(0.08, 0.72, 0.68);
+  vec3 blue = vec3(0.12, 0.38, 0.92);
+  vec3 violet = vec3(0.56, 0.22, 0.88);
+  vec3 pearl = vec3(0.82, 0.96, 0.92);
+
+  vec3 a = mix(teal, blue, smoothstep(0.10, 0.55, x));
+  vec3 b = mix(violet, pearl, smoothstep(0.45, 0.95, x));
+
+  return mix(a, b, smoothstep(0.35, 0.85, x));
+}
+
 vec2 fabricWarp(vec2 p, float t, float e) {
   vec2 c1 = vec2(0.22 * sin(t * 1.7), 0.18 * cos(t * 1.3));
   vec2 c2 = vec2(0.46 * sin(t * 0.8 + 2.1), 0.34 * cos(t * 0.9 + 1.4));
@@ -156,9 +168,15 @@ void main() {
   vec3 fieldBlue = vec3(0.18, 0.42, 0.68);
   vec3 hot = vec3(0.92, 0.96, 1.00);
 
+    float shimmerField = fbm(q * 2.8 + field * 0.9 + vec2(t * 0.42, -t * 0.31));
+  float shimmerMask = smoothstep(0.74, 0.94, shimmerField + cluster * 0.18 + alignment * 0.10);
+  float shimmerPhase = fbm(q * 5.6 + vec2(t * 0.9, t * 0.37));
+  vec3 shimmer = oceanIridescence(shimmerPhase);
+
   vec3 col = deep;
   col += fieldBlue * lines * (0.35 + 0.45 * e);
   col += dust * grains * (0.42 + 0.72 * cluster);
+  col += shimmer * grains * shimmerMask * (0.18 + 0.22 * e);
   col += hot * sparkle * (0.38 + 0.60 * e);
 
   float flux = smoothstep(0.68, 0.98, fbm(q * 4.4 + field * 0.6 + vec2(t * 0.6, -t)));

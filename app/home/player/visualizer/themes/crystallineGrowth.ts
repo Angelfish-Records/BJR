@@ -15,6 +15,13 @@ uniform float uTime;
 uniform float uEnergy;
 uniform float uFrame;
 
+const vec2 TRACK = vec2(0.70710678, 0.70710678);
+const vec2 TRACK_N = vec2(-0.70710678, 0.70710678);
+
+const float CAMERA_SPEED = 0.170;
+const float CAMERA_BACK = 0.340;
+const float CAMERA_SCALE = 1.55;
+
 float hash(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));
   p += dot(p, p + 34.345);
@@ -24,105 +31,285 @@ float hash(vec2 p) {
 float noise(vec2 p) {
   vec2 i = floor(p);
   vec2 f = fract(p);
+
   float a = hash(i);
   float b = hash(i + vec2(1.0, 0.0));
   float c = hash(i + vec2(0.0, 1.0));
   float d = hash(i + vec2(1.0, 1.0));
+
   vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+
+  return mix(a, b, u.x)
+    + (c - a) * u.y * (1.0 - u.x)
+    + (d - b) * u.x * u.y;
 }
 
 float fbm(vec2 p) {
-  float v = 0.0;
-  float a = 0.55;
+  float value = 0.0;
+  float amplitude = 0.55;
+
   for (int i = 0; i < 5; i++) {
-    v += a * noise(p);
+    value += amplitude * noise(p);
     p = mat2(1.62, -1.18, 1.18, 1.62) * p;
-    a *= 0.52;
+    amplitude *= 0.52;
   }
-  return v;
+
+  return value;
 }
 
-float branch(vec2 p, float t, float phase, float spread, float width) {
-  float y = p.y + 0.95 - t;
-  float root = abs(p.x);
+float trackOffset(float s) {
+  return
+    0.220 * sin(s * 0.63 + 0.30) +
+    0.105 * sin(s * 1.57 + 1.10) +
+    0.050 * sin(s * 3.80 - 0.60);
+}
 
-  float wobble =
-    0.34 * sin(y * 5.2 + phase) +
-    0.16 * sin(y * 11.0 - phase * 1.7) +
-    0.12 * (fbm(vec2(y * 2.2, phase)) - 0.5);
+vec2 trackPosition(float s) {
+  return TRACK * s + TRACK_N * trackOffset(s);
+}
 
-  float trunk = abs(p.x - wobble * spread);
-  float front = 1.0 - smoothstep(0.00, 0.42, abs(y));
+vec2 trackTangent(float s) {
+  const float epsilon = 0.002;
+  return normalize(trackPosition(s + epsilon) - trackPosition(s - epsilon));
+}
 
-  float core = exp(-trunk * trunk / width) * front;
+/*
+ * The camera follows the filament's position but remains nearly upright.
+ * That preserves the diagonal traversal through the frame rather than
+ * rotating the filament into a static vertical conveyor belt.
+ */
+vec2 cameraForward(float s) {
+  vec2 upright = vec2(0.0, 1.0);
+  return normalize(mix(upright, trackTangent(s), 0.14));
+}
 
-  float forkA = abs(p.x - wobble * spread - y * 0.46 - 0.10 * sin(y * 13.0 + phase));
-  float forkB = abs(p.x - wobble * spread + y * 0.38 + 0.12 * sin(y * 10.0 - phase));
-  float forkWindow = smoothstep(-0.42, 0.20, y) * smoothstep(0.72, -0.10, y);
+vec2 screenToWorld(vec2 uv, float cameraS) {
+  float minRes = min(uRes.x, uRes.y);
+  vec2 screen = (uv * uRes - 0.5 * uRes) / minRes;
 
-  float forks =
-    exp(-forkA * forkA / (width * 0.72)) * forkWindow * 0.62 +
-    exp(-forkB * forkB / (width * 0.78)) * forkWindow * 0.52;
+  vec2 forward = cameraForward(cameraS);
+  vec2 right = vec2(forward.y, -forward.x);
+  vec2 center = trackPosition(cameraS - CAMERA_BACK);
 
-  return max(core, forks);
+  return center
+    + right * screen.x * CAMERA_SCALE
+    + forward * screen.y * CAMERA_SCALE;
+}
+
+vec2 worldToScreenUv(vec2 world, float cameraS) {
+  float minRes = min(uRes.x, uRes.y);
+
+  vec2 forward = cameraForward(cameraS);
+  vec2 right = vec2(forward.y, -forward.x);
+  vec2 center = trackPosition(cameraS - CAMERA_BACK);
+
+  vec2 local = vec2(
+    dot(world - center, right),
+    dot(world - center, forward)
+  ) / CAMERA_SCALE;
+
+  return 0.5 + local * minRes / uRes;
+}
+
+vec2 trackCoordinates(vec2 world) {
+  float s = dot(world, TRACK);
+  float lateral = dot(world, TRACK_N) - trackOffset(s);
+
+  return vec2(lateral, s);
+}
+
+float lineSegment(
+  vec2 point,
+  vec2 origin,
+  vec2 direction,
+  float length,
+  float width
+) {
+  vec2 q = point - origin;
+
+  float along = dot(q, direction);
+  float across = abs(q.x * direction.y - q.y * direction.x);
+
+  float startCap = smoothstep(0.0, width * 2.0, along);
+  float endCap = 1.0 - smoothstep(length, length + width * 3.0, along);
+
+  float line = exp(-(across * across) / max(width * width, 0.000001));
+
+  return line * startCap * endCap;
+}
+
+/*
+ * x = lateral distance from the living filament
+ * y = longitudinal world-space coordinate along the path
+ *
+ * r: crystallisation seed
+ * g: internal facet intensity
+ * b: active electrical/front charge
+ * a: branch presence
+ */
+vec4 crystallineFront(vec2 world, float headS, float energy) {
+  vec2 local = trackCoordinates(world);
+
+  float lateral = local.x;
+  float longitudinal = local.y;
+  float headOffset = longitudinal - headS;
+
+  float wander =
+    0.016 * sin(longitudinal * 13.0 + 0.80) +
+    0.010 * sin(longitudinal * 27.0 - 1.40);
+
+  float spineWidth = 0.015 + 0.006 * energy;
+  float spineDelta = (lateral - wander) / spineWidth;
+  float spine = exp(-spineDelta * spineDelta);
+
+  float headDelta = headOffset / 0.180;
+  float activeCore = spine * exp(-headDelta * headDelta);
+
+  float branchMass = 0.0;
+  float branchCharge = 0.0;
+
+  float baseCell = floor(headS * 1.35);
+
+  for (int i = -5; i <= 3; i++) {
+    float cell = baseCell + float(i);
+
+    float nodeRandom = hash(vec2(cell, 3.91));
+    float sideRandom = hash(vec2(cell, 8.73));
+    float lengthRandom = hash(vec2(cell, 14.27));
+    float forkRandom = hash(vec2(cell, 22.61));
+
+    float nodeS = (cell + 0.16 + 0.64 * nodeRandom) / 1.35;
+    float branchAge = headS - nodeS;
+
+    float born = smoothstep(-0.060, 0.180, branchAge);
+    float development = smoothstep(0.000, 0.450, branchAge);
+
+    float side = sideRandom < 0.5 ? -1.0 : 1.0;
+
+    float lengthA = (0.145 + 0.190 * lengthRandom) * development;
+    float lengthB = (0.090 + 0.165 * forkRandom) * development;
+
+    vec2 origin = vec2(0.0, nodeS);
+
+    vec2 directionA = normalize(vec2(
+      side * (0.44 + 0.18 * lengthRandom),
+      0.90
+    ));
+
+    vec2 directionB = normalize(vec2(
+      -side * (0.34 + 0.22 * forkRandom),
+      0.94
+    ));
+
+    float widthA = 0.010 + 0.004 * energy;
+    float widthB = 0.008 + 0.003 * energy;
+
+    float branchA = lineSegment(
+      local,
+      origin,
+      directionA,
+      lengthA,
+      widthA
+    );
+
+    float branchB = lineSegment(
+      local,
+      origin + directionA * lengthA * 0.42,
+      directionB,
+      lengthB,
+      widthB
+    );
+
+    float branch = (branchA + branchB) * born;
+
+    float chargeAge = (branchAge - 0.105) / 0.220;
+    float freshCharge = exp(-chargeAge * chargeAge);
+
+    branchMass = max(branchMass, branch);
+    branchCharge = max(branchCharge, branch * freshCharge);
+  }
+
+  float mineral = fbm(world * 5.30 + vec2(1.70, -2.10));
+  float facetMask = smoothstep(0.31, 0.86, mineral);
+
+  float seed = max(activeCore, branchMass * 0.84);
+  float facets = max(activeCore, branchMass) * facetMask;
+  float charge = max(activeCore * 1.12, branchCharge);
+
+  return vec4(seed, facets, charge, branchMass);
+}
+
+float insideUv(vec2 uv) {
+  return
+    step(0.0, uv.x) *
+    step(0.0, uv.y) *
+    step(uv.x, 1.0) *
+    step(uv.y, 1.0);
+}
+
+vec4 stateAt(vec2 uv) {
+  float valid = insideUv(uv);
+  return texture(uPrev, clamp(uv, 0.001, 0.999)) * valid;
 }
 
 void main() {
-  vec2 uv = vUv;
   vec2 texel = 1.0 / max(uRes, vec2(1.0));
-  vec2 p = (uv * uRes - 0.5 * uRes) / min(uRes.x, uRes.y);
 
-  float e = clamp(uEnergy, 0.0, 1.0);
-  float t = uTime * (0.135 + 0.060 * e);
+  float energy = clamp(uEnergy, 0.0, 1.0);
+  float cameraS = uTime * CAMERA_SPEED;
+  float previousCameraS = max(0.0, uTime - 0.016667) * CAMERA_SPEED;
 
-  vec4 prev = texture(uPrev, uv);
+  vec2 world = screenToWorld(vUv, cameraS);
+  vec2 previousUv = worldToScreenUv(world, previousCameraS);
 
-  float n = 0.0;
-  n += texture(uPrev, uv + vec2( texel.x, 0.0)).r;
-  n += texture(uPrev, uv + vec2(-texel.x, 0.0)).r;
-  n += texture(uPrev, uv + vec2(0.0,  texel.y)).r;
-  n += texture(uPrev, uv - vec2(0.0, texel.y)).r;
-  n *= 0.25;
+  vec4 previous = stateAt(previousUv);
 
-  float cycle = mod(t, 2.45);
-  float head = cycle;
+  float neighbour = 0.0;
+  neighbour += stateAt(previousUv + vec2( texel.x, 0.0)).r;
+  neighbour += stateAt(previousUv + vec2(-texel.x, 0.0)).r;
+  neighbour += stateAt(previousUv + vec2(0.0,  texel.y)).r;
+  neighbour += stateAt(previousUv + vec2(0.0, -texel.y)).r;
+  neighbour += stateAt(previousUv + vec2( texel.x,  texel.y)).r;
+  neighbour += stateAt(previousUv + vec2(-texel.x,  texel.y)).r;
+  neighbour += stateAt(previousUv + vec2( texel.x, -texel.y)).r;
+  neighbour += stateAt(previousUv + vec2(-texel.x, -texel.y)).r;
+  neighbour *= 0.125;
 
-  vec2 drift = vec2(
-    fbm(p * 1.4 + vec2(t * 0.17, -t * 0.08)),
-    fbm(p * 1.4 + vec2(-t * 0.11, t * 0.15))
-  ) - 0.5;
+  vec4 source = crystallineFront(world, cameraS, energy);
 
-  vec2 q = p + drift * 0.16;
+  float mineral = fbm(world * 4.00 + vec2(-1.80, 2.40));
+  float mineralGate = smoothstep(0.34, 0.84, mineral + source.a * 0.22);
 
-  float bolt = 0.0;
-  bolt = max(bolt, branch(q, head, 0.4, 0.34, 0.010 + 0.010 * e));
-  bolt = max(bolt, branch(q + vec2(0.28, -0.10), head * 0.94, 2.1, 0.30, 0.008 + 0.008 * e) * 0.80);
-  bolt = max(bolt, branch(q + vec2(-0.30, 0.04), head * 1.03, 4.7, 0.26, 0.007 + 0.007 * e) * 0.72);
+  float propagation =
+    smoothstep(0.15, 0.74, neighbour) *
+    mineralGate;
 
-  float mineral = fbm(q * 5.5 + vec2(t * 0.20, -t * 0.14));
-  float fracture = smoothstep(0.30, 0.96, bolt + mineral * 0.28);
-  float neighbourFeed = smoothstep(0.02, 0.72, n);
+  float growth = max(previous.r * 0.9970, source.r * 0.94);
+  growth = max(growth, propagation * (0.15 + 0.31 * source.r));
 
-  float growth = max(prev.r * 0.991, fracture * (0.54 + 0.38 * neighbourFeed + 0.20 * e));
-  float facet = mix(prev.g * 0.996, mineral, 0.030 + 0.035 * e);
-  facet = max(facet, growth * smoothstep(0.26, 0.92, mineral));
+  float facet = max(
+    previous.g * 0.9980,
+    growth * (0.20 + 0.80 * source.g)
+  );
 
-  float front = max(prev.b * (0.900 - 0.030 * e), bolt);
-  float age = max(prev.a * 0.994, growth * 0.72);
+  float charge = max(
+    previous.b * (0.895 - 0.045 * energy),
+    source.b
+  );
+
+  float age = max(previous.a * 0.9980, growth);
 
   if (uFrame < 2.0) {
-    float mist = smoothstep(0.42, 0.90, fbm(p * 3.0));
-    growth = mist * 0.22;
-    facet = mist * 0.36;
-    front = 0.0;
-    age = mist * 0.18;
+    growth = source.r * 0.84;
+    facet = source.g * 0.74;
+    charge = source.b;
+    age = source.r * 0.52;
   }
 
   fragColor = vec4(
     clamp(growth, 0.0, 1.0),
     clamp(facet, 0.0, 1.0),
-    clamp(front, 0.0, 1.0),
+    clamp(charge, 0.0, 1.0),
     clamp(age, 0.0, 1.0)
   );
 }
@@ -139,6 +326,13 @@ uniform vec2 uRes;
 uniform float uTime;
 uniform float uEnergy;
 
+const vec2 TRACK = vec2(0.70710678, 0.70710678);
+const vec2 TRACK_N = vec2(-0.70710678, 0.70710678);
+
+const float CAMERA_SPEED = 0.170;
+const float CAMERA_BACK = 0.340;
+const float CAMERA_SCALE = 1.55;
+
 float hash(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));
   p += dot(p, p + 34.345);
@@ -148,78 +342,276 @@ float hash(vec2 p) {
 float noise(vec2 p) {
   vec2 i = floor(p);
   vec2 f = fract(p);
+
   float a = hash(i);
   float b = hash(i + vec2(1.0, 0.0));
   float c = hash(i + vec2(0.0, 1.0));
   float d = hash(i + vec2(1.0, 1.0));
+
   vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+
+  return mix(a, b, u.x)
+    + (c - a) * u.y * (1.0 - u.x)
+    + (d - b) * u.x * u.y;
 }
 
 float fbm(vec2 p) {
-  float v = 0.0;
-  float a = 0.55;
+  float value = 0.0;
+  float amplitude = 0.55;
+
   for (int i = 0; i < 5; i++) {
-    v += a * noise(p);
+    value += amplitude * noise(p);
     p = mat2(1.62, -1.18, 1.18, 1.62) * p;
-    a *= 0.52;
+    amplitude *= 0.52;
   }
-  return v;
+
+  return value;
+}
+
+float trackOffset(float s) {
+  return
+    0.220 * sin(s * 0.63 + 0.30) +
+    0.105 * sin(s * 1.57 + 1.10) +
+    0.050 * sin(s * 3.80 - 0.60);
+}
+
+vec2 trackPosition(float s) {
+  return TRACK * s + TRACK_N * trackOffset(s);
+}
+
+vec2 trackTangent(float s) {
+  const float epsilon = 0.002;
+  return normalize(trackPosition(s + epsilon) - trackPosition(s - epsilon));
+}
+
+vec2 cameraForward(float s) {
+  vec2 upright = vec2(0.0, 1.0);
+  return normalize(mix(upright, trackTangent(s), 0.14));
+}
+
+vec2 screenToWorld(vec2 uv, float cameraS) {
+  float minRes = min(uRes.x, uRes.y);
+  vec2 screen = (uv * uRes - 0.5 * uRes) / minRes;
+
+  vec2 forward = cameraForward(cameraS);
+  vec2 right = vec2(forward.y, -forward.x);
+  vec2 center = trackPosition(cameraS - CAMERA_BACK);
+
+  return center
+    + right * screen.x * CAMERA_SCALE
+    + forward * screen.y * CAMERA_SCALE;
+}
+
+vec2 trackCoordinates(vec2 world) {
+  float s = dot(world, TRACK);
+  float lateral = dot(world, TRACK_N) - trackOffset(s);
+
+  return vec2(lateral, s);
+}
+
+float lineSegment(
+  vec2 point,
+  vec2 origin,
+  vec2 direction,
+  float length,
+  float width
+) {
+  vec2 q = point - origin;
+
+  float along = dot(q, direction);
+  float across = abs(q.x * direction.y - q.y * direction.x);
+
+  float startCap = smoothstep(0.0, width * 2.0, along);
+  float endCap = 1.0 - smoothstep(length, length + width * 3.0, along);
+
+  float line = exp(-(across * across) / max(width * width, 0.000001));
+
+  return line * startCap * endCap;
+}
+
+vec4 crystallineFront(vec2 world, float headS, float energy) {
+  vec2 local = trackCoordinates(world);
+
+  float lateral = local.x;
+  float longitudinal = local.y;
+  float headOffset = longitudinal - headS;
+
+  float wander =
+    0.016 * sin(longitudinal * 13.0 + 0.80) +
+    0.010 * sin(longitudinal * 27.0 - 1.40);
+
+  float spineWidth = 0.015 + 0.006 * energy;
+  float spineDelta = (lateral - wander) / spineWidth;
+  float spine = exp(-spineDelta * spineDelta);
+
+  float headDelta = headOffset / 0.180;
+  float activeCore = spine * exp(-headDelta * headDelta);
+
+  float branchMass = 0.0;
+  float branchCharge = 0.0;
+
+  float baseCell = floor(headS * 1.35);
+
+  for (int i = -5; i <= 3; i++) {
+    float cell = baseCell + float(i);
+
+    float nodeRandom = hash(vec2(cell, 3.91));
+    float sideRandom = hash(vec2(cell, 8.73));
+    float lengthRandom = hash(vec2(cell, 14.27));
+    float forkRandom = hash(vec2(cell, 22.61));
+
+    float nodeS = (cell + 0.16 + 0.64 * nodeRandom) / 1.35;
+    float branchAge = headS - nodeS;
+
+    float born = smoothstep(-0.060, 0.180, branchAge);
+    float development = smoothstep(0.000, 0.450, branchAge);
+
+    float side = sideRandom < 0.5 ? -1.0 : 1.0;
+
+    float lengthA = (0.145 + 0.190 * lengthRandom) * development;
+    float lengthB = (0.090 + 0.165 * forkRandom) * development;
+
+    vec2 origin = vec2(0.0, nodeS);
+
+    vec2 directionA = normalize(vec2(
+      side * (0.44 + 0.18 * lengthRandom),
+      0.90
+    ));
+
+    vec2 directionB = normalize(vec2(
+      -side * (0.34 + 0.22 * forkRandom),
+      0.94
+    ));
+
+    float widthA = 0.010 + 0.004 * energy;
+    float widthB = 0.008 + 0.003 * energy;
+
+    float branchA = lineSegment(
+      local,
+      origin,
+      directionA,
+      lengthA,
+      widthA
+    );
+
+    float branchB = lineSegment(
+      local,
+      origin + directionA * lengthA * 0.42,
+      directionB,
+      lengthB,
+      widthB
+    );
+
+    float branch = (branchA + branchB) * born;
+
+    float chargeAge = (branchAge - 0.105) / 0.220;
+    float freshCharge = exp(-chargeAge * chargeAge);
+
+    branchMass = max(branchMass, branch);
+    branchCharge = max(branchCharge, branch * freshCharge);
+  }
+
+  float mineral = fbm(world * 5.30 + vec2(1.70, -2.10));
+  float facetMask = smoothstep(0.31, 0.86, mineral);
+
+  float seed = max(activeCore, branchMass * 0.84);
+  float facets = max(activeCore, branchMass) * facetMask;
+  float charge = max(activeCore * 1.12, branchCharge);
+
+  return vec4(seed, facets, charge, branchMass);
 }
 
 void main() {
-  vec2 uv = vUv;
   vec2 texel = 1.0 / max(uRes, vec2(1.0));
-  vec2 p = (uv * uRes - 0.5 * uRes) / min(uRes.x, uRes.y);
 
-  float e = clamp(uEnergy, 0.0, 1.0);
+  float energy = clamp(uEnergy, 0.0, 1.0);
+  float cameraS = uTime * CAMERA_SPEED;
 
-  vec4 s = texture(uState, uv);
-  float growth = smoothstep(0.04, 0.82, s.r);
-  float facet = s.g;
-  float front = smoothstep(0.08, 0.95, s.b);
-  float age = s.a;
+  vec2 world = screenToWorld(vUv, cameraS);
+  vec4 procedural = crystallineFront(world, cameraS, energy);
+  vec4 state = texture(uState, vUv);
 
-  float gx1 = texture(uState, uv + vec2(texel.x, 0.0)).r;
-  float gx2 = texture(uState, uv - vec2(texel.x, 0.0)).r;
-  float gy1 = texture(uState, uv + vec2(0.0, texel.y)).r;
-  float gy2 = texture(uState, uv - vec2(0.0, texel.y)).r;
-  vec2 grad = vec2(gx1 - gx2, gy1 - gy2);
+  float growth = max(
+    smoothstep(0.045, 0.780, state.r),
+    procedural.r * 0.82
+  );
 
-  float edge = smoothstep(0.020, 0.240, length(grad));
-  float internalFacet = smoothstep(0.34, 0.86, fbm(p * 10.0 + facet * 2.0));
-  float shard = smoothstep(0.46, 0.92, fbm(p * 16.0 + vec2(facet * 2.0, -facet)));
+  float facet = max(state.g, procedural.g * 0.72);
+  float charge = max(state.b, procedural.b);
+  float age = state.a;
 
-  float lightAngle = dot(normalize(grad + vec2(0.0001)), normalize(vec2(0.36, 0.93)));
-  float sheen = smoothstep(0.12, 0.98, lightAngle * 0.5 + 0.5);
+  float gx1 = texture(uState, vUv + vec2(texel.x, 0.0)).r;
+  float gx2 = texture(uState, vUv - vec2(texel.x, 0.0)).r;
+  float gy1 = texture(uState, vUv + vec2(0.0, texel.y)).r;
+  float gy2 = texture(uState, vUv - vec2(0.0, texel.y)).r;
 
-  vec3 voidBlue = vec3(0.018, 0.022, 0.040);
-  vec3 deepIce = vec3(0.060, 0.088, 0.140);
-  vec3 mineral = vec3(0.145, 0.205, 0.310);
-  vec3 violet = vec3(0.310, 0.250, 0.520);
-  vec3 cyan = vec3(0.440, 0.780, 1.000);
+  vec2 gradient = vec2(gx1 - gx2, gy1 - gy2);
+  float growthEdge = smoothstep(0.018, 0.220, length(gradient));
+
+  vec2 local = trackCoordinates(world);
+
+  float broadMineral = fbm(world * 1.55 + vec2(-0.30, 1.20));
+  float internalMineral = fbm(world * 7.00 + vec2(2.10, -1.40));
+  float fineCrystal = fbm(world * 15.00 + vec2(-4.20, 1.70));
+
+  float interiorPlane = smoothstep(
+    0.40,
+    0.88,
+    internalMineral + facet * 0.24
+  );
+
+  float shardPlane = smoothstep(
+    0.56,
+    0.91,
+    fineCrystal + facet * 0.18
+  );
+
+  float sideLight = dot(
+    normalize(gradient + vec2(0.0001)),
+    normalize(vec2(0.38, 0.92))
+  );
+
+  float sheen = smoothstep(0.10, 0.98, sideLight * 0.5 + 0.5);
+
+  vec3 abyss = vec3(0.018, 0.022, 0.041);
+  vec3 midnight = vec3(0.038, 0.061, 0.105);
+  vec3 deepIce = vec3(0.082, 0.145, 0.225);
+  vec3 mineral = vec3(0.150, 0.245, 0.365);
+  vec3 violet = vec3(0.290, 0.220, 0.500);
+  vec3 cyan = vec3(0.390, 0.760, 1.000);
   vec3 white = vec3(0.970, 0.990, 1.000);
 
-  vec3 col = voidBlue;
-  col = mix(col, deepIce, 0.42 + growth * 0.42);
-  col = mix(col, mineral, growth * (0.54 + facet * 0.22));
+  vec3 col = mix(abyss, midnight, 0.36 + broadMineral * 0.28);
+
+  col = mix(col, deepIce, growth * 0.58);
+  col = mix(col, mineral, growth * (0.34 + facet * 0.30));
   col = mix(col, violet, growth * facet * 0.24);
-  col = mix(col, cyan, growth * sheen * (0.22 + 0.18 * e));
+  col = mix(col, cyan, growth * sheen * (0.16 + 0.14 * energy));
 
-  col += white * edge * growth * (0.20 + 0.28 * e);
-  col += cyan * internalFacet * growth * 0.14;
-  col += white * shard * growth * facet * 0.10;
-  col += white * front * (0.70 + 0.70 * e);
-  col += cyan * front * (0.32 + 0.45 * e);
+  col += cyan * interiorPlane * growth * 0.14;
+  col += violet * shardPlane * growth * facet * 0.11;
 
-  float halo = smoothstep(0.82, 0.00, length(p)) * (0.12 + 0.12 * e);
-  col += cyan * halo * (growth + front * 0.8);
+  col += white * growthEdge * growth * (0.11 + 0.20 * energy);
+  col += cyan * growthEdge * growth * 0.10;
 
-  float r = length(p);
-  float vig = smoothstep(1.32, 0.20, r);
-  col *= 0.72 + 0.58 * vig;
+  col += cyan * charge * (0.42 + 0.54 * energy);
+  col += white * charge * (0.50 + 0.62 * energy);
 
-  col *= 0.90 + 0.24 * e;
+  float nearHead = exp(
+    -(
+      (local.y - cameraS) *
+      (local.y - cameraS)
+    ) / 0.150
+  );
+
+  col += cyan * nearHead * procedural.r * (0.14 + 0.16 * energy);
+
+  float vignette = smoothstep(1.25, 0.18, length(
+    (vUv * uRes - 0.5 * uRes) / min(uRes.x, uRes.y)
+  ));
+
+  col *= 0.72 + 0.52 * vignette;
+  col *= 0.90 + 0.22 * energy;
 
   fragColor = vec4(col, 1.0);
 }
