@@ -1,3 +1,5 @@
+// web/app/home/player/visualizer/themes/crystallineGrowth.ts
+// big chunky hexagons, concept is good but the shapes and the overlaid white outline framing need to be aligned
 import type { Theme } from "../types";
 import { createPingPongTheme } from "./themeFactory";
 

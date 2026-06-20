@@ -1,3 +1,5 @@
+// web/app/home/player/visualizer/themes/topographicMemory.ts
+// concept is good but is way too busy and jerky and has no lateral movement throughout - needs work
 import type { Theme } from "../types";
 import { createProgram, makeFullscreenTriangle } from "../gl";
 

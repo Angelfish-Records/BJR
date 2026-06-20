@@ -1,3 +1,5 @@
+// web/app/home/player/visualizer/themes/magneticParticulate.ts
+// this one is cool but it would be even cooler with some space-time compression like simpsons 3D episode fabric
 import type { Theme } from "../types";
 import { createProgram, makeFullscreenTriangle } from "../gl";
 

@@ -1,3 +1,5 @@
+// web/app/home/player/visualizer/themes/eventHorizon.ts
+// gorgeous and as-advertised, probably needs to be a bit more squashed in shape and progressively zoom closer for intensity
 import type { Theme } from "../types";
 import { createProgram, makeFullscreenTriangle } from "../gl";
 

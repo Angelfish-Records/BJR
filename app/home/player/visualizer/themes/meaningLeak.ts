@@ -29,6 +29,8 @@ uniform float uBass;
 uniform float uMid;
 uniform float uTreble;
 
+#define PI 3.14159265359
+
 float hash12(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
@@ -101,26 +103,72 @@ vec3 palette(float x, float play) {
   return outc;
 }
 
+float easeInOut(float x) {
+  x = clamp(x, 0.0, 1.0);
+  return x*x*(3.0 - 2.0*x);
+}
+
+vec2 rotate2(vec2 p, float a) {
+  float s = sin(a);
+  float c = cos(a);
+  return mat2(c, -s, s, c) * p;
+}
+
 void main() {
   vec2 uv = vUv;
   vec2 p = (uv * uRes - 0.5 * uRes) / min(uRes.x, uRes.y);
 
   float e = clamp(uEnergy, 0.0, 1.0);
   float rms = clamp(uRms, 0.0, 1.0);
+  float bass = clamp(uBass, 0.0, 1.0);
+  float mid = clamp(uMid, 0.0, 1.0);
+  float treble = clamp(uTreble, 0.0, 1.0);
 
   // Playback detector: uses rms when present, else energy.
   float drive = max(e, rms);
 
-  // Transition: baseline -> active
-  float play = smoothstep(0.02, 0.12, drive);
+  // Transition: baseline -> active.
+  float play = smoothstep(0.025, 0.16, drive);
+
+  // Directed manga-panel motion:
+  // slow underlying continuity, with occasional eased jumps/zooms instead of constant twitch.
+  float shotClock = uTime * mix(0.08, 0.18, play);
+  float shotId = floor(shotClock);
+  float shotPhase = fract(shotClock);
+  float shotEase = easeInOut(shotPhase);
+
+  vec2 shotSeed = vec2(shotId, shotId * 1.37 + 12.4);
+  vec2 nextSeed = vec2(shotId + 1.0, (shotId + 1.0) * 1.37 + 12.4);
+
+  vec2 shotA = vec2(hash12(shotSeed), hash12(shotSeed + 8.1)) - 0.5;
+  vec2 shotB = vec2(hash12(nextSeed), hash12(nextSeed + 8.1)) - 0.5;
+  vec2 shotPan = mix(shotA, shotB, shotEase) * (0.12 + 0.18 * play);
+
+  float zoomA = mix(0.92, 1.22, hash12(shotSeed + 17.0));
+  float zoomB = mix(0.92, 1.22, hash12(nextSeed + 17.0));
+  float zoom = mix(1.0, mix(zoomA, zoomB, shotEase), play);
+
+  float angleA = (hash12(shotSeed + 23.0) - 0.5) * 0.22;
+  float angleB = (hash12(nextSeed + 23.0) - 0.5) * 0.22;
+  float angle = mix(angleA, angleB, shotEase) * play;
+
+  // Sparse impact jitter: intentional snap, not permanent shimmer.
+  float impact = pow(1.0 - shotPhase, 10.0) * play * smoothstep(0.25, 0.9, bass + treble);
+  vec2 impactJitter = vec2(
+    hash12(vec2(shotId, 91.7)) - 0.5,
+    hash12(vec2(shotId, 42.3)) - 0.5
+  ) * impact * 0.055;
+
+  p = rotate2((p + shotPan + impactJitter) / zoom, angle);
 
   // Inline stability: widen tiny details at low internal res
   float resMin = min(uRes.x, uRes.y);
   float soft = clamp((520.0 / max(240.0, resMin)), 0.9, 1.7);
 
-  // Time: baseline is slower; playback thickens time with bass (viscosity vibe)
-  float tBase = uTime * 0.06;
-  float tPlay = uTime * (0.08 + 0.04*uMid) * (1.0 - 0.20*uBass);
+ // Time: much slower field evolution. The camera now provides motion,
+  // so the texture itself can stop boiling.
+  float tBase = uTime * 0.026;
+  float tPlay = uTime * (0.036 + 0.018 * mid) * (1.0 - 0.14 * bass);
   float t = mix(tBase, tPlay, play);
 
   // Base field (full-coverage)
@@ -129,7 +177,7 @@ void main() {
 
   // Flow advection (subtle in baseline, stronger in play)
   vec2 v = flow(q, t);
-  q += v * (0.06 + 0.10*play) * (0.55 + 0.65*uMid);
+  q += v * (0.035 + 0.070 * play) * (0.55 + 0.45 * mid);
 
   // “world texture”
   float f0 = fbm(q*1.35 + vec2(0.0, t*0.35));
@@ -156,12 +204,12 @@ void main() {
 
   // Salience combines edge + curvature, boosted by treble, gated by play
   float sal = (0.85*gmag + 0.65*curv);
-  sal *= (0.70 + 0.85*uTreble);
+ sal *= (0.62 + 0.58 * treble);
   sal *= (0.20 + 0.80*play);
   sal = clamp(sal * 2.2, 0.0, 1.0);
 
   // Meaning leak: contrast increases selectively where salience exists
-  float k = (0.08 + 0.42*play) * (0.55 + 0.45*drive);
+  float k = (0.06 + 0.34 * play) * (0.58 + 0.42 * drive);
   float shaped = softContrast(field, k * sal);
 
   // Base color (restrained), then local chroma condensation under salience
@@ -170,7 +218,7 @@ void main() {
   // Halo: soft “edge significance” without drawing outlines
   // Subtle chromatic fringe aligned to gradient direction, scaled by salience.
   vec2 dir = normalize(grad + vec2(1e-6, 1e-6));
-  float fringePx = (0.9 + 1.4*play) * (0.5 + 0.7*uTreble) * soft;
+  float fringePx = (0.55 + 0.95 * play) * (0.45 + 0.55 * treble) * soft;
   vec2 off = dir * fringePx * px;
 
   float lC = shaped;
@@ -188,8 +236,10 @@ void main() {
   col += vec3(0.95, 0.95, 1.00) * glow * smoothstep(0.55, 0.98, shaped);
 
   // Baseline: add a tiny film grain-like microtexture so idle isn’t dead
-  float grain = noise(uv*uRes*0.35 + vec2(uTime*0.8, -uTime*0.6));
-  col += vec3(grain - 0.5) * (0.010 + 0.010*(1.0-play));
+    // Slower, coarser grain. Enough texture to breathe, not enough to buzz.
+  float grainTime = floor(uTime * 8.0) / 8.0;
+  float grain = noise(uv * uRes * 0.22 + vec2(grainTime * 0.35, -grainTime * 0.27));
+  col += vec3(grain - 0.5) * (0.006 + 0.008 * (1.0 - play));
 
   // vignette
   float r = length(p);
@@ -197,7 +247,7 @@ void main() {
   col *= 0.55 + 0.70 * vig;
 
   // global breathing (very gentle)
-  col *= 0.92 + 0.20 * drive;
+  col *= 0.90 + 0.16 * drive;
 
   fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }
@@ -218,6 +268,22 @@ export function createMeaningLeakTheme(): Theme {
   let uMid: WebGLUniformLocation | null = null;
   let uTreble: WebGLUniformLocation | null = null;
 
+  let smoothEnergy = 0;
+  let smoothRms = 0;
+  let smoothBass = 0;
+  let smoothMid = 0;
+  let smoothTreble = 0;
+
+  const damp = (
+    current: number,
+    target: number,
+    rise: number,
+    fall: number,
+  ): number => {
+    const rate = target > current ? rise : fall;
+    return current + (target - current) * rate;
+  };
+
   return {
     name: "meaning-leak",
     init(gl) {
@@ -234,21 +300,31 @@ export function createMeaningLeakTheme(): Theme {
     render(gl, opts) {
       if (!program || !tri) return;
 
-      const bass = opts.audio.bass ?? opts.audio.energy;
-      const mid = opts.audio.mid ?? opts.audio.energy;
-      const treble = opts.audio.treble ?? opts.audio.energy;
-      const rms = opts.audio.rms ?? 0;
+      const rawEnergy = Math.max(0, Math.min(1, opts.audio.energy));
+      const rawBass = Math.max(0, Math.min(1, opts.audio.bass ?? rawEnergy));
+      const rawMid = Math.max(0, Math.min(1, opts.audio.mid ?? rawEnergy));
+      const rawTreble = Math.max(
+        0,
+        Math.min(1, opts.audio.treble ?? rawEnergy),
+      );
+      const rawRms = Math.max(0, Math.min(1, opts.audio.rms ?? 0));
+
+      smoothEnergy = damp(smoothEnergy, rawEnergy, 0.16, 0.045);
+      smoothRms = damp(smoothRms, rawRms, 0.14, 0.04);
+      smoothBass = damp(smoothBass, rawBass, 0.18, 0.05);
+      smoothMid = damp(smoothMid, rawMid, 0.13, 0.04);
+      smoothTreble = damp(smoothTreble, rawTreble, 0.11, 0.035);
 
       gl.useProgram(program);
       gl.bindVertexArray(tri.vao);
 
       gl.uniform2f(uRes, opts.width, opts.height);
       gl.uniform1f(uTime, opts.time);
-      gl.uniform1f(uEnergy, opts.audio.energy);
-      gl.uniform1f(uRms, rms);
-      gl.uniform1f(uBass, bass);
-      gl.uniform1f(uMid, mid);
-      gl.uniform1f(uTreble, treble);
+      gl.uniform1f(uEnergy, smoothEnergy);
+      gl.uniform1f(uRms, smoothRms);
+      gl.uniform1f(uBass, smoothBass);
+      gl.uniform1f(uMid, smoothMid);
+      gl.uniform1f(uTreble, smoothTreble);
 
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 

@@ -1,4 +1,5 @@
 // web/app/home/player/visualizer/themes/reactionVeins2.ts
+// too light and boring but presumably the principle is strong
 import type { Theme } from "../types";
 import { createPingPongTheme } from "./themeFactory";
 

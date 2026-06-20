@@ -1,4 +1,5 @@
 // web/app/home/player/visualizer/themes/mosaicDrift.ts
+// doesn't even render
 import type { Theme } from "../types";
 import { createProgram, makeFullscreenTriangle } from "../gl";
 
@@ -115,8 +116,10 @@ void main() {
   float scale = mix(6.5, 4.2, uBass);
   vec2 x = q * scale + vec2(0.0, t*0.35);
 
-  vec2 cellId, cellCenter;
+  vec2 cellId;
+  vec2 cellCenter;
   float edgeDist;
+  float cellDist = voronoi(x, cellId, cellCenter, edgeDist);
 
   float _dist = length(p);
 

@@ -1,4 +1,5 @@
 // web/app/home/player/visualizer/themes/pressureGlass.ts
+// vivid green and orange microscopic sweeping
 import type { Theme } from "../types";
 import { createSinglePassTheme } from "./themeFactory";
 

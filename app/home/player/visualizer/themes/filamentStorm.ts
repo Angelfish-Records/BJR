@@ -91,44 +91,53 @@ void main() {
   float e = clamp(uEnergy, 0.0, 1.0);
 
   // SCREEN-friendly base (dark, but not dead)
-  float under = fbm(p*1.6 + vec2(0.0, t*0.35));
-  vec3 base = mix(vec3(0.015, 0.015, 0.018), vec3(0.060, 0.080, 0.100), under);
+  // Larger spatial scale: calmer behind text, more negative space.
+  vec2 q = p * 0.66;
 
-  float f = filamentField(p, t);
+  float under = fbm(q*1.35 + vec2(0.0, t*0.35));
+  vec3 base = mix(vec3(0.012, 0.012, 0.016), vec3(0.040, 0.052, 0.068), under);
 
-  // lots of bands, but AA them so they don’t sparkle when internal res changes
-  float bands = 20.0 + 24.0 * uTreble;
+  float f = filamentField(q, t);
+
+  // Fewer, wider bands: same behaviour, less visual chatter.
+  float bands = 12.0 + 16.0 * uTreble;
   float v = f * bands;
   float frac = fract(v);
   float d = min(frac, 1.0 - frac); // 0 at boundary
   float line = aaBandLine(d);
 
   // treble shimmer: keep it subtle and broad (no pixel glitter)
-  float jitter = fbm(p*9.0 + vec2(t*1.9, -t*1.6));
+  float jitter = fbm(q*5.5 + vec2(t*1.9, -t*1.6));
   float shiver = (0.55 + 0.45*sin(t*6.5 + jitter*6.28318)) * (0.06 + 0.14*uTreble);
   line = clamp(line + shiver * (0.30 + 0.60*line), 0.0, 1.0);
 
   // bundle control (bass)
-  float bundle = smoothstep(0.45, 0.95, fbm(p*2.8 + vec2(t*0.6, -t*0.5)));
-  float thick = mix(0.35, 0.80, uBass) * bundle;
-  float strand = pow(line, mix(1.45, 0.95, thick));
+float bundle = smoothstep(0.38, 0.92, fbm(q*2.05 + vec2(t*0.6, -t*0.5)));
+  float thick = mix(0.48, 0.92, uBass) * bundle;
+  float strand = pow(line, mix(1.30, 0.82, thick));
 
-  // pearlescent palette (diverse from nebula)
-  vec3 ink = vec3(0.04, 0.04, 0.05);
-  vec3 pearl = vec3(0.88, 0.86, 0.82);
-  vec3 rose = vec3(0.90, 0.70, 0.78);
-  vec3 teal = vec3(0.60, 0.85, 0.82);
+  // Dark pastel iridescence: oil-slick colour, not rainbow neon.
+  vec3 ink = vec3(0.030, 0.030, 0.040);
+  vec3 pearl = vec3(0.82, 0.84, 0.90);
+  vec3 lilac = vec3(0.70, 0.58, 0.90);
+  vec3 rose = vec3(0.86, 0.56, 0.68);
+  vec3 mint = vec3(0.48, 0.78, 0.72);
+  vec3 blue = vec3(0.42, 0.62, 0.92);
 
-  float tint = smoothstep(0.15, 0.95, fbm(p*1.4 + 5.7));
-  vec3 filamentCol = mix(pearl, mix(rose, teal, tint), 0.55);
+  float hueA = fbm(q*1.05 + vec2(5.7, t*0.18));
+  float hueB = fbm(q*1.70 + vec2(-t*0.12, 11.3));
+  vec3 rainbowA = mix(lilac, rose, smoothstep(0.18, 0.82, hueA));
+  vec3 rainbowB = mix(mint, blue, smoothstep(0.20, 0.86, hueB));
+  vec3 filamentCol = mix(pearl, mix(rainbowA, rainbowB, hueA), 0.68);
 
   vec3 col = base;
   col = mix(col, ink, 0.10);
   col += filamentCol * strand * (0.16 + 0.42*e);
 
   // highlights: broaden + cap (avoid pinprick whites)
-  float peak = smoothstep(0.72, 0.98, strand);
-  col += vec3(0.98, 0.98, 1.00) * peak * (0.06 + 0.16*uTreble);
+  float peak = smoothstep(0.68, 0.96, strand);
+  col += filamentCol * peak * (0.08 + 0.18*uTreble);
+  col += vec3(0.90, 0.92, 1.00) * peak * (0.025 + 0.07*uTreble);
 
   float r = length(p);
   float vig = smoothstep(1.35, 0.25, r);

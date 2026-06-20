@@ -75,11 +75,11 @@ void main(){
   float baseT = uTime * 0.18;
   float lock = smoothstep(0.20, 0.85, e) * (0.30 + 0.55*mid); // phase locking strength
 
-  float minD = 1e9;
   vec3 add = vec3(0.0);
 
   for(int s=0;s<8;s++){
     float fs = float(s);
+    float minD = 1e9;
 
     // centres (slow drift; bass shifts in/out)
     float angC = baseT*0.5 + fs*1.1 + 2.0*cen;
@@ -177,8 +177,8 @@ function createTex(gl: WebGL2RenderingContext, w: number, h: number) {
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   gl.texImage2D(
     gl.TEXTURE_2D,
     0,
@@ -333,6 +333,11 @@ export function createOrbitalScriptTheme(): Theme {
       const src = ping ? texA : texB;
       const dstFbo = ping ? fboB : fboA;
 
+      const previousFbo = gl.getParameter(
+        gl.FRAMEBUFFER_BINDING,
+      ) as WebGLFramebuffer | null;
+      const previousViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
+
       // Ink update
       gl.bindFramebuffer(gl.FRAMEBUFFER, dstFbo);
       gl.viewport(0, 0, simW, simH);
@@ -352,9 +357,14 @@ export function createOrbitalScriptTheme(): Theme {
 
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-      // Draw to screen
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      gl.viewport(0, 0, opts.width, opts.height);
+      // Draw to whatever target the engine had bound.
+      gl.bindFramebuffer(gl.FRAMEBUFFER, previousFbo);
+      gl.viewport(
+        previousViewport[0],
+        previousViewport[1],
+        previousViewport[2],
+        previousViewport[3],
+      );
       gl.useProgram(progDraw);
 
       gl.activeTexture(gl.TEXTURE0);

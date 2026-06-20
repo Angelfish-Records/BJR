@@ -1,4 +1,5 @@
 // web/app/home/player/visualizer/themes/mhdSilk.ts
+// nice watery wisps in whitish blue
 import type { Theme } from "../types";
 import { createSinglePassTheme } from "./themeFactory";
 

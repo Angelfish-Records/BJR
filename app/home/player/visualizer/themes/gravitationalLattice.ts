@@ -1,3 +1,5 @@
+// web/app/home/player/visualizer/themes/gravitationalLattice.ts
+// doesn't even render
 import type { Theme } from "../types";
 import { createProgram, makeFullscreenTriangle } from "../gl";
 
@@ -241,37 +243,20 @@ function createTex(gl: WebGL2RenderingContext, w: number, h: number) {
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-  // Try half-float first (best), fall back to RGBA8.
-  const hasCBF = !!gl.getExtension("EXT_color_buffer_float");
-  const hasHF = !!gl.getExtension("OES_texture_half_float") || true; // WebGL2 defines HALF_FLOAT
-  if (hasCBF && hasHF) {
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      gl.RGBA16F,
-      w,
-      h,
-      0,
-      gl.RGBA,
-      gl.HALF_FLOAT,
-      null,
-    );
-  } else {
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      gl.RGBA8,
-      w,
-      h,
-      0,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      null,
-    );
-  }
+  gl.texImage2D(
+    gl.TEXTURE_2D,
+    0,
+    gl.RGBA8,
+    w,
+    h,
+    0,
+    gl.RGBA,
+    gl.UNSIGNED_BYTE,
+    null,
+  );
 
   gl.bindTexture(gl.TEXTURE_2D, null);
   return tex;
@@ -419,6 +404,11 @@ export function createGravitationalLatticeTheme(): Theme {
       const src = ping ? texA : texB;
       const dstFbo = ping ? fboB : fboA;
 
+      const previousFbo = gl.getParameter(
+        gl.FRAMEBUFFER_BINDING,
+      ) as WebGLFramebuffer | null;
+      const previousViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
+
       // SIM PASS (render to data texture sized viewport)
       gl.bindFramebuffer(gl.FRAMEBUFFER, dstFbo);
       gl.viewport(0, 0, tw, th);
@@ -438,9 +428,14 @@ export function createGravitationalLatticeTheme(): Theme {
 
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-      // RENDER PASS (to screen)
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      gl.viewport(0, 0, opts.width, opts.height);
+      // RENDER PASS (to whatever target the engine had bound)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, previousFbo);
+      gl.viewport(
+        previousViewport[0],
+        previousViewport[1],
+        previousViewport[2],
+        previousViewport[3],
+      );
       gl.useProgram(progRender);
 
       gl.activeTexture(gl.TEXTURE0);
