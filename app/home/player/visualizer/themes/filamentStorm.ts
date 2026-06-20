@@ -111,33 +111,40 @@ void main() {
   float shiver = (0.55 + 0.45*sin(t*6.5 + jitter*6.28318)) * (0.06 + 0.14*uTreble);
   line = clamp(line + shiver * (0.30 + 0.60*line), 0.0, 1.0);
 
-  // bundle control (bass)
-float bundle = smoothstep(0.38, 0.92, fbm(q*2.05 + vec2(t*0.6, -t*0.5)));
+ // bundle control (bass)
+  float bundle = smoothstep(0.38, 0.92, fbm(q*2.05 + vec2(t*0.6, -t*0.5)));
   float thick = mix(0.48, 0.92, uBass) * bundle;
   float strand = pow(line, mix(1.30, 0.82, thick));
 
-  // Dark pastel iridescence: oil-slick colour, not rainbow neon.
-  vec3 ink = vec3(0.030, 0.030, 0.040);
-  vec3 pearl = vec3(0.82, 0.84, 0.90);
-  vec3 lilac = vec3(0.70, 0.58, 0.90);
-  vec3 rose = vec3(0.86, 0.56, 0.68);
-  vec3 mint = vec3(0.48, 0.78, 0.72);
-  vec3 blue = vec3(0.42, 0.62, 0.92);
+ // Soft vivid iridescence: visible colour, still dark-screen friendly.
+  vec3 ink = vec3(0.020, 0.022, 0.032);
+  vec3 violet = vec3(0.68, 0.42, 1.00);
+  vec3 magenta = vec3(1.00, 0.38, 0.68);
+  vec3 coral = vec3(1.00, 0.55, 0.38);
+  vec3 cyan = vec3(0.26, 0.88, 1.00);
+  vec3 mint = vec3(0.34, 1.00, 0.72);
 
-  float hueA = fbm(q*1.05 + vec2(5.7, t*0.18));
-  float hueB = fbm(q*1.70 + vec2(-t*0.12, 11.3));
-  vec3 rainbowA = mix(lilac, rose, smoothstep(0.18, 0.82, hueA));
-  vec3 rainbowB = mix(mint, blue, smoothstep(0.20, 0.86, hueB));
-  vec3 filamentCol = mix(pearl, mix(rainbowA, rainbowB, hueA), 0.68);
+  float hueA = fbm(q*0.90 + vec2(5.7, t*0.22));
+  float hueB = fbm(q*1.45 + vec2(-t*0.16, 11.3));
+  float hueC = fbm(q*2.10 + vec2(t*0.10, -7.4));
+
+  vec3 warm = mix(magenta, coral, smoothstep(0.18, 0.82, hueA));
+  vec3 cool = mix(cyan, mint, smoothstep(0.16, 0.86, hueB));
+  vec3 spectral = mix(violet, mix(warm, cool, hueB), smoothstep(0.10, 0.92, hueC));
+
+  // Keep the strands luminous without letting them collapse back to white.
+  vec3 filamentCol = mix(spectral, vec3(0.78, 0.84, 0.94), 0.18);
 
   vec3 col = base;
-  col = mix(col, ink, 0.10);
-  col += filamentCol * strand * (0.16 + 0.42*e);
+  col = mix(col, ink, 0.08);
 
-  // highlights: broaden + cap (avoid pinprick whites)
-  float peak = smoothstep(0.68, 0.96, strand);
-  col += filamentCol * peak * (0.08 + 0.18*uTreble);
-  col += vec3(0.90, 0.92, 1.00) * peak * (0.025 + 0.07*uTreble);
+  float colourLift = 0.26 + 0.54*e;
+  col += filamentCol * strand * colourLift;
+
+  // Coloured bloom instead of white peak highlights.
+  float peak = smoothstep(0.62, 0.94, strand);
+  col += filamentCol * peak * (0.16 + 0.22*uTreble);
+  col += spectral * peak * (0.05 + 0.08*uTreble);
 
   float r = length(p);
   float vig = smoothstep(1.35, 0.25, r);

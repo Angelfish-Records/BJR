@@ -70,23 +70,31 @@ void main(){
   float tre = clamp(uTreble, 0.0, 1.0);
   float cen = clamp(uCentroid, 0.0, 1.0);
 
-  // “Mass”/damping: bass makes it heavier, treble adds jitter energy but restrained.
-  float damping = mix(0.985, 0.965, bass);
-  float dt = 0.55; // stable for 8-bit-ish storage
+    // Keep the simulation spatially calm. Audio should light the lattice,
+  // not yank its geometry around.
+  float drive = smoothstep(0.05, 0.85, e);
+  float damping = mix(0.986, 0.978, drive);
+  float dt = 0.46;
 
-  // Global attractor drifts; centroid steers its orbit
-  vec2 attract = vec2(0.5) + 0.18 * vec2(sin(uTime*0.18 + 5.0*cen), cos(uTime*0.14 + 4.0*cen));
+  // Slow autonomous attractor. Centroid adds only a tiny phase bias.
+  vec2 attract = vec2(0.5) + 0.16 * vec2(
+    sin(uTime * 0.115 + 0.45 * cen),
+    cos(uTime * 0.097 + 0.35 * cen)
+  );
+
   vec2 toA = attract - pos;
-  vec2 acc = 0.18 * toA;
+  vec2 acc = 0.145 * toA;
 
-  // Mild “wind” curl
-  vec2 wind = vec2(sin(uTime*0.22 + pos.y*6.0), cos(uTime*0.19 + pos.x*6.0));
-  acc += wind * (0.015 + 0.03*tre);
+  // Mild curl field: audio increases liveliness, not displacement.
+  vec2 wind = vec2(
+    sin(uTime * 0.17 + pos.y * 6.0),
+    cos(uTime * 0.15 + pos.x * 6.0)
+  );
+  acc += wind * (0.012 + 0.010 * drive + 0.006 * tre);
 
-  // Deterministic links (4 neighbors) — topology *slowly* drifts with centroid.
-  // We sample neighbor positions from the same prev texture.
+  // Deterministic links. Do not let audio change topology.
   float N = uTexRes.x * uTexRes.y;
-  float seed = idx + floor(uTime*0.05 + 10.0*cen); // slow topology drift
+  float seed = idx;
   for (int k = 0; k < 4; k++){
     float r = hash12(vec2(seed, float(k) + 1.23));
     float j = floor(r * N);
@@ -100,16 +108,16 @@ void main(){
     float dist = length(d) + 1e-4;
     vec2 dir = d / dist;
 
-    // Rest length “breathes” with mid; treble adds slight tension shifts.
-    float rest = 0.18 + 0.06 * sin(uTime*0.12 + float(k)) + 0.05 * (mid - 0.5) + 0.02*tre;
-    float kSpring = 0.22 + 0.30 * e; // stronger in chorus but not spiky
+       // Rest length breathes slowly, but not from raw music bands.
+    float rest = 0.19 + 0.035 * sin(uTime * 0.075 + float(k) * 1.7);
+    float kSpring = 0.24 + 0.055 * drive;
     float force = (dist - rest) * kSpring;
 
     acc += dir * force;
   }
 
   // Repulsion to prevent collapse (soft)
-  float rep = 0.018 + 0.020 * e;
+    float rep = 0.014 + 0.006 * drive;
   acc += normalize(vec2(hash12(vec2(idx, 9.1)) - 0.5, hash12(vec2(idx, 2.7)) - 0.5)) * rep;
 
   // Integrate
@@ -186,8 +194,8 @@ void main(){
   float pointK = mix(220.0, 160.0, e);
   float linkK  = mix(160.0, 120.0, e);
 
-  // Link topology seed matches sim’s drift rate
-  float topo = floor(uTime*0.05 + 10.0*cen);
+    // Link topology is stable; movement comes from node drift, not rewiring.
+  float topo = 0.0;
 
   for (int i = 0; i < 36; i++){
     float fi = float(i);
@@ -331,6 +339,13 @@ export function createGravitationalLatticeTheme(): Theme {
   let fboB: WebGLFramebuffer | null = null;
   let ping = true;
 
+  let lastTime = 0;
+  let smoothEnergy = 0;
+  let smoothBass = 0;
+  let smoothMid = 0;
+  let smoothTreble = 0;
+  let smoothCentroid = 0;
+
   // data texture resolution
   const tw = 8;
   const th = 8;
@@ -395,11 +410,31 @@ export function createGravitationalLatticeTheme(): Theme {
         return;
 
       const a = opts.audio;
-      const energy = a.energy ?? 0;
-      const bass = a.bass ?? 0;
-      const mid = a.mid ?? 0;
-      const treble = a.treble ?? 0;
-      const centroid = a.centroid ?? 0;
+      const rawEnergy = a.energy ?? 0;
+      const rawBass = a.bass ?? 0;
+      const rawMid = a.mid ?? 0;
+      const rawTreble = a.treble ?? 0;
+      const rawCentroid = a.centroid ?? 0;
+
+      const dt =
+        lastTime > 0
+          ? Math.max(0, Math.min(0.08, opts.time - lastTime))
+          : 1 / 60;
+      lastTime = opts.time;
+
+      const follow = 1 - Math.exp(-dt * 5.5);
+
+      smoothEnergy += (rawEnergy - smoothEnergy) * follow;
+      smoothBass += (rawBass - smoothBass) * follow;
+      smoothMid += (rawMid - smoothMid) * follow;
+      smoothTreble += (rawTreble - smoothTreble) * follow;
+      smoothCentroid += (rawCentroid - smoothCentroid) * follow;
+
+      const energy = smoothEnergy;
+      const bass = smoothBass;
+      const mid = smoothMid;
+      const treble = smoothTreble;
+      const centroid = smoothCentroid;
 
       const src = ping ? texA : texB;
       const dstFbo = ping ? fboB : fboA;

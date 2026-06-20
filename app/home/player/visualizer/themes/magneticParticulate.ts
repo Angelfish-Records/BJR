@@ -1,5 +1,5 @@
 // web/app/home/player/visualizer/themes/magneticParticulate.ts
-// this one is cool but it would be even cooler with some space-time compression like simpsons 3D episode fabric
+// Magnetic particulate with space-time blanket compression: radial lensing, bubbles, depressions, stable texture.
 import type { Theme } from "../types";
 import { createProgram, makeFullscreenTriangle } from "../gl";
 
@@ -13,8 +13,6 @@ void main() {
 }
 `;
 
-// Magnetic Particulate
-// Iron filings in a living field: granular dust, field-line alignment, audio-driven clustering.
 const FS = `#version 300 es
 precision highp float;
 
@@ -83,29 +81,92 @@ float filament(vec2 p, vec2 dir, float scale) {
   return smoothstep(0.19, 0.018, lane) * smoothstep(0.22, 0.95, broken);
 }
 
+float well(vec2 p, vec2 c, float radius, float strength) {
+  float d = length(p - c) / radius;
+  return strength * exp(-d * d * 2.15);
+}
+
+float blanketHeight(vec2 p, float t, float e) {
+  vec2 c0 = vec2(
+    0.18 * sin(t * 0.73),
+    0.13 * cos(t * 0.61)
+  );
+
+  vec2 c1 = vec2(
+    0.48 * sin(t * 0.31 + 1.7),
+    0.32 * cos(t * 0.39 + 0.8)
+  );
+
+  vec2 c2 = vec2(
+    0.38 * sin(t * 0.47 + 4.1),
+    0.42 * cos(t * 0.35 + 2.9)
+  );
+
+  float pulse = 0.65 + 0.35 * sin(t * 2.2 + e * 2.8);
+
+  float h = 0.0;
+  h -= well(p, c0, 0.48, 0.46 + 0.58 * e) * pulse;
+  h += well(p, c1, 0.34, 0.18 + 0.34 * e);
+  h -= well(p, c2, 0.28, 0.13 + 0.23 * e);
+
+  h += 0.055 * fbm(p * 2.5 + vec2(t * 0.12, -t * 0.08));
+  return h;
+}
+
+vec2 lensBlanket(vec2 p, float t, float e) {
+  float h = blanketHeight(p, t, e);
+
+  float eps = 0.012;
+  float hx = blanketHeight(p + vec2(eps, 0.0), t, e) - blanketHeight(p - vec2(eps, 0.0), t, e);
+  float hy = blanketHeight(p + vec2(0.0, eps), t, e) - blanketHeight(p - vec2(0.0, eps), t, e);
+  vec2 grad = vec2(hx, hy) / (2.0 * eps);
+
+  float breathingZoom = 1.0 + 0.025 * sin(t * 1.7) + 0.075 * e;
+  vec2 warped = p * breathingZoom;
+
+  // This is the core change: audio bends the coordinate fabric locally instead
+  // of shoving the whole canvas sideways.
+  warped -= grad * (0.18 + 0.22 * e);
+
+  // Subtle circular shear gives the “Simpsons 3D fabric” sag without nausea.
+  float r = length(p);
+  vec2 tangent = vec2(-p.y, p.x) / max(r, 0.001);
+  warped += tangent * h * (0.035 + 0.055 * e);
+
+  return warped;
+}
+
 void main() {
   vec2 uv = vUv;
   vec2 p = (uv * uRes - 0.5 * uRes) / min(uRes.x, uRes.y);
 
   float t = uTime * 0.10;
-  float e = clamp(uEnergy, 0.0, 1.0);
+  float eRaw = clamp(uEnergy, 0.0, 1.0);
+  float e = smoothstep(0.02, 0.92, eRaw);
 
-  vec2 q = p;
-  q += 0.10 * vec2(
-    fbm(p * 1.2 + vec2(t, -t * 0.4)),
-    fbm(p * 1.2 + vec2(7.2 - t * 0.3, t * 0.6))
-  ) * (0.45 + 0.95 * e);
+  float h = blanketHeight(p, t, e);
+  vec2 q = lensBlanket(p, t, e);
+
+  // Keep turbulence slow and local. No large audio-scaled translation.
+  q += 0.045 * vec2(
+    fbm(p * 1.35 + vec2(t * 0.45, -t * 0.18)),
+    fbm(p * 1.35 + vec2(7.2 - t * 0.16, t * 0.28))
+  );
 
   vec2 field = curl(q * 1.35 + vec2(t * 0.35, -t * 0.18));
 
   float basin = fbm(q * 1.1 + vec2(-t * 0.22, t * 0.16));
-  float cluster = smoothstep(0.32 - 0.10 * e, 0.92, basin);
+  float cluster = smoothstep(0.32 - 0.08 * e, 0.92, basin);
 
-  float f1 = filament(q + field * 0.05, field, 13.0 + 8.0 * e);
-  float f2 = filament(q * 1.35 - field * 0.08, field, 22.0 + 14.0 * e) * 0.55;
+  float compression = smoothstep(-0.52, -0.04, -h);
+  float expansion = smoothstep(0.04, 0.34, h);
 
-  vec2 grainGrid = floor((q + 1.2) * (118.0 + 54.0 * e));
-  vec2 grainCell = fract((q + 1.2) * (118.0 + 54.0 * e)) - 0.5;
+  float f1 = filament(q + field * 0.05, field, 13.0 + 6.0 * e + 5.0 * compression);
+  float f2 = filament(q * 1.35 - field * 0.08, field, 22.0 + 10.0 * e + 7.0 * compression) * 0.55;
+
+  float grainScale = 118.0 + 34.0 * e + 34.0 * compression - 18.0 * expansion;
+  vec2 grainGrid = floor((q + 1.2) * grainScale);
+  vec2 grainCell = fract((q + 1.2) * grainScale) - 0.5;
   float rnd = hash(grainGrid);
 
   vec2 randomDir = normalize(vec2(
@@ -114,32 +175,51 @@ void main() {
   ) + vec2(0.0001));
 
   float alignment = abs(dot(randomDir, field));
-  float grainShape = smoothstep(0.26, 0.035, length(grainCell * vec2(0.55, 1.85)));
-  float grainMask = smoothstep(0.42 - 0.16 * e, 1.0, rnd + alignment * 0.45 + cluster * 0.38);
+  float grainElongation = 1.65 + 0.55 * compression;
+  float grainShape = smoothstep(0.26, 0.035, length(grainCell * vec2(0.55, grainElongation)));
+  float grainMask = smoothstep(
+    0.42 - 0.12 * e - 0.10 * compression,
+    1.0,
+    rnd + alignment * 0.45 + cluster * 0.38
+  );
 
   float grains = grainShape * grainMask;
 
-  float lines = (f1 + f2) * (0.35 + 0.80 * cluster);
-  float sparkle = smoothstep(0.975 - 0.025 * e, 1.0, hash(grainGrid + floor(t * 18.0))) * grains;
+  float lines = (f1 + f2) * (0.35 + 0.80 * cluster + 0.42 * compression);
+  float sparkle = smoothstep(0.982 - 0.020 * e, 1.0, hash(grainGrid + floor(t * 12.0))) * grains;
 
-  vec3 deep = vec3(0.030, 0.028, 0.045);
+  float eps = 0.01;
+  float hx = blanketHeight(p + vec2(eps, 0.0), t, e) - blanketHeight(p - vec2(eps, 0.0), t, e);
+  float hy = blanketHeight(p + vec2(0.0, eps), t, e) - blanketHeight(p - vec2(0.0, eps), t, e);
+  vec3 normal = normalize(vec3(-hx * 4.4, -hy * 4.4, 1.0));
+
+  vec3 lightDir = normalize(vec3(-0.45, 0.36, 0.82));
+  float fabricLight = clamp(dot(normal, lightDir), 0.0, 1.0);
+  float rim = pow(1.0 - clamp(normal.z, 0.0, 1.0), 1.7);
+
+  vec3 deep = vec3(0.026, 0.024, 0.040);
   vec3 dust = vec3(0.42, 0.42, 0.50);
-  vec3 fieldBlue = vec3(0.18, 0.42, 0.68);
+  vec3 fieldBlue = vec3(0.16, 0.39, 0.68);
+  vec3 pressureBlue = vec3(0.25, 0.58, 0.95);
   vec3 hot = vec3(0.92, 0.96, 1.00);
 
   vec3 col = deep;
-  col += fieldBlue * lines * (0.35 + 0.45 * e);
-  col += dust * grains * (0.42 + 0.72 * cluster);
-  col += hot * sparkle * (0.38 + 0.60 * e);
+  col += fieldBlue * lines * (0.35 + 0.36 * e);
+  col += dust * grains * (0.40 + 0.66 * cluster + 0.30 * compression);
+  col += hot * sparkle * (0.26 + 0.45 * e);
 
   float flux = smoothstep(0.68, 0.98, fbm(q * 4.4 + field * 0.6 + vec2(t * 0.6, -t)));
-  col += vec3(0.30, 0.55, 0.86) * flux * lines * (0.12 + 0.26 * e);
+  col += pressureBlue * flux * lines * (0.10 + 0.20 * e + 0.22 * compression);
+
+  col *= 0.72 + 0.42 * fabricLight;
+  col += pressureBlue * rim * (0.09 + 0.22 * e) * (0.25 + compression);
+  col += vec3(0.12, 0.18, 0.28) * expansion * 0.14;
 
   float r = length(p);
   float vig = smoothstep(1.35, 0.25, r);
   col *= 0.56 + 0.72 * vig;
 
-  col *= 0.88 + 0.30 * e;
+  col *= 0.90 + 0.22 * e;
 
   fragColor = vec4(col, 1.0);
 }
