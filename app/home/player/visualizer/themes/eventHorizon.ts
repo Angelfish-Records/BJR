@@ -34,160 +34,343 @@ float hash(vec2 p) {
 float noise(vec2 p) {
   vec2 i = floor(p);
   vec2 f = fract(p);
+
   float a = hash(i);
   float b = hash(i + vec2(1.0, 0.0));
   float c = hash(i + vec2(0.0, 1.0));
   float d = hash(i + vec2(1.0, 1.0));
+
   vec2 u = f * f * (3.0 - 2.0 * f);
+
   return mix(a, b, u.x)
     + (c - a) * u.y * (1.0 - u.x)
     + (d - b) * u.x * u.y;
 }
 
 float fbm(vec2 p) {
-  float v = 0.0;
-  float a = 0.55;
+  float value = 0.0;
+  float amplitude = 0.55;
+
   for (int i = 0; i < 6; i++) {
-    v += a * noise(p);
+    value += amplitude * noise(p);
     p = mat2(1.61, -1.19, 1.19, 1.61) * p;
-    a *= 0.5;
+    amplitude *= 0.5;
   }
-  return v;
+
+  return value;
 }
 
 float ridged(vec2 p) {
-  float v = 0.0;
-  float a = 0.62;
-  float w = 1.0;
+  float value = 0.0;
+  float amplitude = 0.62;
+  float frequency = 1.0;
+
   for (int i = 0; i < 5; i++) {
-    float n = noise(p * w);
+    float n = noise(p * frequency);
     n = 1.0 - abs(2.0 * n - 1.0);
-    v += a * n;
-    w *= 2.06;
-    a *= 0.55;
+
+    value += amplitude * n;
+
+    frequency *= 2.06;
+    amplitude *= 0.55;
     p = mat2(0.83, -0.56, 0.56, 0.83) * p;
   }
-  return v;
+
+  return value;
 }
 
-mat2 rot(float a) {
-  float s = sin(a);
-  float c = cos(a);
+mat2 rot(float angle) {
+  float s = sin(angle);
+  float c = cos(angle);
   return mat2(c, -s, s, c);
 }
 
-void main() {
-  vec2 uv = vUv;
-  vec2 p = (uv * uRes - 0.5 * uRes) / min(uRes.x, uRes.y);
+float band(float value, float centre, float innerWidth, float outerWidth) {
+  return 1.0 - smoothstep(
+    innerWidth,
+    outerWidth,
+    abs(value - centre)
+  );
+}
 
-  float t = uTime * 0.10;
+void main() {
+  float time = max(uTime, 0.0);
+  float t = time * 0.10;
   float e = clamp(uEnergy, 0.0, 1.0);
 
-  // Slow inexorable fall inward. Reaches strong intensity over several minutes,
-  // with a tiny respiratory pulse so it never feels like a flat camera scale.
-  float longFall = 1.0 - exp(-uTime * 0.0042);
-  float breath = 0.018 * sin(uTime * 0.23) + 0.010 * sin(uTime * 0.071);
-  float zoom = 1.0 + longFall * 0.62 + breath + e * 0.055;
-  p /= zoom;
+  // This is deliberately true camera movement, not radial parameter drift.
+  //
+  // At 60 sec:  1.08x
+  // At 3 min:   1.26x
+  // At 5 min:   1.48x
+  // At 7 min+:  1.73x
+  //
+  // The cap prevents an endlessly running player from eventually filling
+  // the screen with nothing but the inner void.
+  float travelTime = min(time, 420.0);
+  float cameraZoom = exp(travelTime * 0.00130);
 
-  vec2 centre = vec2(
-    0.055 * sin(t * 0.8),
-    0.035 * cos(t * 0.7)
+  vec2 p = (vUv - 0.5) * vec2(uRes.x / uRes.y, 1.0);
+  p *= cameraZoom;
+
+  // The event horizon is intentionally immovable. No travelling centre point.
+  vec2 d = p;
+
+  // Mild vertical compression: recognisably oblate without becoming a flat eye.
+  float oblateness = 1.22;
+  vec2 orbital = vec2(d.x, d.y * oblateness);
+
+  float r = length(orbital);
+  float a = atan(orbital.y, orbital.x);
+
+  float horizonRadius = 0.206;
+  float horizonMask = 1.0 - smoothstep(
+    horizonRadius,
+    horizonRadius + 0.026,
+    r
   );
 
-  vec2 d = p - centre;
+  float umbraMask = 1.0 - smoothstep(0.082, 0.112, r);
 
-  // Oblate gravitational disc: physical space remains circular, but the
-  // event-horizon measurement is vertically compressed.
-  vec2 eh = d;
-  eh.y *= 1.42;
-  float r = length(eh);
-  float physicalR = length(d);
-  float a = atan(eh.y, eh.x);
+  float pull = 0.44 + 0.54 * e;
+  float lens = 1.0 / (1.0 + pull * 2.35 / (0.13 + r * 2.25));
+  float swirl = t * 1.42 + pull * 1.92 / (0.14 + r);
 
-  float pull = 0.46 + 0.58 * e + 0.18 * longFall;
-  float lens = 1.0 / (1.0 + pull * 2.45 / (0.14 + r * 2.25));
-  float swirl = t * 1.55 + pull * 2.0 / (0.12 + r);
+  vec2 q = rot(swirl * (1.0 - smoothstep(0.06, 1.18, r))) * orbital;
+  q *= 1.0 + 0.88 * lens;
 
-  vec2 q = rot(swirl * smoothstep(1.24, 0.045, r)) * eh;
-  q *= 1.0 + 0.92 * lens;
+  // This remains the main luminous ring you already liked.
+  float ringRadius = 0.366 + 0.012 * sin(t * 1.45);
+  float ringWidth = 0.016 + 0.014 * e;
+  float ring = band(r, ringRadius, ringWidth, 0.108);
 
-  float ringRadius = 0.345 - 0.030 * longFall + 0.024 * sin(t * 1.7) - 0.040 * e;
-  float ringWidth = 0.018 + 0.017 * e + 0.010 * longFall;
-  float ring = 1.0 - smoothstep(ringWidth, 0.112, abs(r - ringRadius));
+  float diskNoise = ridged(
+    vec2(a * 2.15, r * 3.95)
+      + vec2(t * 0.72, -t * 0.28)
+  );
 
-  float inner = smoothstep(0.35, 0.075, r);
-  float voidCore = smoothstep(0.178 + 0.028 * e, 0.043, r);
+  float ringMatter = ring * smoothstep(0.34, 0.97, diskNoise);
 
-  float diskNoise = ridged(vec2(a * 2.15, r * 3.7) + vec2(t * 0.8, -t * 0.28));
-  float disk = ring * smoothstep(0.32, 0.98, diskNoise);
+  float filaments = ridged(
+    q * 2.30 + vec2(t * 0.44, -t * 0.31)
+  );
 
-  float filaments = ridged(q * 2.35 + vec2(t * 0.46, -t * 0.32));
-  filaments = smoothstep(0.52 - 0.10 * e, 0.97, filaments);
-  filaments *= smoothstep(1.18, 0.15, r);
+  filaments = smoothstep(0.53 - 0.10 * e, 0.97, filaments);
+  filaments *= 1.0 - smoothstep(0.16, 1.20, r);
 
-  // Central protruding accretion bulge: fake volumetric matter rising from the
-  // near side of the disc, not true geometry, but enough to break flatness.
-  vec2 bulgeP = d;
-  bulgeP.x *= 0.86;
-  bulgeP.y = (bulgeP.y + 0.035) * 1.85;
-  float bulgeShape = smoothstep(0.38, 0.05, length(bulgeP));
-  float bulgeCut = smoothstep(-0.09, 0.17, d.y);
-  float bulgeTexture = smoothstep(
-    0.36,
+  float corona = 1.0 - smoothstep(0.20, 0.74, r);
+  corona *= smoothstep(
+    0.30,
+    0.94,
+    fbm(q * 3.20 + vec2(-t, t * 0.60))
+  );
+  corona *= 1.0 - horizonMask;
+
+  // ---------------------------------------------------------------------------
+  // Rear accretion disc:
+  //
+  // A bright lensed arch behind the horizon. It is drawn before the black
+  // shadow, so the central portion disappears behind the event horizon while
+  // the two shoulders rise out around it.
+  // ---------------------------------------------------------------------------
+
+  float rearExtent = 0.435;
+  float rearX = d.x / rearExtent;
+  float rearArcHeight = sqrt(max(0.0, 1.0 - rearX * rearX));
+
+  float rearArcY = -0.016 - rearArcHeight * 0.152;
+
+  float rearArc = 1.0 - smoothstep(
+    0.010,
+    0.052,
+    abs(d.y - rearArcY)
+  );
+
+  rearArc *= 1.0 - smoothstep(0.345, 0.455, abs(d.x));
+
+  float rearTexture = ridged(
+    vec2(
+      d.x * 12.0 + t * 0.66,
+      (d.y - rearArcY) * 29.0 - t * 0.24
+    )
+  );
+
+  rearArc *= 0.48 + 0.52 * smoothstep(0.25, 0.90, rearTexture);
+
+  // ---------------------------------------------------------------------------
+  // Foreground accretion disc:
+  //
+  // This is an independent compressed torus, not a radial blob. Its lower half
+  // is allowed to sit in front of the black hole, creating the convincing
+  // "matter passing across the face" relationship.
+  // ---------------------------------------------------------------------------
+
+  float foregroundOffset = 0.040;
+  vec2 foregroundPlane = vec2(
+    d.x,
+    (d.y - foregroundOffset) * 3.35
+  );
+
+  float foregroundRadius = length(foregroundPlane);
+  float foregroundAngle = atan(foregroundPlane.y, foregroundPlane.x);
+
+  float lowerHemisphere = smoothstep(-0.020, 0.205, d.y);
+
+  float foregroundTorus = band(
+    foregroundRadius,
+    0.258,
+    0.000,
+    0.108
+  );
+
+  foregroundTorus *= lowerHemisphere;
+
+  float foregroundCore = band(
+    foregroundRadius,
+    0.258,
+    0.000,
+    0.032
+  );
+
+  foregroundCore *= lowerHemisphere;
+
+  float foregroundTexture = ridged(
+    vec2(
+      foregroundAngle * 2.20 + t * 0.88,
+      foregroundRadius * 11.0 - t * 0.42
+    )
+  );
+
+  foregroundTorus *= 0.44 + 0.56 * smoothstep(
+    0.24,
     0.92,
-    fbm(vec2(a * 1.1, r * 5.8) + vec2(t * 0.48, t * 0.19))
+    foregroundTexture
   );
-  float bulge = bulgeShape * bulgeCut * bulgeTexture * (1.0 - voidCore);
 
-  // A thin vertical relativistic shimmer through the core.
-  float axial = smoothstep(0.105, 0.0, abs(d.x));
-  axial *= smoothstep(0.62, 0.02, abs(d.y));
-  axial *= smoothstep(0.22, 0.62, fbm(vec2(d.y * 9.0, t * 3.0)));
-  axial *= 1.0 - voidCore;
+  // Fine lensed bridge across the near side of the shadow.
+  // It is curved rather than ruler-straight, so it reads as depth rather than UI.
+  float bridgeCurve = 0.026
+    + 0.108 * pow(abs(d.x) / 0.345, 2.0);
 
-  float starField = smoothstep(
-    0.988 - 0.016 * e,
-    1.0,
-    hash(floor((p + 1.4) * 165.0) + floor(t * 4.0))
+  float foregroundBridge = 1.0 - smoothstep(
+    0.011,
+    0.047,
+    abs(d.y - bridgeCurve)
   );
-  vec2 starCell = fract((p + 1.4) * 165.0) - 0.5;
-  starField *= smoothstep(0.10, 0.015, length(starCell));
-  starField *= 1.0 - longFall * 0.35;
 
-  float lensGlow = smoothstep(0.49, 0.075, abs(r - ringRadius)) * smoothstep(0.12, 0.62, r);
+  foregroundBridge *= 1.0 - smoothstep(0.295, 0.375, abs(d.x));
+
+  float bridgeTexture = fbm(
+    vec2(
+      d.x * 14.0 - t * 0.70,
+      (d.y - bridgeCurve) * 34.0 + t * 0.34
+    )
+  );
+
+  foregroundBridge *= 0.58 + 0.42 * smoothstep(
+    0.26,
+    0.82,
+    bridgeTexture
+  );
+
+  float approachingSide = pow(
+    max(0.0, 0.50 + 0.50 * sin(foregroundAngle + 0.72)),
+    2.3
+  );
+
+  // Stable star field: no frame-stepped twinkling or popping.
+  vec2 starGrid = floor((p + 1.55) * 176.0);
+  vec2 starCell = fract((p + 1.55) * 176.0) - 0.5;
+
+  float starSeed = hash(starGrid);
+  float starField = step(0.992 - 0.014 * e, starSeed);
+
+  starField *= 1.0 - smoothstep(
+    0.010,
+    0.072,
+    length(starCell)
+  );
+
+  float lensGlow = band(
+    r,
+    ringRadius,
+    0.064,
+    0.265
+  );
+
+  float photonRing = band(
+    r,
+    horizonRadius,
+    0.004,
+    0.026
+  );
 
   vec3 deep = vec3(0.008, 0.009, 0.020);
   vec3 violet = vec3(0.165, 0.095, 0.285);
   vec3 amber = vec3(0.930, 0.560, 0.250);
   vec3 blue = vec3(0.250, 0.600, 1.000);
   vec3 white = vec3(0.960, 0.980, 1.000);
+  vec3 copper = vec3(1.000, 0.420, 0.145);
 
   vec3 col = deep;
 
-  col += violet * filaments * (0.25 + 0.30 * e);
-  col += mix(amber, blue, smoothstep(-1.0, 1.0, sin(a * 2.0 + t))) * disk * (0.44 + 0.58 * e);
-  col += white * lensGlow * (0.050 + 0.17 * e + 0.08 * longFall);
-  col += white * starField * (0.18 + 0.30 * e);
+  col += violet * filaments * (0.25 + 0.28 * e);
 
-  float corona = smoothstep(0.72, 0.05, r) * (1.0 - voidCore);
-  corona *= smoothstep(0.30, 0.94, fbm(q * 3.25 + vec2(-t, t * 0.6)));
-  col += vec3(0.18, 0.36, 0.72) * corona * (0.11 + 0.25 * e);
+  vec3 ringColour = mix(
+    amber,
+    blue,
+    smoothstep(-1.0, 1.0, sin(a * 2.0 + t))
+  );
 
-  col += vec3(1.00, 0.64, 0.34) * bulge * (0.16 + 0.32 * e);
-  col += vec3(0.38, 0.66, 1.00) * axial * (0.035 + 0.12 * e);
+  col += ringColour * ringMatter * (0.44 + 0.58 * e);
+  col += white * lensGlow * (0.040 + 0.15 * e);
+  col += vec3(0.18, 0.36, 0.72) * corona * (0.12 + 0.24 * e);
 
-  col *= 1.0 - inner * 0.82;
-  col = mix(col, vec3(0.0), voidCore);
+  col += mix(blue, amber, 0.48 + 0.52 * sin(t + d.x * 3.0))
+    * rearArc
+    * (0.30 + 0.34 * e);
 
-  // Slightly more cinematic compression top/bottom.
-  float letterboxGravity = smoothstep(0.86, 0.18, abs(p.y));
-  col *= 0.72 + 0.34 * letterboxGravity;
+  col += white * starField * (0.16 + 0.28 * e);
 
-  float outerVig = smoothstep(1.42, 0.20, physicalR);
-  col *= 0.50 + 0.84 * outerVig;
+  // The rear arc is now hidden where it passes behind the actual shadow.
+  col = mix(col, vec3(0.0), horizonMask);
+  col = mix(col, vec3(0.0), umbraMask * 0.72);
 
-  col *= 0.88 + 0.34 * e + 0.10 * longFall;
+  // Photon-ring edge comes back after the black shadow.
+  col += mix(amber, blue, 0.52 + 0.48 * sin(a * 2.0 + t))
+    * photonRing
+    * (0.42 + 0.34 * e);
+
+  // The foreground plane is deliberately composited last: it is matter nearer
+  // to the observer than the horizon and should visibly pass across its face.
+  vec3 foregroundColour = mix(
+    vec3(0.56, 0.16, 0.095),
+    copper,
+    0.62 + 0.38 * approachingSide
+  );
+
+  foregroundColour = mix(
+    foregroundColour,
+    vec3(0.33, 0.58, 1.00),
+    0.20 * (1.0 - approachingSide)
+  );
+
+  col += foregroundColour
+    * foregroundTorus
+    * (0.34 + 0.48 * e);
+
+  col += white
+    * foregroundCore
+    * (0.09 + 0.22 * e + 0.22 * approachingSide);
+
+  col += mix(copper, white, 0.35 + 0.45 * approachingSide)
+    * foregroundBridge
+    * (0.12 + 0.20 * e);
+
+  float edgeVignette = 1.0 - smoothstep(0.78, 1.45, length(p));
+  col *= 0.52 + 0.84 * edgeVignette;
+
+  col *= 0.88 + 0.32 * e;
 
   fragColor = vec4(col, 1.0);
 }

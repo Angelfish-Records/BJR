@@ -121,20 +121,25 @@ void main() {
   float granular = fbm(p * 10.0 + swirl * 1.3 + vec2(-t * 2.0, t * 1.35));
   float sparkle = smoothstep(0.62, 0.96, granular) * thermal;
 
-  float reaction = heat * reagent * reagent;
-  float injection = thermal * (0.032 + 0.075 * e) + sparkle * (0.018 + 0.05 * e);
+    float reaction = heat * reagent * reagent;
 
-  heat += 0.045 * (1.0 - heat) - reaction * 0.42 + injection * 0.72;
-  reagent += reaction * 0.85 - reagent * (0.052 - 0.012 * e) + injection * 0.82;
+  // Always-feed thermal medium, with audio adding pressure rather than causing eruption/collapse.
+  float injection = thermal * (0.052 + 0.045 * e) + sparkle * (0.026 + 0.035 * e);
+
+  heat += 0.032 * (1.0 - heat) - reaction * 0.24 + injection * 0.46;
+  reagent += reaction * 0.58 - reagent * (0.032 - 0.006 * e) + injection * 0.52;
 
   heat = mix(heat, bodyA, 0.008);
   reagent = mix(reagent, bodyB, 0.006);
 
-  float newBloom = smoothstep(0.15, 0.72, reagent - heat * 0.35 + thermal * 0.85);
-  bloom = max(bloom * (0.986 - 0.012 * e), newBloom);
-  bloom = mix(bloom, blur.b, 0.035);
+    float newBloom = smoothstep(0.06, 0.62, reagent - heat * 0.18 + thermal * 0.95);
 
-  age = age * 0.992 + bloom * 0.012 + sparkle * 0.025 + e * 0.002;
+  // Preserve the thermal body. Audio should excite it, not continually birth/kill it.
+  float persistence = 0.996 - 0.004 * e;
+  bloom = max(bloom * persistence, newBloom * 0.92);
+  bloom = mix(bloom, blur.b, 0.018);
+
+  age = age * 0.997 + bloom * 0.006 + sparkle * 0.018 + e * 0.001;
 
   if (uFrame < 2.0) {
     float seedCloud = smoothstep(0.18, 0.88, fbm(p * 1.4) + fbm(p * 2.1 + 8.0) * 0.55);
@@ -236,14 +241,17 @@ void main() {
   float hU = texture(uState, uv + vec2(0.0, texel.y)).b;
   vec2 grad = vec2(hR - hL, hU - hD) / max(texel.x, texel.y);
 
-  float body = smoothstep(0.04, 0.72, bloom);
-  float reactionGlow = smoothstep(0.08, 0.78, reagent - heat * 0.25 + bloom * 0.44);
+    float body = smoothstep(0.015, 0.46, bloom);
+  float reactionGlow = smoothstep(0.04, 0.62, reagent - heat * 0.16 + bloom * 0.52);
   float rim = smoothstep(0.12, 1.7, length(grad)) * body;
 
   float wave = ridged(p * (7.2 + e * 2.2) + grad * 0.012 + vec2(t * 1.15, -t * 0.72));
   float fineWave = fbm(p * 18.0 + grad * 0.018 + vec2(-t * 2.5, t * 1.65));
-  float particulate = smoothstep(0.36, 0.98, wave) * smoothstep(0.18, 0.94, fineWave);
-  particulate *= body * (0.55 + 0.75 * reactionGlow);
+    float particulate = smoothstep(0.24, 0.92, wave) * smoothstep(0.08, 0.82, fineWave);
+
+  // Surface shimmer should live across the whole thermal field, not only at the moment of bloom.
+  float shimmerField = max(body, smoothstep(0.18, 0.72, heat + reagent * 0.65));
+  particulate *= shimmerField * (0.90 + 0.65 * reactionGlow + 0.45 * e);
 
   float atmosphere = fbm(p * 1.35 + vec2(t * 0.16, -t * 0.11));
   float sunset = fbm(p * 2.2 + vec2(-t * 0.24, t * 0.18));
@@ -262,9 +270,9 @@ void main() {
   vec3 thermalCol = mix(sunsetPink, orange, smoothstep(0.15, 0.85, heat + reactionGlow * 0.35));
   thermalCol = mix(thermalCol, gold, smoothstep(0.35, 0.96, reagent + particulate * 0.35));
 
-  vec3 col = mix(base, thermalCol, body * (0.58 + 0.22 * e));
-  col += gold * particulate * (0.28 + 0.45 * e);
-  col += champagne * rim * (0.18 + 0.34 * reactionGlow);
+    vec3 col = mix(base, thermalCol, body * 0.72);
+  col += gold * particulate * (0.52 + 0.72 * e);
+  col += champagne * rim * (0.14 + 0.26 * reactionGlow);
   col += sunsetPink * smoothstep(0.52, 0.98, age) * body * 0.18;
 
   float haze = smoothstep(0.08, 0.86, heat + bloom * 0.45);
@@ -274,7 +282,7 @@ void main() {
   float vig = smoothstep(1.42, 0.22, r);
   col *= 0.70 + 0.60 * vig;
 
-  col *= 0.90 + 0.22 * e;
+    col *= 0.96 + 0.08 * e;
   col = pow(max(col, vec3(0.0)), vec3(0.92));
 
   fragColor = vec4(col, 1.0);

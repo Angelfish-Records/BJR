@@ -47,12 +47,14 @@ float fbm(vec2 p) {
 }
 
 vec2 flow(vec2 p, float t) {
-  float a = fbm(p*1.2 + vec2(t*0.22, -t*0.18));
-  float b = fbm(p*1.2 + vec2(-t*0.16, t*0.24));
+  float a = fbm(p*1.2 + vec2(t*0.18, -t*0.14));
+  float b = fbm(p*1.2 + vec2(-t*0.13, t*0.18));
   vec2 g = vec2(a - 0.5, b - 0.5);
   vec2 v = vec2(g.y, -g.x);
-  v += 0.35 * vec2(sin(t*0.12), cos(t*0.10));
-  return v * (0.85 + 0.85*uMid);
+  v += 0.24 * vec2(sin(t*0.10), cos(t*0.085));
+
+  // Audio should not jerk the vector field around.
+  return v * 0.92;
 }
 
 float filamentField(vec2 p, float t) {
@@ -60,7 +62,8 @@ float filamentField(vec2 p, float t) {
   float s = 0.0;
   float w = 1.0;
 
-  float freq = mix(7.0, 4.2, uBass);
+    // Keep topology stable. Bass will affect thickness later, not contour count.
+  float freq = 5.15;
 
   for (int i = 0; i < 7; i++) {
     vec2 v = flow(a, t);
@@ -87,8 +90,13 @@ void main() {
   vec2 uv = vUv;
   vec2 p = (uv * uRes - 0.5 * uRes) / min(uRes.x, uRes.y);
 
-  float t = uTime * 0.10;
   float e = clamp(uEnergy, 0.0, 1.0);
+  float bass = smoothstep(0.05, 0.95, clamp(uBass, 0.0, 1.0));
+  float mid = smoothstep(0.05, 0.95, clamp(uMid, 0.0, 1.0));
+  float treble = smoothstep(0.08, 0.90, clamp(uTreble, 0.0, 1.0));
+
+  // Let playback intensify drift slightly, but avoid frantic redraw.
+  float t = uTime * (0.082 + 0.018*mid);
 
   // SCREEN-friendly base (dark, but not dead)
   // Larger spatial scale: calmer behind text, more negative space.
@@ -99,22 +107,24 @@ void main() {
 
   float f = filamentField(q, t);
 
-  // Fewer, wider bands: same behaviour, less visual chatter.
-  float bands = 12.0 + 16.0 * uTreble;
+  // Almost fixed band count. Audio must not spawn/delete contours.
+  float bands = 12.5 + 2.0 * treble;
   float v = f * bands;
   float frac = fract(v);
   float d = min(frac, 1.0 - frac); // 0 at boundary
   float line = aaBandLine(d);
 
-  // treble shimmer: keep it subtle and broad (no pixel glitter)
-  float jitter = fbm(q*5.5 + vec2(t*1.9, -t*1.6));
-  float shiver = (0.55 + 0.45*sin(t*6.5 + jitter*6.28318)) * (0.06 + 0.14*uTreble);
-  line = clamp(line + shiver * (0.30 + 0.60*line), 0.0, 1.0);
+   // Gentle phosphorescent breathing, not treble-driven flicker.
+  float jitter = fbm(q*3.4 + vec2(t*0.55, -t*0.48));
+  float breath = 0.5 + 0.5*sin(t*1.7 + jitter*3.14159);
+  line = clamp(line * (0.88 + 0.16*breath + 0.08*e), 0.0, 1.0);
 
  // bundle control (bass)
-  float bundle = smoothstep(0.38, 0.92, fbm(q*2.05 + vec2(t*0.6, -t*0.5)));
-  float thick = mix(0.48, 0.92, uBass) * bundle;
-  float strand = pow(line, mix(1.30, 0.82, thick));
+  float bundle = smoothstep(0.34, 0.90, fbm(q*1.75 + vec2(t*0.34, -t*0.28)));
+
+  // Bass fattens existing filaments instead of creating new ones.
+  float thick = mix(0.52, 0.84, bass) * bundle;
+  float strand = pow(line, mix(1.26, 0.92, thick));
 
  // Soft vivid iridescence: visible colour, still dark-screen friendly.
   vec3 ink = vec3(0.020, 0.022, 0.032);
@@ -138,19 +148,20 @@ void main() {
   vec3 col = base;
   col = mix(col, ink, 0.08);
 
-  float colourLift = 0.26 + 0.54*e;
+  float colourLift = 0.30 + 0.34*e;
   col += filamentCol * strand * colourLift;
 
-  // Coloured bloom instead of white peak highlights.
-  float peak = smoothstep(0.62, 0.94, strand);
-  col += filamentCol * peak * (0.16 + 0.22*uTreble);
-  col += spectral * peak * (0.05 + 0.08*uTreble);
+  // Slow coloured bloom. No white strobing, no treble glitter.
+  float peak = smoothstep(0.60, 0.95, strand);
+  col += filamentCol * peak * (0.13 + 0.12*treble);
+  col += spectral * peak * (0.035 + 0.045*e);
 
   float r = length(p);
   float vig = smoothstep(1.35, 0.25, r);
   col *= 0.55 + 0.70 * vig;
 
-  col *= 0.92 + 0.22*e;
+  // Gentle lift only. Avoid whole-frame pulsing.
+  col *= 0.94 + 0.12*e;
 
   fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }

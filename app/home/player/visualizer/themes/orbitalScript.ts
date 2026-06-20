@@ -208,16 +208,27 @@ void main(){
     float body = exp(-pow(minD / strokeW, 2.0));
     float halo = exp(-pow(minD / (strokeW*4.6), 1.35));
 
-    vec3 bruisedViolet = vec3(0.26, 0.13, 0.36);
-    vec3 warmGhost = vec3(0.82, 0.66, 0.92);
-    vec3 sourBlue = vec3(0.34, 0.48, 0.82);
+        vec3 driedBlood = vec3(0.145, 0.018, 0.014);
+    vec3 arterialRed = vec3(0.58, 0.045, 0.028);
+    vec3 oxidisedOrange = vec3(0.78, 0.22, 0.075);
+    vec3 bruisedBlack = vec3(0.050, 0.010, 0.014);
 
-    vec3 strokeCol = mix(bruisedViolet, warmGhost, 0.30 + 0.45*cen);
-    strokeCol = mix(strokeCol, sourBlue, 0.18 + 0.18*sin(fs*1.8 + uTime*0.05));
+    float vein = 0.5 + 0.5*sin(fs*1.83 + uTime*0.061);
+    float glint = smoothstep(0.62, 1.0, cen) * (0.55 + 0.45*sin(fs*2.4 + uTime*0.19));
 
-    float pulse = 0.09 + 0.18*e + 0.09*bass;
-    add += strokeCol * body * pulse;
-    add += strokeCol * halo * (0.010 + 0.026*e);
+    vec3 strokeCol = mix(driedBlood, arterialRed, 0.20 + 0.28*vein + 0.24*bass);
+    strokeCol = mix(strokeCol, oxidisedOrange, 0.08 + 0.18*glint);
+    strokeCol = mix(strokeCol, bruisedBlack, 0.18 * (1.0 - body));
+
+        float pulse = 0.075 + 0.16*e + 0.11*bass;
+
+    vec3 darkBody = strokeCol * (0.52 + 0.30*vein);
+    vec3 wetHighlight = vec3(1.00, 0.34, 0.15) * (0.14 + 0.36*glint);
+    vec3 blackRedHalo = vec3(0.17, 0.010, 0.012);
+
+    add += darkBody * body * pulse;
+    add += wetHighlight * pow(body, 2.7) * (0.06 + 0.20*tre);
+    add += blackRedHalo * halo * (0.018 + 0.030*e);
   }
 
   ink += add;
@@ -288,15 +299,15 @@ void main(){
   float lum = dot(ink, vec3(0.299, 0.587, 0.114));
   lum = pow(lum, 0.74);
 
-  vec3 bg = vec3(0.012, 0.011, 0.017);
-  vec3 bruise = vec3(0.18, 0.09, 0.27);
-  vec3 violet = vec3(0.54, 0.38, 0.78);
-  vec3 pearl = vec3(0.96, 0.88, 1.00);
+    vec3 bg = vec3(0.014, 0.006, 0.005);
+  vec3 driedWash = vec3(0.22, 0.018, 0.012);
+  vec3 deepBlood = vec3(0.48, 0.028, 0.018);
+  vec3 hotClot = vec3(0.95, 0.21, 0.08);
 
   vec3 col = bg;
-  col += bruise * lum * (0.55 + 0.45*e);
-  col += violet * ink * (0.20 + 0.26*cen);
-  col += pearl * pow(max(ink, vec3(0.0)), vec3(1.35)) * (0.12 + 0.22*e);
+  col += driedWash * lum * (0.62 + 0.36*e);
+  col += deepBlood * ink * (0.28 + 0.28*cen);
+  col += hotClot * pow(max(ink, vec3(0.0)), vec3(1.55)) * (0.08 + 0.22*e);
 
   float vignette = smoothstep(1.34, 0.32, r);
   float blackout = 0.92 + 0.08*sin(uTime*0.37 + r*7.0) * smoothstep(0.55, 1.25, r);
