@@ -280,7 +280,7 @@ function formatShareTokenExpiry(iso: string | null): string | null {
 function formatRedemptionLimit(maxRedemptions: number | null): string | null {
   if (maxRedemptions == null) return null;
 
-  return `Limited to ${maxRedemptions} redemption${
+  return `The link will work ${maxRedemptions} time${
     maxRedemptions === 1 ? "" : "s"
   }`;
 }
@@ -1279,7 +1279,7 @@ export default function FullPlayer(props: {
                 opacity: 0.96,
               }}
             >
-              Private embargo access active
+              Embargoed access
             </div>
 
             <div
@@ -1290,7 +1290,7 @@ export default function FullPlayer(props: {
                 lineHeight: 1.35,
               }}
             >
-              This private link grants early access before the public release.
+              This private link enables playback during embargo.
             </div>
 
             {shareTokenExpiryLabel || shareTokenRedemptionLimit ? (

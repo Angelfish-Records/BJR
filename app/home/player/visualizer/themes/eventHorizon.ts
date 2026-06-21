@@ -177,23 +177,22 @@ void main() {
   // the two shoulders rise out around it.
   // ---------------------------------------------------------------------------
 
-    float rearExtent = 0.435;
+     float rearExtent = 0.505;
   float rearX = d.x / rearExtent;
   float rearArcHeight = sqrt(max(0.0, 1.0 - rearX * rearX));
 
-  // Keep the faint rear lensed material in the lower hemisphere.
-  // It should support the near-side ribbon, not form a second orbit over
-  // the top of the shadow.
-  float rearArcY = 0.054 + rearArcHeight * 0.094;
+  // Rear lensed material belongs below the centreline here, peeking from
+  // behind the shadow rather than climbing up over it.
+  float rearArcY = -0.122 - rearArcHeight * 0.068;
 
   float rearArc = 1.0 - smoothstep(
-    0.012,
-    0.054,
+    0.014,
+    0.060,
     abs(d.y - rearArcY)
   );
 
-  rearArc *= smoothstep(0.012, 0.142, d.y);
-  rearArc *= 1.0 - smoothstep(0.345, 0.455, abs(d.x));
+  rearArc *= 1.0 - smoothstep(-0.030, 0.100, d.y);
+  rearArc *= 1.0 - smoothstep(0.365, 0.500, abs(d.x));
 
   float rearTexture = ridged(
     vec2(
@@ -212,30 +211,39 @@ void main() {
   // "matter passing across the face" relationship.
   // ---------------------------------------------------------------------------
 
-    // A more strongly compressed disc, positioned below the centreline.
-  //
-  // Its upper rim begins just below the midpoint of the shadow rather than
-  // climbing toward the top edge, while the dense lower body reads as matter
-  // passing across the observer-facing side of the horizon.
-  float foregroundOffset = 0.118;
+     // Move the observer-facing accretion plane clearly into the lower half
+  // of the shadow and make it physically larger, so it feels like a broad
+  // ribbon wrapping around the front of the black hole rather than a small
+  // arc hovering near the middle.
+  float foregroundOffset = -0.102;
   vec2 foregroundPlane = vec2(
-    d.x,
-    (d.y - foregroundOffset) * 4.25
+    d.x * 0.96,
+    (d.y - foregroundOffset) * 5.15
   );
 
   float foregroundRadius = length(foregroundPlane);
   float foregroundAngle = atan(foregroundPlane.y, foregroundPlane.x);
 
-  float lowerHemisphere = smoothstep(0.012, 0.105, d.y);
+  // Keep only the lower/front-facing hemisphere of the torus.
+  float lowerHemisphere = 1.0 - smoothstep(-0.020, 0.125, d.y);
 
   float foregroundTorus = band(
     foregroundRadius,
-    0.258,
+    0.332,
     0.000,
-    0.108
+    0.138
   );
 
   foregroundTorus *= lowerHemisphere;
+
+  float foregroundCore = band(
+    foregroundRadius,
+    0.332,
+    0.000,
+    0.040
+  );
+
+  foregroundCore *= lowerHemisphere;
 
   float foregroundCore = band(
     foregroundRadius,
@@ -261,22 +269,22 @@ void main() {
 
   // Fine lensed bridge across the near side of the shadow.
   // It is curved rather than ruler-straight, so it reads as depth rather than UI.
-    // The luminous near-side bridge sits below centre and bows farther
-  // downward toward its outer shoulders.
-  float bridgeCurve = 0.072
-    + 0.075 * pow(abs(d.x) / 0.345, 2.0);
+      // This is the key visual read: the front ribbon should pass across the
+  // lower half of the shadow and feel closer to the viewer than the horizon.
+  float bridgeCurve = -0.082
+    - 0.060 * pow(abs(d.x) / 0.395, 2.0);
 
-  float bridgeHalfWidth = 0.014
-    + 0.010 * (1.0 - smoothstep(0.0, 0.345, abs(d.x)));
+  float bridgeHalfWidth = 0.022
+    + 0.015 * (1.0 - smoothstep(0.0, 0.395, abs(d.x)));
 
   float foregroundBridge = 1.0 - smoothstep(
     bridgeHalfWidth,
-    bridgeHalfWidth + 0.032,
+    bridgeHalfWidth + 0.040,
     abs(d.y - bridgeCurve)
   );
 
-  foregroundBridge *= smoothstep(0.020, 0.070, d.y);
-  foregroundBridge *= 1.0 - smoothstep(0.295, 0.375, abs(d.x));
+  foregroundBridge *= 1.0 - smoothstep(-0.010, 0.120, d.y);
+  foregroundBridge *= 1.0 - smoothstep(0.345, 0.465, abs(d.x));
 
   float bridgeTexture = fbm(
     vec2(
@@ -344,9 +352,9 @@ void main() {
   col += white * lensGlow * (0.040 + 0.15 * e);
   col += vec3(0.18, 0.36, 0.72) * corona * (0.12 + 0.24 * e);
 
-   col += mix(blue, amber, 0.48 + 0.52 * sin(t + d.x * 3.0))
+     col += mix(blue, amber, 0.48 + 0.52 * sin(t + d.x * 3.0))
     * rearArc
-    * (0.14 + 0.20 * e);
+    * (0.10 + 0.15 * e);
 
   col += white * starField * (0.16 + 0.28 * e);
 
@@ -375,15 +383,15 @@ void main() {
 
   col += foregroundColour
     * foregroundTorus
-    * (0.34 + 0.48 * e);
+    * (0.44 + 0.58 * e);
 
   col += white
     * foregroundCore
-    * (0.09 + 0.22 * e + 0.22 * approachingSide);
+    * (0.14 + 0.26 * e + 0.30 * approachingSide);
 
-    col += mix(copper, white, 0.35 + 0.45 * approachingSide)
+  col += mix(copper, white, 0.35 + 0.45 * approachingSide)
     * foregroundBridge
-    * (0.24 + 0.26 * e);
+    * (0.34 + 0.30 * e);
 
   float edgeVignette = 1.0 - smoothstep(0.78, 1.45, length(p));
   col *= 0.52 + 0.84 * edgeVignette;
