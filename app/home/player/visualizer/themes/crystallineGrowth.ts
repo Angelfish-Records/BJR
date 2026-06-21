@@ -138,6 +138,42 @@ float lineSegment(
   return line * startCap * endCap;
 }
 
+float crystalTendril(
+  vec2 point,
+  vec2 origin,
+  vec2 direction,
+  float length,
+  float baseWidth,
+  float tipWidth
+) {
+  vec2 q = point - origin;
+
+  float along = dot(q, direction);
+  float clampedAlong = clamp(along, 0.0, length);
+  float across = abs(q.x * direction.y - q.y * direction.x);
+
+  float taper = mix(
+    baseWidth,
+    tipWidth,
+    clampedAlong / max(length, 0.0001)
+  );
+
+  float body = exp(-(across * across) / max(taper * taper, 0.000001));
+
+  float startCap = smoothstep(0.0, baseWidth * 1.6, along);
+  float endCap = 1.0 - smoothstep(
+    length,
+    length + tipWidth * 5.0 + 0.01,
+    along
+  );
+
+  float innerRidge = exp(
+    -(across * across) / max((taper * 0.34) * (taper * 0.34), 0.000001)
+  ) * 0.35;
+
+  return (body + innerRidge) * startCap * endCap;
+}
+
 /*
  * x = lateral distance from the living filament
  * y = longitudinal world-space coordinate along the path
@@ -167,6 +203,8 @@ vec4 crystallineFront(vec2 world, float headS, float energy) {
 
   float branchMass = 0.0;
   float branchCharge = 0.0;
+  float crystalMass = 0.0;
+  float crystalFacet = 0.0;
 
   float baseCell = floor(headS * 1.35);
 
@@ -181,8 +219,9 @@ vec4 crystallineFront(vec2 world, float headS, float energy) {
     float nodeS = (cell + 0.16 + 0.64 * nodeRandom) / 1.35;
     float branchAge = headS - nodeS;
 
-    float born = smoothstep(-0.060, 0.180, branchAge);
-    float development = smoothstep(0.000, 0.450, branchAge);
+    float born = smoothstep(-0.060, 0.160, branchAge);
+    float development = smoothstep(0.000, 0.420, branchAge);
+    float crystallise = smoothstep(0.050, 0.800, branchAge);
 
     float side = sideRandom < 0.5 ? -1.0 : 1.0;
 
@@ -220,23 +259,73 @@ vec4 crystallineFront(vec2 world, float headS, float energy) {
       widthB
     );
 
-    float branch = (branchA + branchB) * born;
+    float branch = max(branchA, branchB) * born;
+
+    float shardLengthA = lengthA * (0.65 + 0.95 * crystallise);
+    float shardLengthB = lengthB * (0.50 + 0.90 * crystallise);
+
+    float tendrilA = crystalTendril(
+      local,
+      origin,
+      directionA,
+      shardLengthA,
+      0.030 + 0.014 * lengthRandom + 0.005 * energy,
+      0.005 + 0.002 * energy
+    );
+
+    float tendrilB = crystalTendril(
+      local,
+      origin + directionA * lengthA * 0.26,
+      directionB,
+      shardLengthB,
+      0.024 + 0.012 * forkRandom + 0.004 * energy,
+      0.004 + 0.002 * energy
+    );
+
+    float nodeBody = crystalTendril(
+      local,
+      origin - vec2(0.0, 0.012),
+      normalize(vec2(side * 0.10, 1.0)),
+      0.070 + 0.050 * lengthRandom,
+      0.036 + 0.010 * lengthRandom,
+      0.016
+    );
+
+    float crystal = max(max(tendrilA, tendrilB), nodeBody) * crystallise;
 
     float chargeAge = (branchAge - 0.105) / 0.220;
     float freshCharge = exp(-chargeAge * chargeAge);
 
     branchMass = max(branchMass, branch);
     branchCharge = max(branchCharge, branch * freshCharge);
+    crystalMass = max(crystalMass, crystal);
+
+    float facetNoise = noise(
+      local * 12.0 + vec2(cell * 0.37, cell * -0.19)
+    );
+    float localFacet = crystal * smoothstep(
+      0.32,
+      0.86,
+      facetNoise + 0.22 * development
+    );
+    crystalFacet = max(crystalFacet, localFacet);
   }
 
   float mineral = fbm(world * 5.30 + vec2(1.70, -2.10));
+  float fracture = fbm(world * 11.20 + vec2(-3.20, 0.90));
+
   float facetMask = smoothstep(0.31, 0.86, mineral);
+  float shardMask = smoothstep(0.46, 0.90, fracture + crystalMass * 0.24);
 
-  float seed = max(activeCore, branchMass * 0.84);
-  float facets = max(activeCore, branchMass) * facetMask;
+  float seed = max(activeCore, max(branchMass * 0.80, crystalMass * 0.72));
+  float facets = max(
+    max(activeCore, branchMass) * facetMask,
+    max(crystalFacet, crystalMass * (0.40 + 0.60 * shardMask))
+  );
   float charge = max(activeCore * 1.12, branchCharge);
+  float mass = max(branchMass, crystalMass);
 
-  return vec4(seed, facets, charge, branchMass);
+  return vec4(seed, facets, charge, mass);
 }
 
 float insideUv(vec2 uv) {
@@ -275,35 +364,42 @@ void main() {
   neighbour += stateAt(previousUv + vec2(-texel.x, -texel.y)).r;
   neighbour *= 0.125;
 
-  vec4 source = crystallineFront(world, cameraS, energy);
+    vec4 source = crystallineFront(world, cameraS, energy);
 
   float mineral = fbm(world * 4.00 + vec2(-1.80, 2.40));
-  float mineralGate = smoothstep(0.34, 0.84, mineral + source.a * 0.22);
+  float mineralGate = smoothstep(0.30, 0.84, mineral + source.a * 0.34);
 
   float propagation =
-    smoothstep(0.15, 0.74, neighbour) *
+    smoothstep(0.12, 0.72, neighbour) *
     mineralGate;
 
-  float growth = max(previous.r * 0.9970, source.r * 0.94);
-  growth = max(growth, propagation * (0.15 + 0.31 * source.r));
+  float growth = max(previous.r * 0.9980, source.r * 0.90);
+  growth = max(growth, source.a * (0.20 + 0.24 * energy));
+  growth = max(
+    growth,
+    propagation * (0.16 + 0.34 * source.a + 0.22 * source.r)
+  );
 
   float facet = max(
-    previous.g * 0.9980,
-    growth * (0.20 + 0.80 * source.g)
+    previous.g * 0.9984,
+    growth * (0.18 + 0.52 * source.g + 0.34 * source.a)
   );
 
   float charge = max(
-    previous.b * (0.895 - 0.045 * energy),
+    previous.b * (0.900 - 0.050 * energy),
     source.b
   );
 
-  float age = max(previous.a * 0.9980, growth);
+  float age = max(
+    previous.a * 0.9988,
+    max(growth * 0.96, source.a)
+  );
 
   if (uFrame < 2.0) {
-    growth = source.r * 0.84;
-    facet = source.g * 0.74;
+    growth = max(source.r * 0.84, source.a * 0.46);
+    facet = max(source.g * 0.74, source.a * 0.42);
     charge = source.b;
-    age = source.r * 0.52;
+    age = max(source.r * 0.52, source.a * 0.38);
   }
 
   fragColor = vec4(
@@ -429,6 +525,42 @@ float lineSegment(
   return line * startCap * endCap;
 }
 
+float crystalTendril(
+  vec2 point,
+  vec2 origin,
+  vec2 direction,
+  float length,
+  float baseWidth,
+  float tipWidth
+) {
+  vec2 q = point - origin;
+
+  float along = dot(q, direction);
+  float clampedAlong = clamp(along, 0.0, length);
+  float across = abs(q.x * direction.y - q.y * direction.x);
+
+  float taper = mix(
+    baseWidth,
+    tipWidth,
+    clampedAlong / max(length, 0.0001)
+  );
+
+  float body = exp(-(across * across) / max(taper * taper, 0.000001));
+
+  float startCap = smoothstep(0.0, baseWidth * 1.6, along);
+  float endCap = 1.0 - smoothstep(
+    length,
+    length + tipWidth * 5.0 + 0.01,
+    along
+  );
+
+  float innerRidge = exp(
+    -(across * across) / max((taper * 0.34) * (taper * 0.34), 0.000001)
+  ) * 0.35;
+
+  return (body + innerRidge) * startCap * endCap;
+}
+
 vec4 crystallineFront(vec2 world, float headS, float energy) {
   vec2 local = trackCoordinates(world);
 
@@ -449,6 +581,8 @@ vec4 crystallineFront(vec2 world, float headS, float energy) {
 
   float branchMass = 0.0;
   float branchCharge = 0.0;
+  float crystalMass = 0.0;
+  float crystalFacet = 0.0;
 
   float baseCell = floor(headS * 1.35);
 
@@ -463,8 +597,9 @@ vec4 crystallineFront(vec2 world, float headS, float energy) {
     float nodeS = (cell + 0.16 + 0.64 * nodeRandom) / 1.35;
     float branchAge = headS - nodeS;
 
-    float born = smoothstep(-0.060, 0.180, branchAge);
-    float development = smoothstep(0.000, 0.450, branchAge);
+    float born = smoothstep(-0.060, 0.160, branchAge);
+    float development = smoothstep(0.000, 0.420, branchAge);
+    float crystallise = smoothstep(0.050, 0.800, branchAge);
 
     float side = sideRandom < 0.5 ? -1.0 : 1.0;
 
@@ -502,23 +637,73 @@ vec4 crystallineFront(vec2 world, float headS, float energy) {
       widthB
     );
 
-    float branch = (branchA + branchB) * born;
+    float branch = max(branchA, branchB) * born;
+
+    float shardLengthA = lengthA * (0.65 + 0.95 * crystallise);
+    float shardLengthB = lengthB * (0.50 + 0.90 * crystallise);
+
+    float tendrilA = crystalTendril(
+      local,
+      origin,
+      directionA,
+      shardLengthA,
+      0.030 + 0.014 * lengthRandom + 0.005 * energy,
+      0.005 + 0.002 * energy
+    );
+
+    float tendrilB = crystalTendril(
+      local,
+      origin + directionA * lengthA * 0.26,
+      directionB,
+      shardLengthB,
+      0.024 + 0.012 * forkRandom + 0.004 * energy,
+      0.004 + 0.002 * energy
+    );
+
+    float nodeBody = crystalTendril(
+      local,
+      origin - vec2(0.0, 0.012),
+      normalize(vec2(side * 0.10, 1.0)),
+      0.070 + 0.050 * lengthRandom,
+      0.036 + 0.010 * lengthRandom,
+      0.016
+    );
+
+    float crystal = max(max(tendrilA, tendrilB), nodeBody) * crystallise;
 
     float chargeAge = (branchAge - 0.105) / 0.220;
     float freshCharge = exp(-chargeAge * chargeAge);
 
     branchMass = max(branchMass, branch);
     branchCharge = max(branchCharge, branch * freshCharge);
+    crystalMass = max(crystalMass, crystal);
+
+    float facetNoise = noise(
+      local * 12.0 + vec2(cell * 0.37, cell * -0.19)
+    );
+    float localFacet = crystal * smoothstep(
+      0.32,
+      0.86,
+      facetNoise + 0.22 * development
+    );
+    crystalFacet = max(crystalFacet, localFacet);
   }
 
   float mineral = fbm(world * 5.30 + vec2(1.70, -2.10));
+  float fracture = fbm(world * 11.20 + vec2(-3.20, 0.90));
+
   float facetMask = smoothstep(0.31, 0.86, mineral);
+  float shardMask = smoothstep(0.46, 0.90, fracture + crystalMass * 0.24);
 
-  float seed = max(activeCore, branchMass * 0.84);
-  float facets = max(activeCore, branchMass) * facetMask;
+  float seed = max(activeCore, max(branchMass * 0.80, crystalMass * 0.72));
+  float facets = max(
+    max(activeCore, branchMass) * facetMask,
+    max(crystalFacet, crystalMass * (0.40 + 0.60 * shardMask))
+  );
   float charge = max(activeCore * 1.12, branchCharge);
+  float mass = max(branchMass, crystalMass);
 
-  return vec4(seed, facets, charge, branchMass);
+  return vec4(seed, facets, charge, mass);
 }
 
 void main() {
@@ -528,17 +713,20 @@ void main() {
   float cameraS = uTime * CAMERA_SPEED;
 
   vec2 world = screenToWorld(vUv, cameraS);
-  vec4 procedural = crystallineFront(world, cameraS, energy);
+    vec4 procedural = crystallineFront(world, cameraS, energy);
   vec4 state = texture(uState, vUv);
 
   float growth = max(
     smoothstep(0.045, 0.780, state.r),
-    procedural.r * 0.82
+    procedural.r * 0.80
   );
 
-  float facet = max(state.g, procedural.g * 0.72);
+  float facet = max(state.g, procedural.g * 0.76);
   float charge = max(state.b, procedural.b);
-  float age = state.a;
+  float mineralMass = max(
+    smoothstep(0.06, 0.88, state.a),
+    procedural.a * 0.82
+  );
 
   float gx1 = texture(uState, vUv + vec2(texel.x, 0.0)).r;
   float gx2 = texture(uState, vUv - vec2(texel.x, 0.0)).r;
@@ -554,16 +742,16 @@ void main() {
   float internalMineral = fbm(world * 7.00 + vec2(2.10, -1.40));
   float fineCrystal = fbm(world * 15.00 + vec2(-4.20, 1.70));
 
-  float interiorPlane = smoothstep(
+    float interiorPlane = smoothstep(
     0.40,
     0.88,
-    internalMineral + facet * 0.24
+    internalMineral + facet * 0.24 + mineralMass * 0.10
   );
 
   float shardPlane = smoothstep(
     0.56,
     0.91,
-    fineCrystal + facet * 0.18
+    fineCrystal + facet * 0.18 + mineralMass * 0.12
   );
 
   float sideLight = dot(
@@ -581,18 +769,22 @@ void main() {
   vec3 cyan = vec3(0.390, 0.760, 1.000);
   vec3 white = vec3(0.970, 0.990, 1.000);
 
-  vec3 col = mix(abyss, midnight, 0.36 + broadMineral * 0.28);
+    vec3 col = mix(abyss, midnight, 0.36 + broadMineral * 0.28);
 
-  col = mix(col, deepIce, growth * 0.58);
-  col = mix(col, mineral, growth * (0.34 + facet * 0.30));
-  col = mix(col, violet, growth * facet * 0.24);
+  col = mix(col, deepIce, growth * 0.48 + mineralMass * 0.14);
+  col = mix(col, mineral, growth * (0.26 + facet * 0.24) + mineralMass * 0.22);
+  col = mix(col, violet, growth * facet * 0.18 + mineralMass * 0.08);
   col = mix(col, cyan, growth * sheen * (0.16 + 0.14 * energy));
 
-  col += cyan * interiorPlane * growth * 0.14;
-  col += violet * shardPlane * growth * facet * 0.11;
+  col += deepIce * mineralMass * 0.18;
+  col += cyan * interiorPlane * mineralMass * 0.16;
+  col += violet * shardPlane * mineralMass * facet * 0.12;
 
-  col += white * growthEdge * growth * (0.11 + 0.20 * energy);
-  col += cyan * growthEdge * growth * 0.10;
+  float solidEdge = growthEdge * smoothstep(0.18, 0.86, mineralMass);
+
+  col += white * solidEdge * (0.10 + 0.18 * energy);
+  col += cyan * solidEdge * 0.12;
+  col += white * growthEdge * growth * (0.05 + 0.10 * energy);
 
   col += cyan * charge * (0.42 + 0.54 * energy);
   col += white * charge * (0.50 + 0.62 * energy);
