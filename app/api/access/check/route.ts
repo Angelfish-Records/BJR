@@ -28,6 +28,58 @@ import { listCurrentEntitlementKeys } from "@/lib/entitlements";
 
 type Action = "login" | "subscribe" | "buy" | "wait" | null;
 
+type ShareTokenAccessSummary = {
+  expiresAt: string | null;
+  maxRedemptions: number | null;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/**
+ * `validateShareToken` is the sole authority for whether a token is valid.
+ * This intentionally exposes only recipient-relevant access constraints:
+ * never the token, hash, identifier, creator, note, redemption count, or grants.
+ */
+function shareTokenAccessFromValidation(
+  validation: unknown,
+): ShareTokenAccessSummary | null {
+  const result = asRecord(validation);
+  if (!result || result.ok !== true) return null;
+
+  const access = asRecord(result.shareTokenAccess);
+  if (!access) return null;
+
+  const expiresAtRaw = access.expiresAt;
+  const maxRedemptionsRaw = access.maxRedemptions;
+
+  if (
+    expiresAtRaw !== null &&
+    (typeof expiresAtRaw !== "string" ||
+      !Number.isFinite(Date.parse(expiresAtRaw)))
+  ) {
+    return null;
+  }
+
+  if (
+    maxRedemptionsRaw !== null &&
+    (typeof maxRedemptionsRaw !== "number" ||
+      !Number.isInteger(maxRedemptionsRaw) ||
+      maxRedemptionsRaw < 1)
+  ) {
+    return null;
+  }
+
+  return {
+    expiresAt: typeof expiresAtRaw === "string" ? expiresAtRaw : null,
+    maxRedemptions:
+      typeof maxRedemptionsRaw === "number" ? maxRedemptionsRaw : null,
+  };
+}
+
 async function getMemberIdByClerkUserId(
   userId: string,
 ): Promise<string | null> {
@@ -214,6 +266,7 @@ export async function GET(req: NextRequest) {
           reason: null,
           correlationId,
           redeemed: { ok: true },
+          shareTokenAccess: shareTokenAccessFromValidation(v),
         },
         { correlationId },
       );
@@ -388,11 +441,14 @@ export async function GET(req: NextRequest) {
     redeemed = r.ok ? { ok: true } : { ok: false, code: r.code };
   }
 
-  // ✅ ALSO treat a valid share token as immediate access (bypass embargo),
-  // even if entitlement propagation/shape differs.
+  // A currently valid share token grants immediate access, even if entitlement
+  // propagation has not yet occurred. Preserve only its display-safe constraints.
   let shareTokenAllowsAccess = false;
+  let shareTokenAccess: ShareTokenAccessSummary | null = null;
+
   if (st) {
-    const { anonId } = ensureAnonId(req); // stable cookie id, safe for rate/cap logic if validate uses it
+    const { anonId } = ensureAnonId(req);
+
     const v = await validateShareToken({
       token: st,
       expectedScopeId: albumScopeId,
@@ -401,7 +457,9 @@ export async function GET(req: NextRequest) {
       resourceId: albumScopeId,
       action: "access",
     });
+
     shareTokenAllowsAccess = v.ok;
+    shareTokenAccess = shareTokenAccessFromValidation(v);
   }
 
   const policy = await getAlbumPolicyByAlbumId(albumId);
@@ -514,6 +572,8 @@ export async function GET(req: NextRequest) {
       reason: allowed ? null : "reason" in decision ? decision.reason : null,
       correlationId,
       redeemed,
+      shareTokenAccess:
+        allowed && shareTokenAllowsAccess ? shareTokenAccess : null,
     },
     { correlationId },
   );

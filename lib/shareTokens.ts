@@ -19,6 +19,16 @@ export type ShareTokenOutcome =
   | "invalid"
   | "error";
 
+/**
+ * The only token constraints suitable for display to a recipient after a
+ * successful validation. This deliberately excludes token identity, grant
+ * contents, internal notes, creator data, and current/remaining redemptions.
+ */
+export type ShareTokenAccessSummary = {
+  expiresAt: string | null;
+  maxRedemptions: number | null;
+};
+
 type ShareTokenRow = {
   id: string;
   created_at: string;
@@ -29,6 +39,25 @@ type ShareTokenRow = {
   revoked_at: string | null;
   max_redemptions: number | null;
 };
+
+function shareTokenAccessSummary(
+  row: Pick<ShareTokenRow, "expires_at" | "max_redemptions">,
+): ShareTokenAccessSummary {
+  const expiresAt =
+    typeof row.expires_at === "string" &&
+    Number.isFinite(Date.parse(row.expires_at))
+      ? row.expires_at
+      : null;
+
+  const maxRedemptions =
+    typeof row.max_redemptions === "number" &&
+    Number.isInteger(row.max_redemptions) &&
+    row.max_redemptions >= 1
+      ? row.max_redemptions
+      : null;
+
+  return { expiresAt, maxRedemptions };
+}
 
 function b64url(bytes: Buffer) {
   return bytes.toString("base64url");
@@ -504,6 +533,7 @@ export async function validateShareToken(params: {
       scopeId: string | null;
       kind: string;
       grants: TokenGrant[];
+      shareTokenAccess: ShareTokenAccessSummary;
     }
   | {
       ok: false;
@@ -625,5 +655,6 @@ export async function validateShareToken(params: {
     scopeId: row.scope_id,
     kind: row.kind,
     grants,
+    shareTokenAccess: shareTokenAccessSummary(row),
   };
 }
