@@ -219,15 +219,82 @@ function playbackGateMessage(reason: string | null | undefined): string {
   return trimmed || "Enter your email address to continue listening.";
 }
 
+type ShareTokenAccess = {
+  expiresAt: string | null;
+  maxRedemptions: number | null;
+};
+
+function parseShareTokenAccess(value: unknown): ShareTokenAccess | null {
+  if (!value || typeof value !== "object") return null;
+
+  const raw = value as Record<string, unknown>;
+  const hasExpiresAt = Object.prototype.hasOwnProperty.call(raw, "expiresAt");
+  const hasMaxRedemptions = Object.prototype.hasOwnProperty.call(
+    raw,
+    "maxRedemptions",
+  );
+
+  if (!hasExpiresAt && !hasMaxRedemptions) return null;
+
+  const expiresAtRaw = raw.expiresAt;
+  const maxRedemptionsRaw = raw.maxRedemptions;
+
+  const expiresAt =
+    expiresAtRaw == null
+      ? null
+      : typeof expiresAtRaw === "string" &&
+          Number.isFinite(Date.parse(expiresAtRaw))
+        ? expiresAtRaw
+        : null;
+
+  const maxRedemptions =
+    maxRedemptionsRaw == null
+      ? null
+      : typeof maxRedemptionsRaw === "number" &&
+          Number.isFinite(maxRedemptionsRaw) &&
+          maxRedemptionsRaw >= 1
+        ? Math.floor(maxRedemptionsRaw)
+        : null;
+
+  if (expiresAtRaw != null && expiresAt == null) return null;
+  if (maxRedemptionsRaw != null && maxRedemptions == null) return null;
+
+  return { expiresAt, maxRedemptions };
+}
+
+function formatShareTokenExpiry(iso: string | null): string | null {
+  if (!iso) return null;
+
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return null;
+
+  return new Intl.DateTimeFormat(undefined, {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(ms));
+}
+
+function formatRedemptionLimit(maxRedemptions: number | null): string | null {
+  if (maxRedemptions == null) return null;
+
+  return `Limited to ${maxRedemptions} redemption${
+    maxRedemptions === 1 ? "" : "s"
+  }`;
+}
+
 type AccessState = {
   forCatalogueId: string;
   allowed: boolean;
   embargoed: boolean;
   releaseAt: string | null;
   code?: string;
-  action?: BlockAction; //
+  action?: BlockAction;
   reason?: string;
   corr?: string | null;
+  shareTokenAccess: ShareTokenAccess | null;
 };
 
 const accessResultCache = new Map<string, AccessState>();
@@ -265,6 +332,7 @@ async function fetchAccessOnce(
       code?: string | null;
       action?: string | null;
       reason?: string | null;
+      shareTokenAccess?: unknown;
     };
 
     const allowed = j?.allowed !== false;
@@ -288,6 +356,7 @@ async function fetchAccessOnce(
       action,
       reason,
       corr,
+      shareTokenAccess: parseShareTokenAccess(j?.shareTokenAccess),
     };
 
     accessResultCache.set(key, next);
@@ -849,6 +918,7 @@ export default function FullPlayer(props: {
           releaseAt: null,
           code: "ACCESS_CHECK_ERROR",
           reason: "Access check failed (client).",
+          shareTokenAccess: null,
         };
 
         accessResultCache.set(accessKey(catalogueId, st), fallback);
@@ -891,6 +961,20 @@ export default function FullPlayer(props: {
     Number.isFinite(releaseAtMs) &&
     !accessAllowsEmbargoBypass &&
     (!stParam || accessResolved),
+  );
+
+  const shareTokenAccess = accessForAlbum?.shareTokenAccess ?? null;
+
+  const showShareTokenEmbargoAccess = Boolean(
+    emb?.embargoed && accessForAlbum?.allowed === true && shareTokenAccess,
+  );
+
+  const shareTokenExpiryLabel = formatShareTokenExpiry(
+    shareTokenAccess?.expiresAt ?? null,
+  );
+
+  const shareTokenRedemptionLimit = formatRedemptionLimit(
+    shareTokenAccess?.maxRedemptions ?? null,
   );
 
   const isThisAlbumActive = Boolean(albumKey && p.queueContextId === albumKey);
@@ -1169,6 +1253,69 @@ export default function FullPlayer(props: {
                 ? effAlbum.embargo.note.trim()
                 : "Playback disabled while this release is under embargo. Patrons have instant early access."}
             </div>
+          </div>
+        ) : null}
+
+        {showShareTokenEmbargoAccess ? (
+          <div
+            role="note"
+            style={{
+              marginTop: 10,
+              padding: "10px 12px",
+              borderRadius: 14,
+              border: "1px solid rgba(255,255,255,0.16)",
+              background:
+                "color-mix(in srgb, var(--accent) 8%, rgba(0,0,0,0.24))",
+              boxShadow: "0 10px 34px rgba(0,0,0,0.28)",
+              maxWidth: 560,
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: 0.2,
+                opacity: 0.96,
+              }}
+            >
+              Private embargo access active
+            </div>
+
+            <div
+              style={{
+                marginTop: 4,
+                fontSize: 12,
+                opacity: 0.78,
+                lineHeight: 1.35,
+              }}
+            >
+              This private link grants early access before the public release.
+            </div>
+
+            {shareTokenExpiryLabel || shareTokenRedemptionLimit ? (
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  justifyContent: "center",
+                  gap: "4px 10px",
+                  marginTop: 8,
+                  fontSize: 11,
+                  fontWeight: 650,
+                  opacity: 0.76,
+                  lineHeight: 1.35,
+                }}
+              >
+                {shareTokenExpiryLabel ? (
+                  <span>Expires {shareTokenExpiryLabel} local time</span>
+                ) : null}
+
+                {shareTokenRedemptionLimit ? (
+                  <span>{shareTokenRedemptionLimit}</span>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
