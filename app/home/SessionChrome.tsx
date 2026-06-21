@@ -615,7 +615,7 @@ export default function SessionChrome(props: SessionChromeProps) {
               };
 
               const desiredPortalTab =
-                (getLastPortalTab() ?? portalTabId ?? "portal") || "portal";
+                (getLastPortalTab() ?? portalTabId ?? "journal") || "journal";
 
               return (
                 <>
