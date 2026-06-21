@@ -248,7 +248,7 @@ function normalizeAlbumId(raw: string | null | undefined): string {
 
 export default function AudioEngine() {
   const p = usePlayer();
-  const { isSignedIn } = useUser();
+  const { isLoaded: isUserLoaded, isSignedIn } = useUser();
 
   const audioARef = React.useRef<HTMLAudioElement | null>(null);
   const audioBRef = React.useRef<HTMLAudioElement | null>(null);
@@ -352,12 +352,11 @@ export default function AudioEngine() {
     return isSignedIn === true || Boolean(getShareTokenFromLocation());
   }, [getShareTokenFromLocation, isSignedIn]);
 
-  const canUseAlbumSessionTokens = React.useCallback(
-    (st: string | null): boolean => {
-      return isSignedIn === true || Boolean(st);
-    },
-    [isSignedIn],
-  );
+  const shouldPurgeContinuityCaches = React.useCallback((): boolean => {
+    // Do not erase an already-prepared signed-in session while Clerk is still
+    // resolving client auth state after hydration, a route change, or resume.
+    return isUserLoaded && !canUseContinuousPlaybackCache();
+  }, [canUseContinuousPlaybackCache, isUserLoaded]);
 
   const albumSessionKey = React.useCallback(
     (albumId: string, st: string | null): string => {
@@ -1915,9 +1914,21 @@ export default function AudioEngine() {
         detail: `next=${nextTrack.recordingId}`,
       });
 
-      await reportPlaythroughComplete(1);
+      const hasContinuousPlaybackSession = canUseContinuousPlaybackCache();
 
-      const standbyReady = canUseContinuousPlaybackCache()
+      // For signed-in and valid-share listeners, completion telemetry must not
+      // sit on the audio handoff critical path. A locked/background browser may
+      // delay this fetch precisely when the next deck needs to begin.
+      //
+      // Anonymous listeners still wait here because their next individual token
+      // must observe the completed-track cap before it can be issued.
+      if (hasContinuousPlaybackSession) {
+        void reportPlaythroughComplete(1);
+      } else {
+        await reportPlaythroughComplete(1);
+      }
+
+      const standbyReady = hasContinuousPlaybackSession
         ? await prepareStandbyForTrack(nextTrack)
         : false;
 
@@ -2205,7 +2216,7 @@ export default function AudioEngine() {
           : `next=null;queue=${pRef.current.queue.length};repeat=${pRef.current.repeat}`,
       });
 
-      reportPlaythroughComplete(1);
+      void reportPlaythroughComplete(1);
 
       if (nextTrack) {
         void handleAutoAdvance();
@@ -2347,7 +2358,7 @@ export default function AudioEngine() {
   }, [attachActiveTrack, getActiveAudio, p.intent, resurfacePlaybackGate]);
 
   React.useEffect(() => {
-    if (canUseContinuousPlaybackCache()) return;
+    if (!shouldPurgeContinuityCaches()) return;
 
     albumSessionAbortRef.current?.abort();
     albumSessionAbortRef.current = null;
@@ -2356,7 +2367,7 @@ export default function AudioEngine() {
     albumSessionInFlightRef.current.clear();
     tokenCacheRef.current.clear();
     standbyRef.current = null;
-  }, [canUseContinuousPlaybackCache]);
+  }, [shouldPurgeContinuityCaches]);
 
   React.useEffect(() => {
     if (!hasMediaSession()) return;
