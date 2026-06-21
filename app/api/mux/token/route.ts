@@ -5,12 +5,8 @@ import { auth } from "@clerk/nextjs/server";
 import { importPKCS8, SignJWT } from "jose";
 import crypto from "crypto";
 
-import { countAnonDistinctCompletedTracks } from "@/lib/events";
-import {
-  ANON_PLAYBACK_POLICY,
-  hasReachedAnonPlaybackCap,
-} from "@/lib/anonPlaybackPolicy";
 import { ACCESS_ACTIONS } from "@/lib/vocab";
+import { resolveAnonPlaybackSample } from "@/lib/anonPlaybackSample";
 import type {
   GateDomain,
   GateAction,
@@ -19,7 +15,10 @@ import type {
 import { validateShareToken } from "@/lib/shareTokens";
 import { decideAlbumPlaybackAccess } from "@/lib/accessOracle";
 import { ensureAnonId } from "@/lib/anon";
-import { verifyAlbumPlaybackAsset } from "@/lib/albums";
+import {
+  getAlbumPlaybackAssetsForSession,
+  verifyAlbumPlaybackAsset,
+} from "@/lib/albums";
 
 import { correlationIdFromRequest, gateError, jsonOk } from "@/app/api/_gate";
 
@@ -240,28 +239,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ---- Anonymous cap ----
-  if (!userId && !tokenAllowsPlayback) {
-    const distinctCompleted = await countAnonDistinctCompletedTracks({
-      anonId,
-      sinceDays: ANON_PLAYBACK_POLICY.windowDays,
-    });
-
-    if (
-      hasReachedAnonPlaybackCap({
-        distinctCompletedTracks: distinctCompleted,
-      })
-    ) {
-      return muxGateError(req, {
-        correlationId,
-        status: 403,
-        code: "PLAYBACK_CAP_REACHED",
-        action: "login",
-        message: "Enter your email address to continue listening.",
-      });
-    }
-  }
-
   // ---- Canonical album access via oracle ----
   // This is the real server-side playback lock. Share tokens may satisfy
   // entitlement, but they must not bypass embargo or album policy.
@@ -281,6 +258,62 @@ export async function POST(req: NextRequest) {
       action: (d.action ?? "wait") as GateAction,
       message: d.reason,
     });
+  }
+
+  let sampleExpirySeconds: number | null = null;
+
+  if (!userId && !tokenAllowsPlayback) {
+    const sessionAssets = await getAlbumPlaybackAssetsForSession({ albumId });
+
+    if (!sessionAssets.ok || !sessionAssets.albumId) {
+      return muxGateError(req, {
+        correlationId,
+        status: 404,
+        code: "INVALID_REQUEST",
+        action: "wait",
+        message: "No playable tracks were found for this album.",
+      });
+    }
+
+    const sample = await resolveAnonPlaybackSample({
+      anonId,
+      albumId: sessionAssets.albumId,
+      requestedPlaybackId: playbackId,
+      tracks: sessionAssets.tracks.map((track) => ({
+        recordingId: track.recordingId,
+        playbackId: track.playbackId,
+      })),
+    });
+
+    if (!sample.ok) {
+      const invalidStart = sample.reason === "invalid_start";
+
+      return muxGateError(req, {
+        correlationId,
+        status: invalidStart ? 400 : 403,
+        code: invalidStart ? "INVALID_REQUEST" : "PLAYBACK_CAP_REACHED",
+        action: invalidStart ? "wait" : "login",
+        message: invalidStart
+          ? "Missing or invalid anonymous sample starting track."
+          : "Enter your email address to continue listening.",
+      });
+    }
+
+    const included = sample.sample.tracks.some(
+      (track) => track.playbackId === playbackId,
+    );
+
+    if (!included) {
+      return muxGateError(req, {
+        correlationId,
+        status: 403,
+        code: "PLAYBACK_CAP_REACHED",
+        action: "login",
+        message: "Enter your email address to continue listening.",
+      });
+    }
+
+    sampleExpirySeconds = Math.floor(sample.sample.expiresAt.getTime() / 1000);
   }
 
   // ---- Mux Secure Playback signing ----
@@ -306,7 +339,12 @@ export async function POST(req: NextRequest) {
 
   const minForDuration = durSecHint > 0 ? durSecHint + 120 : 0;
   const ttl = Math.min(Math.max(baseTtl, minForDuration, 60), 60 * 60 * 2);
-  const exp = now + ttl;
+  const ordinaryExpiry = now + ttl;
+
+  const exp =
+    sampleExpirySeconds !== null
+      ? Math.min(ordinaryExpiry, sampleExpirySeconds)
+      : ordinaryExpiry;
 
   const playbackRestrictionId =
     process.env.MUX_PLAYBACK_RESTRICTION_ID?.trim() || undefined;

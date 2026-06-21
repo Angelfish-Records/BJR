@@ -6,6 +6,10 @@ import { importPKCS8, SignJWT } from "jose";
 import crypto from "crypto";
 
 import { ACCESS_ACTIONS } from "@/lib/vocab";
+import {
+  resolveAnonPlaybackSample,
+  type AnonPlaybackSample,
+} from "@/lib/anonPlaybackSample";
 import type {
   GateAction,
   GateCodeRaw,
@@ -20,6 +24,7 @@ import { correlationIdFromRequest, gateError, jsonOk } from "@/app/api/_gate";
 type AlbumSessionReq = {
   albumId?: string;
   st?: string;
+  startPlaybackId?: string;
 };
 
 type AlbumSessionTrackToken = {
@@ -35,6 +40,12 @@ type AlbumSessionOk = {
   albumId: string;
   expiresAt: number;
   tracks: AlbumSessionTrackToken[];
+  mode: "full" | "sample";
+  sampleSession?: {
+    id: string;
+    expiresAt: number;
+    trackCount: number;
+  };
   correlationId: string;
 };
 
@@ -233,18 +244,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  if (!userId && !tokenAllowsPlayback) {
-    return gateError(req, {
-      correlationId,
-      status: 403,
-      domain: PLAYBACK_DOMAIN,
-      code: "ENTITLEMENT_REQUIRED",
-      action: "login",
-      message: "Sign in to preload album playback.",
-      onResponse: (res) => ensureAnonId(req, res),
-    });
-  }
-
   const d = await decideAlbumPlaybackAccess({
     memberId,
     albumId: sessionAssets.albumId,
@@ -265,6 +264,70 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  const requestedPlaybackId =
+    typeof body?.startPlaybackId === "string"
+      ? body.startPlaybackId.trim()
+      : "";
+
+  let mode: AlbumSessionOk["mode"] = "full";
+  let sampleSession: AnonPlaybackSample | null = null;
+  let tracksToSign = sessionAssets.tracks;
+
+  if (!userId && !tokenAllowsPlayback) {
+    const sample = await resolveAnonPlaybackSample({
+      anonId,
+      albumId: sessionAssets.albumId,
+      requestedPlaybackId,
+      tracks: sessionAssets.tracks.map((track) => ({
+        recordingId: track.recordingId,
+        playbackId: track.playbackId,
+      })),
+    });
+
+    if (!sample.ok) {
+      const invalidStart = sample.reason === "invalid_start";
+
+      return gateError(req, {
+        correlationId,
+        status: invalidStart ? 400 : 403,
+        domain: PLAYBACK_DOMAIN,
+        code: invalidStart ? "INVALID_REQUEST" : "PLAYBACK_CAP_REACHED",
+        action: invalidStart ? "wait" : "login",
+        message: invalidStart
+          ? "Missing or invalid anonymous sample starting track."
+          : "Enter your email address to continue listening.",
+        onResponse: (res) => ensureAnonId(req, res),
+      });
+    }
+
+    const assetsByPlaybackId = new Map(
+      sessionAssets.tracks.map((track) => [track.playbackId, track]),
+    );
+
+    const boundedTracks = sample.sample.tracks
+      .map((track) => assetsByPlaybackId.get(track.playbackId) ?? null)
+      .filter(
+        (track): track is (typeof sessionAssets.tracks)[number] =>
+          track !== null,
+      );
+
+    if (boundedTracks.length !== sample.sample.tracks.length) {
+      return gateError(req, {
+        correlationId,
+        status: 500,
+        domain: PLAYBACK_DOMAIN,
+        code: "INVALID_REQUEST",
+        action: "wait",
+        message: "Anonymous sample session could not be resolved.",
+        onResponse: (res) => ensureAnonId(req, res),
+      });
+    }
+
+    mode = "sample";
+    sampleSession = sample.sample;
+    tracksToSign = boundedTracks;
+  }
+
   const keyId = mustEnv("MUX_SIGNING_KEY_ID", "MUX_PLAYBACK_SIGNING_KEY_ID");
   const raw = mustEnv(
     "MUX_SIGNING_KEY_SECRET",
@@ -280,13 +343,23 @@ export async function POST(req: NextRequest) {
       7200,
   );
   const ttl = Math.min(Math.max(baseTtl, 60), 60 * 60 * 2);
-  const exp = now + ttl;
+  const ordinaryExpiry = now + ttl;
+
+  const sampleExpiry =
+    sampleSession !== null
+      ? Math.floor(sampleSession.expiresAt.getTime() / 1000)
+      : null;
+
+  const exp =
+    sampleExpiry !== null
+      ? Math.min(ordinaryExpiry, sampleExpiry)
+      : ordinaryExpiry;
 
   const playbackRestrictionId =
     process.env.MUX_PLAYBACK_RESTRICTION_ID?.trim() || undefined;
 
   const tracks: AlbumSessionTrackToken[] = await Promise.all(
-    sessionAssets.tracks.map(async (track) => ({
+    tracksToSign.map(async (track) => ({
       recordingId: track.recordingId,
       displayId: track.displayId,
       playbackId: track.playbackId,
@@ -316,6 +389,16 @@ export async function POST(req: NextRequest) {
     albumId: sessionAssets.albumId,
     expiresAt: exp,
     tracks,
+    mode,
+    ...(sampleSession
+      ? {
+          sampleSession: {
+            id: sampleSession.id,
+            expiresAt: exp,
+            trackCount: tracks.length,
+          },
+        }
+      : {}),
     correlationId,
   };
 

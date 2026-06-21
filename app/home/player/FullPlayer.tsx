@@ -992,17 +992,24 @@ export default function FullPlayer(props: {
     window.setTimeout(() => setTransportLock(false), ms);
   };
 
-  const prefetchAlbumSession = React.useCallback(() => {
-    if (!albumKey) return;
-    window.dispatchEvent(
-      new CustomEvent("af:prefetch-album-session", {
-        detail: {
-          albumId: albumKey,
-          ...(stParam ? { st: stParam } : {}),
-        },
-      }),
-    );
-  }, [albumKey, stParam]);
+  const prefetchAlbumSession = React.useCallback(
+    (track?: PlayerTrack) => {
+      if (!albumKey) return;
+
+      const startPlaybackId = track?.muxPlaybackId?.trim() || null;
+
+      window.dispatchEvent(
+        new CustomEvent("af:prefetch-album-session", {
+          detail: {
+            albumId: albumKey,
+            ...(stParam ? { st: stParam } : {}),
+            ...(startPlaybackId ? { startPlaybackId } : {}),
+          },
+        }),
+      );
+    },
+    [albumKey, stParam],
+  );
 
   const prefetchAlbumArt = (url?: string | null) => {
     if (!url) return;
@@ -1050,7 +1057,7 @@ export default function FullPlayer(props: {
     const firstTrack = effTracks[0];
     if (!firstTrack) return;
 
-    prefetchAlbumSession();
+    prefetchAlbumSession(firstTrack);
 
     p.setQueue(effTracks, {
       contextId: albumKey ?? undefined,
@@ -1127,7 +1134,7 @@ export default function FullPlayer(props: {
     const t = effTracks[i];
     if (!t) return;
 
-    prefetchAlbumSession();
+    prefetchAlbumSession(t);
     ensureAlbumQueue();
     if (isPublicAlbumRoute) {
       // User-initiated navigation; preserve history.
@@ -1499,7 +1506,7 @@ export default function FullPlayer(props: {
                   goCanonicalTrack(t.displayId, "push");
 
                   if (isCoarsePointer) {
-                    prefetchAlbumSession();
+                    prefetchAlbumSession(t);
                     p.play(t);
                     window.dispatchEvent(new Event("af:play-intent"));
                     return;
@@ -1519,7 +1526,7 @@ export default function FullPlayer(props: {
 
                   goCanonicalTrack(t.displayId, "push");
 
-                  prefetchAlbumSession();
+                  prefetchAlbumSession(t);
                   p.play(t);
                   window.dispatchEvent(new Event("af:play-intent"));
                 }}
@@ -1547,7 +1554,7 @@ export default function FullPlayer(props: {
                     goCanonicalTrack(t.displayId, "push");
 
                     if (isCoarsePointer) {
-                      prefetchAlbumSession();
+                      prefetchAlbumSession(t);
                       p.play(t);
                       window.dispatchEvent(new Event("af:play-intent"));
                       return;
@@ -1570,7 +1577,7 @@ export default function FullPlayer(props: {
                     goCanonicalTrack(t.displayId, "push");
 
                     if (isCoarsePointer) {
-                      prefetchAlbumSession();
+                      prefetchAlbumSession(t);
                       p.play(t);
                       window.dispatchEvent(new Event("af:play-intent"));
                       return;
@@ -1643,7 +1650,7 @@ export default function FullPlayer(props: {
 
                           goCanonicalTrack(t.displayId, "push");
 
-                          prefetchAlbumSession();
+                          prefetchAlbumSession(t);
                           p.play(t);
                           window.dispatchEvent(new Event("af:play-intent"));
                         }}

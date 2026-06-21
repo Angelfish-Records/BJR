@@ -13,6 +13,10 @@ function readPositiveIntEnv(name: string, fallback: number): number {
 export const ANON_PLAYBACK_POLICY = {
   distinctTrackCap: readPositiveIntEnv("ANON_DISTINCT_TRACK_CAP", 3),
   windowDays: readPositiveIntEnv("ANON_PLAYBACK_WINDOW_DAYS", 30),
+  sampleSessionTtlSeconds: readPositiveIntEnv(
+    "ANON_PLAYBACK_SAMPLE_SESSION_TTL_SECONDS",
+    1800,
+  ),
 } as const;
 
 export function hasReachedAnonPlaybackCap(params: {

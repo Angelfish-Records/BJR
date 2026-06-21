@@ -37,6 +37,12 @@ type AlbumSessionResponse =
       albumId: string;
       expiresAt: string | number;
       tracks: AlbumSessionToken[];
+      mode?: "full" | "sample";
+      sampleSession?: {
+        id: string;
+        expiresAt: string | number;
+        trackCount: number;
+      };
       correlationId?: string;
     }
   | { ok: false; error: string; gate?: GatePayload };
@@ -323,6 +329,11 @@ export default function AudioEngine() {
   );
   const blockedNonceRef = React.useRef(new Map<string, number>());
 
+  const anonSampleSessionRef = React.useRef<{
+    id: string;
+    expiresAtMs: number;
+  } | null>(null);
+
   const engineBlockedRef = React.useRef(false);
   const lastPlaybackGateRef = React.useRef<GatePayload | null>(null);
 
@@ -348,15 +359,28 @@ export default function AudioEngine() {
     }
   }, []);
 
-  const canUseContinuousPlaybackCache = React.useCallback((): boolean => {
-    return isSignedIn === true || Boolean(getShareTokenFromLocation());
-  }, [getShareTokenFromLocation, isSignedIn]);
+  const hasActiveAnonSampleSession = React.useCallback((): boolean => {
+    const sample = anonSampleSessionRef.current;
+
+    return Boolean(sample && Date.now() < sample.expiresAtMs - 5_000);
+  }, []);
 
   const shouldPurgeContinuityCaches = React.useCallback((): boolean => {
-    // Do not erase an already-prepared signed-in session while Clerk is still
-    // resolving client auth state after hydration, a route change, or resume.
-    return isUserLoaded && !canUseContinuousPlaybackCache();
-  }, [canUseContinuousPlaybackCache, isUserLoaded]);
+    // Do not purge a signed-in session while Clerk is resolving after hydration,
+    // route movement, or a browser resume. An active bounded anon sample is also
+    // a legitimate continuity session until its server-defined expiry.
+    return (
+      isUserLoaded &&
+      isSignedIn !== true &&
+      !getShareTokenFromLocation() &&
+      !hasActiveAnonSampleSession()
+    );
+  }, [
+    getShareTokenFromLocation,
+    hasActiveAnonSampleSession,
+    isSignedIn,
+    isUserLoaded,
+  ]);
 
   const albumSessionKey = React.useCallback(
     (albumId: string, st: string | null): string => {
@@ -505,6 +529,10 @@ export default function AudioEngine() {
       st: string | null;
       expiresAt: string | number;
       tracks: AlbumSessionToken[];
+      sampleSession?: {
+        id: string;
+        expiresAt: string | number;
+      } | null;
     }): boolean => {
       const expiresAtMs =
         typeof args.expiresAt === "number"
@@ -545,6 +573,20 @@ export default function AudioEngine() {
         byPlaybackId,
       });
 
+      if (args.sampleSession) {
+        const sampleExpiresAtMs =
+          typeof args.sampleSession.expiresAt === "number"
+            ? args.sampleSession.expiresAt * 1000
+            : Date.parse(String(args.sampleSession.expiresAt));
+
+        if (Number.isFinite(sampleExpiresAtMs)) {
+          anonSampleSessionRef.current = {
+            id: args.sampleSession.id,
+            expiresAtMs: sampleExpiresAtMs,
+          };
+        }
+      }
+
       return true;
     },
     [albumSessionKey],
@@ -563,14 +605,15 @@ export default function AudioEngine() {
     async (args: {
       albumId: string | null | undefined;
       st?: string | null;
+      startPlaybackId?: string | null;
       signal?: AbortSignal;
+      surfaceGate?: boolean;
     }): Promise<boolean> => {
       const albumId = normalizeAlbumId(args.albumId);
       if (!albumId) return false;
 
       const st = args.st ?? getShareTokenFromLocation();
-
-      if (!canUseContinuousPlaybackCache()) return false;
+      const startPlaybackId = args.startPlaybackId?.trim() || null;
 
       const key = albumSessionKey(albumId, st);
 
@@ -594,6 +637,7 @@ export default function AudioEngine() {
             body: JSON.stringify({
               albumId,
               ...(st ? { st } : {}),
+              ...(startPlaybackId ? { startPlaybackId } : {}),
             }),
             signal: args.signal,
           });
@@ -612,6 +656,33 @@ export default function AudioEngine() {
               source: "AudioEngine",
               detail: `status=${res.status}`,
             });
+
+            const gatePayload =
+              data && "ok" in data && data.ok === false
+                ? (data.gate ?? null)
+                : null;
+
+            if (args.surfaceGate && gatePayload) {
+              reportPlaybackGate(
+                {
+                  domain: gatePayload.domain ?? "playback",
+                  code:
+                    normalizeGateCodeRaw(gatePayload.code) ??
+                    "PLAYBACK_CAP_REACHED",
+                  action: gatePayload.action ?? "login",
+                  message:
+                    gatePayload.message ??
+                    "Enter your email address to continue listening.",
+                  correlationId:
+                    gatePayload.correlationId ??
+                    res.headers.get("x-correlation-id") ??
+                    null,
+                  reason: gatePayload.reason,
+                },
+                res.headers.get("x-correlation-id") ?? null,
+              );
+            }
+
             return false;
           }
 
@@ -627,6 +698,10 @@ export default function AudioEngine() {
             st,
             expiresAt: data.expiresAt,
             tracks: data.tracks,
+            sampleSession:
+              data.mode === "sample" && data.sampleSession
+                ? data.sampleSession
+                : null,
           });
         } catch {
           return false;
@@ -641,8 +716,8 @@ export default function AudioEngine() {
     [
       albumSessionKey,
       cacheAlbumSessionTokens,
-      canUseContinuousPlaybackCache,
       getShareTokenFromLocation,
+      reportPlaybackGate,
     ],
   );
 
@@ -655,6 +730,7 @@ export default function AudioEngine() {
       return prefetchAlbumSession({
         albumId,
         st: getShareTokenFromLocation(),
+        startPlaybackId: s.current?.muxPlaybackId ?? null,
         signal,
       });
     },
@@ -751,6 +827,7 @@ export default function AudioEngine() {
     async (args: {
       track: PlayerTrack;
       signal: AbortSignal;
+      surfaceGate?: boolean;
     }): Promise<{ token: string; expiresAtMs: number } | null> => {
       const playbackId = (args.track.muxPlaybackId ?? "").trim();
       if (!playbackId) return null;
@@ -762,15 +839,23 @@ export default function AudioEngine() {
       const albumId = normalizeAlbumId(s.queueContextId);
       const st = getShareTokenFromLocation();
 
-      if (albumId && canUseContinuousPlaybackCache()) {
+      if (albumId) {
         await prefetchAlbumSession({
           albumId,
           st,
+          startPlaybackId: playbackId,
           signal: args.signal,
+          surfaceGate: args.surfaceGate === true,
         });
 
         const albumCached = getCachedTokenForPlaybackId(playbackId);
         if (albumCached) return albumCached;
+      }
+
+      const isAnonymousWithoutShare = isSignedIn !== true && !st;
+
+      if (isAnonymousWithoutShare) {
+        return null;
       }
 
       return fetchSingleToken({
@@ -780,10 +865,10 @@ export default function AudioEngine() {
       });
     },
     [
-      canUseContinuousPlaybackCache,
       fetchSingleToken,
       getCachedTokenForPlaybackId,
       getShareTokenFromLocation,
+      isSignedIn,
       prefetchAlbumSession,
     ],
   );
@@ -1033,8 +1118,6 @@ export default function AudioEngine() {
 
   const prepareStandbyForTrack = React.useCallback(
     async (track: PlayerTrack): Promise<boolean> => {
-      if (!canUseContinuousPlaybackCache()) return false;
-
       const playbackId = (track.muxPlaybackId ?? "").trim();
       if (!track.recordingId || !playbackId) return false;
 
@@ -1067,6 +1150,7 @@ export default function AudioEngine() {
       const token = await ensureTokenForTrack({
         track,
         signal: ac.signal,
+        surfaceGate: false,
       });
 
       if (!token) return false;
@@ -1111,7 +1195,7 @@ export default function AudioEngine() {
 
       return true;
     },
-    [attachTrackToDeck, canUseContinuousPlaybackCache, ensureTokenForTrack],
+    [attachTrackToDeck, ensureTokenForTrack],
   );
 
   const getNextTrack = React.useCallback((): PlayerTrack | null => {
@@ -1271,6 +1355,7 @@ export default function AudioEngine() {
       (await ensureTokenForTrack({
         track,
         signal: ac.signal,
+        surfaceGate: true,
       }));
 
     if (!token) return;
@@ -1602,6 +1687,7 @@ export default function AudioEngine() {
     void prefetchAlbumSession({
       albumId,
       st: getShareTokenFromLocation(),
+      startPlaybackId: pRef.current.current?.muxPlaybackId ?? null,
       signal: ac.signal,
     });
 
@@ -1615,6 +1701,7 @@ export default function AudioEngine() {
           ? (event.detail as {
               albumId?: unknown;
               st?: unknown;
+              startPlaybackId?: unknown;
             })
           : null;
 
@@ -1625,6 +1712,11 @@ export default function AudioEngine() {
       const st =
         typeof detail?.st === "string" ? detail.st.trim() || null : null;
 
+      const startPlaybackId =
+        typeof detail?.startPlaybackId === "string"
+          ? detail.startPlaybackId.trim() || null
+          : null;
+
       if (!albumId) return;
 
       albumSessionAbortRef.current?.abort();
@@ -1634,6 +1726,7 @@ export default function AudioEngine() {
       void prefetchAlbumSession({
         albumId,
         st,
+        startPlaybackId,
         signal: ac.signal,
       });
     };
@@ -1914,23 +2007,12 @@ export default function AudioEngine() {
         detail: `next=${nextTrack.recordingId}`,
       });
 
-      const hasContinuousPlaybackSession = canUseContinuousPlaybackCache();
+      // The next track has already been authorised by either the full album
+      // session or the bounded anonymous sample session. Completion accounting
+      // must never delay the deck handoff on a locked/background device.
+      void reportPlaythroughComplete(1);
 
-      // For signed-in and valid-share listeners, completion telemetry must not
-      // sit on the audio handoff critical path. A locked/background browser may
-      // delay this fetch precisely when the next deck needs to begin.
-      //
-      // Anonymous listeners still wait here because their next individual token
-      // must observe the completed-track cap before it can be issued.
-      if (hasContinuousPlaybackSession) {
-        void reportPlaythroughComplete(1);
-      } else {
-        await reportPlaythroughComplete(1);
-      }
-
-      const standbyReady = hasContinuousPlaybackSession
-        ? await prepareStandbyForTrack(nextTrack)
-        : false;
+      const standbyReady = await prepareStandbyForTrack(nextTrack);
 
       if (!standbyReady) {
         sendAudioDebug({
@@ -2294,7 +2376,6 @@ export default function AudioEngine() {
     announceBadges,
     getAudio,
     getNextTrack,
-    canUseContinuousPlaybackCache,
     hardStopAll,
     prepareStandbyForTrack,
     prefetchCurrentQueueAlbumSession,
@@ -2367,6 +2448,7 @@ export default function AudioEngine() {
     albumSessionInFlightRef.current.clear();
     tokenCacheRef.current.clear();
     standbyRef.current = null;
+    anonSampleSessionRef.current = null;
   }, [shouldPurgeContinuityCaches]);
 
   React.useEffect(() => {
