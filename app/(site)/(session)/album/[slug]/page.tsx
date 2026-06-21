@@ -18,6 +18,7 @@ export async function generateMetadata(props: {
   const { slug } = await props.params;
 
   const decodedSlug = decodeURIComponent((slug ?? "").trim());
+  const albumSlug = decodedSlug.toLowerCase();
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
 
   const doc = await client.fetch<AlbumTitleDoc | null>(
@@ -32,7 +33,7 @@ export async function generateMetadata(props: {
   const display =
     normTitle(doc?.displayTitle) || normTitle(doc?.title) || decodedSlug;
 
-  const canonicalPath = `/${encodeURIComponent(decodedSlug)}`;
+  const canonicalPath = `/${encodeURIComponent(doc?.slug?.current ?? albumSlug)}`;
   const canonical = appUrl ? `${appUrl}${canonicalPath}` : canonicalPath;
 
   return {
