@@ -16,6 +16,11 @@ import {
   type NewlyAwardedBadge,
 } from "@/lib/badgeAutoAward";
 import { markOverlayAnnouncedForAwardedBadges } from "@/lib/badgeAwardAnnouncementServer";
+import { ensureAnonId } from "@/lib/anon";
+import {
+  recordShareTokenPlaybackEvent,
+  resolveShareTokenPlaybackContext,
+} from "@/lib/shareTokenPlaybackContext";
 
 type PlaybackTelemetryEvent = "play" | "progress" | "complete";
 
@@ -27,6 +32,8 @@ type PlaybackTelemetryRequest = {
   listenedMs?: number;
   progressMs?: number;
   durationMs?: number | null;
+  albumScopeId?: string | null;
+  sharePlaybackContext?: string | null;
 };
 
 type MemberRow = {
@@ -553,6 +560,20 @@ export async function POST(req: NextRequest) {
   const { userId } = await auth();
   const memberId = userId ? await getMemberIdByClerkUserId(userId) : null;
 
+  const { anonId } = ensureAnonId(req);
+
+  const albumScopeId = asTrimmedString(body.albumScopeId) || null;
+  const sharePlaybackContext =
+    asTrimmedString(body.sharePlaybackContext) || null;
+
+  const shareAttribution = await resolveShareTokenPlaybackContext({
+    context: sharePlaybackContext,
+    scopeId: albumScopeId,
+    memberId,
+    anonId,
+    recordingId,
+  });
+
   const eventType =
     event === "play"
       ? EVENT_TYPES.PLAYBACK_TELEMETRY_PLAY
@@ -581,6 +602,25 @@ export async function POST(req: NextRequest) {
   }
 
   const occurredAtIso = new Date().toISOString();
+
+  if (shareAttribution) {
+    await recordShareTokenPlaybackEvent({
+      shareTokenId: shareAttribution.shareTokenId,
+      telemetryLabel: shareAttribution.telemetryLabel,
+      scopeId: shareAttribution.scopeId,
+      audience: memberId ? "member" : "anonymous",
+      memberId,
+      recordingId,
+      playbackId,
+      eventType,
+      milestoneKey,
+      listenedMs,
+      progressMs,
+      durationMs,
+      occurredAtIso,
+    });
+  }
+
   let newlyAwardedBadges: NewlyAwardedBadge[] = [];
 
   if (event === "play") {

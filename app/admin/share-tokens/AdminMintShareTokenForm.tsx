@@ -82,12 +82,12 @@ export default function AdminMintShareTokenForm({ albums }: Props) {
   );
 
   const [maxRedemptions, setMaxRedemptions] = React.useState<string>("");
+  const [telemetryLabel, setTelemetryLabel] = React.useState<string>("");
 
   const [busy, setBusy] = React.useState(false);
   const [result, setResult] = React.useState<MintResp | null>(null);
 
-  const [tokenCopyState, setTokenCopyState] =
-    React.useState<CopyState>("idle");
+  const [tokenCopyState, setTokenCopyState] = React.useState<CopyState>("idle");
   const [linkCopyState, setLinkCopyState] = React.useState<CopyState>("idle");
 
   const tokenCopyTimerRef = React.useRef<number | null>(null);
@@ -106,9 +106,8 @@ export default function AdminMintShareTokenForm({ albums }: Props) {
 
   const selected = React.useMemo(
     () =>
-      mintable.find(
-        (a) => (a.catalogueId as string) === albumCatalogueId,
-      ) ?? null,
+      mintable.find((a) => (a.catalogueId as string) === albumCatalogueId) ??
+      null,
     [mintable, albumCatalogueId],
   );
 
@@ -137,6 +136,24 @@ export default function AdminMintShareTokenForm({ albums }: Props) {
         return;
       }
 
+      const cleanTelemetryLabel = telemetryLabel.trim();
+
+      if (!cleanTelemetryLabel) {
+        setResult({
+          ok: false,
+          error: "A share-link label is required.",
+        });
+        return;
+      }
+
+      if (cleanTelemetryLabel.length > 120) {
+        setResult({
+          ok: false,
+          error: "Share-link labels must be 120 characters or fewer.",
+        });
+        return;
+      }
+
       const expiresAt = expiresEnabled
         ? new Date(expiresAtLocal).toISOString()
         : null;
@@ -153,6 +170,7 @@ export default function AdminMintShareTokenForm({ albums }: Props) {
           albumId: albumCatalogueId,
           expiresAt,
           maxRedemptions: max,
+          telemetryLabel: cleanTelemetryLabel,
         }),
       });
 
@@ -299,6 +317,23 @@ export default function AdminMintShareTokenForm({ albums }: Props) {
             ) : null}
           </div>
 
+          <div style={{ display: "grid", gap: 6 }}>
+            <div style={{ fontSize: 12, opacity: 0.66 }}>Share-link label</div>
+
+            <input
+              value={telemetryLabel}
+              onChange={(e) => setTelemetryLabel(e.target.value)}
+              placeholder="e.g. RNZ Music — review desk"
+              maxLength={120}
+              style={fieldStyle}
+            />
+
+            <div style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.58 }}>
+              Internal only. This appears in playback telemetry, never on the
+              recipient’s page.
+            </div>
+          </div>
+
           <div
             style={{
               display: "grid",
@@ -307,9 +342,7 @@ export default function AdminMintShareTokenForm({ albums }: Props) {
             }}
           >
             <div style={{ display: "grid", gap: 6 }}>
-              <div style={{ fontSize: 12, opacity: 0.66 }}>
-                Max redemptions
-              </div>
+              <div style={{ fontSize: 12, opacity: 0.66 }}>Max redemptions</div>
               <input
                 value={maxRedemptions}
                 onChange={(e) => setMaxRedemptions(e.target.value)}
@@ -379,7 +412,9 @@ export default function AdminMintShareTokenForm({ albums }: Props) {
       {result ? (
         result.ok ? (
           <div style={cardStyle}>
-            <div style={{ fontSize: 12, letterSpacing: "0.04em", opacity: 0.56 }}>
+            <div
+              style={{ fontSize: 12, letterSpacing: "0.04em", opacity: 0.56 }}
+            >
               MINT RESULT
             </div>
 

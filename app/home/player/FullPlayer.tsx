@@ -262,6 +262,22 @@ function parseShareTokenAccess(value: unknown): ShareTokenAccess | null {
   return { expiresAt, maxRedemptions };
 }
 
+function parseSharePlaybackContext(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+
+  const context = value.trim();
+
+  return context.startsWith("stpc1.") && context.length <= 900 ? context : null;
+}
+
+function parseSharePlaybackScopeId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+
+  const scopeId = value.trim();
+
+  return /^alb:[^\s]+$/i.test(scopeId) ? scopeId : null;
+}
+
 function formatShareTokenExpiry(iso: string | null): string | null {
   if (!iso) return null;
 
@@ -295,6 +311,8 @@ type AccessState = {
   reason?: string;
   corr?: string | null;
   shareTokenAccess: ShareTokenAccess | null;
+  sharePlaybackContext: string | null;
+  sharePlaybackScopeId: string | null;
 };
 
 const accessResultCache = new Map<string, AccessState>();
@@ -333,6 +351,8 @@ async function fetchAccessOnce(
       action?: string | null;
       reason?: string | null;
       shareTokenAccess?: unknown;
+      sharePlaybackContext?: unknown;
+      sharePlaybackScopeId?: unknown;
     };
 
     const allowed = j?.allowed !== false;
@@ -357,6 +377,8 @@ async function fetchAccessOnce(
       reason,
       corr,
       shareTokenAccess: parseShareTokenAccess(j?.shareTokenAccess),
+      sharePlaybackContext: parseSharePlaybackContext(j?.sharePlaybackContext),
+      sharePlaybackScopeId: parseSharePlaybackScopeId(j?.sharePlaybackScopeId),
     };
 
     accessResultCache.set(key, next);
@@ -919,6 +941,8 @@ export default function FullPlayer(props: {
           code: "ACCESS_CHECK_ERROR",
           reason: "Access check failed (client).",
           shareTokenAccess: null,
+          sharePlaybackContext: null,
+          sharePlaybackScopeId: null,
         };
 
         accessResultCache.set(accessKey(catalogueId, st), fallback);
@@ -976,6 +1000,12 @@ export default function FullPlayer(props: {
   const shareTokenRedemptionLimit = formatRedemptionLimit(
     shareTokenAccess?.maxRedemptions ?? null,
   );
+
+  const queueSharePlaybackContext =
+    accessForAlbum?.sharePlaybackContext ?? null;
+
+  const queueSharePlaybackScopeId =
+    accessForAlbum?.sharePlaybackScopeId ?? null;
 
   const isThisAlbumActive = Boolean(albumKey && p.queueContextId === albumKey);
   const playingThisAlbum = playingish && isThisAlbumActive;
@@ -1058,14 +1088,7 @@ export default function FullPlayer(props: {
     if (!firstTrack) return;
 
     prefetchAlbumSession(firstTrack);
-
-    p.setQueue(effTracks, {
-      contextId: albumKey ?? undefined,
-      artworkUrl: effAlbum?.artworkUrl ?? null,
-      contextSlug: effAlbumSlug,
-      contextTitle: effAlbum?.title ?? undefined,
-      contextArtist: effAlbum?.artist ?? undefined,
-    });
+    ensureAlbumQueue();
 
     if (isPublicAlbumRoute) {
       // Pressing play on an album implies first-track is the canonical track leaf.
@@ -1120,13 +1143,16 @@ export default function FullPlayer(props: {
   const nextDisabled = transportLock || !albumHasCurrent || albumAtEnd;
 
   function ensureAlbumQueue() {
-    // If we're already in this album context with the right queue, this is cheap + idempotent.
+    // Explicit nulls prevent an earlier private-link attribution context from
+    // surviving when ordinary album playback replaces the queue.
     p.setQueue(effTracks, {
       contextId: albumKey ?? undefined,
       artworkUrl: effAlbum?.artworkUrl ?? null,
       contextSlug: effAlbumSlug,
       contextTitle: effAlbum?.title ?? undefined,
       contextArtist: effAlbum?.artist ?? undefined,
+      sharePlaybackContext: queueSharePlaybackContext,
+      sharePlaybackScopeId: queueSharePlaybackScopeId,
     });
   }
 
@@ -1495,13 +1521,7 @@ export default function FullPlayer(props: {
 
                   if (!canPlay) return;
 
-                  p.setQueue(effTracks, {
-                    contextId: albumKey ?? undefined,
-                    artworkUrl: effAlbum?.artworkUrl ?? null,
-                    contextSlug: effAlbumSlug,
-                    contextTitle: effAlbum?.title ?? undefined,
-                    contextArtist: effAlbum?.artist ?? undefined,
-                  });
+                  ensureAlbumQueue();
 
                   goCanonicalTrack(t.displayId, "push");
 
@@ -1543,13 +1563,7 @@ export default function FullPlayer(props: {
 
                   if (e.key === "Enter") {
                     e.preventDefault();
-                    p.setQueue(effTracks, {
-                      contextId: albumKey ?? undefined,
-                      artworkUrl: effAlbum?.artworkUrl ?? null,
-                      contextSlug: effAlbumSlug,
-                      contextTitle: effAlbum?.title ?? undefined,
-                      contextArtist: effAlbum?.artist ?? undefined,
-                    });
+                    ensureAlbumQueue();
 
                     goCanonicalTrack(t.displayId, "push");
 
@@ -1566,13 +1580,7 @@ export default function FullPlayer(props: {
                   if (e.key === " ") {
                     e.preventDefault();
 
-                    p.setQueue(effTracks, {
-                      contextId: albumKey ?? undefined,
-                      artworkUrl: effAlbum?.artworkUrl ?? null,
-                      contextSlug: effAlbumSlug,
-                      contextTitle: effAlbum?.title ?? undefined,
-                      contextArtist: effAlbum?.artist ?? undefined,
-                    });
+                    ensureAlbumQueue();
 
                     goCanonicalTrack(t.displayId, "push");
 
@@ -1640,13 +1648,7 @@ export default function FullPlayer(props: {
                             return;
                           }
 
-                          p.setQueue(effTracks, {
-                            contextId: albumKey ?? undefined,
-                            artworkUrl: effAlbum?.artworkUrl ?? null,
-                            contextSlug: effAlbumSlug,
-                            contextTitle: effAlbum?.title ?? undefined,
-                            contextArtist: effAlbum?.artist ?? undefined,
-                          });
+                          ensureAlbumQueue();
 
                           goCanonicalTrack(t.displayId, "push");
 

@@ -17,8 +17,10 @@ import {
 } from "@/lib/anonPlaybackPolicy";
 import {
   redeemShareTokenForMember,
+  type ShareTokenAccessSummary,
   validateShareToken,
 } from "@/lib/shareTokens";
+import { issueShareTokenPlaybackContext } from "@/lib/shareTokenPlaybackContext";
 import {
   getAlbumPolicyByAlbumId,
   isEmbargoed,
@@ -27,58 +29,6 @@ import {
 import { listCurrentEntitlementKeys } from "@/lib/entitlements";
 
 type Action = "login" | "subscribe" | "buy" | "wait" | null;
-
-type ShareTokenAccessSummary = {
-  expiresAt: string | null;
-  maxRedemptions: number | null;
-};
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-/**
- * `validateShareToken` is the sole authority for whether a token is valid.
- * This intentionally exposes only recipient-relevant access constraints:
- * never the token, hash, identifier, creator, note, redemption count, or grants.
- */
-function shareTokenAccessFromValidation(
-  validation: unknown,
-): ShareTokenAccessSummary | null {
-  const result = asRecord(validation);
-  if (!result || result.ok !== true) return null;
-
-  const access = asRecord(result.shareTokenAccess);
-  if (!access) return null;
-
-  const expiresAtRaw = access.expiresAt;
-  const maxRedemptionsRaw = access.maxRedemptions;
-
-  if (
-    expiresAtRaw !== null &&
-    (typeof expiresAtRaw !== "string" ||
-      !Number.isFinite(Date.parse(expiresAtRaw)))
-  ) {
-    return null;
-  }
-
-  if (
-    maxRedemptionsRaw !== null &&
-    (typeof maxRedemptionsRaw !== "number" ||
-      !Number.isInteger(maxRedemptionsRaw) ||
-      maxRedemptionsRaw < 1)
-  ) {
-    return null;
-  }
-
-  return {
-    expiresAt: typeof expiresAtRaw === "string" ? expiresAtRaw : null,
-    maxRedemptions:
-      typeof maxRedemptionsRaw === "number" ? maxRedemptionsRaw : null,
-  };
-}
 
 async function getMemberIdByClerkUserId(
   userId: string,
@@ -254,6 +204,16 @@ export async function GET(req: NextRequest) {
         );
       }
 
+      const sharePlaybackContext = v.telemetryLabel
+        ? issueShareTokenPlaybackContext({
+            shareTokenId: v.tokenId,
+            scopeId: albumScopeId,
+            tokenExpiresAt: v.shareTokenAccess.expiresAt,
+            memberId: null,
+            anonId,
+          })
+        : null;
+
       return anonJsonWithId(
         anonId,
         {
@@ -266,7 +226,9 @@ export async function GET(req: NextRequest) {
           reason: null,
           correlationId,
           redeemed: { ok: true },
-          shareTokenAccess: shareTokenAccessFromValidation(v),
+          shareTokenAccess: v.shareTokenAccess,
+          sharePlaybackContext,
+          sharePlaybackScopeId: sharePlaybackContext ? albumScopeId : null,
         },
         { correlationId },
       );
@@ -427,8 +389,14 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Share token redemption for members (grants entitlements)
+  // A successful member redemption is already a validated token decision.
+  // Do not validate it again under an anonymous identity: that could consume
+  // a second distinct-consumer slot on capped links.
   let redeemed: { ok: boolean; code?: string } | null = null;
+  let shareTokenAllowsAccess = false;
+  let shareTokenAccess: ShareTokenAccessSummary | null = null;
+  let sharePlaybackContext: string | null = null;
+
   if (st) {
     const r = await redeemShareTokenForMember({
       token: st,
@@ -438,28 +406,23 @@ export async function GET(req: NextRequest) {
       resourceId: albumScopeId,
       action: "redeem",
     });
+
     redeemed = r.ok ? { ok: true } : { ok: false, code: r.code };
-  }
 
-  // A currently valid share token grants immediate access, even if entitlement
-  // propagation has not yet occurred. Preserve only its display-safe constraints.
-  let shareTokenAllowsAccess = false;
-  let shareTokenAccess: ShareTokenAccessSummary | null = null;
+    if (r.ok) {
+      shareTokenAllowsAccess = true;
+      shareTokenAccess = r.shareTokenAccess;
 
-  if (st) {
-    const { anonId } = ensureAnonId(req);
-
-    const v = await validateShareToken({
-      token: st,
-      expectedScopeId: albumScopeId,
-      anonId,
-      resourceKind: "album",
-      resourceId: albumScopeId,
-      action: "access",
-    });
-
-    shareTokenAllowsAccess = v.ok;
-    shareTokenAccess = shareTokenAccessFromValidation(v);
+      if (r.telemetryLabel) {
+        sharePlaybackContext = issueShareTokenPlaybackContext({
+          shareTokenId: r.tokenId,
+          scopeId: albumScopeId,
+          tokenExpiresAt: r.shareTokenAccess.expiresAt,
+          memberId,
+          anonId: null,
+        });
+      }
+    }
   }
 
   const policy = await getAlbumPolicyByAlbumId(albumId);
@@ -574,6 +537,12 @@ export async function GET(req: NextRequest) {
       redeemed,
       shareTokenAccess:
         allowed && shareTokenAllowsAccess ? shareTokenAccess : null,
+      sharePlaybackContext:
+        allowed && shareTokenAllowsAccess ? sharePlaybackContext : null,
+      sharePlaybackScopeId:
+        allowed && shareTokenAllowsAccess && sharePlaybackContext
+          ? albumScopeId
+          : null,
     },
     { correlationId },
   );

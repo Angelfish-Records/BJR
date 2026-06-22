@@ -16,6 +16,8 @@ export type QueueContext = {
   contextTitle?: string;
   contextArtist?: string;
   artworkUrl?: string | null;
+  sharePlaybackContext?: string | null;
+  sharePlaybackScopeId?: string | null;
 };
 
 export type PlayerState = {
@@ -30,6 +32,8 @@ export type PlayerState = {
   queueContextTitle?: string;
   queueContextArtist?: string;
   queueContextArtworkUrl?: string | null;
+  queueSharePlaybackContext?: string | null;
+  queueSharePlaybackScopeId?: string | null;
 
   intent: Intent;
   intentAtMs?: number;
@@ -141,6 +145,8 @@ type PlaybackAccessState = {
   releaseAt: string | null;
   code?: string;
   reason?: string;
+  sharePlaybackContext: string | null;
+  sharePlaybackScopeId: string | null;
 };
 
 const playbackAccessCache = new Map<string, PlaybackAccessState>();
@@ -197,6 +203,8 @@ async function fetchPlaybackAccess(
       releaseAt?: string | null;
       code?: string | null;
       reason?: string | null;
+      sharePlaybackContext?: unknown;
+      sharePlaybackScopeId?: unknown;
     };
 
     const next: PlaybackAccessState = {
@@ -212,6 +220,16 @@ async function fetchPlaybackAccess(
         typeof body.reason === "string" && body.reason.trim()
           ? body.reason
           : undefined,
+      sharePlaybackContext:
+        typeof body.sharePlaybackContext === "string" &&
+        body.sharePlaybackContext.startsWith("stpc1.")
+          ? body.sharePlaybackContext
+          : null,
+      sharePlaybackScopeId:
+        typeof body.sharePlaybackScopeId === "string" &&
+        /^alb:[^:\s]+$/i.test(body.sharePlaybackScopeId)
+          ? body.sharePlaybackScopeId
+          : null,
     };
 
     playbackAccessCache.set(key, next);
@@ -254,6 +272,8 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
     queueContextTitle: undefined,
     queueContextArtist: undefined,
     queueContextArtworkUrl: null,
+    queueSharePlaybackContext: null,
+    queueSharePlaybackScopeId: null,
 
     intent: null,
     intentAtMs: undefined,
@@ -309,6 +329,17 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
         if (!access.allowed) {
           blockPlayback(blockedPlaybackMessage(access));
           return;
+        }
+
+        if (
+          access.sharePlaybackContext &&
+          access.sharePlaybackScopeId ===
+            stateRef.current.queueSharePlaybackScopeId
+        ) {
+          setState((current) => ({
+            ...current,
+            queueSharePlaybackContext: access.sharePlaybackContext,
+          }));
         }
 
         onAllowed();
@@ -673,6 +704,15 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
           const hasTitle = title.length > 0;
           const hasArtist = artist.length > 0;
           const hasArtwork = typeof opts?.artworkUrl !== "undefined";
+          const hasSharePlaybackContext = Object.prototype.hasOwnProperty.call(
+            opts ?? {},
+            "sharePlaybackContext",
+          );
+
+          const hasSharePlaybackScopeId = Object.prototype.hasOwnProperty.call(
+            opts ?? {},
+            "sharePlaybackScopeId",
+          );
           const hasId =
             typeof opts?.contextId === "string" && opts.contextId.length > 0;
 
@@ -688,6 +728,19 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
             queueContextArtworkUrl: hasArtwork
               ? (opts!.artworkUrl ?? null)
               : (s.queueContextArtworkUrl ?? null),
+            queueSharePlaybackContext: hasSharePlaybackContext
+              ? typeof opts?.sharePlaybackContext === "string" &&
+                opts.sharePlaybackContext.trim()
+                ? opts.sharePlaybackContext.trim()
+                : null
+              : s.queueSharePlaybackContext,
+
+            queueSharePlaybackScopeId: hasSharePlaybackScopeId
+              ? typeof opts?.sharePlaybackScopeId === "string" &&
+                opts.sharePlaybackScopeId.trim()
+                ? opts.sharePlaybackScopeId.trim()
+                : null
+              : s.queueSharePlaybackScopeId,
 
             current: nextCurrent,
             positionMs: s.current ? s.positionMs : 0,
@@ -725,6 +778,8 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
           seeking: false,
           seekNonce: s.seekNonce + 1,
           loadingReason: undefined,
+          queueSharePlaybackContext: null,
+          queueSharePlaybackScopeId: null,
         })),
 
       setPositionMs: (ms: number) =>

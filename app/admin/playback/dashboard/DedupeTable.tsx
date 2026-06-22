@@ -37,7 +37,7 @@ export function DedupeTable(props: {
         style={{
           width: "100%",
           borderCollapse: "collapse",
-          minWidth: 1120,
+          minWidth: 1280,
         }}
       >
         <thead>
@@ -48,6 +48,7 @@ export function DedupeTable(props: {
               "Progress",
               "Status",
               "Audience",
+              "Share link",
               "Listener",
             ].map((label) => (
               <th
@@ -72,7 +73,7 @@ export function DedupeTable(props: {
           {rows.length === 0 ? (
             <tr>
               <td
-                colSpan={6}
+                colSpan={7}
                 style={{
                   padding: 10,
                   fontSize: FONT_SIZE_DEDUPE,
@@ -93,6 +94,13 @@ export function DedupeTable(props: {
 
             const monospaceIdentity =
               row.memberEmail == null && row.memberId != null;
+
+            const shareTokenLabel =
+              row.sourceRows.find(
+                (sourceRow) =>
+                  typeof sourceRow.shareTokenLabel === "string" &&
+                  sourceRow.shareTokenLabel.trim().length > 0,
+              )?.shareTokenLabel ?? null;
 
             return (
               <tr key={row.groupKey}>
@@ -206,7 +214,40 @@ export function DedupeTable(props: {
                 >
                   <AudienceBadge audience={row.audience} />
                 </td>
-
+                <td
+                  style={{
+                    padding: "10px 10px",
+                    borderBottom: ROW_BORDER,
+                    color: TEXT_STRONG,
+                    fontSize: FONT_SIZE_DEDUPE,
+                    maxWidth: 260,
+                    verticalAlign: "top",
+                  }}
+                >
+                  {shareTokenLabel ? (
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        maxWidth: "100%",
+                        padding: "3px 7px",
+                        borderRadius: 999,
+                        border: "1px solid rgba(255,255,255,0.14)",
+                        background: "rgba(255,255,255,0.06)",
+                        color: TEXT_PRIMARY,
+                        fontSize: 11,
+                        fontWeight: 650,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={shareTokenLabel}
+                    >
+                      {shareTokenLabel}
+                    </span>
+                  ) : (
+                    <span style={{ color: TEXT_MUTED }}>—</span>
+                  )}
+                </td>
                 <td
                   style={{
                     padding: "10px 10px",

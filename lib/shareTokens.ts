@@ -38,7 +38,18 @@ type ShareTokenRow = {
   expires_at: string | null;
   revoked_at: string | null;
   max_redemptions: number | null;
+  telemetry_label: string | null;
 };
+
+function normalizeTelemetryLabel(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+
+  const label = value.trim();
+  if (!label) return null;
+  if (label.length > 120) return null;
+
+  return label;
+}
 
 function shareTokenAccessSummary(
   row: Pick<ShareTokenRow, "expires_at" | "max_redemptions">,
@@ -121,11 +132,21 @@ function normalizeAction(input: unknown, fallback: string) {
 
 async function loadTokenRow(tokenHash: string): Promise<ShareTokenRow | null> {
   const rowR = await sql<ShareTokenRow>`
-    select id, created_at, kind, scope_id, grants, expires_at, revoked_at, max_redemptions
+    select
+      id,
+      created_at,
+      kind,
+      scope_id,
+      grants,
+      expires_at,
+      revoked_at,
+      max_redemptions,
+      telemetry_label
     from share_tokens
     where token_hash = ${tokenHash}
     limit 1
   `;
+
   return rowR.rows?.[0] ?? null;
 }
 
@@ -267,6 +288,7 @@ export async function createShareToken(params: {
   grants: TokenGrant[];
   expiresAt?: string | null;
   maxRedemptions?: number | null;
+  telemetryLabel?: string | null;
   createdByMemberId?: string | null;
 }): Promise<{
   token: string;
@@ -275,14 +297,22 @@ export async function createShareToken(params: {
   scopeId: string | null;
   expiresAt: string | null;
   maxRedemptions: number | null;
+  telemetryLabel: string | null;
   createdAt: string;
 }> {
   const token = newShareTokenString();
   const tokenHash = hashShareToken(token);
 
   const kind = (params.kind ?? "album_press").trim() || "album_press";
-  const scopeId = (params.scopeId ?? null) ? String(params.scopeId) : null;
+  const scopeId = normalizeScopeId(params.scopeId ?? null);
   const grants = Array.isArray(params.grants) ? params.grants : [];
+
+  const telemetryLabel = normalizeTelemetryLabel(params.telemetryLabel);
+  if (!telemetryLabel) {
+    throw new Error(
+      "telemetryLabel is required and must be 120 characters or fewer",
+    );
+  }
 
   const expiresAt = params.expiresAt
     ? new Date(params.expiresAt).toISOString()
@@ -301,6 +331,7 @@ export async function createShareToken(params: {
     scope_id: string | null;
     expires_at: string | null;
     max_redemptions: number | null;
+    telemetry_label: string | null;
   }>`
     insert into share_tokens (
       created_by_member_id,
@@ -309,7 +340,8 @@ export async function createShareToken(params: {
       scope_id,
       grants,
       expires_at,
-      max_redemptions
+      max_redemptions,
+      telemetry_label
     )
     values (
       ${params.createdByMemberId ?? null}::uuid,
@@ -318,9 +350,17 @@ export async function createShareToken(params: {
       ${scopeId},
       ${JSON.stringify(grants)}::jsonb,
       ${expiresAt}::timestamptz,
-      ${maxRedemptions}
+      ${maxRedemptions},
+      ${telemetryLabel}
     )
-    returning id, created_at, kind, scope_id, expires_at, max_redemptions
+    returning
+      id,
+      created_at,
+      kind,
+      scope_id,
+      expires_at,
+      max_redemptions,
+      telemetry_label
   `;
 
   const row = r.rows?.[0];
@@ -333,6 +373,7 @@ export async function createShareToken(params: {
     scopeId: row.scope_id,
     expiresAt: row.expires_at,
     maxRedemptions: row.max_redemptions,
+    telemetryLabel: row.telemetry_label,
     createdAt: row.created_at,
   };
 }
@@ -351,6 +392,8 @@ export async function redeemShareTokenForMember(params: {
       scopeId: string | null;
       kind: string;
       grants: TokenGrant[];
+      shareTokenAccess: ShareTokenAccessSummary;
+      telemetryLabel: string | null;
     }
   | {
       ok: false;
@@ -516,6 +559,8 @@ export async function redeemShareTokenForMember(params: {
     scopeId: row.scope_id,
     kind: row.kind,
     grants,
+    shareTokenAccess: shareTokenAccessSummary(row),
+    telemetryLabel: normalizeTelemetryLabel(row.telemetry_label),
   };
 }
 
@@ -534,6 +579,7 @@ export async function validateShareToken(params: {
       kind: string;
       grants: TokenGrant[];
       shareTokenAccess: ShareTokenAccessSummary;
+      telemetryLabel: string | null;
     }
   | {
       ok: false;
@@ -656,5 +702,6 @@ export async function validateShareToken(params: {
     kind: row.kind,
     grants,
     shareTokenAccess: shareTokenAccessSummary(row),
+    telemetryLabel: normalizeTelemetryLabel(row.telemetry_label),
   };
 }

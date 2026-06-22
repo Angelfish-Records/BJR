@@ -10,6 +10,7 @@ type Body = {
   expiresAt?: string | null; // ISO
   maxRedemptions?: number | null;
   note?: string | null;
+  telemetryLabel?: string | null;
 };
 
 function isBody(x: unknown): x is Body {
@@ -20,6 +21,9 @@ function isBody(x: unknown): x is Body {
   if (o.maxRedemptions != null && typeof o.maxRedemptions !== "number")
     return false;
   if (o.note != null && typeof o.note !== "string") return false;
+  if (o.telemetryLabel != null && typeof o.telemetryLabel !== "string") {
+    return false;
+  }
   return true;
 }
 
@@ -86,6 +90,24 @@ export async function POST(req: Request) {
     const scopeId = `alb:${albumId}`;
 
     const note = cleanStr(raw.note);
+    const telemetryLabel = cleanStr(raw.telemetryLabel);
+
+    if (!telemetryLabel) {
+      return NextResponse.json(
+        { ok: false, error: "telemetryLabel is required" },
+        { status: 400 },
+      );
+    }
+
+    if (telemetryLabel.length > 120) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "telemetryLabel must be 120 characters or fewer",
+        },
+        { status: 400 },
+      );
+    }
 
     const grants: TokenGrant[] = [
       {
@@ -101,6 +123,7 @@ export async function POST(req: Request) {
       grants,
       expiresAt: expiresIso,
       maxRedemptions,
+      telemetryLabel,
       createdByMemberId: adminMemberId,
     });
 
@@ -112,6 +135,7 @@ export async function POST(req: Request) {
       scopeId: created.scopeId,
       expiresAt: created.expiresAt,
       maxRedemptions: created.maxRedemptions,
+      telemetryLabel: created.telemetryLabel,
       createdAt: created.createdAt,
     });
   } catch (e) {

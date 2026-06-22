@@ -252,6 +252,29 @@ function normalizeAlbumId(raw: string | null | undefined): string {
   return s.trim();
 }
 
+type SharePlaybackAttribution = {
+  context: string;
+  scopeId: string;
+};
+
+function readQueueSharePlaybackAttribution(queue: {
+  queueSharePlaybackContext?: string | null;
+  queueSharePlaybackScopeId?: string | null;
+}): SharePlaybackAttribution | null {
+  const context = queue.queueSharePlaybackContext?.trim() ?? "";
+  const scopeId = queue.queueSharePlaybackScopeId?.trim() ?? "";
+
+  if (!context.startsWith("stpc1.") || context.length > 900) {
+    return null;
+  }
+
+  if (!/^alb:[^\s]+$/i.test(scopeId)) {
+    return null;
+  }
+
+  return { context, scopeId };
+}
+
 export default function AudioEngine() {
   const p = usePlayer();
   const { isLoaded: isUserLoaded, isSignedIn } = useUser();
@@ -286,6 +309,8 @@ export default function AudioEngine() {
   );
   const telemetryProgressSentRef = React.useRef(new Set<string>());
   const telemetryCompleteSentRef = React.useRef(new Set<string>());
+  const telemetryShareAttributionRef =
+    React.useRef<SharePlaybackAttribution | null>(null);
 
   const nearEndWarmKeyRef = React.useRef<string | null>(null);
   const debugProgressHeartbeatRef = React.useRef<string | null>(null);
@@ -520,6 +545,7 @@ export default function AudioEngine() {
 
     standbyRef.current = null;
     telemetrySessionIdRef.current = null;
+    telemetryShareAttributionRef.current = null;
     playIntentRef.current = false;
   }, [stopDeck]);
 
@@ -1270,6 +1296,9 @@ export default function AudioEngine() {
       activeDeckRef.current = newDeck;
       standbyRef.current = null;
       telemetrySessionIdRef.current = newPlaybackSessionId();
+      telemetryShareAttributionRef.current = readQueueSharePlaybackAttribution(
+        pRef.current,
+      );
 
       mediaSurface.setTrack(nextTrack.recordingId);
       mediaSurface.setStatus("playing");
@@ -1336,6 +1365,7 @@ export default function AudioEngine() {
 
     standbyRef.current = null;
     telemetrySessionIdRef.current = newPlaybackSessionId();
+    telemetryShareAttributionRef.current = readQueueSharePlaybackAttribution(s);
 
     mediaSurface.setTrack(track.recordingId);
     mediaSurface.setStatus("loading");
@@ -1425,6 +1455,7 @@ export default function AudioEngine() {
       stopDeck("b");
 
       telemetrySessionIdRef.current = null;
+      telemetryShareAttributionRef.current = null;
       standbyRef.current = null;
 
       try {
@@ -1778,10 +1809,20 @@ export default function AudioEngine() {
       progressMs: number;
       durationMs: number | null;
     }) => {
+      const shareAttribution = telemetryShareAttributionRef.current;
+
       fetch("/api/playback/telemetry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...payload,
+          ...(shareAttribution
+            ? {
+                albumScopeId: shareAttribution.scopeId,
+                sharePlaybackContext: shareAttribution.context,
+              }
+            : {}),
+        }),
         keepalive: true,
       })
         .then(async (response) => {

@@ -14,6 +14,7 @@ import {
 } from "./dashboard/PlaybackDashboardPrimitives";
 import { QualifiedPlayTrendChart } from "./dashboard/QualifiedPlayTrendChart";
 import { TrackTable } from "./dashboard/TrackTable";
+import { ShareLinkActivityTable } from "./dashboard/ShareLinkActivityTable";
 import {
   FONT_SIZE_UI,
   TEXT_MUTED,
@@ -183,18 +184,19 @@ export default function PlaybackTelemetryDashboardClient(props: {
         >
           <AudienceSplitCard snapshot={snapshot} />
 
-          <SectionCard
-            title="Top tracks by listened time"
-            subtitle=""
-          >
+          <SectionCard title="Top tracks by listened time" subtitle="">
             <TrackTable rows={snapshot.topTracksByListenedMs} />
           </SectionCard>
         </div>
 
         <SectionCard
-          title="Recent telemetry sessions"
-          subtitle=""
+          title="Share-link activity"
+          subtitle="Playback attributed to currently valid labelled share links. This identifies the link used, not a verified individual listener."
         >
+          <ShareLinkActivityTable rows={snapshot.shareLinkActivity} />
+        </SectionCard>
+
+        <SectionCard title="Recent telemetry sessions" subtitle="">
           <DedupeTable rows={snapshot.recentDedupe} />
         </SectionCard>
       </div>

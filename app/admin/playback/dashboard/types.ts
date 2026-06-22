@@ -11,6 +11,7 @@ export type DedupeRow = DedupeRowBase & {
   recordingTitle?: string | null;
   trackTitle?: string | null;
   memberEmail?: string | null;
+  shareTokenLabel?: string | null;
 };
 
 export type DedupeSessionRow = {

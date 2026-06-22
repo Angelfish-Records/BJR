@@ -35,6 +35,7 @@ type DedupeRow = {
   milestone_key: string;
   created_at: string;
   audience: "member" | "anonymous";
+  share_token_label: string | null;
 };
 
 type TrendRow = {
@@ -42,6 +43,15 @@ type TrendRow = {
   member_play_count: string | number;
   anonymous_play_count: string | number;
   site_play_count: string | number;
+};
+
+type ShareLinkActivityQueryRow = {
+  telemetry_label: string;
+  qualified_play_count: string | number;
+  listened_ms: string | number;
+  completed_count: string | number;
+  top_recording_id: string | null;
+  last_activity_at: string;
 };
 
 function asSafeInt(value: string | number | null | undefined): number {
@@ -93,6 +103,7 @@ export type PlaybackAdminDedupeRow = {
   milestoneKey: string;
   createdAt: string;
   audience: "member" | "anonymous";
+  shareTokenLabel: string | null;
 };
 
 export type PlaybackAdminTrendRangeKey =
@@ -123,6 +134,15 @@ export type PlaybackAdminAudienceSplit = {
   recent30dAnonymousPlayCount: number;
 };
 
+export type PlaybackAdminShareLinkActivityRow = {
+  telemetryLabel: string;
+  qualifiedPlayCount: number;
+  listenedMs: number;
+  completedCount: number;
+  topTrackTitle: string | null;
+  lastActivityAt: string;
+};
+
 export type PlaybackAdminSnapshot = {
   generatedAt: string;
   memberTotals: PlaybackAdminAggregate;
@@ -137,6 +157,7 @@ export type PlaybackAdminSnapshot = {
   topTracksByListenedMs: PlaybackAdminTrackRow[];
   recentTracks: PlaybackAdminTrackRow[];
   recentDedupe: PlaybackAdminDedupeRow[];
+  shareLinkActivity: PlaybackAdminShareLinkActivityRow[];
 };
 
 async function getMemberTotals(): Promise<PlaybackAdminAggregate> {
@@ -701,9 +722,91 @@ async function getQualifiedPlayTrends(): Promise<
   };
 }
 
+async function getShareLinkActivity(): Promise<
+  PlaybackAdminShareLinkActivityRow[]
+> {
+  const result = await sql<ShareLinkActivityQueryRow>`
+    with label_totals as (
+      select
+        telemetry_label,
+        count(*) filter (
+          where event_type = ${EVENT_TYPES.PLAYBACK_TELEMETRY_PLAY}
+        ) as qualified_play_count,
+        coalesce(
+          sum(listened_ms) filter (
+            where event_type = ${EVENT_TYPES.PLAYBACK_TELEMETRY_PROGRESS}
+          ),
+          0
+        ) as listened_ms,
+        count(*) filter (
+          where event_type = ${EVENT_TYPES.PLAYBACK_TELEMETRY_COMPLETE}
+        ) as completed_count,
+        max(occurred_at) as last_activity_at
+      from share_token_playback_events
+      where char_length(btrim(telemetry_label)) > 0
+      group by telemetry_label
+    ),
+    ranked_tracks as (
+      select
+        telemetry_label,
+        recording_id,
+        row_number() over (
+          partition by telemetry_label
+          order by
+            coalesce(
+              sum(listened_ms) filter (
+                where event_type = ${EVENT_TYPES.PLAYBACK_TELEMETRY_PROGRESS}
+              ),
+              0
+            ) desc,
+            count(*) filter (
+              where event_type = ${EVENT_TYPES.PLAYBACK_TELEMETRY_PLAY}
+            ) desc,
+            max(occurred_at) desc
+        ) as rank
+      from share_token_playback_events
+      where char_length(btrim(telemetry_label)) > 0
+      group by telemetry_label, recording_id
+    )
+    select
+      totals.telemetry_label,
+      totals.qualified_play_count,
+      totals.listened_ms,
+      totals.completed_count,
+      tracks.recording_id as top_recording_id,
+      totals.last_activity_at::text as last_activity_at
+    from label_totals totals
+    left join ranked_tracks tracks
+      on tracks.telemetry_label = totals.telemetry_label
+      and tracks.rank = 1
+    order by
+      totals.last_activity_at desc,
+      totals.listened_ms desc,
+      totals.qualified_play_count desc
+    limit 24
+  `;
+
+  return Promise.all(
+    result.rows.map(async (row): Promise<PlaybackAdminShareLinkActivityRow> => {
+      const topTrack = row.top_recording_id
+        ? await getRecordingSummaryByRecordingId(row.top_recording_id)
+        : null;
+
+      return {
+        telemetryLabel: row.telemetry_label,
+        qualifiedPlayCount: asSafeInt(row.qualified_play_count),
+        listenedMs: asSafeInt(row.listened_ms),
+        completedCount: asSafeInt(row.completed_count),
+        topTrackTitle: topTrack?.title ?? row.top_recording_id,
+        lastActivityAt: new Date(row.last_activity_at).toISOString(),
+      };
+    }),
+  );
+}
+
 async function getRecentDedupe(): Promise<PlaybackAdminDedupeRow[]> {
   const res = await sql<DedupeRow>`
-    with recent_member_dedupe as (
+        with recent_member_dedupe as (
       select
         d.member_id,
         m.email::text as member_email,
@@ -712,7 +815,8 @@ async function getRecentDedupe(): Promise<PlaybackAdminDedupeRow[]> {
         d.event_type,
         d.milestone_key,
         d.created_at::text as created_at,
-        'member'::text as audience
+        'member'::text as audience,
+        share_event.telemetry_label as share_token_label
       from member_playback_telemetry_dedupe d
       left join members m
         on m.id = d.member_id
@@ -727,8 +831,20 @@ async function getRecentDedupe(): Promise<PlaybackAdminDedupeRow[]> {
         order by me.occurred_at desc
         limit 1
       ) evt on true
+      left join lateral (
+        select e.telemetry_label
+        from share_token_playback_events e
+        where
+          e.audience = 'member'
+          and e.member_id = d.member_id
+          and e.playback_id = d.playback_id
+          and e.event_type = d.event_type
+          and e.milestone_key = d.milestone_key
+        order by e.occurred_at desc
+        limit 1
+      ) share_event on true
     ),
-    recent_anonymous_dedupe as (
+        recent_anonymous_dedupe as (
       select
         null::uuid as member_id,
         null::text as member_email,
@@ -737,8 +853,21 @@ async function getRecentDedupe(): Promise<PlaybackAdminDedupeRow[]> {
         d.event_type,
         d.milestone_key,
         d.created_at::text as created_at,
-        'anonymous'::text as audience
+        'anonymous'::text as audience,
+        share_event.telemetry_label as share_token_label
       from anonymous_playback_telemetry_dedupe d
+      left join lateral (
+        select e.telemetry_label
+        from share_token_playback_events e
+        where
+          e.audience = 'anonymous'
+          and e.playback_id = d.playback_id
+          and e.recording_id = d.recording_id
+          and e.event_type = d.event_type
+          and e.milestone_key = d.milestone_key
+        order by e.occurred_at desc
+        limit 1
+      ) share_event on true
     ),
     all_dedupe_rows as (
       select * from recent_member_dedupe
@@ -769,7 +898,8 @@ async function getRecentDedupe(): Promise<PlaybackAdminDedupeRow[]> {
       t.event_type,
       t.milestone_key,
       t.created_at,
-      t.audience
+      t.audience,
+      t.share_token_label
     from all_dedupe_rows t
     inner join recent_sessions s
       on s.audience = t.audience
@@ -810,6 +940,7 @@ async function getRecentDedupe(): Promise<PlaybackAdminDedupeRow[]> {
     milestoneKey: row.milestone_key,
     createdAt: new Date(row.created_at).toISOString(),
     audience: row.audience,
+    shareTokenLabel: row.share_token_label,
   }));
 }
 
@@ -848,6 +979,7 @@ export async function getPlaybackAdminSnapshot(): Promise<PlaybackAdminSnapshot>
     topTracksByListenedMs,
     recentTracks,
     recentDedupe,
+    shareLinkActivity,
   ] = await Promise.all([
     getMemberTotals(),
     getMember30d(),
@@ -857,6 +989,7 @@ export async function getPlaybackAdminSnapshot(): Promise<PlaybackAdminSnapshot>
     getTopTracksByListenedMs(),
     getRecentTracks(),
     getRecentDedupe(),
+    getShareLinkActivity(),
   ]);
 
   return {
@@ -875,5 +1008,6 @@ export async function getPlaybackAdminSnapshot(): Promise<PlaybackAdminSnapshot>
     topTracksByListenedMs,
     recentTracks,
     recentDedupe,
+    shareLinkActivity,
   };
 }
