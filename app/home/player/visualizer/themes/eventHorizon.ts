@@ -211,36 +211,35 @@ void main() {
   // "matter passing across the face" relationship.
   // ---------------------------------------------------------------------------
 
-     // Move the observer-facing accretion plane clearly into the lower half
-  // of the shadow and make it physically larger, so it feels like a broad
-  // ribbon wrapping around the front of the black hole rather than a small
-  // arc hovering near the middle.
-  float foregroundOffset = -0.102;
+  // Make the front accretion plane wider than the main photon ring so it
+  // reads as matter projecting toward the viewer rather than sitting inside
+  // the same circular footprint.
+  float foregroundOffset = -0.108;
   vec2 foregroundPlane = vec2(
-    d.x * 0.96,
-    (d.y - foregroundOffset) * 5.15
+    d.x * 0.76,
+    (d.y - foregroundOffset) * 5.55
   );
 
   float foregroundRadius = length(foregroundPlane);
   float foregroundAngle = atan(foregroundPlane.y, foregroundPlane.x);
 
-  // Keep only the lower/front-facing hemisphere of the torus.
-  float lowerHemisphere = 1.0 - smoothstep(-0.020, 0.125, d.y);
+  // Lower/front hemisphere only.
+  float lowerHemisphere = 1.0 - smoothstep(-0.012, 0.115, d.y);
 
   float foregroundTorus = band(
     foregroundRadius,
-    0.332,
+    0.392,
     0.000,
-    0.138
+    0.152
   );
 
   foregroundTorus *= lowerHemisphere;
 
-    float foregroundCore = band(
+  float foregroundCore = band(
     foregroundRadius,
-    0.332,
+    0.392,
     0.000,
-    0.040
+    0.046
   );
 
   foregroundCore *= lowerHemisphere;
@@ -260,22 +259,22 @@ void main() {
 
   // Fine lensed bridge across the near side of the shadow.
   // It is curved rather than ruler-straight, so it reads as depth rather than UI.
-      // This is the key visual read: the front ribbon should pass across the
-  // lower half of the shadow and feel closer to the viewer than the horizon.
-  float bridgeCurve = -0.082
-    - 0.060 * pow(abs(d.x) / 0.395, 2.0);
+    // Push the observer-facing bridge slightly lower and make it wider than
+  // the vertical ring footprint, so it feels like a protruding foreground lip.
+  float bridgeCurve = -0.086
+    - 0.070 * pow(abs(d.x) / 0.455, 2.0);
 
-  float bridgeHalfWidth = 0.022
-    + 0.015 * (1.0 - smoothstep(0.0, 0.395, abs(d.x)));
+  float bridgeHalfWidth = 0.026
+    + 0.018 * (1.0 - smoothstep(0.0, 0.455, abs(d.x)));
 
   float foregroundBridge = 1.0 - smoothstep(
     bridgeHalfWidth,
-    bridgeHalfWidth + 0.040,
+    bridgeHalfWidth + 0.044,
     abs(d.y - bridgeCurve)
   );
 
-  foregroundBridge *= 1.0 - smoothstep(-0.010, 0.120, d.y);
-  foregroundBridge *= 1.0 - smoothstep(0.345, 0.465, abs(d.x));
+  foregroundBridge *= 1.0 - smoothstep(-0.006, 0.105, d.y);
+  foregroundBridge *= 1.0 - smoothstep(0.385, 0.565, abs(d.x));
 
   float bridgeTexture = fbm(
     vec2(
@@ -284,11 +283,22 @@ void main() {
     )
   );
 
-  foregroundBridge *= 0.58 + 0.42 * smoothstep(
+    foregroundBridge *= 0.58 + 0.42 * smoothstep(
     0.26,
     0.82,
     bridgeTexture
   );
+
+  // Only preserve the observer-facing/front half of the torus.
+  // Anything above this front lip gets swallowed by the black centre.
+  float frontHalfMask = 1.0 - smoothstep(
+    bridgeCurve - 0.006,
+    bridgeCurve + 0.060,
+    d.y
+  );
+
+  foregroundTorus *= frontHalfMask;
+  foregroundCore *= frontHalfMask;
 
   float approachingSide = pow(
     max(0.0, 0.50 + 0.50 * sin(foregroundAngle + 0.72)),
@@ -372,17 +382,17 @@ void main() {
     0.20 * (1.0 - approachingSide)
   );
 
-  col += foregroundColour
+   col += foregroundColour
     * foregroundTorus
-    * (0.44 + 0.58 * e);
+    * (0.50 + 0.64 * e);
 
   col += white
     * foregroundCore
-    * (0.14 + 0.26 * e + 0.30 * approachingSide);
+    * (0.18 + 0.30 * e + 0.34 * approachingSide);
 
   col += mix(copper, white, 0.35 + 0.45 * approachingSide)
     * foregroundBridge
-    * (0.34 + 0.30 * e);
+    * (0.40 + 0.34 * e);
 
   float edgeVignette = 1.0 - smoothstep(0.78, 1.45, length(p));
   col *= 0.52 + 0.84 * edgeVignette;
