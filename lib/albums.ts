@@ -701,7 +701,8 @@ export async function getRecordingSummaryByRecordingId(
   if (!id) return null;
 
   const q = `
-    *[_type == "album" && count(tracks[recordingId == $recordingId]) > 0][0]{
+        *[_type == "album" && count(tracks[recordingId == $recordingId]) > 0][0]{
+      "albumCatalogueId": catalogueId,
       "albumSlug": slug.current,
       "albumTitle": title,
       "albumArtist": artist,
@@ -714,6 +715,7 @@ export async function getRecordingSummaryByRecordingId(
   `;
 
   const doc = await client.fetch<{
+    albumCatalogueId?: string;
     albumSlug?: string;
     albumTitle?: string;
     albumArtist?: string;
@@ -732,6 +734,7 @@ export async function getRecordingSummaryByRecordingId(
     recordingId: trackRecordingId,
     title: trackTitle,
     artist: normStr(doc?.track?.artist) ?? normStr(doc?.albumArtist) ?? null,
+    albumCatalogueId: normStr(doc?.albumCatalogueId) ?? null,
     albumSlug: normStr(doc?.albumSlug) ?? null,
     albumTitle: normStr(doc?.albumTitle) ?? null,
   };
@@ -741,6 +744,7 @@ export type RecordingSummary = {
   recordingId: string;
   title: string;
   artist?: string | null;
+  albumCatalogueId?: string | null;
   albumSlug?: string | null;
   albumTitle?: string | null;
 };

@@ -1,8 +1,12 @@
+// web/lib/shareTokenPlaybackContext.ts
 import "server-only";
 
 import crypto from "crypto";
 import { sql } from "@vercel/postgres";
-import { getRecordingSummaryByRecordingId } from "@/lib/albums";
+import {
+  getRecordingSummaryByRecordingId,
+  type RecordingSummary,
+} from "@/lib/albums";
 
 const CONTEXT_VERSION = 1;
 const CONTEXT_TTL_MS = 24 * 60 * 60 * 1000;
@@ -109,10 +113,7 @@ function consumerBinding(params: {
 
   if (!consumerKey) return null;
 
-  return crypto
-    .createHash("sha256")
-    .update(consumerKey)
-    .digest("base64url");
+  return crypto.createHash("sha256").update(consumerKey).digest("base64url");
 }
 
 function parseContext(
@@ -168,26 +169,8 @@ function parseContext(
   }
 }
 
-function scopeFromSummary(summary: unknown): string | null {
-  const root = asRecord(summary);
-  const album = asRecord(root?.album);
-
-  const candidates: unknown[] = [
-    album?.catalogueId,
-    album?.albumCatalogueId,
-    album?.id,
-    root?.albumScopeId,
-    root?.albumCatalogueId,
-    root?.albumId,
-    root?.catalogueId,
-  ];
-
-  for (const candidate of candidates) {
-    const scopeId = normalizeScopeId(asTrimmedString(candidate));
-    if (scopeId) return scopeId;
-  }
-
-  return null;
+function scopeFromSummary(summary: RecordingSummary | null): string | null {
+  return normalizeScopeId(asTrimmedString(summary?.albumCatalogueId));
 }
 
 async function getRecordingScopeId(
@@ -278,7 +261,10 @@ export async function resolveShareTokenPlaybackContext(params: {
     anonId: params.anonId,
   });
 
-  if (!expectedBinding || !timingSafeEqualText(payload.binding, expectedBinding)) {
+  if (
+    !expectedBinding ||
+    !timingSafeEqualText(payload.binding, expectedBinding)
+  ) {
     return null;
   }
 
@@ -307,9 +293,7 @@ export async function resolveShareTokenPlaybackContext(params: {
   if (tokenScopeId !== expectedScopeId) return null;
   if (token.revoked_at) return null;
 
-  const tokenExpiryMs = token.expires_at
-    ? Date.parse(token.expires_at)
-    : NaN;
+  const tokenExpiryMs = token.expires_at ? Date.parse(token.expires_at) : NaN;
 
   if (Number.isFinite(tokenExpiryMs) && tokenExpiryMs <= Date.now()) {
     return null;
