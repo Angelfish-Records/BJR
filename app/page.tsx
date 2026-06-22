@@ -71,7 +71,7 @@ export default async function Home() {
   const title = data?.title?.trim() || "Coming soon";
   const subtitle =
     data?.subtitle?.trim() ||
-    "A new home for audio and video—built for members, not platforms.";
+    "A new home for the music of Brendan John Roch.";
   const eyebrow = data?.eyebrow?.trim() || "";
   const ctaText = data?.ctaText?.trim() || "Visit label site";
   const ctaHref = data?.ctaHref?.trim() || "https://angelfishrecords.com";

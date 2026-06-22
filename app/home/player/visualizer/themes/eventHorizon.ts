@@ -236,20 +236,11 @@ void main() {
 
   foregroundTorus *= lowerHemisphere;
 
-  float foregroundCore = band(
+    float foregroundCore = band(
     foregroundRadius,
     0.332,
     0.000,
     0.040
-  );
-
-  foregroundCore *= lowerHemisphere;
-
-  float foregroundCore = band(
-    foregroundRadius,
-    0.258,
-    0.000,
-    0.032
   );
 
   foregroundCore *= lowerHemisphere;

@@ -24,7 +24,7 @@ export default function ExegesisReportForm(props: {
         className="mt-2 rounded-md bg-black/25 p-3 text-sm"
       >
         <div className="text-xs opacity-75">
-          Report submitted. Thanks — this helps keep the discourse usable.
+          Report submitted. Thank you.
         </div>
       </div>
     );

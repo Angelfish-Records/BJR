@@ -39,7 +39,7 @@ export async function generateMetadata(props: {
   const albumTitle =
     normTitle(doc?.albumDisplayTitle) || normTitle(doc?.albumTitle);
 
-  const display = albumTitle ? `${trackTitle} — ${albumTitle}` : trackTitle;
+  const display = albumTitle ? `${trackTitle} | ${albumTitle}` : trackTitle;
 
   const canonicalSlug = doc?.albumSlug ?? albumSlug;
   const canonicalDisplayId = normTitle(doc?.displayId) || decodedDisplayId;

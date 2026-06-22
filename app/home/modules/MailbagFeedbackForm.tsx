@@ -323,7 +323,7 @@ export default function MailbagFeedbackForm(props: Props) {
 
       {state === "success" ? (
         <div style={{ marginTop: 8, fontSize: 12, opacity: 0.72 }}>
-          Thanks — your {kind === "bug_report" ? "bug report" : "suggestion"}{" "}
+          Thanks, your {kind === "bug_report" ? "bug report" : "suggestion"}{" "}
           has been sent.
         </div>
       ) : null}
