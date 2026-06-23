@@ -39,6 +39,7 @@ type LyricsOk = {
   offsetMs: number;
   version: string;
   geniusUrl: string | null;
+  exegesisEnabled: boolean;
   cues: LyricsApiCue[];
 
   trackTitle?: string | null;
@@ -760,7 +761,19 @@ export default function PortalExegesis(props: { title?: string }) {
             <div className="rounded-md bg-white/5 p-3 text-sm">{lyricsErr}</div>
           </div>
         ) : lyrics ? (
-          // ✅ Gate: if catalogue is still loading, show a tiny header skeleton instead of flashing recordingId
+          lyrics.exegesisEnabled === false ? (
+            <div className="mx-auto max-w-5xl px-4 py-6">
+              <div className="rounded-xl bg-white/5 p-4">
+                <div className="text-sm font-medium opacity-90">
+                  Exegesis is not available for this track.
+                </div>
+                <div className="mt-1 text-sm opacity-60">
+                  This may be a skit, interlude, instrumental, or other track
+                  that is not open for lyric discussion.
+                </div>
+              </div>
+            </div>
+          ) : // ✅ Gate: if catalogue is still loading, show a tiny header skeleton instead of flashing recordingId
           noCatalogueYet ? (
             <div className="mx-auto max-w-5xl px-4 py-6">
               <div className="h-6 w-72 rounded bg-white/10 animate-pulse" />

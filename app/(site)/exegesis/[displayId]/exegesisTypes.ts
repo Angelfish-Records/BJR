@@ -9,6 +9,7 @@ export type LyricsApiOk = {
   offsetMs: number;
   version: string;
   geniusUrl: string | null;
+  exegesisEnabled: boolean;
   cues: LyricCue[];
   groupMap?: LyricGroupMap;
 };

@@ -47,6 +47,15 @@ export default defineType({
     }),
 
     defineField({
+      name: "exegesisEnabled",
+      title: "Enable Exegesis",
+      type: "boolean",
+      initialValue: true,
+      description:
+        "Turn this off for skits, interludes, instrumentals, or tracks that should not appear in the Exegesis system.",
+    }),
+
+    defineField({
       name: "cues",
       title: "Cues",
       type: "array",

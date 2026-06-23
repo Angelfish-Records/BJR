@@ -13,6 +13,7 @@ type TrackLyricsDoc = {
   offsetMs?: number;
   version?: string;
   geniusUrl?: string | null;
+  exegesisEnabled?: boolean;
   cues?: Array<{ _key?: string; tMs?: number; text?: string; endMs?: number }>;
 };
 
@@ -163,11 +164,12 @@ export async function GET(req: Request) {
   // Meta is fetched either via (albumSlug+displayId) or a recordingId lookup.
   const q = `
     {
-      "lyrics": *[_type == "lyrics" && recordingId == $recordingId][0]{
+            "lyrics": *[_type == "lyrics" && recordingId == $recordingId][0]{
         recordingId,
         offsetMs,
         version,
         geniusUrl,
+        exegesisEnabled,
         cues[]{ _key, tMs, text, endMs }
       },
       "meta": *[_type == "album" && $recordingId in tracks[].recordingId][0]{
@@ -184,7 +186,9 @@ export async function GET(req: Request) {
     }
   `;
 
-  const bundle = await client.fetch<LyricsQueryResult | null>(q, { recordingId });
+  const bundle = await client.fetch<LyricsQueryResult | null>(q, {
+    recordingId,
+  });
 
   const doc = bundle?.lyrics ?? null;
   const metaRaw = forcedMeta ?? bundle?.meta ?? null;
@@ -207,6 +211,7 @@ export async function GET(req: Request) {
 
   const version = trimStr(doc?.version) || "v1";
   const geniusUrl = safeUrl(doc?.geniusUrl);
+  const exegesisEnabled = doc?.exegesisEnabled !== false;
 
   // Embed exegesis grouping map (admin-auth not needed; it's just presentation data)
   const groupMap = await fetchGroupMap(recordingId);
@@ -245,6 +250,7 @@ export async function GET(req: Request) {
       offsetMs,
       version,
       geniusUrl,
+      exegesisEnabled,
       groupMap, // keyed by lineKey
     },
     {
