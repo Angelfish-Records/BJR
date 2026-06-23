@@ -4,7 +4,7 @@
 import React from "react";
 import type { PlaybackAdminSnapshot } from "@/lib/playbackAdmin";
 import type { DedupeRow } from "./types";
-import { AudienceBadge, TableShell } from "./PlaybackDashboardPrimitives";
+import { TableShell } from "./PlaybackDashboardPrimitives";
 import {
   BG_ACCENT,
   BG_ANON,
@@ -47,7 +47,6 @@ export function DedupeTable(props: {
               "Track / Session",
               "Progress",
               "Status",
-              "Audience",
               "Share link",
               "Listener",
             ].map((label) => (
@@ -202,18 +201,6 @@ export function DedupeTable(props: {
                   </span>
                 </td>
 
-                <td
-                  style={{
-                    padding: "10px 10px",
-                    borderBottom: ROW_BORDER,
-                    color: TEXT_STRONG,
-                    fontSize: FONT_SIZE_DEDUPE,
-                    whiteSpace: "nowrap",
-                    verticalAlign: "top",
-                  }}
-                >
-                  <AudienceBadge audience={row.audience} />
-                </td>
                 <td
                   style={{
                     padding: "10px 10px",

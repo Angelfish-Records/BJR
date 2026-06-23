@@ -298,7 +298,7 @@ function formatRedemptionLimit(maxRedemptions: number | null): string | null {
 
   return `The link will work ${maxRedemptions} time${
     maxRedemptions === 1 ? "" : "s"
-  }`;
+  }.`;
 }
 
 type AccessState = {
@@ -1341,7 +1341,7 @@ export default function FullPlayer(props: {
                 }}
               >
                 {shareTokenExpiryLabel ? (
-                  <span>Expires {shareTokenExpiryLabel} local time</span>
+                  <span>Expires {shareTokenExpiryLabel} local time.</span>
                 ) : null}
 
                 {shareTokenRedemptionLimit ? (
