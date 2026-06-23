@@ -37,7 +37,7 @@ export function DedupeTable(props: {
         style={{
           width: "100%",
           borderCollapse: "collapse",
-          minWidth: 1280,
+          minWidth: 1160,
         }}
       >
         <thead>
@@ -72,7 +72,7 @@ export function DedupeTable(props: {
           {rows.length === 0 ? (
             <tr>
               <td
-                colSpan={7}
+                colSpan={6}
                 style={{
                   padding: 10,
                   fontSize: FONT_SIZE_DEDUPE,
