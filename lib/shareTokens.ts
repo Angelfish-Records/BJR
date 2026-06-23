@@ -51,14 +51,24 @@ function normalizeTelemetryLabel(value: unknown): string | null {
   return label;
 }
 
+function toCanonicalIsoTimestamp(value: unknown): string | null {
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? value.toISOString() : null;
+  }
+
+  if (typeof value !== "string") return null;
+
+  const timestampMs = Date.parse(value);
+
+  return Number.isFinite(timestampMs)
+    ? new Date(timestampMs).toISOString()
+    : null;
+}
+
 function shareTokenAccessSummary(
   row: Pick<ShareTokenRow, "expires_at" | "max_redemptions">,
 ): ShareTokenAccessSummary {
-  const expiresAt =
-    typeof row.expires_at === "string" &&
-    Number.isFinite(Date.parse(row.expires_at))
-      ? row.expires_at
-      : null;
+  const expiresAt = toCanonicalIsoTimestamp(row.expires_at);
 
   const maxRedemptions =
     typeof row.max_redemptions === "number" &&
