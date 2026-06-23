@@ -6,20 +6,6 @@ import type { AlbumNavItem, AlbumPlayerBundle } from "@/lib/types";
 import { usePlayer } from "@/app/home/player/PlayerState";
 import { getAutoplayFlag } from "./urlState";
 
-function getSavedSt(slug: string): string {
-  try {
-    return (sessionStorage.getItem(`af_st:${slug}`) ?? "").trim();
-  } catch {
-    return "";
-  }
-}
-
-function setSavedSt(slug: string, st: string) {
-  try {
-    sessionStorage.setItem(`af_st:${slug}`, st);
-  } catch {}
-}
-
 type PlayerApi = ReturnType<typeof usePlayer>;
 
 export function usePlaybackReconciliation(props: {
@@ -99,11 +85,8 @@ export function usePlaybackReconciliation(props: {
         // ignore
       }
 
-      if (!out.get("st") && !out.get("share")) {
-        const saved = getSavedSt(slug);
-        if (saved) out.set("st", saved);
-      }
-
+      // Share-token context is URL-authoritative. A tokenless current URL
+      // must remain tokenless rather than reviving a prior session value.
       const query = out.toString();
       routerPush(`/${encodeURIComponent(slug)}${query ? `?${query}` : ""}`);
     },
@@ -196,7 +179,7 @@ export function usePlaybackReconciliation(props: {
     }
 
     primedAlbumKeyRef.current = primeKey;
-    }, [
+  }, [
     album,
     tracks,
     hasSt,
@@ -261,25 +244,6 @@ export function usePlaybackReconciliation(props: {
     setQueue,
     patchQuery,
   ]);
-
-  React.useEffect(() => {
-    if (!isPlayer) return;
-
-    const slug = qAlbum ?? currentAlbumSlug;
-    if (!slug) return;
-
-    const stFromUrl = (sp.get("st") ?? sp.get("share") ?? "").trim();
-
-    if (stFromUrl) {
-      setSavedSt(slug, stFromUrl);
-      return;
-    }
-
-    const saved = getSavedSt(slug);
-    if (saved) {
-      patchQuery({ st: saved, share: null });
-    }
-  }, [isPlayer, qAlbum, currentAlbumSlug, sp, patchQuery]);
 
   React.useEffect(() => {
     const onOpen = (event: Event) => {

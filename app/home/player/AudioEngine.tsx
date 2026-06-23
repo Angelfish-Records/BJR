@@ -62,6 +62,7 @@ type DeckMeta = {
   playbackId: string;
   attachKey: string;
   prepared: boolean;
+  hlsPath: "native" | "hlsjs";
 };
 
 type PreparedStandby = {
@@ -142,21 +143,134 @@ const audioDebugSessionId =
     ? crypto.randomUUID()
     : `debug-${Date.now().toString(36)}`;
 
-const audioDebugBuffer: AudioDebugEvent[] = [];
+const AUDIO_DEBUG_STORAGE_KEY = "af:audio-debug:v1";
+const AUDIO_DEBUG_STORAGE_LIMIT = 240;
+
+const audioDebugMemoryBuffer: AudioDebugEvent[] = [];
 let audioDebugFlushTimer: number | null = null;
+let audioDebugFlushInFlight = false;
+
+function isStoredAudioDebugEvent(value: unknown): value is AudioDebugEvent {
+  if (!value || typeof value !== "object") return false;
+
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    typeof candidate.t === "number" &&
+    Number.isFinite(candidate.t) &&
+    typeof candidate.event === "string"
+  );
+}
+
+function readPersistedAudioDebugEvents(): AudioDebugEvent[] | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(AUDIO_DEBUG_STORAGE_KEY);
+
+    if (!raw?.trim()) return [];
+
+    const parsed: unknown = JSON.parse(raw);
+
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .filter(isStoredAudioDebugEvent)
+      .slice(-AUDIO_DEBUG_STORAGE_LIMIT);
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedAudioDebugEvents(events: AudioDebugEvent[]): boolean {
+  if (typeof window === "undefined") return false;
+
+  try {
+    window.sessionStorage.setItem(
+      AUDIO_DEBUG_STORAGE_KEY,
+      JSON.stringify(events.slice(-AUDIO_DEBUG_STORAGE_LIMIT)),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function appendAudioDebugEvent(event: AudioDebugEvent): void {
+  const persisted = readPersistedAudioDebugEvents();
+
+  if (
+    persisted !== null &&
+    writePersistedAudioDebugEvents([...persisted, event])
+  ) {
+    return;
+  }
+
+  audioDebugMemoryBuffer.push(event);
+
+  if (audioDebugMemoryBuffer.length > AUDIO_DEBUG_STORAGE_LIMIT) {
+    audioDebugMemoryBuffer.splice(
+      0,
+      audioDebugMemoryBuffer.length - AUDIO_DEBUG_STORAGE_LIMIT,
+    );
+  }
+}
+
+function takeAudioDebugEvents(): AudioDebugEvent[] {
+  const persisted = readPersistedAudioDebugEvents();
+
+  if (persisted !== null) {
+    if (writePersistedAudioDebugEvents([])) {
+      return persisted;
+    }
+
+    return persisted;
+  }
+
+  return audioDebugMemoryBuffer.splice(0, audioDebugMemoryBuffer.length);
+}
+
+function restoreAudioDebugEvents(events: AudioDebugEvent[]): void {
+  if (!events.length) return;
+
+  const persisted = readPersistedAudioDebugEvents();
+
+  if (
+    persisted !== null &&
+    writePersistedAudioDebugEvents([...events, ...persisted])
+  ) {
+    return;
+  }
+
+  audioDebugMemoryBuffer.unshift(...events);
+
+  if (audioDebugMemoryBuffer.length > AUDIO_DEBUG_STORAGE_LIMIT) {
+    audioDebugMemoryBuffer.splice(
+      AUDIO_DEBUG_STORAGE_LIMIT,
+      audioDebugMemoryBuffer.length - AUDIO_DEBUG_STORAGE_LIMIT,
+    );
+  }
+}
 
 function flushAudioDebugSoon(force = false): void {
   if (!audioDebugEnabled()) return;
-  if (!audioDebugBuffer.length) return;
 
   const flush = () => {
     audioDebugFlushTimer = null;
-    if (!audioDebugBuffer.length) return;
 
-    const events = audioDebugBuffer.splice(0, audioDebugBuffer.length);
+    if (audioDebugFlushInFlight) return;
+
+    const events = takeAudioDebugEvents();
+    if (!events.length) return;
+
+    audioDebugFlushInFlight = true;
+
+    const restore = () => {
+      restoreAudioDebugEvents(events);
+    };
 
     try {
-      fetch("/api/playback/debug", {
+      void fetch("/api/playback/debug", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -165,8 +279,24 @@ function flushAudioDebugSoon(force = false): void {
           events,
         }),
         keepalive: true,
-      }).catch(() => {});
-    } catch {}
+      })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Audio debug request failed (${response.status})`);
+          }
+        })
+        .catch(restore)
+        .finally(() => {
+          audioDebugFlushInFlight = false;
+
+          if (readPersistedAudioDebugEvents()?.length) {
+            flushAudioDebugSoon();
+          }
+        });
+    } catch {
+      restore();
+      audioDebugFlushInFlight = false;
+    }
   };
 
   if (force) {
@@ -174,11 +304,13 @@ function flushAudioDebugSoon(force = false): void {
       window.clearTimeout(audioDebugFlushTimer);
       audioDebugFlushTimer = null;
     }
+
     flush();
     return;
   }
 
   if (audioDebugFlushTimer != null) return;
+
   audioDebugFlushTimer = window.setTimeout(flush, 5000);
 }
 
@@ -198,7 +330,7 @@ function sendAudioDebug(payload: {
     ...payload,
   };
 
-  audioDebugBuffer.push(event);
+  appendAudioDebugEvent(event);
 
   if (audioDebugVerboseEnabled()) {
     try {
@@ -325,6 +457,7 @@ export default function AudioEngine() {
   });
 
   const audioCtxRef = React.useRef<AudioContext | null>(null);
+  const audioCtxStateCleanupRef = React.useRef<(() => void) | null>(null);
   const analyserRef = React.useRef<AnalyserNode | null>(null);
   type U8AB = Uint8Array<ArrayBuffer>;
   const freqDataRef = React.useRef<U8AB | null>(null);
@@ -374,6 +507,66 @@ export default function AudioEngine() {
   const getActiveAudio = React.useCallback(() => {
     return getAudio(activeDeckRef.current);
   }, [getAudio]);
+
+  const sendRuntimeSnapshot = React.useCallback(
+    (event: string, reason?: string) => {
+      const activeDeck = activeDeckRef.current;
+      const audio = getAudio(activeDeck);
+      const meta = metaByDeckRef.current[activeDeck];
+      const context = audioCtxRef.current;
+
+      let bufferedEndSec: number | null = null;
+
+      try {
+        if (audio && audio.buffered.length > 0) {
+          bufferedEndSec = audio.buffered.end(audio.buffered.length - 1);
+        }
+      } catch {
+        bufferedEndSec = null;
+      }
+
+      const snapshot = {
+        epochMs: Date.now(),
+        reason: reason ?? null,
+        visibility:
+          typeof document === "undefined" ? null : document.visibilityState,
+        activeDeck,
+        hlsPath: meta?.hlsPath ?? null,
+        audioOutputMode: context ? "web-audio" : "direct-media",
+        audioContextState: context?.state ?? null,
+        mediaCurrentTimeSec:
+          audio && Number.isFinite(audio.currentTime)
+            ? audio.currentTime
+            : null,
+        mediaDurationSec:
+          audio && Number.isFinite(audio.duration) ? audio.duration : null,
+        mediaPaused: audio?.paused ?? null,
+        mediaEnded: audio?.ended ?? null,
+        mediaReadyState: audio?.readyState ?? null,
+        mediaNetworkState: audio?.networkState ?? null,
+        mediaBufferedEndSec: bufferedEndSec,
+        mediaErrorCode: audio?.error?.code ?? null,
+        mediaErrorMessage: audio?.error?.message ?? null,
+        nativeHlsCanPlay:
+          audio?.canPlayType("application/vnd.apple.mpegurl") ?? null,
+        alternateNativeHlsCanPlay:
+          audio?.canPlayType("application/x-mpegURL") ?? null,
+        hlsJsSupported: Hls.isSupported(),
+      };
+
+      sendAudioDebug({
+        event,
+        albumId: pRef.current.queueContextId ?? null,
+        recordingId:
+          meta?.recordingId ?? pRef.current.current?.recordingId ?? null,
+        playbackId:
+          meta?.playbackId ?? pRef.current.current?.muxPlaybackId ?? null,
+        source: `AudioEngine.${activeDeck}`,
+        detail: JSON.stringify(snapshot),
+      });
+    },
+    [getAudio],
+  );
 
   const getShareTokenFromLocation = React.useCallback((): string | null => {
     try {
@@ -916,6 +1109,26 @@ export default function AudioEngine() {
 
       const attachKey = `${playbackId}:${pRef.current.reloadNonce}`;
       const srcUrl = muxSignedHlsUrl(playbackId, args.token);
+      const useNativeHls = shouldUseNativeHls(a);
+      const hlsPath = useNativeHls ? "native" : "hlsjs";
+
+      sendAudioDebug({
+        event: "hls-path-selected",
+        albumId: pRef.current.queueContextId ?? null,
+        recordingId,
+        playbackId,
+        source: `AudioEngine.${args.deckId}`,
+        detail: JSON.stringify({
+          epochMs: Date.now(),
+          reason: args.reason,
+          path: hlsPath,
+          nativeHlsCanPlay: a.canPlayType("application/vnd.apple.mpegurl"),
+          alternateNativeHlsCanPlay: a.canPlayType("application/x-mpegURL"),
+          hlsJsSupported: Hls.isSupported(),
+          userAgent:
+            typeof navigator === "undefined" ? null : navigator.userAgent,
+        }),
+      });
 
       sendAudioDebug({
         event:
@@ -946,9 +1159,10 @@ export default function AudioEngine() {
         playbackId,
         attachKey,
         prepared: false,
+        hlsPath,
       };
 
-      if (shouldUseNativeHls(a)) {
+      if (useNativeHls) {
         sendAudioDebug({
           event:
             args.reason === "standby"
@@ -1474,6 +1688,9 @@ export default function AudioEngine() {
       freqDataRef.current = null;
       timeDataRef.current = null;
 
+      audioCtxStateCleanupRef.current?.();
+      audioCtxStateCleanupRef.current = null;
+
       const ctx = audioCtxRef.current;
       audioCtxRef.current = null;
       if (ctx) {
@@ -1519,11 +1736,29 @@ export default function AudioEngine() {
     const ensureAudioGraph = async () => {
       const a = audioARef.current;
       const b = audioBRef.current;
+
       if (!a || !b) return;
-      if (audioCtxRef.current) return;
+
+      if (audioCtxRef.current) {
+        sendRuntimeSnapshot("audio-graph-already-present");
+        return;
+      }
+
+      sendRuntimeSnapshot("audio-graph-create-start");
 
       const ctx = new AudioContext();
       audioCtxRef.current = ctx;
+
+      const onStateChange = () => {
+        sendRuntimeSnapshot("audio-context-statechange", `state=${ctx.state}`);
+      };
+
+      audioCtxStateCleanupRef.current?.();
+      audioCtxStateCleanupRef.current = () => {
+        ctx.removeEventListener("statechange", onStateChange);
+      };
+
+      ctx.addEventListener("statechange", onStateChange);
 
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 2048;
@@ -1545,18 +1780,35 @@ export default function AudioEngine() {
       timeDataRef.current = new Uint8Array(
         new ArrayBuffer(analyser.fftSize),
       ) as U8AB;
+
+      sendRuntimeSnapshot("audio-graph-created");
     };
 
     const onUserGesture = async () => {
+      sendRuntimeSnapshot("audio-user-gesture");
+
       await ensureAudioGraph();
-      if (audioCtxRef.current?.state === "suspended") {
-        await audioCtxRef.current.resume();
+
+      const context = audioCtxRef.current;
+
+      if (context?.state === "suspended") {
+        sendRuntimeSnapshot("audio-context-resume-requested");
+
+        try {
+          await context.resume();
+          sendRuntimeSnapshot("audio-context-resume-resolved");
+        } catch {
+          sendRuntimeSnapshot("audio-context-resume-rejected");
+        }
       }
     };
 
     window.addEventListener("af:play-intent", onUserGesture);
-    return () => window.removeEventListener("af:play-intent", onUserGesture);
-  }, []);
+
+    return () => {
+      window.removeEventListener("af:play-intent", onUserGesture);
+    };
+  }, [sendRuntimeSnapshot]);
 
   React.useEffect(() => {
     let raf: number | null = null;
@@ -1696,17 +1948,49 @@ export default function AudioEngine() {
   }, [getAudio, p.volume, p.muted]);
 
   React.useEffect(() => {
-    const flush = () => flushAudioDebugSoon(true);
+    const recordAndFlush = (event: string) => {
+      sendRuntimeSnapshot(event);
+      flushAudioDebugSoon(true);
+    };
 
-    window.addEventListener("pagehide", flush);
-    document.addEventListener("visibilitychange", flush);
+    const onVisibilityChange = () => {
+      recordAndFlush("lifecycle-visibilitychange");
+    };
+
+    const onPageHide = () => {
+      recordAndFlush("lifecycle-pagehide");
+    };
+
+    const onPageShow = () => {
+      recordAndFlush("lifecycle-pageshow");
+    };
+
+    const onFreeze = () => {
+      recordAndFlush("lifecycle-freeze");
+    };
+
+    const onResume = () => {
+      recordAndFlush("lifecycle-resume");
+    };
+
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("pageshow", onPageShow);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    document.addEventListener("freeze", onFreeze);
+    document.addEventListener("resume", onResume);
 
     return () => {
-      window.removeEventListener("pagehide", flush);
-      document.removeEventListener("visibilitychange", flush);
-      flush();
+      sendRuntimeSnapshot("lifecycle-audio-engine-unmount");
+
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("pageshow", onPageShow);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      document.removeEventListener("freeze", onFreeze);
+      document.removeEventListener("resume", onResume);
+
+      flushAudioDebugSoon(true);
     };
-  }, []);
+  }, [sendRuntimeSnapshot]);
 
   React.useEffect(() => {
     const albumId = normalizeAlbumId(p.queueContextId);
@@ -1994,6 +2278,37 @@ export default function AudioEngine() {
       const a = getAudio(deckId);
       const meta = metaByDeckRef.current[deckId];
 
+      let bufferedEndSec: number | null = null;
+
+      try {
+        if (a && a.buffered.length > 0) {
+          bufferedEndSec = a.buffered.end(a.buffered.length - 1);
+        }
+      } catch {
+        bufferedEndSec = null;
+      }
+
+      const fallbackDetail = a
+        ? JSON.stringify({
+            epochMs: Date.now(),
+            visibility:
+              typeof document === "undefined" ? null : document.visibilityState,
+            hlsPath: meta?.hlsPath ?? null,
+            audioContextState: audioCtxRef.current?.state ?? null,
+            currentTimeSec: Number.isFinite(a.currentTime)
+              ? a.currentTime
+              : null,
+            durationSec: Number.isFinite(a.duration) ? a.duration : null,
+            paused: a.paused,
+            ended: a.ended,
+            readyState: a.readyState,
+            networkState: a.networkState,
+            bufferedEndSec,
+            mediaErrorCode: a.error?.code ?? null,
+            mediaErrorMessage: a.error?.message ?? null,
+          })
+        : "missing-audio";
+
       sendAudioDebug({
         event,
         albumId: pRef.current.queueContextId ?? null,
@@ -2002,15 +2317,7 @@ export default function AudioEngine() {
         playbackId:
           meta?.playbackId ?? pRef.current.current?.muxPlaybackId ?? null,
         source: `AudioEngine.${deckId}`,
-        detail:
-          detail ??
-          (a
-            ? `readyState=${a.readyState};networkState=${a.networkState};currentTime=${a.currentTime.toFixed(
-                2,
-              )};duration=${
-                Number.isFinite(a.duration) ? a.duration.toFixed(2) : "NaN"
-              }`
-            : "missing-audio"),
+        detail: detail ?? fallbackDetail,
       });
     };
 
