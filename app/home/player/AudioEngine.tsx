@@ -5,7 +5,7 @@ import Hls from "hls.js";
 import { useUser } from "@clerk/nextjs";
 import { usePlayer } from "./PlayerState";
 import type { PlayerTrack } from "@/lib/types";
-import { muxSignedHlsUrl } from "@/lib/mux";
+import { muxPublicStaticAudioUrl, muxSignedHlsUrl } from "@/lib/mux";
 import { mediaSurface } from "./mediaSurface";
 import { audioSurface } from "./audioSurface";
 import type {
@@ -62,7 +62,7 @@ type DeckMeta = {
   playbackId: string;
   attachKey: string;
   prepared: boolean;
-  hlsPath: "native" | "hlsjs";
+  hlsPath: "native" | "hlsjs" | "static-m4a";
 };
 
 type PreparedStandby = {
@@ -95,6 +95,14 @@ function shouldUseNativeHls(a: HTMLMediaElement): boolean {
   return isSafari && a.canPlayType("application/vnd.apple.mpegurl") !== "";
 }
 
+const STATIC_M4A_CANARY_RECORDING_IDS = new Set<string>([
+  "AFR-R-0001",
+  "AFR-R-0002",
+]);
+
+const STATIC_M4A_STANDBY_MIN_BUFFER_AHEAD_SEC = 20;
+const STATIC_M4A_STANDBY_TIMEOUT_MS = 20_000;
+
 function isAppleMobileWebKit(): boolean {
   if (typeof navigator === "undefined") return false;
 
@@ -108,9 +116,40 @@ function isAppleMobileWebKit(): boolean {
   );
 }
 
-function isDocumentHidden(): boolean {
+function shouldUseStaticM4aCanary(recordingId: string): boolean {
   return (
-    typeof document !== "undefined" && document.visibilityState === "hidden"
+    isAppleMobileWebKit() && STATIC_M4A_CANARY_RECORDING_IDS.has(recordingId)
+  );
+}
+
+function bufferedAheadSeconds(media: HTMLMediaElement): number {
+  try {
+    const currentTime = Math.max(0, media.currentTime);
+
+    for (let index = 0; index < media.buffered.length; index += 1) {
+      const start = media.buffered.start(index);
+      const end = media.buffered.end(index);
+
+      if (currentTime >= start && currentTime <= end) {
+        return Math.max(0, end - currentTime);
+      }
+    }
+
+    if (media.buffered.length > 0) {
+      return Math.max(
+        0,
+        media.buffered.end(media.buffered.length - 1) - currentTime,
+      );
+    }
+  } catch {}
+
+  return 0;
+}
+
+function isStaticM4aStandbyBuffered(media: HTMLMediaElement): boolean {
+  return (
+    media.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA &&
+    bufferedAheadSeconds(media) >= STATIC_M4A_STANDBY_MIN_BUFFER_AHEAD_SEC
   );
 }
 
@@ -465,6 +504,7 @@ export default function AudioEngine() {
 
   const nearEndWarmKeyRef = React.useRef<string | null>(null);
   const debugProgressHeartbeatRef = React.useRef<string | null>(null);
+  const staticM4aProgressProofRef = React.useRef<string | null>(null);
   const autoAdvanceKeyRef = React.useRef<string | null>(null);
   const suppressPauseDeckRef = React.useRef<DeckId | null>(null);
 
@@ -1127,12 +1167,19 @@ export default function AudioEngine() {
       if (!playbackId || !recordingId) return false;
 
       const attachKey = `${playbackId}:${pRef.current.reloadNonce}`;
-      const srcUrl = muxSignedHlsUrl(playbackId, args.token);
-      const useNativeHls = shouldUseNativeHls(a);
-      const hlsPath = useNativeHls ? "native" : "hlsjs";
+      const useStaticM4a = shouldUseStaticM4aCanary(recordingId);
+      const srcUrl = useStaticM4a
+        ? muxPublicStaticAudioUrl(playbackId)
+        : muxSignedHlsUrl(playbackId, args.token);
+      const useNativeHls = !useStaticM4a && shouldUseNativeHls(a);
+      const hlsPath = useStaticM4a
+        ? "static-m4a"
+        : useNativeHls
+          ? "native"
+          : "hlsjs";
 
       sendAudioDebug({
-        event: "hls-path-selected",
+        event: "transport-path-selected",
         albumId: pRef.current.queueContextId ?? null,
         recordingId,
         playbackId,
@@ -1168,7 +1215,8 @@ export default function AudioEngine() {
       }
 
       a.crossOrigin = "anonymous";
-      a.preload = args.reason === "standby" ? "auto" : "metadata";
+      a.preload =
+        args.reason === "standby" || useStaticM4a ? "auto" : "metadata";
       a.volume = Math.max(0, Math.min(1, pRef.current.volume));
       a.muted = pRef.current.muted;
 
@@ -1180,6 +1228,132 @@ export default function AudioEngine() {
         prepared: false,
         hlsPath,
       };
+
+      if (useStaticM4a) {
+        sendAudioDebug({
+          event:
+            args.reason === "standby"
+              ? "standby-static-m4a-attach"
+              : "active-static-m4a-attach",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId,
+          playbackId,
+          source: `AudioEngine.${args.deckId}`,
+        });
+
+        return new Promise<boolean>((resolve) => {
+          let settled = false;
+          let timeoutId: number | null = null;
+
+          const snapshot = () =>
+            JSON.stringify({
+              readyState: a.readyState,
+              networkState: a.networkState,
+              currentTimeSec: Number(a.currentTime.toFixed(3)),
+              bufferedAheadSec: Number(bufferedAheadSeconds(a).toFixed(3)),
+            });
+
+          const cleanup = () => {
+            a.removeEventListener("loadedmetadata", onMaybeReady);
+            a.removeEventListener("canplay", onMaybeReady);
+            a.removeEventListener("canplaythrough", onMaybeReady);
+            a.removeEventListener("progress", onMaybeReady);
+            a.removeEventListener("error", onError);
+
+            if (timeoutId != null) {
+              window.clearTimeout(timeoutId);
+              timeoutId = null;
+            }
+          };
+
+          const finish = (ok: boolean) => {
+            if (settled) return;
+
+            settled = true;
+            cleanup();
+
+            const meta = metaByDeckRef.current[args.deckId];
+
+            if (ok && meta?.attachKey === attachKey) {
+              metaByDeckRef.current[args.deckId] = {
+                ...meta,
+                prepared: true,
+              };
+            }
+
+            resolve(ok);
+          };
+
+          const onMaybeReady = () => {
+            const ready =
+              args.reason === "standby"
+                ? isStaticM4aStandbyBuffered(a)
+                : a.readyState >= HTMLMediaElement.HAVE_METADATA;
+
+            if (!ready) return;
+
+            if (args.reason === "standby") {
+              sendAudioDebug({
+                event: "standby-static-m4a-buffered",
+                albumId: pRef.current.queueContextId ?? null,
+                recordingId,
+                playbackId,
+                source: `AudioEngine.${args.deckId}`,
+                detail: snapshot(),
+              });
+            }
+
+            finish(true);
+          };
+
+          const onError = () => {
+            sendAudioDebug({
+              event:
+                args.reason === "standby"
+                  ? "standby-static-m4a-error"
+                  : "active-static-m4a-error",
+              albumId: pRef.current.queueContextId ?? null,
+              recordingId,
+              playbackId,
+              source: `AudioEngine.${args.deckId}`,
+              detail: snapshot(),
+            });
+
+            finish(false);
+          };
+
+          a.addEventListener("loadedmetadata", onMaybeReady);
+          a.addEventListener("canplay", onMaybeReady);
+          a.addEventListener("canplaythrough", onMaybeReady);
+          a.addEventListener("progress", onMaybeReady);
+          a.addEventListener("error", onError);
+
+          try {
+            a.src = srcUrl;
+            a.load();
+            onMaybeReady();
+          } catch {
+            onError();
+            return;
+          }
+
+          timeoutId = window.setTimeout(() => {
+            sendAudioDebug({
+              event:
+                args.reason === "standby"
+                  ? "standby-static-m4a-buffer-timeout"
+                  : "active-static-m4a-timeout",
+              albumId: pRef.current.queueContextId ?? null,
+              recordingId,
+              playbackId,
+              source: `AudioEngine.${args.deckId}`,
+              detail: snapshot(),
+            });
+
+            finish(false);
+          }, STATIC_M4A_STANDBY_TIMEOUT_MS);
+        });
+      }
 
       if (useNativeHls) {
         sendAudioDebug({
@@ -1757,6 +1931,14 @@ export default function AudioEngine() {
       const b = audioBRef.current;
 
       if (!a || !b) return;
+
+      if (isAppleMobileWebKit()) {
+        sendRuntimeSnapshot(
+          "audio-graph-skipped-apple-mobile",
+          "direct-html-media-output",
+        );
+        return;
+      }
 
       if (audioCtxRef.current) {
         sendRuntimeSnapshot("audio-graph-already-present");
@@ -2363,25 +2545,6 @@ export default function AudioEngine() {
 
       if (!cur || !nextTrack) return;
 
-      const isAppleMobileBackground =
-        isAppleMobileWebKit() && isDocumentHidden();
-
-      // Safari can continue an established native-HLS media session while
-      // locked, but has rejected a first play() on the standby deck in this
-      // circumstance. Do not cut the outgoing track short for a handoff that
-      // the browser cannot legally complete.
-      if (trigger === "timeupdate" && isAppleMobileBackground) {
-        sendAudioDebug({
-          event: "ios-hidden-timeupdate-auto-next-deferred",
-          albumId: s.queueContextId ?? null,
-          recordingId: cur.recordingId,
-          playbackId: cur.muxPlaybackId ?? null,
-          source: "AudioEngine",
-          detail: `next=${nextTrack.recordingId}`,
-        });
-        return;
-      }
-
       const key = `${cur.recordingId}:${
         telemetrySessionIdRef.current ?? cur.muxPlaybackId ?? ""
       }`;
@@ -2397,25 +2560,6 @@ export default function AudioEngine() {
         source: "AudioEngine",
         detail: `next=${nextTrack.recordingId}`,
       });
-
-      // On locked Apple WebKit, avoid the known-forbidden first play() on deck
-      // B. This lets us test the only narrower continuation path available to
-      // a browser: changing source on the already-active native media element
-      // after it has actually ended.
-      if (trigger === "ended" && isAppleMobileBackground) {
-        sendAudioDebug({
-          event: "ios-hidden-ended-same-deck-continuation",
-          albumId: s.queueContextId ?? null,
-          recordingId: cur.recordingId,
-          playbackId: cur.muxPlaybackId ?? null,
-          source: `AudioEngine.${activeDeckRef.current}`,
-          detail: `next=${nextTrack.recordingId}`,
-        });
-
-        playIntentRef.current = true;
-        pRef.current.advanceFromEngine();
-        return;
-      }
 
       // The next track has already been authorised by either the full album
       // session or the bounded anonymous sample session. Completion accounting
@@ -2518,6 +2662,33 @@ export default function AudioEngine() {
         progressMs: ms,
         durationMs: durMs,
       });
+
+      const deckMeta = metaByDeckRef.current[deckId];
+      const staticM4aProgressProofKey = `${curId}:${
+        telemetrySessionIdRef.current ?? ""
+      }`;
+
+      if (
+        deckMeta?.hlsPath === "static-m4a" &&
+        ms >= 5_000 &&
+        staticM4aProgressProofRef.current !== staticM4aProgressProofKey
+      ) {
+        staticM4aProgressProofRef.current = staticM4aProgressProofKey;
+
+        sendAudioDebug({
+          event: "static-m4a-progress-confirmed",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId: curId,
+          playbackId: pRef.current.current?.muxPlaybackId ?? null,
+          source: `AudioEngine.${deckId}`,
+          detail: JSON.stringify({
+            visibility:
+              typeof document === "undefined" ? null : document.visibilityState,
+            currentTimeSec: Number(a.currentTime.toFixed(3)),
+            bufferedAheadSec: Number(bufferedAheadSeconds(a).toFixed(3)),
+          }),
+        });
+      }
 
       const remainingMs = durMs - ms;
       const nextTrack = getNextTrack();
