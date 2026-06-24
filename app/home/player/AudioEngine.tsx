@@ -95,6 +95,25 @@ function shouldUseNativeHls(a: HTMLMediaElement): boolean {
   return isSafari && a.canPlayType("application/vnd.apple.mpegurl") !== "";
 }
 
+function isAppleMobileWebKit(): boolean {
+  if (typeof navigator === "undefined") return false;
+
+  const ua = navigator.userAgent;
+  const isAppleHandheld = /iPad|iPhone|iPod/i.test(ua);
+  const isTouchCapableIpadDesktopUa =
+    navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+
+  return (
+    (isAppleHandheld || isTouchCapableIpadDesktopUa) && /AppleWebKit/i.test(ua)
+  );
+}
+
+function isDocumentHidden(): boolean {
+  return (
+    typeof document !== "undefined" && document.visibilityState === "hidden"
+  );
+}
+
 function newPlaybackSessionId(): string {
   if (
     typeof crypto !== "undefined" &&
@@ -2335,25 +2354,68 @@ export default function AudioEngine() {
       pRef.current.clearPendingSeek();
     };
 
-    const handleAutoAdvance = async () => {
+    const handleAutoAdvance = async (
+      trigger: "timeupdate" | "ended",
+    ): Promise<void> => {
       const s = pRef.current;
       const cur = s.current;
       const nextTrack = getNextTrack();
 
       if (!cur || !nextTrack) return;
 
-      const key = `${cur.recordingId}:${telemetrySessionIdRef.current ?? cur.muxPlaybackId ?? ""}`;
+      const isAppleMobileBackground =
+        isAppleMobileWebKit() && isDocumentHidden();
+
+      // Safari can continue an established native-HLS media session while
+      // locked, but has rejected a first play() on the standby deck in this
+      // circumstance. Do not cut the outgoing track short for a handoff that
+      // the browser cannot legally complete.
+      if (trigger === "timeupdate" && isAppleMobileBackground) {
+        sendAudioDebug({
+          event: "ios-hidden-timeupdate-auto-next-deferred",
+          albumId: s.queueContextId ?? null,
+          recordingId: cur.recordingId,
+          playbackId: cur.muxPlaybackId ?? null,
+          source: "AudioEngine",
+          detail: `next=${nextTrack.recordingId}`,
+        });
+        return;
+      }
+
+      const key = `${cur.recordingId}:${
+        telemetrySessionIdRef.current ?? cur.muxPlaybackId ?? ""
+      }`;
+
       if (autoAdvanceKeyRef.current === key) return;
       autoAdvanceKeyRef.current = key;
 
       sendAudioDebug({
-        event: "auto-next-from-timeupdate",
+        event: `auto-next-from-${trigger}`,
         albumId: s.queueContextId ?? null,
         recordingId: cur.recordingId,
         playbackId: cur.muxPlaybackId ?? null,
         source: "AudioEngine",
         detail: `next=${nextTrack.recordingId}`,
       });
+
+      // On locked Apple WebKit, avoid the known-forbidden first play() on deck
+      // B. This lets us test the only narrower continuation path available to
+      // a browser: changing source on the already-active native media element
+      // after it has actually ended.
+      if (trigger === "ended" && isAppleMobileBackground) {
+        sendAudioDebug({
+          event: "ios-hidden-ended-same-deck-continuation",
+          albumId: s.queueContextId ?? null,
+          recordingId: cur.recordingId,
+          playbackId: cur.muxPlaybackId ?? null,
+          source: `AudioEngine.${activeDeckRef.current}`,
+          detail: `next=${nextTrack.recordingId}`,
+        });
+
+        playIntentRef.current = true;
+        pRef.current.advanceFromEngine();
+        return;
+      }
 
       // The next track has already been authorised by either the full album
       // session or the bounded anonymous sample session. Completion accounting
@@ -2481,7 +2543,7 @@ export default function AudioEngine() {
         remainingMs > 0 &&
         remainingMs <= AUTO_ADVANCE_WINDOW_MS
       ) {
-        void handleAutoAdvance();
+        void handleAutoAdvance("timeupdate");
       }
 
       const pct = ms / durMs;
@@ -2649,7 +2711,7 @@ export default function AudioEngine() {
       void reportPlaythroughComplete(1);
 
       if (nextTrack) {
-        void handleAutoAdvance();
+        void handleAutoAdvance("ended");
       } else {
         pRef.current.advanceFromEngine();
       }
