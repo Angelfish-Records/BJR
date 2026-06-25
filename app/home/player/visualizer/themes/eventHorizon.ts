@@ -170,99 +170,101 @@ void main() {
   corona *= 1.0 - horizonMask;
 
   // ---------------------------------------------------------------------------
-  // Rear accretion disc:
+  // Coherent lensed accretion disc.
   //
-  // A bright lensed arch behind the horizon. It is drawn before the black
-  // shadow, so the central portion disappears behind the event horizon while
-  // the two shoulders rise out around it.
+  // One compressed ellipse supplies both visible branches:
+  //
+  // - its upper branch is the distant/rear side, rendered before the shadow;
+  // - its lower branch is the near/front side, rendered after the shadow.
+  //
+  // The horizon naturally swallows the central rear branch, while more of it
+  // becomes visible toward the shoulders as the disc curves back into the
+  // broader gravitational structure.
   // ---------------------------------------------------------------------------
 
-     float rearExtent = 0.505;
-  float rearX = d.x / rearExtent;
-  float rearArcHeight = sqrt(max(0.0, 1.0 - rearX * rearX));
+  float discHalfWidth = 0.535;
+  float discHalfHeight = 0.135;
+  float discCentreY = 0.015;
 
-  // Rear lensed material belongs below the centreline here, peeking from
-  // behind the shadow rather than climbing up over it.
-  float rearArcY = -0.122 - rearArcHeight * 0.068;
-
-  float rearArc = 1.0 - smoothstep(
-    0.014,
-    0.060,
-    abs(d.y - rearArcY)
+  vec2 discSpace = vec2(
+    d.x / discHalfWidth,
+    (d.y - discCentreY) / discHalfHeight
   );
 
-  rearArc *= 1.0 - smoothstep(-0.030, 0.100, d.y);
-  rearArc *= 1.0 - smoothstep(0.365, 0.500, abs(d.x));
+  float discRadius = length(discSpace);
+  float discAngle = atan(discSpace.y, discSpace.x);
 
-  float rearTexture = ridged(
+  // A genuinely thin ellipse: no filled foreground slab and no independent
+  // bridge thickness to spill into the central black space.
+  float discBand = band(
+    discRadius,
+    1.0,
+    0.0,
+    0.092
+  );
+
+  float discTexture = ridged(
     vec2(
-      d.x * 12.0 + t * 0.66,
-      (d.y - rearArcY) * 29.0 - t * 0.24
+      discAngle * 2.12 + t * 0.78,
+      discRadius * 6.20 - t * 0.32
     )
   );
 
-  rearArc *= 0.48 + 0.52 * smoothstep(0.25, 0.90, rearTexture);
-
-  // ---------------------------------------------------------------------------
-  // Foreground accretion disc:
-  //
-  // This is an independent compressed torus, not a radial blob. Its lower half
-  // is allowed to sit in front of the black hole, creating the convincing
-  // "matter passing across the face" relationship.
-  // ---------------------------------------------------------------------------
-
-   // Observer-facing accretion disc:
-  // render it as a single thin textured lip, not as a filled torus with
-  // a separate interior mass. This keeps the foreground disc faithful to
-  // the black-hole reference: one front-facing half only, with no diffuse
-  // spill inward toward the centre.
-   // Front-facing accretion lip:
-  // lowest at the centre, rising toward the side attachments so it feels
-  // like the front half of a torus bulging toward the viewer.
-  float bridgeCurve = -0.132
-    + 0.082 * pow(abs(d.x) / 0.535, 2.0);
-
-  float bridgeHalfWidth = 0.018
-    + 0.014 * (1.0 - smoothstep(0.0, 0.535, abs(d.x)));
-
-  // Keep the observer-facing/front portion only, but preserve much more of
-  // the structure so it reads as roughly the front 70% of the ring.
-  float frontHalfMask = 1.0 - smoothstep(0.004, 0.090, d.y - bridgeCurve);
-  float frontSpanMask = 1.0 - smoothstep(0.505, 0.735, abs(d.x));
-
-  float foregroundAngle = atan(d.y - bridgeCurve, d.x);
-
-  float foregroundBridge = 1.0 - smoothstep(
-    bridgeHalfWidth,
-    bridgeHalfWidth + 0.028,
-    abs(d.y - bridgeCurve)
+  discTexture = smoothstep(
+    0.36,
+    0.95,
+    discTexture
   );
 
-  foregroundBridge *= frontHalfMask;
-  foregroundBridge *= frontSpanMask;
+  discBand *= 0.62 + 0.38 * discTexture;
 
-    float foregroundTexture = ridged(
-    vec2(
-      foregroundAngle * 2.10 + t * 0.80,
-      abs(d.y - bridgeCurve) * 62.0 - t * 0.34
+  // In this coordinate system, negative Y is visually lower on the canvas.
+  // That lower branch is the observer-facing/front side of the disc.
+  float discFrontWeight = 1.0 - smoothstep(
+    -0.090,
+    0.075,
+    discSpace.y
+  );
+
+  float discRearWeight = 1.0 - discFrontWeight;
+
+  // Preserve the near side across the full central span. The rear side only
+  // begins to emerge at the shoulders, where it can visibly bend back toward
+  // the main ring rather than hovering as an independent upper eyebrow.
+  float rearShoulderReveal = smoothstep(
+    0.115,
+    0.335,
+    abs(d.x)
+  );
+
+  float discExtent = 1.0 - smoothstep(
+    0.485,
+    0.590,
+    abs(d.x)
+  );
+
+  float discFront = discBand
+    * discFrontWeight
+    * discExtent;
+
+  float discRear = discBand
+    * discRearWeight
+    * rearShoulderReveal
+    * discExtent;
+
+  // Brings a little extra authority to the parts that visually reconnect
+  // the wide horizontal plane to the circular photon structure.
+  float discAttachment = smoothstep(
+    0.220,
+    0.360,
+    abs(d.x)
+  ) * (
+    1.0 - smoothstep(
+      0.405,
+      0.535,
+      abs(d.x)
     )
   );
-
-  foregroundTexture = smoothstep(
-    0.34,
-    0.94,
-    foregroundTexture
-  );
-
-  foregroundBridge *= 0.64 + 0.36 * foregroundTexture;
-
-    float approachingSide = pow(
-    max(0.0, 0.50 + 0.50 * sin(foregroundAngle + 0.72)),
-    2.3
-  );
-
-  float attachmentBoost = smoothstep(0.18, 0.42, abs(d.x))
-    * (1.0 - smoothstep(0.42, 0.68, abs(d.x)));
 
   // Stable star field: no frame-stepped twinkling or popping.
   vec2 starGrid = floor((p + 1.55) * 176.0);
@@ -295,8 +297,7 @@ void main() {
   vec3 violet = vec3(0.165, 0.095, 0.285);
   vec3 amber = vec3(0.930, 0.560, 0.250);
   vec3 blue = vec3(0.250, 0.600, 1.000);
-  vec3 white = vec3(0.960, 0.980, 1.000);
-  vec3 copper = vec3(1.000, 0.420, 0.145);
+   vec3 white = vec3(0.960, 0.980, 1.000);
 
   vec3 col = deep;
 
@@ -308,13 +309,20 @@ void main() {
     smoothstep(-1.0, 1.0, sin(a * 2.0 + t))
   );
 
-  col += ringColour * ringMatter * (0.44 + 0.58 * e);
+   col += ringColour * ringMatter * (0.44 + 0.58 * e);
   col += white * lensGlow * (0.040 + 0.15 * e);
   col += vec3(0.18, 0.36, 0.72) * corona * (0.12 + 0.24 * e);
 
-     col += mix(blue, amber, 0.48 + 0.52 * sin(t + d.x * 3.0))
-    * rearArc
-    * (0.10 + 0.15 * e);
+  vec3 accretionColour = mix(
+    ringColour,
+    white,
+    0.07 + 0.16 * discTexture
+  );
+
+  // Distant/rear branch. The horizon mask below erases its central segment.
+  col += accretionColour
+    * discRear
+    * (0.28 + 0.22 * e + 0.12 * discAttachment);
 
   col += white * starField * (0.16 + 0.28 * e);
 
@@ -327,23 +335,15 @@ void main() {
     * photonRing
     * (0.42 + 0.34 * e);
 
-  // The foreground plane is deliberately composited last: it is matter nearer
-  // to the observer than the horizon and should visibly pass across its face.
-    // Keep the foreground lip visually aligned with the main photon ring
-  // rather than treating it as a separate glowing material system.
-    vec3 foregroundColour = mix(
-    ringColour,
-    white,
-    0.08 + 0.20 * approachingSide
-  );
-
-  col += foregroundColour
-    * foregroundBridge
-    * (0.50 + 0.42 * e + 0.14 * attachmentBoost);
+  // The near/front branch is composited after the shadow, so it alone can
+  // cross the lower face of the black centre.
+  col += accretionColour
+    * discFront
+    * (0.46 + 0.34 * e + 0.16 * discAttachment);
 
   col += white
-    * foregroundBridge
-    * (0.06 + 0.14 * e + 0.16 * approachingSide + 0.10 * attachmentBoost);
+    * discFront
+    * (0.045 + 0.12 * e + 0.08 * discAttachment);
 
   float edgeVignette = 1.0 - smoothstep(0.78, 1.45, length(p));
   col *= 0.52 + 0.84 * edgeVignette;
