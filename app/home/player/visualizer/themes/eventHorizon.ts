@@ -182,7 +182,9 @@ void main() {
   // broader gravitational structure.
   // ---------------------------------------------------------------------------
 
-  float discHalfWidth = 0.535;
+   // The horizontal plane needs a materially wider footprint than the
+  // upright photon ring, so its shoulders visibly project toward the viewer.
+  float discHalfWidth = 0.655;
   float discHalfHeight = 0.135;
   float discCentreY = 0.015;
 
@@ -237,23 +239,26 @@ void main() {
 
   float discRearWeight = 1.0 - discFrontWeight;
 
-  // Reveal the rear branch only at the shoulders, then extinguish both
-  // branches before the ellipse completes its outer/back third.
+  // Reveal the rear return only around the widened shoulders. It remains
+  // absent through the middle and fades again before the disc can complete
+  // a fully visible outer ellipse.
   float rearShoulderReveal = smoothstep(
-    0.150,
-    0.315,
+    0.185,
+    0.405,
     abs(d.x)
   ) * (
     1.0 - smoothstep(
-      0.340,
-      0.440,
+      0.485,
+      0.595,
       abs(d.x)
     )
   );
 
+  // This is what lets the horizontal plane visibly extend beyond the
+  // upright ring before its far/back third disappears.
   float discExtent = 1.0 - smoothstep(
-    0.365,
-    0.465,
+    0.505,
+    0.625,
     abs(d.x)
   );
 
@@ -266,16 +271,17 @@ void main() {
     * rearShoulderReveal
     * discExtent;
 
-  // A restrained shoulder lift makes the disc appear to emerge from the
-  // main ring without leaving visible outer tips beyond that join.
+    // Shift the shoulder lift outward to support the widened visible plane.
+  // It strengthens the point where the protruding disc appears to emerge
+  // from the main ring, then falls away before the extreme outer tips.
   float discAttachment = smoothstep(
-    0.230,
-    0.340,
+    0.345,
+    0.485,
     abs(d.x)
   ) * (
     1.0 - smoothstep(
-      0.370,
-      0.455,
+      0.545,
+      0.620,
       abs(d.x)
     )
   );
@@ -334,7 +340,7 @@ void main() {
   // Distant/rear branch. The shadow below still swallows its central section.
   col += accretionColour
     * discRear
-    * (0.30 + 0.30 * e + 0.08 * discAttachment);
+    * (0.30 + 0.30 * e + 0.14 * discAttachment);
 
   col += white * starField * (0.16 + 0.28 * e);
 
@@ -351,7 +357,7 @@ void main() {
   // cross the lower face of the black centre.
   col += accretionColour
     * discFront
-    * (0.44 + 0.58 * e + 0.08 * discAttachment);
+    * (0.44 + 0.58 * e + 0.14 * discAttachment);
 
   float edgeVignette = 1.0 - smoothstep(0.78, 1.45, length(p));
   col *= 0.52 + 0.84 * edgeVignette;
