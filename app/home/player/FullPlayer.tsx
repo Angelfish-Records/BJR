@@ -1010,6 +1010,13 @@ export default function FullPlayer(props: {
   const isThisAlbumActive = Boolean(albumKey && p.queueContextId === albumKey);
   const playingThisAlbum = playingish && isThisAlbumActive;
 
+  const currentTrackInThisAlbum =
+    isThisAlbumActive && p.current?.recordingId
+      ? (effTracks.find(
+          (track) => track.recordingId === p.current?.recordingId,
+        ) ?? null)
+      : null;
+
   const [playLock, setPlayLock] = React.useState(false);
   const lockPlayFor = (ms: number) => {
     setPlayLock(true);
@@ -1084,6 +1091,22 @@ export default function FullPlayer(props: {
       return;
     }
 
+    // When this is already the active album, preserve native player state:
+    // resume the current track rather than rebuilding the album from track one.
+    if (currentTrackInThisAlbum) {
+      prefetchAlbumSession(currentTrackInThisAlbum);
+
+      if (isPublicAlbumRoute) {
+        goCanonicalTrack(currentTrackInThisAlbum.displayId, "replace");
+      }
+
+      p.play(currentTrackInThisAlbum);
+      window.dispatchEvent(new Event("af:play-intent"));
+      return;
+    }
+
+    // This album is not the active queue, so intentionally replace the queue
+    // and begin this album from its first track.
     const firstTrack = effTracks[0];
     if (!firstTrack) return;
 
@@ -1091,7 +1114,6 @@ export default function FullPlayer(props: {
     ensureAlbumQueue();
 
     if (isPublicAlbumRoute) {
-      // Pressing play on an album implies first-track is the canonical track leaf.
       goCanonicalTrack(firstTrack.displayId, "replace");
     }
 
