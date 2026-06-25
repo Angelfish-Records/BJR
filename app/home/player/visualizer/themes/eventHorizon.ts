@@ -211,94 +211,45 @@ void main() {
   // "matter passing across the face" relationship.
   // ---------------------------------------------------------------------------
 
-  // Make the front accretion plane wider than the main photon ring so it
-  // reads as matter projecting toward the viewer rather than sitting inside
-  // the same circular footprint.
-  float foregroundOffset = -0.108;
-  vec2 foregroundPlane = vec2(
-    d.x * 0.76,
-    (d.y - foregroundOffset) * 5.55
-  );
+   // Observer-facing accretion disc:
+  // render it as a single thin textured lip, not as a filled torus with
+  // a separate interior mass. This keeps the foreground disc faithful to
+  // the black-hole reference: one front-facing half only, with no diffuse
+  // spill inward toward the centre.
+  float bridgeCurve = -0.088
+    - 0.072 * pow(abs(d.x) / 0.455, 2.0);
 
-  float foregroundRadius = length(foregroundPlane);
-  float foregroundAngle = atan(foregroundPlane.y, foregroundPlane.x);
+  float bridgeHalfWidth = 0.020
+    + 0.013 * (1.0 - smoothstep(0.0, 0.455, abs(d.x)));
 
-  // Lower/front hemisphere only.
-  float lowerHemisphere = 1.0 - smoothstep(-0.012, 0.115, d.y);
+  float frontHalfMask = 1.0 - smoothstep(-0.006, 0.100, d.y);
+  float frontSpanMask = 1.0 - smoothstep(0.385, 0.565, abs(d.x));
 
-  float foregroundTorus = band(
-    foregroundRadius,
-    0.392,
-    0.000,
-    0.152
-  );
-
-  foregroundTorus *= lowerHemisphere;
-
-  float foregroundCore = band(
-    foregroundRadius,
-    0.392,
-    0.000,
-    0.046
-  );
-
-  foregroundCore *= lowerHemisphere;
-
-  float foregroundTexture = ridged(
-    vec2(
-      foregroundAngle * 2.20 + t * 0.88,
-      foregroundRadius * 11.0 - t * 0.42
-    )
-  );
-
-  foregroundTorus *= 0.44 + 0.56 * smoothstep(
-    0.24,
-    0.92,
-    foregroundTexture
-  );
-
-  // Fine lensed bridge across the near side of the shadow.
-  // It is curved rather than ruler-straight, so it reads as depth rather than UI.
-    // Push the observer-facing bridge slightly lower and make it wider than
-  // the vertical ring footprint, so it feels like a protruding foreground lip.
-  float bridgeCurve = -0.086
-    - 0.070 * pow(abs(d.x) / 0.455, 2.0);
-
-  float bridgeHalfWidth = 0.026
-    + 0.018 * (1.0 - smoothstep(0.0, 0.455, abs(d.x)));
+  float foregroundAngle = atan(d.y - bridgeCurve, d.x);
 
   float foregroundBridge = 1.0 - smoothstep(
     bridgeHalfWidth,
-    bridgeHalfWidth + 0.044,
+    bridgeHalfWidth + 0.034,
     abs(d.y - bridgeCurve)
   );
 
-  foregroundBridge *= 1.0 - smoothstep(-0.006, 0.105, d.y);
-  foregroundBridge *= 1.0 - smoothstep(0.385, 0.565, abs(d.x));
+  foregroundBridge *= frontHalfMask;
+  foregroundBridge *= frontSpanMask;
 
-  float bridgeTexture = fbm(
+  float foregroundTexture = ridged(
     vec2(
-      d.x * 14.0 - t * 0.70,
-      (d.y - bridgeCurve) * 34.0 + t * 0.34
+      foregroundAngle * 2.25 + t * 0.88,
+      (d.y - bridgeCurve) * 48.0 - t * 0.38
     )
   );
 
-    foregroundBridge *= 0.58 + 0.42 * smoothstep(
+  foregroundTexture = smoothstep(
     0.26,
-    0.82,
-    bridgeTexture
+    0.90,
+    foregroundTexture
   );
 
-  // Only preserve the observer-facing/front half of the torus.
-  // Anything above this front lip gets swallowed by the black centre.
-  float frontHalfMask = 1.0 - smoothstep(
-    bridgeCurve - 0.006,
-    bridgeCurve + 0.060,
-    d.y
-  );
-
-  foregroundTorus *= frontHalfMask;
-  foregroundCore *= frontHalfMask;
+  foregroundBridge *= 0.58 + 0.42 * foregroundTexture;
 
   float approachingSide = pow(
     max(0.0, 0.50 + 0.50 * sin(foregroundAngle + 0.72)),
@@ -370,29 +321,21 @@ void main() {
 
   // The foreground plane is deliberately composited last: it is matter nearer
   // to the observer than the horizon and should visibly pass across its face.
+    // Keep the foreground lip visually aligned with the main photon ring
+  // rather than treating it as a separate glowing material system.
   vec3 foregroundColour = mix(
-    vec3(0.56, 0.16, 0.095),
-    copper,
-    0.62 + 0.38 * approachingSide
+    ringColour,
+    white,
+    0.10 + 0.22 * approachingSide
   );
 
-  foregroundColour = mix(
-    foregroundColour,
-    vec3(0.33, 0.58, 1.00),
-    0.20 * (1.0 - approachingSide)
-  );
-
-   col += foregroundColour
-    * foregroundTorus
-    * (0.50 + 0.64 * e);
+  col += foregroundColour
+    * foregroundBridge
+    * (0.46 + 0.40 * e);
 
   col += white
-    * foregroundCore
-    * (0.18 + 0.30 * e + 0.34 * approachingSide);
-
-  col += mix(copper, white, 0.35 + 0.45 * approachingSide)
     * foregroundBridge
-    * (0.40 + 0.34 * e);
+    * (0.08 + 0.16 * e + 0.18 * approachingSide);
 
   float edgeVignette = 1.0 - smoothstep(0.78, 1.45, length(p));
   col *= 0.52 + 0.84 * edgeVignette;
