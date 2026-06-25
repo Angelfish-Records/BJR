@@ -2,6 +2,7 @@
 "use client";
 
 import React from "react";
+import { useAuth } from "@clerk/nextjs";
 import type { PlayerTrack } from "@/lib/types";
 import { ensureLyricsForTrack } from "@/app/home/player/lyrics/ensureLyricsForTrack";
 
@@ -161,8 +162,12 @@ function readShareTokenFromLocation(): string | null {
   return token || null;
 }
 
-function playbackAccessKey(catalogueId: string, st: string | null): string {
-  return `${catalogueId}::st=${st ?? ""}`;
+function playbackAccessKey(
+  catalogueId: string,
+  st: string | null,
+  accessIdentityKey: string,
+): string {
+  return `${catalogueId}::st=${st ?? ""}::identity=${accessIdentityKey}`;
 }
 
 function blockedPlaybackMessage(access: PlaybackAccessState): string {
@@ -177,9 +182,10 @@ function blockedPlaybackMessage(access: PlaybackAccessState): string {
 
 async function fetchPlaybackAccess(
   catalogueId: string,
+  accessIdentityKey: string,
 ): Promise<PlaybackAccessState> {
   const st = readShareTokenFromLocation();
-  const key = playbackAccessKey(catalogueId, st);
+  const key = playbackAccessKey(catalogueId, st, accessIdentityKey);
 
   const cached = playbackAccessCache.get(key);
   if (cached) return cached;
@@ -260,6 +266,19 @@ function primeDurationByRecordingId(
 }
 
 export function PlayerStateProvider(props: { children: React.ReactNode }) {
+  const {
+    isLoaded: clerkAuthLoaded,
+    isSignedIn,
+    userId,
+    sessionId,
+  } = useAuth();
+
+  const playbackAccessIdentityKey = !clerkAuthLoaded
+    ? "clerk:loading"
+    : isSignedIn
+      ? `clerk:user:${userId ?? ""}:session:${sessionId ?? ""}`
+      : "clerk:anonymous";
+
   const [state, setState] = React.useState<PlayerState>({
     status: "idle",
     current: undefined,
@@ -324,7 +343,10 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
       }
 
       try {
-        const access = await fetchPlaybackAccess(catalogueId);
+        const access = await fetchPlaybackAccess(
+          catalogueId,
+          playbackAccessIdentityKey,
+        );
 
         if (!access.allowed) {
           blockPlayback(blockedPlaybackMessage(access));
@@ -347,9 +369,8 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
         blockPlayback("Playback access could not be verified.");
       }
     },
-    [blockPlayback],
+    [blockPlayback, playbackAccessIdentityKey],
   );
-
   const actions: PlayerActions = React.useMemo(() => {
     return {
       setIntent: (i: Intent) =>

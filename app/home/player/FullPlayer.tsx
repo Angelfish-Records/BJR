@@ -2,6 +2,7 @@
 "use client";
 
 import React from "react";
+import { useAuth } from "@clerk/nextjs";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { usePlayer } from "./PlayerState";
 import { useGateBroker } from "@/app/home/gating/GateBroker";
@@ -318,16 +319,22 @@ type AccessState = {
 const accessResultCache = new Map<string, AccessState>();
 const accessInFlight = new Map<string, Promise<AccessState>>();
 
-function accessKey(catalogueId: string, st: string | null) {
-  // include st because it can change entitlement decision
-  return `${catalogueId}::st=${st ?? ""}`;
+function accessKey(
+  catalogueId: string,
+  st: string | null,
+  accessIdentityKey: string,
+) {
+  // Identity must be included: an anonymous denial must never be reused after
+  // Clerk establishes an authenticated session.
+  return `${catalogueId}::st=${st ?? ""}::identity=${accessIdentityKey}`;
 }
 
 async function fetchAccessOnce(
   catalogueId: string,
   st: string | null,
+  accessIdentityKey: string,
 ): Promise<AccessState> {
-  const key = accessKey(catalogueId, st);
+  const key = accessKey(catalogueId, st, accessIdentityKey);
 
   const cached = accessResultCache.get(key);
   if (cached) return cached;
@@ -656,6 +663,18 @@ export default function FullPlayer(props: {
   const { albumSlug, album, tracks, albumLyrics } = bundle;
   const p = usePlayer();
   const { reportGate } = useGateBroker();
+  const {
+    isLoaded: clerkAuthLoaded,
+    isSignedIn,
+    userId,
+    sessionId,
+  } = useAuth();
+
+  const accessIdentityKey = !clerkAuthLoaded
+    ? "clerk:loading"
+    : isSignedIn
+      ? `clerk:user:${userId ?? ""}:session:${sessionId ?? ""}`
+      : "clerk:anonymous";
 
   // near your other hooks
   const searchParams = useSearchParams();
@@ -855,7 +874,11 @@ export default function FullPlayer(props: {
     let alive = true;
 
     const st = stParam;
-    const key = accessKey(catalogueId, st);
+    const key = accessKey(catalogueId, st, accessIdentityKey);
+
+    // Do not leave an anonymous denial visibly attached to the newly
+    // authenticated session while its fresh access request is in flight.
+    setAccess(null);
 
     const cached = accessResultCache.get(key) ?? null;
     setAccess((prev) => {
@@ -867,7 +890,7 @@ export default function FullPlayer(props: {
 
     (async () => {
       try {
-        const next = await fetchAccessOnce(catalogueId, st);
+        const next = await fetchAccessOnce(catalogueId, st, accessIdentityKey);
         if (!alive) return;
 
         setAccess((prev) => {
@@ -945,7 +968,10 @@ export default function FullPlayer(props: {
           sharePlaybackScopeId: null,
         };
 
-        accessResultCache.set(accessKey(catalogueId, st), fallback);
+        accessResultCache.set(
+          accessKey(catalogueId, st, accessIdentityKey),
+          fallback,
+        );
         setAccess(fallback);
 
         const player = pRef.current;
@@ -956,7 +982,7 @@ export default function FullPlayer(props: {
     return () => {
       alive = false;
     };
-  }, [catalogueId, albumKey, stParam]);
+  }, [catalogueId, albumKey, stParam, accessIdentityKey]);
 
   // Unknown access still disables the transport until the access check resolves.
   // A resolved auth/cap block remains clickable so the user can summon the gate.
@@ -1009,13 +1035,6 @@ export default function FullPlayer(props: {
 
   const isThisAlbumActive = Boolean(albumKey && p.queueContextId === albumKey);
   const playingThisAlbum = playingish && isThisAlbumActive;
-
-  const currentTrackInThisAlbum =
-    isThisAlbumActive && p.current?.recordingId
-      ? (effTracks.find(
-          (track) => track.recordingId === p.current?.recordingId,
-        ) ?? null)
-      : null;
 
   const [playLock, setPlayLock] = React.useState(false);
   const lockPlayFor = (ms: number) => {
@@ -1085,14 +1104,47 @@ export default function FullPlayer(props: {
 
     if (!canPlay) return;
 
-    if (playingThisAlbum) {
+    const currentTrackInThisAlbum =
+      isThisAlbumActive && p.current?.recordingId
+        ? (effTracks.find(
+            (track) => track.recordingId === p.current?.recordingId,
+          ) ?? null)
+        : null;
+
+    const directRouteTrack =
+      isPublicAlbumRoute && route.albumSlug === effAlbumSlug && route.displayId
+        ? (effTracks.find((track) => track.displayId === route.displayId) ??
+          null)
+        : null;
+
+    const directRouteTargetsAnotherTrack = Boolean(
+      directRouteTrack &&
+      directRouteTrack.recordingId !== currentTrackInThisAlbum?.recordingId,
+    );
+
+    // A generic album page controls its existing same-album transport natively.
+    // A direct track URL is more specific: it deliberately selects that track.
+    if (playingThisAlbum && !directRouteTargetsAnotherTrack) {
       window.dispatchEvent(new Event("af:pause-intent"));
       p.pause();
       return;
     }
 
-    // When this is already the active album, preserve native player state:
-    // resume the current track rather than rebuilding the album from track one.
+    if (directRouteTrack && directRouteTargetsAnotherTrack) {
+      prefetchAlbumSession(directRouteTrack);
+      ensureAlbumQueue();
+
+      if (isPublicAlbumRoute) {
+        goCanonicalTrack(directRouteTrack.displayId, "replace");
+      }
+
+      p.play(directRouteTrack);
+      window.dispatchEvent(new Event("af:play-intent"));
+      return;
+    }
+
+    // Same active album, no differently targeted direct-track URL:
+    // retain position and resume rather than resetting to track one.
     if (currentTrackInThisAlbum) {
       prefetchAlbumSession(currentTrackInThisAlbum);
 
@@ -1105,8 +1157,8 @@ export default function FullPlayer(props: {
       return;
     }
 
-    // This album is not the active queue, so intentionally replace the queue
-    // and begin this album from its first track.
+    // A different album, or an album with no recoverable current track:
+    // intentionally establish its queue and begin at its first track.
     const firstTrack = effTracks[0];
     if (!firstTrack) return;
 
