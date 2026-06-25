@@ -95,11 +95,6 @@ function shouldUseNativeHls(a: HTMLMediaElement): boolean {
   return isSafari && a.canPlayType("application/vnd.apple.mpegurl") !== "";
 }
 
-const STATIC_M4A_CANARY_RECORDING_IDS = new Set<string>([
-  "AFR-R-0001",
-  "AFR-R-0002",
-]);
-
 const STATIC_M4A_STANDBY_MIN_BUFFER_AHEAD_SEC = 20;
 const STATIC_M4A_STANDBY_TIMEOUT_MS = 20_000;
 
@@ -116,10 +111,8 @@ function isAppleMobileWebKit(): boolean {
   );
 }
 
-function shouldUseStaticM4aCanary(recordingId: string): boolean {
-  return (
-    isAppleMobileWebKit() && STATIC_M4A_CANARY_RECORDING_IDS.has(recordingId)
-  );
+function shouldUseStaticM4a(): boolean {
+  return isAppleMobileWebKit();
 }
 
 function bufferedAheadSeconds(media: HTMLMediaElement): number {
@@ -1167,7 +1160,7 @@ export default function AudioEngine() {
       if (!playbackId || !recordingId) return false;
 
       const attachKey = `${playbackId}:${pRef.current.reloadNonce}`;
-      const useStaticM4a = shouldUseStaticM4aCanary(recordingId);
+      const useStaticM4a = shouldUseStaticM4a();
       const srcUrl = useStaticM4a
         ? muxPublicStaticAudioUrl(playbackId)
         : muxSignedHlsUrl(playbackId, args.token);
@@ -2575,6 +2568,29 @@ export default function AudioEngine() {
           recordingId: cur.recordingId,
           playbackId: cur.muxPlaybackId ?? null,
           source: "AudioEngine",
+          detail: `next=${nextTrack.recordingId}`,
+        });
+
+        playIntentRef.current = true;
+        pRef.current.advanceFromEngine();
+        return;
+      }
+
+      const activeMeta = metaByDeckRef.current[activeDeckRef.current];
+
+      const shouldUseAppleMobileActiveDeckAdvance =
+        isAppleMobileWebKit() &&
+        typeof document !== "undefined" &&
+        document.visibilityState === "hidden" &&
+        activeMeta?.hlsPath === "static-m4a";
+
+      if (shouldUseAppleMobileActiveDeckAdvance) {
+        sendAudioDebug({
+          event: "apple-mobile-static-active-deck-advance",
+          albumId: s.queueContextId ?? null,
+          recordingId: cur.recordingId,
+          playbackId: cur.muxPlaybackId ?? null,
+          source: `AudioEngine.${activeDeckRef.current}`,
           detail: `next=${nextTrack.recordingId}`,
         });
 
