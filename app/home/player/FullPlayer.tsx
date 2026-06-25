@@ -1230,6 +1230,67 @@ export default function FullPlayer(props: {
     });
   }
 
+  const preparedDirectTrackQueueRef = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    // Wait for the access check so a private-link queue receives its resolved
+    // attribution context before any listener can press play.
+    if (!accessKnown) return;
+
+    if (
+      !isPublicAlbumRoute ||
+      route.albumSlug !== effAlbumSlug ||
+      !route.displayId ||
+      !albumKey
+    ) {
+      return;
+    }
+
+    const directTrack =
+      effTracks.find((track) => track.displayId === route.displayId) ?? null;
+
+    if (!directTrack) return;
+
+    // A fresh deep link should prime the player. Never overwrite an existing
+    // player session, including a currently playing or paused different album.
+    const hasExistingPlayerSession = Boolean(
+      p.current || p.queue.length > 0 || p.pendingRecordingId,
+    );
+
+    if (hasExistingPlayerSession) return;
+
+    const queueKey = `${albumKey}:${directTrack.recordingId}`;
+
+    if (preparedDirectTrackQueueRef.current === queueKey) return;
+
+    preparedDirectTrackQueueRef.current = queueKey;
+
+    p.setQueue(effTracks, {
+      contextId: albumKey,
+      artworkUrl: effAlbum?.artworkUrl ?? null,
+      contextSlug: effAlbumSlug,
+      contextTitle: effAlbum?.title ?? undefined,
+      contextArtist: effAlbum?.artist ?? undefined,
+      sharePlaybackContext: queueSharePlaybackContext,
+      sharePlaybackScopeId: queueSharePlaybackScopeId,
+      initialCurrentRecordingId: directTrack.recordingId,
+    });
+  }, [
+    accessKnown,
+    albumKey,
+    effAlbum?.artworkUrl,
+    effAlbum?.artist,
+    effAlbum?.title,
+    effAlbumSlug,
+    effTracks,
+    isPublicAlbumRoute,
+    p,
+    queueSharePlaybackContext,
+    queueSharePlaybackScopeId,
+    route.albumSlug,
+    route.displayId,
+  ]);
+
   function playAlbumIndex(i: number) {
     const t = effTracks[i];
     if (!t) return;

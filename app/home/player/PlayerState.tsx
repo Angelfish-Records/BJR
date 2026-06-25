@@ -19,6 +19,10 @@ export type QueueContext = {
   artworkUrl?: string | null;
   sharePlaybackContext?: string | null;
   sharePlaybackScopeId?: string | null;
+
+  // Lets a deep link prepare an album queue around a specific track without
+  // beginning playback or rearranging the album’s natural track order.
+  initialCurrentRecordingId?: string;
 };
 
 export type PlayerState = {
@@ -703,7 +707,20 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
             nextDurationByRecordingId,
           );
 
-          const nextCurrentRaw = s.current ?? hydratedQueue[0];
+          const initialCurrentRecordingId =
+            typeof opts?.initialCurrentRecordingId === "string"
+              ? opts.initialCurrentRecordingId.trim()
+              : "";
+
+          const requestedInitialCurrent = initialCurrentRecordingId
+            ? (hydratedQueue.find(
+                (track) => track.recordingId === initialCurrentRecordingId,
+              ) ?? null)
+            : null;
+
+          const nextCurrentRaw =
+            requestedInitialCurrent ?? s.current ?? hydratedQueue[0];
+
           const nextCurrent = nextCurrentRaw
             ? hydrateTrack(nextCurrentRaw, nextDurationByRecordingId)
             : undefined;
@@ -764,9 +781,17 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
               : s.queueSharePlaybackScopeId,
 
             current: nextCurrent,
-            positionMs: s.current ? s.positionMs : 0,
-            selectedRecordingId:
-              s.selectedRecordingId ?? nextCurrent?.recordingId,
+            positionMs: requestedInitialCurrent
+              ? 0
+              : s.current
+                ? s.positionMs
+                : 0,
+            selectedRecordingId: requestedInitialCurrent
+              ? requestedInitialCurrent.recordingId
+              : (s.selectedRecordingId ?? nextCurrent?.recordingId),
+            pendingRecordingId: requestedInitialCurrent
+              ? undefined
+              : s.pendingRecordingId,
           };
         }),
 
