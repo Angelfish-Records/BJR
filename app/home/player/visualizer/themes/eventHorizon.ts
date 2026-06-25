@@ -216,45 +216,53 @@ void main() {
   // a separate interior mass. This keeps the foreground disc faithful to
   // the black-hole reference: one front-facing half only, with no diffuse
   // spill inward toward the centre.
-  float bridgeCurve = -0.088
-    - 0.072 * pow(abs(d.x) / 0.455, 2.0);
+   // Front-facing accretion lip:
+  // lowest at the centre, rising toward the side attachments so it feels
+  // like the front half of a torus bulging toward the viewer.
+  float bridgeCurve = -0.132
+    + 0.082 * pow(abs(d.x) / 0.535, 2.0);
 
-  float bridgeHalfWidth = 0.020
-    + 0.013 * (1.0 - smoothstep(0.0, 0.455, abs(d.x)));
+  float bridgeHalfWidth = 0.018
+    + 0.014 * (1.0 - smoothstep(0.0, 0.535, abs(d.x)));
 
-  float frontHalfMask = 1.0 - smoothstep(-0.006, 0.100, d.y);
-  float frontSpanMask = 1.0 - smoothstep(0.385, 0.565, abs(d.x));
+  // Keep the observer-facing/front portion only, but preserve much more of
+  // the structure so it reads as roughly the front 70% of the ring.
+  float frontHalfMask = 1.0 - smoothstep(0.004, 0.090, d.y - bridgeCurve);
+  float frontSpanMask = 1.0 - smoothstep(0.505, 0.735, abs(d.x));
 
   float foregroundAngle = atan(d.y - bridgeCurve, d.x);
 
   float foregroundBridge = 1.0 - smoothstep(
     bridgeHalfWidth,
-    bridgeHalfWidth + 0.034,
+    bridgeHalfWidth + 0.028,
     abs(d.y - bridgeCurve)
   );
 
   foregroundBridge *= frontHalfMask;
   foregroundBridge *= frontSpanMask;
 
-  float foregroundTexture = ridged(
+    float foregroundTexture = ridged(
     vec2(
-      foregroundAngle * 2.25 + t * 0.88,
-      (d.y - bridgeCurve) * 48.0 - t * 0.38
+      foregroundAngle * 2.10 + t * 0.80,
+      abs(d.y - bridgeCurve) * 62.0 - t * 0.34
     )
   );
 
   foregroundTexture = smoothstep(
-    0.26,
-    0.90,
+    0.34,
+    0.94,
     foregroundTexture
   );
 
-  foregroundBridge *= 0.58 + 0.42 * foregroundTexture;
+  foregroundBridge *= 0.64 + 0.36 * foregroundTexture;
 
-  float approachingSide = pow(
+    float approachingSide = pow(
     max(0.0, 0.50 + 0.50 * sin(foregroundAngle + 0.72)),
     2.3
   );
+
+  float attachmentBoost = smoothstep(0.18, 0.42, abs(d.x))
+    * (1.0 - smoothstep(0.42, 0.68, abs(d.x)));
 
   // Stable star field: no frame-stepped twinkling or popping.
   vec2 starGrid = floor((p + 1.55) * 176.0);
@@ -323,19 +331,19 @@ void main() {
   // to the observer than the horizon and should visibly pass across its face.
     // Keep the foreground lip visually aligned with the main photon ring
   // rather than treating it as a separate glowing material system.
-  vec3 foregroundColour = mix(
+    vec3 foregroundColour = mix(
     ringColour,
     white,
-    0.10 + 0.22 * approachingSide
+    0.08 + 0.20 * approachingSide
   );
 
   col += foregroundColour
     * foregroundBridge
-    * (0.46 + 0.40 * e);
+    * (0.50 + 0.42 * e + 0.14 * attachmentBoost);
 
   col += white
     * foregroundBridge
-    * (0.08 + 0.16 * e + 0.18 * approachingSide);
+    * (0.06 + 0.14 * e + 0.16 * approachingSide + 0.10 * attachmentBoost);
 
   float edgeVignette = 1.0 - smoothstep(0.78, 1.45, length(p));
   col *= 0.52 + 0.84 * edgeVignette;
