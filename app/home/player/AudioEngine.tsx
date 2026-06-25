@@ -165,6 +165,55 @@ function hasMediaSession(): boolean {
   );
 }
 
+type MediaSessionArtwork = {
+  src: string;
+  sizes?: string;
+  type?: string;
+};
+
+function getMediaSessionArtwork(
+  rawArtworkUrl: string | null | undefined,
+): MediaSessionArtwork[] {
+  const artworkUrl = (rawArtworkUrl ?? "").trim();
+
+  if (!artworkUrl) return [];
+
+  let sourceUrl: URL;
+
+  try {
+    sourceUrl = new URL(artworkUrl);
+  } catch {
+    return [];
+  }
+
+  // The album artwork currently comes from Sanity's CDN. Supplying several
+  // correctly described JPEG variants gives iOS a clean, native-friendly
+  // choice for Now Playing and the lock screen.
+  if (sourceUrl.hostname !== "cdn.sanity.io") {
+    return [{ src: sourceUrl.toString() }];
+  }
+
+  const sizes = [96, 128, 192, 256, 384, 512, 1024];
+
+  return sizes.map((size) => {
+    const url = new URL(sourceUrl.toString());
+
+    url.searchParams.set("w", String(size));
+    url.searchParams.set("h", String(size));
+    url.searchParams.set("fit", "crop");
+    url.searchParams.set("crop", "center");
+    url.searchParams.set("fm", "jpg");
+    url.searchParams.set("q", "85");
+    url.searchParams.set("cs", "srgb");
+
+    return {
+      src: url.toString(),
+      sizes: `${size}x${size}`,
+      type: "image/jpeg",
+    };
+  });
+}
+
 function audioDebugEnabled(): boolean {
   return process.env.NEXT_PUBLIC_AUDIO_DEBUG === "1";
 }
@@ -3060,22 +3109,14 @@ export default function AudioEngine() {
       player.queueContextArtist?.trim() ||
       "Angelfish Records";
     const album = player.queueContextTitle?.trim() || undefined;
-    const artworkUrl = player.queueContextArtworkUrl?.trim() || "";
+    const artwork = getMediaSessionArtwork(player.queueContextArtworkUrl);
 
     try {
       navigator.mediaSession.metadata = new MediaMetadata({
         title,
         artist,
         album,
-        artwork: artworkUrl
-          ? [
-              {
-                src: artworkUrl,
-                sizes: "512x512",
-                type: "image/jpeg",
-              },
-            ]
-          : [],
+        artwork,
       });
     } catch {}
 
