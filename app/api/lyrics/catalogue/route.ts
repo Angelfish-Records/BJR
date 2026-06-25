@@ -35,8 +35,13 @@ type CatalogueAlbum = {
 type CatalogueOk = { ok: true; albums: CatalogueAlbum[] };
 type CatalogueErr = { ok: false; error: string };
 
+type CatalogueLyricsDoc = {
+  recordingId?: string;
+  exegesisEnabled?: boolean;
+};
+
 type CatalogueQueryResult = {
-  lyricIds?: unknown;
+  lyrics?: CatalogueLyricsDoc[];
   albums?: Array<{
     albumId?: string;
     albumSlug?: string | null;
@@ -68,7 +73,10 @@ export async function GET() {
   try {
     const q = `
       {
-        "lyricIds": *[_type == "lyrics" && defined(recordingId)].recordingId,
+        "lyrics": *[_type == "lyrics" && defined(recordingId)]{
+          recordingId,
+          exegesisEnabled
+        },
         "albums": *[_type == "album" && publicPageVisible != false]
           | order(year desc, title asc) {
             "albumId": _id,
@@ -88,22 +96,23 @@ export async function GET() {
 
     const bundle = await client.fetch<CatalogueQueryResult | null>(q);
 
-    const lyricIdsArr = Array.isArray(bundle?.lyricIds)
-      ? (bundle?.lyricIds as unknown[])
-      : [];
+    const lyricsRaw = Array.isArray(bundle?.lyrics) ? bundle.lyrics : [];
 
-    const lyricIdSet = new Set(
-      uniqNonEmpty(lyricIdsArr.map((x) => asTrimmedString(x))),
+    const exegesisEnabledRecordingIdSet = new Set(
+      lyricsRaw
+        .filter((doc) => doc?.exegesisEnabled !== false)
+        .map((doc) => asTrimmedString(doc?.recordingId))
+        .filter(Boolean),
     );
 
-    const albumsRaw = Array.isArray(bundle?.albums) ? bundle!.albums! : [];
+    const albumsRaw = Array.isArray(bundle?.albums) ? bundle.albums : [];
 
     const albums: CatalogueAlbum[] = albumsRaw
       .map((a) => {
         const tracksRaw = Array.isArray(a.tracks) ? a.tracks : [];
 
         const normTracks: CatalogueTrack[] = normalizeAlbumTracks(tracksRaw)
-          .filter((t) => lyricIdSet.has(t.recordingId))
+          .filter((t) => exegesisEnabledRecordingIdSet.has(t.recordingId))
           .map((t) => ({
             recordingId: t.recordingId,
             displayId: t.displayId,
