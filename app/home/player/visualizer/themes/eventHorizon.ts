@@ -194,74 +194,88 @@ void main() {
   float discRadius = length(discSpace);
   float discAngle = atan(discSpace.y, discSpace.x);
 
-  // A genuinely thin ellipse: no filled foreground slab and no independent
-  // bridge thickness to spill into the central black space.
-  float discBand = band(
-    discRadius,
-    1.0,
-    0.0,
-    0.092
+   // Approximate the ellipse's signed distance in display space. This lets
+  // the accretion plane inherit the same apparent thickness as the main ring,
+  // instead of becoming narrow at its crown and fat at its side extremities.
+  vec2 discGradient = vec2(
+    discSpace.x / discHalfWidth,
+    discSpace.y / discHalfHeight
   );
 
+  float discDistance = abs(discRadius - 1.0) / max(
+    length(discGradient),
+    0.0001
+  );
+
+  // Match the main ring's inner thickness and outer falloff exactly.
+  float discBand = 1.0 - smoothstep(
+    ringWidth,
+    0.108,
+    discDistance
+  );
+
+  // Use the same angular/radial texture grammar as ringMatter.
   float discTexture = ridged(
     vec2(
-      discAngle * 2.12 + t * 0.78,
-      discRadius * 6.20 - t * 0.32
-    )
+      discAngle * 2.15,
+      discRadius * 3.95
+    ) + vec2(t * 0.72, -t * 0.28)
   );
 
-  discTexture = smoothstep(
-    0.36,
-    0.95,
+  float discMatter = discBand * smoothstep(
+    0.34,
+    0.97,
     discTexture
   );
 
-  discBand *= 0.62 + 0.38 * discTexture;
-
-  // In this coordinate system, negative Y is visually lower on the canvas.
-  // That lower branch is the observer-facing/front side of the disc.
+  // Negative Y is visually lower: that is the observer-facing branch.
   float discFrontWeight = 1.0 - smoothstep(
-    -0.090,
-    0.075,
+    -0.050,
+    0.080,
     discSpace.y
   );
 
   float discRearWeight = 1.0 - discFrontWeight;
 
-  // Preserve the near side across the full central span. The rear side only
-  // begins to emerge at the shoulders, where it can visibly bend back toward
-  // the main ring rather than hovering as an independent upper eyebrow.
+  // Reveal the rear branch only at the shoulders, then extinguish both
+  // branches before the ellipse completes its outer/back third.
   float rearShoulderReveal = smoothstep(
-    0.115,
-    0.335,
+    0.150,
+    0.315,
     abs(d.x)
+  ) * (
+    1.0 - smoothstep(
+      0.340,
+      0.440,
+      abs(d.x)
+    )
   );
 
   float discExtent = 1.0 - smoothstep(
-    0.485,
-    0.590,
+    0.365,
+    0.465,
     abs(d.x)
   );
 
-  float discFront = discBand
+  float discFront = discMatter
     * discFrontWeight
     * discExtent;
 
-  float discRear = discBand
+  float discRear = discMatter
     * discRearWeight
     * rearShoulderReveal
     * discExtent;
 
-  // Brings a little extra authority to the parts that visually reconnect
-  // the wide horizontal plane to the circular photon structure.
+  // A restrained shoulder lift makes the disc appear to emerge from the
+  // main ring without leaving visible outer tips beyond that join.
   float discAttachment = smoothstep(
-    0.220,
-    0.360,
+    0.230,
+    0.340,
     abs(d.x)
   ) * (
     1.0 - smoothstep(
-      0.405,
-      0.535,
+      0.370,
+      0.455,
       abs(d.x)
     )
   );
@@ -313,16 +327,14 @@ void main() {
   col += white * lensGlow * (0.040 + 0.15 * e);
   col += vec3(0.18, 0.36, 0.72) * corona * (0.12 + 0.24 * e);
 
-  vec3 accretionColour = mix(
-    ringColour,
-    white,
-    0.07 + 0.16 * discTexture
-  );
+  // The plane shares the main ring's colour and texture language rather
+  // than becoming a separately lit white-blue object.
+  vec3 accretionColour = ringColour;
 
-  // Distant/rear branch. The horizon mask below erases its central segment.
+  // Distant/rear branch. The shadow below still swallows its central section.
   col += accretionColour
     * discRear
-    * (0.28 + 0.22 * e + 0.12 * discAttachment);
+    * (0.30 + 0.30 * e + 0.08 * discAttachment);
 
   col += white * starField * (0.16 + 0.28 * e);
 
@@ -339,11 +351,7 @@ void main() {
   // cross the lower face of the black centre.
   col += accretionColour
     * discFront
-    * (0.46 + 0.34 * e + 0.16 * discAttachment);
-
-  col += white
-    * discFront
-    * (0.045 + 0.12 * e + 0.08 * discAttachment);
+    * (0.44 + 0.58 * e + 0.08 * discAttachment);
 
   float edgeVignette = 1.0 - smoothstep(0.78, 1.45, length(p));
   col *= 0.52 + 0.84 * edgeVignette;
