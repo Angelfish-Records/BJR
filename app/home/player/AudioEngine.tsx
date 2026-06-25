@@ -5,7 +5,7 @@ import Hls from "hls.js";
 import { useUser } from "@clerk/nextjs";
 import { usePlayer } from "./PlayerState";
 import type { PlayerTrack } from "@/lib/types";
-import { muxPublicStaticAudioUrl, muxSignedHlsUrl } from "@/lib/mux";
+import { muxSignedHlsUrl, muxSignedStaticAudioUrl } from "@/lib/mux";
 import { mediaSurface } from "./mediaSurface";
 import { audioSurface } from "./audioSurface";
 import type {
@@ -1162,7 +1162,7 @@ export default function AudioEngine() {
       const attachKey = `${playbackId}:${pRef.current.reloadNonce}`;
       const useStaticM4a = shouldUseStaticM4a();
       const srcUrl = useStaticM4a
-        ? muxPublicStaticAudioUrl(playbackId)
+        ? muxSignedStaticAudioUrl(playbackId, args.token)
         : muxSignedHlsUrl(playbackId, args.token);
       const useNativeHls = !useStaticM4a && shouldUseNativeHls(a);
       const hlsPath = useStaticM4a
