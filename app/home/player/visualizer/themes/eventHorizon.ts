@@ -172,19 +172,14 @@ void main() {
   // ---------------------------------------------------------------------------
   // Coherent lensed accretion disc.
   //
-  // One compressed ellipse supplies both visible branches:
-  //
-  // - its upper branch is the distant/rear side, rendered before the shadow;
-  // - its lower branch is the near/front side, rendered after the shadow.
-  //
-  // The horizon naturally swallows the central rear branch, while more of it
-  // becomes visible toward the shoulders as the disc curves back into the
-  // broader gravitational structure.
+  // The visible plane is one deliberately selected lower-front ellipse arc.
+  // Its width controls the system's scale; its angular window independently
+  // controls how much curvature is visible. No rear branch is drawn.
   // ---------------------------------------------------------------------------
 
-   // The horizontal plane needs a materially wider footprint than the
-  // upright photon ring, so its shoulders visibly project toward the viewer.
-  float discHalfWidth = 0.655;
+  // Restore the tighter scale: the plane still projects beyond the photon
+  // ring, but no longer reads as a second full halo.
+  float discHalfWidth = ringRadius * 1.50;
   float discHalfHeight = 0.135;
   float discCentreY = 0.015;
 
@@ -196,7 +191,7 @@ void main() {
   float discRadius = length(discSpace);
   float discAngle = atan(discSpace.y, discSpace.x);
 
-   // Approximate the ellipse's signed distance in display space. This lets
+  // Approximate the ellipse's signed distance in display space. This lets
   // the accretion plane inherit the same apparent thickness as the main ring,
   // instead of becoming narrow at its crown and fat at its side extremities.
   vec2 discGradient = vec2(
@@ -230,61 +225,49 @@ void main() {
     discTexture
   );
 
-  // Negative Y is visually lower: that is the observer-facing branch.
+  // The observer-facing centre of the ellipse is -PI / 2. The endpoint is
+  // derived from the photon-ring radius, so the arc dies just after its
+  // shoulders have turned back toward the lower side quadrants of the ring.
+  float frontArcDistance = abs(discAngle + 1.57079632679);
+  float discAttachmentX = ringRadius * 1.40;
+  float discEndpointAngle = acos(clamp(
+    discAttachmentX / discHalfWidth,
+    0.0,
+    0.999
+  ));
+  float discArcHalfSpan = 1.57079632679 - discEndpointAngle;
+
+  // This replaces the old screen-space X range. It exposes one continuous
+  // lower-front arc, feathers its endpoints, and makes the far/back branch
+  // geometrically nonexistent rather than merely faint.
+  float discArcMask = 1.0 - smoothstep(
+    discArcHalfSpan - 0.160,
+    discArcHalfSpan,
+    frontArcDistance
+  );
+
   float discFrontWeight = 1.0 - smoothstep(
-    -0.050,
-    0.080,
+    -0.020,
+    0.100,
     discSpace.y
-  );
-
-  float discRearWeight = 1.0 - discFrontWeight;
-
-  // Reveal the rear return only around the widened shoulders. It remains
-  // absent through the middle and fades again before the disc can complete
-  // a fully visible outer ellipse.
-  float rearShoulderReveal = smoothstep(
-    0.185,
-    0.405,
-    abs(d.x)
-  ) * (
-    1.0 - smoothstep(
-      0.485,
-      0.595,
-      abs(d.x)
-    )
-  );
-
-  // This is what lets the horizontal plane visibly extend beyond the
-  // upright ring before its far/back third disappears.
-  float discExtent = 1.0 - smoothstep(
-    0.505,
-    0.625,
-    abs(d.x)
   );
 
   float discFront = discMatter
     * discFrontWeight
-    * discExtent;
+    * discArcMask;
 
-  float discRear = discMatter
-    * discRearWeight
-    * rearShoulderReveal
-    * discExtent;
-
-    // Shift the shoulder lift outward to support the widened visible plane.
-  // It strengthens the point where the protruding disc appears to emerge
-  // from the main ring, then falls away before the extreme outer tips.
-  float discAttachment = smoothstep(
-    0.345,
-    0.485,
-    abs(d.x)
-  ) * (
-    1.0 - smoothstep(
-      0.545,
-      0.620,
-      abs(d.x)
-    )
-  );
+  // Brighten the actual approach to the photon ring rather than an arbitrary
+  // X range. This gives the shoulders a deliberate attachment point while
+  // letting the outer tips disappear cleanly.
+  float discAttachment = discArcMask
+    * discBand
+    * (
+      1.0 - smoothstep(
+        0.026,
+        0.102,
+        abs(r - ringRadius)
+      )
+    );
 
   // Stable star field: no frame-stepped twinkling or popping.
   vec2 starGrid = floor((p + 1.55) * 176.0);
@@ -329,7 +312,12 @@ void main() {
     smoothstep(-1.0, 1.0, sin(a * 2.0 + t))
   );
 
-   col += ringColour * ringMatter * (0.44 + 0.58 * e);
+  // Give the upright ring a restrained local lift at the real disc/ring
+  // approach points, helping the shoulder arcs read as connected rather than
+  // merely overlaid.
+  col += ringColour
+    * ringMatter
+    * (0.44 + 0.58 * e + 0.10 * discAttachment);
   col += white * lensGlow * (0.040 + 0.15 * e);
   col += vec3(0.18, 0.36, 0.72) * corona * (0.12 + 0.24 * e);
 
@@ -337,14 +325,11 @@ void main() {
   // than becoming a separately lit white-blue object.
   vec3 accretionColour = ringColour;
 
-  // Distant/rear branch. The shadow below still swallows its central section.
-  col += accretionColour
-    * discRear
-    * (0.30 + 0.30 * e + 0.14 * discAttachment);
-
   col += white * starField * (0.16 + 0.28 * e);
 
-  // The rear arc is now hidden where it passes behind the actual shadow.
+  // The black shadow removes the background and the upright ring's interior.
+  // The selected lower-front accretion arc is drawn afterwards, allowing it
+  // alone to cross the lower face of the void.
   col = mix(col, vec3(0.0), horizonMask);
   col = mix(col, vec3(0.0), umbraMask * 0.72);
 
@@ -353,11 +338,9 @@ void main() {
     * photonRing
     * (0.42 + 0.34 * e);
 
-  // The near/front branch is composited after the shadow, so it alone can
-  // cross the lower face of the black centre.
   col += accretionColour
     * discFront
-    * (0.44 + 0.58 * e + 0.14 * discAttachment);
+    * (0.44 + 0.58 * e + 0.18 * discAttachment);
 
   float edgeVignette = 1.0 - smoothstep(0.78, 1.45, length(p));
   col *= 0.52 + 0.84 * edgeVignette;
