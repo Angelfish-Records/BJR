@@ -58,7 +58,14 @@ export type PlayerState = {
   muted: boolean;
   repeat: RepeatMode;
 
+  // Catalogue duration supplied by Sanity. This remains stable metadata and a
+  // pre-load fallback, but is not assumed to be the decoded asset's exact end.
   durationByRecordingId: Record<string, number>;
+
+  // Runtime duration reported by the browser for the actual delivered Mux
+  // rendition. Keyed by playback ID so a future asset replacement cannot reuse
+  // a stale duration merely because it shares a recording ID.
+  assetDurationByPlaybackId: Record<string, number>;
 };
 
 type PlayerActions = {
@@ -74,6 +81,7 @@ type PlayerActions = {
 
   setPositionMs: (ms: number) => void;
   setDurationMs: (ms: number) => void;
+  setAssetDurationMs: (playbackId: string, ms: number) => void;
 
   setStatusExternal: (s: PlayerStatus) => void;
   setLoadingReasonExternal: (r?: LoadingReason) => void;
@@ -118,6 +126,68 @@ function nextRepeat(r: RepeatMode): RepeatMode {
   if (r === "off") return "all";
   if (r === "all") return "one";
   return "off";
+}
+
+function positiveDurationMs(value: number | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.round(value)
+    : 0;
+}
+
+function getAssetDurationMs(
+  assetDurationByPlaybackId: Record<string, number>,
+  track: PlayerTrack | undefined,
+): number {
+  const playbackId = (track?.muxPlaybackId ?? "").trim();
+
+  return playbackId
+    ? positiveDurationMs(assetDurationByPlaybackId[playbackId])
+    : 0;
+}
+
+function getEffectiveDurationMs(
+  state: Pick<
+    PlayerState,
+    "durationByRecordingId" | "assetDurationByPlaybackId"
+  >,
+  track: PlayerTrack | undefined,
+): number {
+  const assetDurationMs = getAssetDurationMs(
+    state.assetDurationByPlaybackId,
+    track,
+  );
+
+  if (assetDurationMs > 0) return assetDurationMs;
+
+  const recordingId = (track?.recordingId ?? "").trim();
+  const catalogueDurationMs = recordingId
+    ? positiveDurationMs(state.durationByRecordingId[recordingId])
+    : 0;
+
+  return catalogueDurationMs || positiveDurationMs(track?.durationMs);
+}
+
+function retainAssetDurationsByPlaybackId(
+  previous: Record<string, number>,
+  tracks: PlayerTrack[],
+): Record<string, number> {
+  const activePlaybackIds = new Set<string>();
+
+  for (const track of tracks) {
+    const playbackId = (track.muxPlaybackId ?? "").trim();
+    if (playbackId) activePlaybackIds.add(playbackId);
+  }
+
+  let next = previous;
+
+  for (const playbackId of Object.keys(previous)) {
+    if (activePlaybackIds.has(playbackId)) continue;
+
+    if (next === previous) next = { ...previous };
+    delete next[playbackId];
+  }
+
+  return next;
 }
 
 function hydrateTrack(
@@ -317,6 +387,7 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
     repeat: "off",
 
     durationByRecordingId: {},
+    assetDurationByPlaybackId: {},
   });
 
   const stateRef = React.useRef(state);
@@ -702,6 +773,11 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
             s.durationByRecordingId,
             tracks,
           );
+          const nextAssetDurationByPlaybackId =
+            retainAssetDurationsByPlaybackId(
+              s.assetDurationByPlaybackId,
+              tracks,
+            );
           const hydratedQueue = hydrateTracks(
             tracks,
             nextDurationByRecordingId,
@@ -757,6 +833,7 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
           return {
             ...s,
             durationByRecordingId: nextDurationByRecordingId,
+            assetDurationByPlaybackId: nextAssetDurationByPlaybackId,
             queue: hydratedQueue,
 
             queueContextId: hasId ? opts!.contextId : s.queueContextId,
@@ -826,6 +903,7 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
           loadingReason: undefined,
           queueSharePlaybackContext: null,
           queueSharePlaybackScopeId: null,
+          assetDurationByPlaybackId: {},
         })),
 
       setPositionMs: (ms: number) =>
@@ -869,6 +947,30 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
           };
         }),
 
+      setAssetDurationMs: (playbackId: string, ms: number) => {
+        const normalizedPlaybackId = playbackId.trim();
+        const normalizedDurationMs = positiveDurationMs(ms);
+
+        if (!normalizedPlaybackId || normalizedDurationMs <= 0) return;
+
+        setState((s) => {
+          if (
+            s.assetDurationByPlaybackId[normalizedPlaybackId] ===
+            normalizedDurationMs
+          ) {
+            return s;
+          }
+
+          return {
+            ...s,
+            assetDurationByPlaybackId: {
+              ...s.assetDurationByPlaybackId,
+              [normalizedPlaybackId]: normalizedDurationMs,
+            },
+          };
+        });
+      },
+
       setStatusExternal: (st: PlayerStatus) =>
         setState((s) => (s.status === st ? s : { ...s, status: st })),
 
@@ -879,11 +981,7 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
 
       seek: (ms: number) => {
         setState((s) => {
-          const curId = s.current?.recordingId ?? "";
-          const dur =
-            (curId ? s.durationByRecordingId[curId] : 0) ||
-            s.current?.durationMs ||
-            0;
+          const dur = getEffectiveDurationMs(s, s.current);
           const next = dur > 0 ? clamp(ms, 0, dur) : Math.max(0, ms);
           return {
             ...s,
@@ -912,11 +1010,7 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
         setState((s) => {
           if (s.status !== "playing") return s;
 
-          const curId = s.current?.recordingId ?? "";
-          const dur =
-            (curId ? s.durationByRecordingId[curId] : 0) ||
-            s.current?.durationMs ||
-            0;
+          const dur = getEffectiveDurationMs(s, s.current);
           const nextPos = Math.max(0, s.positionMs + Math.max(0, deltaMs));
 
           if (dur <= 0) return { ...s, positionMs: nextPos };

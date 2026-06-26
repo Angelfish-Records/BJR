@@ -139,6 +139,14 @@ function bufferedAheadSeconds(media: HTMLMediaElement): number {
   return 0;
 }
 
+function readFiniteMediaDurationMs(media: HTMLMediaElement): number {
+  const durationSec = media.duration;
+
+  return Number.isFinite(durationSec) && durationSec > 0
+    ? Math.round(durationSec * 1000)
+    : 0;
+}
+
 function isStaticM4aStandbyBuffered(media: HTMLMediaElement): boolean {
   return (
     media.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA &&
@@ -573,9 +581,9 @@ export default function AudioEngine() {
   const TELEMETRY_PROGRESS_STEP_MS = 15_000;
 
   // Mobile data needs a much longer runway than Wi-Fi for HLS standby preparation.
-  // This also makes locked-screen handoff less dependent on late timeupdate events.
+  // The next deck should be ready well before the end, but the outgoing media
+  // element remains authoritative for its own final sample.
   const STANDBY_PREPARE_WINDOW_MS = 90_000;
-  const AUTO_ADVANCE_WINDOW_MS = 250;
 
   const tokenCacheRef = React.useRef(
     new Map<string, { token: string; expiresAtMs: number }>(),
@@ -1730,9 +1738,6 @@ export default function AudioEngine() {
 
       suppressPauseDeckRef.current = oldDeck;
 
-      const oldAudio = getAudio(oldDeck);
-      if (oldAudio) oldAudio.volume = 0;
-
       const ok = await playDeck(newDeck, "promote");
 
       if (!ok) {
@@ -1773,7 +1778,7 @@ export default function AudioEngine() {
 
       return true;
     },
-    [getAudio, playDeck, stopDeck],
+    [playDeck, stopDeck],
   );
 
   const attachActiveTrack = React.useCallback(async () => {
@@ -2578,9 +2583,7 @@ export default function AudioEngine() {
       pRef.current.clearPendingSeek();
     };
 
-    const handleAutoAdvance = async (
-      trigger: "timeupdate" | "ended",
-    ): Promise<void> => {
+    const handleAutoAdvance = async (): Promise<void> => {
       const s = pRef.current;
       const cur = s.current;
       const nextTrack = getNextTrack();
@@ -2594,13 +2597,32 @@ export default function AudioEngine() {
       if (autoAdvanceKeyRef.current === key) return;
       autoAdvanceKeyRef.current = key;
 
+      const activeAudio = getAudio(activeDeckRef.current);
+      const currentTimeMs = activeAudio
+        ? Math.round(Math.max(0, activeAudio.currentTime) * 1000)
+        : 0;
+      const liveAssetDurationMs = activeAudio
+        ? readFiniteMediaDurationMs(activeAudio)
+        : 0;
+      const catalogueDurationMs =
+        s.durationByRecordingId[cur.recordingId] ?? cur.durationMs ?? 0;
+      const cachedAssetDurationMs = cur.muxPlaybackId
+        ? (s.assetDurationByPlaybackId[cur.muxPlaybackId] ?? 0)
+        : 0;
+
       sendAudioDebug({
-        event: `auto-next-from-${trigger}`,
+        event: "auto-next-from-ended",
         albumId: s.queueContextId ?? null,
         recordingId: cur.recordingId,
         playbackId: cur.muxPlaybackId ?? null,
         source: "AudioEngine",
-        detail: `next=${nextTrack.recordingId}`,
+        detail: JSON.stringify({
+          nextRecordingId: nextTrack.recordingId,
+          currentTimeMs,
+          liveAssetDurationMs,
+          cachedAssetDurationMs,
+          catalogueDurationMs,
+        }),
       });
 
       // The next track has already been authorised by either the full album
@@ -2675,18 +2697,25 @@ export default function AudioEngine() {
       mediaSurface.setTime(ms);
       pRef.current.setPositionMs(ms);
 
-      const curId = pRef.current.current?.recordingId ?? "";
-      const durFromState =
+      const currentTrack = pRef.current.current;
+      const curId = currentTrack?.recordingId ?? "";
+      const currentPlaybackId = (currentTrack?.muxPlaybackId ?? "").trim();
+
+      const catalogueDurationMs =
         (curId ? pRef.current.durationByRecordingId[curId] : 0) ||
-        pRef.current.current?.durationMs ||
+        currentTrack?.durationMs ||
         0;
 
-      const durFromEl =
-        Number.isFinite(a.duration) && a.duration > 0
-          ? Math.floor(a.duration * 1000)
-          : 0;
+      const cachedAssetDurationMs = currentPlaybackId
+        ? (pRef.current.assetDurationByPlaybackId[currentPlaybackId] ?? 0)
+        : 0;
 
-      const durMs = durFromState || durFromEl;
+      // The live element is closest to the actual delivered rendition and is
+      // therefore authoritative for playback, telemetry, and end detection.
+      const liveAssetDurationMs = readFiniteMediaDurationMs(a);
+
+      const durMs =
+        liveAssetDurationMs || cachedAssetDurationMs || catalogueDurationMs;
 
       if (durMs <= 0) return;
 
@@ -2774,13 +2803,9 @@ export default function AudioEngine() {
         }
       }
 
-      if (
-        nextTrack &&
-        remainingMs > 0 &&
-        remainingMs <= AUTO_ADVANCE_WINDOW_MS
-      ) {
-        void handleAutoAdvance("timeupdate");
-      }
+      // Do not pre-empt the active element near its end. Calling promotion from
+      // timeupdate intentionally sacrifices the remaining programme audio.
+      // Native `ended` is the single authoritative handoff point.
 
       const pct = ms / durMs;
       void reportPlaythroughComplete(pct);
@@ -2796,14 +2821,15 @@ export default function AudioEngine() {
     };
 
     const onLoadedMeta = (deckId: DeckId) => {
-      if (deckId !== activeDeckRef.current) return;
-
       const a = getAudio(deckId);
-      if (!a) return;
+      const meta = metaByDeckRef.current[deckId];
 
-      const d = a.duration;
-      if (Number.isFinite(d) && d > 0) {
-        pRef.current.setDurationMs(Math.floor(d * 1000));
+      if (!a || !meta) return;
+
+      const assetDurationMs = readFiniteMediaDurationMs(a);
+
+      if (assetDurationMs > 0) {
+        pRef.current.setAssetDurationMs(meta.playbackId, assetDurationMs);
       }
     };
 
@@ -2947,7 +2973,7 @@ export default function AudioEngine() {
       void reportPlaythroughComplete(1);
 
       if (nextTrack) {
-        void handleAutoAdvance("ended");
+        void handleAutoAdvance();
       } else {
         pRef.current.advanceFromEngine();
       }
@@ -3216,10 +3242,14 @@ export default function AudioEngine() {
 
   React.useEffect(() => {
     const player = pRef.current;
-    const curId = player.current?.recordingId ?? "";
+    const currentTrack = player.current;
+    const curId = currentTrack?.recordingId ?? "";
+    const playbackId = (currentTrack?.muxPlaybackId ?? "").trim();
+
     const durMs =
+      (playbackId ? (player.assetDurationByPlaybackId[playbackId] ?? 0) : 0) ||
       (curId ? player.durationByRecordingId[curId] : 0) ||
-      player.current?.durationMs ||
+      currentTrack?.durationMs ||
       0;
 
     if (durMs <= 0) return;
@@ -3232,6 +3262,8 @@ export default function AudioEngine() {
   }, [
     p.current?.recordingId,
     p.current?.durationMs,
+    p.current?.muxPlaybackId,
+    p.assetDurationByPlaybackId,
     p.durationByRecordingId,
     p.positionMs,
   ]);
