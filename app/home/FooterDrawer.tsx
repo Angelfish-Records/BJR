@@ -71,10 +71,12 @@ export default function FooterDrawer(props: {
         title: "Terms",
         body: (
           <>
-            Purchases grant a personal licence to access and enjoy the content.
-            You may not redistribute, mirror, scrape, automate access to, or
-            commercially exploit the content without permission. Platform access
-            may be suspended for fraud, abuse, or policy violations.
+            Purchases grant a personal, non-transferable licence to access and
+            enjoy the content for private use. You may not share account access,
+            resell or redistribute purchases, mirror the platform, scrape its
+            content, automate access, or commercially exploit the service
+            without permission. Platform access may be suspended for fraud,
+            abuse, or policy violations.
           </>
         ),
       },
@@ -84,14 +86,17 @@ export default function FooterDrawer(props: {
         body: (
           <>
             All recordings, compositions, lyrics, artwork, and audiovisual
-            elements are protected by copyright and related rights. No
-            synchronisation, public performance, mechanical reproduction,
-            sampling, derivative works, or redistribution without written
-            licence. Unauthorized uploading to third-party platforms, content-ID
-            databases, or dataset aggregation is prohibited.
+            elements are protected by copyright and related rights. Except as
+            expressly permitted by your personal licence, no synchronisation,
+            public performance, sampling, adaptation, derivative work,
+            reproduction, distribution, or other exploitation is permitted
+            without a written licence. Unauthorized uploading to third-party
+            platforms, content-ID databases, or dataset aggregation is
+            prohibited.
           </>
         ),
       },
+
       {
         key: "ai",
         title: "AI",
