@@ -209,6 +209,7 @@ export async function POST(req: Request) {
   // Otherwise: create a new subscription checkout for the chosen tier.
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
+    payment_method_types: ["card"],
     line_items: [{ price: priceId, quantity: 1 }],
     success_url,
     cancel_url,

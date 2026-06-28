@@ -9,6 +9,10 @@ import crypto from "crypto";
 import { ensureMemberByEmail, normalizeEmail } from "../../../../lib/members";
 import { grantEntitlement } from "../../../../lib/entitlementOps";
 import { reconcileStripeSubscription } from "../../../../lib/stripeSubscriptions";
+import {
+  recordPaidStripeCheckoutPurchase,
+  recordStripeRefund,
+} from "@/lib/stripePurchases";
 import { Resend } from "resend";
 import { GiftCreatedEmail } from "@/emails";
 import { getAlbumEmailMetaBySlug } from "@/lib/albums";
@@ -29,26 +33,112 @@ function safeErrMessage(err: unknown): string {
   return String(err);
 }
 
+const WEBHOOK_PROCESSING_LEASE_SECONDS = 120;
+
+type WebhookClaim = "claimed" | "handled" | "processing";
+
+async function claimStripeWebhookEvent(params: {
+  eventId: string;
+  eventType: string;
+  refs: {
+    stripeObjectId: string | null;
+    stripeCustomerId: string | null;
+    checkoutSessionId: string | null;
+    subscriptionId: string | null;
+  };
+}): Promise<WebhookClaim> {
+  const { eventId, eventType, refs } = params;
+
+  const claimed = await sql`
+    insert into stripe_webhook_events (
+      event_id,
+      type,
+      stripe_object_id,
+      stripe_customer_id,
+      checkout_session_id,
+      subscription_id,
+      processing_started_at,
+      processing_attempts,
+      last_attempt_at
+    )
+    values (
+      ${eventId},
+      ${eventType},
+      ${refs.stripeObjectId},
+      ${refs.stripeCustomerId},
+      ${refs.checkoutSessionId},
+      ${refs.subscriptionId},
+      now(),
+      1,
+      now()
+    )
+    on conflict (event_id)
+    do update set
+      type = excluded.type,
+      stripe_object_id = coalesce(
+        stripe_webhook_events.stripe_object_id,
+        excluded.stripe_object_id
+      ),
+      stripe_customer_id = coalesce(
+        stripe_webhook_events.stripe_customer_id,
+        excluded.stripe_customer_id
+      ),
+      checkout_session_id = coalesce(
+        stripe_webhook_events.checkout_session_id,
+        excluded.checkout_session_id
+      ),
+      subscription_id = coalesce(
+        stripe_webhook_events.subscription_id,
+        excluded.subscription_id
+      ),
+      processing_started_at = now(),
+      processing_attempts = stripe_webhook_events.processing_attempts + 1,
+      last_attempt_at = now()
+    where stripe_webhook_events.handled_at is null
+      and (
+        stripe_webhook_events.processing_started_at is null
+        or stripe_webhook_events.processing_started_at <
+          now() - (${WEBHOOK_PROCESSING_LEASE_SECONDS}::int * interval '1 second')
+      )
+    returning event_id
+  `;
+
+  if ((claimed.rowCount ?? 0) > 0) return "claimed";
+
+  const existing = await sql<{
+    handled_at: Date | null;
+  }>`
+    select handled_at
+    from stripe_webhook_events
+    where event_id = ${eventId}
+    limit 1
+  `;
+
+  return existing.rows[0]?.handled_at ? "handled" : "processing";
+}
+
 async function recordStripeWebhookHandled(eventId: string) {
   await sql`
     update stripe_webhook_events
-    set handled_at = coalesce(handled_at, now())
+    set
+      handled_at = coalesce(handled_at, now()),
+      processing_started_at = null
     where event_id = ${eventId}
   `;
 }
 
 async function recordStripeWebhookFailure(params: {
   eventId: string;
-  eventType: string;
   message: string;
 }) {
   await sql`
     update stripe_webhook_events
     set
       handler_error = ${params.message},
-      handler_error_at = now()
+      handler_error_at = now(),
+      processing_started_at = null
     where event_id = ${params.eventId}
-      and handler_error is null
+      and handled_at is null
   `;
 }
 
@@ -231,7 +321,7 @@ async function resolveMemberIdFromSession(
 
 function sessionIsPaid(session: Stripe.Checkout.Session): boolean {
   const ps = (session.payment_status ?? "").toString();
-  if (ps === "paid") return true;
+  if (ps === "paid" || ps === "no_payment_required") return true;
 
   const pi = session.payment_intent;
   if (pi && typeof pi === "object") {
@@ -515,32 +605,46 @@ export async function POST(req: Request) {
 
   const refs = refsFromStripeEvent(event);
 
-  // Idempotency: dedupe by event.id
-  const dedupe = await sql`
-    insert into stripe_webhook_events (
-      event_id,
-      type,
-      stripe_object_id,
-      stripe_customer_id,
-      checkout_session_id,
-      subscription_id
-    )
-    values (
-      ${event.id},
-      ${event.type},
-      ${refs.stripeObjectId},
-      ${refs.stripeCustomerId},
-      ${refs.checkoutSessionId},
-      ${refs.subscriptionId}
-    )
-    on conflict (event_id) do nothing
-    returning event_id
-  `;
-  if (dedupe.rowCount === 0) {
+  const claim = await claimStripeWebhookEvent({
+    eventId: event.id,
+    eventType: event.type,
+    refs,
+  });
+
+  if (claim === "handled") {
     return NextResponse.json({ ok: true, deduped: true });
   }
 
+  if (claim === "processing") {
+    return NextResponse.json(
+      { ok: false, error: "Webhook event is already processing" },
+      { status: 503 },
+    );
+  }
+
   try {
+    if (
+      event.type === "refund.created" ||
+      event.type === "refund.updated" ||
+      event.type === "refund.failed"
+    ) {
+      const refund = event.data.object as Stripe.Refund;
+      const outcome = await recordStripeRefund({
+        refund,
+        correlationId: event.id,
+      });
+
+      if (!outcome.matched) {
+        console.warn("Stripe refund did not match a direct purchase", {
+          eventId: event.id,
+          refundId: refund.id,
+        });
+      }
+
+      await recordStripeWebhookHandled(event.id);
+      return NextResponse.json({ ok: true });
+    }
+
     // Subscription lifecycle
     if (
       event.type === "customer.subscription.created" ||
@@ -584,7 +688,38 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    const session = event.data.object as Stripe.Checkout.Session;
+    const sessionSnapshot = event.data.object as Stripe.Checkout.Session;
+
+    if (sessionSnapshot.mode === "subscription") {
+      const subscriptionId = readStripeId(
+        sessionSnapshot.subscription as unknown,
+      );
+
+      if (!subscriptionId) {
+        throw new Error(
+          `Subscription Checkout session ${sessionSnapshot.id} has no subscription id`,
+        );
+      }
+
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
+        expand: ["latest_invoice.payment_intent"],
+      });
+
+      await reconcileStripeSubscription({ stripe, subscription });
+      await recordStripeWebhookHandled(event.id);
+      return NextResponse.json({ ok: true });
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(
+      sessionSnapshot.id,
+      { expand: ["payment_intent.latest_charge"] },
+    );
+
+    if (!sessionIsPaid(session)) {
+      throw new Error(
+        `Checkout session ${session.id} completed without a settled payment`,
+      );
+    }
 
     const { memberId, customerId } = await resolveMemberIdFromSession(session);
     if (!memberId) {
@@ -595,17 +730,6 @@ export async function POST(req: Request) {
 
     if (customerId) await attachStripeCustomerId(memberId, customerId);
 
-    if (session.mode === "subscription") {
-      if (typeof session.subscription === "string" && session.subscription) {
-        const sub = await stripe.subscriptions.retrieve(session.subscription, {
-          expand: ["latest_invoice.payment_intent"],
-        });
-        await reconcileStripeSubscription({ stripe, subscription: sub });
-      }
-      await recordStripeWebhookHandled(event.id);
-      return NextResponse.json({ ok: true });
-    }
-
     const lineItems = await stripe.checkout.sessions.listLineItems(session.id, {
       limit: 100,
     });
@@ -615,8 +739,9 @@ export async function POST(req: Request) {
       .map((li) => li.price?.id)
       .filter((v): v is string => !!v);
     if (priceIds.length === 0) {
-      await recordStripeWebhookHandled(event.id);
-      return NextResponse.json({ ok: true });
+      throw new Error(
+        `Paid Checkout session ${session.id} has no line-item price IDs`,
+      );
     }
 
     const mapped = await sql`
@@ -645,21 +770,17 @@ export async function POST(req: Request) {
       );
     }
 
-    for (const r of rows) {
-      await grantEntitlement({
-        memberId,
-        entitlementKey: r.entitlement_key,
-        scopeId: r.scope_id,
-        scopeMeta: (r.scope_meta ?? {}) as Record<string, unknown>,
-        grantedBy: "system",
-        grantReason: "stripe_checkout_completed",
-        grantSource: "stripe",
-        grantSourceRef: session.id,
-        expiresAt: null,
-        correlationId: session.id,
-        eventSource: EVENT_SOURCES.STRIPE,
-      });
-    }
+    await recordPaidStripeCheckoutPurchase({
+      session,
+      memberId,
+      correlationId: event.id,
+      entitlements: rows.map((row) => ({
+        priceId: row.price_id,
+        entitlementKey: row.entitlement_key,
+        scopeId: row.scope_id,
+        scopeMeta: (row.scope_meta ?? {}) as Record<string, unknown>,
+      })),
+    });
 
     await recordStripeWebhookHandled(event.id);
     return NextResponse.json({ ok: true });
@@ -674,11 +795,12 @@ export async function POST(req: Request) {
 
     await recordStripeWebhookFailure({
       eventId: event.id,
-      eventType: event.type,
       message,
     });
 
-    // Avoid Stripe retry storms while we inspect logs.
-    return NextResponse.json({ ok: true, recordedFailure: true });
+    return NextResponse.json(
+      { ok: false, error: "Webhook processing failed" },
+      { status: 500 },
+    );
   }
 }

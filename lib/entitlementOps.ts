@@ -133,6 +133,8 @@ export async function revokeEntitlement(params: {
   memberId: string;
   entitlementKey: string;
   scopeId?: string | null;
+  grantSource?: string | null;
+  grantSourceRef?: string | null;
   revokedBy?: string;
   revokeReason?: string | null;
   correlationId?: string | null;
@@ -144,6 +146,8 @@ export async function revokeEntitlement(params: {
     memberId,
     entitlementKey,
     scopeId = null,
+    grantSource = null,
+    grantSourceRef = null,
     revokedBy = "system",
     revokeReason = null,
     correlationId = null,
@@ -158,6 +162,11 @@ export async function revokeEntitlement(params: {
     where member_id = ${memberId}::uuid
       and entitlement_key = ${entitlementKey}
       and coalesce(scope_id,'') = coalesce(${scopeId ?? ""},'')
+      and (${grantSource}::text is null or grant_source = ${grantSource})
+      and (
+        ${grantSourceRef}::text is null
+        or grant_source_ref = ${grantSourceRef}
+      )
       and revoked_at is null
       and (expires_at is null or expires_at > now())
     returning 1
@@ -173,7 +182,12 @@ export async function revokeEntitlement(params: {
     scopeId,
     source: eventSource,
     correlationId,
-    payload: { revoked_by: revokedBy, revoke_reason: revokeReason },
+    payload: {
+      revoked_by: revokedBy,
+      revoke_reason: revokeReason,
+      grant_source: grantSource,
+      grant_source_ref: grantSourceRef,
+    },
   });
 
   return { status: "revoked" };
