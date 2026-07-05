@@ -98,6 +98,11 @@ function shouldUseNativeHls(a: HTMLMediaElement): boolean {
 const STATIC_M4A_STANDBY_MIN_BUFFER_AHEAD_SEC = 20;
 const STATIC_M4A_STANDBY_TIMEOUT_MS = 20_000;
 
+// A tiny, guarded early promotion removes the browser scheduling seam between
+// decks. Set this to 0 to retain strictly native-ended handoff behaviour.
+const GAPLESS_EARLY_PROMOTION_LEAD_MS = 36;
+const GAPLESS_EARLY_PROMOTION_ARM_WINDOW_MS = 800;
+
 function isAppleMobileWebKit(): boolean {
   if (typeof navigator === "undefined") return false;
 
@@ -2332,6 +2337,9 @@ export default function AudioEngine() {
   ]);
 
   React.useEffect(() => {
+    let earlyHandoffFrame: number | null = null;
+    let earlyHandoffKey: string | null = null;
+
     const sendPlaybackTelemetry = (payload: {
       event: "play" | "progress" | "complete";
       recordingId: string;
@@ -2687,6 +2695,117 @@ export default function AudioEngine() {
       }
     };
 
+    const hasPreparedStandbyForTrack = (nextTrack: PlayerTrack): boolean => {
+      if (isAppleMobileWebKit()) return false;
+
+      const playbackId = (nextTrack.muxPlaybackId ?? "").trim();
+      const prepared = standbyRef.current;
+
+      if (
+        !playbackId ||
+        !prepared ||
+        prepared.recordingId !== nextTrack.recordingId ||
+        prepared.playbackId !== playbackId
+      ) {
+        return false;
+      }
+
+      const meta = metaByDeckRef.current[prepared.deckId];
+
+      return Boolean(
+        meta &&
+        meta.prepared &&
+        meta.attachKey === prepared.attachKey &&
+        meta.recordingId === nextTrack.recordingId &&
+        meta.playbackId === playbackId,
+      );
+    };
+
+    const armEarlyHandoff = (args: {
+      deckId: DeckId;
+      currentTrack: PlayerTrack;
+      nextTrack: PlayerTrack;
+    }): void => {
+      if (
+        GAPLESS_EARLY_PROMOTION_LEAD_MS <= 0 ||
+        isAppleMobileWebKit() ||
+        earlyHandoffFrame != null
+      ) {
+        return;
+      }
+
+      const currentPlaybackId = (args.currentTrack.muxPlaybackId ?? "").trim();
+      const handoffKey = `${args.currentTrack.recordingId}:${
+        args.nextTrack.recordingId
+      }:${telemetrySessionIdRef.current ?? currentPlaybackId}`;
+
+      if (earlyHandoffKey === handoffKey) return;
+      earlyHandoffKey = handoffKey;
+
+      const tick = () => {
+        earlyHandoffFrame = null;
+
+        const activeAudio = getAudio(args.deckId);
+        const player = pRef.current;
+        const currentTrack = player.current;
+        const playbackId = (currentTrack?.muxPlaybackId ?? "").trim();
+
+        if (
+          !activeAudio ||
+          activeDeckRef.current !== args.deckId ||
+          !currentTrack ||
+          currentTrack.recordingId !== args.currentTrack.recordingId ||
+          playbackId !== currentPlaybackId ||
+          activeAudio.paused ||
+          activeAudio.ended
+        ) {
+          earlyHandoffKey = null;
+          return;
+        }
+
+        const durationMs =
+          readFiniteMediaDurationMs(activeAudio) ||
+          (playbackId
+            ? (player.assetDurationByPlaybackId[playbackId] ?? 0)
+            : 0) ||
+          player.durationByRecordingId[currentTrack.recordingId] ||
+          currentTrack.durationMs ||
+          0;
+
+        if (durationMs <= 0) {
+          earlyHandoffKey = null;
+          return;
+        }
+
+        const remainingMs =
+          durationMs - Math.floor(Math.max(0, activeAudio.currentTime) * 1000);
+
+        if (remainingMs > GAPLESS_EARLY_PROMOTION_LEAD_MS) {
+          earlyHandoffFrame = window.requestAnimationFrame(tick);
+          return;
+        }
+
+        earlyHandoffKey = null;
+
+        if (remainingMs < 0 || !hasPreparedStandbyForTrack(args.nextTrack)) {
+          return;
+        }
+
+        sendAudioDebug({
+          event: "gapless-early-promotion",
+          albumId: player.queueContextId ?? null,
+          recordingId: currentTrack.recordingId,
+          playbackId,
+          source: `AudioEngine.${args.deckId}`,
+          detail: `remaining=${remainingMs};next=${args.nextTrack.recordingId}`,
+        });
+
+        void handleAutoAdvance();
+      };
+
+      earlyHandoffFrame = window.requestAnimationFrame(tick);
+    };
+
     const onTime = (deckId: DeckId) => {
       if (deckId !== activeDeckRef.current) return;
 
@@ -2803,9 +2922,18 @@ export default function AudioEngine() {
         }
       }
 
-      // Do not pre-empt the active element near its end. Calling promotion from
-      // timeupdate intentionally sacrifices the remaining programme audio.
-      // Native `ended` is the single authoritative handoff point.
+      if (
+        currentTrack &&
+        nextTrack &&
+        remainingMs > GAPLESS_EARLY_PROMOTION_LEAD_MS &&
+        remainingMs <= GAPLESS_EARLY_PROMOTION_ARM_WINDOW_MS
+      ) {
+        armEarlyHandoff({
+          deckId,
+          currentTrack,
+          nextTrack,
+        });
+      }
 
       const pct = ms / durMs;
       void reportPlaythroughComplete(pct);
@@ -3041,6 +3169,10 @@ export default function AudioEngine() {
     const cleanupB = makeHandlers("b");
 
     return () => {
+      if (earlyHandoffFrame != null) {
+        window.cancelAnimationFrame(earlyHandoffFrame);
+      }
+
       cleanupA?.();
       cleanupB?.();
     };

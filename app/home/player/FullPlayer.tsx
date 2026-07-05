@@ -735,6 +735,38 @@ export default function FullPlayer(props: {
   const [pendingAlbumSlug, setPendingAlbumSlug] = React.useState<string | null>(
     null,
   );
+  const fullPlayerTopRef = React.useRef<HTMLDivElement | null>(null);
+  const mobileScrollTargetAlbumSlugRef = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    const targetAlbumSlug = mobileScrollTargetAlbumSlugRef.current;
+
+    if (
+      !targetAlbumSlug ||
+      targetAlbumSlug !== effAlbumSlug ||
+      !effAlbum ||
+      effTracks.length === 0
+    ) {
+      return;
+    }
+
+    mobileScrollTargetAlbumSlugRef.current = null;
+
+    if (!window.matchMedia("(max-width: 640px)").matches) return;
+
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+
+    const frame = window.requestAnimationFrame(() => {
+      fullPlayerTopRef.current?.scrollIntoView({
+        block: "start",
+        behavior: reduceMotion ? "auto" : "smooth",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [effAlbum, effAlbumSlug, effTracks.length]);
 
   // Clear when the pending selection has actually become the effective album view.
   React.useEffect(() => {
@@ -1312,6 +1344,7 @@ export default function FullPlayer(props: {
 
   return (
     <div
+      ref={fullPlayerTopRef}
       style={{
         minWidth: 0,
         width: "100%",
@@ -1972,6 +2005,7 @@ export default function FullPlayer(props: {
                     }}
                     onFocus={() => prefetchAlbumArt(a.coverUrl)}
                     onClick={() => {
+                      mobileScrollTargetAlbumSlugRef.current = a.slug;
                       setPendingAlbumSlug(a.slug);
                       onSelectAlbum?.(a.slug);
                     }}
