@@ -27,6 +27,7 @@ type Props = {
   memberId: string | null;
   entitlementKeys: string[];
   memberSummary?: PortalMemberSummary | null;
+  isPortalActive: boolean;
 };
 
 function hasKey(
@@ -905,6 +906,7 @@ export default function PortalModules(props: Props) {
     modules,
     entitlementKeys: entitlementKeysInput,
     memberSummary = null,
+    isPortalActive,
   } = props;
 
   const entitlementKeys = expandEntitlementKeys(entitlementKeysInput);
@@ -925,5 +927,11 @@ export default function PortalModules(props: Props) {
     ),
   }));
 
-  return <PortalTabs tabs={tabs} defaultTabId={tabs[0]?.id ?? null} />;
+  return (
+    <PortalTabs
+      tabs={tabs}
+      defaultTabId={tabs[0]?.id ?? null}
+      isPortalActive={isPortalActive}
+    />
+  );
 }

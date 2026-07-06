@@ -61,8 +61,9 @@ function getRememberedValidTab(
 export default function PortalTabs(props: {
   tabs: PortalTabSpec[];
   defaultTabId?: string | null;
+  isPortalActive?: boolean;
 }) {
-  const { tabs, defaultTabId = null } = props;
+  const { tabs, defaultTabId = null, isPortalActive = true } = props;
 
   // Router is only used here for optional prefetch warming.
   const router = useRouter();
@@ -110,7 +111,7 @@ export default function PortalTabs(props: {
 
   const [mountedIds, setMountedIds] = React.useState<Set<string>>(() => {
     const s = new Set<string>();
-    if (initial) s.add(initial);
+    if (initial && isPortalActive) s.add(initial);
     return s;
   });
 
@@ -168,6 +169,11 @@ export default function PortalTabs(props: {
       return next;
     });
   }, []);
+
+  React.useEffect(() => {
+    if (!isPortalActive || !activeId) return;
+    ensureMounted(activeId);
+  }, [activeId, ensureMounted, isPortalActive]);
 
   const measure = React.useCallback(
     (targetTabId?: string | null) => {
@@ -230,49 +236,6 @@ export default function PortalTabs(props: {
       }
     };
   }, []);
-
-  // ✅ Keep your prewarm-all behavior unchanged
-  React.useEffect(() => {
-    if (!tabs.length) return;
-
-    const warmAll = () => {
-      setMountedIds((prev) => {
-        const next = new Set(prev);
-        tabs.forEach((tab, i) => {
-          window.setTimeout(
-            () => {
-              setMountedIds((prev) => {
-                const next = new Set(prev);
-                next.add(tab.id);
-                return next;
-              });
-            },
-            100 * (i + 1),
-          );
-        });
-        return next;
-      });
-    };
-
-    type IdleWin = Window & {
-      requestIdleCallback?: (cb: () => void) => number;
-      cancelIdleCallback?: (handle: number) => void;
-    };
-
-    const win = typeof window !== "undefined" ? (window as IdleWin) : null;
-
-    let id: number | null = null;
-
-    if (win?.requestIdleCallback) {
-      id = win.requestIdleCallback(warmAll);
-      return () => {
-        if (win.cancelIdleCallback && id != null) win.cancelIdleCallback(id);
-      };
-    }
-
-    const t = window.setTimeout(warmAll, 250);
-    return () => window.clearTimeout(t);
-  }, [tabs]);
 
   const active = React.useMemo(() => {
     if (!hasTabs) return null;
@@ -436,7 +399,11 @@ export default function PortalTabs(props: {
 
       <div style={{ minWidth: 0 }}>
         {tabs.map((t) => {
-          if (!mountedIds.has(t.id)) return null;
+          const shouldRender =
+            mountedIds.has(t.id) || (isPortalActive && t.id === activeId);
+
+          if (!shouldRender) return null;
+
           const isActive = t.id === activeId;
 
           return (

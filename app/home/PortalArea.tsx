@@ -144,6 +144,7 @@ export default function PortalArea(props: PortalAreaProps) {
             memberId={memberId}
             entitlementKeys={entitlementKeys}
             memberSummary={memberSummary}
+            isPortalActive={!effectiveIsPlayer}
           />
         ) : (
           <div
@@ -174,6 +175,7 @@ export default function PortalArea(props: PortalAreaProps) {
       memberId,
       entitlementKeys,
       memberSummary,
+      effectiveIsPlayer,
     ],
   );
 
