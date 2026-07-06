@@ -782,43 +782,22 @@ export default function FullPlayer(props: {
     });
   }, []);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const targetAlbumSlug = mobileScrollTargetAlbumSlugRef.current;
 
-    if (
-      !targetAlbumSlug ||
-      targetAlbumSlug !== effAlbumSlug ||
-      !effAlbum ||
-      effTracks.length === 0
-    ) {
-      return;
-    }
+    const hasResolvedSelectedAlbum =
+      targetAlbumSlug === effAlbumSlug &&
+      Boolean(effAlbum) &&
+      effTracks.length > 0;
+
+    if (!hasResolvedSelectedAlbum) return;
+
+    // This fires after React has committed the incoming album's DOM, but before
+    // the browser paints it. The user therefore sees the new album and the
+    // restored top position as a single visual change.
+    scrollMobilePlayerToTop();
 
     mobileScrollTargetAlbumSlugRef.current = null;
-
-    let secondFrame: number | null = null;
-
-    const firstFrame = window.requestAnimationFrame(() => {
-      scrollMobilePlayerToTop();
-
-      secondFrame = window.requestAnimationFrame(() => {
-        scrollMobilePlayerToTop();
-      });
-    });
-
-    const settledTimer = window.setTimeout(() => {
-      scrollMobilePlayerToTop();
-    }, 180);
-
-    return () => {
-      window.cancelAnimationFrame(firstFrame);
-
-      if (secondFrame != null) {
-        window.cancelAnimationFrame(secondFrame);
-      }
-
-      window.clearTimeout(settledTimer);
-    };
   }, [effAlbum, effAlbumSlug, effTracks.length, scrollMobilePlayerToTop]);
 
   // Clear when the pending selection has actually become the effective album view.
@@ -2076,7 +2055,6 @@ export default function FullPlayer(props: {
                     onFocus={() => prefetchAlbumArt(a.coverUrl)}
                     onClick={() => {
                       mobileScrollTargetAlbumSlugRef.current = a.slug;
-                      scrollMobilePlayerToTop();
                       setPendingAlbumSlug(a.slug);
                       onSelectAlbum?.(a.slug);
                     }}
