@@ -249,9 +249,12 @@ export default function PortalTabs(props: {
     if (!didHydrateRef.current) {
       didHydrateRef.current = true;
       setActiveId(initial);
-      ensureMounted(initial);
+
+      if (isPortalActive) {
+        ensureMounted(initial);
+      }
     }
-  }, [initial, ensureMounted]);
+  }, [initial, ensureMounted, isPortalActive]);
 
   // Passive external pathname sync only.
   // This should react to real external route changes, not fight local tab clicks.

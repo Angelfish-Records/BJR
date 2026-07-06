@@ -3,10 +3,7 @@
 
 import React from "react";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  useClientSearchParams,
-  replaceQuery,
-} from "./urlState";
+import { useClientSearchParams, replaceQuery } from "./urlState";
 import { getLastPortalTab } from "./portalLastTab";
 
 const DEFAULT_PORTAL_TAB = "journal";
@@ -138,22 +135,32 @@ export function useSessionSurfaceController(props: {
   const pathname = usePathname();
   const sp = useClientSearchParams();
 
+  const pathnameResolved =
+    typeof pathname === "string" && pathname.trim().length > 0;
+
   const route = React.useMemo(() => parsePublicAlbumPath(pathname), [pathname]);
   const isMusicRoute = Boolean(route.albumSlug);
-  const pathTab = React.useMemo(() => portalTabFromPathname(pathname), [pathname]);
+  const pathTab = React.useMemo(
+    () => portalTabFromPathname(pathname),
+    [pathname],
+  );
 
-  const isPlayer = isMusicRoute;
-  const portalTabId = !isPlayer ? pathTab : null;
+  // Never awaken the persistent Portal subtree while App Router pathname
+  // state is unresolved. Direct Portal routes activate once their pathname
+  // is available; music is the conservative default during hydration.
+  const isPlayer = !pathnameResolved || isMusicRoute;
+  const portalTabId = pathnameResolved && !isPlayer ? pathTab : null;
 
   const [optimisticSurface, setOptimisticSurface] = React.useState<
     "player" | "portal" | null
   >(null);
 
   React.useEffect(() => {
-    if (!optimisticSurface) return;
+    if (!optimisticSurface || !pathnameResolved) return;
+
     const reality = isPlayer ? "player" : "portal";
     if (reality === optimisticSurface) setOptimisticSurface(null);
-  }, [optimisticSurface, isPlayer]);
+  }, [optimisticSurface, isPlayer, pathnameResolved]);
 
   const effectiveIsPlayer =
     optimisticSurface != null ? optimisticSurface === "player" : isPlayer;
@@ -304,19 +311,33 @@ export function useSessionSurfaceController(props: {
     if (checkout) replaceQuery({ checkout: null });
   }, [bannerKey, gift, checkout]);
 
-  const lastSurfaceKeyRef = React.useRef<string>(
-    `${isPlayer ? "player" : `portal:${portalTabId ?? ""}`}`,
-  );
+  const lastSurfaceKeyRef = React.useRef<string | null>(null);
 
   React.useEffect(() => {
+    if (!pathnameResolved) return;
+
     const key = `${isPlayer ? "player" : `portal:${portalTabId ?? ""}`}`;
     const prev = lastSurfaceKeyRef.current;
+
+    // Establish the first real route state without treating hydration as
+    // a navigation that could dismiss a valid banner.
+    if (prev === null) {
+      lastSurfaceKeyRef.current = key;
+      return;
+    }
 
     if (prev !== key) {
       lastSurfaceKeyRef.current = key;
       if (!bannerDismissed && bannerKey) dismissBanner();
     }
-  }, [isPlayer, portalTabId, bannerDismissed, bannerKey, dismissBanner]);
+  }, [
+    isPlayer,
+    portalTabId,
+    bannerDismissed,
+    bannerKey,
+    dismissBanner,
+    pathnameResolved,
+  ]);
 
   const bannerKind: BannerKind = gift ? "gift" : checkout ? "checkout" : null;
   const bannerCode =
