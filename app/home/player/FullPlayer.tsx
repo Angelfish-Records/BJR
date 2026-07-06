@@ -950,7 +950,7 @@ export default function FullPlayer(props: {
     catalogueId && access?.forCatalogueId === catalogueId ? access : null;
 
   React.useEffect(() => {
-    if (!catalogueId) return;
+    if (!catalogueId || !clerkAuthLoaded) return;
 
     let alive = true;
 
@@ -1063,7 +1063,7 @@ export default function FullPlayer(props: {
     return () => {
       alive = false;
     };
-  }, [catalogueId, albumKey, stParam, accessIdentityKey]);
+  }, [catalogueId, albumKey, stParam, accessIdentityKey, clerkAuthLoaded]);
 
   // Unknown access still disables the transport until the access check resolves.
   // A resolved auth/cap block remains clickable so the user can summon the gate.

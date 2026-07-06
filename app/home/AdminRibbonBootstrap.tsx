@@ -2,6 +2,7 @@
 "use client";
 
 import React from "react";
+import { useAuth } from "@clerk/nextjs";
 import AdminRibbon from "@/app/home/AdminRibbon";
 
 type AdminMeResponse = {
@@ -10,11 +11,33 @@ type AdminMeResponse = {
 };
 
 export default function AdminRibbonBootstrap() {
+  const { isLoaded, isSignedIn, userId } = useAuth();
+
   const [isAdmin, setIsAdmin] = React.useState(false);
   const [resolved, setResolved] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
+
+    if (!isLoaded) {
+      setIsAdmin(false);
+      setResolved(false);
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!isSignedIn) {
+      setIsAdmin(false);
+      setResolved(true);
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setResolved(false);
 
     async function run() {
       try {
@@ -43,7 +66,7 @@ export default function AdminRibbonBootstrap() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isLoaded, isSignedIn, userId]);
 
   React.useEffect(() => {
     if (typeof document === "undefined") return;
