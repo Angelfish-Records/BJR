@@ -2246,23 +2246,6 @@ export default function AudioEngine() {
   }, [sendRuntimeSnapshot]);
 
   React.useEffect(() => {
-    const albumId = normalizeAlbumId(p.queueContextId);
-    if (!albumId) return;
-    if (engineBlockedRef.current) return;
-
-    const ac = new AbortController();
-
-    void prefetchAlbumSession({
-      albumId,
-      st: getShareTokenFromLocation(),
-      startPlaybackId: pRef.current.current?.muxPlaybackId ?? null,
-      signal: ac.signal,
-    });
-
-    return () => ac.abort();
-  }, [p.queueContextId, getShareTokenFromLocation, prefetchAlbumSession]);
-
-  React.useEffect(() => {
     const onPrefetchAlbumSession = (event: Event) => {
       const detail =
         event instanceof CustomEvent && typeof event.detail === "object"

@@ -845,13 +845,21 @@ export default function FullPlayer(props: {
   const [activeListeners, setActiveListeners] = React.useState<number>(0);
 
   React.useEffect(() => {
+    if (!playingish) {
+      setActiveListeners(0);
+      return;
+    }
+
     let cancelled = false;
 
+    const isVisible = () => document.visibilityState === "visible";
+
     async function refreshActiveListeners(): Promise<void> {
+      if (!isVisible()) return;
+
       try {
         const res = await fetch("/api/playback/live?windowSeconds=30", {
           method: "GET",
-          cache: "no-store",
         });
 
         if (!res.ok) return;
@@ -872,21 +880,30 @@ export default function FullPlayer(props: {
 
         setActiveListeners(next);
       } catch {
-        if (cancelled) return;
+        // A live-count failure must never affect playback.
       }
     }
+
+    const onVisibilityChange = () => {
+      if (isVisible()) {
+        void refreshActiveListeners();
+      }
+    };
 
     void refreshActiveListeners();
 
     const id = window.setInterval(() => {
       void refreshActiveListeners();
-    }, 10_000);
+    }, 30_000);
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       cancelled = true;
       window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, []);
+  }, [playingish]);
 
   const [access, setAccess] = React.useState<AccessState | null>(null);
 
