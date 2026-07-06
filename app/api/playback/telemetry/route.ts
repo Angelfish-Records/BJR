@@ -12,7 +12,7 @@ import {
 } from "@/lib/events";
 import { EVENT_SOURCES, EVENT_TYPES } from "@/lib/vocab";
 import {
-  runAutoBadgeAwardsForMember,
+  runPlaybackAutoBadgeAwardsForMember,
   type NewlyAwardedBadge,
 } from "@/lib/badgeAutoAward";
 import { markOverlayAnnouncedForAwardedBadges } from "@/lib/badgeAwardAnnouncementServer";
@@ -624,24 +624,25 @@ export async function POST(req: NextRequest) {
   let newlyAwardedBadges: NewlyAwardedBadge[] = [];
 
   if (event === "play") {
-    if (memberId) {
-      await upsertPlaybackPlay({
-        memberId,
+    await Promise.all([
+      memberId
+        ? upsertPlaybackPlay({
+            memberId,
+            recordingId,
+            occurredAtIso,
+          })
+        : Promise.resolve(),
+      upsertRecordingPlaybackPlay({
         recordingId,
         occurredAtIso,
-      });
-    }
-
-    await upsertRecordingPlaybackPlay({
-      recordingId,
-      occurredAtIso,
-    });
+      }),
+    ]);
 
     if (memberId) {
-      newlyAwardedBadges = await runAutoBadgeAwardsForMember({
+      newlyAwardedBadges = await runPlaybackAutoBadgeAwardsForMember({
         memberId,
-        trigger: "playback_aggregate_updated",
         recordingId,
+        event: "play",
         grantedBy: "system",
         correlationId,
       });
@@ -661,26 +662,27 @@ export async function POST(req: NextRequest) {
       });
     }
   } else if (event === "progress") {
-    if (memberId) {
-      await upsertPlaybackProgress({
-        memberId,
+    await Promise.all([
+      memberId
+        ? upsertPlaybackProgress({
+            memberId,
+            recordingId,
+            listenedMs,
+            occurredAtIso,
+          })
+        : Promise.resolve(),
+      upsertRecordingPlaybackProgress({
         recordingId,
         listenedMs,
         occurredAtIso,
-      });
-    }
-
-    await upsertRecordingPlaybackProgress({
-      recordingId,
-      listenedMs,
-      occurredAtIso,
-    });
+      }),
+    ]);
 
     if (memberId) {
-      newlyAwardedBadges = await runAutoBadgeAwardsForMember({
+      newlyAwardedBadges = await runPlaybackAutoBadgeAwardsForMember({
         memberId,
-        trigger: "playback_aggregate_updated",
         recordingId,
+        event: "progress",
         grantedBy: "system",
         correlationId,
       });
@@ -701,24 +703,25 @@ export async function POST(req: NextRequest) {
       });
     }
   } else {
-    if (memberId) {
-      await upsertPlaybackComplete({
-        memberId,
+    await Promise.all([
+      memberId
+        ? upsertPlaybackComplete({
+            memberId,
+            recordingId,
+            occurredAtIso,
+          })
+        : Promise.resolve(),
+      upsertRecordingPlaybackComplete({
         recordingId,
         occurredAtIso,
-      });
-    }
-
-    await upsertRecordingPlaybackComplete({
-      recordingId,
-      occurredAtIso,
-    });
+      }),
+    ]);
 
     if (memberId) {
-      newlyAwardedBadges = await runAutoBadgeAwardsForMember({
+      newlyAwardedBadges = await runPlaybackAutoBadgeAwardsForMember({
         memberId,
-        trigger: "playback_aggregate_updated",
         recordingId,
+        event: "complete",
         grantedBy: "system",
         correlationId,
       });

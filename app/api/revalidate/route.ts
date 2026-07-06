@@ -100,6 +100,11 @@ export async function POST(req: Request) {
     tags.push("shadowHome");
   }
 
+  // Badge definitions are cached independently from member-specific grants.
+  if (docType === "badgeDefinition") {
+    tags.push("badgeDefinitions");
+  }
+
   // Portal configuration. The broad tag is sufficient because every portal
   // page cache entry also carries the shared "portalPage" tag.
   if (docType === "portalPage") {

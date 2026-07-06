@@ -108,15 +108,15 @@ async function getMemberIdByClerkUserId(
   return (r.rows?.[0]?.id as string | undefined) ?? null;
 }
 
+type MuxSigningKey = Awaited<ReturnType<typeof importPKCS8>>;
+
 async function signPlaybackToken(params: {
   playbackId: string;
   exp: number;
   keyId: string;
-  pkcs8Pem: string;
+  signingKey: MuxSigningKey;
   playbackRestrictionId?: string;
 }): Promise<string> {
-  const pk = await importPKCS8(params.pkcs8Pem, "RS256");
-
   return new SignJWT({
     sub: params.playbackId,
     aud: AUD,
@@ -126,7 +126,7 @@ async function signPlaybackToken(params: {
       : {}),
   })
     .setProtectedHeader({ alg: "RS256", kid: params.keyId, typ: "JWT" })
-    .sign(pk);
+    .sign(params.signingKey);
 }
 
 export async function POST(req: NextRequest) {
@@ -336,6 +336,7 @@ export async function POST(req: NextRequest) {
   );
 
   const pkcs8Pem = toPkcs8Pem(normalizePemMaybe(raw));
+  const signingKey = await importPKCS8(pkcs8Pem, "RS256");
   const now = Math.floor(Date.now() / 1000);
   const baseTtl = Number(
     process.env.MUX_ALBUM_SESSION_TOKEN_TTL_SECONDS ??
@@ -367,7 +368,7 @@ export async function POST(req: NextRequest) {
         playbackId: track.playbackId,
         exp,
         keyId,
-        pkcs8Pem,
+        signingKey,
         playbackRestrictionId,
       }),
       expiresAt: exp,

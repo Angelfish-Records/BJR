@@ -1,8 +1,10 @@
 // web/lib/badges.ts
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { cache } from "react";
 import { client } from "@/sanity/lib/client";
+import { areBadgesEnabled } from "@/lib/badgeFeature";
 import type { BadgeQualificationMode } from "@/lib/badgePreviewModes";
 
 export type BadgeAwardMode = "manual" | "automatic";
@@ -183,7 +185,9 @@ function coerceBadgeDefinition(
   };
 }
 
-export const getActiveBadgeDefinitions = cache(
+const BADGE_DEFINITIONS_REVALIDATE_SECONDS = 5 * 60;
+
+const getCachedActiveBadgeDefinitions = unstable_cache(
   async (): Promise<BadgeDefinition[]> => {
     const result = await client.fetch(BADGE_DEFINITIONS_QUERY);
 
@@ -194,6 +198,21 @@ export const getActiveBadgeDefinitions = cache(
     return rows
       .map((row: BadgeDefinitionQueryRow) => coerceBadgeDefinition(row))
       .filter((row): row is BadgeDefinition => row !== null);
+  },
+  ["active-badge-definitions-v1"],
+  {
+    revalidate: BADGE_DEFINITIONS_REVALIDATE_SECONDS,
+    tags: ["badgeDefinitions"],
+  },
+);
+
+export const getActiveBadgeDefinitions = cache(
+  async (): Promise<BadgeDefinition[]> => {
+    if (!areBadgesEnabled()) {
+      return [];
+    }
+
+    return getCachedActiveBadgeDefinitions();
   },
 );
 
