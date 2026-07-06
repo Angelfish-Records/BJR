@@ -1,14 +1,6 @@
 // web/app/(site)/(session)/album/[slug]/track/[displayId]/page.tsx
 import type { Metadata } from "next";
-import { client } from "@/sanity/lib/client";
-
-type TrackMetadataDoc = {
-  albumTitle?: string | null;
-  albumDisplayTitle?: string | null;
-  albumSlug?: string | null;
-  trackTitle?: string | null;
-  displayId?: string | null;
-};
+import { getTrackCanonicalMetadataBySlugAndDisplayId } from "@/lib/albums";
 
 function normTitle(value: string | null | undefined): string {
   return (value ?? "").trim();
@@ -24,16 +16,10 @@ export async function generateMetadata(props: {
 
   const albumSlug = decodedSlug.toLowerCase();
 
-  const doc = await client.fetch<TrackMetadataDoc | null>(
-    `*[_type == "album" && slug.current == $slug][0]{
-      "albumTitle": title,
-      "albumDisplayTitle": displayTitle,
-      "albumSlug": slug.current,
-      "trackTitle": tracks[displayId == $displayId][0].title,
-      "displayId": tracks[displayId == $displayId][0].displayId
-    }`,
-    { slug: albumSlug, displayId: decodedDisplayId },
-  );
+  const doc = await getTrackCanonicalMetadataBySlugAndDisplayId({
+    slug: albumSlug,
+    displayId: decodedDisplayId,
+  });
 
   const trackTitle = normTitle(doc?.trackTitle) || decodedDisplayId;
   const albumTitle =

@@ -1,5 +1,6 @@
 // web/app/(site)/(session)/layout.tsx
 import React from "react";
+import { unstable_cache } from "next/cache";
 import ShadowHomeFrame from "@/app/home/ShadowHomeFrame";
 import StableSessionShell from "@/app/home/StableSessionShell";
 import { fetchPortalPage } from "@/lib/portal";
@@ -22,6 +23,19 @@ const sessionShellQuery = `
     topLogoHeight
   }
 `;
+
+const getCachedSessionShellConfig = unstable_cache(
+  async (): Promise<SessionShellConfig | null> => {
+    return client.fetch<SessionShellConfig | null>(sessionShellQuery, {
+      slug: "home",
+    });
+  },
+  ["session-shell-config-v1"],
+  {
+    revalidate: 60 * 60,
+    tags: ["shadowHome"],
+  },
+);
 
 function asTierName(v: unknown): "friend" | "patron" | "partner" | null {
   const s = typeof v === "string" ? v.trim().toLowerCase() : "";
@@ -57,11 +71,7 @@ export default async function SessionLayout(props: {
   runtime: React.ReactNode;
 }) {
   const [shellConfig, featured, browseAlbumsRaw] = await Promise.all([
-    client.fetch<SessionShellConfig>(
-      sessionShellQuery,
-      { slug: "home" },
-      { next: { tags: ["shadowHome"] } },
-    ),
+    getCachedSessionShellConfig(),
     getFeaturedAlbumSlugFromSanity(),
     listAlbumsForBrowse(),
   ]);

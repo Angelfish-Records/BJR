@@ -1,6 +1,9 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { sql } from "@vercel/postgres";
+
+const RECORDING_PLAY_COUNTS_REVALIDATE_SECONDS = 60;
 
 type RecordingPlayCountRow = {
   recording_id: string;
@@ -28,18 +31,20 @@ function asNonNegativeInt(value: number | string | null): number {
   return 0;
 }
 
-export async function getRecordingPlayCountsByRecordingIds(
-  recordingIds: string[],
-): Promise<Record<string, number>> {
-  const ids = Array.from(
+function normalizeRecordingIds(recordingIds: string[]): string[] {
+  return Array.from(
     new Set(
       recordingIds
         .map(asTrimmedRecordingId)
         .filter((value): value is string => Boolean(value)),
     ),
-  );
+  ).sort((a, b) => a.localeCompare(b));
+}
 
-  if (!ids.length) return {};
+async function readRecordingPlayCounts(
+  ids: string[],
+): Promise<Record<string, number>> {
+  if (ids.length === 0) return {};
 
   const placeholders = ids.map((_, index) => `$${index + 1}`).join(", ");
 
@@ -59,8 +64,29 @@ export async function getRecordingPlayCountsByRecordingIds(
   for (const row of res.rows) {
     const recordingId = asTrimmedRecordingId(row.recording_id);
     if (!recordingId) continue;
+
     out[recordingId] = asNonNegativeInt(row.play_count);
   }
 
   return out;
+}
+
+const getCachedRecordingPlayCountsByIds = unstable_cache(
+  async (ids: string[]): Promise<Record<string, number>> => {
+    return readRecordingPlayCounts(ids);
+  },
+  ["recording-play-counts-v1"],
+  {
+    revalidate: RECORDING_PLAY_COUNTS_REVALIDATE_SECONDS,
+  },
+);
+
+export async function getRecordingPlayCountsByRecordingIds(
+  recordingIds: string[],
+): Promise<Record<string, number>> {
+  const ids = normalizeRecordingIds(recordingIds);
+
+  if (ids.length === 0) return {};
+
+  return getCachedRecordingPlayCountsByIds(ids);
 }

@@ -1,4 +1,5 @@
 // web/lib/albums.ts
+import { unstable_cache } from "next/cache";
 import { client } from "@/sanity/lib/client";
 import { urlFor } from "@/sanity/lib/image";
 import type {
@@ -28,7 +29,9 @@ export type AlbumDocTrack = {
 type AlbumDoc = {
   _id?: string;
   catalogueId?: string | null;
+  slug?: string | null;
   title?: string;
+  displayTitle?: string | null;
   artist?: string;
   year?: number;
   description?: string;
@@ -57,18 +60,7 @@ export async function getFeaturedAlbumSlugFromSanity(): Promise<{
   slug: string | null;
   fallbackSlug: string | null;
 }> {
-  const q = `
-    *[_type == "siteFlags"]
-      | order(_updatedAt desc)[0]{
-        "slug": featuredAlbum->slug.current,
-        "fallbackSlug": featuredAlbumFallbackSlug
-      }
-  `;
-
-  const res = await client.fetch<{
-    slug?: string | null;
-    fallbackSlug?: string | null;
-  }>(q, {}, { next: { tags: ["siteFlags"] } });
+  const res = await getCachedFeaturedAlbumSlugDoc();
 
   return {
     slug:
@@ -208,6 +200,130 @@ export function normalizeAlbumTracks(
       };
     });
 }
+
+type FeaturedAlbumSlugDoc = {
+  slug?: string | null;
+  fallbackSlug?: string | null;
+};
+
+const STATIC_CATALOGUE_REVALIDATE_SECONDS = 60 * 60;
+
+const featuredAlbumSlugQuery = `
+  *[_type == "siteFlags"]
+    | order(_updatedAt desc)[0]{
+      "slug": featuredAlbum->slug.current,
+      "fallbackSlug": featuredAlbumFallbackSlug
+    }
+`;
+
+const albumBySlugQuery = `
+  *[_type == "album" && slug.current == $slug][0]{
+    _id,
+    catalogueId,
+    "slug": slug.current,
+    title,
+    displayTitle,
+    artist,
+    year,
+    description,
+    artwork,
+    visualTheme,
+    publicPageVisible,
+    releaseAt,
+    embargoNote,
+    earlyAccessEnabled,
+    earlyAccessTiers,
+    minTierToLoad,
+    platformLinks[]{
+      platform,
+      url
+    },
+    "tracks": tracks[]{
+      recordingId,
+      displayId,
+      title,
+      artist,
+      durationMs,
+      muxPlaybackId,
+      visualTheme,
+      explicit
+    }
+  }
+`;
+
+const lyricsByRecordingIdsQuery = `
+  *[_type == "lyrics" && recordingId in $recordingIds]{
+    recordingId,
+    offsetMs,
+    cues[]{ _key, tMs, text, endMs }
+  }
+`;
+
+const albumBrowseQuery = `
+  *[_type=="album"]|order(year desc, _createdAt desc){
+    "id": _id,
+    "catalogueId": catalogueId,
+    "slug": slug.current,
+    title,
+    artist,
+    year,
+    artwork,
+    publicPageVisible,
+    minTierToLoad
+  }
+`;
+
+const getCachedFeaturedAlbumSlugDoc = unstable_cache(
+  async (): Promise<FeaturedAlbumSlugDoc | null> => {
+    return client.fetch<FeaturedAlbumSlugDoc | null>(featuredAlbumSlugQuery);
+  },
+  ["featured-album-slug-v1"],
+  {
+    revalidate: STATIC_CATALOGUE_REVALIDATE_SECONDS,
+    tags: ["siteFlags"],
+  },
+);
+
+const getCachedAlbumDocumentBySlug = unstable_cache(
+  async (slug: string): Promise<AlbumDoc | null> => {
+    return client.fetch<AlbumDoc | null>(albumBySlugQuery, { slug });
+  },
+  ["album-document-by-slug-v1"],
+  {
+    revalidate: STATIC_CATALOGUE_REVALIDATE_SECONDS,
+    tags: ["albums"],
+  },
+);
+
+const getCachedLyricsByRecordingIds = unstable_cache(
+  async (recordingIds: string[]): Promise<TrackLyricsDoc[]> => {
+    if (recordingIds.length === 0) return [];
+
+    const docs = await client.fetch<TrackLyricsDoc[]>(
+      lyricsByRecordingIdsQuery,
+      { recordingIds },
+    );
+
+    return Array.isArray(docs) ? docs : [];
+  },
+  ["album-lyrics-by-recording-ids-v1"],
+  {
+    revalidate: STATIC_CATALOGUE_REVALIDATE_SECONDS,
+    tags: ["lyrics"],
+  },
+);
+
+const getCachedAlbumBrowseDocs = unstable_cache(
+  async (): Promise<AlbumBrowseItem[]> => {
+    const docs = await client.fetch<AlbumBrowseItem[]>(albumBrowseQuery);
+    return Array.isArray(docs) ? docs : [];
+  },
+  ["album-browse-list-v1"],
+  {
+    revalidate: STATIC_CATALOGUE_REVALIDATE_SECONDS,
+    tags: ["albums"],
+  },
+);
 
 export type AlbumPlaybackAssetVerification = {
   ok: boolean;
@@ -389,44 +505,22 @@ export async function verifyAlbumPlaybackAsset(params: {
 }
 
 export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
-  const q = `
-    *[_type == "album" && slug.current == $slug][0]{
-      _id,
-      catalogueId,
-      title,
-      artist,
-      year,
-      description,
-      artwork,
-      visualTheme,
-      publicPageVisible,
-      releaseAt,
-      embargoNote,
-      earlyAccessEnabled,
-      earlyAccessTiers,
-      minTierToLoad,
-      platformLinks[]{
-        platform,
-        url
-      },
-      "tracks": tracks[]{
-        recordingId,
-        displayId,
-        title,
-        artist,
-        durationMs,
-        muxPlaybackId,
-        visualTheme,
-        explicit
-      }
-    }
-  `;
+  const albumSlug = (slug ?? "").trim().toLowerCase();
 
-  const doc = await client.fetch<AlbumDoc | null>(q, { slug });
+  if (!albumSlug) {
+    return makeAlbumPlayerBundle({
+      albumSlug: "",
+      album: null,
+      tracks: [],
+      albumLyrics: null,
+    });
+  }
+
+  const doc = await getCachedAlbumDocumentBySlug(albumSlug);
 
   if (!doc?._id) {
     return makeAlbumPlayerBundle({
-      albumSlug: slug,
+      albumSlug,
       album: null,
       tracks: [],
       albumLyrics: null,
@@ -436,6 +530,8 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
   const albumCatalogueId = normStr(doc.catalogueId) ?? undefined;
   const albumTheme = normTheme(doc.visualTheme);
 
+  // This remains outside the long-lived catalogue cache. An album must become
+  // non-embargoed as its release timestamp passes, without a fresh publish.
   const releaseAt = doc.releaseAt ?? null;
   const releaseAtMs = releaseAt ? Date.parse(releaseAt) : NaN;
   const isEmbargoedByDate = Boolean(
@@ -497,34 +593,29 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
 
   const recordingIds = tracks
     .map((t) => t.recordingId)
-    .filter((x): x is string => typeof x === "string" && x.length > 0);
+    .filter((recordingId): recordingId is string => recordingId.length > 0);
 
-  const playCountsByRecordingId =
-    await getRecordingPlayCountsByRecordingIds(recordingIds);
+  const lyricRecordingIds = Array.from(new Set(recordingIds)).sort((a, b) =>
+    a.localeCompare(b),
+  );
+
+  const [playCountsByRecordingId, lyricDocs] = await Promise.all([
+    getRecordingPlayCountsByRecordingIds(recordingIds),
+    getCachedLyricsByRecordingIds(lyricRecordingIds),
+  ]);
 
   const tracksWithPlayCounts: PlayerTrack[] = tracks.map((t) => ({
     ...t,
     playCount: playCountsByRecordingId[t.recordingId] ?? 0,
   }));
 
-  const lyricsQ = `
-    *[_type == "lyrics" && recordingId in $recordingIds]{
-      recordingId,
-      offsetMs,
-      cues[]{ _key, tMs, text, endMs }
-    }
-  `;
-
-  const lyricDocs = recordingIds.length
-    ? await client.fetch<TrackLyricsDoc[]>(lyricsQ, { recordingIds })
-    : [];
-
   const cuesByRecordingId: Record<string, LyricCue[]> = {};
   const offsetByRecordingId: Record<string, number> = {};
 
-  for (const d of Array.isArray(lyricDocs) ? lyricDocs : []) {
-    const id = (d?.recordingId ?? "").trim();
+  for (const d of lyricDocs) {
+    const id = (d.recordingId ?? "").trim();
     if (!id) continue;
+
     cuesByRecordingId[id] = normalizeLyricCuesFromSanity(d.cues);
     offsetByRecordingId[id] =
       typeof d.offsetMs === "number" && Number.isFinite(d.offsetMs)
@@ -533,31 +624,71 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
   }
 
   return makeAlbumPlayerBundle({
-    albumSlug: slug,
+    albumSlug: normStr(doc.slug) ?? albumSlug,
     album,
     tracks: tracksWithPlayCounts,
     albumLyrics: { cuesByRecordingId, offsetByRecordingId },
   });
 }
 
+export type AlbumCanonicalMetadata = {
+  title: string | null;
+  displayTitle: string | null;
+  slug: string | null;
+};
+
+export type TrackCanonicalMetadata = {
+  albumTitle: string | null;
+  albumDisplayTitle: string | null;
+  albumSlug: string | null;
+  trackTitle: string | null;
+  displayId: string | null;
+};
+
+export async function getAlbumCanonicalMetadataBySlug(
+  slug: string,
+): Promise<AlbumCanonicalMetadata | null> {
+  const albumSlug = (slug ?? "").trim().toLowerCase();
+  if (!albumSlug) return null;
+
+  const doc = await getCachedAlbumDocumentBySlug(albumSlug);
+  if (!doc?._id) return null;
+
+  return {
+    title: normStr(doc.title) ?? null,
+    displayTitle: normStr(doc.displayTitle) ?? null,
+    slug: normStr(doc.slug) ?? null,
+  };
+}
+
+export async function getTrackCanonicalMetadataBySlugAndDisplayId(params: {
+  slug: string;
+  displayId: string;
+}): Promise<TrackCanonicalMetadata | null> {
+  const albumSlug = (params.slug ?? "").trim().toLowerCase();
+  const requestedDisplayId = (params.displayId ?? "").trim();
+
+  if (!albumSlug || !requestedDisplayId) return null;
+
+  const doc = await getCachedAlbumDocumentBySlug(albumSlug);
+  if (!doc?._id) return null;
+
+  const matchingTrack =
+    doc.tracks?.find(
+      (track) => normStr(track.displayId) === requestedDisplayId,
+    ) ?? null;
+
+  return {
+    albumTitle: normStr(doc.title) ?? null,
+    albumDisplayTitle: normStr(doc.displayTitle) ?? null,
+    albumSlug: normStr(doc.slug) ?? null,
+    trackTitle: normStr(matchingTrack?.title) ?? null,
+    displayId: normStr(matchingTrack?.displayId) ?? null,
+  };
+}
+
 export async function listAlbumsForBrowse(): Promise<AlbumBrowseItem[]> {
-  const q = `
-    *[_type=="album"]|order(year desc, _createdAt desc){
-      "id": _id,
-      "catalogueId": catalogueId,
-      "slug": slug.current,
-      title,
-      artist,
-      year,
-      artwork,
-      publicPageVisible,
-      minTierToLoad
-    }
-  `;
-
-  const data = await client.fetch<AlbumBrowseItem[]>(q);
-
-  const items = Array.isArray(data) ? data : [];
+  const items = await getCachedAlbumBrowseDocs();
   return items.map((a) => ({
     ...a,
     catalogueId: normStr(a.catalogueId) ?? null,

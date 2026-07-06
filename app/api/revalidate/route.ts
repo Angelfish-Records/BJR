@@ -91,16 +91,44 @@ export async function POST(req: Request) {
   }
 
   // Site flags singleton
-  if (docType === "siteFlags" || docId === "siteFlags") tags.push("siteFlags");
+  if (docType === "siteFlags" || docId === "siteFlags") {
+    tags.push("siteFlags");
+  }
 
   // Shadow home pages
-  if (docType === "shadowHomePage") tags.push("shadowHome");
+  if (docType === "shadowHomePage") {
+    tags.push("shadowHome");
+  }
 
-  // Never silently ignore: if we don't recognize the doc type, do a cheap safe refresh.
+  // Portal configuration. The broad tag is sufficient because every portal
+  // page cache entry also carries the shared "portalPage" tag.
+  if (docType === "portalPage") {
+    tags.push("portalPage");
+    revalidatePath("/portal");
+  }
+
+  // Album metadata, tracks, browse lists, and canonical metadata helpers.
+  if (docType === "album") {
+    tags.push("albums");
+    revalidatePath("/albums");
+  }
+
+  // Lyrics are independently cached, but album payload construction depends on
+  // them, so invalidate both cache families together.
+  if (docType === "lyrics") {
+    tags.push("lyrics");
+    tags.push("albums");
+    revalidatePath("/albums");
+  }
+
+  // Never silently ignore: if we do not recognise the document type, retain
+  // the existing low-cost landing-page fallback.
   if (tags.length === 0) {
     tags.push("landingPage");
     revalidatePath("/");
-    for (const t of tags) reTag(t);
+
+    for (const tag of tags) reTag(tag);
+
     return Response.json({
       ok: true,
       docType,
@@ -111,23 +139,7 @@ export async function POST(req: Request) {
     });
   }
 
-  // Albums
-  if (docType === "album") {
-    tags.push("albums");
-    revalidatePath("/albums"); // if we have an index route
-    // If your album pages depend on tags, also tag them:
-    // tags.push(`album:${docId ?? ''}`) // optional if we tag-fetch by id
-  }
-
-  // Lyrics / tracks docs can affect album pages too (depending on your query model)
-  if (docType === "lyrics") {
-    tags.push("lyrics");
-    // safest cheap refresh:
-    tags.push("albums");
-    revalidatePath("/albums");
-  }
-
-  for (const t of tags) reTag(t);
+  for (const tag of tags) reTag(tag);
 
   return Response.json({ ok: true, docType, docId, revalidated: tags });
 }
