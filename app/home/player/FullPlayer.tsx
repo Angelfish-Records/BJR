@@ -738,6 +738,50 @@ export default function FullPlayer(props: {
   const fullPlayerTopRef = React.useRef<HTMLDivElement | null>(null);
   const mobileScrollTargetAlbumSlugRef = React.useRef<string | null>(null);
 
+  const scrollMobilePlayerToTop = React.useCallback(() => {
+    if (typeof window === "undefined") return;
+    if (!window.matchMedia("(max-width: 640px)").matches) return;
+
+    const target = fullPlayerTopRef.current;
+    if (!target) return;
+
+    let ancestor: HTMLElement | null = target.parentElement;
+
+    while (ancestor) {
+      const overflowY = window.getComputedStyle(ancestor).overflowY;
+      const canScroll =
+        (overflowY === "auto" ||
+          overflowY === "scroll" ||
+          overflowY === "overlay") &&
+        ancestor.scrollHeight > ancestor.clientHeight;
+
+      if (canScroll) {
+        const ancestorTop = ancestor.getBoundingClientRect().top;
+        const targetTop = target.getBoundingClientRect().top;
+        const nextTop = Math.max(
+          0,
+          ancestor.scrollTop + targetTop - ancestorTop,
+        );
+
+        ancestor.scrollTo({
+          top: nextTop,
+          behavior: "auto",
+        });
+
+        return;
+      }
+
+      ancestor = ancestor.parentElement;
+    }
+
+    const targetTop = window.scrollY + target.getBoundingClientRect().top;
+
+    window.scrollTo({
+      top: Math.max(0, targetTop),
+      behavior: "auto",
+    });
+  }, []);
+
   React.useEffect(() => {
     const targetAlbumSlug = mobileScrollTargetAlbumSlugRef.current;
 
@@ -752,21 +796,30 @@ export default function FullPlayer(props: {
 
     mobileScrollTargetAlbumSlugRef.current = null;
 
-    if (!window.matchMedia("(max-width: 640px)").matches) return;
+    let secondFrame: number | null = null;
 
-    const reduceMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
+    const firstFrame = window.requestAnimationFrame(() => {
+      scrollMobilePlayerToTop();
 
-    const frame = window.requestAnimationFrame(() => {
-      fullPlayerTopRef.current?.scrollIntoView({
-        block: "start",
-        behavior: reduceMotion ? "auto" : "smooth",
+      secondFrame = window.requestAnimationFrame(() => {
+        scrollMobilePlayerToTop();
       });
     });
 
-    return () => window.cancelAnimationFrame(frame);
-  }, [effAlbum, effAlbumSlug, effTracks.length]);
+    const settledTimer = window.setTimeout(() => {
+      scrollMobilePlayerToTop();
+    }, 180);
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+
+      if (secondFrame != null) {
+        window.cancelAnimationFrame(secondFrame);
+      }
+
+      window.clearTimeout(settledTimer);
+    };
+  }, [effAlbum, effAlbumSlug, effTracks.length, scrollMobilePlayerToTop]);
 
   // Clear when the pending selection has actually become the effective album view.
   React.useEffect(() => {
@@ -2023,6 +2076,7 @@ export default function FullPlayer(props: {
                     onFocus={() => prefetchAlbumArt(a.coverUrl)}
                     onClick={() => {
                       mobileScrollTargetAlbumSlugRef.current = a.slug;
+                      scrollMobilePlayerToTop();
                       setPendingAlbumSlug(a.slug);
                       onSelectAlbum?.(a.slug);
                     }}
