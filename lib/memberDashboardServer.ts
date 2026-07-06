@@ -10,6 +10,7 @@ import {
   type PortalMemberSummary,
 } from "@/lib/memberDashboard";
 import { getActiveBadgeDefinitionsByEntitlementKey } from "@/lib/badges";
+import { areBadgesEnabled } from "@/lib/badgeFeature";
 import { buildMemberIdentityState } from "@/lib/memberIdentityServer";
 
 type MemberListenTotalsRow = {
@@ -144,6 +145,10 @@ async function consumeCabinetRevealGrants(grantIds: string[]): Promise<void> {
 async function getDashboardBadges(
   memberId: string,
 ): Promise<MemberDashboardBadge[]> {
+  if (!areBadgesEnabled()) {
+    return [];
+  }
+
   const [activeBadgeGrants, badgeDefinitionsByKey] = await Promise.all([
     listActiveGlobalBadgeGrants(memberId),
     getActiveBadgeDefinitionsByEntitlementKey(),

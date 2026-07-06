@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { requireAdminMemberId } from "@/lib/adminAuth";
 import { awardBadgeToMembers } from "@/lib/badgeAdmin";
+import { areBadgesEnabled } from "@/lib/badgeFeature";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -28,6 +29,17 @@ function asStringArray(value: unknown): string[] {
 export async function POST(request: Request) {
   try {
     const adminMemberId = await requireAdminMemberId();
+
+    if (!areBadgesEnabled()) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Badges are currently disabled.",
+          code: "BADGES_DISABLED",
+        },
+        { status: 409 },
+      );
+    }
 
     const body = (await request.json()) as unknown;
     if (!isRecord(body)) {

@@ -3,10 +3,9 @@ import "server-only";
 
 import { sql } from "@vercel/postgres";
 import type { NewlyAwardedBadge } from "@/lib/badgeAutoAward";
+import { areBadgesEnabled } from "@/lib/badgeFeature";
 
-function normalizeEntitlementKeys(
-  badges: NewlyAwardedBadge[],
-): string[] {
+function normalizeEntitlementKeys(badges: NewlyAwardedBadge[]): string[] {
   const unique = new Set<string>();
 
   for (const badge of badges) {
@@ -26,6 +25,10 @@ export async function markOverlayAnnouncedForAwardedBadges(params: {
   memberId: string;
   badges: NewlyAwardedBadge[];
 }): Promise<void> {
+  if (!areBadgesEnabled()) {
+    return;
+  }
+
   const { memberId, badges } = params;
 
   const entitlementKeys = normalizeEntitlementKeys(badges);

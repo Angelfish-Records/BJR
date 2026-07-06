@@ -3,6 +3,7 @@ import "server-only";
 
 import { sql } from "@vercel/postgres";
 import { getRecordingSummaryByRecordingId } from "@/lib/albums";
+import { areBadgesEnabled } from "@/lib/badgeFeature";
 import { grantEntitlement } from "@/lib/entitlementOps";
 
 export type AwardBadgeToMembersInput = {
@@ -38,6 +39,10 @@ function uniqueMemberIds(memberIds: string[]): string[] {
 export async function awardBadgeToMembers(
   input: AwardBadgeToMembersInput,
 ): Promise<AwardBadgeToMembersResult> {
+  if (!areBadgesEnabled()) {
+    throw new Error("Badge system is disabled.");
+  }
+
   const entitlementKey = input.entitlementKey.trim();
   const memberIds = uniqueMemberIds(input.memberIds);
 
