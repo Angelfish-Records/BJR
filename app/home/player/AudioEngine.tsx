@@ -578,8 +578,7 @@ export default function AudioEngine() {
   const timeDataRef = React.useRef<U8AB | null>(null);
 
   const playIntentRef = React.useRef(false);
-  const playthroughSentRef = React.useRef(new Set<string>());
-  const playthroughCompleteInFlightRef = React.useRef(
+  const telemetryCompleteInFlightRef = React.useRef(
     new Map<string, Promise<boolean>>(),
   );
   const TELEMETRY_PLAY_THRESHOLD_MS = 5_000;
@@ -1891,13 +1890,12 @@ export default function AudioEngine() {
     const albumSessionCache = albumSessionCacheRef.current;
     const albumSessionInFlight = albumSessionInFlightRef.current;
     const blockedNonce = blockedNonceRef.current;
-    const playthroughSent = playthroughSentRef.current;
-    const playthroughCompleteInFlight = playthroughCompleteInFlightRef.current;
     const telemetryPlaySent = telemetryPlaySentRef.current;
     const telemetryPlayAccumulated = telemetryPlayAccumulatedMsRef.current;
     const telemetryPlayLastProgress = telemetryPlayLastProgressMsRef.current;
     const telemetryProgressSent = telemetryProgressSentRef.current;
     const telemetryCompleteSent = telemetryCompleteSentRef.current;
+    const telemetryCompleteInFlight = telemetryCompleteInFlightRef.current;
 
     return () => {
       try {
@@ -1946,13 +1944,12 @@ export default function AudioEngine() {
       albumSessionCache.clear();
       albumSessionInFlight.clear();
       blockedNonce.clear();
-      playthroughSent.clear();
-      playthroughCompleteInFlight.clear();
       telemetryPlaySent.clear();
       telemetryPlayAccumulated.clear();
       telemetryPlayLastProgress.clear();
       telemetryProgressSent.clear();
       telemetryCompleteSent.clear();
+      telemetryCompleteInFlight.clear();
 
       try {
         audioSurface.set({
@@ -2331,10 +2328,10 @@ export default function AudioEngine() {
       listenedMs?: number;
       progressMs: number;
       durationMs: number | null;
-    }) => {
+    }): Promise<boolean> => {
       const shareAttribution = telemetryShareAttributionRef.current;
 
-      fetch("/api/playback/telemetry", {
+      return fetch("/api/playback/telemetry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2367,44 +2364,10 @@ export default function AudioEngine() {
           if (badges.length > 0) {
             announceBadges(badges);
           }
+
+          return response.ok;
         })
-        .catch(() => {});
-    };
-
-    const reportPlaythroughComplete = (pct: number): Promise<boolean> => {
-      const recordingId = pRef.current.current?.recordingId ?? "";
-      const playbackId = telemetrySessionIdRef.current ?? "";
-
-      if (!recordingId || !playbackId) return Promise.resolve(false);
-      if (pct < 0.9) return Promise.resolve(false);
-
-      const key = `${recordingId}:${playbackId}`;
-
-      if (playthroughSentRef.current.has(key)) {
-        return Promise.resolve(true);
-      }
-
-      const inFlight = playthroughCompleteInFlightRef.current.get(key);
-      if (inFlight) return inFlight;
-
-      const request = fetch("/api/playthrough/complete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recordingId, playbackId, pct }),
-        keepalive: true,
-      })
-        .then((response) => {
-          if (!response.ok) return false;
-          playthroughSentRef.current.add(key);
-          return true;
-        })
-        .catch(() => false)
-        .finally(() => {
-          playthroughCompleteInFlightRef.current.delete(key);
-        });
-
-      playthroughCompleteInFlightRef.current.set(key, request);
-      return request;
+        .catch(() => false);
     };
 
     const reportTelemetryPlay = (params: {
@@ -2446,7 +2409,7 @@ export default function AudioEngine() {
 
       telemetryPlaySentRef.current.add(sentKey);
 
-      sendPlaybackTelemetry({
+      void sendPlaybackTelemetry({
         event: "play",
         recordingId,
         playbackId,
@@ -2461,22 +2424,47 @@ export default function AudioEngine() {
       playbackId: string;
       progressMs: number;
       durationMs: number | null;
-    }) => {
+    }): Promise<boolean> => {
       const { recordingId, playbackId, progressMs, durationMs } = params;
+
+      if (!recordingId || !playbackId) {
+        return Promise.resolve(false);
+      }
+
       const milestoneKey = `${recordingId}:${playbackId}:complete`;
 
-      if (telemetryCompleteSentRef.current.has(milestoneKey)) return;
+      if (telemetryCompleteSentRef.current.has(milestoneKey)) {
+        return Promise.resolve(true);
+      }
 
-      telemetryCompleteSentRef.current.add(milestoneKey);
+      const inFlight = telemetryCompleteInFlightRef.current.get(milestoneKey);
 
-      sendPlaybackTelemetry({
+      if (inFlight) {
+        return inFlight;
+      }
+
+      const request = sendPlaybackTelemetry({
         event: "complete",
         recordingId,
         playbackId,
         milestoneKey: "complete",
         progressMs,
         durationMs,
-      });
+      })
+        .then((ok) => {
+          if (ok) {
+            telemetryCompleteSentRef.current.add(milestoneKey);
+          }
+
+          return ok;
+        })
+        .finally(() => {
+          telemetryCompleteInFlightRef.current.delete(milestoneKey);
+        });
+
+      telemetryCompleteInFlightRef.current.set(milestoneKey, request);
+
+      return request;
     };
 
     const reportTelemetryProgress = (params: {
@@ -2498,7 +2486,7 @@ export default function AudioEngine() {
 
       telemetryProgressSentRef.current.add(milestoneKey);
 
-      sendPlaybackTelemetry({
+      void sendPlaybackTelemetry({
         event: "progress",
         recordingId,
         playbackId,
@@ -2617,9 +2605,17 @@ export default function AudioEngine() {
       });
 
       // The next track has already been authorised by either the full album
-      // session or the bounded anonymous sample session. Completion accounting
+      // session or the bounded anonymous sample session. Completion telemetry
       // must never delay the deck handoff on a locked/background device.
-      void reportPlaythroughComplete(1);
+      const completionDurationMs =
+        liveAssetDurationMs || cachedAssetDurationMs || catalogueDurationMs;
+
+      void reportTelemetryComplete({
+        recordingId: cur.recordingId,
+        playbackId: telemetrySessionIdRef.current ?? "",
+        progressMs: currentTimeMs,
+        durationMs: completionDurationMs || null,
+      });
 
       const standbyReady = await prepareStandbyForTrack(nextTrack);
 
@@ -2919,10 +2915,9 @@ export default function AudioEngine() {
       }
 
       const pct = ms / durMs;
-      void reportPlaythroughComplete(pct);
 
       if (pct >= 0.9) {
-        reportTelemetryComplete({
+        void reportTelemetryComplete({
           recordingId: curId,
           playbackId: telemetrySessionIdRef.current ?? "",
           progressMs: ms,
@@ -3081,7 +3076,33 @@ export default function AudioEngine() {
           : `next=null;queue=${pRef.current.queue.length};repeat=${pRef.current.repeat}`,
       });
 
-      void reportPlaythroughComplete(1);
+      const currentTrack = pRef.current.current;
+      const recordingId = currentTrack?.recordingId ?? "";
+      const currentPlaybackId = (currentTrack?.muxPlaybackId ?? "").trim();
+      const activeAudio = getAudio(deckId);
+
+      const liveDurationMs = activeAudio
+        ? readFiniteMediaDurationMs(activeAudio)
+        : 0;
+
+      const fallbackDurationMs =
+        (currentPlaybackId
+          ? (pRef.current.assetDurationByPlaybackId[currentPlaybackId] ?? 0)
+          : 0) ||
+        pRef.current.durationByRecordingId[recordingId] ||
+        currentTrack?.durationMs ||
+        0;
+
+      const progressMs = activeAudio
+        ? Math.floor(Math.max(0, activeAudio.currentTime) * 1000)
+        : fallbackDurationMs;
+
+      void reportTelemetryComplete({
+        recordingId,
+        playbackId: telemetrySessionIdRef.current ?? "",
+        progressMs,
+        durationMs: liveDurationMs || fallbackDurationMs || null,
+      });
 
       if (nextTrack) {
         void handleAutoAdvance();

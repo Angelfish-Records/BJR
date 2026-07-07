@@ -16,7 +16,7 @@ import {
   type NewlyAwardedBadge,
 } from "@/lib/badgeAutoAward";
 import { markOverlayAnnouncedForAwardedBadges } from "@/lib/badgeAwardAnnouncementServer";
-import { ensureAnonId } from "@/lib/anon";
+import { ensureAnonId, persistAnonId } from "@/lib/anon";
 import {
   recordShareTokenPlaybackEvent,
   resolveShareTokenPlaybackContext,
@@ -94,21 +94,24 @@ async function insertDedupeKey(params: {
 }
 
 async function insertAnonymousDedupeKey(params: {
+  anonId: string;
   playbackId: string;
   recordingId: string;
   eventType: string;
   milestoneKey: string;
 }): Promise<boolean> {
-  const { playbackId, recordingId, eventType, milestoneKey } = params;
+  const { anonId, playbackId, recordingId, eventType, milestoneKey } = params;
 
   const res = await sql<{ inserted: boolean }>`
     insert into anonymous_playback_telemetry_dedupe (
+      anon_id,
       playback_id,
       recording_id,
       event_type,
       milestone_key
     )
     values (
+      ${anonId},
       ${playbackId},
       ${recordingId},
       ${eventType},
@@ -560,7 +563,7 @@ export async function POST(req: NextRequest) {
   const { userId } = await auth();
   const memberId = userId ? await getMemberIdByClerkUserId(userId) : null;
 
-  const { anonId } = ensureAnonId(req);
+  const { anonId, isNew: isNewAnonId } = ensureAnonId(req);
 
   const albumScopeId = asTrimmedString(body.albumScopeId) || null;
   const sharePlaybackContext =
@@ -589,6 +592,7 @@ export async function POST(req: NextRequest) {
         milestoneKey,
       })
     : await insertAnonymousDedupeKey({
+        anonId,
         playbackId,
         recordingId,
         eventType,
@@ -597,6 +601,11 @@ export async function POST(req: NextRequest) {
 
   if (!inserted) {
     const res = NextResponse.json({ ok: true, deduped: true });
+
+    if (isNewAnonId) {
+      persistAnonId(res, anonId);
+    }
+
     res.headers.set("x-correlation-id", correlationId);
     return res;
   }
@@ -750,6 +759,11 @@ export async function POST(req: NextRequest) {
   }
 
   const res = NextResponse.json({ ok: true, newlyAwardedBadges });
+
+  if (isNewAnonId) {
+    persistAnonId(res, anonId);
+  }
+
   res.headers.set("x-correlation-id", correlationId);
   return res;
 }
