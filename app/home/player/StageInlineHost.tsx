@@ -104,17 +104,23 @@ export default function StageInlineHost(props: {
   // Config is stateful (allowed to change), but portal container is NOT.
   const [cfg, setCfg] = React.useState<SlotConfig>(fallback);
 
-  // Ensure hostEl is attached somewhere, and move it as the slot appears/disappears.
+  // Every session layout renders the inline-stage slot. Attach during hydration
+  // and once again on the next paint, rather than permanently observing every
+  // mutation beneath document.body for a slot that does not disappear.
   React.useEffect(() => {
     if (!hostEl) return;
 
     const parking = ensureOffscreenParking();
+    let cancelled = false;
+    let retryFrame: number | null = null;
 
     const attach = () => {
+      if (cancelled) return;
+
       const slot = document.getElementById(slotId) as HTMLElement | null;
       const targetParent = slot ?? parking;
 
-      // Move hostEl if parent changed.
+      // Move hostEl only if its parent actually changed.
       if (hostEl.parentElement !== targetParent) {
         try {
           targetParent.appendChild(hostEl);
@@ -122,35 +128,35 @@ export default function StageInlineHost(props: {
             "moved hostEl into",
             slot ? `#${slotId}` : "#af-stage-inline-offscreen",
           );
-        } catch (e) {
-          dbg("appendChild failed", e);
+        } catch (error) {
+          dbg("appendChild failed", error);
         }
       }
 
-      // Read config from slot (or fallback if no slot).
       const nextCfg = readSlotConfig(slot, fallback);
 
-      // Keep parking sized to the current intended stage height
-      // so the mounted tree doesn’t collapse when the slot disappears.
+      // Keep the fallback parking box sized correctly even though ordinary
+      // session layouts should keep the host in the visible stage slot.
       parking.style.height = `${Math.max(1, Math.floor(nextCfg.height))}px`;
 
-      setCfg((prev) => (prev.height === nextCfg.height ? prev : nextCfg));
+      setCfg((previous) =>
+        previous.height === nextCfg.height ? previous : nextCfg,
+      );
     };
 
-    // Initial attach in a microtask so we’re not doing sync state changes on mount timing edges.
+    // The microtask covers ordinary hydration; the next-frame retry covers
+    // any late sibling commit without keeping a permanent global observer.
     queueMicrotask(attach);
-
-    const mo = new MutationObserver(() => attach());
-    mo.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["data-height"],
-    });
+    retryFrame = window.requestAnimationFrame(attach);
 
     return () => {
-      mo.disconnect();
-      // Do NOT remove hostEl; leaving it parked preserves state even if tree reorders.
+      cancelled = true;
+
+      if (retryFrame != null) {
+        window.cancelAnimationFrame(retryFrame);
+      }
+
+      // Do NOT remove hostEl; preserving it retains stage and WebGL state.
     };
   }, [hostEl, slotId, fallback]);
 
