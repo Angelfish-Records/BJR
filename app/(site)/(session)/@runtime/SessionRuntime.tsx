@@ -23,6 +23,15 @@ export default async function SessionRuntime(props: {
 }) {
   // Important: this file is now a route-payload loader only.
   // It must not directly instantiate the persistent session shell.
+  const selectedAlbumSlug =
+    (props.albumSlugOverride ?? "").trim() ||
+    (props.featuredAlbumSlug ?? "").trim() ||
+    "god-defend";
+
+  // Catalogue data is independent of Clerk and member provisioning. Start it
+  // immediately so it can overlap the authenticated runtime path.
+  const bundlePromise = getAlbumBySlug(selectedAlbumSlug);
+
   const { userId } = await auth();
   const user = userId ? await currentUser() : null;
   const email =
@@ -44,18 +53,18 @@ export default async function SessionRuntime(props: {
     });
 
     member = { id: ensured.id, created: ensured.created, email };
-    entitlementKeys = await listCurrentEntitlementKeys(ensured.id);
-    tier = deriveTier(entitlementKeys);
 
-    memberSummary = await buildPortalMemberSummary(ensured.id);
+    const [nextEntitlementKeys, nextMemberSummary] = await Promise.all([
+      listCurrentEntitlementKeys(ensured.id),
+      buildPortalMemberSummary(ensured.id),
+    ]);
+
+    entitlementKeys = nextEntitlementKeys;
+    tier = deriveTier(entitlementKeys);
+    memberSummary = nextMemberSummary;
   }
 
-  const selectedAlbumSlug =
-    (props.albumSlugOverride ?? "").trim() ||
-    (props.featuredAlbumSlug ?? "").trim() ||
-    "god-defend";
-
-  const bundle = await getAlbumBySlug(selectedAlbumSlug);
+  const bundle = await bundlePromise;
 
   const payload: SessionRuntimePayload = {
     memberId: member?.id ?? null,

@@ -13,7 +13,12 @@ export default function PlayerHost({
   children: React.ReactNode;
 }) {
   React.useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (
+      typeof window === "undefined" ||
+      process.env.NEXT_PUBLIC_NAV_DEBUG !== "1"
+    ) {
+      return;
+    }
 
     const tag = "[NAV]";
     const origPush = window.history.pushState.bind(window.history);

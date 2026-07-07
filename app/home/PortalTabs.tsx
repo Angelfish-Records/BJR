@@ -256,6 +256,14 @@ export default function PortalTabs(props: {
     }
   }, [initial, ensureMounted, isPortalActive]);
 
+  // A portal route can become active after hydration has resolved its pathname.
+  // Mount only its selected tab; do not awaken the entire portal tree.
+  React.useEffect(() => {
+    if (!isPortalActive || !activeId) return;
+
+    ensureMounted(activeId);
+  }, [activeId, ensureMounted, isPortalActive]);
+
   // Passive external pathname sync only.
   // This should react to real external route changes, not fight local tab clicks.
   React.useEffect(() => {

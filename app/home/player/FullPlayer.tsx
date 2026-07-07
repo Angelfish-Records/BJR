@@ -18,6 +18,9 @@ import { primeLyricsFromAlbumBundle } from "./lyrics/ensureLyricsForTrack";
 import { deriveShareContext, shareAlbum, shareTrack } from "./share";
 import { PatternRingGlow } from "./VisualizerPattern";
 
+const LIVE_LISTENER_COUNT_ENABLED =
+  process.env.NEXT_PUBLIC_LIVE_LISTENER_COUNT_ENABLED === "true";
+
 function fmtTime(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
   const m = Math.floor(s / 60);
@@ -877,7 +880,7 @@ export default function FullPlayer(props: {
   const [activeListeners, setActiveListeners] = React.useState<number>(0);
 
   React.useEffect(() => {
-    if (!playingish) {
+    if (!LIVE_LISTENER_COUNT_ENABLED || !playingish) {
       setActiveListeners(0);
       return;
     }

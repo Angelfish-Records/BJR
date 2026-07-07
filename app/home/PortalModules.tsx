@@ -1,4 +1,7 @@
 // web/app/home/PortalModules.tsx
+"use client";
+
+import dynamic from "next/dynamic";
 import React from "react";
 import { PortableText } from "@portabletext/react";
 import type { PortableTextBlock } from "@portabletext/types";
@@ -15,10 +18,16 @@ import BuyAlbumButton from "./modules/BuyAlbumButton";
 import DownloadAlbumButton from "./modules/DownloadAlbumButton";
 import GiftAlbumButton from "./modules/GiftAlbumButton";
 import PortalTabs, { type PortalTabSpec } from "./PortalTabs";
-import PortalArtistPosts from "./modules/PortalArtistPosts";
-import PortalExegesis from "./modules/PortalExegesis";
-import PortalMemberPanel from "./modules/PortalMemberPanel";
-import MailbagFeedbackForm from "./modules/MailbagFeedbackForm";
+
+const PortalArtistPosts = dynamic(() => import("./modules/PortalArtistPosts"));
+
+const PortalExegesis = dynamic(() => import("./modules/PortalExegesis"));
+
+const PortalMemberPanel = dynamic(() => import("./modules/PortalMemberPanel"));
+
+const MailbagFeedbackForm = dynamic(
+  () => import("./modules/MailbagFeedbackForm"),
+);
 
 type DownloadAssetSel = NonNullable<PortalModuleDownloads["assets"]>[number];
 
