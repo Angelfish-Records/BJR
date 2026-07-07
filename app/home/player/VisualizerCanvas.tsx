@@ -34,6 +34,11 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
   }, []);
 
   const themeName: ThemeName = canonicalThemeName(player.current?.visualTheme);
+  const shouldLoadTrackTheme =
+    player.status === "loading" ||
+    player.status === "playing" ||
+    player.status === "paused" ||
+    player.intent === "play";
 
   const themeNameRef = React.useRef<ThemeName>(themeName);
 
@@ -65,21 +70,7 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
     engine.setIdleTheme(createIdleMistTheme());
     engineRef.current = engine;
 
-    let cancelled = false;
-
-    (async () => {
-      const nextThemeName = themeNameRef.current;
-      const factory = await loadThemeFactory(nextThemeName);
-
-      if (cancelled || engineRef.current !== engine) return;
-
-      engine.setThemeDebugName(nextThemeName);
-      engine.setTargetTheme(factory());
-    })().catch(() => {});
-
     return () => {
-      cancelled = true;
-
       try {
         engine.stop();
         engine.dispose();
@@ -144,7 +135,7 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
 
   React.useEffect(() => {
     const engine = engineRef.current;
-    if (!engine) return;
+    if (!engine || !shouldLoadTrackTheme) return;
 
     engine.setThemeDebugName(themeName);
 
@@ -161,7 +152,7 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
     return () => {
       cancelled = true;
     };
-  }, [themeName]);
+  }, [shouldLoadTrackTheme, themeName]);
 
   return (
     <canvas

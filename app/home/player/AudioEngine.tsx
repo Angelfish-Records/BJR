@@ -576,6 +576,7 @@ export default function AudioEngine() {
   type U8AB = Uint8Array<ArrayBuffer>;
   const freqDataRef = React.useRef<U8AB | null>(null);
   const timeDataRef = React.useRef<U8AB | null>(null);
+  const [audioAnalysisReady, setAudioAnalysisReady] = React.useState(false);
 
   const playIntentRef = React.useRef(false);
   const telemetryCompleteInFlightRef = React.useRef(
@@ -2030,6 +2031,7 @@ export default function AudioEngine() {
       timeDataRef.current = new Uint8Array(
         new ArrayBuffer(analyser.fftSize),
       ) as U8AB;
+      setAudioAnalysisReady(true);
 
       sendRuntimeSnapshot("audio-graph-created");
     };
@@ -2061,47 +2063,33 @@ export default function AudioEngine() {
   }, [sendRuntimeSnapshot]);
 
   React.useEffect(() => {
+    const clearAudioFeatures = () => {
+      audioSurface.set({
+        rms: 0,
+        bass: 0,
+        mid: 0,
+        treble: 0,
+        centroid: 0,
+        energy: 0,
+      });
+    };
+
+    const isActive = p.status === "playing" || p.status === "loading";
+
+    if (!audioAnalysisReady || !isActive) {
+      clearAudioFeatures();
+      return;
+    }
+
     let raf: number | null = null;
-    let to: number | null = null;
 
     const tick = () => {
       const analyser = analyserRef.current;
       const freq = freqDataRef.current;
       const time = timeDataRef.current;
 
-      const st = pRef.current.status;
-      const active = st === "playing" || st === "loading";
-
       if (!analyser || !freq || !time) {
-        audioSurface.set({
-          rms: 0,
-          bass: 0,
-          mid: 0,
-          treble: 0,
-          centroid: 0,
-          energy: 0.08,
-        });
-        to = window.setTimeout(tick, 250);
-        return;
-      }
-
-      if (!active) {
-        analyser.getByteTimeDomainData(time);
-        let sum = 0;
-        for (let i = 0; i < time.length; i++) {
-          const v = (time[i]! - 128) / 128;
-          sum += v * v;
-        }
-        const rms = Math.sqrt(sum / time.length);
-        audioSurface.set({
-          rms,
-          bass: 0,
-          mid: 0,
-          treble: 0,
-          centroid: 0,
-          energy: Math.min(1, rms * 1.2),
-        });
-        to = window.setTimeout(tick, 180);
+        clearAudioFeatures();
         return;
       }
 
@@ -2160,10 +2148,9 @@ export default function AudioEngine() {
     raf = window.requestAnimationFrame(tick);
 
     return () => {
-      if (raf) window.cancelAnimationFrame(raf);
-      if (to) window.clearTimeout(to);
+      if (raf != null) window.cancelAnimationFrame(raf);
     };
-  }, []);
+  }, [audioAnalysisReady, p.status]);
 
   React.useEffect(() => {
     nearEndWarmKeyRef.current = null;

@@ -106,6 +106,7 @@ export class VisualizerEngine {
 
   private ro: ResizeObserver | null = null;
   private raf: number | null = null;
+  private timer: number | null = null;
   private parent: HTMLElement | null = null;
 
   private w = 1; // CSS px width of parent
@@ -376,6 +377,39 @@ export class VisualizerEngine {
     }
   }
 
+  private scheduleNextFrame(loop: FrameRequestCallback): void {
+    if (
+      this.disposed ||
+      this.contextLost ||
+      this.raf != null ||
+      this.timer != null
+    ) {
+      return;
+    }
+
+    const fpsCap = getTierConfig(this.tier, this.performanceProfile).fpsCap;
+    const minFrameMs = 1000 / Math.max(1, fpsCap);
+    const elapsedMs = this.lastDrawMs
+      ? performance.now() - this.lastDrawMs
+      : minFrameMs;
+    const delayMs = Math.max(0, minFrameMs - elapsedMs);
+
+    const queueRaf = () => {
+      this.timer = null;
+
+      if (this.disposed || this.contextLost || this.raf != null) return;
+
+      this.raf = window.requestAnimationFrame(loop);
+    };
+
+    if (delayMs <= 1) {
+      queueRaf();
+      return;
+    }
+
+    this.timer = window.setTimeout(queueRaf, delayMs);
+  }
+
   start() {
     if (this.disposed || this.contextLost) return;
 
@@ -385,7 +419,7 @@ export class VisualizerEngine {
     const parentChanged = this.parent !== parent;
 
     // If already running and parent hasn't changed, nothing to do.
-    if (this.raf != null && !parentChanged) return;
+    if ((this.raf != null || this.timer != null) && !parentChanged) return;
 
     // If parent changed while running, rebind sizing observer without restarting RAF.
     if (parentChanged) {
@@ -431,28 +465,19 @@ export class VisualizerEngine {
     this.ro.observe(parent);
     resize();
 
-    // If RAF is already running, we only needed to rebind to the new parent.
-    if (this.raf != null) return;
+    // If a frame or timer is already scheduled, we only needed to rebind.
+    if (this.raf != null || this.timer != null) return;
 
     this.lastT = performance.now();
     this.lastDrawMs = 0;
 
     const loop = (tNowMs: number) => {
-      if (this.disposed || this.contextLost) {
-        this.raf = null;
-        return;
-      }
+      this.raf = null;
+
+      if (this.disposed || this.contextLost) return;
 
       const dtSec = Math.min(0.05, (tNowMs - this.lastT) / 1000);
       this.lastT = tNowMs;
-
-      // FPS cap per tier
-      const fpsCap = getTierConfig(this.tier, this.performanceProfile).fpsCap;
-      const minFrame = 1000 / Math.max(1, fpsCap);
-      if (this.lastDrawMs && tNowMs - this.lastDrawMs < minFrame) {
-        this.raf = window.requestAnimationFrame(loop);
-        return;
-      }
       this.lastDrawMs = tNowMs;
 
       const frameStart = performance.now();
@@ -467,7 +492,7 @@ export class VisualizerEngine {
       this.ensurePresentFboSized();
 
       if (!this.presentPass || !this.presentFbo || !this.frameRenderer) {
-        this.raf = window.requestAnimationFrame(loop);
+        this.scheduleNextFrame(loop);
         return;
       }
 
@@ -613,15 +638,17 @@ export class VisualizerEngine {
         this.lastPerfPublishAtMs = tNowMs;
       }
 
-      this.raf = window.requestAnimationFrame(loop);
+      this.scheduleNextFrame(loop);
     };
 
-    this.raf = window.requestAnimationFrame(loop);
+    this.scheduleNextFrame(loop);
   }
 
   stop() {
     if (this.raf != null) window.cancelAnimationFrame(this.raf);
+    if (this.timer != null) window.clearTimeout(this.timer);
     this.raf = null;
+    this.timer = null;
     this.ro?.disconnect();
     this.ro = null;
     this.parent = null;
