@@ -64,6 +64,105 @@ function getSrcSize(src: HTMLCanvasElement): { srcW: number; srcH: number } {
   return { srcW, srcH };
 }
 
+function useVisualSnapshotSource() {
+  const srcRef = React.useRef<HTMLCanvasElement | null>(null);
+  const [hasSnapshotSource, setHasSnapshotSource] = React.useState(false);
+
+  React.useEffect(() => {
+    const apply = (canvas: HTMLCanvasElement | null) => {
+      srcRef.current = canvas;
+
+      const nextHasSnapshotSource = Boolean(canvas);
+
+      setHasSnapshotSource((previous) =>
+        previous === nextHasSnapshotSource ? previous : nextHasSnapshotSource,
+      );
+    };
+
+    apply(visualSurface.getSnapshotCanvas());
+
+    const unsubscribe = visualSurface.subscribe((event) => {
+      if (event.type === "snapshot") {
+        apply(event.canvas);
+      }
+    });
+
+    return () => {
+      try {
+        unsubscribe();
+      } catch {
+        // VisualSurface subscriptions are best-effort decorative plumbing.
+      }
+    };
+  }, []);
+
+  return { srcRef, hasSnapshotSource };
+}
+
+function useCanvasRenderAvailability(
+  canvasRef: React.RefObject<HTMLCanvasElement | null>,
+  requestedActive: boolean,
+): boolean {
+  const [documentVisible, setDocumentVisible] = React.useState(
+    () => typeof document === "undefined" || !document.hidden,
+  );
+  const [intersecting, setIntersecting] = React.useState(true);
+
+  React.useEffect(() => {
+    const syncDocumentVisibility = () => {
+      setDocumentVisible(!document.hidden);
+    };
+
+    syncDocumentVisibility();
+
+    document.addEventListener(
+      "visibilitychange",
+      syncDocumentVisibility,
+      false,
+    );
+
+    return () => {
+      document.removeEventListener(
+        "visibilitychange",
+        syncDocumentVisibility,
+        false,
+      );
+    };
+  }, []);
+
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+
+    if (!canvas || typeof IntersectionObserver === "undefined") {
+      setIntersecting(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry) return;
+
+        const nextIntersecting =
+          entry.isIntersecting &&
+          entry.intersectionRatio > 0 &&
+          entry.boundingClientRect.width > 0 &&
+          entry.boundingClientRect.height > 0;
+
+        setIntersecting((previous) =>
+          previous === nextIntersecting ? previous : nextIntersecting,
+        );
+      },
+      { threshold: 0 },
+    );
+
+    observer.observe(canvas);
+
+    return () => observer.disconnect();
+  }, [canvasRef]);
+
+  return requestedActive && documentVisible && intersecting;
+}
+
 /** Cover-fit mapping into destination (fills the canvas, cropping if needed). */
 function coverMap(
   dstW: number,
@@ -111,35 +210,25 @@ export function VisualizerSnapshotCanvas(props: {
   } = props;
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
-  const srcRef = React.useRef<HTMLCanvasElement | null>(null);
+  const { srcRef, hasSnapshotSource } = useVisualSnapshotSource();
 
-  // Keep latest prop values without restarting the RAF loop.
+  const shouldRender = useCanvasRenderAvailability(
+    canvasRef,
+    active && hasSnapshotSource,
+  );
+
+  // Keep latest prop values without restarting the visible render loop.
   const fpsRef = React.useRef(fps);
   const opacityRef = React.useRef(opacity);
   const sourceRectRef = React.useRef<SourceRect>(sourceRect);
-  const activeRef = React.useRef(active);
   const ctxFilterRef = React.useRef<string | undefined>(ctxFilter);
 
   React.useEffect(() => {
     fpsRef.current = fps;
     opacityRef.current = opacity;
     sourceRectRef.current = sourceRect;
-    activeRef.current = active;
     ctxFilterRef.current = ctxFilter;
-  }, [fps, opacity, sourceRect, active, ctxFilter]);
-
-  // Subscribe once to the current visual SNAPSHOT canvas.
-  React.useEffect(() => {
-    srcRef.current = visualSurface.getSnapshotCanvas();
-    const unsub = visualSurface.subscribe((e) => {
-      if (e.type === "snapshot") srcRef.current = e.canvas;
-    });
-    return () => {
-      try {
-        unsub();
-      } catch {}
-    };
-  }, []);
+  }, [fps, opacity, sourceRect, ctxFilter]);
 
   // Canvas sizing via ResizeObserver (no per-frame layout reads).
   const sizeRef = React.useRef({ pxW: 1, pxH: 1, dpr: 1 });
@@ -164,10 +253,13 @@ export function VisualizerSnapshotCanvas(props: {
     return () => ro.disconnect();
   }, []);
 
-  // Draw loop (stable; doesn’t restart on prop identity changes).
+  // Draw only while the canvas is visible, active, and backed by a snapshot.
   React.useEffect(() => {
-    let raf = 0;
-    let last = 0;
+    if (!shouldRender) return;
+
+    let raf: number | null = null;
+    let timer: number | null = null;
+    let lastDrawMs = 0;
 
     // Cache contexts + a backbuffer to avoid blanking on transient draw failures.
     const backRef = {
@@ -200,29 +292,56 @@ export function VisualizerSnapshotCanvas(props: {
       backRef.ctx = bc.getContext("2d", { alpha: true });
       return backRef.ctx;
     };
+    const scheduleNextFrame = () => {
+      const interval = 1000 / Math.max(1, fpsRef.current);
+      const elapsedMs = lastDrawMs ? performance.now() - lastDrawMs : interval;
+      const delayMs = Math.max(0, interval - elapsedMs);
+
+      const queueFrame = () => {
+        timer = null;
+        raf = window.requestAnimationFrame(tick);
+      };
+
+      if (delayMs <= 1) {
+        queueFrame();
+      } else {
+        timer = window.setTimeout(queueFrame, delayMs);
+      }
+    };
 
     const tick = (t: number) => {
-      raf = requestAnimationFrame(tick);
-
-      if (!activeRef.current) return;
-
-      const interval = 1000 / Math.max(1, fpsRef.current);
-      if (t - last < interval) return;
-      last = t;
+      raf = null;
+      lastDrawMs = t;
 
       const dst = canvasRef.current;
       const src = srcRef.current;
-      if (!dst || !src) return;
+
+      if (!dst || !src) {
+        scheduleNextFrame();
+        return;
+      }
 
       const { pxW, pxH } = sizeRef.current;
       const ctx = ensure2d(dst);
-      if (!ctx) return;
+
+      if (!ctx) {
+        scheduleNextFrame();
+        return;
+      }
 
       const { srcW, srcH } = getSrcSize(src);
-      if (srcW < 2 || srcH < 2) return;
+
+      if (srcW < 2 || srcH < 2) {
+        scheduleNextFrame();
+        return;
+      }
 
       const bctx = ensureBack(pxW, pxH);
-      if (!bctx || !backRef.canvas) return;
+
+      if (!bctx || !backRef.canvas) {
+        scheduleNextFrame();
+        return;
+      }
 
       const { sx, sy, sw, sh } = pickRect(srcW, srcH, sourceRectRef.current);
       const { dX, dY, dW, dH } = coverMap(pxW, pxH, sw, sh);
@@ -244,13 +363,19 @@ export function VisualizerSnapshotCanvas(props: {
         ctx.globalCompositeOperation = "copy";
         ctx.drawImage(backRef.canvas, 0, 0);
       } catch {
-        // keep last good onscreen frame
+        // Keep the last good onscreen frame.
       }
+
+      scheduleNextFrame();
     };
 
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, []);
+    scheduleNextFrame();
+
+    return () => {
+      if (raf != null) window.cancelAnimationFrame(raf);
+      if (timer != null) window.clearTimeout(timer);
+    };
+  }, [shouldRender, srcRef]);
 
   return (
     <canvas
@@ -288,9 +413,14 @@ function VisualizerRingGlowCanvas(props: {
     props;
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
-  const srcRef = React.useRef<HTMLCanvasElement | null>(null);
+  const { srcRef, hasSnapshotSource } = useVisualSnapshotSource();
 
-  // Keep latest prop values without restarting RAF.
+  const shouldRender = useCanvasRenderAvailability(
+    canvasRef,
+    active && hasSnapshotSource,
+  );
+
+  // Keep latest prop values without restarting the visible render loop.
   const fpsRef = React.useRef(fps);
   const opacityRef = React.useRef(opacity);
   const blurRef = React.useRef(blurPx);
@@ -298,7 +428,6 @@ function VisualizerRingGlowCanvas(props: {
   const glowRef = React.useRef(glowPx);
   const sizeParamRef = React.useRef(size);
   const sourceRectRef = React.useRef<SourceRect>(sourceRect);
-  const activeRef = React.useRef(active);
 
   React.useEffect(() => {
     fpsRef.current = fps;
@@ -308,21 +437,7 @@ function VisualizerRingGlowCanvas(props: {
     glowRef.current = glowPx;
     sizeParamRef.current = size;
     sourceRectRef.current = sourceRect;
-    activeRef.current = active;
-  }, [fps, opacity, blurPx, ringPx, glowPx, size, sourceRect, active]);
-
-  // Subscribe once to the current visual SNAPSHOT canvas.
-  React.useEffect(() => {
-    srcRef.current = visualSurface.getSnapshotCanvas();
-    const unsub = visualSurface.subscribe((e) => {
-      if (e.type === "snapshot") srcRef.current = e.canvas;
-    });
-    return () => {
-      try {
-        unsub();
-      } catch {}
-    };
-  }, []);
+  }, [fps, opacity, blurPx, ringPx, glowPx, size, sourceRect]);
 
   // Size canvas via ResizeObserver on its own CSS box (explicit width/height set by parent).
   const sizeRef = React.useRef({ pxW: 1, pxH: 1, dpr: 1 });
@@ -348,8 +463,11 @@ function VisualizerRingGlowCanvas(props: {
   }, []);
 
   React.useEffect(() => {
-    let raf = 0;
-    let last = 0;
+    if (!shouldRender) return;
+
+    let raf: number | null = null;
+    let timer: number | null = null;
+    let lastDrawMs = 0;
 
     const backRef = {
       canvas: null as HTMLCanvasElement | null,
@@ -382,25 +500,49 @@ function VisualizerRingGlowCanvas(props: {
       return backRef.ctx;
     };
 
-    const tick = (t: number) => {
-      raf = requestAnimationFrame(tick);
-
-      if (!activeRef.current) return;
-
+    const scheduleNextFrame = () => {
       const interval = 1000 / Math.max(1, fpsRef.current);
-      if (t - last < interval) return;
-      last = t;
+      const elapsedMs = lastDrawMs ? performance.now() - lastDrawMs : interval;
+      const delayMs = Math.max(0, interval - elapsedMs);
+
+      const queueFrame = () => {
+        timer = null;
+        raf = window.requestAnimationFrame(tick);
+      };
+
+      if (delayMs <= 1) {
+        queueFrame();
+      } else {
+        timer = window.setTimeout(queueFrame, delayMs);
+      }
+    };
+
+    const tick = (t: number) => {
+      raf = null;
+      lastDrawMs = t;
 
       const dst = canvasRef.current;
       const src = srcRef.current;
-      if (!dst || !src) return;
+
+      if (!dst || !src) {
+        scheduleNextFrame();
+        return;
+      }
 
       const { pxW, pxH, dpr } = sizeRef.current;
       const ctx = ensure2d(dst);
-      if (!ctx) return;
+
+      if (!ctx) {
+        scheduleNextFrame();
+        return;
+      }
 
       const { srcW, srcH } = getSrcSize(src);
-      if (srcW < 2 || srcH < 2) return;
+
+      if (srcW < 2 || srcH < 2) {
+        scheduleNextFrame();
+        return;
+      }
 
       const ringPxNow = ringRef.current;
       const glowPxNow = glowRef.current;
@@ -423,7 +565,11 @@ function VisualizerRingGlowCanvas(props: {
       const { dX, dY, dW, dH } = coverMap(pxW, pxH, sw, sh);
 
       const bctx = ensureBack(pxW, pxH);
-      if (!bctx || !backRef.canvas) return;
+
+      if (!bctx || !backRef.canvas) {
+        scheduleNextFrame();
+        return;
+      }
 
       try {
         // ---- render EVERYTHING onto backbuffer ----
@@ -480,13 +626,19 @@ function VisualizerRingGlowCanvas(props: {
         ctx.globalCompositeOperation = "copy";
         ctx.drawImage(backRef.canvas, 0, 0);
       } catch {
-        // Keep last good onscreen frame.
+        // Keep the last good onscreen frame.
       }
+
+      scheduleNextFrame();
     };
 
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, []);
+    scheduleNextFrame();
+
+    return () => {
+      if (raf != null) window.cancelAnimationFrame(raf);
+      if (timer != null) window.clearTimeout(timer);
+    };
+  }, [shouldRender, srcRef]);
 
   // CSS size is controlled by parent, but we set explicit dimensions for clarity
   const pad = ringPx + glowPx;
