@@ -5,6 +5,12 @@ import React from "react";
 import { useAuth } from "@clerk/nextjs";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { usePlayer } from "./PlayerState";
+import {
+  fetchPlaybackAccessDecision,
+  getCachedPlaybackAccessDecision,
+  isPlaybackAccessAction,
+  type PlaybackAccessDecision as AccessState,
+} from "./playbackAccessClient";
 import { useGateBroker } from "@/app/home/gating/GateBroker";
 import type { GateAction, GateCodeRaw } from "@/app/home/gating/gateTypes";
 import type {
@@ -190,16 +196,6 @@ function TrackInlinePlayIcon() {
   );
 }
 
-// ---- access-check single-flight cache (module scope) ----
-const BLOCK_ACTIONS = ["login", "subscribe", "buy", "wait"] as const;
-type BlockAction = (typeof BLOCK_ACTIONS)[number];
-
-function isBlockAction(v: unknown): v is BlockAction {
-  return (
-    typeof v === "string" && (BLOCK_ACTIONS as readonly string[]).includes(v)
-  );
-}
-
 const PLAYBACK_GATE_CODES = [
   "AUTH_REQUIRED",
   "PLAYBACK_CAP_REACHED",
@@ -215,71 +211,12 @@ function isPlaybackGateCode(v: unknown): v is GateCodeRaw {
 }
 
 function toGateAction(v: unknown): GateAction {
-  return isBlockAction(v) ? v : "login";
+  return isPlaybackAccessAction(v) ? v : "login";
 }
 
 function playbackGateMessage(reason: string | null | undefined): string {
   const trimmed = reason?.trim();
   return trimmed || "Enter your email address to continue listening.";
-}
-
-type ShareTokenAccess = {
-  expiresAt: string | null;
-  maxRedemptions: number | null;
-};
-
-function parseShareTokenAccess(value: unknown): ShareTokenAccess | null {
-  if (!value || typeof value !== "object") return null;
-
-  const raw = value as Record<string, unknown>;
-  const hasExpiresAt = Object.prototype.hasOwnProperty.call(raw, "expiresAt");
-  const hasMaxRedemptions = Object.prototype.hasOwnProperty.call(
-    raw,
-    "maxRedemptions",
-  );
-
-  if (!hasExpiresAt && !hasMaxRedemptions) return null;
-
-  const expiresAtRaw = raw.expiresAt;
-  const maxRedemptionsRaw = raw.maxRedemptions;
-
-  const expiresAt =
-    expiresAtRaw == null
-      ? null
-      : typeof expiresAtRaw === "string" &&
-          Number.isFinite(Date.parse(expiresAtRaw))
-        ? expiresAtRaw
-        : null;
-
-  const maxRedemptions =
-    maxRedemptionsRaw == null
-      ? null
-      : typeof maxRedemptionsRaw === "number" &&
-          Number.isFinite(maxRedemptionsRaw) &&
-          maxRedemptionsRaw >= 1
-        ? Math.floor(maxRedemptionsRaw)
-        : null;
-
-  if (expiresAtRaw != null && expiresAt == null) return null;
-  if (maxRedemptionsRaw != null && maxRedemptions == null) return null;
-
-  return { expiresAt, maxRedemptions };
-}
-
-function parseSharePlaybackContext(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-
-  const context = value.trim();
-
-  return context.startsWith("stpc1.") && context.length <= 900 ? context : null;
-}
-
-function parseSharePlaybackScopeId(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-
-  const scopeId = value.trim();
-
-  return /^alb:[^\s]+$/i.test(scopeId) ? scopeId : null;
 }
 
 function formatShareTokenExpiry(iso: string | null): string | null {
@@ -303,102 +240,6 @@ function formatRedemptionLimit(maxRedemptions: number | null): string | null {
   return `The link will work ${maxRedemptions} time${
     maxRedemptions === 1 ? "" : "s"
   }.`;
-}
-
-type AccessState = {
-  forCatalogueId: string;
-  allowed: boolean;
-  embargoed: boolean;
-  releaseAt: string | null;
-  code?: string;
-  action?: BlockAction;
-  reason?: string;
-  corr?: string | null;
-  shareTokenAccess: ShareTokenAccess | null;
-  sharePlaybackContext: string | null;
-  sharePlaybackScopeId: string | null;
-};
-
-const accessResultCache = new Map<string, AccessState>();
-const accessInFlight = new Map<string, Promise<AccessState>>();
-
-function accessKey(
-  catalogueId: string,
-  st: string | null,
-  accessIdentityKey: string,
-) {
-  // Identity must be included: an anonymous denial must never be reused after
-  // Clerk establishes an authenticated session.
-  return `${catalogueId}::st=${st ?? ""}::identity=${accessIdentityKey}`;
-}
-
-async function fetchAccessOnce(
-  catalogueId: string,
-  st: string | null,
-  accessIdentityKey: string,
-): Promise<AccessState> {
-  const key = accessKey(catalogueId, st, accessIdentityKey);
-
-  const cached = accessResultCache.get(key);
-  if (cached) return cached;
-
-  const existing = accessInFlight.get(key);
-  if (existing) return existing;
-
-  const p = (async () => {
-    const u = new URL("/api/access/check", window.location.origin);
-    u.searchParams.set("albumId", catalogueId);
-    if (st) u.searchParams.set("st", st);
-
-    const r = await fetch(u.toString(), { method: "GET", cache: "no-store" });
-    const corr = r.headers.get("x-correlation-id") ?? null;
-
-    const j = (await r.json()) as {
-      allowed?: boolean;
-      embargoed?: boolean;
-      releaseAt?: string | null;
-      code?: string | null;
-      action?: string | null;
-      reason?: string | null;
-      shareTokenAccess?: unknown;
-      sharePlaybackContext?: unknown;
-      sharePlaybackScopeId?: unknown;
-    };
-
-    const allowed = j?.allowed !== false;
-    const embargoed = j?.embargoed === true;
-    const releaseAt = (j?.releaseAt ?? null) as string | null;
-
-    const code =
-      typeof j?.code === "string" && j.code.trim() ? j.code : undefined;
-
-    const action = isBlockAction(j?.action) ? j.action : undefined;
-
-    const reason =
-      typeof j?.reason === "string" && j.reason.trim() ? j.reason : undefined;
-
-    const next: AccessState = {
-      forCatalogueId: catalogueId,
-      allowed,
-      embargoed,
-      releaseAt,
-      code,
-      action,
-      reason,
-      corr,
-      shareTokenAccess: parseShareTokenAccess(j?.shareTokenAccess),
-      sharePlaybackContext: parseSharePlaybackContext(j?.sharePlaybackContext),
-      sharePlaybackScopeId: parseSharePlaybackScopeId(j?.sharePlaybackScopeId),
-    };
-
-    accessResultCache.set(key, next);
-    return next;
-  })().finally(() => {
-    accessInFlight.delete(key);
-  });
-
-  accessInFlight.set(key, p);
-  return p;
 }
 
 type StableView = AlbumPlayerBundle;
@@ -958,14 +799,17 @@ export default function FullPlayer(props: {
 
     let alive = true;
 
-    const st = stParam;
-    const key = accessKey(catalogueId, st, accessIdentityKey);
+    const accessRequest = {
+      catalogueId,
+      shareToken: stParam,
+      accessIdentityKey,
+    };
 
     // Do not leave an anonymous denial visibly attached to the newly
     // authenticated session while its fresh access request is in flight.
     setAccess(null);
 
-    const cached = accessResultCache.get(key) ?? null;
+    const cached = getCachedPlaybackAccessDecision(accessRequest);
     setAccess((prev) => {
       if (!cached && !prev) return prev;
       if (cached && prev && JSON.stringify(cached) === JSON.stringify(prev))
@@ -975,7 +819,7 @@ export default function FullPlayer(props: {
 
     (async () => {
       try {
-        const next = await fetchAccessOnce(catalogueId, st, accessIdentityKey);
+        const next = await fetchPlaybackAccessDecision(accessRequest);
         if (!alive) return;
 
         setAccess((prev) => {
@@ -1049,15 +893,15 @@ export default function FullPlayer(props: {
           releaseAt: null,
           code: "ACCESS_CHECK_ERROR",
           reason: "Access check failed (client).",
+          corr: null,
           shareTokenAccess: null,
           sharePlaybackContext: null,
           sharePlaybackScopeId: null,
         };
 
-        accessResultCache.set(
-          accessKey(catalogueId, st, accessIdentityKey),
-          fallback,
-        );
+        // Presentation may remain available after a transient request failure,
+        // but do not cache this fallback in the shared decision store.
+        // PlayerState must still fail closed if real play authorisation fails.
         setAccess(fallback);
 
         const player = pRef.current;

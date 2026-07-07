@@ -5,6 +5,11 @@ import React from "react";
 import { useAuth } from "@clerk/nextjs";
 import type { PlayerTrack } from "@/lib/types";
 import { ensureLyricsForTrack } from "@/app/home/player/lyrics/ensureLyricsForTrack";
+import {
+  fetchPlaybackAccessDecision,
+  readPlaybackShareTokenFromLocation,
+  type PlaybackAccessDecision,
+} from "./playbackAccessClient";
 
 type PlayerStatus = "idle" | "loading" | "playing" | "paused";
 type RepeatMode = "off" | "one" | "all";
@@ -219,38 +224,7 @@ function hydrateTracks(
   return changed ? next : ts;
 }
 
-type PlaybackAccessState = {
-  forCatalogueId: string;
-  allowed: boolean;
-  embargoed: boolean;
-  releaseAt: string | null;
-  code?: string;
-  reason?: string;
-  sharePlaybackContext: string | null;
-  sharePlaybackScopeId: string | null;
-};
-
-const playbackAccessCache = new Map<string, PlaybackAccessState>();
-const playbackAccessInFlight = new Map<string, Promise<PlaybackAccessState>>();
-
-function readShareTokenFromLocation(): string | null {
-  if (typeof window === "undefined") return null;
-
-  const sp = new URLSearchParams(window.location.search);
-  const token = (sp.get("st") ?? sp.get("share") ?? "").trim();
-
-  return token || null;
-}
-
-function playbackAccessKey(
-  catalogueId: string,
-  st: string | null,
-  accessIdentityKey: string,
-): string {
-  return `${catalogueId}::st=${st ?? ""}::identity=${accessIdentityKey}`;
-}
-
-function blockedPlaybackMessage(access: PlaybackAccessState): string {
+function blockedPlaybackMessage(access: PlaybackAccessDecision): string {
   if (access.embargoed) {
     return "Playback is disabled while this release is under embargo.";
   }
@@ -258,74 +232,6 @@ function blockedPlaybackMessage(access: PlaybackAccessState): string {
   if (access.reason) return access.reason;
 
   return "Playback is not available for this release.";
-}
-
-async function fetchPlaybackAccess(
-  catalogueId: string,
-  accessIdentityKey: string,
-): Promise<PlaybackAccessState> {
-  const st = readShareTokenFromLocation();
-  const key = playbackAccessKey(catalogueId, st, accessIdentityKey);
-
-  const cached = playbackAccessCache.get(key);
-  if (cached) return cached;
-
-  const existing = playbackAccessInFlight.get(key);
-  if (existing) return existing;
-
-  const promise = (async () => {
-    const u = new URL("/api/access/check", window.location.origin);
-    u.searchParams.set("albumId", catalogueId);
-    if (st) u.searchParams.set("st", st);
-
-    const res = await fetch(u.toString(), {
-      method: "GET",
-      cache: "no-store",
-    });
-
-    const body = (await res.json()) as {
-      allowed?: boolean;
-      embargoed?: boolean;
-      releaseAt?: string | null;
-      code?: string | null;
-      reason?: string | null;
-      sharePlaybackContext?: unknown;
-      sharePlaybackScopeId?: unknown;
-    };
-
-    const next: PlaybackAccessState = {
-      forCatalogueId: catalogueId,
-      allowed: body.allowed !== false,
-      embargoed: body.embargoed === true,
-      releaseAt: body.releaseAt ?? null,
-      code:
-        typeof body.code === "string" && body.code.trim()
-          ? body.code
-          : undefined,
-      reason:
-        typeof body.reason === "string" && body.reason.trim()
-          ? body.reason
-          : undefined,
-      sharePlaybackContext:
-        typeof body.sharePlaybackContext === "string" &&
-        body.sharePlaybackContext.startsWith("stpc1.")
-          ? body.sharePlaybackContext
-          : null,
-      sharePlaybackScopeId:
-        typeof body.sharePlaybackScopeId === "string" &&
-        /^alb:[^:\s]+$/i.test(body.sharePlaybackScopeId)
-          ? body.sharePlaybackScopeId
-          : null,
-    };
-
-    playbackAccessCache.set(key, next);
-    return next;
-  })().finally(() => {
-    playbackAccessInFlight.delete(key);
-  });
-
-  playbackAccessInFlight.set(key, promise);
-  return promise;
 }
 
 function primeDurationByRecordingId(
@@ -427,10 +333,11 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
       }
 
       try {
-        const access = await fetchPlaybackAccess(
+        const access = await fetchPlaybackAccessDecision({
           catalogueId,
-          playbackAccessIdentityKey,
-        );
+          shareToken: readPlaybackShareTokenFromLocation(),
+          accessIdentityKey: playbackAccessIdentityKey,
+        });
 
         if (!access.allowed) {
           blockPlayback(blockedPlaybackMessage(access));
