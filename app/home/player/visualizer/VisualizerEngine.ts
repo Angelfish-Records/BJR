@@ -697,9 +697,10 @@ export class VisualizerEngine {
     const want = this.wantPlaying;
     const hasIdle = !!this.idleTheme;
     const hasTarget = !!this.targetTheme;
+    const canRenderTrackTheme = want && hasTarget;
 
     if (this.mode.mode !== "transition") {
-      this.tier = want ? "active" : "idle";
+      this.tier = canRenderTrackTheme ? "active" : "idle";
     }
 
     if (this.tier !== this.lastTier) {
@@ -711,11 +712,21 @@ export class VisualizerEngine {
 
     if (this.mode.mode === "transition") return;
 
+    // A click may be visually optimistic while the protected theme chunk and
+    // playback access decision are still pending. Keep IdleMist visible rather
+    // than promoting the blank bootstrap theme into the active renderer.
+    if (want && !hasTarget) {
+      this.mode = { mode: "idle" };
+      this.tier = "idle";
+      return;
+    }
+
     if (want) {
-      if (hasTarget && this.currentTheme !== this.targetTheme) {
+      if (this.currentTheme !== this.targetTheme) {
         this.beginTransition(tNowMs, "toTheme");
         return;
       }
+
       this.mode = { mode: "playing" };
       this.tier = "active";
       return;
@@ -725,6 +736,7 @@ export class VisualizerEngine {
       this.beginTransition(tNowMs, "toIdle");
       return;
     }
+
     this.mode = { mode: "idle" };
     this.tier = "idle";
   }

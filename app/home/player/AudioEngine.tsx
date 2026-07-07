@@ -3208,6 +3208,7 @@ export default function AudioEngine() {
     }
 
     if (p.intent === "pause") {
+      playIntentRef.current = false;
       a.pause();
       pRef.current.clearIntent();
       return;

@@ -124,7 +124,8 @@ export default function VisualizerCanvas(props: { variant: StageVariant }) {
     player.status === "playing" ||
     player.status === "loading" ||
     player.status === "paused" ||
-    player.intent === "play";
+    player.intent === "play" ||
+    player.playRequestPending;
 
   React.useEffect(() => {
     const engine = engineRef.current;

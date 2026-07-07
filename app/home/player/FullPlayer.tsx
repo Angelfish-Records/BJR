@@ -875,7 +875,8 @@ export default function FullPlayer(props: {
 
   const browseAlbums = albums.filter((a) => a.id !== effAlbum?.id);
 
-  const playingish = p.status === "playing" || p.status === "loading";
+  const playingish =
+    p.status === "playing" || p.status === "loading" || p.playRequestPending;
 
   const [activeListeners, setActiveListeners] = React.useState<number>(0);
 
@@ -1007,6 +1008,7 @@ export default function FullPlayer(props: {
             code === "ANON_CAP_REACHED";
 
           const hasPlaybackIntentForThisAlbum =
+            player.playRequestPending ||
             player.intent === "play" ||
             player.status === "loading" ||
             player.status === "playing" ||
@@ -2017,7 +2019,7 @@ export default function FullPlayer(props: {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
                 gap: 12,
               }}
             >

@@ -32,6 +32,11 @@ export type PlayerState = {
   lastError?: string;
   lastPlayAttemptAtMs?: number;
 
+  // True only while a user-initiated play request is awaiting the client-side
+  // access decision. This is visual state: it must not itself arm protected
+  // media attachment.
+  playRequestPending: boolean;
+
   queueContextId?: string;
   queueContextSlug?: string;
   queueContextTitle?: string;
@@ -108,6 +113,7 @@ type PlayerActions = {
 type PlayerVisualState = {
   status: PlayerStatus;
   intent: Intent;
+  playRequestPending: boolean;
   current?: PlayerTrack;
   firstQueuedTrack?: PlayerTrack;
 };
@@ -359,6 +365,7 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
     queue: [],
     lastError: undefined,
     lastPlayAttemptAtMs: undefined,
+    playRequestPending: false,
 
     queueContextId: undefined,
     queueContextSlug: undefined,
@@ -391,6 +398,7 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
   });
 
   const stateRef = React.useRef(state);
+  const playRequestSequenceRef = React.useRef(0);
 
   React.useEffect(() => {
     stateRef.current = state;
@@ -402,6 +410,7 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
       status: s.status === "loading" ? "idle" : s.status,
       intent: "pause",
       intentAtMs: Date.now(),
+      playRequestPending: false,
       loadingReason: undefined,
       pendingRecordingId: undefined,
       lastError: message,
@@ -485,11 +494,29 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
         }),
 
       play: (track?: PlayerTrack) => {
-        void guardPlayback(() => {
-          setState((s) => {
-            const now = Date.now();
+        const requestSequence = ++playRequestSequenceRef.current;
+        const requestStartedAtMs = Date.now();
 
+        setState((s) => ({
+          ...s,
+          playRequestPending: true,
+          lastPlayAttemptAtMs: requestStartedAtMs,
+          lastError: undefined,
+        }));
+
+        void guardPlayback(() => {
+          if (requestSequence !== playRequestSequenceRef.current) {
+            return;
+          }
+
+          setState((s) => {
+            if (requestSequence !== playRequestSequenceRef.current) {
+              return s;
+            }
+
+            const now = Date.now();
             const rawNext = track ?? s.current ?? s.queue[0];
+
             if (!rawNext) {
               return {
                 ...s,
@@ -499,6 +526,7 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
                 intent: "play",
                 intentAtMs: now,
                 lastPlayAttemptAtMs: now,
+                playRequestPending: false,
                 lastError: undefined,
                 loadingReason: undefined,
                 pendingRecordingId: undefined,
@@ -515,6 +543,7 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
               intent: "play" as const,
               intentAtMs: now,
               lastPlayAttemptAtMs: now,
+              playRequestPending: false,
               lastError: undefined,
               selectedRecordingId: nextTrack.recordingId,
               pendingRecordingId: nextTrack.recordingId,
@@ -547,12 +576,16 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
         });
       },
 
-      pause: () =>
+      pause: () => {
+        playRequestSequenceRef.current += 1;
+
         setState((s) => ({
           ...s,
           intent: "pause",
           intentAtMs: Date.now(),
-        })),
+          playRequestPending: false,
+        }));
+      },
 
       next: () => {
         void guardPlayback(() => {
@@ -1088,6 +1121,7 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
   const {
     status: visualStatus,
     intent: visualIntent,
+    playRequestPending: visualPlayRequestPending,
     current: visualCurrent,
     queue: visualQueue,
   } = state;
@@ -1098,10 +1132,17 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
     () => ({
       status: visualStatus,
       intent: visualIntent,
+      playRequestPending: visualPlayRequestPending,
       current: visualCurrent,
       firstQueuedTrack,
     }),
-    [visualStatus, visualIntent, visualCurrent, firstQueuedTrack],
+    [
+      visualStatus,
+      visualIntent,
+      visualPlayRequestPending,
+      visualCurrent,
+      firstQueuedTrack,
+    ],
   );
 
   const currentId = state.current?.recordingId ?? null;

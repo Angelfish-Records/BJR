@@ -10,6 +10,7 @@ export default function MiniPlayerHost(props: { onExpand: () => void }) {
 
   const intent = p.intent;
   const status = p.status;
+  const playRequestPending = p.playRequestPending;
   const current = p.current;
   const queueLen = p.queue.length;
 
@@ -20,6 +21,7 @@ export default function MiniPlayerHost(props: { onExpand: () => void }) {
 
   React.useEffect(() => {
     const shouldActivate =
+      playRequestPending ||
       intent === "play" ||
       status === "playing" ||
       status === "paused" ||
@@ -32,7 +34,7 @@ export default function MiniPlayerHost(props: { onExpand: () => void }) {
         window.sessionStorage.setItem("af:miniActive", "1");
       } catch {}
     }
-  }, [miniActive, intent, status, current, queueLen]);
+  }, [miniActive, intent, status, playRequestPending, current, queueLen]);
 
   if (!miniActive) return null;
 

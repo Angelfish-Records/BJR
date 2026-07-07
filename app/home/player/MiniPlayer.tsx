@@ -200,60 +200,6 @@ function findTrackById(
   return queue.find((t) => t.recordingId === id) ?? null;
 }
 
-type MiniAccessState = {
-  forCatalogueId: string;
-  allowed: boolean;
-  embargoed: boolean;
-  releaseAt: string | null;
-  code?: string;
-  reason?: string;
-};
-
-function readShareTokenFromLocation(): string | null {
-  if (typeof window === "undefined") return null;
-
-  const sp = new URLSearchParams(window.location.search);
-  const token = (sp.get("st") ?? sp.get("share") ?? "").trim();
-
-  return token || null;
-}
-
-async function checkMiniPlayerAccess(
-  catalogueId: string,
-): Promise<MiniAccessState> {
-  const u = new URL("/api/access/check", window.location.origin);
-  u.searchParams.set("albumId", catalogueId);
-
-  const st = readShareTokenFromLocation();
-  if (st) u.searchParams.set("st", st);
-
-  const res = await fetch(u.toString(), {
-    method: "GET",
-    cache: "no-store",
-  });
-
-  const body = (await res.json()) as {
-    allowed?: boolean;
-    embargoed?: boolean;
-    releaseAt?: string | null;
-    code?: string | null;
-    reason?: string | null;
-  };
-
-  return {
-    forCatalogueId: catalogueId,
-    allowed: body.allowed !== false,
-    embargoed: body.embargoed === true,
-    releaseAt: body.releaseAt ?? null,
-    code:
-      typeof body.code === "string" && body.code.trim() ? body.code : undefined,
-    reason:
-      typeof body.reason === "string" && body.reason.trim()
-        ? body.reason
-        : undefined,
-  };
-}
-
 export default function MiniPlayer(props: {
   onExpand?: () => void;
   artworkUrl?: string | null;
@@ -341,48 +287,10 @@ export default function MiniPlayer(props: {
   }, [mounted]);
 
   const playingish =
-    p.status === "playing" || p.status === "loading" || p.intent === "play";
-
-  const [accessLock, setAccessLock] = React.useState(false);
-
-  const guardPlayback = React.useCallback(
-    async (action: () => void | Promise<void>): Promise<void> => {
-      const catalogueId = (p.queueContextId ?? "").trim();
-
-      if (!catalogueId) {
-        await action();
-        return;
-      }
-
-      setAccessLock(true);
-
-      try {
-        const access = await checkMiniPlayerAccess(catalogueId);
-
-        if (!access.allowed) {
-          p.pause();
-
-          if (p.status === "loading") {
-            p.setStatusExternal("idle");
-          }
-
-          return;
-        }
-
-        await action();
-      } catch {
-        // Fail closed for MiniPlayer transport. FullPlayer can surface richer messaging.
-        p.pause();
-
-        if (p.status === "loading") {
-          p.setStatusExternal("idle");
-        }
-      } finally {
-        setAccessLock(false);
-      }
-    },
-    [p],
-  );
+    p.status === "playing" ||
+    p.status === "loading" ||
+    p.intent === "play" ||
+    p.playRequestPending;
 
   // Pending-first display (truthy UI during transitions)
   const pendingTrack = findTrackById(p.queue, p.pendingRecordingId) ?? null;
@@ -885,12 +793,10 @@ export default function MiniPlayer(props: {
                 label="Previous"
                 onClick={() => {
                   lockFor(350);
-                  void guardPlayback(() => {
-                    window.dispatchEvent(new Event("af:play-intent"));
-                    p.prev();
-                  });
+                  p.prev();
+                  window.dispatchEvent(new Event("af:play-intent"));
                 }}
-                disabled={prevDisabled || accessLock}
+                disabled={prevDisabled}
               >
                 <PrevIcon />
               </IconBtn>
@@ -906,15 +812,13 @@ export default function MiniPlayer(props: {
                     return;
                   }
 
-                  void guardPlayback(() => {
-                    const t = p.current ?? p.queue[0];
-                    if (!t) return;
+                  const t = p.current ?? p.queue[0];
+                  if (!t) return;
 
-                    p.play(t);
-                    window.dispatchEvent(new Event("af:play-intent"));
-                  });
+                  p.play(t);
+                  window.dispatchEvent(new Event("af:play-intent"));
                 }}
-                disabled={!displayTrack || playLock || accessLock}
+                disabled={!displayTrack || playLock}
               >
                 <PlayPauseIcon playing={playingish} />
               </IconBtn>
@@ -923,12 +827,10 @@ export default function MiniPlayer(props: {
                 label="Next"
                 onClick={() => {
                   lockFor(350);
-                  void guardPlayback(() => {
-                    window.dispatchEvent(new Event("af:play-intent"));
-                    p.next();
-                  });
+                  p.next();
+                  window.dispatchEvent(new Event("af:play-intent"));
                 }}
-                disabled={nextDisabled || accessLock}
+                disabled={nextDisabled}
               >
                 <NextIcon />
               </IconBtn>
@@ -1121,12 +1023,9 @@ export default function MiniPlayer(props: {
                   label="Retry"
                   title="Retry"
                   onClick={() => {
-                    void guardPlayback(() => {
-                      window.dispatchEvent(new Event("af:play-intent"));
-                      p.bumpReload();
-                    });
+                    p.bumpReload();
+                    window.dispatchEvent(new Event("af:play-intent"));
                   }}
-                  disabled={accessLock}
                 >
                   <RetryIcon />
                 </IconBtn>
