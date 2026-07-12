@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import Hls from "hls.js";
+import type Hls from "hls.js";
 import { useUser } from "@clerk/nextjs";
 import { usePlayer } from "./PlayerState";
 import type { PlayerTrack } from "@/lib/types";
@@ -81,6 +81,56 @@ type AudioDebugEvent = {
   source?: string | null;
   detail?: string | null;
 };
+
+type HlsJsConstructor = typeof import("hls.js").default;
+
+let hlsConstructorCache: HlsJsConstructor | null = null;
+let hlsConstructorPromise: Promise<HlsJsConstructor> | null = null;
+
+function loadHlsConstructor(): Promise<HlsJsConstructor> {
+  if (hlsConstructorCache) {
+    return Promise.resolve(hlsConstructorCache);
+  }
+
+  if (!hlsConstructorPromise) {
+    hlsConstructorPromise = import("hls.js")
+      .then((module) => {
+        hlsConstructorCache = module.default;
+        return module.default;
+      })
+      .catch((error: unknown) => {
+        hlsConstructorPromise = null;
+        throw error;
+      });
+  }
+
+  return hlsConstructorPromise;
+}
+
+function getKnownHlsJsSupport(): boolean | null {
+  if (!hlsConstructorCache) return null;
+
+  try {
+    return hlsConstructorCache.isSupported();
+  } catch {
+    return null;
+  }
+}
+
+function shouldUseHlsJsForMediaElement(media: HTMLMediaElement): boolean {
+  return !shouldUseStaticM4a() && !shouldUseNativeHls(media);
+}
+
+function warmHlsConstructorForMediaElement(
+  media: HTMLMediaElement | null,
+): void {
+  if (!media) return;
+  if (!shouldUseHlsJsForMediaElement(media)) return;
+
+  void loadHlsConstructor().catch(() => {
+    // Attachment will surface the real playback failure if HLS.js is required.
+  });
+}
 
 function shouldUseNativeHls(a: HTMLMediaElement): boolean {
   if (typeof navigator === "undefined") return false;
@@ -665,7 +715,8 @@ export default function AudioEngine() {
           audio?.canPlayType("application/vnd.apple.mpegurl") ?? null,
         alternateNativeHlsCanPlay:
           audio?.canPlayType("application/x-mpegURL") ?? null,
-        hlsJsSupported: Hls.isSupported(),
+        hlsJsLoaded: hlsConstructorCache !== null,
+        hlsJsSupported: getKnownHlsJsSupport(),
       };
 
       sendAudioDebug({
@@ -1245,7 +1296,8 @@ export default function AudioEngine() {
           path: hlsPath,
           nativeHlsCanPlay: a.canPlayType("application/vnd.apple.mpegurl"),
           alternateNativeHlsCanPlay: a.canPlayType("application/x-mpegURL"),
-          hlsJsSupported: Hls.isSupported(),
+          hlsJsLoaded: hlsConstructorCache !== null,
+          hlsJsSupported: getKnownHlsJsSupport(),
           userAgent:
             typeof navigator === "undefined" ? null : navigator.userAgent,
         }),
@@ -1463,7 +1515,27 @@ export default function AudioEngine() {
         });
       }
 
-      if (!Hls.isSupported()) {
+      let HlsJs: HlsJsConstructor;
+
+      try {
+        HlsJs = await loadHlsConstructor();
+      } catch {
+        sendAudioDebug({
+          event: "hls-load-failed",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId,
+          playbackId,
+          source: `AudioEngine.${args.deckId}`,
+        });
+
+        return false;
+      }
+
+      if (args.seq !== loadSeq.current && args.reason === "active") {
+        return false;
+      }
+
+      if (!HlsJs.isSupported()) {
         sendAudioDebug({
           event: "hls-unsupported",
           albumId: pRef.current.queueContextId ?? null,
@@ -1487,7 +1559,7 @@ export default function AudioEngine() {
       return new Promise<boolean>((resolve) => {
         let settled = false;
 
-        const hls = new Hls({
+        const hls = new HlsJs({
           enableWorker: true,
           lowLatencyMode: false,
           backBufferLength: 30,
@@ -1510,7 +1582,7 @@ export default function AudioEngine() {
           resolve(ok);
         };
 
-        hls.on(Hls.Events.ERROR, (_event, err) => {
+        hls.on(HlsJs.Events.ERROR, (_event, err) => {
           if (!err?.fatal) return;
 
           sendAudioDebug({
@@ -1535,7 +1607,7 @@ export default function AudioEngine() {
           }
         });
 
-        hls.once(Hls.Events.MANIFEST_PARSED, () => {
+        hls.once(HlsJs.Events.MANIFEST_PARSED, () => {
           sendAudioDebug({
             event:
               args.reason === "standby"
@@ -2038,6 +2110,7 @@ export default function AudioEngine() {
 
     const onUserGesture = async () => {
       sendRuntimeSnapshot("audio-user-gesture");
+      warmHlsConstructorForMediaElement(getActiveAudio());
 
       await ensureAudioGraph();
 
@@ -2060,7 +2133,7 @@ export default function AudioEngine() {
     return () => {
       window.removeEventListener("af:play-intent", onUserGesture);
     };
-  }, [sendRuntimeSnapshot]);
+  }, [getActiveAudio, sendRuntimeSnapshot]);
 
   React.useEffect(() => {
     const clearAudioFeatures = () => {
