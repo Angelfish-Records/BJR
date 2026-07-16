@@ -2476,6 +2476,10 @@ export default function AudioEngine() {
         milestoneKey: "play",
         progressMs,
         durationMs,
+      }).then((ok) => {
+        if (!ok) {
+          telemetryPlaySentRef.current.delete(sentKey);
+        }
       });
     };
 
@@ -2554,6 +2558,10 @@ export default function AudioEngine() {
         listenedMs: TELEMETRY_PROGRESS_STEP_MS,
         progressMs,
         durationMs,
+      }).then((ok) => {
+        if (!ok) {
+          telemetryProgressSentRef.current.delete(milestoneKey);
+        }
       });
     };
 

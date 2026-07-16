@@ -584,6 +584,43 @@ export async function POST(req: NextRequest) {
         ? EVENT_TYPES.PLAYBACK_TELEMETRY_PROGRESS
         : EVENT_TYPES.PLAYBACK_TELEMETRY_COMPLETE;
 
+  const occurredAtIso = new Date().toISOString();
+
+  if (shareAttribution) {
+    try {
+      await recordShareTokenPlaybackEvent({
+        shareTokenId: shareAttribution.shareTokenId,
+        telemetryLabel: shareAttribution.telemetryLabel,
+        scopeId: shareAttribution.scopeId,
+        audience: memberId ? "member" : "anonymous",
+        memberId,
+        recordingId,
+        playbackId,
+        eventType,
+        milestoneKey,
+        listenedMs,
+        progressMs,
+        durationMs,
+        occurredAtIso,
+      });
+    } catch {
+      const res = NextResponse.json(
+        {
+          ok: false,
+          error: "share_attribution_write_failed",
+        },
+        { status: 503 },
+      );
+
+      if (isNewAnonId) {
+        persistAnonId(res, anonId);
+      }
+
+      res.headers.set("x-correlation-id", correlationId);
+      return res;
+    }
+  }
+
   const inserted = memberId
     ? await insertDedupeKey({
         memberId,
@@ -608,26 +645,6 @@ export async function POST(req: NextRequest) {
 
     res.headers.set("x-correlation-id", correlationId);
     return res;
-  }
-
-  const occurredAtIso = new Date().toISOString();
-
-  if (shareAttribution) {
-    await recordShareTokenPlaybackEvent({
-      shareTokenId: shareAttribution.shareTokenId,
-      telemetryLabel: shareAttribution.telemetryLabel,
-      scopeId: shareAttribution.scopeId,
-      audience: memberId ? "member" : "anonymous",
-      memberId,
-      recordingId,
-      playbackId,
-      eventType,
-      milestoneKey,
-      listenedMs,
-      progressMs,
-      durationMs,
-      occurredAtIso,
-    });
   }
 
   let newlyAwardedBadges: NewlyAwardedBadge[] = [];

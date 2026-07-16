@@ -344,14 +344,19 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
           return;
         }
 
+        const expectedSharePlaybackScopeId = `alb:${catalogueId.replace(
+          /^alb:/i,
+          "",
+        )}`;
+
         if (
           access.sharePlaybackContext &&
-          access.sharePlaybackScopeId ===
-            stateRef.current.queueSharePlaybackScopeId
+          access.sharePlaybackScopeId === expectedSharePlaybackScopeId
         ) {
           setState((current) => ({
             ...current,
             queueSharePlaybackContext: access.sharePlaybackContext,
+            queueSharePlaybackScopeId: access.sharePlaybackScopeId,
           }));
         }
 

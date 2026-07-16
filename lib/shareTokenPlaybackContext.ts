@@ -366,5 +366,7 @@ export async function recordShareTokenPlaybackEvent(params: {
       eventType: params.eventType,
       error,
     });
+
+    throw error;
   }
 }

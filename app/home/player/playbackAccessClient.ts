@@ -47,8 +47,30 @@ type PlaybackAccessResponse = {
   sharePlaybackScopeId?: unknown;
 };
 
-const decisionsByKey = new Map<string, PlaybackAccessDecision>();
+type CachedPlaybackAccessDecision = {
+  decision: PlaybackAccessDecision;
+  expiresAtMs: number;
+};
+
+const PLAYBACK_ACCESS_CACHE_TTL_MS = 60_000;
+
+const decisionsByKey = new Map<string, CachedPlaybackAccessDecision>();
 const inFlightByKey = new Map<string, Promise<PlaybackAccessDecision>>();
+
+function getFreshCachedPlaybackAccessDecision(
+  key: string,
+): PlaybackAccessDecision | null {
+  const cached = decisionsByKey.get(key);
+
+  if (!cached) return null;
+
+  if (cached.expiresAtMs <= Date.now()) {
+    decisionsByKey.delete(key);
+    return null;
+  }
+
+  return cached.decision;
+}
 
 function normalizeCatalogueId(value: string): string {
   return value.trim();
@@ -145,7 +167,7 @@ export function readPlaybackShareTokenFromLocation(): string | null {
 export function getCachedPlaybackAccessDecision(
   request: PlaybackAccessRequest,
 ): PlaybackAccessDecision | null {
-  return decisionsByKey.get(playbackAccessKey(request)) ?? null;
+  return getFreshCachedPlaybackAccessDecision(playbackAccessKey(request));
 }
 
 export async function fetchPlaybackAccessDecision(
@@ -164,7 +186,7 @@ export async function fetchPlaybackAccessDecision(
     accessIdentityKey: request.accessIdentityKey,
   });
 
-  const cached = decisionsByKey.get(key);
+  const cached = getFreshCachedPlaybackAccessDecision(key);
   if (cached) return cached;
 
   const existing = inFlightByKey.get(key);
@@ -209,7 +231,11 @@ export async function fetchPlaybackAccessDecision(
       ),
     };
 
-    decisionsByKey.set(key, decision);
+    decisionsByKey.set(key, {
+      decision,
+      expiresAtMs: Date.now() + PLAYBACK_ACCESS_CACHE_TTL_MS,
+    });
+
     return decision;
   })().finally(() => {
     inFlightByKey.delete(key);
