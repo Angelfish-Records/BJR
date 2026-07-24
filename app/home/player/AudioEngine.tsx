@@ -72,6 +72,11 @@ type PreparedStandby = {
   attachKey: string;
 };
 
+type TargetedPlayIntentDetail = {
+  track?: PlayerTrack;
+  albumId?: string | null;
+};
+
 type AudioDebugEvent = {
   t: number;
   event: string;
@@ -1675,6 +1680,198 @@ export default function AudioEngine() {
     },
     [getAudio],
   );
+
+  const playTargetFromUserGesture = React.useCallback(
+    (detail: TargetedPlayIntentDetail): void => {
+      if (!isAppleMobileWebKit()) return;
+      if (engineBlockedRef.current) return;
+
+      const track = detail.track;
+      const albumId = (detail.albumId ?? "").trim();
+      const playbackId = (track?.muxPlaybackId ?? "").trim();
+      const recordingId = (track?.recordingId ?? "").trim();
+
+      if (!track || !albumId || !playbackId || !recordingId) {
+        sendAudioDebug({
+          event: "apple-target-play-missing-context",
+          albumId: albumId || pRef.current.queueContextId || null,
+          recordingId: recordingId || null,
+          playbackId: playbackId || null,
+          source: "AudioEngine",
+        });
+        return;
+      }
+
+      const activeDeck = activeDeckRef.current;
+      const audio = getAudio(activeDeck);
+
+      if (!audio) return;
+
+      const existingMeta = metaByDeckRef.current[activeDeck];
+
+      playIntentRef.current = true;
+
+      if (
+        existingMeta?.recordingId === recordingId &&
+        existingMeta.playbackId === playbackId &&
+        Boolean(audio.currentSrc || audio.src)
+      ) {
+        void audio.play().then(
+          () => {
+            sendAudioDebug({
+              event: "apple-target-resume-resolved",
+              albumId,
+              recordingId,
+              playbackId,
+              source: `AudioEngine.${activeDeck}`,
+            });
+          },
+          (error: unknown) => {
+            sendAudioDebug({
+              event: "apple-target-resume-rejected",
+              albumId,
+              recordingId,
+              playbackId,
+              source: `AudioEngine.${activeDeck}`,
+              detail:
+                error instanceof Error
+                  ? `${error.name}: ${error.message}`
+                  : "unknown",
+            });
+          },
+        );
+
+        return;
+      }
+
+      const sourceUrl = new URL("/api/mux/token", window.location.origin);
+      sourceUrl.searchParams.set("format", "audio-m4a");
+      sourceUrl.searchParams.set("playbackId", playbackId);
+      sourceUrl.searchParams.set("albumId", albumId);
+
+      const durationMs =
+        track.durationMs ??
+        pRef.current.durationByRecordingId[recordingId] ??
+        0;
+
+      if (Number.isFinite(durationMs) && durationMs > 0) {
+        sourceUrl.searchParams.set(
+          "durationMs",
+          String(Math.round(durationMs)),
+        );
+      }
+
+      const shareToken = getShareTokenFromLocation();
+
+      if (shareToken) {
+        sourceUrl.searchParams.set("st", shareToken);
+      }
+
+      const attachKey = `${playbackId}:${pRef.current.reloadNonce}`;
+
+      loadSeq.current += 1;
+      standbyRef.current = null;
+
+      stopDeck(activeDeck);
+
+      audio.crossOrigin = "anonymous";
+      audio.preload = "auto";
+      audio.volume = Math.max(0, Math.min(1, pRef.current.volume));
+      audio.muted = pRef.current.muted;
+
+      metaByDeckRef.current[activeDeck] = {
+        deckId: activeDeck,
+        recordingId,
+        playbackId,
+        attachKey,
+        prepared: false,
+        hlsPath: "static-m4a",
+      };
+
+      telemetrySessionIdRef.current = newPlaybackSessionId();
+      telemetryShareAttributionRef.current = readQueueSharePlaybackAttribution(
+        pRef.current,
+      );
+
+      mediaSurface.setTrack(recordingId);
+      mediaSurface.setStatus("loading");
+
+      sendAudioDebug({
+        event: "apple-target-play-start",
+        albumId,
+        recordingId,
+        playbackId,
+        source: `AudioEngine.${activeDeck}`,
+        detail: "same-origin-token-redirect",
+      });
+
+      try {
+        audio.src = sourceUrl.toString();
+        audio.load();
+      } catch (error: unknown) {
+        sendAudioDebug({
+          event: "apple-target-source-attach-rejected",
+          albumId,
+          recordingId,
+          playbackId,
+          source: `AudioEngine.${activeDeck}`,
+          detail:
+            error instanceof Error
+              ? `${error.name}: ${error.message}`
+              : "unknown",
+        });
+        return;
+      }
+
+      // This invocation deliberately remains in the original click/touch call
+      // stack. The media request may resolve asynchronously, but play() itself
+      // has already received WebKit's user activation.
+      void audio.play().then(
+        () => {
+          sendAudioDebug({
+            event: "apple-target-play-resolved",
+            albumId,
+            recordingId,
+            playbackId,
+            source: `AudioEngine.${activeDeck}`,
+          });
+        },
+        (error: unknown) => {
+          sendAudioDebug({
+            event: "apple-target-play-rejected",
+            albumId,
+            recordingId,
+            playbackId,
+            source: `AudioEngine.${activeDeck}`,
+            detail:
+              error instanceof Error
+                ? `${error.name}: ${error.message}`
+                : "unknown",
+          });
+        },
+      );
+    },
+    [getAudio, getShareTokenFromLocation, stopDeck],
+  );
+
+  React.useEffect(() => {
+    const onTargetedPlayIntent = (event: Event) => {
+      const detail =
+        event instanceof CustomEvent
+          ? (event.detail as TargetedPlayIntentDetail | null)
+          : null;
+
+      if (!detail) return;
+
+      playTargetFromUserGesture(detail);
+    };
+
+    window.addEventListener("af:play-target-intent", onTargetedPlayIntent);
+
+    return () => {
+      window.removeEventListener("af:play-target-intent", onTargetedPlayIntent);
+    };
+  }, [playTargetFromUserGesture]);
 
   const prepareStandbyForTrack = React.useCallback(
     async (track: PlayerTrack): Promise<boolean> => {

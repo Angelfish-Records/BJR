@@ -197,6 +197,15 @@ export async function loadThemeFactory(
   return factory;
 }
 
+export function clearThemeFactoryCache(themeName?: ThemeName): void {
+  if (themeName) {
+    themeCache.delete(themeName);
+    return;
+  }
+
+  themeCache.clear();
+}
+
 export function createBlankTheme(): Theme {
   return { name: "blank", init() {}, render() {}, dispose() {} };
 }

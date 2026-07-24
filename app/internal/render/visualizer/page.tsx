@@ -3,8 +3,12 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import VisualizerLivePreview from "./VisualizerLivePreview";
 import { FramePostProcessor } from "../../../home/player/visualizer/offline/FramePostProcessor";
-import { LyricTextRenderer } from "../../../home/player/visualizer/offline/LyricTextRenderer";
+import {
+  LyricTextRenderer,
+  type LyricTextStyle,
+} from "../../../home/player/visualizer/offline/LyricTextRenderer";
 import {
   LYRIC_STYLE_NAMES,
   LYRIC_STYLES,
@@ -14,6 +18,7 @@ import {
   POST_PRESET_NAMES,
   POST_STYLES,
   type PostPresetName,
+  type PostProcessStyle,
 } from "../../../home/player/visualizer/offline/postStyles";
 import { OfflineVisualizerRenderer } from "../../../home/player/visualizer/offline/OfflineVisualizerRenderer";
 import type {
@@ -72,6 +77,55 @@ declare global {
   }
 }
 
+function scaleLyricStyle(
+  style: Partial<LyricTextStyle> | undefined,
+  pixelScale: number,
+): Partial<LyricTextStyle> | undefined {
+  if (!style || pixelScale === 1) return style;
+
+  return {
+    ...style,
+    ...(style.fontSizePx !== undefined
+      ? { fontSizePx: style.fontSizePx * pixelScale }
+      : {}),
+    ...(style.letterSpacingPx !== undefined
+      ? { letterSpacingPx: style.letterSpacingPx * pixelScale }
+      : {}),
+    ...(style.strokeWidthPx !== undefined
+      ? { strokeWidthPx: style.strokeWidthPx * pixelScale }
+      : {}),
+    ...(style.shadowBlurPx !== undefined
+      ? { shadowBlurPx: style.shadowBlurPx * pixelScale }
+      : {}),
+    ...(style.trailBlurPx !== undefined
+      ? { trailBlurPx: style.trailBlurPx * pixelScale }
+      : {}),
+    ...(style.lineStartBlurPx !== undefined
+      ? { lineStartBlurPx: style.lineStartBlurPx * pixelScale }
+      : {}),
+    ...(style.lineStartShakePx !== undefined
+      ? { lineStartShakePx: style.lineStartShakePx * pixelScale }
+      : {}),
+    ...(style.backgroundVeilRadiusPx !== undefined
+      ? {
+          backgroundVeilRadiusPx: style.backgroundVeilRadiusPx * pixelScale,
+        }
+      : {}),
+  };
+}
+
+function scalePostStyle(
+  style: PostProcessStyle,
+  pixelScale: number,
+): PostProcessStyle {
+  if (pixelScale === 1) return style;
+
+  return {
+    ...style,
+    bloomBlurPx: style.bloomBlurPx * pixelScale,
+  };
+}
+
 export default function InternalVisualizerRenderPage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rendererRef = useRef<OfflineVisualizerRenderer | null>(null);
@@ -80,8 +134,10 @@ export default function InternalVisualizerRenderPage() {
   const pixelBufferRef = useRef<Uint8Array | null>(null);
   const lastFrameRef = useRef<OfflineFrame | null>(null);
   const [, setStatus] = useState<RendererStatus>("idle");
+  const [rendererApiReady, setRendererApiReady] = useState(false);
   const [message, setMessage] = useState("Renderer not initialised");
   const [themes, setThemes] = useState<string[]>([]);
+
   const [audioFiles, setAudioFiles] = useState<AudioFileOption[]>([]);
   const [lrcFiles, setLrcFiles] = useState<AudioFileOption[]>([]);
   const [selectedTheme, setSelectedTheme] = useState("nebula");
@@ -141,6 +197,21 @@ export default function InternalVisualizerRenderPage() {
           const renderer = new OfflineVisualizerRenderer(gl, config);
           await renderer.init();
 
+          const requestedPixelScale = config.pixelScale;
+          const pixelScale =
+            typeof requestedPixelScale === "number" &&
+            Number.isFinite(requestedPixelScale)
+              ? Math.max(0.1, Math.min(1, requestedPixelScale))
+              : 1;
+
+          const lyricStyle = config.lyricStyleName
+            ? LYRIC_STYLES[config.lyricStyleName]
+            : undefined;
+
+          const postStyle = config.postPresetName
+            ? POST_STYLES[config.postPresetName]
+            : POST_STYLES.none;
+
           rendererRef.current = renderer;
           pixelBufferRef.current = new Uint8Array(
             config.width * config.height * 4,
@@ -148,18 +219,13 @@ export default function InternalVisualizerRenderPage() {
           lyricRendererRef.current = new LyricTextRenderer(
             config.width,
             config.height,
-            config.lyricStyleName
-              ? LYRIC_STYLES[config.lyricStyleName]
-              : undefined,
+            scaleLyricStyle(lyricStyle, pixelScale),
           );
           postProcessorRef.current = new FramePostProcessor(
             config.width,
             config.height,
-            config.postPresetName
-              ? POST_STYLES[config.postPresetName]
-              : POST_STYLES.none,
+            scalePostStyle(postStyle, pixelScale),
           );
-
           setStatus("ready");
           setMessage(
             `Ready: ${config.themeName} ${config.width}×${config.height} @ ${config.fps}fps`,
@@ -248,10 +314,11 @@ export default function InternalVisualizerRenderPage() {
     };
 
     window.__AFR_RENDERER__ = api;
-
+    setRendererApiReady(true);
     setMessage("Renderer API attached to window.__AFR_RENDERER__");
 
     return () => {
+      setRendererApiReady(false);
       rendererRef.current?.dispose();
       rendererRef.current = null;
       lyricRendererRef.current = null;
@@ -361,9 +428,11 @@ export default function InternalVisualizerRenderPage() {
       <section
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(280px, 420px) 480px",
+          gridTemplateColumns: "minmax(300px, 390px) minmax(0, 1fr)",
           gap: 24,
           alignItems: "start",
+          maxWidth: 1680,
+          margin: "0 auto",
         }}
       >
         <div
@@ -564,14 +633,21 @@ export default function InternalVisualizerRenderPage() {
           </pre>
         </div>
 
-        <canvas
-          ref={canvasRef}
-          style={{
-            width: 480,
-            height: 270,
-            border: "1px solid rgba(255,255,255,0.18)",
-            background: "black",
-          }}
+        <VisualizerLivePreview
+          renderCanvasRef={canvasRef}
+          rendererApiReady={rendererApiReady}
+          rendererMessage={message}
+          audioFiles={audioFiles}
+          lrcFiles={lrcFiles}
+          selectedTheme={selectedTheme}
+          selectedAudioFile={selectedAudioFile}
+          selectedLrcFile={selectedLrcFile}
+          selectedLyricStyle={selectedLyricStyle}
+          selectedPostPreset={selectedPostPreset}
+          width={width}
+          height={height}
+          fps={fps}
+          seed={seed}
         />
       </section>
     </main>

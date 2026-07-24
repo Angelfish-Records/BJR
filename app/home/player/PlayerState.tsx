@@ -234,6 +234,74 @@ function blockedPlaybackMessage(access: PlaybackAccessDecision): string {
   return "Playback is not available for this release.";
 }
 
+type TargetedPlayIntentDetail = {
+  track: PlayerTrack;
+  albumId: string | null;
+};
+
+function dispatchTargetedPlayIntent(
+  track: PlayerTrack,
+  state: Pick<PlayerState, "queueContextId">,
+): void {
+  if (typeof window === "undefined") return;
+
+  const albumId = (state.queueContextId ?? "").trim() || null;
+
+  window.dispatchEvent(
+    new CustomEvent<TargetedPlayIntentDetail>("af:play-target-intent", {
+      detail: {
+        track,
+        albumId,
+      },
+    }),
+  );
+}
+
+function getNextTransportTrack(state: PlayerState): PlayerTrack | undefined {
+  const current = state.current;
+
+  if (!current || state.queue.length === 0) return undefined;
+  if (state.repeat === "one") return current;
+
+  const index = state.queue.findIndex(
+    (track) => track.recordingId === current.recordingId,
+  );
+  const currentIndex = index >= 0 ? index : 0;
+
+  if (currentIndex + 1 < state.queue.length) {
+    return state.queue[currentIndex + 1];
+  }
+
+  return state.repeat === "all" ? state.queue[0] : undefined;
+}
+
+function getPreviousTransportTrack(
+  state: PlayerState,
+): PlayerTrack | undefined {
+  const current = state.current;
+
+  if (!current || state.queue.length === 0) return undefined;
+
+  if (state.status === "playing" && state.positionMs > 3000) {
+    return current;
+  }
+
+  const index = state.queue.findIndex(
+    (track) => track.recordingId === current.recordingId,
+  );
+  const currentIndex = index >= 0 ? index : 0;
+
+  if (currentIndex > 0) {
+    return state.queue[currentIndex - 1];
+  }
+
+  if (state.repeat === "all") {
+    return state.queue[state.queue.length - 1];
+  }
+
+  return current;
+}
+
 function primeDurationByRecordingId(
   prev: Record<string, number>,
   tracks: PlayerTrack[],
@@ -408,6 +476,15 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
       play: (track?: PlayerTrack) => {
         const requestSequence = ++playRequestSequenceRef.current;
         const requestStartedAtMs = Date.now();
+        const snapshot = stateRef.current;
+        const requestedTrack = track ?? snapshot.current ?? snapshot.queue[0];
+
+        if (requestedTrack) {
+          dispatchTargetedPlayIntent(
+            hydrateTrack(requestedTrack, snapshot.durationByRecordingId),
+            snapshot,
+          );
+        }
 
         setState((s) => ({
           ...s,
@@ -500,6 +577,16 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
       },
 
       next: () => {
+        const snapshot = stateRef.current;
+        const targetTrack = getNextTransportTrack(snapshot);
+
+        if (targetTrack) {
+          dispatchTargetedPlayIntent(
+            hydrateTrack(targetTrack, snapshot.durationByRecordingId),
+            snapshot,
+          );
+        }
+
         void guardPlayback(() => {
           setState((s) => {
             const cur = s.current;
@@ -641,6 +728,16 @@ export function PlayerStateProvider(props: { children: React.ReactNode }) {
       },
 
       prev: () => {
+        const snapshot = stateRef.current;
+        const targetTrack = getPreviousTransportTrack(snapshot);
+
+        if (targetTrack) {
+          dispatchTargetedPlayIntent(
+            hydrateTrack(targetTrack, snapshot.durationByRecordingId),
+            snapshot,
+          );
+        }
+
         void guardPlayback(() => {
           setState((s) => {
             const cur = s.current;

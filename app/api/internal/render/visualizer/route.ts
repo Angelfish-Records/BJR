@@ -73,6 +73,64 @@ const THEMES: ThemeName[] = [
   "crystalline-growth",
 ];
 
+const PREVIEW_SOURCE_EXTENSIONS = /\.(css|ts|tsx)$/i;
+
+async function latestSourceMtimeMs(pathname: string): Promise<number> {
+  let stat: Awaited<ReturnType<typeof fs.stat>>;
+
+  try {
+    stat = await fs.stat(pathname);
+  } catch {
+    return 0;
+  }
+
+  if (stat.isFile()) {
+    return PREVIEW_SOURCE_EXTENSIONS.test(pathname) ? stat.mtimeMs : 0;
+  }
+
+  if (!stat.isDirectory()) return 0;
+
+  const entries = await fs.readdir(pathname, { withFileTypes: true });
+  let latest = stat.mtimeMs;
+
+  for (const entry of entries) {
+    const childPath = path.join(pathname, entry.name);
+
+    if (entry.isDirectory()) {
+      latest = Math.max(latest, await latestSourceMtimeMs(childPath));
+      continue;
+    }
+
+    if (entry.isFile() && PREVIEW_SOURCE_EXTENSIONS.test(entry.name)) {
+      const childStat = await fs.stat(childPath);
+      latest = Math.max(latest, childStat.mtimeMs);
+    }
+  }
+
+  return latest;
+}
+
+async function getPreviewSourceRevision(): Promise<string> {
+  const candidates = [
+    path.resolve("app/home/player/visualizer/themes"),
+    path.resolve("app/home/player/visualizer/core"),
+    path.resolve("app/home/player/visualizer/offline"),
+    path.resolve("app/globals.css"),
+    path.resolve("web/app/home/player/visualizer/themes"),
+    path.resolve("web/app/home/player/visualizer/core"),
+    path.resolve("web/app/home/player/visualizer/offline"),
+    path.resolve("web/app/globals.css"),
+  ];
+
+  let latest = 0;
+
+  for (const candidate of candidates) {
+    latest = Math.max(latest, await latestSourceMtimeMs(candidate));
+  }
+
+  return String(Math.floor(latest));
+}
+
 function isThemeName(value: string): value is ThemeName {
   return THEMES.includes(value as ThemeName);
 }
@@ -192,17 +250,39 @@ async function listLrcFiles(): Promise<RenderAssetOption[]> {
   return listRenderAssets(/\.lrc$/i);
 }
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(req: Request): Promise<NextResponse> {
+  const sourceRevision = await getPreviewSourceRevision();
+  const requestUrl = new URL(req.url);
+
+  if (requestUrl.searchParams.get("mode") === "revision") {
+    return NextResponse.json(
+      { sourceRevision },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      },
+    );
+  }
+
   const [audioFiles, lrcFiles] = await Promise.all([
     listAudioFiles(),
     listLrcFiles(),
   ]);
 
-  return NextResponse.json({
-    themes: THEMES,
-    audioFiles,
-    lrcFiles,
-  });
+  return NextResponse.json(
+    {
+      themes: THEMES,
+      audioFiles,
+      lrcFiles,
+      sourceRevision,
+    },
+    {
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    },
+  );
 }
 
 export async function POST(req: Request): Promise<NextResponse> {

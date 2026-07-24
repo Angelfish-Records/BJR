@@ -1160,40 +1160,39 @@ export default function FullPlayer(props: {
     });
   }
 
-  const preparedDirectTrackQueueRef = React.useRef<string | null>(null);
+  const preparedInitialQueueRef = React.useRef<string | null>(null);
 
   React.useEffect(() => {
     // Wait for the access check so a private-link queue receives its resolved
     // attribution context before any listener can press play.
     if (!accessKnown) return;
 
-    if (
-      !isPublicAlbumRoute ||
-      route.albumSlug !== effAlbumSlug ||
-      !route.displayId ||
-      !albumKey
-    ) {
+    if (!isPublicAlbumRoute || route.albumSlug !== effAlbumSlug || !albumKey) {
       return;
     }
 
-    const directTrack =
-      effTracks.find((track) => track.displayId === route.displayId) ?? null;
+    const directTrack = route.displayId
+      ? (effTracks.find((track) => track.displayId === route.displayId) ?? null)
+      : null;
 
-    if (!directTrack) return;
+    const initialTrack = directTrack ?? effTracks[0] ?? null;
 
-    // A fresh deep link should prime the player. Never overwrite an existing
-    // player session, including a currently playing or paused different album.
+    if (!initialTrack) return;
+
+    // Prepare a fresh player around the route's target track—or track one on a
+    // generic album route—without beginning playback. Never overwrite an
+    // existing session, including a paused or playing different album.
     const hasExistingPlayerSession = Boolean(
       p.current || p.queue.length > 0 || p.pendingRecordingId,
     );
 
     if (hasExistingPlayerSession) return;
 
-    const queueKey = `${albumKey}:${directTrack.recordingId}`;
+    const queueKey = `${albumKey}:${initialTrack.recordingId}`;
 
-    if (preparedDirectTrackQueueRef.current === queueKey) return;
+    if (preparedInitialQueueRef.current === queueKey) return;
 
-    preparedDirectTrackQueueRef.current = queueKey;
+    preparedInitialQueueRef.current = queueKey;
 
     p.setQueue(effTracks, {
       contextId: albumKey,
@@ -1203,7 +1202,7 @@ export default function FullPlayer(props: {
       contextArtist: effAlbum?.artist ?? undefined,
       sharePlaybackContext: queueSharePlaybackContext,
       sharePlaybackScopeId: queueSharePlaybackScopeId,
-      initialCurrentRecordingId: directTrack.recordingId,
+      initialCurrentRecordingId: initialTrack.recordingId,
     });
   }, [
     accessKnown,
@@ -1220,7 +1219,7 @@ export default function FullPlayer(props: {
     route.albumSlug,
     route.displayId,
   ]);
-
+  
   function playAlbumIndex(i: number) {
     const t = effTracks[i];
     if (!t) return;

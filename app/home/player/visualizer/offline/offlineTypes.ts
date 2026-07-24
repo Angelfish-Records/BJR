@@ -16,6 +16,15 @@ export type OfflineRenderConfig = {
   seed: number;
   lyricStyleName?: LyricStyleName;
   postPresetName?: PostPresetName;
+
+  /**
+   * Optional multiplier for pixel-sized composition values.
+   *
+   * Offline exports omit this and therefore render at 1:1. Lower-resolution
+   * development previews use it to preserve the relative size of typography,
+   * glow, blur, stroke, and camera shake.
+   */
+  pixelScale?: number;
 };
 
 export type AudioFeatureFrame = Required<AudioFeatures> & {
