@@ -143,9 +143,15 @@ export default clerkMiddleware(
     const url = new URL(req.url);
     const pathname = url.pathname;
 
-    // ---- A) Hard upgrades: legacy /home family -> canonical tabs/player ----
+    // ---- A) Root cutover + hard upgrades for the legacy /home family ----
+    // Route the public root through the dynamic player alias. /player then
+    // resolves the current featured album and redirects to its canonical URL.
+    if (pathname === "/") {
+      return rewriteTo(url, "/player");
+    }
+
     if (pathname === "/home") {
-      return redirect308(url, "/portal", pickPreservedParams(url));
+      return redirect308(url, "/", pickPreservedParams(url));
     }
 
     if (pathname === "/home/player") {
