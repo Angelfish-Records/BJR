@@ -509,7 +509,9 @@ function sendAudioDebug(payload: {
     } catch {}
   }
 
-  flushAudioDebugSoon(true);
+  // Batch diagnostics after the playback-critical call stack has completed.
+  // Immediate per-event fetches can perturb timing-sensitive mobile playback.
+  flushAudioDebugSoon();
 }
 
 function setMediaSessionPositionStateSafe(args: {
