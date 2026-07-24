@@ -67,30 +67,21 @@ export async function POST(req: Request) {
 
   const { docType, docId } = getDocMeta(body);
 
-  const reTag = (t: string) => revalidateTag(t, CACHE_PROFILE);
+  const reTag = (tag: string) => revalidateTag(tag, CACHE_PROFILE);
 
-  // Back-compat: missing docType => treat as landing change.
   if (!docType) {
-    reTag("landingPage");
-    revalidatePath("/");
     return Response.json({
       ok: true,
       docType: null,
       docId,
-      revalidated: ["landingPage"],
-      path: "/",
+      revalidated: [],
+      note: "Missing document type; no cache invalidation performed",
     });
   }
 
   const tags: string[] = [];
 
-  // Landing singleton (support both type-based and id-based routing)
-  if (docType === "landingPage" || docId === "landingPage") {
-    tags.push("landingPage");
-    revalidatePath("/");
-  }
-
-  // Site flags singleton
+  // Site configuration singleton
   if (docType === "siteFlags" || docId === "siteFlags") {
     tags.push("siteFlags");
   }
@@ -126,21 +117,13 @@ export async function POST(req: Request) {
     revalidatePath("/albums");
   }
 
-  // Never silently ignore: if we do not recognise the document type, retain
-  // the existing low-cost landing-page fallback.
   if (tags.length === 0) {
-    tags.push("landingPage");
-    revalidatePath("/");
-
-    for (const tag of tags) reTag(tag);
-
     return Response.json({
       ok: true,
       docType,
       docId,
-      revalidated: tags,
-      note: "Unknown docType; defaulted to landingPage revalidation",
-      path: "/",
+      revalidated: [],
+      note: "No cache invalidation configured for this document type",
     });
   }
 

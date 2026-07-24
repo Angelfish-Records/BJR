@@ -13,11 +13,11 @@ import { schema } from "./sanity/schemaTypes";
 import { structure } from "./sanity/structure";
 import { apiVersion, dataset, projectId } from "./sanity/lib/env";
 
-// Singleton docs: visible in Structure, but should not be creatable as new documents globally.
-const SINGLETON_TEMPLATE_IDS = new Set(["landingPage", "siteFlags"]);
-// Your structure.ts pins these IDs explicitly via documentId(...)
-const SINGLETON_SCHEMA_TYPES = new Set(["landingPage", "siteFlags"]);
-const SINGLETON_DOCUMENT_IDS = new Set(["landingPage", "siteFlags"]);
+// Singleton documents are visible in Structure but cannot be created,
+// deleted, or duplicated through the ordinary Studio document menus.
+const SINGLETON_TEMPLATE_IDS = new Set(["siteFlags"]);
+const SINGLETON_SCHEMA_TYPES = new Set(["siteFlags"]);
+const SINGLETON_DOCUMENT_IDS = new Set(["siteFlags"]);
 
 function isSingleton(ctx: { schemaType?: string; documentId?: string }) {
   return (
