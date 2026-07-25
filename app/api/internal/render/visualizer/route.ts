@@ -250,6 +250,82 @@ async function listLrcFiles(): Promise<RenderAssetOption[]> {
   return listRenderAssets(/\.lrc$/i);
 }
 
+function assertThemeName(themeName: string): void {
+  if (!isThemeName(themeName)) {
+    throw new Error(`Invalid themeName: ${themeName}`);
+  }
+}
+
+function resolveAudioAsset(
+  audioFiles: readonly RenderAssetOption[],
+  audioFile: string,
+): RenderAssetOption {
+  const audio = audioFiles.find((item) => item.file === audioFile);
+
+  if (!audio) {
+    throw new Error(
+      `Audio file not found in web/public/render-test: ${audioFile}`,
+    );
+  }
+
+  return audio;
+}
+
+function resolveLrcAsset(
+  lrcFiles: readonly RenderAssetOption[],
+  lrcFile: string | undefined,
+): RenderAssetOption | undefined {
+  if (!lrcFile || lrcFile === "__none__") {
+    return undefined;
+  }
+
+  const lrc = lrcFiles.find((item) => item.file === lrcFile);
+
+  if (!lrc) {
+    throw new Error(`LRC file not found in web/public/render-test: ${lrcFile}`);
+  }
+
+  return lrc;
+}
+
+function assertRenderSettings(body: RenderRequest): void {
+  if (
+    body.lyricStyleName !== undefined &&
+    !isLyricStyleName(body.lyricStyleName)
+  ) {
+    throw new Error(`Invalid lyricStyleName: ${body.lyricStyleName}`);
+  }
+
+  if (
+    body.postPresetName !== undefined &&
+    !isPostPresetName(body.postPresetName)
+  ) {
+    throw new Error(`Invalid postPresetName: ${body.postPresetName}`);
+  }
+
+  assertNumber("width", body.width, 16, 7680);
+  assertNumber("height", body.height, 16, 4320);
+  assertNumber("fps", body.fps, 1, 120);
+  assertNumber("seed", body.seed, 0, 2147483647);
+  assertNumber("crf", body.crf, 0, 51);
+
+  if (body.startSec !== undefined) {
+    assertNumber("startSec", body.startSec, 0, 60 * 60);
+  }
+
+  if (body.endSec !== undefined) {
+    assertNumber("endSec", body.endSec, 0, 60 * 60);
+  }
+
+  if (
+    body.startSec !== undefined &&
+    body.endSec !== undefined &&
+    body.endSec <= body.startSec
+  ) {
+    throw new Error("endSec must be greater than startSec");
+  }
+}
+
 export async function GET(req: Request): Promise<NextResponse> {
   const sourceRevision = await getPreviewSourceRevision();
   const requestUrl = new URL(req.url);
@@ -289,68 +365,17 @@ export async function POST(req: Request): Promise<NextResponse> {
   try {
     const body = (await req.json()) as RenderRequest;
 
-    if (!isThemeName(body.themeName)) {
-      throw new Error(`Invalid themeName: ${body.themeName}`);
-    }
+    assertThemeName(body.themeName);
 
     const [audioFiles, lrcFiles] = await Promise.all([
       listAudioFiles(),
       listLrcFiles(),
     ]);
 
-    const audio = audioFiles.find((item) => item.file === body.audioFile);
-    if (!audio) {
-      throw new Error(
-        `Audio file not found in web/public/render-test: ${body.audioFile}`,
-      );
-    }
+    const audio = resolveAudioAsset(audioFiles, body.audioFile);
+    const lrc = resolveLrcAsset(lrcFiles, body.lrcFile);
 
-    const lrc =
-      body.lrcFile && body.lrcFile !== "__none__"
-        ? lrcFiles.find((item) => item.file === body.lrcFile)
-        : undefined;
-
-    if (body.lrcFile && body.lrcFile !== "__none__" && !lrc) {
-      throw new Error(
-        `LRC file not found in web/public/render-test: ${body.lrcFile}`,
-      );
-    }
-
-    if (
-      body.lyricStyleName !== undefined &&
-      !isLyricStyleName(body.lyricStyleName)
-    ) {
-      throw new Error(`Invalid lyricStyleName: ${body.lyricStyleName}`);
-    }
-
-    if (
-      body.postPresetName !== undefined &&
-      !isPostPresetName(body.postPresetName)
-    ) {
-      throw new Error(`Invalid postPresetName: ${body.postPresetName}`);
-    }
-
-    assertNumber("width", body.width, 16, 7680);
-    assertNumber("height", body.height, 16, 4320);
-    assertNumber("fps", body.fps, 1, 120);
-    assertNumber("seed", body.seed, 0, 2147483647);
-    assertNumber("crf", body.crf, 0, 51);
-
-    if (body.startSec !== undefined) {
-      assertNumber("startSec", body.startSec, 0, 60 * 60);
-    }
-
-    if (body.endSec !== undefined) {
-      assertNumber("endSec", body.endSec, 0, 60 * 60);
-    }
-
-    if (
-      body.startSec !== undefined &&
-      body.endSec !== undefined &&
-      body.endSec <= body.startSec
-    ) {
-      throw new Error("endSec must be greater than startSec");
-    }
+    assertRenderSettings(body);
 
     const recordingId = body.recordingId.trim() || safeStem(body.audioFile);
     const outputDir = `exports/${recordingId}_${body.themeName}`;

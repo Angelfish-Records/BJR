@@ -24,6 +24,7 @@ import { issueShareTokenPlaybackContext } from "@/lib/shareTokenPlaybackContext"
 import {
   getAlbumPolicyByAlbumId,
   isEmbargoed,
+  type AlbumPolicy,
   type TierName,
 } from "@/lib/albumPolicy";
 import { listCurrentEntitlementKeys } from "@/lib/entitlements";
@@ -111,14 +112,512 @@ function anonJsonWithId<T extends Record<string, unknown>>(
   return res;
 }
 
+type RedeemedState = { ok: true } | { ok: false; code: string } | null;
+
+type MemberShareState = {
+  redeemed: RedeemedState;
+  shareTokenAllowsAccess: boolean;
+  shareTokenAccess: ShareTokenAccessSummary | null;
+  sharePlaybackContext: string | null;
+};
+
+type AccessRequestContext = {
+  albumId: string;
+  albumScopeId: string;
+  shareToken: string;
+  correlationId: string;
+};
+
+async function resolveAnonymousAccess(
+  req: NextRequest,
+  context: AccessRequestContext,
+): Promise<NextResponse> {
+  const { albumId, albumScopeId, shareToken, correlationId } = context;
+  const { anonId } = ensureAnonId(req);
+
+  const policy = await getAlbumPolicyByAlbumId(albumId);
+  const releaseAt = policy?.releaseAt ?? null;
+  const embargoed = isEmbargoed(policy);
+
+  if (embargoed && !shareToken) {
+    return anonJsonWithId(
+      anonId,
+      {
+        ok: true,
+        allowed: false,
+        embargoed: true,
+        releaseAt,
+        code: "EMBARGO",
+        action: "wait" satisfies Action,
+        reason: "This album is not released yet.",
+        correlationId,
+        redeemed: null,
+      },
+      { correlationId },
+    );
+  }
+
+  if (shareToken) {
+    const validation = await validateShareToken({
+      token: shareToken,
+      expectedScopeId: albumScopeId,
+      anonId,
+      resourceKind: "album",
+      resourceId: albumScopeId,
+      action: "access",
+    });
+
+    if (!validation.ok) {
+      return anonJsonWithId(
+        anonId,
+        {
+          ok: true,
+          allowed: false,
+          embargoed,
+          releaseAt,
+          code: validation.code,
+          action: "login" as const,
+          reason:
+            validation.code === "CAP_REACHED"
+              ? "Share link cap reached."
+              : "Invalid or expired share token.",
+          correlationId,
+          redeemed: { ok: false, code: validation.code },
+        },
+        { correlationId },
+      );
+    }
+
+    const sharePlaybackContext = validation.telemetryLabel
+      ? issueShareTokenPlaybackContext({
+          shareTokenId: validation.tokenId,
+          scopeId: albumScopeId,
+          tokenExpiresAt: validation.shareTokenAccess.expiresAt,
+          memberId: null,
+          anonId,
+        })
+      : null;
+
+    return anonJsonWithId(
+      anonId,
+      {
+        ok: true,
+        allowed: true,
+        embargoed: false,
+        releaseAt,
+        code: null,
+        action: null,
+        reason: null,
+        correlationId,
+        redeemed: { ok: true },
+        shareTokenAccess: validation.shareTokenAccess,
+        sharePlaybackContext,
+        sharePlaybackScopeId: sharePlaybackContext ? albumScopeId : null,
+      },
+      { correlationId },
+    );
+  }
+
+  const distinctCompleted = await countAnonDistinctCompletedTracks({
+    anonId,
+    sinceDays: ANON_PLAYBACK_POLICY.windowDays,
+  });
+
+  const cap = {
+    used: distinctCompleted,
+    max: ANON_PLAYBACK_POLICY.distinctTrackCap,
+    windowDays: ANON_PLAYBACK_POLICY.windowDays,
+  };
+
+  if (
+    hasReachedAnonPlaybackCap({
+      distinctCompletedTracks: distinctCompleted,
+    })
+  ) {
+    return anonJsonWithId(
+      anonId,
+      {
+        ok: true,
+        allowed: false,
+        embargoed: false,
+        releaseAt,
+        code: "ANON_CAP_REACHED",
+        action: "login" as const,
+        reason: "Enter your email address to continue listening.",
+        correlationId,
+        redeemed: null,
+        cap,
+      },
+      { correlationId },
+    );
+  }
+
+  return anonJsonWithId(
+    anonId,
+    {
+      ok: true,
+      allowed: true,
+      embargoed: false,
+      releaseAt,
+      code: null,
+      action: null,
+      reason: null,
+      correlationId,
+      redeemed: null,
+      cap,
+    },
+    { correlationId },
+  );
+}
+
+async function resolveAdminDebugOverride(
+  memberId: string,
+  correlationId: string,
+): Promise<NextResponse | null> {
+  const debug = await readAdminDebugCookie();
+  if (!debug) return null;
+
+  const isAdmin = (
+    await checkAccess(
+      memberId,
+      { kind: "global", required: [ENTITLEMENTS.ADMIN] },
+      { log: false },
+    )
+  ).allowed;
+
+  if (!isAdmin) return null;
+
+  const force = String(debug.force ?? "none");
+
+  switch (force) {
+    case "AUTH_REQUIRED":
+      return baseJson(
+        {
+          ok: true,
+          allowed: false,
+          embargoed: false,
+          releaseAt: null,
+          code: "AUTH_REQUIRED",
+          action: "login",
+          reason: "Sign in required",
+          correlationId,
+          redeemed: null,
+        },
+        { correlationId },
+      );
+
+    case "ENTITLEMENT_REQUIRED":
+      return baseJson(
+        {
+          ok: true,
+          allowed: false,
+          embargoed: false,
+          releaseAt: null,
+          code: "ENTITLEMENT_REQUIRED",
+          action: "subscribe",
+          reason: "Entitlement required",
+          correlationId,
+          redeemed: null,
+        },
+        { correlationId },
+      );
+
+    case "ANON_CAP_REACHED":
+      return baseJson(
+        {
+          ok: true,
+          allowed: false,
+          embargoed: false,
+          releaseAt: null,
+          code: "ANON_CAP_REACHED",
+          action: "login",
+          reason: "Anon cap reached",
+          correlationId,
+          redeemed: null,
+        },
+        { correlationId },
+      );
+
+    case "EMBARGOED":
+      return baseJson(
+        {
+          ok: true,
+          allowed: false,
+          embargoed: true,
+          releaseAt: new Date().toISOString(),
+          code: "EMBARGOED",
+          action: "wait",
+          reason: "Embargoed",
+          correlationId,
+          redeemed: null,
+        },
+        { correlationId },
+      );
+
+    default:
+      return null;
+  }
+}
+
+async function resolveMemberShareState(params: {
+  memberId: string;
+  albumScopeId: string;
+  shareToken: string;
+}): Promise<MemberShareState> {
+  if (!params.shareToken) {
+    return {
+      redeemed: null,
+      shareTokenAllowsAccess: false,
+      shareTokenAccess: null,
+      sharePlaybackContext: null,
+    };
+  }
+
+  const redemption = await redeemShareTokenForMember({
+    token: params.shareToken,
+    memberId: params.memberId,
+    expectedScopeId: params.albumScopeId,
+    resourceKind: "album",
+    resourceId: params.albumScopeId,
+    action: "redeem",
+  });
+
+  if (!redemption.ok) {
+    return {
+      redeemed: { ok: false, code: redemption.code },
+      shareTokenAllowsAccess: false,
+      shareTokenAccess: null,
+      sharePlaybackContext: null,
+    };
+  }
+
+  const sharePlaybackContext = redemption.telemetryLabel
+    ? issueShareTokenPlaybackContext({
+        shareTokenId: redemption.tokenId,
+        scopeId: params.albumScopeId,
+        tokenExpiresAt: redemption.shareTokenAccess.expiresAt,
+        memberId: params.memberId,
+        anonId: null,
+      })
+    : null;
+
+  return {
+    redeemed: { ok: true },
+    shareTokenAllowsAccess: true,
+    shareTokenAccess: redemption.shareTokenAccess,
+    sharePlaybackContext,
+  };
+}
+
+async function resolveMemberEmbargoGate(params: {
+  memberId: string;
+  albumScopeId: string;
+  policy: AlbumPolicy | null;
+  embargoed: boolean;
+  releaseAt: string | null;
+  shareTokenAllowsAccess: boolean;
+  correlationId: string;
+  redeemed: RedeemedState;
+}): Promise<NextResponse | null> {
+  if (!params.embargoed || params.shareTokenAllowsAccess) {
+    return null;
+  }
+
+  const shareGrant = await checkAccess(
+    params.memberId,
+    {
+      kind: "album",
+      albumScopeId: params.albumScopeId,
+      required: [ENTITLEMENTS.ALBUM_SHARE_GRANT],
+    },
+    {
+      log: true,
+      action: ACCESS_ACTIONS.ACCESS_CHECK,
+      correlationId: params.correlationId,
+    },
+  );
+
+  if (shareGrant.allowed) {
+    return null;
+  }
+
+  const { policy } = params;
+
+  if (policy?.earlyAccessEnabled && policy.earlyAccessTiers.length > 0) {
+    const keys = await listCurrentEntitlementKeys(params.memberId);
+    const keySet = new Set(keys);
+    const allowedTierKeys = policy.earlyAccessTiers.map(
+      (tier) => `tier_${tier}`,
+    );
+
+    if (allowedTierKeys.some((key) => keySet.has(key))) {
+      return null;
+    }
+
+    return baseJson(
+      {
+        ok: true,
+        allowed: false,
+        embargoed: true,
+        releaseAt: params.releaseAt,
+        code: "EMBARGO",
+        action: "subscribe" satisfies Action,
+        reason: "This album is not released yet. Upgrade for early access.",
+        correlationId: params.correlationId,
+        redeemed: params.redeemed,
+      },
+      { correlationId: params.correlationId },
+    );
+  }
+
+  return baseJson(
+    {
+      ok: true,
+      allowed: false,
+      embargoed: true,
+      releaseAt: params.releaseAt,
+      code: "EMBARGO",
+      action: "wait" satisfies Action,
+      reason: "This album is not released yet.",
+      correlationId: params.correlationId,
+      redeemed: params.redeemed,
+    },
+    { correlationId: params.correlationId },
+  );
+}
+
+async function resolveMemberTierGate(params: {
+  memberId: string;
+  policy: AlbumPolicy | null;
+  releaseAt: string | null;
+  correlationId: string;
+  redeemed: RedeemedState;
+}): Promise<NextResponse | null> {
+  const minTier = params.policy?.minTierForPlayback;
+
+  if (!minTier) {
+    return null;
+  }
+
+  const keys = await listCurrentEntitlementKeys(params.memberId);
+  const keySet = new Set(keys);
+  const requiredTierKeys = tierAtOrAbove(minTier);
+
+  if (requiredTierKeys.some((key) => keySet.has(key))) {
+    return null;
+  }
+
+  return baseJson(
+    {
+      ok: true,
+      allowed: false,
+      embargoed: false,
+      releaseAt: params.releaseAt,
+      code: "TIER_REQUIRED",
+      action: "subscribe" satisfies Action,
+      reason: `This album requires ${minTier} tier or higher.`,
+      correlationId: params.correlationId,
+      redeemed: params.redeemed,
+    },
+    { correlationId: params.correlationId },
+  );
+}
+
+async function resolveMemberAccess(params: {
+  memberId: string;
+  albumId: string;
+  albumScopeId: string;
+  correlationId: string;
+  shareState: MemberShareState;
+}): Promise<NextResponse> {
+  const policy = await getAlbumPolicyByAlbumId(params.albumId);
+  const releaseAt = policy?.releaseAt ?? null;
+  const embargoed = isEmbargoed(policy);
+
+  const embargoResponse = await resolveMemberEmbargoGate({
+    memberId: params.memberId,
+    albumScopeId: params.albumScopeId,
+    policy,
+    embargoed,
+    releaseAt,
+    shareTokenAllowsAccess: params.shareState.shareTokenAllowsAccess,
+    correlationId: params.correlationId,
+    redeemed: params.shareState.redeemed,
+  });
+
+  if (embargoResponse) {
+    return embargoResponse;
+  }
+
+  const tierResponse = await resolveMemberTierGate({
+    memberId: params.memberId,
+    policy,
+    releaseAt,
+    correlationId: params.correlationId,
+    redeemed: params.shareState.redeemed,
+  });
+
+  if (tierResponse) {
+    return tierResponse;
+  }
+
+  const decision = await checkAccess(
+    params.memberId,
+    {
+      kind: "album",
+      albumScopeId: params.albumScopeId,
+      required: [ENTITLEMENTS.PLAY_ALBUM],
+    },
+    {
+      log: true,
+      action: ACCESS_ACTIONS.ACCESS_CHECK,
+      correlationId: params.correlationId,
+    },
+  );
+
+  const allowed = Boolean(
+    decision.allowed || params.shareState.shareTokenAllowsAccess,
+  );
+
+  return baseJson(
+    {
+      ok: true,
+      allowed,
+      embargoed: embargoed && !allowed,
+      releaseAt,
+      code: allowed ? null : "NO_ENTITLEMENT",
+      action: allowed ? null : ("subscribe" satisfies Action),
+      reason: allowed ? null : "reason" in decision ? decision.reason : null,
+      correlationId: params.correlationId,
+      redeemed: params.shareState.redeemed,
+      shareTokenAccess:
+        allowed && params.shareState.shareTokenAllowsAccess
+          ? params.shareState.shareTokenAccess
+          : null,
+      sharePlaybackContext:
+        allowed && params.shareState.shareTokenAllowsAccess
+          ? params.shareState.sharePlaybackContext
+          : null,
+      sharePlaybackScopeId:
+        allowed &&
+        params.shareState.shareTokenAllowsAccess &&
+        params.shareState.sharePlaybackContext
+          ? params.albumScopeId
+          : null,
+    },
+    { correlationId: params.correlationId },
+  );
+}
+
 export async function GET(req: NextRequest) {
   const correlationId = newCorrelationId();
   const { userId } = await auth();
 
   const url = new URL(req.url);
-  const rawAlbumId = (url.searchParams.get("albumId") ?? "").trim();
-  const albumId = normalizeAlbumId(rawAlbumId);
-  const st = (
+  const albumId = normalizeAlbumId(
+    (url.searchParams.get("albumId") ?? "").trim(),
+  );
+  const shareToken = (
     url.searchParams.get("st") ??
     url.searchParams.get("share") ??
     ""
@@ -143,156 +642,19 @@ export async function GET(req: NextRequest) {
 
   const albumScopeId = `alb:${albumId}`;
 
-  // ---- Unauthed ----
   if (!userId) {
-    // Mint once if missing/invalid; we will persist EXACTLY this id in every response below.
-    // ✅ ensure stable anonId and persist if it was minted
-    const { anonId } = ensureAnonId(req);
-
-    const policy = await getAlbumPolicyByAlbumId(albumId);
-    const releaseAt = policy?.releaseAt ?? null;
-    const embargoed = isEmbargoed(policy);
-
-    // Embargo blocks anon unless share token present.
-    if (embargoed && !st) {
-      return anonJsonWithId(
-        anonId,
-        {
-          ok: true,
-          allowed: false,
-          embargoed: true,
-          releaseAt,
-          code: "EMBARGO",
-          action: "wait" satisfies Action,
-          reason: "This album is not released yet.",
-          correlationId,
-          redeemed: null,
-        },
-        { correlationId },
-      );
-    }
-
-    // Share token capability (access check only).
-    if (st) {
-      const v = await validateShareToken({
-        token: st,
-        expectedScopeId: albumScopeId,
-        anonId, // ✅ stable
-        resourceKind: "album",
-        resourceId: albumScopeId,
-        action: "access",
-      });
-
-      if (!v.ok) {
-        return anonJsonWithId(
-          anonId,
-          {
-            ok: true,
-            allowed: false,
-            embargoed,
-            releaseAt,
-            code: v.code,
-            action: "login" as const,
-            reason:
-              v.code === "CAP_REACHED"
-                ? "Share link cap reached."
-                : "Invalid or expired share token.",
-            correlationId,
-            redeemed: { ok: false, code: v.code },
-          },
-          { correlationId },
-        );
-      }
-
-      const sharePlaybackContext = v.telemetryLabel
-        ? issueShareTokenPlaybackContext({
-            shareTokenId: v.tokenId,
-            scopeId: albumScopeId,
-            tokenExpiresAt: v.shareTokenAccess.expiresAt,
-            memberId: null,
-            anonId,
-          })
-        : null;
-
-      return anonJsonWithId(
-        anonId,
-        {
-          ok: true,
-          allowed: true,
-          embargoed: false,
-          releaseAt,
-          code: null,
-          action: null,
-          reason: null,
-          correlationId,
-          redeemed: { ok: true },
-          shareTokenAccess: v.shareTokenAccess,
-          sharePlaybackContext,
-          sharePlaybackScopeId: sharePlaybackContext ? albumScopeId : null,
-        },
-        { correlationId },
-      );
-    }
-
-    // No token: anon sampling cap
-    const distinctCompleted = await countAnonDistinctCompletedTracks({
-      anonId,
-      sinceDays: ANON_PLAYBACK_POLICY.windowDays,
+    return resolveAnonymousAccess(req, {
+      albumId,
+      albumScopeId,
+      shareToken,
+      correlationId,
     });
-    if (
-      hasReachedAnonPlaybackCap({
-        distinctCompletedTracks: distinctCompleted,
-      })
-    ) {
-      return anonJsonWithId(
-        anonId,
-        {
-          ok: true,
-          allowed: false,
-          embargoed: false,
-          releaseAt,
-          code: "ANON_CAP_REACHED",
-          action: "login" as const,
-          reason: "Enter your email address to continue listening.",
-          correlationId,
-          redeemed: null,
-          cap: {
-            used: distinctCompleted,
-            max: ANON_PLAYBACK_POLICY.distinctTrackCap,
-            windowDays: ANON_PLAYBACK_POLICY.windowDays,
-          },
-        },
-        { correlationId },
-      );
-    }
-
-    return anonJsonWithId(
-      anonId,
-      {
-        ok: true,
-        allowed: true,
-        embargoed: false,
-        releaseAt,
-        code: null,
-        action: null,
-        reason: null,
-        correlationId,
-        redeemed: null,
-        cap: {
-          used: distinctCompleted,
-          max: ANON_PLAYBACK_POLICY.distinctTrackCap,
-          windowDays: ANON_PLAYBACK_POLICY.windowDays,
-        },
-      },
-      { correlationId },
-    );
   }
 
-  // ---- Authed ----
   const memberId = await getMemberIdByClerkUserId(userId);
+
   if (!memberId) {
-    // ✅ if we touched ensureAnonId above (st path), persist it even for authed
-    const anonForAuthed = st ? ensureAnonId(req).anonId : undefined;
+    const anonForAuthed = shareToken ? ensureAnonId(req).anonId : undefined;
 
     return baseJson(
       {
@@ -310,240 +672,26 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Admin debug override
-  const dbg = await readAdminDebugCookie();
-  if (dbg) {
-    const isAdmin = (
-      await checkAccess(
-        memberId,
-        { kind: "global", required: [ENTITLEMENTS.ADMIN] },
-        { log: false },
-      )
-    ).allowed;
-    if (isAdmin) {
-      const force = (dbg.force ?? "none").toString();
-      if (force === "AUTH_REQUIRED") {
-        return baseJson(
-          {
-            ok: true,
-            allowed: false,
-            embargoed: false,
-            releaseAt: null,
-            code: "AUTH_REQUIRED",
-            action: "login",
-            reason: "Sign in required",
-            correlationId,
-            redeemed: null,
-          },
-          { correlationId },
-        );
-      }
-      if (force === "ENTITLEMENT_REQUIRED") {
-        return baseJson(
-          {
-            ok: true,
-            allowed: false,
-            embargoed: false,
-            releaseAt: null,
-            code: "ENTITLEMENT_REQUIRED",
-            action: "subscribe",
-            reason: "Entitlement required",
-            correlationId,
-            redeemed: null,
-          },
-          { correlationId },
-        );
-      }
-      if (force === "ANON_CAP_REACHED") {
-        return baseJson(
-          {
-            ok: true,
-            allowed: false,
-            embargoed: false,
-            releaseAt: null,
-            code: "ANON_CAP_REACHED",
-            action: "login",
-            reason: "Anon cap reached",
-            correlationId,
-            redeemed: null,
-          },
-          { correlationId },
-        );
-      }
-      if (force === "EMBARGOED") {
-        return baseJson(
-          {
-            ok: true,
-            allowed: false,
-            embargoed: true,
-            releaseAt: new Date().toISOString(),
-            code: "EMBARGOED",
-            action: "wait",
-            reason: "Embargoed",
-            correlationId,
-            redeemed: null,
-          },
-          { correlationId },
-        );
-      }
-    }
-  }
-
-  // A successful member redemption is already a validated token decision.
-  // Do not validate it again under an anonymous identity: that could consume
-  // a second distinct-consumer slot on capped links.
-  let redeemed: { ok: boolean; code?: string } | null = null;
-  let shareTokenAllowsAccess = false;
-  let shareTokenAccess: ShareTokenAccessSummary | null = null;
-  let sharePlaybackContext: string | null = null;
-
-  if (st) {
-    const r = await redeemShareTokenForMember({
-      token: st,
-      memberId,
-      expectedScopeId: albumScopeId,
-      resourceKind: "album",
-      resourceId: albumScopeId,
-      action: "redeem",
-    });
-
-    redeemed = r.ok ? { ok: true } : { ok: false, code: r.code };
-
-    if (r.ok) {
-      shareTokenAllowsAccess = true;
-      shareTokenAccess = r.shareTokenAccess;
-
-      if (r.telemetryLabel) {
-        sharePlaybackContext = issueShareTokenPlaybackContext({
-          shareTokenId: r.tokenId,
-          scopeId: albumScopeId,
-          tokenExpiresAt: r.shareTokenAccess.expiresAt,
-          memberId,
-          anonId: null,
-        });
-      }
-    }
-  }
-
-  const policy = await getAlbumPolicyByAlbumId(albumId);
-  const releaseAt = policy?.releaseAt ?? null;
-  const embargoed = isEmbargoed(policy);
-
-  // ✅ Share-grant entitlement should allow playback (not just bypass embargo).
-  const shareGrant = await checkAccess(
+  const debugResponse = await resolveAdminDebugOverride(
     memberId,
-    { kind: "album", albumScopeId, required: [ENTITLEMENTS.ALBUM_SHARE_GRANT] },
-    { log: true, action: ACCESS_ACTIONS.ACCESS_CHECK, correlationId },
+    correlationId,
   );
-  const shareGrantAllowed = shareGrant.allowed;
 
-  // Embargo gate
-  if (embargoed && !shareTokenAllowsAccess) {
-    const override = await checkAccess(
-      memberId,
-      {
-        kind: "album",
-        albumScopeId,
-        required: [ENTITLEMENTS.ALBUM_SHARE_GRANT],
-      },
-      { log: true, action: ACCESS_ACTIONS.ACCESS_CHECK, correlationId },
-    );
-
-    if (!override.allowed) {
-      if (policy?.earlyAccessEnabled && policy.earlyAccessTiers.length > 0) {
-        const keys = await listCurrentEntitlementKeys(memberId);
-        const s = new Set(keys);
-        const allowedTierKeys = policy.earlyAccessTiers.map((t) => `tier_${t}`);
-        const ok = allowedTierKeys.some((k) => s.has(k));
-        if (!ok) {
-          return baseJson(
-            {
-              ok: true,
-              allowed: false,
-              embargoed: true,
-              releaseAt,
-              code: "EMBARGO",
-              action: "subscribe" satisfies Action,
-              reason:
-                "This album is not released yet. Upgrade for early access.",
-              correlationId,
-              redeemed,
-            },
-            { correlationId },
-          );
-        }
-      } else {
-        return baseJson(
-          {
-            ok: true,
-            allowed: false,
-            embargoed: true,
-            releaseAt,
-            code: "EMBARGO",
-            action: "wait" satisfies Action,
-            reason: "This album is not released yet.",
-            correlationId,
-            redeemed,
-          },
-          { correlationId },
-        );
-      }
-    }
+  if (debugResponse) {
+    return debugResponse;
   }
 
-  // Min-tier gate (post-release or embargo bypass)
-  if (policy?.minTierForPlayback && !shareGrantAllowed) {
-    const keys = await listCurrentEntitlementKeys(memberId);
-    const s = new Set(keys);
-    const requiredTierKeys = tierAtOrAbove(policy.minTierForPlayback);
-    const ok = requiredTierKeys.some((k) => s.has(k));
-    if (!ok) {
-      return baseJson(
-        {
-          ok: true,
-          allowed: false,
-          embargoed: false,
-          releaseAt,
-          code: "TIER_REQUIRED",
-          action: "subscribe" satisfies Action,
-          reason: `This album requires ${policy.minTierForPlayback} tier or higher.`,
-          correlationId,
-          redeemed,
-        },
-        { correlationId },
-      );
-    }
-  }
-
-  // Final entitlement gate (share-grant also allows)
-  const decision = await checkAccess(
+  const shareState = await resolveMemberShareState({
     memberId,
-    { kind: "album", albumScopeId, required: [ENTITLEMENTS.PLAY_ALBUM] },
-    { log: true, action: ACCESS_ACTIONS.ACCESS_CHECK, correlationId },
-  );
+    albumScopeId,
+    shareToken,
+  });
 
-  const allowed = Boolean(decision.allowed || shareTokenAllowsAccess);
-
-  return baseJson(
-    {
-      ok: true,
-      allowed,
-      embargoed: embargoed && !allowed,
-      releaseAt,
-      code: allowed ? null : "NO_ENTITLEMENT",
-      action: allowed ? null : ("subscribe" satisfies Action),
-      reason: allowed ? null : "reason" in decision ? decision.reason : null,
-      correlationId,
-      redeemed,
-      shareTokenAccess:
-        allowed && shareTokenAllowsAccess ? shareTokenAccess : null,
-      sharePlaybackContext:
-        allowed && shareTokenAllowsAccess ? sharePlaybackContext : null,
-      sharePlaybackScopeId:
-        allowed && shareTokenAllowsAccess && sharePlaybackContext
-          ? albumScopeId
-          : null,
-    },
-    { correlationId },
-  );
+  return resolveMemberAccess({
+    memberId,
+    albumId,
+    albumScopeId,
+    correlationId,
+    shareState,
+  });
 }

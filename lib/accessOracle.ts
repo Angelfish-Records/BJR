@@ -4,6 +4,7 @@ import { checkAccess } from "@/lib/access";
 import {
   getAlbumPolicyByAlbumId,
   isEmbargoed,
+  type AlbumPolicy,
   type TierName,
 } from "@/lib/albumPolicy";
 import { listCurrentEntitlementKeys } from "@/lib/entitlements";
@@ -90,192 +91,283 @@ function normalizeAlbumId(raw: string): string {
   return s.trim();
 }
 
-export async function decideAlbumPlaybackAccess(
-  params: AlbumPlaybackOracleParams,
-): Promise<AlbumPlaybackOracleDecision> {
-  const albumId = normalizeAlbumId(params.albumId);
-  const correlationId = params.correlationId;
-  const action = params.action ?? ACCESS_ACTIONS.ACCESS_CHECK;
+type DeniedAlbumPlaybackOracleDecision = Extract<
+  AlbumPlaybackOracleDecision,
+  { allowed: false }
+>;
 
-  if (!albumId) {
-    return {
-      ok: true,
-      allowed: false,
-      code: "INVALID_REQUEST",
-      action: null,
-      reason: "Missing albumId.",
-      albumId: "",
-      albumScopeId: "",
-      embargoed: false,
-      releaseAt: null,
-      requiredTier: null,
-      correlationId,
-    };
-  }
+type OracleContext = {
+  albumId: string;
+  albumScopeId: string;
+  policy: AlbumPolicy | null;
+  releaseAt: string | null;
+  embargoed: boolean;
+  memberId: string | null;
+  shareTokenAllowsPlayback: boolean;
+  entitlementKeys: ReadonlySet<string>;
+  correlationId: string;
+  action: string;
+};
 
-  const albumScopeId =
-    albumId === SCOPE_CATALOGUE ? SCOPE_CATALOGUE : `alb:${albumId}`;
+function invalidAlbumDecision(
+  correlationId: string,
+): DeniedAlbumPlaybackOracleDecision {
+  return {
+    ok: true,
+    allowed: false,
+    code: "INVALID_REQUEST",
+    action: null,
+    reason: "Missing albumId.",
+    albumId: "",
+    albumScopeId: "",
+    embargoed: false,
+    releaseAt: null,
+    requiredTier: null,
+    correlationId,
+  };
+}
 
-  const policy = await getAlbumPolicyByAlbumId(albumId);
-  const releaseAt = safeParseReleaseAt(policy?.releaseAt ?? null);
-  const embargoed = isEmbargoed(policy);
+function deniedDecision(
+  context: OracleContext,
+  input: {
+    code: Exclude<AccessOracleCode, "OK">;
+    action: AccessOracleAction;
+    reason: string;
+    requiredTier: TierName | null;
+  },
+): DeniedAlbumPlaybackOracleDecision {
+  return {
+    ok: true,
+    allowed: false,
+    code: input.code,
+    action: input.action,
+    reason: input.reason,
+    albumId: context.albumId,
+    albumScopeId: context.albumScopeId,
+    embargoed: context.embargoed,
+    releaseAt: context.releaseAt,
+    requiredTier: input.requiredTier,
+    correlationId: context.correlationId,
+  };
+}
 
-  const memberId = params.memberId;
-  const hasMember = typeof memberId === "string" && memberId.trim().length > 0;
-  const shareTokenAllowsPlayback = params.shareTokenAllowsPlayback === true;
-
-  // Load entitlement keys once when a member exists.
-  // Anonymous listeners may still be allowed later by the public/free playback lane,
-  // but they cannot satisfy tier or member-only override checks.
-  const keys = hasMember ? await listCurrentEntitlementKeys(memberId) : [];
-  const keySet = new Set(keys);
-
-  // ---- Embargo gate ----
-  if (embargoed) {
-    // 1) explicit override.
-    // A validated album share token is allowed to bypass embargo for playback.
-    const memberOverrideAllowed = hasMember
-      ? (
-          await checkAccess( 
-            memberId,
-            {
-              kind: "album",
-              albumScopeId,
-              required: [ENTITLEMENTS.ALBUM_SHARE_GRANT],
-            },
-            { log: true, action, correlationId },
-          )
-        ).allowed
-      : false;
-
-    const overrideAllowed = shareTokenAllowsPlayback || memberOverrideAllowed;
-
-    if (!overrideAllowed) {
-      // 2) early-access tiers during embargo (if enabled)
-      if (
-        policy?.earlyAccessEnabled &&
-        Array.isArray(policy.earlyAccessTiers) &&
-        policy.earlyAccessTiers.length > 0
-      ) {
-        const allowedTierKeys = policy.earlyAccessTiers.map(tierKey);
-        const ok = allowedTierKeys.some((k) => keySet.has(k));
-        if (!ok) {
-          return {
-            ok: true,
-            allowed: false,
-            code: "EMBARGO",
-            action: "subscribe",
-            reason: "This album is not released yet. Upgrade for early access.",
-            albumId,
-            albumScopeId,
-            embargoed: true,
-            releaseAt,
-            requiredTier: null,
-            correlationId,
-          };
-        }
-        // allowed by early-access tier -> continue
-      } else {
-        return {
-          ok: true,
-          allowed: false,
-          code: "EMBARGO",
-          action: "wait",
-          reason: "This album is not released yet.",
-          albumId,
-          albumScopeId,
-          embargoed: true,
-          releaseAt,
-          requiredTier: null,
-          correlationId,
-        };
-      }
-    }
-    // override allowed -> continue
-  }
-
-  // ---- Min tier for playback (post-release or embargo bypass) ----
-  if (policy?.minTierForPlayback) {
-    const requiredTierKeys = tierAtOrAbove(policy.minTierForPlayback);
-    const ok = requiredTierKeys.some((k) => keySet.has(k));
-    if (!ok) {
-      return {
-        ok: true,
-        allowed: false,
-        code: "TIER_REQUIRED",
-        action: "subscribe",
-        reason: `This album requires ${policy.minTierForPlayback} tier or higher.`,
-        albumId,
-        albumScopeId,
-        embargoed,
-        releaseAt,
-        requiredTier: policy.minTierForPlayback,
-        correlationId,
-      };
-    }
-  }
-
-  // ---- Entitlement gate (play_album) ----
-  // Share tokens can satisfy ordinary playback access, but not embargo or tier policy.
-  if (!shareTokenAllowsPlayback && hasMember) {
-    const decision = await checkAccess(
-      memberId,
-      albumScopeId === SCOPE_CATALOGUE
-        ? {
-            kind: "global",
-            scopeId: SCOPE_CATALOGUE,
-            required: [ENTITLEMENTS.PLAY_ALBUM],
-          }
-        : { kind: "album", albumScopeId, required: [ENTITLEMENTS.PLAY_ALBUM] },
-      { log: true, action, correlationId },
-    );
-
-    if (!decision.allowed) {
-      return {
-        ok: true,
-        allowed: false,
-        code: "ENTITLEMENT_REQUIRED",
-        action: "subscribe",
-        reason: "You do not have access to play this album.",
-        albumId,
-        albumScopeId,
-        embargoed,
-        releaseAt,
-        requiredTier: policy?.minTierForPlayback ?? null,
-        correlationId,
-      };
-    }
-  }
-
-  // Anonymous public/free playback is allowed here after embargo and tier policy
-  // have already been enforced. The anonymous completion cap remains enforced
-  // by the Mux token route before this oracle call.
-  if (!shareTokenAllowsPlayback && !hasMember && policy?.minTierForPlayback) {
-    return {
-      ok: true,
-      allowed: false,
-      code: "TIER_REQUIRED",
-      action: "login",
-      reason: `This album requires ${policy.minTierForPlayback} tier or higher.`,
-      albumId,
-      albumScopeId,
-      embargoed,
-      releaseAt,
-      requiredTier: policy.minTierForPlayback,
-      correlationId,
-    };
-  }
-
+function allowedDecision(context: OracleContext): AlbumPlaybackOracleDecision {
   return {
     ok: true,
     allowed: true,
     code: "OK",
     action: null,
+    albumId: context.albumId,
+    albumScopeId: context.albumScopeId,
+    embargoed: context.embargoed,
+    releaseAt: context.releaseAt,
+    requiredTier: context.policy?.minTierForPlayback ?? null,
+    correlationId: context.correlationId,
+  };
+}
+
+function hasAnyEntitlementKey(
+  entitlementKeys: ReadonlySet<string>,
+  requiredKeys: readonly string[],
+): boolean {
+  return requiredKeys.some((key) => entitlementKeys.has(key));
+}
+
+async function createOracleContext(
+  params: AlbumPlaybackOracleParams,
+  albumId: string,
+  albumScopeId: string,
+): Promise<OracleContext> {
+  const policy = await getAlbumPolicyByAlbumId(albumId);
+
+  const memberId =
+    typeof params.memberId === "string" && params.memberId.trim().length > 0
+      ? params.memberId
+      : null;
+
+  const entitlementKeys = memberId
+    ? await listCurrentEntitlementKeys(memberId)
+    : [];
+
+  return {
     albumId,
     albumScopeId,
-    embargoed,
-    releaseAt,
-    requiredTier: policy?.minTierForPlayback ?? null,
-    correlationId,
+    policy,
+    releaseAt: safeParseReleaseAt(policy?.releaseAt ?? null),
+    embargoed: isEmbargoed(policy),
+    memberId,
+    shareTokenAllowsPlayback: params.shareTokenAllowsPlayback === true,
+    entitlementKeys: new Set(entitlementKeys),
+    correlationId: params.correlationId,
+    action: params.action ?? ACCESS_ACTIONS.ACCESS_CHECK,
   };
+}
+
+async function hasMemberEmbargoOverride(
+  context: OracleContext,
+): Promise<boolean> {
+  if (!context.memberId) {
+    return false;
+  }
+
+  const decision = await checkAccess(
+    context.memberId,
+    {
+      kind: "album",
+      albumScopeId: context.albumScopeId,
+      required: [ENTITLEMENTS.ALBUM_SHARE_GRANT],
+    },
+    {
+      log: true,
+      action: context.action,
+      correlationId: context.correlationId,
+    },
+  );
+
+  return decision.allowed;
+}
+
+/**
+ * ALBUM_SHARE_GRANT and validated bearer share tokens are embargo overrides.
+ * They do not bypass minTierForPlayback.
+ */
+async function resolveEmbargoDecision(
+  context: OracleContext,
+): Promise<DeniedAlbumPlaybackOracleDecision | null> {
+  if (!context.embargoed) {
+    return null;
+  }
+
+  const memberOverrideAllowed = await hasMemberEmbargoOverride(context);
+
+  if (context.shareTokenAllowsPlayback || memberOverrideAllowed) {
+    return null;
+  }
+
+  const earlyAccessTiers = context.policy?.earlyAccessEnabled
+    ? context.policy.earlyAccessTiers
+    : [];
+
+  if (earlyAccessTiers.length === 0) {
+    return deniedDecision(context, {
+      code: "EMBARGO",
+      action: "wait",
+      reason: "This album is not released yet.",
+      requiredTier: null,
+    });
+  }
+
+  const allowedTierKeys = earlyAccessTiers.map(tierKey);
+
+  if (hasAnyEntitlementKey(context.entitlementKeys, allowedTierKeys)) {
+    return null;
+  }
+
+  return deniedDecision(context, {
+    code: "EMBARGO",
+    action: "subscribe",
+    reason: "This album is not released yet. Upgrade for early access.",
+    requiredTier: null,
+  });
+}
+
+function resolveMinimumTierDecision(
+  context: OracleContext,
+): DeniedAlbumPlaybackOracleDecision | null {
+  const minTier = context.policy?.minTierForPlayback ?? null;
+
+  if (!minTier) {
+    return null;
+  }
+
+  const requiredTierKeys = tierAtOrAbove(minTier);
+
+  if (hasAnyEntitlementKey(context.entitlementKeys, requiredTierKeys)) {
+    return null;
+  }
+
+  return deniedDecision(context, {
+    code: "TIER_REQUIRED",
+    action: "subscribe",
+    reason: `This album requires ${minTier} tier or higher.`,
+    requiredTier: minTier,
+  });
+}
+
+/**
+ * A validated bearer share token may satisfy ordinary playback permission.
+ * ALBUM_SHARE_GRANT does not replace PLAY_ALBUM.
+ */
+async function resolvePlaybackEntitlementDecision(
+  context: OracleContext,
+): Promise<DeniedAlbumPlaybackOracleDecision | null> {
+  if (context.shareTokenAllowsPlayback || !context.memberId) {
+    return null;
+  }
+
+  const decision = await checkAccess(
+    context.memberId,
+    context.albumScopeId === SCOPE_CATALOGUE
+      ? {
+          kind: "global",
+          scopeId: SCOPE_CATALOGUE,
+          required: [ENTITLEMENTS.PLAY_ALBUM],
+        }
+      : {
+          kind: "album",
+          albumScopeId: context.albumScopeId,
+          required: [ENTITLEMENTS.PLAY_ALBUM],
+        },
+    {
+      log: true,
+      action: context.action,
+      correlationId: context.correlationId,
+    },
+  );
+
+  if (decision.allowed) {
+    return null;
+  }
+
+  return deniedDecision(context, {
+    code: "ENTITLEMENT_REQUIRED",
+    action: "subscribe",
+    reason: "You do not have access to play this album.",
+    requiredTier: context.policy?.minTierForPlayback ?? null,
+  });
+}
+
+export async function decideAlbumPlaybackAccess(
+  params: AlbumPlaybackOracleParams,
+): Promise<AlbumPlaybackOracleDecision> {
+  const albumId = normalizeAlbumId(params.albumId);
+
+  if (!albumId) {
+    return invalidAlbumDecision(params.correlationId);
+  }
+
+  const albumScopeId =
+    albumId === SCOPE_CATALOGUE ? SCOPE_CATALOGUE : `alb:${albumId}`;
+
+  const context = await createOracleContext(params, albumId, albumScopeId);
+
+  const embargoDecision = await resolveEmbargoDecision(context);
+
+  if (embargoDecision) {
+    return embargoDecision;
+  }
+
+  const tierDecision = resolveMinimumTierDecision(context);
+
+  if (tierDecision) {
+    return tierDecision;
+  }
+
+  const entitlementDecision = await resolvePlaybackEntitlementDecision(context);
+
+  if (entitlementDecision) {
+    return entitlementDecision;
+  }
+
+  return allowedDecision(context);
 }
