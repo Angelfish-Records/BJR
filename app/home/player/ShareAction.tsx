@@ -4,34 +4,65 @@
 import React from "react";
 import { performShare, buildShareTarget, type ShareTarget } from "@/lib/share";
 
-function CopyFallbackModal(props: { url: string; onClose: () => void }) {
-  const ref = React.useRef<HTMLInputElement | null>(null);
+function CopyFallbackModal(
+  props: Readonly<{ url: string; onClose: () => void }>,
+) {
+  const dialogRef = React.useRef<HTMLDialogElement | null>(null);
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
+  const titleId = React.useId();
 
   React.useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.focus();
-    el.select();
+    const dialog = dialogRef.current;
+    const input = inputRef.current;
+
+    if (!dialog || !input) return;
+
+    if (!dialog.open) {
+      dialog.showModal();
+    }
+
+    input.focus();
+    input.select();
+
+    return () => {
+      if (dialog.open) {
+        dialog.close();
+      }
+    };
   }, []);
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      onClick={props.onClose}
+    <dialog
+      ref={dialogRef}
+      aria-labelledby={titleId}
+      onCancel={(event) => {
+        event.preventDefault();
+        props.onClose();
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          props.onClose();
+        }
+      }}
       style={{
         position: "fixed",
         inset: 0,
+        width: "100%",
+        height: "100%",
+        maxWidth: "none",
+        maxHeight: "none",
+        margin: 0,
+        border: 0,
         background: "rgba(0,0,0,0.45)",
+        color: "white",
+        padding: 16,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: 16,
         zIndex: 9999,
       }}
     >
       <div
-        onClick={(e) => e.stopPropagation()}
         style={{
           width: "min(520px, 100%)",
           borderRadius: 16,
@@ -40,11 +71,15 @@ function CopyFallbackModal(props: { url: string; onClose: () => void }) {
           padding: 14,
         }}
       >
-        <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 10 }}>
+        <div
+          id={titleId}
+          style={{ fontSize: 13, opacity: 0.9, marginBottom: 10 }}
+        >
           Copy link
         </div>
+
         <input
-          ref={ref}
+          ref={inputRef}
           readOnly
           value={props.url}
           style={{
@@ -57,6 +92,7 @@ function CopyFallbackModal(props: { url: string; onClose: () => void }) {
             fontSize: 12,
           }}
         />
+
         <div
           style={{
             display: "flex",
@@ -66,6 +102,7 @@ function CopyFallbackModal(props: { url: string; onClose: () => void }) {
           }}
         >
           <button
+            type="button"
             onClick={props.onClose}
             style={{
               borderRadius: 12,
@@ -80,7 +117,7 @@ function CopyFallbackModal(props: { url: string; onClose: () => void }) {
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }
 

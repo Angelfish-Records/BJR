@@ -135,116 +135,149 @@ const RESERVED_ROOTS = new Set<string>([
   "exegesis",
 ]);
 
+function resolveRootAndLegacyHome(url: URL): NextResponse | null {
+  const pathname = url.pathname;
+
+  // Route the public root through the dynamic player alias. /player then
+  // resolves the current featured album and redirects to its canonical URL.
+  if (pathname === "/") {
+    return rewriteTo(url, "/player");
+  }
+
+  if (pathname === "/home") {
+    return redirect308(url, "/", pickPreservedParams(url));
+  }
+
+  if (pathname === "/home/player") {
+    return redirect308(url, "/player", pickPreservedParams(url));
+  }
+
+  if (!pathname.startsWith("/home/")) {
+    return null;
+  }
+
+  const parts = splitPath(pathname); // ["home", "<tab>", ...]
+  const tab = (parts[1] ?? "").trim();
+
+  return redirect308(
+    url,
+    tab ? `/${encodeURIComponent(tab)}` : "/portal",
+    pickPreservedParams(url),
+  );
+}
+
+function resolveLegacyAlbumRoute(url: URL): NextResponse | null {
+  const pathname = url.pathname;
+
+  if (!pathname.startsWith("/albums/")) {
+    return null;
+  }
+
+  const parts = splitPath(pathname); // ["albums", ":slug", ...]
+  const slug = (parts[1] ?? "").trim();
+
+  if (!slug) {
+    return null;
+  }
+
+  const preserved = pickPreservedParams(url);
+
+  // /albums/:slug/track/:displayId -> /:slug/:displayId
+  if ((parts[2] ?? "") === "track" && parts[3]) {
+    return redirect308(
+      url,
+      `/${encodeURIComponent(slug)}/${encodeURIComponent(parts[3])}`,
+      preserved,
+    );
+  }
+
+  // /albums/:slug?track=... -> /:slug/:displayId
+  const trackQuery = (url.searchParams.get("track") ?? "").trim();
+
+  if (trackQuery) {
+    return redirect308(
+      url,
+      `/${encodeURIComponent(slug)}/${encodeURIComponent(trackQuery)}`,
+      preserved,
+    );
+  }
+
+  // /albums/:slug -> /:slug
+  return redirect308(url, `/${encodeURIComponent(slug)}`, preserved);
+}
+
+function hasLegacyQueryParams(searchParams: URLSearchParams): boolean {
+  for (const key of searchParams.keys()) {
+    if (STRIP_KEYS.has(key)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function resolveCanonicalQueryRedirect(url: URL): NextResponse | null {
+  if (url.searchParams.size === 0 || !hasLegacyQueryParams(url.searchParams)) {
+    return null;
+  }
+
+  const filtered = filteredCanonicalParams(url);
+  const current = new URLSearchParams(url.searchParams.toString());
+
+  if (sameParams(filtered, current)) {
+    return null;
+  }
+
+  return redirect308(url, url.pathname, filtered);
+}
+
+function resolvePrettyMusicRoute(url: URL): NextResponse | null {
+  const parts = splitPath(url.pathname);
+
+  // Only root-level one- or two-segment paths qualify.
+  if (parts.length !== 1 && parts.length !== 2) {
+    return null;
+  }
+
+  const first = (parts[0] ?? "").trim().toLowerCase();
+
+  if (!first || RESERVED_ROOTS.has(first)) {
+    return null;
+  }
+
+  // Keep segments exactly as encoded in the incoming URL.
+  const slugSegment = parts[0];
+
+  if (parts.length === 1) {
+    // Public canonical: /:slug
+    // Internal page target remains /album/:slug for now.
+    return rewriteTo(url, `/album/${slugSegment}`);
+  }
+
+  const displaySegment = parts[1];
+
+  // Public canonical: /:slug/:displayId
+  // Internal page target remains /album/:slug/track/:displayId for now.
+  return rewriteTo(url, `/album/${slugSegment}/track/${displaySegment}`);
+}
+
+function resolveMiddlewareResponse(url: URL): NextResponse | null {
+  return (
+    resolveRootAndLegacyHome(url) ??
+    resolveLegacyAlbumRoute(url) ??
+    resolveCanonicalQueryRedirect(url) ??
+    resolvePrettyMusicRoute(url)
+  );
+}
+
 export default clerkMiddleware(
   (auth, req) => {
-    // Force Clerk to initialize on every matched request
+    // Force Clerk to initialize on every matched request.
     auth();
 
     const url = new URL(req.url);
-    const pathname = url.pathname;
 
-    // ---- A) Root cutover + hard upgrades for the legacy /home family ----
-    // Route the public root through the dynamic player alias. /player then
-    // resolves the current featured album and redirects to its canonical URL.
-    if (pathname === "/") {
-      return rewriteTo(url, "/player");
-    }
-
-    if (pathname === "/home") {
-      return redirect308(url, "/", pickPreservedParams(url));
-    }
-
-    if (pathname === "/home/player") {
-      return redirect308(url, "/player", pickPreservedParams(url));
-    }
-
-    if (pathname.startsWith("/home/")) {
-      const parts = splitPath(pathname); // ["home", "<tab>", ...]
-      const tab = (parts[1] ?? "").trim();
-      return redirect308(
-        url,
-        tab ? `/${encodeURIComponent(tab)}` : "/portal",
-        pickPreservedParams(url),
-      );
-    }
-
-    // ---- B) Hard upgrades: legacy /albums family -> canonical music URLs ----
-    if (pathname.startsWith("/albums/")) {
-      const parts = splitPath(pathname); // ["albums", ":slug", ...]
-      const slug = (parts[1] ?? "").trim();
-      if (slug) {
-        const preserved = pickPreservedParams(url);
-
-        // /albums/:slug/track/:displayId  ->  /:slug/:displayId
-        if ((parts[2] ?? "") === "track" && parts[3]) {
-          return redirect308(
-            url,
-            `/${encodeURIComponent(slug)}/${encodeURIComponent(parts[3])}`,
-            preserved,
-          );
-        }
-
-        // /albums/:slug?track=...
-        const trackQ = (url.searchParams.get("track") ?? "").trim();
-        if (trackQ) {
-          // ✅ FIX: new canonical is /:slug/:displayId (no /track/)
-          return redirect308(
-            url,
-            `/${encodeURIComponent(slug)}/${encodeURIComponent(trackQ)}`,
-            preserved,
-          );
-        }
-
-        // /albums/:slug -> /:slug
-        return redirect308(url, `/${encodeURIComponent(slug)}`, preserved);
-      }
-    }
-
-    // ---- D) On canonical routes, strip legacy UI-surface params if present ----
-    if (url.searchParams.size > 0) {
-      let hasLegacy = false;
-      for (const k of url.searchParams.keys()) {
-        if (STRIP_KEYS.has(k)) {
-          hasLegacy = true;
-          break;
-        }
-      }
-
-      if (hasLegacy) {
-        const filtered = filteredCanonicalParams(url);
-        const current = new URLSearchParams(url.searchParams.toString());
-        if (!sameParams(filtered, current)) {
-          return redirect308(url, pathname, filtered);
-        }
-      }
-    }
-
-    // ---- E) Canonical pretty music URLs: rewrite /:slug(/:displayId) -> existing internal page tree ----
-    // NOTE: rewrite (not redirect) so the browser URL stays clean.
-    {
-      const parts = splitPath(pathname);
-
-      // only root-level 1 or 2 segment paths qualify
-      if (parts.length === 1 || parts.length === 2) {
-        const first = (parts[0] ?? "").trim().toLowerCase();
-        if (first && !RESERVED_ROOTS.has(first)) {
-          // Keep segments exactly as encoded in the incoming URL.
-          const slugSeg = parts[0];
-          if (parts.length === 1) {
-            // Public canonical: /:slug
-            // Internal page target remains /album/:slug for now.
-            return rewriteTo(url, `/album/${slugSeg}`);
-          } else {
-            const displaySeg = parts[1];
-            // Public canonical: /:slug/:displayId
-            // Internal page target remains /album/:slug/track/:displayId for now.
-            return rewriteTo(url, `/album/${slugSeg}/track/${displaySeg}`);
-          }
-        }
-      }
-    }
-
-    return NextResponse.next();
+    return resolveMiddlewareResponse(url) ?? NextResponse.next();
   },
   {
     authorizedParties: getClerkAuthorizedParties(),
