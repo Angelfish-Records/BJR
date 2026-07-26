@@ -39,11 +39,6 @@ function CopyFallbackModal(
         event.preventDefault();
         props.onClose();
       }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          props.onClose();
-        }
-      }}
       style={{
         position: "fixed",
         inset: 0,
@@ -62,8 +57,27 @@ function CopyFallbackModal(
         zIndex: 9999,
       }}
     >
+      <button
+        type="button"
+        aria-label="Close copy link dialog"
+        onClick={props.onClose}
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          margin: 0,
+          padding: 0,
+          border: 0,
+          background: "transparent",
+          cursor: "default",
+        }}
+      />
+
       <div
         style={{
+          position: "relative",
+          zIndex: 1,
           width: "min(520px, 100%)",
           borderRadius: 16,
           border: "1px solid rgba(255,255,255,0.14)",
