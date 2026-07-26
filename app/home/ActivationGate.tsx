@@ -21,7 +21,7 @@ import {
 type Phase = "idle" | "code";
 type Flow = "signin" | "signup" | null;
 
-type Props = {
+type Props = Readonly<{
   children: React.ReactNode;
   attentionMessage?: string | null;
   canManageBilling?: boolean;
@@ -32,7 +32,14 @@ type Props = {
    * - "modal": centered CTA layout (panels render inline and expand the card)
    */
   placement?: "topbar" | "modal";
-};
+}>;
+
+type SubscriptionStatus = Readonly<{
+  cancelAtPeriodEnd: boolean;
+  accessUntil: string | null;
+}>;
+
+type ToggleMode = "anon" | "auth";
 
 function getClerkErrorMessage(err: unknown): string {
   if (!err || typeof err !== "object") return "Something went wrong";
@@ -65,20 +72,72 @@ function looksLikeNoAccountError(err: unknown): boolean {
   return false;
 }
 
+const TOGGLE_ANON_BG_OFF = "rgb(10, 10, 14)";
+const TOGGLE_ANON_BG_ON =
+  "color-mix(in srgb, var(--accent) 22%, rgb(10, 10, 14))";
+const TOGGLE_AUTH_BG_OFF = "rgba(255,255,255,0.10)";
+const TOGGLE_AUTH_BG_ON =
+  "color-mix(in srgb, var(--accent) 26%, rgba(255,255,255,0.10))";
+const TOGGLE_SHADOW_OFF = "0 10px 26px rgba(0,0,0,0.28)";
+const TOGGLE_SHADOW_AUTH_ON =
+  "0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent), 0 10px 26px rgba(0,0,0,0.35)";
+const OTP_BOX_IDS = [
+  "otp-digit-1",
+  "otp-digit-2",
+  "otp-digit-3",
+  "otp-digit-4",
+  "otp-digit-5",
+  "otp-digit-6",
+] as const;
+
+function getToggleBackground(mode: ToggleMode, checked: boolean): string {
+  if (mode === "anon") {
+    return checked ? TOGGLE_ANON_BG_ON : TOGGLE_ANON_BG_OFF;
+  }
+
+  return checked ? TOGGLE_AUTH_BG_ON : TOGGLE_AUTH_BG_OFF;
+}
+
+function getToggleBoxShadow(mode: ToggleMode, checked: boolean): string {
+  if (mode === "auth" && checked) return TOGGLE_SHADOW_AUTH_ON;
+  return TOGGLE_SHADOW_OFF;
+}
+
+function formatAccessUntil(iso: string | null): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(date);
+}
+
+function getCancelTipText(subStatus: SubscriptionStatus | null): string {
+  const untilLabel = formatAccessUntil(subStatus?.accessUntil ?? null);
+  return untilLabel
+    ? `You have cancelled your membership and this will take effect on ${untilLabel}.`
+    : "You have cancelled your membership and this will take effect at the end of your billing period.";
+}
+
 /**
  * Patterned OUTLINE ring: a wrapper that shows the visualizer snapshot only in the ring.
  */
-function PatternRingOutline(props: {
-  children: React.ReactNode;
-  radius?: number;
-  ringPx?: number;
-  seed?: number;
-  opacity?: number;
-  disabled?: boolean;
-  innerBg?: string;
-  glowPx?: number;
-  blurPx?: number;
-}) {
+function PatternRingOutline(
+  props: Readonly<{
+    children: React.ReactNode;
+    radius?: number;
+    ringPx?: number;
+    seed?: number;
+    opacity?: number;
+    disabled?: boolean;
+    innerBg?: string;
+    glowPx?: number;
+    blurPx?: number;
+  }>,
+) {
   const {
     children,
     radius = 999,
@@ -150,27 +209,21 @@ function PatternRingOutline(props: {
   );
 }
 
-function Toggle(props: {
-  checked: boolean;
-  disabled?: boolean;
-  onClick?: () => void;
-  mode: "anon" | "auth";
-}) {
+function Toggle(
+  props: Readonly<{
+    checked: boolean;
+    disabled?: boolean;
+    onClick?: () => void;
+    mode: ToggleMode;
+  }>,
+) {
   const { checked, disabled, onClick, mode } = props;
 
-  const w = 56;
-  const h = 32;
-  const pad = 3;
-  const knob = h - pad * 2;
-  const travel = w - pad * 2 - knob;
-
-  const ANON_BG_OFF = "rgb(10, 10, 14)";
-  const ANON_BG_ON = "color-mix(in srgb, var(--accent) 22%, rgb(10, 10, 14))";
-
-  const AUTH_BG_OFF = "rgba(255,255,255,0.10)";
-  const AUTH_BG_ON =
-    "color-mix(in srgb, var(--accent) 26%, rgba(255,255,255,0.10))";
-
+  const width = 56;
+  const height = 32;
+  const padding = 3;
+  const knob = height - padding * 2;
+  const travel = width - padding * 2 - knob;
   const button = (
     <button
       type="button"
@@ -179,33 +232,21 @@ function Toggle(props: {
       aria-checked={checked}
       role="switch"
       style={{
-        width: w,
-        height: h,
+        width,
+        height,
         borderRadius: 999,
         border:
           mode === "anon"
             ? "0px solid transparent"
             : "1px solid rgba(255,255,255,0.18)",
-        background:
-          mode === "anon"
-            ? checked
-              ? ANON_BG_ON
-              : ANON_BG_OFF
-            : checked
-              ? AUTH_BG_ON
-              : AUTH_BG_OFF,
+        background: getToggleBackground(mode, checked),
         position: "relative",
         padding: 0,
         outline: "none",
         cursor: disabled ? "default" : "pointer",
         transition:
           "background 180ms ease, box-shadow 180ms ease, border-color 180ms ease, opacity 180ms ease",
-        boxShadow:
-          mode === "anon"
-            ? "0 10px 26px rgba(0,0,0,0.28)"
-            : checked
-              ? "0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent), 0 10px 26px rgba(0,0,0,0.35)"
-              : "0 10px 26px rgba(0,0,0,0.28)",
+        boxShadow: getToggleBoxShadow(mode, checked),
         opacity: disabled ? 0.65 : 1,
         overflow: "hidden",
         display: "grid",
@@ -241,8 +282,8 @@ function Toggle(props: {
           height: knob,
           borderRadius: 999,
           position: "absolute",
-          top: pad,
-          left: pad,
+          top: padding,
+          left: padding,
           transform: `translateX(${checked ? travel : 0}px)`,
           transition:
             "transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease",
@@ -255,7 +296,9 @@ function Toggle(props: {
     </button>
   );
 
-  return mode === "anon" ? (
+  if (mode === "auth") return button;
+
+  return (
     <PatternRingOutline
       ringPx={2}
       glowPx={26}
@@ -267,8 +310,6 @@ function Toggle(props: {
     >
       {button}
     </PatternRingOutline>
-  ) : (
-    button
   );
 }
 
@@ -276,7 +317,7 @@ function normalizeDigits(raw: string): string {
   return raw.replace(/\D/g, "").slice(0, 6);
 }
 
-function ClockIcon(props: { size?: number }) {
+function ClockIcon(props: Readonly<{ size?: number }>) {
   const { size = 12 } = props;
   return (
     <svg
@@ -304,7 +345,7 @@ function ClockIcon(props: { size?: number }) {
   );
 }
 
-function LockIcon(props: { size?: number }) {
+function LockIcon(props: Readonly<{ size?: number }>) {
   const { size = 12 } = props;
   return (
     <svg
@@ -332,12 +373,14 @@ function LockIcon(props: { size?: number }) {
   );
 }
 
-function OtpBoxes(props: {
-  value: string;
-  onChange: (next: string) => void;
-  disabled?: boolean;
-  maxWidth?: number;
-}) {
+function OtpBoxes(
+  props: Readonly<{
+    value: string;
+    onChange: (next: string) => void;
+    disabled?: boolean;
+    maxWidth?: number;
+  }>,
+) {
   const { value, onChange, disabled, maxWidth = 360 } = props;
   const digits = (value + "______").slice(0, 6).split("");
   const refs = useRef<Array<HTMLInputElement | null>>([]);
@@ -361,7 +404,7 @@ function OtpBoxes(props: {
       >
         {digits.map((d, i) => (
           <input
-            key={i}
+            key={OTP_BOX_IDS[i]}
             ref={(el) => {
               refs.current[i] = el;
             }}
@@ -422,12 +465,14 @@ function OtpBoxes(props: {
   );
 }
 
-function OverlayPanel(props: {
-  open: boolean;
-  children: React.ReactNode;
-  maxHeightOpen?: number;
-  yOffsetClosed?: number;
-}) {
+function OverlayPanel(
+  props: Readonly<{
+    open: boolean;
+    children: React.ReactNode;
+    maxHeightOpen?: number;
+    yOffsetClosed?: number;
+  }>,
+) {
   const { open, children, maxHeightOpen = 520, yOffsetClosed = -6 } = props;
   return (
     <div
@@ -462,6 +507,959 @@ function OverlayPanel(props: {
         }}
       >
         {children}
+      </div>
+    </div>
+  );
+}
+
+type OtpContentProps = Readonly<{
+  showSignupPrivacy: boolean;
+  width: number;
+  code: string;
+  onCodeChange: (next: string) => void;
+  isVerifying: boolean;
+  isSending: boolean;
+  flow: Flow;
+  error: string | null;
+}>;
+
+function OtpContent(props: OtpContentProps) {
+  const {
+    showSignupPrivacy,
+    width,
+    code,
+    onCodeChange,
+    isVerifying,
+    isSending,
+    flow,
+    error,
+  } = props;
+
+  return (
+    <div style={{ display: "grid", gap: 10, justifyItems: "center" }}>
+      {showSignupPrivacy && (
+        <div
+          style={{
+            width: "100%",
+            maxWidth: width,
+            display: "grid",
+            gap: 10,
+            boxSizing: "border-box",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              lineHeight: "15px",
+              opacity: 0.82,
+              textAlign: "left",
+              padding: "0 2px",
+            }}
+          >
+            By entering, you agree to receive occasional emails about releases,
+            events, and account activity. Unsubscribe anytime.
+          </div>
+
+          <div
+            aria-hidden
+            style={{
+              height: 1,
+              width: "100%",
+              background:
+                "linear-gradient(90deg, transparent, rgba(255,255,255,0.18) 18%, rgba(255,255,255,0.18) 82%, transparent)",
+            }}
+          />
+        </div>
+      )}
+
+      <OtpBoxes
+        maxWidth={width}
+        value={code}
+        onChange={onCodeChange}
+        disabled={isVerifying}
+      />
+
+      {(isSending || !flow) && (
+        <div style={{ fontSize: 12, opacity: 0.7 }}>Sending code…</div>
+      )}
+      {isVerifying && (
+        <div style={{ fontSize: 12, opacity: 0.7 }}>Verifying…</div>
+      )}
+
+      {error && (
+        <div
+          style={{
+            fontSize: 12,
+            opacity: 0.88,
+            color: "#ffb4b4",
+            textAlign: "center",
+          }}
+        >
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+type MembershipModalProps = Readonly<{
+  open: boolean;
+  onClose: () => void;
+  isFriend: boolean;
+  isPatron: boolean;
+  isPartner: boolean;
+  subStatus: SubscriptionStatus | null;
+  maxWidth: number;
+  minWidth: number;
+}>;
+
+function MembershipModal(props: MembershipModalProps) {
+  const {
+    open,
+    onClose,
+    isFriend,
+    isPatron,
+    isPartner,
+    subStatus,
+    maxWidth,
+    minWidth,
+  } = props;
+
+  if (!open) return null;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 5000,
+        pointerEvents: "none",
+      }}
+    >
+      <div
+        aria-hidden
+        onMouseDown={onClose}
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "auto",
+          background: "rgba(0,0,0,0.06)",
+        }}
+      />
+
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "grid",
+          placeItems: "center",
+          padding: "min(8vh, 56px) 16px",
+          pointerEvents: "none",
+        }}
+      >
+        <dialog
+          open
+          aria-label="Membership options"
+          onMouseDown={(event) => event.stopPropagation()}
+          style={{
+            position: "relative",
+            display: "block",
+            width: "100%",
+            maxWidth: `min(92vw, ${maxWidth}px)`,
+            minWidth: `min(92vw, ${minWidth}px)`,
+            margin: 0,
+            border: 0,
+            borderRadius: 26,
+            padding: 1,
+            pointerEvents: "auto",
+            color: "inherit",
+            background:
+              "linear-gradient(135deg, rgba(255,215,130,0.62), rgba(255,234,170,0.18) 38%, rgba(255,215,130,0.46) 65%, rgba(255,255,255,0.10))",
+            boxShadow:
+              "0 30px 90px rgba(0,0,0,0.55), 0 60px 160px rgba(0,0,0,0.55)",
+            transform: "translateZ(0)",
+          }}
+        >
+          <div
+            style={{
+              borderRadius: 25,
+              background: "rgba(10,10,14,0.92)",
+              backdropFilter: "blur(14px)",
+              WebkitBackdropFilter: "blur(14px)",
+              border: "1px solid rgba(255,255,255,0.06)",
+              boxShadow:
+                "0 0 0 1px rgba(255,255,255,0.03) inset, 0 18px 52px rgba(0,0,0,0.35)",
+              padding: 18,
+              display: "grid",
+              gap: 14,
+              maxHeight: "min(82vh, 680px)",
+              overflowY: "auto",
+              overflowX: "hidden",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gap: 6,
+                  minWidth: 0,
+                  flex: "1 1 auto",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 14,
+                    lineHeight: "18px",
+                    fontWeight: 700,
+                    letterSpacing: "0.01em",
+                    color: "rgba(255,255,255,0.92)",
+                  }}
+                >
+                  Membership
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    lineHeight: "16px",
+                    opacity: 0.82,
+                    maxWidth: "calc(100% - 58px)",
+                  }}
+                >
+                  {isFriend
+                    ? "Support future work, access exclusive content."
+                    : "Change or cancel your membership below. Thank you for supporting future work on this independent platform."}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                aria-label="Close membership"
+                onClick={onClose}
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 999,
+                  border: "1px solid rgba(255,255,255,0.14)",
+                  background: "rgba(255,255,255,0.06)",
+                  color: "rgba(255,255,255,0.88)",
+                  cursor: "pointer",
+                  display: "grid",
+                  placeItems: "center",
+                  lineHeight: 1,
+                  fontSize: 18,
+                  userSelect: "none",
+                  flex: "0 0 auto",
+                }}
+                title="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+                gap: 14,
+                alignItems: "stretch",
+                width: "100%",
+                minWidth: 0,
+              }}
+            >
+              <SubscribeButton
+                loggedIn={true}
+                variant="card"
+                tier="patron"
+                disabled={isPatron}
+                current={isPatron}
+                label={isPatron ? "Active" : "Choose Patron"}
+                card={{
+                  title: "Patron",
+                  price: "$5 / month",
+                  bullets: [
+                    "All downloads",
+                    "First listener access",
+                    "Mailbag Q&A",
+                    "Lyrics discussion",
+                  ],
+                }}
+              />
+
+              <SubscribeButton
+                loggedIn={true}
+                variant="card"
+                tier="partner"
+                disabled={isPartner}
+                current={isPartner}
+                label={isPartner ? "Active" : "Choose Partner"}
+                card={{
+                  title: "Partner",
+                  price: "$299 / year",
+                  bullets: [
+                    "All Patron benefits",
+                    "Release credits",
+                    "Creative livestreams",
+                    "Demo recordings",
+                  ],
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                marginTop: 2,
+                fontSize: 11,
+                lineHeight: "14px",
+                opacity: 0.7,
+              }}
+            >
+              <LockIcon size={12} />
+              <span>
+                Secured by Stripe. Your payment is protected and we will never
+                share your data.
+              </span>
+            </div>
+
+            {(isPatron || isPartner) && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  marginTop: 2,
+                }}
+              >
+                {subStatus?.cancelAtPeriodEnd ? (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      lineHeight: "16px",
+                      opacity: 0.82,
+                      textAlign: "center",
+                      maxWidth: 520,
+                      padding: "6px 10px",
+                      borderRadius: 12,
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background: "rgba(255,255,255,0.04)",
+                    }}
+                  >
+                    {getCancelTipText(subStatus)}
+                  </div>
+                ) : (
+                  <CancelSubscriptionButton
+                    variant="link"
+                    label="Cancel subscription"
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        </dialog>
+      </div>
+    </div>
+  );
+}
+
+type SignedInIdentityProps = Readonly<{
+  displayEmail: string;
+  tier: Tier;
+  modalCentered: boolean;
+  subStatus: SubscriptionStatus | null;
+  cancelTipOpen: boolean;
+  onCancelTipOpenChange: (open: boolean) => void;
+  onOpenMembership: () => void;
+}>;
+
+function SignedInIdentity(props: SignedInIdentityProps) {
+  const {
+    displayEmail,
+    tier,
+    modalCentered,
+    subStatus,
+    cancelTipOpen,
+    onCancelTipOpenChange,
+    onOpenMembership,
+  } = props;
+  const cancelTipText = getCancelTipText(subStatus);
+
+  return (
+    <div
+      aria-label="Signed in identity"
+      style={{
+        width: "100%",
+        minWidth: 0,
+        height: 32,
+        display: "grid",
+        gridTemplateColumns: "18px 1fr",
+        gridTemplateRows: "1fr 1fr",
+        columnGap: 8,
+        rowGap: 0,
+        alignItems: "center",
+        justifyItems: "stretch",
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          gridColumn: 1,
+          gridRow: "1 / 3",
+          alignSelf: "center",
+          justifySelf: modalCentered ? "center" : "end",
+          width: 18,
+          height: 18,
+          display: "inline-block",
+          flex: "0 0 auto",
+          filter:
+            "drop-shadow(0 10px 18px rgba(0,0,0,0.35)) drop-shadow(0 0 0 rgba(0,0,0,0))",
+        }}
+      >
+        <span
+          aria-hidden
+          style={{
+            position: "relative",
+            width: 18,
+            height: 18,
+            display: "block",
+            overflow: "hidden",
+            WebkitMaskImage: `url("data:image/svg+xml;utf8,${encodeURIComponent(
+              `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill-rule='evenodd' clip-rule='evenodd' d='M14.6563 5.24291C15.4743 5.88358 16 6.8804 16 8C16 9.11964 15.4743 10.1165 14.6562 10.7572C14.7816 11.7886 14.4485 12.8652 13.6568 13.6569C12.8651 14.4486 11.7885 14.7817 10.7571 14.6563C10.1164 15.4743 9.1196 16 8 16C6.88038 16 5.88354 15.4743 5.24288 14.6562C4.21141 14.7817 3.13481 14.4485 2.34312 13.6568C1.55143 12.8652 1.2183 11.7886 1.34372 10.7571C0.525698 10.1164 0 9.1196 0 8C0 6.88038 0.525715 5.88354 1.34376 5.24288C1.21834 4.21141 1.55147 3.13481 2.34316 2.34312C3.13485 1.55143 4.21145 1.2183 5.24291 1.34372C5.88358 0.525698 6.8804 0 8 0C9.11964 0 10.1165 0.525732 10.7572 1.3438C11.7886 1.21838 12.8652 1.55152 13.6569 2.3432C14.4486 3.13488 14.7817 4.21146 14.6563 5.24291ZM12.2071 6.20711L10.7929 4.79289L7 8.58579L5.20711 6.79289L3.79289 8.20711L7 11.4142L12.2071 6.20711Z'/></svg>`,
+            )}")`,
+            WebkitMaskRepeat: "no-repeat",
+            WebkitMaskPosition: "center",
+            WebkitMaskSize: "contain",
+            maskImage: `url("data:image/svg+xml;utf8,${encodeURIComponent(
+              `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill-rule='evenodd' clip-rule='evenodd' d='M14.6563 5.24291C15.4743 5.88358 16 6.8804 16 8C16 9.11964 15.4743 10.1165 14.6562 10.7572C14.7816 11.7886 14.4485 12.8652 13.6568 13.6569C12.8651 14.4486 11.7885 14.7817 10.7571 14.6563C10.1164 15.4743 9.1196 16 8 16C6.88038 16 5.88354 15.4743 5.24288 14.6562C4.21141 14.7817 3.13481 14.4485 2.34312 13.6568C1.55143 12.8652 1.2183 11.7886 1.34372 10.7571C0.525698 10.1164 0 9.1196 0 8C0 6.88038 0.525715 5.88354 1.34376 5.24288C1.21834 4.21141 1.55147 3.13481 2.34316 2.34312C3.13485 1.55143 4.21145 1.2183 5.24291 1.34372C5.88358 0.525698 6.8804 0 8 0C9.11964 0 10.1165 0.525732 10.7572 1.3438C11.7886 1.21838 12.8652 1.55152 13.6569 2.3432C14.4486 3.13488 14.7817 4.21146 14.6563 5.24291ZM12.2071 6.20711L10.7929 4.79289L7 8.58579L5.20711 6.79289L3.79289 8.20711L7 11.4142L12.2071 6.20711Z'/></svg>`,
+            )}")`,
+            maskRepeat: "no-repeat",
+            maskPosition: "center",
+            maskSize: "contain",
+          }}
+        >
+          <PatternPillUnderlay active opacity={0.74} seed={777} />
+          <span
+            aria-hidden
+            style={{
+              position: "absolute",
+              inset: 0,
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.26), rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.00))",
+              opacity: 0.62,
+              pointerEvents: "none",
+            }}
+          />
+        </span>
+      </span>
+
+      <div
+        style={{
+          gridColumn: 2,
+          gridRow: 1,
+          minWidth: 0,
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: modalCentered ? "center" : "flex-end",
+          color: "rgba(255,255,255,0.82)",
+          fontSize: 12,
+          lineHeight: "16px",
+          letterSpacing: "0.01em",
+        }}
+      >
+        <span
+          style={{
+            minWidth: 0,
+            maxWidth: "100%",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            textAlign: modalCentered ? "center" : "right",
+          }}
+          title={displayEmail}
+        >
+          {displayEmail}
+        </span>
+      </div>
+
+      <div
+        style={{
+          gridColumn: 2,
+          gridRow: 2,
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: modalCentered ? "center" : "flex-end",
+          gap: 8,
+          fontSize: 12,
+          lineHeight: "16px",
+          minWidth: 0,
+          opacity: 0.95,
+        }}
+      >
+        <>
+          <span style={{ opacity: 0.72 }} title={tier}>
+            {tier}
+          </span>
+
+          {subStatus?.cancelAtPeriodEnd && (
+            <span style={{ position: "relative", display: "inline-flex" }}>
+              <button
+                type="button"
+                onClick={() => onCancelTipOpenChange(!cancelTipOpen)}
+                onMouseEnter={() => onCancelTipOpenChange(true)}
+                onMouseLeave={() => onCancelTipOpenChange(false)}
+                onBlur={() => onCancelTipOpenChange(false)}
+                aria-label={cancelTipText}
+                style={{
+                  appearance: "none",
+                  border: "1px solid rgba(255,255,255,0.16)",
+                  background: "rgba(255,255,255,0.06)",
+                  color: "rgba(255,255,255,0.82)",
+                  width: 18,
+                  height: 18,
+                  borderRadius: 999,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  transform: "translateY(1px)",
+                  padding: 0,
+                  margin: 0,
+                  cursor: "pointer",
+                }}
+              >
+                <ClockIcon size={12} />
+              </button>
+
+              {cancelTipOpen && (
+                <div
+                  role="tooltip"
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 8px)",
+                    right: 0,
+                    zIndex: 80,
+                    minWidth: 220,
+                    maxWidth: 320,
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    background: "rgba(10,10,14,0.96)",
+                    boxShadow:
+                      "0 18px 42px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04)",
+                    backdropFilter: "blur(10px)",
+                    WebkitBackdropFilter: "blur(10px)",
+                    fontSize: 12,
+                    lineHeight: "16px",
+                    color: "rgba(255,255,255,0.86)",
+                    pointerEvents: "none",
+                    whiteSpace: "normal",
+                  }}
+                >
+                  {cancelTipText}
+                </div>
+              )}
+            </span>
+          )}
+
+          <span aria-hidden style={{ opacity: 0.35 }}>
+            |
+          </span>
+        </>
+
+        <button
+          type="button"
+          onClick={onOpenMembership}
+          style={{
+            appearance: "none",
+            border: 0,
+            background: "transparent",
+            padding: 0,
+            margin: 0,
+            cursor: "pointer",
+            color: "rgba(255,255,255,0.84)",
+            textDecoration: "underline",
+            textUnderlineOffset: 3,
+            textDecorationColor: "rgba(255,255,255,0.28)",
+          }}
+          title="View membership options"
+        >
+          Membership
+        </button>
+      </div>
+    </div>
+  );
+}
+
+type ActivationGateLayout = Readonly<{
+  modalCentered: boolean;
+  contentWidth: number;
+  panelMaxWidth: number;
+  panelGap: number;
+  panelAlignContent: "center" | "end";
+  horizontalAlignment: "center" | "flex-end";
+  attentionMargin: string;
+  attentionPadding: string;
+  attentionFontSize: number;
+  attentionTextAlign: "center" | "right";
+  ringGlowPx: number;
+  inputHeight: number;
+  inputPadding: string;
+  inputFontSize: number;
+}>;
+
+function getActivationGateLayout(
+  placement: NonNullable<Props["placement"]>,
+): ActivationGateLayout {
+  if (placement === "modal") {
+    return {
+      modalCentered: true,
+      contentWidth: 420,
+      panelMaxWidth: 520,
+      panelGap: 10,
+      panelAlignContent: "center",
+      horizontalAlignment: "center",
+      attentionMargin: "0 0 14px",
+      attentionPadding: "0 4px",
+      attentionFontSize: 15,
+      attentionTextAlign: "center",
+      ringGlowPx: 20,
+      inputHeight: 40,
+      inputPadding: "0 16px",
+      inputFontSize: 13,
+    };
+  }
+
+  return {
+    modalCentered: false,
+    contentWidth: 360,
+    panelMaxWidth: 360,
+    panelGap: 4,
+    panelAlignContent: "end",
+    horizontalAlignment: "flex-end",
+    attentionMargin: "0 0 10px",
+    attentionPadding: "0 2px",
+    attentionFontSize: 13,
+    attentionTextAlign: "right",
+    ringGlowPx: 18,
+    inputHeight: 32,
+    inputPadding: "0 14px",
+    inputFontSize: 12,
+  };
+}
+
+type AccountControlProps = Readonly<{
+  layout: ActivationGateLayout;
+  attentionText: string | null;
+  needsAttention: boolean;
+  isActive: boolean;
+  clerkLoaded: boolean;
+  emailInputRef: React.RefObject<HTMLInputElement | null>;
+  email: string;
+  onEmailChange: (next: string) => void;
+  onSubmit: () => void;
+  displayEmail: string;
+  tier: Tier;
+  subStatus: SubscriptionStatus | null;
+  cancelTipOpen: boolean;
+  onCancelTipOpenChange: (open: boolean) => void;
+  onOpenMembership: () => void;
+  toggleOn: boolean;
+  toggleClickable: boolean;
+  onToggle: () => void;
+}>;
+
+function AccountControl(props: AccountControlProps) {
+  const {
+    layout,
+    attentionText,
+    needsAttention,
+    isActive,
+    clerkLoaded,
+    emailInputRef,
+    email,
+    onEmailChange,
+    onSubmit,
+    displayEmail,
+    tier,
+    subStatus,
+    cancelTipOpen,
+    onCancelTipOpenChange,
+    onOpenMembership,
+    toggleOn,
+    toggleClickable,
+    onToggle,
+  } = props;
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit();
+      }}
+      style={{ margin: 0 }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0 12px",
+          width: "100%",
+          minWidth: 0,
+          justifyContent: layout.horizontalAlignment,
+        }}
+      >
+        <div
+          style={{
+            flex: "1 1 auto",
+            minWidth: 0,
+            maxWidth: layout.contentWidth,
+          }}
+        >
+          {attentionText && (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                margin: layout.attentionMargin,
+                padding: layout.attentionPadding,
+                color: "rgba(255,255,255,0.86)",
+                fontSize: layout.attentionFontSize,
+                lineHeight: 1.45,
+                textAlign: layout.attentionTextAlign,
+                textWrap: "balance",
+              }}
+            >
+              {attentionText}
+            </div>
+          )}
+
+          {!isActive ? (
+            <PatternRingOutline
+              ringPx={2}
+              glowPx={layout.ringGlowPx}
+              blurPx={10}
+              seed={888}
+              opacity={0.92}
+              disabled={!clerkLoaded}
+              innerBg="rgb(10, 10, 14)"
+            >
+              <input
+                ref={emailInputRef}
+                type="email"
+                placeholder="Enter email for access"
+                value={email}
+                onChange={(event) => onEmailChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    onSubmit();
+                  }
+                }}
+                style={{
+                  width: "100%",
+                  minWidth: 0,
+                  height: layout.inputHeight,
+                  padding: layout.inputPadding,
+                  fontSize: layout.inputFontSize,
+                  lineHeight: "16px",
+                  WebkitTextSizeAdjust: "100%",
+                  borderRadius: 999,
+                  border: "0px solid transparent",
+                  background: "rgb(10, 10, 14)",
+                  color: "rgba(255,255,255,0.92)",
+                  outline: "none",
+                  textAlign: "left",
+                  boxShadow: needsAttention
+                    ? `0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent),
+                      0 0 26px color-mix(in srgb, var(--accent) 40%, transparent),
+                      0 14px 30px rgba(0,0,0,0.22)`
+                    : "0 14px 30px rgba(0,0,0,0.22)",
+                  transition: "box-shadow 220ms ease",
+                  boxSizing: "border-box",
+                }}
+              />
+            </PatternRingOutline>
+          ) : (
+            <SignedInIdentity
+              displayEmail={displayEmail}
+              tier={tier}
+              modalCentered={layout.modalCentered}
+              subStatus={subStatus}
+              cancelTipOpen={cancelTipOpen}
+              onCancelTipOpenChange={onCancelTipOpenChange}
+              onOpenMembership={onOpenMembership}
+            />
+          )}
+        </div>
+
+        <div
+          style={{
+            flex: "0 0 auto",
+            display: "grid",
+            alignItems: "center",
+          }}
+        >
+          <Toggle
+            checked={toggleOn}
+            disabled={!toggleClickable}
+            onClick={onToggle}
+            mode={isActive ? "auth" : "anon"}
+          />
+        </div>
+      </div>
+    </form>
+  );
+}
+
+type OtpPanelsProps = Readonly<{
+  placement: NonNullable<Props["placement"]>;
+  isActive: boolean;
+  panelWidth: number;
+  overlayOpen: boolean;
+  otpOpen: boolean;
+  maxHeight: number;
+  children: React.ReactNode;
+}>;
+
+function OtpPanels(props: OtpPanelsProps) {
+  const {
+    placement,
+    isActive,
+    panelWidth,
+    overlayOpen,
+    otpOpen,
+    maxHeight,
+    children,
+  } = props;
+
+  if (isActive) return null;
+
+  if (placement === "modal") {
+    return (
+      <div
+        style={{
+          width: "100%",
+          minWidth: 0,
+          display: "grid",
+          justifyItems: "center",
+          marginTop: 12,
+        }}
+      >
+        <div
+          style={{
+            width: "100%",
+            maxWidth: panelWidth,
+            minWidth: 0,
+            boxSizing: "border-box",
+          }}
+        >
+          <OverlayPanel
+            open={otpOpen}
+            maxHeightOpen={maxHeight}
+            yOffsetClosed={-4}
+          >
+            <div
+              style={{
+                width: "100%",
+                minWidth: 0,
+                boxSizing: "border-box",
+              }}
+            >
+              {children}
+            </div>
+          </OverlayPanel>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: "calc(100% + 8px)",
+        right: 0,
+        zIndex: 60,
+        pointerEvents: overlayOpen ? "auto" : "none",
+        display: "grid",
+        justifyItems: "end",
+        width: "max-content",
+        maxWidth: "min(92vw, 520px)",
+      }}
+    >
+      <div style={{ width: panelWidth, maxWidth: "92vw" }}>
+        <OverlayPanel open={otpOpen} maxHeightOpen={maxHeight}>
+          {children}
+        </OverlayPanel>
+      </div>
+    </div>
+  );
+}
+
+type ActivationGateViewProps = Readonly<{
+  rootRef: React.RefObject<HTMLDivElement | null>;
+  layout: ActivationGateLayout;
+  membershipModal: React.ReactNode;
+  accountControl: React.ReactNode;
+  otpPanels: React.ReactNode;
+  isActive: boolean;
+  children: React.ReactNode;
+}>;
+
+function ActivationGateView(props: ActivationGateViewProps) {
+  const {
+    rootRef,
+    layout,
+    membershipModal,
+    accountControl,
+    otpPanels,
+    isActive,
+    children,
+  } = props;
+
+  return (
+    <div
+      ref={rootRef}
+      style={{
+        position: "relative",
+        width: "100%",
+        minWidth: 0,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: layout.horizontalAlignment,
+      }}
+    >
+      {membershipModal}
+
+      <div
+        style={{
+          position: "relative",
+          zIndex: 42,
+          width: "100%",
+          minWidth: 0,
+          maxWidth: layout.panelMaxWidth,
+          display: "grid",
+          gap: layout.panelGap,
+          justifyItems: "center",
+          alignContent: layout.panelAlignContent,
+        }}
+      >
+        <div style={{ position: "relative", width: "100%", minWidth: 0 }}>
+          {accountControl}
+          {otpPanels}
+        </div>
+
+        {isActive && <>{children}</>}
       </div>
     </div>
   );
@@ -503,30 +1501,8 @@ export default function ActivationGate(props: Props) {
   const isActive = !!isSignedIn;
   const clerkLoaded = signInLoaded && signUpLoaded;
 
-  const [subStatus, setSubStatus] = useState<{
-    cancelAtPeriodEnd: boolean;
-    accessUntil: string | null;
-  } | null>(null);
-
+  const [subStatus, setSubStatus] = useState<SubscriptionStatus | null>(null);
   const [cancelTipOpen, setCancelTipOpen] = useState(false);
-
-  function formatAccessUntil(iso: string | null): string | null {
-    if (!iso) return null;
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return null;
-    return new Intl.DateTimeFormat(undefined, {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    }).format(d);
-  }
-
-  function buildCancelTipText(): string {
-    const untilLabel = formatAccessUntil(subStatus?.accessUntil ?? null);
-    return untilLabel
-      ? `You have cancelled your membership and this will take effect on ${untilLabel}.`
-      : "You have cancelled your membership and this will take effect at the end of your billing period.";
-  }
 
   useEffect(() => {
     if (!isActive) {
@@ -602,10 +1578,9 @@ export default function ActivationGate(props: Props) {
       "") ||
     email;
 
-  // Unified widths: everything should line up cleanly
-  const CONTENT_W = placement === "modal" ? 420 : 360;
-  const EMAIL_W = CONTENT_W;
-  const OTP_W = CONTENT_W;
+  const layout = getActivationGateLayout(placement);
+  const EMAIL_W = layout.contentWidth;
+  const OTP_W = layout.contentWidth;
 
   // New membership modal sizing (bigger, centered)
   const BILLING_MODAL_MAX_W = 860;
@@ -761,10 +1736,6 @@ export default function ActivationGate(props: Props) {
   const toggleOn = isActive || phase === "code" || isSending || isVerifying;
   const otpOpen = !isActive && phase === "code";
 
-  // Any signed-in user should be able to view membership options.
-  // canManageBilling should govern existing-subscription controls only.
-  const showBillingTrigger = isActive;
-
   const overlayOpen = otpOpen; // billing no longer lives in the topbar overlay stack
   const showSignupPrivacy = otpOpen && flow === "signup";
 
@@ -777,759 +1748,81 @@ export default function ActivationGate(props: Props) {
     void startEmailCode();
   }
 
-  const modalCentered = placement === "modal";
-
-  const inlinePanelOpen = otpOpen;
   const inlineMaxHeight = showSignupPrivacy ? 620 : 520;
 
-  const privacyNode = (
-    <div
-      style={{
-        width: "100%",
-        maxWidth: EMAIL_W,
-        display: "grid",
-        gap: 10,
-        boxSizing: "border-box",
-      }}
-    >
-      <div
-        style={{
-          fontSize: 11,
-          lineHeight: "15px",
-          opacity: 0.82,
-          textAlign: "left",
-          padding: "0 2px",
-        }}
-      >
-        By entering, you agree to receive occasional emails about releases,
-        events, and account activity. Unsubscribe anytime.
-      </div>
-
-      <div
-        aria-hidden
-        style={{
-          height: 1,
-          width: "100%",
-          background:
-            "linear-gradient(90deg, transparent, rgba(255,255,255,0.18) 18%, rgba(255,255,255,0.18) 82%, transparent)",
-        }}
-      />
-    </div>
-  );
-
   const otpNode = (
-    <div style={{ display: "grid", gap: 10, justifyItems: "center" }}>
-      {showSignupPrivacy && privacyNode}
-
-      <OtpBoxes
-        maxWidth={EMAIL_W}
-        value={code}
-        onChange={(next) => setCode(normalizeDigits(next))}
-        disabled={isVerifying}
-      />
-
-      {(isSending || !flow) && (
-        <div style={{ fontSize: 12, opacity: 0.7 }}>Sending code…</div>
-      )}
-      {isVerifying && (
-        <div style={{ fontSize: 12, opacity: 0.7 }}>Verifying…</div>
-      )}
-
-      {error && (
-        <div
-          style={{
-            fontSize: 12,
-            opacity: 0.88,
-            color: "#ffb4b4",
-            textAlign: "center",
-          }}
-        >
-          {error}
-        </div>
-      )}
-    </div>
+    <OtpContent
+      showSignupPrivacy={showSignupPrivacy}
+      width={EMAIL_W}
+      code={code}
+      onCodeChange={(next) => setCode(normalizeDigits(next))}
+      isVerifying={isVerifying}
+      isSending={isSending}
+      flow={flow}
+      error={error}
+    />
   );
 
   const membershipModalOpen = isMembershipOpen && isActive;
+  const membershipModal = (
+    <MembershipModal
+      open={membershipModalOpen}
+      onClose={closeMembershipModal}
+      isFriend={isFriend}
+      isPatron={isPatron}
+      isPartner={isPartner}
+      subStatus={subStatus}
+      maxWidth={BILLING_MODAL_MAX_W}
+      minWidth={BILLING_MODAL_MIN_W}
+    />
+  );
 
-  const membershipModal = membershipModalOpen ? (
-    <div
-      aria-hidden={false}
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 5000,
-        // allow the page to remain interactable by default
-        pointerEvents: "none",
-      }}
+  const accountControl = (
+    <AccountControl
+      layout={layout}
+      attentionText={attentionText}
+      needsAttention={needsAttention}
+      isActive={isActive}
+      clerkLoaded={clerkLoaded}
+      emailInputRef={emailInputRef}
+      email={email}
+      onEmailChange={onEmailChange}
+      onSubmit={submitFromEnter}
+      displayEmail={displayEmail}
+      tier={tier}
+      subStatus={subStatus}
+      cancelTipOpen={cancelTipOpen}
+      onCancelTipOpenChange={setCancelTipOpen}
+      onOpenMembership={openMembershipModal}
+      toggleOn={toggleOn}
+      toggleClickable={toggleClickable}
+      onToggle={startEmailCode}
+    />
+  );
+
+  const otpPanels = (
+    <OtpPanels
+      placement={placement}
+      isActive={isActive}
+      panelWidth={OTP_W}
+      overlayOpen={overlayOpen}
+      otpOpen={otpOpen}
+      maxHeight={inlineMaxHeight}
     >
-      {/* Backdrop: click-catcher + subtle blur/lift. */}
-      <div
-        aria-hidden
-        onMouseDown={() => closeMembershipModal()}
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "auto",
-          // minimal tint; mostly blur, not blockade
-          background: "rgba(0,0,0,0.06)",
-        }}
-      />
-
-      {/* Centered modal container */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          display: "grid",
-          placeItems: "center",
-          padding: "min(8vh, 56px) 16px",
-          pointerEvents: "none",
-        }}
-      >
-        {/* Gradient border frame */}
-        <div
-          role="dialog"
-          aria-modal="false"
-          aria-label="Membership options"
-          onMouseDown={(e) => {
-            // prevent backdrop click from closing when clicking inside modal
-            e.stopPropagation();
-          }}
-          style={{
-            width: "100%",
-            maxWidth: `min(92vw, ${BILLING_MODAL_MAX_W}px)`,
-            minWidth: `min(92vw, ${BILLING_MODAL_MIN_W}px)`,
-            borderRadius: 26,
-            padding: 1, // gradient border thickness
-            pointerEvents: "auto",
-            background:
-              "linear-gradient(135deg, rgba(255,215,130,0.62), rgba(255,234,170,0.18) 38%, rgba(255,215,130,0.46) 65%, rgba(255,255,255,0.10))",
-            boxShadow:
-              "0 30px 90px rgba(0,0,0,0.55), 0 60px 160px rgba(0,0,0,0.55)",
-            transform: "translateZ(0)",
-          }}
-        >
-          {/* Inner panel */}
-          <div
-            style={{
-              borderRadius: 25,
-              background: "rgba(10,10,14,0.92)",
-              backdropFilter: "blur(14px)",
-              WebkitBackdropFilter: "blur(14px)",
-              border: "1px solid rgba(255,255,255,0.06)",
-              boxShadow:
-                "0 0 0 1px rgba(255,255,255,0.03) inset, 0 18px 52px rgba(0,0,0,0.35)",
-              padding: 18,
-              display: "grid",
-              gap: 14,
-              maxHeight: "min(82vh, 680px)",
-              overflowY: "auto",
-              overflowX: "hidden",
-            }}
-          >
-            {/* Header row */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                gap: 12,
-              }}
-            >
-              <div
-                style={{
-                  display: "grid",
-                  gap: 6,
-                  minWidth: 0,
-                  flex: "1 1 auto",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 14,
-                    lineHeight: "18px",
-                    fontWeight: 700,
-                    letterSpacing: "0.01em",
-                    color: "rgba(255,255,255,0.92)",
-                  }}
-                >
-                  Membership
-                </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    lineHeight: "16px",
-                    opacity: 0.82,
-                    maxWidth: "calc(100% - 58px)", // 34 (button) + 12 (gap) + 12 (breathing room)
-                  }}
-                >
-                  {isFriend
-                    ? "Support future work, access exclusive content."
-                    : "Change or cancel your membership below. Thank you for supporting future work on this independent platform."}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                aria-label="Close membership"
-                onClick={() => closeMembershipModal()}
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 999,
-                  border: "1px solid rgba(255,255,255,0.14)",
-                  background: "rgba(255,255,255,0.06)",
-                  color: "rgba(255,255,255,0.88)",
-                  cursor: "pointer",
-                  display: "grid",
-                  placeItems: "center",
-                  lineHeight: 1,
-                  fontSize: 18,
-                  userSelect: "none",
-                  flex: "0 0 auto",
-                }}
-                title="Close"
-              >
-                ×
-              </button>
-            </div>
-
-            {/* Cards row (keeps the 2-up layout, but with more vertical room) */}
-            <div
-              style={{
-                display: "grid",
-                // Two-up when there's room, single column when not.
-                gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-                gap: 14,
-                alignItems: "stretch",
-                width: "100%",
-                minWidth: 0,
-              }}
-            >
-              <SubscribeButton
-                loggedIn={true}
-                variant="card"
-                tier="patron"
-                disabled={isPatron}
-                current={isPatron}
-                label={isPatron ? "Active" : "Choose Patron"}
-                card={{
-                  title: "Patron",
-                  price: "$5 / month",
-                  bullets: [
-                    "All downloads",
-                    "First listener access",
-                    "Mailbag Q&A",
-                    "Lyrics discussion",
-                  ],
-                }}
-              />
-
-              <SubscribeButton
-                loggedIn={true}
-                variant="card"
-                tier="partner"
-                disabled={isPartner}
-                current={isPartner}
-                label={isPartner ? "Active" : "Choose Partner"}
-                card={{
-                  title: "Partner",
-                  price: "$299 / year",
-                  bullets: [
-                    "All Patron benefits",
-                    "Release credits",
-                    "Creative livestreams",
-                    "Demo recordings",
-                  ],
-                }}
-              />
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 6,
-                marginTop: 2,
-                fontSize: 11,
-                lineHeight: "14px",
-                opacity: 0.7,
-              }}
-            >
-              <LockIcon size={12} />
-              <span>
-                Secured by Stripe. Your payment is protected and we will never
-                share your data.
-              </span>
-            </div>
-
-            {(isPatron || isPartner) && (
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "center",
-                  marginTop: 2,
-                }}
-              >
-                {subStatus?.cancelAtPeriodEnd ? (
-                  <div
-                    style={{
-                      fontSize: 12,
-                      lineHeight: "16px",
-                      opacity: 0.82,
-                      textAlign: "center",
-                      maxWidth: 520,
-                      padding: "6px 10px",
-                      borderRadius: 12,
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      background: "rgba(255,255,255,0.04)",
-                    }}
-                  >
-                    {buildCancelTipText()}
-                  </div>
-                ) : (
-                  <CancelSubscriptionButton
-                    variant="link"
-                    label="Cancel subscription"
-                  />
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  ) : null;
+      {otpNode}
+    </OtpPanels>
+  );
 
   return (
-    <div
-      ref={rootRef}
-      style={{
-        position: "relative",
-        width: "100%",
-        minWidth: 0,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: modalCentered ? "center" : "flex-end",
-      }}
+    <ActivationGateView
+      rootRef={rootRef}
+      layout={layout}
+      membershipModal={membershipModal}
+      accountControl={accountControl}
+      otpPanels={otpPanels}
+      isActive={isActive}
     >
-      {/* Membership modal: centered overlay (non-blocking scroll) */}
-      {membershipModal}
-
-      <div
-        style={{
-          position: "relative",
-          zIndex: 42,
-          width: "100%",
-          minWidth: 0,
-          maxWidth: modalCentered ? 520 : CONTENT_W,
-          display: "grid",
-          gap: modalCentered ? 10 : 4,
-          justifyItems: "center",
-          alignContent: modalCentered ? "center" : "end",
-        }}
-      >
-        <div style={{ position: "relative", width: "100%", minWidth: 0 }}>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              submitFromEnter();
-            }}
-            style={{ margin: 0 }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0 12px",
-                width: "100%",
-                minWidth: 0,
-                justifyContent: modalCentered ? "center" : "flex-end",
-              }}
-            >
-              <div style={{ flex: "1 1 auto", minWidth: 0, maxWidth: EMAIL_W }}>
-                {attentionText && (
-                  <div
-                    role="status"
-                    aria-live="polite"
-                    style={{
-                      margin: modalCentered ? "0 0 14px" : "0 0 10px",
-                      padding: modalCentered ? "0 4px" : "0 2px",
-                      color: "rgba(255,255,255,0.86)",
-                      fontSize: modalCentered ? 15 : 13,
-                      lineHeight: 1.45,
-                      textAlign: modalCentered ? "center" : "right",
-                      textWrap: "balance",
-                    }}
-                  >
-                    {attentionText}
-                  </div>
-                )}
-
-                {!isActive ? (
-                  <PatternRingOutline
-                    ringPx={2}
-                    glowPx={modalCentered ? 20 : 18}
-                    blurPx={10}
-                    seed={888}
-                    opacity={0.92}
-                    disabled={!clerkLoaded}
-                    innerBg="rgb(10, 10, 14)"
-                  >
-                    <input
-                      ref={emailInputRef}
-                      type="email"
-                      placeholder="Enter email for access"
-                      value={email}
-                      onChange={(e) => onEmailChange(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          submitFromEnter();
-                        }
-                      }}
-                      style={{
-                        width: "100%",
-                        minWidth: 0,
-                        height: modalCentered ? 40 : 32,
-                        padding: modalCentered ? "0 16px" : "0 14px",
-                        fontSize: modalCentered ? 13 : 12,
-                        lineHeight: "16px",
-                        WebkitTextSizeAdjust: "100%",
-                        borderRadius: 999,
-                        border: "0px solid transparent",
-                        background: "rgb(10, 10, 14)",
-                        color: "rgba(255,255,255,0.92)",
-                        outline: "none",
-                        textAlign: "left",
-                        boxShadow: needsAttention
-                          ? `0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent),
-                          0 0 26px color-mix(in srgb, var(--accent) 40%, transparent),
-                          0 14px 30px rgba(0,0,0,0.22)`
-                          : "0 14px 30px rgba(0,0,0,0.22)",
-                        transition: "box-shadow 220ms ease",
-                        boxSizing: "border-box",
-                      }}
-                    />
-                  </PatternRingOutline>
-                ) : (
-                  <div
-                    aria-label="Signed in identity"
-                    style={{
-                      width: "100%",
-                      minWidth: 0,
-
-                      // Keep the overall block height stable, but let the icon
-                      // center itself between the two text rows.
-                      height: 32,
-
-                      display: "grid",
-                      gridTemplateColumns: "18px 1fr",
-                      gridTemplateRows: "1fr 1fr",
-                      columnGap: 8,
-                      rowGap: 0,
-                      alignItems: "center",
-                      justifyItems: "stretch",
-                    }}
-                  >
-                    {/* Verified badge: spans both rows and vertically centers */}
-                    <span
-                      aria-hidden
-                      style={{
-                        gridColumn: 1,
-                        gridRow: "1 / 3",
-                        alignSelf: "center",
-                        justifySelf: modalCentered ? "center" : "end",
-                        width: 18,
-                        height: 18,
-                        display: "inline-block",
-                        flex: "0 0 auto",
-
-                        // subtle lift to match your UI language
-                        filter:
-                          "drop-shadow(0 10px 18px rgba(0,0,0,0.35)) drop-shadow(0 0 0 rgba(0,0,0,0))",
-                      }}
-                    >
-                      {/* Masked fill using the same PatternPillUnderlay as Toggle */}
-                      <span
-                        aria-hidden
-                        style={{
-                          position: "relative",
-                          width: 18,
-                          height: 18,
-                          display: "block",
-                          overflow: "hidden",
-
-                          WebkitMaskImage: `url("data:image/svg+xml;utf8,${encodeURIComponent(
-                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill-rule='evenodd' clip-rule='evenodd' d='M14.6563 5.24291C15.4743 5.88358 16 6.8804 16 8C16 9.11964 15.4743 10.1165 14.6562 10.7572C14.7816 11.7886 14.4485 12.8652 13.6568 13.6569C12.8651 14.4486 11.7885 14.7817 10.7571 14.6563C10.1164 15.4743 9.1196 16 8 16C6.88038 16 5.88354 15.4743 5.24288 14.6562C4.21141 14.7817 3.13481 14.4485 2.34312 13.6568C1.55143 12.8652 1.2183 11.7886 1.34372 10.7571C0.525698 10.1164 0 9.1196 0 8C0 6.88038 0.525715 5.88354 1.34376 5.24288C1.21834 4.21141 1.55147 3.13481 2.34316 2.34312C3.13485 1.55143 4.21145 1.2183 5.24291 1.34372C5.88358 0.525698 6.8804 0 8 0C9.11964 0 10.1165 0.525732 10.7572 1.3438C11.7886 1.21838 12.8652 1.55152 13.6569 2.3432C14.4486 3.13488 14.7817 4.21146 14.6563 5.24291ZM12.2071 6.20711L10.7929 4.79289L7 8.58579L5.20711 6.79289L3.79289 8.20711L7 11.4142L12.2071 6.20711Z'/></svg>`,
-                          )}")`,
-                          WebkitMaskRepeat: "no-repeat",
-                          WebkitMaskPosition: "center",
-                          WebkitMaskSize: "contain",
-
-                          maskImage: `url("data:image/svg+xml;utf8,${encodeURIComponent(
-                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill-rule='evenodd' clip-rule='evenodd' d='M14.6563 5.24291C15.4743 5.88358 16 6.8804 16 8C16 9.11964 15.4743 10.1165 14.6562 10.7572C14.7816 11.7886 14.4485 12.8652 13.6568 13.6569C12.8651 14.4486 11.7885 14.7817 10.7571 14.6563C10.1164 15.4743 9.1196 16 8 16C6.88038 16 5.88354 15.4743 5.24288 14.6562C4.21141 14.7817 3.13481 14.4485 2.34312 13.6568C1.55143 12.8652 1.2183 11.7886 1.34372 10.7571C0.525698 10.1164 0 9.1196 0 8C0 6.88038 0.525715 5.88354 1.34376 5.24288C1.21834 4.21141 1.55147 3.13481 2.34316 2.34312C3.13485 1.55143 4.21145 1.2183 5.24291 1.34372C5.88358 0.525698 6.8804 0 8 0C9.11964 0 10.1165 0.525732 10.7572 1.3438C11.7886 1.21838 12.8652 1.55152 13.6569 2.3432C14.4486 3.13488 14.7817 4.21146 14.6563 5.24291ZM12.2071 6.20711L10.7929 4.79289L7 8.58579L5.20711 6.79289L3.79289 8.20711L7 11.4142L12.2071 6.20711Z'/></svg>`,
-                          )}")`,
-                          maskRepeat: "no-repeat",
-                          maskPosition: "center",
-                          maskSize: "contain",
-                        }}
-                      >
-                        <PatternPillUnderlay active opacity={0.74} seed={777} />
-                        <span
-                          aria-hidden
-                          style={{
-                            position: "absolute",
-                            inset: 0,
-                            background:
-                              "linear-gradient(180deg, rgba(255,255,255,0.26), rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.00))",
-                            opacity: 0.62,
-                            pointerEvents: "none",
-                          }}
-                        />
-                      </span>
-                    </span>
-
-                    {/* Row 1: email */}
-                    <div
-                      style={{
-                        gridColumn: 2,
-                        gridRow: 1,
-                        minWidth: 0,
-                        width: "100%",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: modalCentered ? "center" : "flex-end",
-                        color: "rgba(255,255,255,0.82)",
-                        fontSize: 12,
-                        lineHeight: "16px",
-                        letterSpacing: "0.01em",
-                      }}
-                    >
-                      <span
-                        style={{
-                          minWidth: 0,
-                          maxWidth: "100%",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                          textAlign: modalCentered ? "center" : "right",
-                        }}
-                        title={displayEmail}
-                      >
-                        {displayEmail}
-                      </span>
-                    </div>
-
-                    {/* Row 2: tier + actions */}
-                    <div
-                      style={{
-                        gridColumn: 2,
-                        gridRow: 2,
-                        width: "100%",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: modalCentered ? "center" : "flex-end",
-                        gap: 8,
-                        fontSize: 12,
-                        lineHeight: "16px",
-                        minWidth: 0,
-                        opacity: 0.95,
-                      }}
-                    >
-                      {tier ? (
-                        <>
-                          <span style={{ opacity: 0.72 }} title={tier}>
-                            {tier}
-                          </span>
-
-                          {subStatus?.cancelAtPeriodEnd ? (
-                            <span
-                              style={{
-                                position: "relative",
-                                display: "inline-flex",
-                              }}
-                            >
-                              <button
-                                type="button"
-                                onClick={() => setCancelTipOpen((v) => !v)}
-                                onMouseEnter={() => setCancelTipOpen(true)}
-                                onMouseLeave={() => setCancelTipOpen(false)}
-                                onBlur={() => setCancelTipOpen(false)}
-                                aria-label={buildCancelTipText()}
-                                style={{
-                                  appearance: "none",
-                                  border: "1px solid rgba(255,255,255,0.16)",
-                                  background: "rgba(255,255,255,0.06)",
-                                  color: "rgba(255,255,255,0.82)",
-                                  width: 18,
-                                  height: 18,
-                                  borderRadius: 999,
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  transform: "translateY(1px)",
-                                  padding: 0,
-                                  margin: 0,
-                                  cursor: "pointer",
-                                }}
-                              >
-                                <ClockIcon size={12} />
-                              </button>
-
-                              {cancelTipOpen ? (
-                                <div
-                                  role="tooltip"
-                                  style={{
-                                    position: "absolute",
-                                    top: "calc(100% + 8px)",
-                                    right: 0,
-                                    zIndex: 80,
-                                    minWidth: 220,
-                                    maxWidth: 320,
-                                    padding: "10px 12px",
-                                    borderRadius: 12,
-                                    border: "1px solid rgba(255,255,255,0.14)",
-                                    background: "rgba(10,10,14,0.96)",
-                                    boxShadow:
-                                      "0 18px 42px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04)",
-                                    backdropFilter: "blur(10px)",
-                                    WebkitBackdropFilter: "blur(10px)",
-                                    fontSize: 12,
-                                    lineHeight: "16px",
-                                    color: "rgba(255,255,255,0.86)",
-                                    pointerEvents: "none",
-                                    whiteSpace: "normal",
-                                  }}
-                                >
-                                  {buildCancelTipText()}
-                                </div>
-                              ) : null}
-                            </span>
-                          ) : null}
-
-                          <span aria-hidden style={{ opacity: 0.35 }}>
-                            |
-                          </span>
-                        </>
-                      ) : null}
-
-                      {showBillingTrigger ? (
-                        <button
-                          type="button"
-                          onClick={() => openMembershipModal()}
-                          style={{
-                            appearance: "none",
-                            border: 0,
-                            background: "transparent",
-                            padding: 0,
-                            margin: 0,
-                            cursor: "pointer",
-                            color: "rgba(255,255,255,0.84)",
-                            textDecoration: "underline",
-                            textUnderlineOffset: 3,
-                            textDecorationColor: "rgba(255,255,255,0.28)",
-                          }}
-                          title="View membership options"
-                        >
-                          Membership
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div
-                style={{
-                  flex: "0 0 auto",
-                  display: "grid",
-                  alignItems: "center",
-                }}
-              >
-                <Toggle
-                  checked={toggleOn}
-                  disabled={!toggleClickable}
-                  onClick={startEmailCode}
-                  mode={isActive ? "auth" : "anon"}
-                />
-              </div>
-            </div>
-          </form>
-
-          {/* MODAL: inline expanding area (smooth downward growth, same width) */}
-          {modalCentered && !isActive && (
-            <div
-              style={{
-                width: "100%",
-                minWidth: 0,
-                display: "grid",
-                justifyItems: "center",
-                marginTop: 12,
-              }}
-            >
-              <div
-                style={{
-                  width: "100%",
-                  maxWidth: OTP_W,
-                  minWidth: 0,
-                  boxSizing: "border-box",
-                }}
-              >
-                <OverlayPanel
-                  open={inlinePanelOpen}
-                  maxHeightOpen={inlineMaxHeight}
-                  yOffsetClosed={-4}
-                >
-                  <div
-                    style={{
-                      width: "100%",
-                      minWidth: 0,
-                      boxSizing: "border-box",
-                    }}
-                  >
-                    {otpNode}
-                  </div>
-                </OverlayPanel>
-              </div>
-            </div>
-          )}
-
-          {/* TOPBAR: absolutely-positioned overlay stack (no layout shift) */}
-          {placement === "topbar" && (
-            <div
-              style={{
-                position: "absolute",
-                top: "calc(100% + 8px)",
-                right: 0,
-                zIndex: 60,
-                pointerEvents: overlayOpen ? "auto" : "none",
-
-                display: "grid",
-                justifyItems: "end",
-                width: "max-content",
-                maxWidth: "min(92vw, 520px)",
-              }}
-            >
-              {!isActive && (
-                <div style={{ width: OTP_W, maxWidth: "92vw" }}>
-                  <OverlayPanel
-                    open={otpOpen}
-                    maxHeightOpen={showSignupPrivacy ? 620 : 520}
-                  >
-                    {otpNode}
-                  </OverlayPanel>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {isActive && <>{children}</>}
-      </div>
-    </div>
+      {children}
+    </ActivationGateView>
   );
 }
