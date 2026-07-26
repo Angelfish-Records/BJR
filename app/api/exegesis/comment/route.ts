@@ -1,16 +1,13 @@
 // web/app/api/exegesis/comment/route.ts
 import "server-only";
 import crypto from "crypto";
-import { NextRequest } from "next/server";
+import type { NextRequest, NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 
 import type { IdentityDTO } from "@/lib/exegesisIdentityDto";
 
 import { hasAnyEntitlement } from "@/lib/entitlements";
-import {
-  buildExegesisIdentityDto,
-  ensureMemberIdentity,
-} from "@/lib/memberIdentityServer";
+import { ensureMemberIdentity } from "@/lib/memberIdentityServer";
 import { ENTITLEMENTS } from "@/lib/vocab";
 import {
   runAutoBadgeAwardsForMember,
@@ -43,10 +40,6 @@ type ApiOk = {
 };
 
 type ApiErr = ExegesisApiErr;
-
-function jsonErr(correlationId: string, status: number, body: ApiErr) {
-  return jsonExegesisErr(correlationId, status, body);
-}
 
 type CommentDTO = {
   id: string;
@@ -81,38 +74,71 @@ type ThreadMetaDTO = {
   updatedAt: string;
 };
 
-function clampInt(v: unknown, min: number, max: number): number | null {
-  if (typeof v !== "number" || !Number.isFinite(v)) return null;
-  const n = Math.trunc(v);
-  if (n < min) return min;
-  if (n > max) return max;
-  return n;
-}
+type CommentContent = {
+  bodyPlain: string;
+  bodyRichJson: string;
+};
 
-async function requireCanPost(memberId: string): Promise<boolean> {
-  return await hasAnyEntitlement(memberId, [
-    ENTITLEMENTS.TIER_PATRON,
-    ENTITLEMENTS.TIER_PARTNER,
-  ]);
-}
+type CommentCommandDraft = CommentContent & {
+  recordingId: string;
+  lineKey: string;
+  groupKeyClient: string;
+  parentId: string | null;
+  lineTextSnapshot: string;
+  lyricsVersion: string | null;
+  tMs: number | null;
+};
 
-function assertInsertedRow(row: {
+type CommentCommand = Omit<CommentCommandDraft, "groupKeyClient"> & {
+  groupKey: string;
+};
+
+type ValidationResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; status: number; error: string };
+
+type PostingIdentity = Awaited<ReturnType<typeof ensureMemberIdentity>>;
+
+type PostingAuthorityResult =
+  | { ok: true; memberId: string; identity: PostingIdentity }
+  | { ok: false; response: NextResponse };
+
+type CommentInsertRow = {
   inserted_count: number;
+  guard_err: string | null;
   id: string | null;
   track_id: string | null;
   group_key: string | null;
   line_key: string | null;
+  parent_id: string | null;
   root_id: string | null;
   depth: number | null;
+  body_rich: unknown | null;
   body_plain: string | null;
+  t_ms: number | null;
   line_text_snapshot: string | null;
+  lyrics_version: string | null;
   created_by_member_id: string | null;
   status: "live" | "hidden" | "deleted" | null;
   created_at: string | null;
+  edited_at: string | null;
   edit_count: number | null;
   vote_count: number | null;
-}): asserts row is typeof row & {
-  inserted_count: number;
+  meta_track_id: string;
+  meta_group_key: string;
+  meta_pinned_comment_id: string | null;
+  meta_locked: boolean;
+  meta_comment_count: number;
+  meta_last_activity_at: string;
+  meta_created_at: string;
+  meta_updated_at: string;
+  ident_member_id: string;
+  ident_public_name_unlocked_at: string | null;
+  ident_contribution_count: number;
+};
+
+type InsertedCommentRow = CommentInsertRow & {
+  inserted_count: 1;
   id: string;
   track_id: string;
   group_key: string;
@@ -126,252 +152,263 @@ function assertInsertedRow(row: {
   created_at: string;
   edit_count: number;
   vote_count: number;
-} {
-  if (!row || row.inserted_count !== 1) {
-    throw new Error("assertInsertedRow: inserted_count != 1");
-  }
-  if (
-    !row.id ||
-    !row.track_id ||
-    !row.group_key ||
-    !row.line_key ||
-    !row.root_id ||
-    typeof row.depth !== "number" ||
-    row.body_plain === null ||
-    row.line_text_snapshot === null ||
-    !row.created_by_member_id ||
-    !row.status ||
-    !row.created_at ||
-    typeof row.edit_count !== "number" ||
-    typeof row.vote_count !== "number"
-  ) {
-    throw new Error("assertInsertedRow: missing required comment fields");
-  }
+};
+
+type InsertResolution =
+  | { ok: true; row: InsertedCommentRow }
+  | { ok: false; response: NextResponse };
+
+const EMPTY_BODY_RICH_JSON = JSON.stringify({
+  type: "doc",
+  content: [{ type: "paragraph" }],
+});
+
+function jsonErr(correlationId: string, status: number, body: ApiErr) {
+  return jsonExegesisErr(correlationId, status, body);
 }
 
-export async function POST(req: NextRequest) {
-  const correlationId = correlationIdFromRequest(req);
+function validationError(status: number, error: string): ValidationResult<never> {
+  return { ok: false, status, error };
+}
 
-  let body: unknown;
+function clampInt(v: unknown, min: number, max: number): number | null {
+  if (typeof v !== "number" || !Number.isFinite(v)) return null;
+  const n = Math.trunc(v);
+  if (n < min) return min;
+  if (n > max) return max;
+  return n;
+}
+
+function normNullableId(v: unknown): string | null {
+  const value = normString(v);
+  if (!value || value === "null" || value === "undefined") return null;
+  return value;
+}
+
+async function requireCanPost(memberId: string): Promise<boolean> {
+  return await hasAnyEntitlement(memberId, [
+    ENTITLEMENTS.TIER_PATRON,
+    ENTITLEMENTS.TIER_PARTNER,
+  ]);
+}
+
+function parseCommentContent(
+  body: Record<string, unknown>,
+): ValidationResult<CommentContent> {
+  const legacyBodyPlain = normString(body.bodyPlain);
+  const bodyRichInput = "bodyRich" in body ? (body.bodyRich ?? null) : null;
+
+  if (bodyRichInput === null || typeof bodyRichInput === "undefined") {
+    if (!legacyBodyPlain) return validationError(400, "Missing bodyPlain.");
+    if (legacyBodyPlain.length > 5000) {
+      return validationError(400, "bodyPlain too long.");
+    }
+
+    return {
+      ok: true,
+      value: {
+        bodyPlain: legacyBodyPlain,
+        bodyRichJson: EMPTY_BODY_RICH_JSON,
+      },
+    };
+  }
+
+  const validated = validateAndSanitizeTipTapDoc(bodyRichInput);
+  if (!validated.ok) return validationError(400, validated.error);
+
+  let bodyRichJson = "";
   try {
-    body = await req.json();
+    bodyRichJson = JSON.stringify(validated.doc);
   } catch {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Invalid JSON body.",
-    });
-  }
-
-  const b = bodyRecord(body);
-
-  if (!b) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Invalid JSON body.",
-    });
-  }
-
-  const recordingId = normString(b.recordingId);
-  const lineKey = normString(b.lineKey);
-  const groupKeyClient = normString(b.groupKey);
-
-  function normNullableId(v: unknown): string | null {
-    const s = normString(v);
-    if (!s) return null;
-    if (s === "null" || s === "undefined") return null;
-    return s;
-  }
-
-  const parentId = normNullableId(b.parentId);
-  const legacyBodyPlain = normString(b.bodyPlain);
-  const hasBodyRich = "bodyRich" in b;
-  const bodyRichInput: unknown = hasBodyRich ? (b.bodyRich ?? null) : null;
-
-  let bodyPlain = legacyBodyPlain;
-  let bodyRichJson = JSON.stringify({
-    type: "doc",
-    content: [{ type: "paragraph" }],
-  });
-
-  if (bodyRichInput !== null && typeof bodyRichInput !== "undefined") {
-    const v = validateAndSanitizeTipTapDoc(bodyRichInput);
-    if (!v.ok) {
-      return jsonErr(correlationId, 400, { ok: false, error: v.error });
-    }
-    bodyPlain = v.plain;
-    try {
-      bodyRichJson = JSON.stringify(v.doc);
-    } catch {
-      return jsonErr(correlationId, 400, {
-        ok: false,
-        error: "Invalid bodyRich.",
-      });
-    }
-  } else {
-    if (!bodyPlain) {
-      return jsonErr(correlationId, 400, {
-        ok: false,
-        error: "Missing bodyPlain.",
-      });
-    }
-    if (bodyPlain.length > 5000) {
-      return jsonErr(correlationId, 400, {
-        ok: false,
-        error: "bodyPlain too long.",
-      });
-    }
+    return validationError(400, "Invalid bodyRich.");
   }
 
   if (bodyRichJson.length > 200_000) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "bodyRich too large.",
-    });
+    return validationError(400, "bodyRich too large.");
   }
 
-  const lineTextSnapshot = normString(b.lineTextSnapshot);
-  const lyricsVersion = normString(b.lyricsVersion) || null;
+  return {
+    ok: true,
+    value: {
+      bodyPlain: validated.plain,
+      bodyRichJson,
+    },
+  };
+}
 
-  const tMs = clampInt(b.tMs, 0, 60 * 60 * 1000);
-  const tMsOrNull = tMs === null ? null : tMs;
+function parseCommentCommandDraft(
+  raw: unknown,
+): ValidationResult<CommentCommandDraft> {
+  const body = bodyRecord(raw);
+  if (!body) return validationError(400, "Invalid JSON body.");
 
-  if (!recordingId) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Missing recordingId.",
-    });
-  }
-  if (!lineKey) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Missing lineKey.",
-    });
-  }
+  const content = parseCommentContent(body);
+  if (!content.ok) return content;
 
-  const resolved = await resolveGroupKeyForAnchor({ recordingId, lineKey });
+  const recordingId = normString(body.recordingId);
+  if (!recordingId) return validationError(400, "Missing recordingId.");
+
+  const lineKey = normString(body.lineKey);
+  if (!lineKey) return validationError(400, "Missing lineKey.");
+
+  return {
+    ok: true,
+    value: {
+      ...content.value,
+      recordingId,
+      lineKey,
+      groupKeyClient: normString(body.groupKey),
+      parentId: normNullableId(body.parentId),
+      lineTextSnapshot: normString(body.lineTextSnapshot),
+      lyricsVersion: normString(body.lyricsVersion) || null,
+      tMs: clampInt(body.tMs, 0, 60 * 60 * 1000),
+    },
+  };
+}
+
+async function resolveCommentCommand(
+  draft: CommentCommandDraft,
+): Promise<ValidationResult<CommentCommand>> {
+  const resolved = await resolveGroupKeyForAnchor({
+    recordingId: draft.recordingId,
+    lineKey: draft.lineKey,
+  });
   const groupKey = resolved.groupKey;
 
-  if (!groupKey) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Could not resolve groupKey.",
-    });
+  if (!groupKey) return validationError(400, "Could not resolve groupKey.");
+
+  if (draft.groupKeyClient && draft.groupKeyClient !== groupKey) {
+    return validationError(409, "Group key changed. Refresh and try again.");
   }
 
-  if (groupKeyClient && groupKeyClient !== groupKey) {
-    return jsonErr(correlationId, 409, {
-      ok: false,
-      error: "Group key changed. Refresh and try again.",
-    });
+  if (!draft.bodyPlain) return validationError(400, "Missing bodyPlain.");
+  if (draft.bodyPlain.length > 5000) {
+    return validationError(400, "bodyPlain too long.");
+  }
+  if (!draft.lineTextSnapshot) {
+    return validationError(400, "Missing lineTextSnapshot.");
+  }
+  if (draft.lineTextSnapshot.length > 2000) {
+    return validationError(400, "lineTextSnapshot too long.");
+  }
+  if (draft.parentId && !isUuid(draft.parentId)) {
+    return validationError(400, "Invalid parentId.");
   }
 
-  if (!bodyPlain) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Missing bodyPlain.",
-    });
-  }
-  if (bodyPlain.length > 5000) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "bodyPlain too long.",
-    });
-  }
-  if (!lineTextSnapshot) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Missing lineTextSnapshot.",
-    });
-  }
-  if (lineTextSnapshot.length > 2000) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "lineTextSnapshot too long.",
-    });
-  }
-  if (parentId && !isUuid(parentId)) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Invalid parentId.",
-    });
+  return {
+    ok: true,
+    value: {
+      recordingId: draft.recordingId,
+      lineKey: draft.lineKey,
+      groupKey,
+      parentId: draft.parentId,
+      bodyRichJson: draft.bodyRichJson,
+      bodyPlain: draft.bodyPlain,
+      lineTextSnapshot: draft.lineTextSnapshot,
+      lyricsVersion: draft.lyricsVersion,
+      tMs: draft.tMs,
+    },
+  };
+}
+
+async function readCommentCommand(
+  req: NextRequest,
+): Promise<ValidationResult<CommentCommand>> {
+  let raw: unknown;
+
+  try {
+    raw = await req.json();
+  } catch {
+    return validationError(400, "Invalid JSON body.");
   }
 
+  const draft = parseCommentCommandDraft(raw);
+  if (!draft.ok) return draft;
+
+  return resolveCommentCommand(draft.value);
+}
+
+async function resolvePostingAuthority(
+  req: NextRequest,
+  correlationId: string,
+): Promise<PostingAuthorityResult> {
   const memberId = await requireExegesisMemberId();
+
   if (!memberId) {
-    return gateError(req, {
-      correlationId,
-      status: 401,
-      domain: "exegesis",
-      code: "AUTH_REQUIRED",
-      action: "login",
-      message: "Sign in to post a comment.",
-    });
+    return {
+      ok: false,
+      response: gateError(req, {
+        correlationId,
+        status: 401,
+        domain: "exegesis",
+        code: "AUTH_REQUIRED",
+        action: "login",
+        message: "Sign in to post a comment.",
+      }),
+    };
   }
 
   if (!isUuid(memberId)) {
-    return gateError(req, {
-      correlationId,
-      status: 403,
-      domain: "exegesis",
-      code: "PROVISIONING",
-      action: "wait",
-      message: "Still setting things up. Try again shortly.",
-    });
+    return {
+      ok: false,
+      response: gateError(req, {
+        correlationId,
+        status: 403,
+        domain: "exegesis",
+        code: "PROVISIONING",
+        action: "wait",
+        message: "Still setting things up. Try again shortly.",
+      }),
+    };
   }
 
   const canPost = await requireCanPost(memberId);
   if (!canPost) {
-    return gateError(req, {
-      correlationId,
-      status: 403,
-      domain: "exegesis",
-      code: "TIER_REQUIRED",
-      action: "subscribe",
-      message: "Posting requires Patron or Partner.",
-    });
+    return {
+      ok: false,
+      response: gateError(req, {
+        correlationId,
+        status: 403,
+        domain: "exegesis",
+        code: "TIER_REQUIRED",
+        action: "subscribe",
+        message: "Posting requires Patron or Partner.",
+      }),
+    };
   }
 
   const canonicalIdentity = await ensureMemberIdentity(memberId);
 
+  return {
+    ok: true,
+    memberId,
+    identity: canonicalIdentity,
+  };
+}
+
+async function insertComment(params: {
+  command: CommentCommand;
+  memberId: string;
+  anonLabel: string;
+}): Promise<CommentInsertRow | null> {
+  const { command, memberId, anonLabel } = params;
+  const {
+    recordingId,
+    groupKey,
+    lineKey,
+    parentId,
+    bodyRichJson,
+    bodyPlain,
+    tMs,
+    lineTextSnapshot,
+    lyricsVersion,
+  } = command;
+
   const rootIdForRootComment = crypto.randomUUID();
   const commentIdForReply = crypto.randomUUID();
+  const parentUuid = parentId;
 
-  try {
-    const parentUuid = parentId;
-
-    const q = await sql<{
-      inserted_count: number;
-      guard_err: string | null;
-      id: string | null;
-      track_id: string | null;
-      group_key: string | null;
-      line_key: string | null;
-      parent_id: string | null;
-      root_id: string | null;
-      depth: number | null;
-      body_rich: unknown | null;
-      body_plain: string | null;
-      t_ms: number | null;
-      line_text_snapshot: string | null;
-      lyrics_version: string | null;
-      created_by_member_id: string | null;
-      status: "live" | "hidden" | "deleted" | null;
-      created_at: string | null;
-      edited_at: string | null;
-      edit_count: number | null;
-      vote_count: number | null;
-      meta_track_id: string;
-      meta_group_key: string;
-      meta_pinned_comment_id: string | null;
-      meta_locked: boolean;
-      meta_comment_count: number;
-      meta_last_activity_at: string;
-      meta_created_at: string;
-      meta_updated_at: string;
-      ident_member_id: string;
-      ident_public_name_unlocked_at: string | null;
-      ident_contribution_count: number;
-    }>`
+  const result = await sql<CommentInsertRow>`
       with
 params as (
   select
@@ -590,178 +627,300 @@ join meta_out m on true
 join ident_out u on true
 left join inserted i on true
 limit 1
-    `;
+  `;
 
-    const row = q.rows?.[0] ?? null;
+  return result.rows?.[0] ?? null;
+}
 
-    if (!row) {
+function guardFailureResponse(
+  req: NextRequest,
+  correlationId: string,
+  guardError: string | null,
+): NextResponse {
+  switch (guardError) {
+    case "LOCKED":
+      return gateError(req, {
+        correlationId,
+        status: 403,
+        domain: "exegesis",
+        code: "INVALID_REQUEST",
+        action: "wait",
+        message: "This thread is locked.",
+      });
+    case "PARENT_NOT_FOUND":
+      return jsonErr(correlationId, 404, {
+        ok: false,
+        error: "Parent not found.",
+      });
+    case "PARENT_SCOPE":
+      return jsonErr(correlationId, 400, {
+        ok: false,
+        error: "Parent scope mismatch.",
+      });
+    case "DEPTH":
+      return jsonErr(correlationId, 400, {
+        ok: false,
+        error: "Thread depth limit reached.",
+      });
+    case "META_MISSING":
       return jsonErr(correlationId, 500, {
         ok: false,
-        error: "No response row.",
+        error: "Thread meta missing.",
       });
-    }
-
-    if ((row.inserted_count ?? 0) === 0) {
-      if (row.guard_err === "LOCKED") {
-        return gateError(req, {
-          correlationId,
-          status: 403,
-          domain: "exegesis",
-          code: "INVALID_REQUEST",
-          action: "wait",
-          message: "This thread is locked.",
-        });
-      }
-      if (row.guard_err === "PARENT_NOT_FOUND") {
-        return jsonErr(correlationId, 404, {
-          ok: false,
-          error: "Parent not found.",
-        });
-      }
-      if (row.guard_err === "PARENT_SCOPE") {
-        return jsonErr(correlationId, 400, {
-          ok: false,
-          error: "Parent scope mismatch.",
-        });
-      }
-      if (row.guard_err === "DEPTH") {
-        return jsonErr(correlationId, 400, {
-          ok: false,
-          error: "Thread depth limit reached.",
-        });
-      }
-      if (row.guard_err === "META_MISSING") {
-        return jsonErr(correlationId, 500, {
-          ok: false,
-          error: "Thread meta missing.",
-        });
-      }
-      if (row.guard_err === "IDENT_MISSING") {
-        return jsonErr(correlationId, 500, {
-          ok: false,
-          error: "Identity missing.",
-        });
-      }
-
+    case "IDENT_MISSING":
+      return jsonErr(correlationId, 500, {
+        ok: false,
+        error: "Identity missing.",
+      });
+    default:
       return jsonErr(correlationId, 500, {
         ok: false,
         error: "Insert suppressed unexpectedly.",
       });
-    }
+  }
+}
 
-    if (
-      !row.id ||
-      !row.track_id ||
-      !row.group_key ||
-      !row.line_key ||
-      !row.root_id
-    ) {
-      return jsonErr(correlationId, 500, {
+function assertInsertedRow(
+  row: CommentInsertRow,
+): asserts row is InsertedCommentRow {
+  if (row.inserted_count !== 1) {
+    throw new Error("assertInsertedRow: inserted_count != 1");
+  }
+
+  if (
+    !row.id ||
+    !row.track_id ||
+    !row.group_key ||
+    !row.line_key ||
+    !row.root_id ||
+    typeof row.depth !== "number" ||
+    row.body_plain === null ||
+    row.line_text_snapshot === null ||
+    !row.created_by_member_id ||
+    !row.status ||
+    !row.created_at ||
+    typeof row.edit_count !== "number" ||
+    typeof row.vote_count !== "number"
+  ) {
+    throw new Error("assertInsertedRow: missing required comment fields");
+  }
+}
+
+function resolveInsertResult(
+  req: NextRequest,
+  correlationId: string,
+  row: CommentInsertRow | null,
+): InsertResolution {
+  if (!row) {
+    return {
+      ok: false,
+      response: jsonErr(correlationId, 500, {
+        ok: false,
+        error: "No response row.",
+      }),
+    };
+  }
+
+  if ((row.inserted_count ?? 0) === 0) {
+    return {
+      ok: false,
+      response: guardFailureResponse(req, correlationId, row.guard_err),
+    };
+  }
+
+  if (
+    !row.id ||
+    !row.track_id ||
+    !row.group_key ||
+    !row.line_key ||
+    !row.root_id
+  ) {
+    return {
+      ok: false,
+      response: jsonErr(correlationId, 500, {
         ok: false,
         error: "Insert returned incomplete row.",
-      });
-    }
-
-    assertInsertedRow(row);
-
-    const comment: CommentDTO = {
-      id: row.id,
-      recordingId: row.track_id,
-      groupKey: row.group_key,
-      lineKey: row.line_key,
-      parentId: row.parent_id,
-      rootId: row.root_id,
-      depth: row.depth,
-      bodyRich: row.body_rich,
-      bodyPlain: row.body_plain,
-      tMs: row.t_ms,
-      lineTextSnapshot: row.line_text_snapshot,
-      lyricsVersion: row.lyrics_version,
-      createdByMemberId: row.created_by_member_id,
-      status: row.status,
-      createdAt: row.created_at,
-      editedAt: row.edited_at,
-      editCount: row.edit_count,
-      voteCount: row.vote_count,
-      viewerHasVoted: false,
+      }),
     };
+  }
 
-    const meta: ThreadMetaDTO = {
-      recordingId: row.meta_track_id,
-      groupKey: row.meta_group_key,
-      pinnedCommentId: row.meta_pinned_comment_id,
-      locked: row.meta_locked,
-      commentCount: row.meta_comment_count,
-      lastActivityAt: row.meta_last_activity_at,
-      createdAt: row.meta_created_at,
-      updatedAt: row.meta_updated_at,
-    };
+  assertInsertedRow(row);
+  return { ok: true, row };
+}
 
-    const identityDto = await buildExegesisIdentityDto(row.ident_member_id);
+function buildCommentDto(row: InsertedCommentRow): CommentDTO {
+  return {
+    id: row.id,
+    recordingId: row.track_id,
+    groupKey: row.group_key,
+    lineKey: row.line_key,
+    parentId: row.parent_id,
+    rootId: row.root_id,
+    depth: row.depth,
+    bodyRich: row.body_rich,
+    bodyPlain: row.body_plain,
+    tMs: row.t_ms,
+    lineTextSnapshot: row.line_text_snapshot,
+    lyricsVersion: row.lyrics_version,
+    createdByMemberId: row.created_by_member_id,
+    status: row.status,
+    createdAt: row.created_at,
+    editedAt: row.edited_at,
+    editCount: row.edit_count,
+    voteCount: row.vote_count,
+    viewerHasVoted: false,
+  };
+}
 
-    const identities: Record<string, IdentityDTO> = {
-      [row.ident_member_id]: {
-        ...identityDto,
-        publicNameUnlockedAt: row.ident_public_name_unlocked_at,
-        contributionCount: row.ident_contribution_count,
-      },
-    };
+function buildThreadMetaDto(row: InsertedCommentRow): ThreadMetaDTO {
+  return {
+    recordingId: row.meta_track_id,
+    groupKey: row.meta_group_key,
+    pinnedCommentId: row.meta_pinned_comment_id,
+    locked: row.meta_locked,
+    commentCount: row.meta_comment_count,
+    lastActivityAt: row.meta_last_activity_at,
+    createdAt: row.meta_created_at,
+    updatedAt: row.meta_updated_at,
+  };
+}
 
-    const newlyAwardedBadges = await runAutoBadgeAwardsForMember({
-      memberId,
+function buildIdentityMap(
+  row: InsertedCommentRow,
+  identity: PostingIdentity,
+): Record<string, IdentityDTO> {
+  return {
+    [row.ident_member_id]: {
+      memberId: identity.memberId,
+      anonLabel: identity.anonLabel,
+      publicName: identity.publicName,
+      publicNameUnlockedAt: row.ident_public_name_unlocked_at,
+      contributionCount: row.ident_contribution_count,
+      isAdmin: identity.isAdmin,
+    },
+  };
+}
+
+async function runPostCommitBadgeEffects(params: {
+  memberId: string;
+  recordingId: string;
+  publicNameUnlockedAt: string | null;
+  correlationId: string;
+}): Promise<NewlyAwardedBadge[]> {
+  let badges: NewlyAwardedBadge[];
+
+  try {
+    badges = await runAutoBadgeAwardsForMember({
+      memberId: params.memberId,
       trigger:
-        row.ident_public_name_unlocked_at != null
+        params.publicNameUnlockedAt !== null
           ? "public_name_unlocked"
           : "exegesis_contribution_created",
-      recordingId,
+      recordingId: params.recordingId,
       grantedBy: "system",
-      correlationId,
+      correlationId: params.correlationId,
+    });
+  } catch (error: unknown) {
+    console.error("[exegesis/comment] post-commit badge award failed", error);
+    return [];
+  }
+
+  if (badges.length === 0) return badges;
+
+  try {
+    await markOverlayAnnouncedForAwardedBadges({
+      memberId: params.memberId,
+      badges,
+    });
+  } catch (error: unknown) {
+    console.error(
+      "[exegesis/comment] post-commit badge announcement failed",
+      error,
+    );
+  }
+
+  return badges;
+}
+
+function describeUnexpectedError(error: unknown): string {
+  const details =
+    typeof error === "object" && error !== null
+      ? (error as {
+          code?: string;
+          message?: string;
+          detail?: string;
+          hint?: string;
+        })
+      : null;
+
+  let message = "";
+  if (typeof details?.message === "string" && details.message.trim()) {
+    message = details.message.trim();
+  } else if (error instanceof Error && error.message.trim()) {
+    message = error.message.trim();
+  }
+
+  const extras = [details?.code, details?.detail, details?.hint].filter(
+    (value): value is string =>
+      typeof value === "string" && value.trim().length > 0,
+  );
+
+  return `${message || "Unknown error."}${
+    extras.length > 0 ? ` (${extras.join(" · ")})` : ""
+  }`;
+}
+
+export async function POST(req: NextRequest) {
+  const correlationId = correlationIdFromRequest(req);
+
+  const command = await readCommentCommand(req);
+  if (!command.ok) {
+    return jsonErr(correlationId, command.status, {
+      ok: false,
+      error: command.error,
+    });
+  }
+
+  const authority = await resolvePostingAuthority(req, correlationId);
+  if (!authority.ok) return authority.response;
+
+  try {
+    const insertRow = await insertComment({
+      command: command.value,
+      memberId: authority.memberId,
+      anonLabel: authority.identity.anonLabel,
     });
 
-    await markOverlayAnnouncedForAwardedBadges({
-      memberId,
-      badges: newlyAwardedBadges,
+    const insert = resolveInsertResult(req, correlationId, insertRow);
+    if (!insert.ok) return insert.response;
+
+    const { row } = insert;
+    const identities = buildIdentityMap(row, authority.identity);
+    const newlyAwardedBadges = await runPostCommitBadgeEffects({
+      memberId: authority.memberId,
+      recordingId: command.value.recordingId,
+      publicNameUnlockedAt: row.ident_public_name_unlocked_at,
+      correlationId,
     });
 
     return jsonOk<ApiOk>(
       {
         ok: true,
-        recordingId,
-        groupKey,
-        comment,
-        meta,
+        recordingId: command.value.recordingId,
+        groupKey: command.value.groupKey,
+        comment: buildCommentDto(row),
+        meta: buildThreadMetaDto(row),
         identities,
         newlyAwardedBadges,
       },
       { correlationId },
     );
-  } catch (e: unknown) {
-    console.error("[exegesis/comment] POST failed", e);
-
-    const errObj = e as {
-      code?: string;
-      message?: string;
-      detail?: string;
-      hint?: string;
-    } | null;
-
-    const msg =
-      typeof errObj?.message === "string" && errObj.message.trim()
-        ? errObj.message.trim()
-        : e instanceof Error && e.message.trim()
-          ? e.message.trim()
-          : "";
-
-    const extra =
-      errObj?.code || errObj?.detail || errObj?.hint
-        ? ` (${[errObj?.code, errObj?.detail, errObj?.hint]
-            .filter(Boolean)
-            .join(" · ")})`
-        : "";
+  } catch (error: unknown) {
+    console.error("[exegesis/comment] POST failed", error);
 
     return jsonErr(correlationId, 500, {
       ok: false,
-      error: (msg || "Unknown error.") + extra,
+      error: describeUnexpectedError(error),
     });
   }
 }
