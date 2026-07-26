@@ -167,7 +167,10 @@ function jsonErr(correlationId: string, status: number, body: ApiErr) {
   return jsonExegesisErr(correlationId, status, body);
 }
 
-function validationError(status: number, error: string): ValidationResult<never> {
+function validationError(
+  status: number,
+  error: string,
+): ValidationResult<never> {
   return { ok: false, status, error };
 }
 
@@ -417,10 +420,10 @@ params as (
     ${lineKey}::text              as line_key,
     nullif(${parentUuid}::text, '')::uuid as parent_id,
       ${memberId}::uuid             as member_id,
-    ${canonicalIdentity.anonLabel}::text as anon_label,
+    ${anonLabel}::text            as anon_label,
     ${bodyRichJson}::jsonb        as body_rich,
     ${bodyPlain}::text            as body_plain,
-    ${tMsOrNull}::int             as t_ms,
+    ${tMs}::int                   as t_ms,
     ${lineTextSnapshot}::text     as line_text_snapshot,
     ${lyricsVersion}::text        as lyrics_version,
     ${rootIdForRootComment}::uuid as root_id_for_root,
