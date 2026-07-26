@@ -4,25 +4,28 @@
 import React from "react";
 import { VisualizerSnapshotCanvas } from "@/app/home/player/VisualizerPattern";
 
-type CardSpec = {
+type SubscribeTier = "patron" | "partner";
+type SubscribeVariant = "link" | "button" | "card";
+
+type CardSpec = Readonly<{
   title: string;
   price: string;
-  bullets: string[];
-};
+  bullets: readonly string[];
+}>;
 
-type Props = {
+type Props = Readonly<{
   loggedIn: boolean;
-  variant?: "link" | "button" | "card";
+  variant?: SubscribeVariant;
   label?: string;
-  tier?: "patron" | "partner";
+  tier?: SubscribeTier;
   card?: CardSpec;
 
   // NEW: current-tier “affirmation” state
   disabled?: boolean;
   current?: boolean;
-};
+}>;
 
-function TickIcon(props: { size?: number }) {
+function TickIcon(props: Readonly<{ size?: number }>) {
   const { size = 14 } = props;
   return (
     <svg
@@ -51,7 +54,7 @@ function TickIcon(props: { size?: number }) {
  * - separators between rows
  * - NO outer container border/background
  */
-function FeatureRows(props: { items: string[] }) {
+function FeatureRows(props: Readonly<{ items: readonly string[] }>) {
   const { items } = props;
 
   return (
@@ -104,7 +107,7 @@ function FeatureRows(props: { items: string[] }) {
  * - NO pill container/border/background
  * - designed to sit vertically centered in the right column
  */
-function PriceBlock(props: { price: string; subcopy: string }) {
+function PriceBlock(props: Readonly<{ price: string; subcopy: string }>) {
   const { price, subcopy } = props;
 
   return (
@@ -144,14 +147,16 @@ function PriceBlock(props: { price: string; subcopy: string }) {
   );
 }
 
-function CardGlowRing(props: {
-  radius?: number;
-  seed?: number;
-  opacity?: number;
-  ringPx?: number;
-  glowPx?: number;
-  blurPx?: number;
-}) {
+function CardGlowRing(
+  props: Readonly<{
+    radius?: number;
+    seed?: number;
+    opacity?: number;
+    ringPx?: number;
+    glowPx?: number;
+    blurPx?: number;
+  }>,
+) {
   const {
     radius = 16,
     seed = 913,
@@ -197,50 +202,141 @@ function CardGlowRing(props: {
   );
 }
 
-export default function SubscribeButton(props: Props) {
-  const {
-    loggedIn,
-    variant = "button",
-    label = "Become a Patron",
-    tier = "patron",
-    card,
-    disabled = false,
-    current = false,
-  } = props;
+type CheckoutResponse = Readonly<{
+  url?: string;
+  error?: string;
+}>;
 
-  const [hover, setHover] = React.useState(false);
+type CheckoutActionProps = Readonly<{
+  tier: SubscribeTier;
+  disabled: boolean;
+}>;
+
+type SubscribeControlProps = Readonly<{
+  label: string;
+  disabled: boolean;
+  onCheckout: () => Promise<void>;
+}>;
+
+type CardSubscribeControlProps = SubscribeControlProps &
+  Readonly<{
+    tier: SubscribeTier;
+    card?: CardSpec;
+    current: boolean;
+    hover: boolean;
+    onHoverChange: (hover: boolean) => void;
+  }>;
+
+type CardVisualState = Readonly<{
+  border: string;
+  background: string;
+  boxShadow: string;
+  transform: string;
+}>;
+
+function defaultCardSpec(tier: SubscribeTier): CardSpec {
+  if (tier === "partner") {
+    return {
+      title: "Partner",
+      price: "$20 / mo",
+      bullets: ["Benefit 1", "Benefit 2", "Benefit 3", "Benefit 4"],
+    };
+  }
+
+  return {
+    title: "Patron",
+    price: "$5 / mo",
+    bullets: ["Benefit 1", "Benefit 2", "Benefit 3", "Benefit 4"],
+  };
+}
+
+function cardSubcopy(tier: SubscribeTier): string {
+  if (tier === "partner") return "Billed annually. Cancel anytime.";
+  return "Billed monthly. Cancel anytime.";
+}
+
+function cardGlowSeed(tier: SubscribeTier): number {
+  if (tier === "partner") return 972;
+  return 913;
+}
+
+function cardVisualState(
+  current: boolean,
+  isHovering: boolean,
+): CardVisualState {
+  if (current) {
+    return {
+      border: "1px solid rgba(255,255,255,0.26)",
+      background: "rgba(255,255,255,0.075)",
+      boxShadow: "0 18px 46px rgba(0,0,0,0.46)",
+      transform: "translateY(-1px)",
+    };
+  }
+
+  if (isHovering) {
+    return {
+      border: "1px solid rgba(255,255,255,0.22)",
+      background: "rgba(255,255,255,0.07)",
+      boxShadow: "0 18px 42px rgba(0,0,0,0.42)",
+      transform: "translateY(-1px)",
+    };
+  }
+
+  return {
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.045)",
+    boxShadow: "0 14px 34px rgba(0,0,0,0.34)",
+    transform: "translateY(0px)",
+  };
+}
+
+function featureItems(items: readonly string[]): readonly string[] {
+  if (!Array.isArray(items)) return [];
+  return items.slice(0, 5);
+}
+
+function checkoutReturnTo(): string {
+  return `${window.location.pathname}${window.location.search}`;
+}
+
+async function redirectToCheckout(tier: SubscribeTier): Promise<void> {
+  const res = await fetch("/api/stripe/create-checkout-session", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      tier,
+      returnTo: checkoutReturnTo(),
+    }),
+  });
+
+  const data = (await res.json().catch(() => null)) as CheckoutResponse | null;
+
+  if (!res.ok) {
+    throw new Error(data?.error || "Unable to start checkout session");
+  }
+
+  if (!data?.url) {
+    throw new Error("Checkout session did not return a redirect URL");
+  }
+
+  window.location.assign(data.url);
+}
+
+function useCheckoutAction(props: CheckoutActionProps): {
+  checkout: () => Promise<void>;
+} {
+  const { tier, disabled } = props;
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const [, setError] = React.useState<string | null>(null);
 
-  async function go() {
+  async function checkout(): Promise<void> {
     if (disabled || isSubmitting) return;
 
     setError(null);
     setIsSubmitting(true);
 
     try {
-      const returnTo = `${window.location.pathname}${window.location.search}`;
-
-      const res = await fetch("/api/stripe/create-checkout-session", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ tier, returnTo }),
-      });
-
-      const data = (await res.json().catch(() => null)) as {
-        url?: string;
-        error?: string;
-      } | null;
-
-      if (!res.ok) {
-        throw new Error(data?.error || "Unable to start checkout session");
-      }
-
-      if (!data?.url) {
-        throw new Error("Checkout session did not return a redirect URL");
-      }
-
-      window.location.assign(data.url);
+      await redirectToCheckout(tier);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Unable to start checkout";
@@ -254,176 +350,157 @@ export default function SubscribeButton(props: Props) {
     }
   }
 
-  if (!loggedIn) return null;
+  return { checkout };
+}
 
-  if (variant === "link") {
-    return (
-      <button
-        type="button"
-        onClick={go}
-        disabled={disabled}
+function LinkSubscribeControl(props: SubscribeControlProps) {
+  const { label, disabled, onCheckout } = props;
+
+  return (
+    <button
+      type="button"
+      onClick={() => void onCheckout()}
+      disabled={disabled}
+      style={{
+        appearance: "none",
+        border: 0,
+        background: "transparent",
+        padding: 0,
+        margin: 0,
+        cursor: disabled ? "default" : "pointer",
+        color: disabled ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.84)",
+        textDecoration: "underline",
+        textUnderlineOffset: 3,
+        textDecorationColor: "rgba(255,255,255,0.28)",
+        opacity: disabled ? 0.75 : 1,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function CurrentTierBadge() {
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: "absolute",
+        top: 10,
+        right: 10,
+        padding: "4px 10px",
+        borderRadius: 999,
+        fontSize: 11,
+        lineHeight: "14px",
+        letterSpacing: "0.01em",
+        color: "rgba(255,255,255,0.92)",
+        background: "rgba(0,0,0,0.38)",
+        border: "1px solid rgba(255,255,255,0.14)",
+        boxShadow: "0 10px 22px rgba(0,0,0,0.35)",
+        pointerEvents: "none",
+      }}
+    >
+      Active
+    </div>
+  );
+}
+
+function CardSubscribeControl(props: CardSubscribeControlProps) {
+  const {
+    tier,
+    card,
+    current,
+    disabled,
+    onCheckout,
+    hover,
+    onHoverChange,
+  } = props;
+  const spec = card ?? defaultCardSpec(tier);
+  const isHovering = hover && !disabled;
+  const radius = 16;
+  const visualState = cardVisualState(current, isHovering);
+  const features = featureItems(spec.bullets);
+
+  return (
+    <button
+      type="button"
+      onClick={() => void onCheckout()}
+      disabled={disabled}
+      onMouseEnter={() => onHoverChange(true)}
+      onMouseLeave={() => onHoverChange(false)}
+      style={{
+        position: "relative",
+        textAlign: "left",
+        width: "100%",
+        borderRadius: radius,
+        border: visualState.border,
+        background: visualState.background,
+        padding: 16,
+        cursor: disabled ? "default" : "pointer",
+        color: "rgba(255,255,255,0.92)",
+        boxShadow: visualState.boxShadow,
+        transform: visualState.transform,
+        transition:
+          "transform 180ms cubic-bezier(.2,.8,.2,1), background 180ms ease, border-color 180ms ease, box-shadow 220ms ease, opacity 180ms ease",
+        opacity: disabled && !current ? 0.75 : 1,
+        overflow: "visible",
+        alignSelf: "stretch",
+      }}
+    >
+      {current && (
+        <CardGlowRing
+          radius={radius}
+          seed={cardGlowSeed(tier)}
+          opacity={0.92}
+        />
+      )}
+
+      {current && <CurrentTierBadge />}
+
+      <div
         style={{
-          appearance: "none",
-          border: 0,
-          background: "transparent",
-          padding: 0,
-          margin: 0,
-          cursor: disabled ? "default" : "pointer",
-          color: disabled ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.84)",
-          textDecoration: "underline",
-          textUnderlineOffset: 3,
-          textDecorationColor: "rgba(255,255,255,0.28)",
-          opacity: disabled ? 0.75 : 1,
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 180px)",
+          columnGap: 18,
+          alignItems: "stretch",
+          minWidth: 0,
         }}
       >
-        {label}
-      </button>
-    );
-  }
-
-  if (variant === "card") {
-    const spec: CardSpec = card ?? {
-      title: tier === "partner" ? "Partner" : "Patron",
-      price: tier === "partner" ? "$20 / mo" : "$5 / mo",
-      bullets: ["Benefit 1", "Benefit 2", "Benefit 3", "Benefit 4"],
-    };
-
-    const isHovering = hover && !disabled;
-    const radius = 16;
-
-    const subcopy =
-      tier === "partner"
-        ? "Billed annually. Cancel anytime."
-        : "Billed monthly. Cancel anytime.";
-
-    return (
-      <button
-        type="button"
-        onClick={go}
-        disabled={disabled}
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
-        style={{
-          position: "relative",
-          textAlign: "left",
-          width: "100%",
-          borderRadius: radius,
-
-          border: current
-            ? "1px solid rgba(255,255,255,0.26)"
-            : isHovering
-              ? "1px solid rgba(255,255,255,0.22)"
-              : "1px solid rgba(255,255,255,0.14)",
-
-          background: current
-            ? "rgba(255,255,255,0.075)"
-            : isHovering
-              ? "rgba(255,255,255,0.07)"
-              : "rgba(255,255,255,0.045)",
-
-          padding: 16,
-          cursor: disabled ? "default" : "pointer",
-          color: "rgba(255,255,255,0.92)",
-
-          boxShadow: current
-            ? "0 18px 46px rgba(0,0,0,0.46)"
-            : isHovering
-              ? "0 18px 42px rgba(0,0,0,0.42)"
-              : "0 14px 34px rgba(0,0,0,0.34)",
-
-          transform: current
-            ? "translateY(-1px)"
-            : isHovering
-              ? "translateY(-1px)"
-              : "translateY(0px)",
-          transition:
-            "transform 180ms cubic-bezier(.2,.8,.2,1), background 180ms ease, border-color 180ms ease, box-shadow 220ms ease, opacity 180ms ease",
-
-          opacity: disabled && !current ? 0.75 : 1,
-          overflow: "visible",
-          alignSelf: "stretch",
-        }}
-      >
-        {/* Current-tier glow ring */}
-        {current && (
-          <CardGlowRing
-            radius={radius}
-            seed={tier === "partner" ? 972 : 913}
-            opacity={0.92}
-          />
-        )}
-
-        {/* “Current” badge */}
-        {current && (
-          <div
-            aria-hidden
-            style={{
-              position: "absolute",
-              top: 10,
-              right: 10,
-              padding: "4px 10px",
-              borderRadius: 999,
-              fontSize: 11,
-              lineHeight: "14px",
-              letterSpacing: "0.01em",
-              color: "rgba(255,255,255,0.92)",
-              background: "rgba(0,0,0,0.38)",
-              border: "1px solid rgba(255,255,255,0.14)",
-              boxShadow: "0 10px 22px rgba(0,0,0,0.35)",
-              pointerEvents: "none",
-            }}
-          >
-            Active
-          </div>
-        )}
-
-        {/* Two-column layout:
-            - left: title + features
-            - right: price block, vertically centered */}
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 180px)",
-            columnGap: 18,
-            alignItems: "stretch",
+            gap: 12,
+            alignContent: "start",
             minWidth: 0,
           }}
         >
           <div
             style={{
-              display: "grid",
-              gap: 12,
-              alignContent: "start",
-              minWidth: 0,
+              fontSize: 16,
+              fontWeight: 700,
+              letterSpacing: "0.01em",
+              paddingTop: 2,
             }}
           >
-            <div
-              style={{
-                fontSize: 16,
-                fontWeight: 700,
-                letterSpacing: "0.01em",
-                paddingTop: 2,
-              }}
-            >
-              {spec.title}
-            </div>
-
-            {Array.isArray(spec.bullets) && spec.bullets.length > 0 ? (
-              <FeatureRows items={spec.bullets.slice(0, 5)} />
-            ) : null}
+            {spec.title}
           </div>
 
-          <PriceBlock price={spec.price} subcopy={subcopy} />
+          {features.length > 0 && <FeatureRows items={features} />}
         </div>
-      </button>
-    );
-  }
 
-  // default: pill button
+        <PriceBlock price={spec.price} subcopy={cardSubcopy(tier)} />
+      </div>
+    </button>
+  );
+}
+
+function PillSubscribeControl(props: SubscribeControlProps) {
+  const { label, disabled, onCheckout } = props;
+
   return (
     <button
       type="button"
-      onClick={go}
+      onClick={() => void onCheckout()}
       disabled={disabled}
       style={{
         height: 32,
@@ -438,5 +515,54 @@ export default function SubscribeButton(props: Props) {
     >
       {label}
     </button>
+  );
+}
+
+export default function SubscribeButton(props: Props) {
+  const {
+    loggedIn,
+    variant = "button",
+    label = "Become a Patron",
+    tier = "patron",
+    card,
+    disabled = false,
+    current = false,
+  } = props;
+  const [hover, setHover] = React.useState(false);
+  const { checkout } = useCheckoutAction({ tier, disabled });
+
+  if (!loggedIn) return null;
+
+  if (variant === "link") {
+    return (
+      <LinkSubscribeControl
+        label={label}
+        disabled={disabled}
+        onCheckout={checkout}
+      />
+    );
+  }
+
+  if (variant === "card") {
+    return (
+      <CardSubscribeControl
+        label={label}
+        tier={tier}
+        card={card}
+        current={current}
+        disabled={disabled}
+        onCheckout={checkout}
+        hover={hover}
+        onHoverChange={setHover}
+      />
+    );
+  }
+
+  return (
+    <PillSubscribeControl
+      label={label}
+      disabled={disabled}
+      onCheckout={checkout}
+    />
   );
 }

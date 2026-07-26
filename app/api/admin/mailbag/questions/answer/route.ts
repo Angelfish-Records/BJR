@@ -43,6 +43,67 @@ type PTBlock = {
 };
 type PortableText = PTBlock[];
 
+type QuestionRow = {
+  id: string;
+  question_text: string;
+  asker_name: string | null;
+  kind: SubmissionKind;
+  member_email: string | null;
+  status: string;
+  notify_email_sent_at: string | null;
+};
+
+type NotificationRow = {
+  question_id: string;
+  question_text: string;
+  to_email: string;
+};
+
+type PickedText = {
+  key: string | null;
+  value: string;
+};
+
+type AnswerRequest = {
+  questionIds: string[];
+  pickedTitle: PickedText;
+  pickedAnswer: PickedText;
+  title: string;
+  answer: string;
+  visibility: Visibility;
+  pinned: boolean;
+};
+
+type ParseAnswerRequestResult =
+  | { ok: true; value: AnswerRequest }
+  | { ok: false; response: NextResponse };
+
+type SelectionResult =
+  | { ok: true; kind: SubmissionKind }
+  | { ok: false; response: NextResponse };
+
+type MailConfig = {
+  fromEmail: string;
+  appName: string;
+  supportEmail?: string;
+};
+
+type CreatedPost = {
+  _id: string;
+  slug?: { current?: string };
+};
+
+type PublishedPost = {
+  created: CreatedPost;
+  slug: string;
+  finalTitle: string;
+};
+
+type SendResult = {
+  sent: boolean;
+  providerId: string | null;
+};
+
 function must(v: string | undefined, name: string) {
   if (!v) throw new Error(`Missing ${name}`);
   return v;
@@ -79,7 +140,7 @@ function escapeHtml(input: string): string {
 }
 
 function nl2brHtml(input: string): string {
-  return escapeHtml(input).replace(/\n/g, "<br />");
+  return escapeHtml(input).replaceAll("\n", "<br />");
 }
 
 function placeholders(count: number, startAt = 1): string {
@@ -92,7 +153,7 @@ function slugify(input: string): string {
   let pendingDash = false;
 
   for (const char of normalized) {
-    const code = char.charCodeAt(0);
+    const code = char.codePointAt(0) ?? 0;
     const isAlphaNumeric =
       (code >= 97 && code <= 122) || (code >= 48 && code <= 57);
 
@@ -162,20 +223,14 @@ function pickIds(body: Body | null): { raw: unknown; ids: string[] } {
   }
 
   if (Array.isArray(raw)) {
-    const ids = raw
-      .map((x) => String(x))
-      .map((x) => x.trim())
-      .filter(Boolean);
+    const ids = raw.map(String).map((x) => x.trim()).filter(Boolean);
     return { raw, ids };
   }
 
   return { raw, ids: [] };
 }
 
-function pickText(
-  body: Body | null,
-  keys: Array<keyof Body>,
-): { key: string | null; value: string } {
+function pickText(body: Body | null, keys: Array<keyof Body>): PickedText {
   for (const kk of keys) {
     const v = body?.[kk];
     if (typeof v === "string") {
@@ -238,37 +293,34 @@ function buildPrivateReplyHtml(params: {
   ].join("");
 }
 
-export async function POST(req: NextRequest) {
-  await requireAdminMemberId();
+function rawIdsType(rawIds: unknown): string {
+  if (rawIds === null) return "null";
+  if (Array.isArray(rawIds)) return "array";
+  return typeof rawIds;
+}
 
-  const body = (await req.json().catch(() => null)) as Body | null;
+function uniqueIds(ids: string[]): string[] {
+  return Array.from(new Set(ids));
+}
 
+function parseAnswerRequest(body: Body | null): ParseAnswerRequestResult {
   const { raw: rawIds, ids: rawList } = pickIds(body);
   const badIds = rawList.filter((id) => !isUuid(id));
 
   if (!rawList.length || badIds.length) {
-    return json(400, {
+    return {
       ok: false,
-      code: "BAD_IDS",
-      receivedKeys: body ? Object.keys(body) : [],
-      receivedIdsType:
-        rawIds === null
-          ? "null"
-          : Array.isArray(rawIds)
-            ? "array"
-            : typeof rawIds,
-      badIds: badIds.slice(0, 10),
-    });
+      response: json(400, {
+        ok: false,
+        code: "BAD_IDS",
+        receivedKeys: body ? Object.keys(body) : [],
+        receivedIdsType: rawIdsType(rawIds),
+        badIds: badIds.slice(0, 10),
+      }),
+    };
   }
 
-  const seen = new Set<string>();
-  const questionIds = rawList.filter((id) =>
-    seen.has(id) ? false : (seen.add(id), true),
-  );
-
   const pickedTitle = pickText(body, ["title"]);
-  const title = pickedTitle.value;
-
   const pickedAnswer = pickText(body, [
     "answer",
     "answerText",
@@ -276,30 +328,36 @@ export async function POST(req: NextRequest) {
     "content",
     "text",
   ]);
-  const answer = pickedAnswer.value;
 
-  const visibility = asVisibility(body?.visibility);
-  const pinned = Boolean(body?.pinned);
-
-  if (!answer) {
-    return json(400, {
+  if (!pickedAnswer.value) {
+    return {
       ok: false,
-      code: "EMPTY_ANSWER",
-      receivedKeys: body ? Object.keys(body) : [],
-      hint: "Expected one of: answer | answerText | body | content | text",
-    });
+      response: json(400, {
+        ok: false,
+        code: "EMPTY_ANSWER",
+        receivedKeys: body ? Object.keys(body) : [],
+        hint: "Expected one of: answer | answerText | body | content | text",
+      }),
+    };
   }
 
+  return {
+    ok: true,
+    value: {
+      questionIds: uniqueIds(rawList),
+      pickedTitle,
+      pickedAnswer,
+      title: pickedTitle.value,
+      answer: pickedAnswer.value,
+      visibility: asVisibility(body?.visibility),
+      pinned: Boolean(body?.pinned),
+    },
+  };
+}
+
+async function loadQuestions(questionIds: string[]): Promise<QuestionRow[]> {
   const inPh1 = placeholders(questionIds.length, 1);
-  const qRes = await sql.query<{
-    id: string;
-    question_text: string;
-    asker_name: string | null;
-    kind: SubmissionKind;
-    member_email: string | null;
-    status: string;
-    notify_email_sent_at: string | null;
-  }>(
+  const result = await sql.query<QuestionRow>(
     `
     SELECT
       q.id::text AS id,
@@ -316,32 +374,63 @@ export async function POST(req: NextRequest) {
     questionIds,
   );
 
-  if (qRes.rows.length !== questionIds.length) {
-    return json(404, { ok: false, code: "NOT_FOUND" });
+  return result.rows;
+}
+
+function validateSelection(
+  rows: QuestionRow[],
+  questionIds: string[],
+): SelectionResult {
+  if (rows.length !== questionIds.length) {
+    return {
+      ok: false,
+      response: json(404, { ok: false, code: "NOT_FOUND" }),
+    };
   }
 
-  const selectedKinds = Array.from(new Set(qRes.rows.map((row) => row.kind)));
+  const selectedKinds = Array.from(new Set(rows.map((row) => row.kind)));
   if (selectedKinds.length !== 1) {
-    return json(400, {
+    return {
       ok: false,
-      code: "MIXED_KINDS_NOT_ALLOWED",
-      kinds: selectedKinds,
-    });
+      response: json(400, {
+        ok: false,
+        code: "MIXED_KINDS_NOT_ALLOWED",
+        kinds: selectedKinds,
+      }),
+    };
   }
 
   const kind = selectedKinds[0] as SubmissionKind;
-
   if (kind !== "question" && questionIds.length !== 1) {
-    return json(400, {
+    return {
       ok: false,
-      code: "PRIVATE_REPLY_REQUIRES_SINGLE_SELECTION",
-    });
+      response: json(400, {
+        ok: false,
+        code: "PRIVATE_REPLY_REQUIRES_SINGLE_SELECTION",
+      }),
+    };
   }
 
-  if (kind === "question") {
-    const blocks: PortableText = [];
+  return { ok: true, kind };
+}
 
-    blocks.push({
+function mailConfig(): MailConfig {
+  const fromEmail =
+    process.env.RESEND_FROM_TRANSACTIONAL?.trim() ||
+    must(process.env.RESEND_FROM_MARKETING, "RESEND_FROM_MARKETING");
+
+  const appName = process.env.NEXT_PUBLIC_APP_NAME?.trim() || "BJR";
+  const supportEmail = process.env.SUPPORT_EMAIL?.trim() || undefined;
+
+  return { fromEmail, appName, supportEmail };
+}
+
+function buildQuestionBlocks(
+  rows: QuestionRow[],
+  answer: string,
+): PortableText {
+  const blocks: PortableText = [
+    {
       _type: "block",
       _key: k("intro"),
       style: "normal",
@@ -359,311 +448,427 @@ export async function POST(req: NextRequest) {
           marks: ["mailbagIntro"],
         },
       ],
-    });
+    },
+  ];
 
-    for (const q of qRes.rows) {
-      const name = (q.asker_name ?? "").trim();
-      const children: PTSpan[] = [span((q.question_text || "").trim())];
+  for (const question of rows) {
+    const name = (question.asker_name ?? "").trim();
+    const children: PTSpan[] = [
+      span((question.question_text || "").trim()),
+    ];
 
-      if (name) {
-        children.push(span("\n"));
-        children.push(span(`— ${name}`, ["mailbagAsker"]));
-      }
-
-      blocks.push({
-        _type: "block",
-        _key: k("bq"),
-        style: "blockquote",
-        children,
-      });
+    if (name) {
+      children.push(span("\n"), span(`— ${name}`, ["mailbagAsker"]));
     }
 
-    blocks.push(...answerToPortableTextBlocks(answer));
-
-    const fallbackTitle = `Q&A — ${new Date().toISOString().slice(0, 10)}`;
-    const finalTitle = title || fallbackTitle;
-    const slugCurrent = `${slugify(finalTitle)}-${shortId()}`;
-
-    const doc: SanityDocumentStub = {
-      _type: "artistPost",
-      title: finalTitle,
-      postType: "qa",
-      slug: { current: slugCurrent },
-      publishedAt: new Date().toISOString(),
-      visibility,
-      pinned,
-      body: blocks,
-    };
-
-    let created: { _id: string; slug?: { current?: string } };
-    try {
-      created = (await sanityWrite.create(doc)) as unknown as {
-        _id: string;
-        slug?: { current?: string };
-      };
-    } catch {
-      return json(500, { ok: false, code: "SANITY_CREATE_FAILED" });
-    }
-
-    const slug = created?.slug?.current || slugCurrent;
-
-    const inPh3 = placeholders(questionIds.length, 3);
-    await sql.query(
-      `
-      UPDATE mailbag_questions
-      SET status = 'answered',
-          answered_at = now(),
-          answer_post_id = $1,
-          answer_post_slug = $2,
-          admin_reply_text = $3,
-          updated_at = now()
-      WHERE id IN (${inPh3})
-      `,
-      [created._id, slug, answer, ...questionIds],
-    );
-
-    const postUrl = `${appOrigin()}/journal?post=${encodeURIComponent(slug)}`;
-
-    const notifyRes = await sql.query<{
-      question_id: string;
-      question_text: string;
-      to_email: string;
-    }>(
-      `
-      SELECT
-        q.id::text AS question_id,
-        q.question_text,
-        m.email::text AS to_email
-      FROM mailbag_questions q
-      JOIN members m ON m.id = q.member_id
-      LEFT JOIN email_suppressions s ON s.email = m.email
-      WHERE q.id IN (${inPh1})
-        AND q.status = 'answered'
-        AND q.notify_email_sent_at IS NULL
-        AND s.email IS NULL
-      `,
-      questionIds,
-    );
-
-    const fromEmail =
-      (process.env.RESEND_FROM_TRANSACTIONAL &&
-        process.env.RESEND_FROM_TRANSACTIONAL.trim()) ||
-      must(process.env.RESEND_FROM_MARKETING, "RESEND_FROM_MARKETING");
-
-    const appName =
-      (process.env.NEXT_PUBLIC_APP_NAME &&
-        process.env.NEXT_PUBLIC_APP_NAME.trim()) ||
-      "BJR";
-
-    const supportEmail =
-      (process.env.SUPPORT_EMAIL && process.env.SUPPORT_EMAIL.trim()) ||
-      undefined;
-
-    const subject = title
-      ? `Your question was answered: ${title}`
-      : "Your question was answered";
-
-    const sentQuestionIds: string[] = [];
-
-    for (const row of notifyRes.rows) {
-      const toEmail = normalizeEmail(row.to_email || "");
-      if (!toEmail) continue;
-
-      const html = await render(
-        React.createElement(MailbagAnsweredEmail, {
-          appName,
-          toEmail,
-          questionText: row.question_text,
-          postTitle: title || null,
-          postUrl,
-          supportEmail,
-        }),
-      );
-
-      const text = [
-        "Your question was answered.",
-        "",
-        title ? `Post: ${title}` : `Post: ${finalTitle}`,
-        `Link: ${postUrl}`,
-        "",
-        "Your question:",
-        (row.question_text || "").trim(),
-        "",
-        supportEmail ? `Need help? ${supportEmail}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n");
-
-      try {
-        const result = await resend.emails.send({
-          from: fromEmail,
-          to: [toEmail],
-          subject,
-          html,
-          text,
-          tags: [
-            { name: "purpose", value: "mailbag-answered" },
-            { name: "postSlug", value: slug },
-          ],
-        });
-
-        const providerId =
-          (result as { data?: { id?: string } })?.data?.id ?? null;
-
-        await sql`
-          INSERT INTO email_outbox (
-            kind,
-            entity_key,
-            to_email,
-            from_email,
-            subject,
-            provider,
-            provider_email_id,
-            sent_at
-          )
-          VALUES (
-            'mailbag_answered',
-            ${row.question_id},
-            ${toEmail},
-            ${fromEmail},
-            ${subject},
-            'resend',
-            ${providerId},
-            now()
-          )
-        `;
-
-        sentQuestionIds.push(row.question_id);
-      } catch {
-        continue;
-      }
-    }
-
-    if (sentQuestionIds.length) {
-      const sentPh1 = placeholders(sentQuestionIds.length, 1);
-      await sql.query(
-        `
-        UPDATE mailbag_questions
-        SET notify_email_sent_at = now(),
-            updated_at = now()
-        WHERE id IN (${sentPh1})
-          AND notify_email_sent_at IS NULL
-        `,
-        sentQuestionIds,
-      );
-    }
-
-    return json(200, {
-      ok: true,
-      mode: "published_post",
-      kind,
-      post: { id: created._id, slug, url: postUrl },
-      notified: {
-        attempted: notifyRes.rows.length,
-        sent: sentQuestionIds.length,
-      },
-      debug: {
-        acceptedAnswerKey: pickedAnswer.key,
-        acceptedTitleKey: pickedTitle.key,
-        finalTitle,
-      },
+    blocks.push({
+      _type: "block",
+      _key: k("bq"),
+      style: "blockquote",
+      children,
     });
   }
 
-  const target = qRes.rows[0];
-  const toEmail = normalizeEmail(target.member_email || "");
-  const questionId = target.id;
+  blocks.push(...answerToPortableTextBlocks(answer));
+  return blocks;
+}
 
-  const fromEmail =
-    (process.env.RESEND_FROM_TRANSACTIONAL &&
-      process.env.RESEND_FROM_TRANSACTIONAL.trim()) ||
-    must(process.env.RESEND_FROM_MARKETING, "RESEND_FROM_MARKETING");
+async function createPublishedPost(params: {
+  title: string;
+  answer: string;
+  rows: QuestionRow[];
+  visibility: Visibility;
+  pinned: boolean;
+}): Promise<PublishedPost | null> {
+  const { title, answer, rows, visibility, pinned } = params;
+  const blocks = buildQuestionBlocks(rows, answer);
+  const fallbackTitle = `Q&A — ${new Date().toISOString().slice(0, 10)}`;
+  const finalTitle = title || fallbackTitle;
+  const slugCurrent = `${slugify(finalTitle)}-${shortId()}`;
 
-  const appName =
-    (process.env.NEXT_PUBLIC_APP_NAME &&
-      process.env.NEXT_PUBLIC_APP_NAME.trim()) ||
-    "BJR";
+  const doc: SanityDocumentStub = {
+    _type: "artistPost",
+    title: finalTitle,
+    postType: "qa",
+    slug: { current: slugCurrent },
+    publishedAt: new Date().toISOString(),
+    visibility,
+    pinned,
+    body: blocks,
+  };
 
-  const supportEmail =
-    (process.env.SUPPORT_EMAIL && process.env.SUPPORT_EMAIL.trim()) ||
-    undefined;
+  try {
+    const created = (await sanityWrite.create(doc)) as unknown as CreatedPost;
+    return {
+      created,
+      slug: created?.slug?.current || slugCurrent,
+      finalTitle,
+    };
+  } catch {
+    return null;
+  }
+}
 
-  const subject = privateReplySubject(kind);
+async function markQuestionsPublished(params: {
+  questionIds: string[];
+  createdId: string;
+  slug: string;
+  answer: string;
+}): Promise<void> {
+  const { questionIds, createdId, slug, answer } = params;
+  const inPh3 = placeholders(questionIds.length, 3);
 
-  let sent = false;
-  let providerId: string | null = null;
+  await sql.query(
+    `
+    UPDATE mailbag_questions
+    SET status = 'answered',
+        answered_at = now(),
+        answer_post_id = $1,
+        answer_post_slug = $2,
+        admin_reply_text = $3,
+        updated_at = now()
+    WHERE id IN (${inPh3})
+    `,
+    [createdId, slug, answer, ...questionIds],
+  );
+}
 
-  if (toEmail) {
-    const html = buildPrivateReplyHtml({
-      appName,
+async function loadPublishedNotificationRows(
+  questionIds: string[],
+): Promise<NotificationRow[]> {
+  const inPh1 = placeholders(questionIds.length, 1);
+  const result = await sql.query<NotificationRow>(
+    `
+    SELECT
+      q.id::text AS question_id,
+      q.question_text,
+      m.email::text AS to_email
+    FROM mailbag_questions q
+    JOIN members m ON m.id = q.member_id
+    LEFT JOIN email_suppressions s ON s.email = m.email
+    WHERE q.id IN (${inPh1})
+      AND q.status = 'answered'
+      AND q.notify_email_sent_at IS NULL
+      AND s.email IS NULL
+    `,
+    questionIds,
+  );
+
+  return result.rows;
+}
+
+function providerIdFromResult(result: unknown): string | null {
+  return (result as { data?: { id?: string } })?.data?.id ?? null;
+}
+
+async function recordEmailOutbox(params: {
+  kind: string;
+  entityKey: string;
+  toEmail: string;
+  fromEmail: string;
+  subject: string;
+  providerId: string | null;
+}): Promise<void> {
+  const { kind, entityKey, toEmail, fromEmail, subject, providerId } = params;
+
+  await sql`
+    INSERT INTO email_outbox (
       kind,
-      originalText: target.question_text,
-      replyText: answer,
-      supportEmail,
-    });
+      entity_key,
+      to_email,
+      from_email,
+      subject,
+      provider,
+      provider_email_id,
+      sent_at
+    )
+    VALUES (
+      ${kind},
+      ${entityKey},
+      ${toEmail},
+      ${fromEmail},
+      ${subject},
+      'resend',
+      ${providerId},
+      now()
+    )
+  `;
+}
 
-    const text = [
-      `We've replied to your ${kindLabel(kind)}.`,
-      "",
-      `Your ${kindLabel(kind)}:`,
-      target.question_text.trim(),
-      "",
-      "Reply:",
-      answer,
-      "",
-      supportEmail ? `Need help? ${supportEmail}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+function publishedNotificationText(params: {
+  title: string;
+  finalTitle: string;
+  postUrl: string;
+  questionText: string;
+  supportEmail?: string;
+}): string {
+  const { title, finalTitle, postUrl, questionText, supportEmail } = params;
+  const postTitle = title || finalTitle;
+
+  return [
+    "Your question was answered.",
+    "",
+    `Post: ${postTitle}`,
+    `Link: ${postUrl}`,
+    "",
+    "Your question:",
+    (questionText || "").trim(),
+    "",
+    supportEmail ? `Need help? ${supportEmail}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+async function sendPublishedNotifications(params: {
+  rows: NotificationRow[];
+  config: MailConfig;
+  title: string;
+  finalTitle: string;
+  slug: string;
+  postUrl: string;
+}): Promise<string[]> {
+  const { rows, config, title, finalTitle, slug, postUrl } = params;
+  const subject = title
+    ? `Your question was answered: ${title}`
+    : "Your question was answered";
+  const sentQuestionIds: string[] = [];
+
+  for (const row of rows) {
+    const toEmail = normalizeEmail(row.to_email || "");
+    if (!toEmail) continue;
+
+    const html = await render(
+      React.createElement(MailbagAnsweredEmail, {
+        appName: config.appName,
+        toEmail,
+        questionText: row.question_text,
+        postTitle: title || null,
+        postUrl,
+        supportEmail: config.supportEmail,
+      }),
+    );
+
+    const text = publishedNotificationText({
+      title,
+      finalTitle,
+      postUrl,
+      questionText: row.question_text,
+      supportEmail: config.supportEmail,
+    });
 
     try {
       const result = await resend.emails.send({
-        from: fromEmail,
+        from: config.fromEmail,
         to: [toEmail],
         subject,
         html,
         text,
         tags: [
-          {
-            name: "purpose",
-            value:
-              kind === "suggestion"
-                ? "suggestion-replied"
-                : "bug-report-replied",
-          },
-          { name: "submissionId", value: questionId },
+          { name: "purpose", value: "mailbag-answered" },
+          { name: "postSlug", value: slug },
         ],
       });
 
-      providerId = (result as { data?: { id?: string } })?.data?.id ?? null;
-      sent = true;
+      await recordEmailOutbox({
+        kind: "mailbag_answered",
+        entityKey: row.question_id,
+        toEmail,
+        fromEmail: config.fromEmail,
+        subject,
+        providerId: providerIdFromResult(result),
+      });
 
-      await sql`
-        INSERT INTO email_outbox (
-          kind,
-          entity_key,
-          to_email,
-          from_email,
-          subject,
-          provider,
-          provider_email_id,
-          sent_at
-        )
-        VALUES (
-          ${kind === "suggestion" ? "mailbag_suggestion_replied" : "mailbag_bug_report_replied"},
-          ${questionId},
-          ${toEmail},
-          ${fromEmail},
-          ${subject},
-          'resend',
-          ${providerId},
-          now()
-        )
-      `;
+      sentQuestionIds.push(row.question_id);
     } catch {
-      sent = false;
+      continue;
     }
   }
+
+  return sentQuestionIds;
+}
+
+async function markPublishedNotificationsSent(
+  sentQuestionIds: string[],
+): Promise<void> {
+  if (!sentQuestionIds.length) return;
+
+  const sentPh1 = placeholders(sentQuestionIds.length, 1);
+  await sql.query(
+    `
+    UPDATE mailbag_questions
+    SET notify_email_sent_at = now(),
+        updated_at = now()
+    WHERE id IN (${sentPh1})
+      AND notify_email_sent_at IS NULL
+    `,
+    sentQuestionIds,
+  );
+}
+
+async function handlePublishedQuestionAnswer(params: {
+  request: AnswerRequest;
+  rows: QuestionRow[];
+  kind: SubmissionKind;
+}): Promise<NextResponse> {
+  const { request, rows, kind } = params;
+  const published = await createPublishedPost({
+    title: request.title,
+    answer: request.answer,
+    rows,
+    visibility: request.visibility,
+    pinned: request.pinned,
+  });
+
+  if (!published) {
+    return json(500, { ok: false, code: "SANITY_CREATE_FAILED" });
+  }
+
+  await markQuestionsPublished({
+    questionIds: request.questionIds,
+    createdId: published.created._id,
+    slug: published.slug,
+    answer: request.answer,
+  });
+
+  const postUrl = `${appOrigin()}/journal?post=${encodeURIComponent(
+    published.slug,
+  )}`;
+  const notificationRows = await loadPublishedNotificationRows(
+    request.questionIds,
+  );
+  const sentQuestionIds = await sendPublishedNotifications({
+    rows: notificationRows,
+    config: mailConfig(),
+    title: request.title,
+    finalTitle: published.finalTitle,
+    slug: published.slug,
+    postUrl,
+  });
+
+  await markPublishedNotificationsSent(sentQuestionIds);
+
+  return json(200, {
+    ok: true,
+    mode: "published_post",
+    kind,
+    post: {
+      id: published.created._id,
+      slug: published.slug,
+      url: postUrl,
+    },
+    notified: {
+      attempted: notificationRows.length,
+      sent: sentQuestionIds.length,
+    },
+    debug: {
+      acceptedAnswerKey: request.pickedAnswer.key,
+      acceptedTitleKey: request.pickedTitle.key,
+      finalTitle: published.finalTitle,
+    },
+  });
+}
+
+function privatePurposeTag(kind: SubmissionKind): string {
+  return kind === "suggestion"
+    ? "suggestion-replied"
+    : "bug-report-replied";
+}
+
+function privateOutboxKind(kind: SubmissionKind): string {
+  return kind === "suggestion"
+    ? "mailbag_suggestion_replied"
+    : "mailbag_bug_report_replied";
+}
+
+function privateReplyText(params: {
+  kind: SubmissionKind;
+  originalText: string;
+  replyText: string;
+  supportEmail?: string;
+}): string {
+  const { kind, originalText, replyText, supportEmail } = params;
+  const label = kindLabel(kind);
+
+  return [
+    `We've replied to your ${label}.`,
+    "",
+    `Your ${label}:`,
+    originalText.trim(),
+    "",
+    "Reply:",
+    replyText,
+    "",
+    supportEmail ? `Need help? ${supportEmail}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+async function sendPrivateReply(params: {
+  target: QuestionRow;
+  kind: SubmissionKind;
+  answer: string;
+  config: MailConfig;
+  toEmail: string;
+  subject: string;
+}): Promise<SendResult> {
+  const { target, kind, answer, config, toEmail, subject } = params;
+  let providerId: string | null = null;
+
+  if (!toEmail) return { sent: false, providerId };
+
+  const html = buildPrivateReplyHtml({
+    appName: config.appName,
+    kind,
+    originalText: target.question_text,
+    replyText: answer,
+    supportEmail: config.supportEmail,
+  });
+
+  const text = privateReplyText({
+    kind,
+    originalText: target.question_text,
+    replyText: answer,
+    supportEmail: config.supportEmail,
+  });
+
+  try {
+    const result = await resend.emails.send({
+      from: config.fromEmail,
+      to: [toEmail],
+      subject,
+      html,
+      text,
+      tags: [
+        { name: "purpose", value: privatePurposeTag(kind) },
+        { name: "submissionId", value: target.id },
+      ],
+    });
+
+    providerId = providerIdFromResult(result);
+
+    await recordEmailOutbox({
+      kind: privateOutboxKind(kind),
+      entityKey: target.id,
+      toEmail,
+      fromEmail: config.fromEmail,
+      subject,
+      providerId,
+    });
+
+    return { sent: true, providerId };
+  } catch {
+    return { sent: false, providerId };
+  }
+}
+
+async function markPrivateReplyAnswered(params: {
+  questionId: string;
+  answer: string;
+  sent: boolean;
+}): Promise<void> {
+  const { questionId, answer, sent } = params;
 
   await sql`
     UPDATE mailbag_questions
@@ -678,6 +883,32 @@ export async function POST(req: NextRequest) {
         updated_at = now()
     WHERE id = ${questionId}::uuid
   `;
+}
+
+async function handlePrivateAnswer(params: {
+  request: AnswerRequest;
+  rows: QuestionRow[];
+  kind: SubmissionKind;
+}): Promise<NextResponse> {
+  const { request, rows, kind } = params;
+  const target = rows[0];
+  const toEmail = normalizeEmail(target.member_email || "");
+  const config = mailConfig();
+  const subject = privateReplySubject(kind);
+  const result = await sendPrivateReply({
+    target,
+    kind,
+    answer: request.answer,
+    config,
+    toEmail,
+    subject,
+  });
+
+  await markPrivateReplyAnswered({
+    questionId: target.id,
+    answer: request.answer,
+    sent: result.sent,
+  });
 
   return json(200, {
     ok: true,
@@ -685,12 +916,38 @@ export async function POST(req: NextRequest) {
     kind,
     notified: {
       attempted: toEmail ? 1 : 0,
-      sent: sent ? 1 : 0,
+      sent: result.sent ? 1 : 0,
     },
     debug: {
-      acceptedAnswerKey: pickedAnswer.key,
-      acceptedTitleKey: pickedTitle.key,
-      providerId,
+      acceptedAnswerKey: request.pickedAnswer.key,
+      acceptedTitleKey: request.pickedTitle.key,
+      providerId: result.providerId,
     },
+  });
+}
+
+export async function POST(req: NextRequest) {
+  await requireAdminMemberId();
+
+  const body = (await req.json().catch(() => null)) as Body | null;
+  const parsed = parseAnswerRequest(body);
+  if (!parsed.ok) return parsed.response;
+
+  const rows = await loadQuestions(parsed.value.questionIds);
+  const selection = validateSelection(rows, parsed.value.questionIds);
+  if (!selection.ok) return selection.response;
+
+  if (selection.kind === "question") {
+    return handlePublishedQuestionAnswer({
+      request: parsed.value,
+      rows,
+      kind: selection.kind,
+    });
+  }
+
+  return handlePrivateAnswer({
+    request: parsed.value,
+    rows,
+    kind: selection.kind,
   });
 }
