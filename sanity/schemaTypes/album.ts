@@ -17,6 +17,10 @@ const THEME_OPTIONS = [
   { title: "Reaction Veins 2", value: "reaction-veins-2" },
   { title: "Signal Decay", value: "signal-decay" },
   { title: "Topographic Memory", value: "topographic-memory" },
+  { title: "Singularity Nursery", value: "singularity-nursery" },
+  { title: "Coral Reef Wall", value: "reef-wall" },
+  { title: "Temporal Crystal Cathedral", value: "crystal-cathedral" },
+  { title: "Wormhole Throat", value: "wormhole-throat" },
 ];
 
 const TIER_OPTIONS = [

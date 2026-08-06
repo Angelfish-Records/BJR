@@ -14,6 +14,18 @@ export type LyricTextStyle = {
   fill: string;
   stroke?: string;
   strokeWidthPx?: number;
+
+  /**
+   * A dark local-contrast pass rendered beneath the visible typography.
+   *
+   * Unlike the aesthetic shadow, this pass exists solely to preserve glyph
+   * separation over bright visualiser highlights.
+   */
+  contrastStroke?: string;
+  contrastStrokeWidthPx?: number;
+  contrastShadowBlurPx?: number;
+  contrastShadowColor?: string;
+
   shadowBlurPx?: number;
   shadowColor?: string;
   opacity: number;
@@ -49,8 +61,14 @@ const DEFAULT_STYLE: LyricTextStyle = {
   anchorX01: 0.5,
   anchorY01: 0.74,
   fill: "rgba(255,255,255,0.94)",
-  stroke: "rgba(0,0,0,0.48)",
-  strokeWidthPx: 5,
+  stroke: "rgba(0,0,0,0.32)",
+  strokeWidthPx: 2,
+
+  contrastStroke: "rgba(0,0,0,0.62)",
+  contrastStrokeWidthPx: 8,
+  contrastShadowBlurPx: 14,
+  contrastShadowColor: "rgba(0,0,0,0.76)",
+
   shadowBlurPx: 22,
   shadowColor: "rgba(255,255,255,0.28)",
   opacity: 1,
@@ -371,6 +389,21 @@ export class LyricTextRenderer {
 
       const y = block.startY + i * block.lineHeightPx;
       const x = block.anchorX + (shakePx ?? 0);
+
+      if (
+        this.style.contrastStroke &&
+        this.style.contrastStrokeWidthPx &&
+        this.style.contrastStrokeWidthPx > 0
+      ) {
+        ctx.save();
+        ctx.strokeStyle = this.style.contrastStroke;
+        ctx.lineWidth = this.style.contrastStrokeWidthPx;
+        ctx.lineJoin = "round";
+        ctx.shadowBlur = this.style.contrastShadowBlurPx ?? 0;
+        ctx.shadowColor = this.style.contrastShadowColor ?? "rgba(0,0,0,0)";
+        ctx.strokeText(line, x, y);
+        ctx.restore();
+      }
 
       if (
         this.style.stroke &&

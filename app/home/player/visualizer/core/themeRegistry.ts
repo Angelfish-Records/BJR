@@ -20,6 +20,10 @@ type MagneticMod = typeof import("../themes/magneticParticulate");
 type HorizonMod = typeof import("../themes/eventHorizon");
 type SignalMod = typeof import("../themes/signalDecay");
 type CrystalMod = typeof import("../themes/crystallineGrowth");
+type SingularityMod = typeof import("../themes/singularityNursery");
+type ReefMod = typeof import("../themes/coralReefWall");
+type CathedralMod = typeof import("../themes/temporalCrystalCathedral");
+type WormholeMod = typeof import("../themes/wormholeThroat");
 
 export type ThemeName =
   | "nebula"
@@ -36,7 +40,11 @@ export type ThemeName =
   | "magnetic-particulate"
   | "event-horizon"
   | "signal-decay"
-  | "crystalline-growth";
+  | "crystalline-growth"
+  | "singularity-nursery"
+  | "reef-wall"
+  | "crystal-cathedral"
+  | "wormhole-throat";
 
 const themeCache = new Map<ThemeName, ThemeFactory>();
 
@@ -119,6 +127,21 @@ export function canonicalThemeName(raw: string | undefined | null): ThemeName {
     case "crystals":
       return "crystalline-growth";
 
+    case "singularity-nursery":
+      return "singularity-nursery";
+
+    case "coral-reef-wall":
+    case "reef-wall":
+      return "reef-wall";
+
+    case "crystal-cathedral":
+    case "cathedral":
+      return "crystal-cathedral";
+
+    case "wormhole-throat":
+    case "wormhole":
+      return "wormhole-throat";
+
     case "nebula":
     default:
       return "nebula";
@@ -183,6 +206,22 @@ const THEME_LOADERS: Record<ThemeName, () => Promise<ThemeFactory>> = {
   "crystalline-growth": async () =>
     ((await import("../themes/crystallineGrowth")) as CrystalMod)
       .createCrystallineGrowthTheme,
+
+  "singularity-nursery": async () =>
+    ((await import("../themes/singularityNursery")) as SingularityMod)
+      .createSingularityNurseryTheme,
+
+  "reef-wall": async () =>
+    ((await import("../themes/coralReefWall")) as ReefMod)
+      .createCoralReefWallTheme,
+
+  "crystal-cathedral": async () =>
+    ((await import("../themes/temporalCrystalCathedral")) as CathedralMod)
+      .createTemporalCrystalCathedralTheme,
+
+  "wormhole-throat": async () =>
+    ((await import("../themes/wormholeThroat")) as WormholeMod)
+      .createWormholeThroatTheme,
 };
 
 export async function loadThemeFactory(

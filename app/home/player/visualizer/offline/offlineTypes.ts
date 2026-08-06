@@ -6,6 +6,7 @@ import type { CameraFrameState } from "./cinematicTypes";
 import type { LyricFrameState } from "./lyricTypes";
 import type { LyricStyleName } from "./lyricStyles";
 import type { PostPresetName } from "./postStyles";
+import type { RenderFormatName } from "./renderFormats";
 
 export type OfflineRenderConfig = {
   width: number;
@@ -16,13 +17,23 @@ export type OfflineRenderConfig = {
   seed: number;
   lyricStyleName?: LyricStyleName;
   postPresetName?: PostPresetName;
+  renderFormatName?: RenderFormatName;
 
   /**
-   * Optional multiplier for pixel-sized composition values.
+   * Full composition dimensions used to resolve format-aware typography,
+   * post-processing, and camera scale.
    *
-   * Offline exports omit this and therefore render at 1:1. Lower-resolution
-   * development previews use it to preserve the relative size of typography,
-   * glow, blur, stroke, and camera shake.
+   * Development previews render smaller buffers but retain the geometry of
+   * their intended export dimensions.
+   */
+  compositionWidth?: number;
+  compositionHeight?: number;
+
+  /**
+   * Multiplier between the full composition and the current render buffer.
+   *
+   * Full exports omit this and therefore render at 1:1. Reduced-resolution
+   * previews use it to preserve preview/export composition parity.
    */
   pixelScale?: number;
 };
@@ -44,6 +55,7 @@ export type VisualizerExportManifest = {
   version: 1;
   recordingId: string;
   themeName: ThemeName;
+  renderFormatName?: RenderFormatName;
   seed: number;
   width: number;
   height: number;

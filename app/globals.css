@@ -237,7 +237,7 @@ html[data-af-surface="portal"][data-af-portal-tab="exegesis"]
 @font-face {
   font-family: "Space Grotesk";
   src: url("/fonts/SpaceGrotesk-SemiBold.ttf") format("truetype");
-  font-weight: 500;
+  font-weight: 600;
   font-style: normal;
 }
 

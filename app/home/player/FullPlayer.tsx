@@ -1331,7 +1331,7 @@ export default function FullPlayer(props: {
                 opacity: 0.95,
               }}
             >
-              Embargoed until{" "}
+              Releases on{" "}
               {new Date(releaseAtMs).toLocaleDateString(undefined, {
                 day: "numeric",
                 month: "long",

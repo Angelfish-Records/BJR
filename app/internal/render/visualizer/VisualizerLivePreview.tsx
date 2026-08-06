@@ -25,6 +25,11 @@ import type {
 } from "../../../home/player/visualizer/offline/offlineTypes";
 import type { PostPresetName } from "../../../home/player/visualizer/offline/postStyles";
 import {
+  inferRenderFormatName,
+  RENDER_FORMATS,
+  type RenderFormatName,
+} from "../../../home/player/visualizer/offline/renderFormats";
+import {
   bakePreviewSourceTimeline,
   type PreviewSourceTimeline,
 } from "../../../home/player/visualizer/offline/previewTimeline";
@@ -56,6 +61,7 @@ type Props = {
   selectedLrcFile: string;
   selectedLyricStyle: LyricStyleName;
   selectedPostPreset: PostPresetName;
+  renderFormatName: RenderFormatName;
   width: number;
   height: number;
   fps: number;
@@ -109,6 +115,18 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function resolveRenderFormatName(
+  value: RenderFormatName | undefined,
+  width: number,
+  height: number,
+): RenderFormatName {
+  if (value && Object.prototype.hasOwnProperty.call(RENDER_FORMATS, value)) {
+    return value;
+  }
+
+  return inferRenderFormatName(width, height);
+}
+
 function formatTime(value: number): string {
   const safe = Math.max(0, Number.isFinite(value) ? value : 0);
   const minutes = Math.floor(safe / 60);
@@ -137,6 +155,7 @@ export default function VisualizerLivePreview(props: Props) {
     selectedLrcFile,
     selectedLyricStyle,
     selectedPostPreset,
+    renderFormatName,
     width,
     height,
     fps,
@@ -196,6 +215,14 @@ export default function VisualizerLivePreview(props: Props) {
   const exportWidth = Math.max(16, Math.floor(width));
   const exportHeight = Math.max(16, Math.floor(height));
   const exportFps = clamp(fps, 1, 120);
+
+  const resolvedRenderFormatName = resolveRenderFormatName(
+    renderFormatName,
+    exportWidth,
+    exportHeight,
+  );
+  const renderFormatProfile = RENDER_FORMATS[resolvedRenderFormatName];
+
   const previewProfile = PREVIEW_QUALITY_CONFIG[previewQuality];
 
   const previewScale = Math.min(
@@ -277,13 +304,7 @@ export default function VisualizerLivePreview(props: Props) {
 
       const sequenceFrameIndex = renderSequenceRef.current;
       const lyric = timeline.lyricFrames?.[sourceFrameIndex];
-      const sourceCamera = cameraFrames[sourceFrameIndex];
-      const camera = sourceCamera
-        ? {
-            ...sourceCamera,
-            shake: sourceCamera.shake * previewScale,
-          }
-        : undefined;
+      const camera = cameraFrames[sourceFrameIndex];
 
       const frame: OfflineFrame = {
         frameIndex: sequenceFrameIndex,
@@ -310,14 +331,7 @@ export default function VisualizerLivePreview(props: Props) {
         setActiveLyric(lyric?.activeText?.trim() ?? "");
       }
     },
-    [
-      cameraFrames,
-      presentBuffer,
-      previewScale,
-      safeFps,
-      timeline,
-      updatePreviewTime,
-    ],
+    [cameraFrames, presentBuffer, safeFps, timeline, updatePreviewTime],
   );
 
   const rebuildPreview = useCallback(
@@ -347,6 +361,9 @@ export default function VisualizerLivePreview(props: Props) {
           seed: Math.max(0, Math.floor(seed)),
           lyricStyleName: selectedLyricStyle,
           postPresetName: selectedPostPreset,
+          renderFormatName: resolvedRenderFormatName,
+          compositionWidth: exportWidth,
+          compositionHeight: exportHeight,
           pixelScale: previewScale,
         });
 
@@ -378,7 +395,10 @@ export default function VisualizerLivePreview(props: Props) {
       }
     },
     [
+      exportHeight,
+      exportWidth,
       previewScale,
+      resolvedRenderFormatName,
       rendererApiReady,
       renderPreparedFrame,
       safeFps,
@@ -841,8 +861,9 @@ export default function VisualizerLivePreview(props: Props) {
         <span>{rendererMessage}</span>
 
         <span>
-          {previewProfile.label} preview: {safeWidth}×{safeHeight} @ {safeFps}
-          fps · export: {exportWidth}×{exportHeight} @ {exportFps}fps
+          {renderFormatProfile.label} · {previewProfile.label} preview:{" "}
+          {safeWidth}×{safeHeight} @ {safeFps}fps · export: {exportWidth}×
+          {exportHeight} @ {exportFps}fps
         </span>
 
         <span>

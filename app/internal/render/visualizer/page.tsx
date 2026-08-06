@@ -10,6 +10,14 @@ import {
   type LyricTextStyle,
 } from "../../../home/player/visualizer/offline/LyricTextRenderer";
 import {
+  applyRenderFormatToLyricStyle,
+  getRenderFormatGeometry,
+  inferRenderFormatName,
+  RENDER_FORMAT_NAMES,
+  RENDER_FORMATS,
+  type RenderFormatName,
+} from "../../../home/player/visualizer/offline/renderFormats";
+import {
   LYRIC_STYLE_NAMES,
   LYRIC_STYLES,
   type LyricStyleName,
@@ -94,6 +102,16 @@ function scaleLyricStyle(
     ...(style.strokeWidthPx !== undefined
       ? { strokeWidthPx: style.strokeWidthPx * pixelScale }
       : {}),
+    ...(style.contrastStrokeWidthPx !== undefined
+      ? {
+          contrastStrokeWidthPx: style.contrastStrokeWidthPx * pixelScale,
+        }
+      : {}),
+    ...(style.contrastShadowBlurPx !== undefined
+      ? {
+          contrastShadowBlurPx: style.contrastShadowBlurPx * pixelScale,
+        }
+      : {}),
     ...(style.shadowBlurPx !== undefined
       ? { shadowBlurPx: style.shadowBlurPx * pixelScale }
       : {}),
@@ -133,6 +151,7 @@ export default function InternalVisualizerRenderPage() {
   const postProcessorRef = useRef<FramePostProcessor | null>(null);
   const pixelBufferRef = useRef<Uint8Array | null>(null);
   const lastFrameRef = useRef<OfflineFrame | null>(null);
+  const cameraPixelScaleRef = useRef(1);
   const [, setStatus] = useState<RendererStatus>("idle");
   const [rendererApiReady, setRendererApiReady] = useState(false);
   const [message, setMessage] = useState("Renderer not initialised");
@@ -149,6 +168,8 @@ export default function InternalVisualizerRenderPage() {
   const [selectedPostPreset, setSelectedPostPreset] =
     useState<PostPresetName>("gold-devotional");
   const [recordingId, setRecordingId] = useState("test_render");
+  const [renderFormatName, setRenderFormatName] =
+    useState<RenderFormatName>("landscape-16:9");
   const [width, setWidth] = useState(1280);
   const [height, setHeight] = useState(720);
   const [fps, setFps] = useState(30);
@@ -204,13 +225,37 @@ export default function InternalVisualizerRenderPage() {
               ? Math.max(0.1, Math.min(1, requestedPixelScale))
               : 1;
 
-          const lyricStyle = config.lyricStyleName
+          const compositionWidth = config.compositionWidth ?? config.width;
+          const compositionHeight = config.compositionHeight ?? config.height;
+
+          const resolvedFormatName =
+            config.renderFormatName ??
+            inferRenderFormatName(compositionWidth, compositionHeight);
+
+          const formatGeometry = getRenderFormatGeometry(
+            resolvedFormatName,
+            compositionWidth,
+            compositionHeight,
+          );
+
+          const sourceLyricStyle = config.lyricStyleName
             ? LYRIC_STYLES[config.lyricStyleName]
             : undefined;
+
+          const lyricStyle = applyRenderFormatToLyricStyle(
+            sourceLyricStyle,
+            formatGeometry,
+          );
 
           const postStyle = config.postPresetName
             ? POST_STYLES[config.postPresetName]
             : POST_STYLES.none;
+
+          const lyricPixelScale = pixelScale * formatGeometry.lyricPixelScale;
+          const effectPixelScale = pixelScale * formatGeometry.effectPixelScale;
+
+          cameraPixelScaleRef.current =
+            pixelScale * formatGeometry.cameraPixelScale;
 
           rendererRef.current = renderer;
           pixelBufferRef.current = new Uint8Array(
@@ -219,12 +264,12 @@ export default function InternalVisualizerRenderPage() {
           lyricRendererRef.current = new LyricTextRenderer(
             config.width,
             config.height,
-            scaleLyricStyle(lyricStyle, pixelScale),
+            scaleLyricStyle(lyricStyle, lyricPixelScale),
           );
           postProcessorRef.current = new FramePostProcessor(
             config.width,
             config.height,
-            scalePostStyle(postStyle, pixelScale),
+            scalePostStyle(postStyle, effectPixelScale),
           );
           setStatus("ready");
           setMessage(
@@ -263,7 +308,16 @@ export default function InternalVisualizerRenderPage() {
           lyricRenderer.compositeIntoRgbaBuffer(buffer, lyric);
         }
 
-        const camera = lastFrameRef.current?.camera;
+        const sourceCamera = lastFrameRef.current?.camera;
+        const cameraScale = cameraPixelScaleRef.current;
+        const camera =
+          sourceCamera && cameraScale !== 1
+            ? {
+                ...sourceCamera,
+                shake: sourceCamera.shake * cameraScale,
+              }
+            : sourceCamera;
+
         const postProcessor = postProcessorRef.current;
         const frameIndex = lastFrameRef.current?.frameIndex ?? 0;
 
@@ -281,6 +335,7 @@ export default function InternalVisualizerRenderPage() {
         postProcessorRef.current = null;
         pixelBufferRef.current = null;
         lastFrameRef.current = null;
+        cameraPixelScaleRef.current = 1;
         setStatus("disposed");
         setMessage("Renderer disposed");
       },
@@ -325,6 +380,7 @@ export default function InternalVisualizerRenderPage() {
       postProcessorRef.current = null;
       pixelBufferRef.current = null;
       lastFrameRef.current = null;
+      cameraPixelScaleRef.current = 1;
 
       if (window.__AFR_RENDERER__ === api) {
         delete window.__AFR_RENDERER__;
@@ -364,6 +420,24 @@ export default function InternalVisualizerRenderPage() {
     };
   }, []);
 
+  function selectRenderFormat(nextFormatName: RenderFormatName): void {
+    const profile = RENDER_FORMATS[nextFormatName];
+
+    setRenderFormatName(nextFormatName);
+    setWidth(profile.width);
+    setHeight(profile.height);
+  }
+
+  function updateWidth(nextWidth: number): void {
+    setWidth(nextWidth);
+    setRenderFormatName(inferRenderFormatName(nextWidth, height));
+  }
+
+  function updateHeight(nextHeight: number): void {
+    setHeight(nextHeight);
+    setRenderFormatName(inferRenderFormatName(width, nextHeight));
+  }
+
   async function runExport(): Promise<void> {
     setIsExporting(true);
     setExportMessage("Export started...");
@@ -381,6 +455,7 @@ export default function InternalVisualizerRenderPage() {
           lrcFile: selectedLrcFile,
           lyricStyleName: selectedLyricStyle,
           postPresetName: selectedPostPreset,
+          renderFormatName,
           width,
           height,
           fps,
@@ -538,11 +613,28 @@ export default function InternalVisualizerRenderPage() {
           </label>
 
           <label>
+            <div>Format</div>
+            <select
+              value={renderFormatName}
+              onChange={(event) =>
+                selectRenderFormat(event.target.value as RenderFormatName)
+              }
+              style={{ width: "100%" }}
+            >
+              {RENDER_FORMAT_NAMES.map((formatName) => (
+                <option key={formatName} value={formatName}>
+                  {RENDER_FORMATS[formatName].label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
             <div>Width</div>
             <input
               type="number"
               value={width}
-              onChange={(event) => setWidth(Number(event.target.value))}
+              onChange={(event) => updateWidth(Number(event.target.value))}
               style={{ width: "100%" }}
             />
           </label>
@@ -552,7 +644,7 @@ export default function InternalVisualizerRenderPage() {
             <input
               type="number"
               value={height}
-              onChange={(event) => setHeight(Number(event.target.value))}
+              onChange={(event) => updateHeight(Number(event.target.value))}
               style={{ width: "100%" }}
             />
           </label>
@@ -644,6 +736,7 @@ export default function InternalVisualizerRenderPage() {
           selectedLrcFile={selectedLrcFile}
           selectedLyricStyle={selectedLyricStyle}
           selectedPostPreset={selectedPostPreset}
+          renderFormatName={renderFormatName}
           width={width}
           height={height}
           fps={fps}

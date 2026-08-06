@@ -12,6 +12,11 @@ import {
   isPostPresetName,
   type PostPresetName,
 } from "../../../../home/player/visualizer/offline/postStyles";
+import {
+  inferRenderFormatName,
+  isRenderFormatName,
+  type RenderFormatName,
+} from "../../../../home/player/visualizer/offline/renderFormats";
 
 export const runtime = "nodejs";
 
@@ -30,7 +35,11 @@ type ThemeName =
   | "magnetic-particulate"
   | "event-horizon"
   | "signal-decay"
-  | "crystalline-growth";
+  | "crystalline-growth"
+  | "singularity-nursery"
+  | "reef-wall"
+  | "crystal-cathedral"
+  | "wormhole-throat";
 
 type RenderRequest = {
   recordingId: string;
@@ -39,6 +48,7 @@ type RenderRequest = {
   lrcFile?: string;
   lyricStyleName?: LyricStyleName;
   postPresetName?: PostPresetName;
+  renderFormatName?: RenderFormatName;
   width: number;
   height: number;
   fps: number;
@@ -71,6 +81,10 @@ const THEMES: ThemeName[] = [
   "event-horizon",
   "signal-decay",
   "crystalline-growth",
+  "singularity-nursery",
+  "reef-wall",
+  "crystal-cathedral",
+  "wormhole-throat",
 ];
 
 const PREVIEW_SOURCE_EXTENSIONS = /\.(css|ts|tsx)$/i;
@@ -303,6 +317,13 @@ function assertRenderSettings(body: RenderRequest): void {
     throw new Error(`Invalid postPresetName: ${body.postPresetName}`);
   }
 
+  if (
+    body.renderFormatName !== undefined &&
+    !isRenderFormatName(body.renderFormatName)
+  ) {
+    throw new Error(`Invalid renderFormatName: ${body.renderFormatName}`);
+  }
+
   assertNumber("width", body.width, 16, 7680);
   assertNumber("height", body.height, 16, 4320);
   assertNumber("fps", body.fps, 1, 120);
@@ -379,10 +400,13 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     const recordingId = body.recordingId.trim() || safeStem(body.audioFile);
     const outputDir = `exports/${recordingId}_${body.themeName}`;
+    const renderFormatName =
+      body.renderFormatName ?? inferRenderFormatName(body.width, body.height);
 
     const manifest = {
       recordingId,
       themeName: body.themeName,
+      renderFormatName,
       seed: Math.floor(body.seed),
       width: Math.floor(body.width),
       height: Math.floor(body.height),
