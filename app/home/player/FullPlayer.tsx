@@ -1349,7 +1349,7 @@ export default function FullPlayer(props: {
             >
               {effAlbum?.embargo?.note?.trim()
                 ? effAlbum.embargo.note.trim()
-                : "Playback disabled while this release is under embargo. Patrons have instant early access."}
+                : "Playback disabled pre-release. Patrons have instant early access."}
             </div>
           </div>
         ) : null}

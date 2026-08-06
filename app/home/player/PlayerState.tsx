@@ -226,7 +226,7 @@ function hydrateTracks(
 
 function blockedPlaybackMessage(access: PlaybackAccessDecision): string {
   if (access.embargoed) {
-    return "Playback is disabled while this release is under embargo.";
+    return "Playback is disabled pre-release.";
   }
 
   if (access.reason) return access.reason;
