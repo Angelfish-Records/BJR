@@ -666,6 +666,7 @@ export default function AudioEngine() {
 
   const engineBlockedRef = React.useRef(false);
   const lastPlaybackGateRef = React.useRef<GatePayload | null>(null);
+  const resumeAfterAuthTrackRef = React.useRef<PlayerTrack | null>(null);
 
   const pRef = React.useRef(p);
   React.useEffect(() => {
@@ -856,6 +857,23 @@ export default function AudioEngine() {
       null,
     );
   }, [reportPlaybackGate]);
+
+  const rememberAuthResumeTarget = React.useCallback(
+    (track: PlayerTrack, shouldRemember: boolean) => {
+      if (!shouldRemember) return;
+      if (!engineBlockedRef.current) return;
+      if (lastPlaybackGateRef.current?.action !== "login") return;
+      if (inferIntentForGate() !== "explicit") return;
+
+      const recordingId = (track.recordingId ?? "").trim();
+      const playbackId = (track.muxPlaybackId ?? "").trim();
+
+      if (!recordingId || !playbackId) return;
+
+      resumeAfterAuthTrackRef.current = track;
+    },
+    [inferIntentForGate],
+  );
 
   const reportLocalPlaybackErrorAsGate = React.useCallback(
     (code: GateCodeRaw, message: string, corr?: string | null) => {
@@ -1306,6 +1324,7 @@ export default function AudioEngine() {
       const s = pRef.current;
       const albumId = normalizeAlbumId(s.queueContextId);
       const st = getShareTokenFromLocation();
+      const shouldRememberResumeTarget = args.surfaceGate === true;
 
       if (albumId) {
         await prefetchAlbumSession({
@@ -1313,7 +1332,7 @@ export default function AudioEngine() {
           st,
           startPlaybackId: playbackId,
           signal: args.signal,
-          surfaceGate: args.surfaceGate === true,
+          surfaceGate: shouldRememberResumeTarget,
         });
 
         const albumCached = getCachedTokenForPlaybackId(playbackId);
@@ -1323,14 +1342,21 @@ export default function AudioEngine() {
       const isAnonymousWithoutShare = isSignedIn !== true && !st;
 
       if (isAnonymousWithoutShare) {
+        rememberAuthResumeTarget(args.track, shouldRememberResumeTarget);
         return null;
       }
 
-      return fetchSingleToken({
+      const singleToken = await fetchSingleToken({
         playbackId,
         track: args.track,
         signal: args.signal,
       });
+
+      if (!singleToken) {
+        rememberAuthResumeTarget(args.track, shouldRememberResumeTarget);
+      }
+
+      return singleToken;
     },
     [
       fetchSingleToken,
@@ -1338,6 +1364,7 @@ export default function AudioEngine() {
       getShareTokenFromLocation,
       isSignedIn,
       prefetchAlbumSession,
+      rememberAuthResumeTarget,
     ],
   );
 
@@ -3599,6 +3626,86 @@ export default function AudioEngine() {
       );
     }
   }, [attachActiveTrack, getActiveAudio, p.intent, resurfacePlaybackGate]);
+
+  React.useEffect(() => {
+    const onAuthResumeTarget = (event: Event) => {
+      const detail =
+        event instanceof CustomEvent
+          ? (event.detail as { track?: PlayerTrack } | null)
+          : null;
+
+      const track = detail?.track;
+      const recordingId = (track?.recordingId ?? "").trim();
+      const playbackId = (track?.muxPlaybackId ?? "").trim();
+
+      if (!track || !recordingId || !playbackId) return;
+
+      // An engine-level denial knows the exact failed handoff target and may
+      // already have armed this ref. Do not replace it with a less-specific
+      // UI target.
+      if (!resumeAfterAuthTrackRef.current) {
+        resumeAfterAuthTrackRef.current = track;
+      }
+    };
+
+    window.addEventListener(
+      "af:playback-auth-resume-target",
+      onAuthResumeTarget,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "af:playback-auth-resume-target",
+        onAuthResumeTarget,
+      );
+    };
+  }, []);
+
+  React.useEffect(() => {
+    const onMemberRuntimeReady = () => {
+      const resumeTrack = resumeAfterAuthTrackRef.current;
+
+      // The old anonymous gate and its cached authority belong to the previous
+      // identity. The refreshed server member runtime is now authoritative.
+      clearPlaybackGate();
+
+      albumSessionAbortRef.current?.abort();
+      albumSessionAbortRef.current = null;
+
+      tokenAbortRef.current?.abort();
+      tokenAbortRef.current = null;
+
+      loadSeq.current += 1;
+      albumSessionCacheRef.current.clear();
+      albumSessionInFlightRef.current.clear();
+      tokenCacheRef.current.clear();
+      blockedNonceRef.current.clear();
+      standbyRef.current = null;
+      anonSampleSessionRef.current = null;
+
+      if (!resumeTrack) return;
+
+      resumeAfterAuthTrackRef.current = null;
+      playIntentRef.current = true;
+
+      // Re-enter through PlayerState rather than attaching media directly.
+      // This preserves the fresh authenticated /api/access/check and Mux
+      // issuance boundaries before playback is allowed to continue.
+      pRef.current.play(resumeTrack);
+    };
+
+    window.addEventListener(
+      "af:session-runtime-member-ready",
+      onMemberRuntimeReady,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "af:session-runtime-member-ready",
+        onMemberRuntimeReady,
+      );
+    };
+  }, [clearPlaybackGate]);
 
   React.useEffect(() => {
     if (!shouldPurgeContinuityCaches()) return;

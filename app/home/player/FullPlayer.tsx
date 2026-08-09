@@ -1633,7 +1633,17 @@ export default function FullPlayer(props: FullPlayerProps) {
     } catch {}
   };
 
-  function openPlaybackGate() {
+  function openPlaybackGate(resumeTrack?: PlayerTrack) {
+    if (resumeTrack) {
+      window.dispatchEvent(
+        new CustomEvent("af:playback-auth-resume-target", {
+          detail: {
+            track: resumeTrack,
+          },
+        }),
+      );
+    }
+
     reportGate({
       code: isPlaybackGateCode(accessForAlbum?.code)
         ? accessForAlbum.code
@@ -1846,7 +1856,7 @@ export default function FullPlayer(props: FullPlayerProps) {
 
   const activateTrackRow = (track: PlayerTrack) => {
     if (isPlaybackGate) {
-      openPlaybackGate();
+      openPlaybackGate(track);
       return;
     }
     if (!canPlay) return;
@@ -1867,7 +1877,7 @@ export default function FullPlayer(props: FullPlayerProps) {
   const doubleActivateTrackRow = (track: PlayerTrack) => {
     if (isCoarsePointer) return;
     if (isPlaybackGate) {
-      openPlaybackGate();
+      openPlaybackGate(track);
       return;
     }
     if (!canPlay) return;
@@ -1880,7 +1890,7 @@ export default function FullPlayer(props: FullPlayerProps) {
 
   const inlinePlayTrack = (track: PlayerTrack) => {
     if (isPlaybackGate) {
-      openPlaybackGate();
+      openPlaybackGate(track);
       return;
     }
 

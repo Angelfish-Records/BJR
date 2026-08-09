@@ -30,6 +30,35 @@ import {
 import { useBadgeAwardOverlay } from "@/app/home/badges/BadgeAwardOverlayProvider";
 import { normalizeBadgeAwardNotices } from "@/app/home/badges/badgeAwardTypes";
 
+type ThreadGatePayload = NonNullable<ThreadApiErr["gate"]>;
+
+async function fetchVoteRecoveryThread(
+  params: Readonly<{
+    recordingId: string;
+    selected: ExegesisSelectedLine | null;
+    groupKey: string;
+  }>,
+): Promise<ThreadApiOk | null> {
+  const { recordingId, selected } = params;
+  if (!selected) return null;
+
+  const groupKey = params.groupKey.trim();
+  let selector = `&lineKey=${encodeURIComponent(selected.lineKey)}`;
+
+  if (groupKey) {
+    selector = `&groupKey=${encodeURIComponent(groupKey)}`;
+  }
+
+  const url =
+    `/api/exegesis/thread?recordingId=${encodeURIComponent(recordingId)}` +
+    selector;
+  const response = await fetch(url, { cache: "no-store" });
+  const payload = (await response.json()) as ThreadApiOk | ThreadApiErr;
+
+  if (!payload.ok) return null;
+  return payload;
+}
+
 export default function useExegesisThread(props: {
   recordingId: string;
   lyricsVersion: string | null | undefined;
@@ -48,9 +77,9 @@ export default function useExegesisThread(props: {
   pendingScrollCommentIdRef: React.MutableRefObject<string>;
   focusedRootId: string;
   draft: string;
-  draftDoc: unknown | null;
+  draftDoc: unknown;
   setDraft: React.Dispatch<React.SetStateAction<string>>;
-  setDraftDoc: React.Dispatch<React.SetStateAction<unknown | null>>;
+  setDraftDoc: React.Dispatch<React.SetStateAction<unknown>>;
   setPosting: React.Dispatch<React.SetStateAction<boolean>>;
   replyByCommentId: Record<string, ReplyDraft>;
   setReplyByCommentId: React.Dispatch<
@@ -224,7 +253,7 @@ export default function useExegesisThread(props: {
         if (!alive) return;
 
         if (!j.ok) {
-          setThread((prev) => (prev ? prev : null));
+          setThread((prev) => prev ?? null);
 
           if (j.gate) {
             const res = gateResultFromPayload({
@@ -253,7 +282,7 @@ export default function useExegesisThread(props: {
         setThreadLoadedKey(wantedCore);
       } catch {
         if (!alive) return;
-        setThread((prev) => (prev ? prev : null));
+        setThread((prev) => prev ?? null);
         setThreadErr("Failed to load thread.");
       } finally {
         if (!alive) return;
@@ -402,7 +431,7 @@ export default function useExegesisThread(props: {
     }
 
     const draft0 = editByCommentId[comment.id];
-    if (!draft0 || !draft0.open) return;
+    if (!draft0?.open) return;
 
     const text = (draft0.plain ?? "").trim();
     if (!text) {
@@ -533,7 +562,7 @@ export default function useExegesisThread(props: {
         | {
             ok: false;
             error: string;
-            gate?: ThreadApiErr["gate"];
+            gate?: ThreadGatePayload;
             newlyAwardedBadges?: unknown;
           };
 
@@ -621,7 +650,7 @@ export default function useExegesisThread(props: {
 
     const parentId = parentComment.id;
     const draft0 = replyByCommentId[parentId];
-    if (!draft0 || !draft0.open) return;
+    if (!draft0?.open) return;
 
     const text = (draft0.plain ?? "").trim();
     if (!text) {
@@ -682,7 +711,7 @@ export default function useExegesisThread(props: {
         | {
             ok: false;
             error: string;
-            gate?: ThreadApiErr["gate"];
+            gate?: ThreadGatePayload;
             newlyAwardedBadges?: unknown;
           };
 
@@ -832,19 +861,15 @@ export default function useExegesisThread(props: {
 
       setThreadErr(j.error || "Vote failed.");
 
-      if (selected) {
-        const gk = (thread?.groupKey ?? "").trim();
-        const url =
-          `/api/exegesis/thread?recordingId=${encodeURIComponent(recordingId)}` +
-          (gk
-            ? `&groupKey=${encodeURIComponent(gk)}`
-            : `&lineKey=${encodeURIComponent(selected.lineKey)}`);
-        const rr = await fetch(url, { cache: "no-store" });
-        const jj = (await rr.json()) as ThreadApiOk | ThreadApiErr;
-        if (jj.ok) {
-          setThread(jj);
-          setThreadErr("");
-        }
+      const recoveredThread = await fetchVoteRecoveryThread({
+        recordingId,
+        selected,
+        groupKey: thread.groupKey,
+      });
+
+      if (recoveredThread) {
+        setThread(recoveredThread);
+        setThreadErr("");
       }
       return;
     }

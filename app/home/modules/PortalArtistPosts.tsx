@@ -10,7 +10,7 @@ import PortalArtistPostsToolbar from "./PortalArtistPostsToolbar";
 import PortalArtistPostsComposer from "./PortalArtistPostsComposer";
 import PortalArtistPostItem from "./PortalArtistPostItem";
 
-function CopyToast(props: { visible: boolean; text: string }) {
+function CopyToast(props: Readonly<{ visible: boolean; text: string }>) {
   return (
     <div
       aria-live="polite"
@@ -62,7 +62,47 @@ function CopyToast(props: { visible: boolean; text: string }) {
   );
 }
 
-export default function PortalArtistPosts(props: PortalArtistPostsProps) {
+function LoadMoreControl(
+  props: Readonly<{
+    loading: boolean;
+    inlineGateActive: boolean;
+    cursor: string | null;
+    onLoadMore: () => void;
+  }>,
+) {
+  const { loading, inlineGateActive, cursor, onLoadMore } = props;
+  if (inlineGateActive || !cursor) return null;
+
+  const cursorStyle = loading ? "default" : "pointer";
+  const opacity = loading ? 0.5 : 0.85;
+
+  return (
+    <div style={{ paddingTop: 12 }}>
+      <button
+        type="button"
+        onClick={onLoadMore}
+        disabled={loading}
+        style={{
+          border: "none",
+          background: "transparent",
+          color: "rgba(255,255,255,0.70)",
+          cursor: cursorStyle,
+          fontSize: 12,
+          textDecoration: "underline",
+          textUnderlineOffset: 3,
+          opacity,
+          padding: 0,
+        }}
+      >
+        Load more
+      </button>
+    </div>
+  );
+}
+
+export default function PortalArtistPosts(
+  props: Readonly<PortalArtistPostsProps>,
+) {
   const {
     pageSize,
     minVisibility,
@@ -167,18 +207,29 @@ export default function PortalArtistPosts(props: PortalArtistPostsProps) {
         </div>
 
         {controller.inlineGateActive ? (
-          <div
-            role="dialog"
-            aria-modal="false"
+          <dialog
+            open
             aria-label="Sign in to keep reading"
             style={{
               position: "absolute",
               inset: 0,
               zIndex: 50,
+              width: "auto",
+              height: "auto",
+              maxWidth: "none",
+              maxHeight: "none",
+              margin: 0,
+              padding: 0,
+              border: 0,
+              boxSizing: "border-box",
+              overflow: "visible",
               pointerEvents: "auto",
               display: "block",
+              background: "transparent",
+              color: "inherit",
+              font: "inherit",
             }}
-            onMouseDown={(event) => {
+            onMouseDown={(event: React.MouseEvent<HTMLDialogElement>) => {
               event.stopPropagation();
             }}
           >
@@ -221,7 +272,7 @@ export default function PortalArtistPosts(props: PortalArtistPostsProps) {
                 </div>
               </div>
             </div>
-          </div>
+          </dialog>
         ) : null}
 
         {controller.loading ? (
@@ -251,28 +302,12 @@ export default function PortalArtistPosts(props: PortalArtistPostsProps) {
           </div>
         ) : null}
 
-        {!controller.inlineGateActive && controller.cursor ? (
-          <div style={{ paddingTop: 12 }}>
-            <button
-              type="button"
-              onClick={() => void controller.fetchPage(controller.cursor)}
-              disabled={controller.loading}
-              style={{
-                border: "none",
-                background: "transparent",
-                color: "rgba(255,255,255,0.70)",
-                cursor: controller.loading ? "default" : "pointer",
-                fontSize: 12,
-                textDecoration: "underline",
-                textUnderlineOffset: 3,
-                opacity: controller.loading ? 0.5 : 0.85,
-                padding: 0,
-              }}
-            >
-              Load more
-            </button>
-          </div>
-        ) : null}
+        <LoadMoreControl
+          loading={controller.loading}
+          inlineGateActive={controller.inlineGateActive}
+          cursor={controller.cursor}
+          onLoadMore={() => void controller.fetchPage(controller.cursor)}
+        />
       </div>
 
       <CopyToast visible={controller.toastVisible} text="Link copied" />
