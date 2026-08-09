@@ -1306,6 +1306,8 @@ function AccountControl(props: AccountControlProps) {
             flex: "0 0 auto",
             display: "grid",
             alignItems: "center",
+            alignSelf: attentionText && !isActive ? "flex-end" : "center",
+            height: attentionText && !isActive ? layout.inputHeight : "auto",
           }}
         >
           <Toggle
