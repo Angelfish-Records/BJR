@@ -121,6 +121,280 @@ function isProbablyCanonicalGroupKey(groupKey: string): boolean {
   return g.startsWith("g:") || g.startsWith("cg:") || g.startsWith("grp:");
 }
 
+function recordingIdFromCatalogueItem(
+  item: unknown,
+  allowString: boolean,
+): string | null {
+  if (allowString && typeof item === "string") return item.trim();
+  if (typeof item !== "object" || item === null) return null;
+
+  const recordingId = (item as Record<string, unknown>).recordingId;
+  return typeof recordingId === "string" ? recordingId.trim() : null;
+}
+
+function appendCatalogueRecordingIds(
+  target: string[],
+  items: unknown,
+  allowStrings: boolean,
+): void {
+  if (!Array.isArray(items)) return;
+  for (const item of items) {
+    const recordingId = recordingIdFromCatalogueItem(item, allowStrings);
+    if (recordingId !== null) target.push(recordingId);
+  }
+}
+
+function parseKnownRecordingIds(payload: unknown): string[] {
+  const out: string[] = [];
+  appendCatalogueRecordingIds(out, payload, true);
+
+  if (typeof payload === "object" && payload !== null) {
+    const record = payload as Record<string, unknown>;
+    appendCatalogueRecordingIds(out, record.recordings, true);
+    appendCatalogueRecordingIds(out, record.items, false);
+  }
+
+  return Array.from(new Set(out)).sort((a, b) => a.localeCompare(b));
+}
+
+async function fetchKnownRecordingIds(): Promise<string[]> {
+  const response = await fetch("/api/lyrics/catalogue", { cache: "no-store" });
+  const payload: unknown = await response.json();
+
+  // Temporary debug so we see the real shape once
+  console.debug("lyrics catalogue payload", payload);
+
+  return parseKnownRecordingIds(payload);
+}
+
+async function createNewGroupKey(): Promise<string> {
+  const response = await fetch("/api/admin/exegesis/group-map/new-group", {
+    method: "POST",
+  });
+  const payload: unknown = await response.json();
+  if (!isNewGroupOk(payload)) {
+    if (isApiErrShape(payload)) {
+      throw new Error(payload.error || "Failed to create group.");
+    }
+    throw new Error("Failed to create group.");
+  }
+  return payload.canonicalGroupKey;
+}
+
+async function assignLineKeysToGroup(
+  recordingId: string,
+  canonicalGroupKey: string,
+  lineKeys: string[],
+): Promise<number> {
+  const response = await fetch("/api/admin/exegesis/group-map/set", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ recordingId, canonicalGroupKey, lineKeys }),
+  });
+  const payload: unknown = await response.json();
+  if (!isSetOk(payload)) {
+    if (isApiErrShape(payload)) {
+      throw new Error(payload.error || "Assign failed.");
+    }
+    throw new Error("Assign failed.");
+  }
+  return payload.updated;
+}
+
+async function clearLineKeyMappings(
+  recordingId: string,
+  lineKeys: string[],
+): Promise<number> {
+  const response = await fetch("/api/admin/exegesis/group-map/clear", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ recordingId, lineKeys }),
+  });
+  const payload: unknown = await response.json();
+  if (!isClearOk(payload)) {
+    if (isApiErrShape(payload)) {
+      throw new Error(payload.error || "Clear failed.");
+    }
+    throw new Error("Clear failed.");
+  }
+  return payload.deleted;
+}
+
+function catalogueStatusText(
+  busy: boolean,
+  error: string,
+  knownCount: number,
+): string {
+  if (busy) return "Loading catalogue…";
+  if (error) return `Catalogue unavailable: ${error}`;
+  if (knownCount > 0) return `${knownCount} known recordingIds`;
+  return "No catalogue entries";
+}
+
+type VisibleCue = { cue: LyricsApiCue; groupKey: string };
+
+type CueRowProps = Readonly<{
+  row: VisibleCue;
+  index: number;
+  selected: boolean;
+  activeGroupKey: string;
+  onCueClick: (index: number, lineKey: string, event: React.MouseEvent) => void;
+  onFocusGroup: (groupKey: string) => void;
+}>;
+
+function CueRow(props: CueRowProps) {
+  const { row, index, selected, activeGroupKey, onCueClick, onFocusGroup } =
+    props;
+  const { cue, groupKey } = row;
+  const isActiveGroup = activeGroupKey.length > 0 && groupKey === activeGroupKey;
+  const isMappedCanonical = !startsWithLk(groupKey);
+
+  return (
+    <div
+      className={clsx([
+        "relative w-full rounded-md bg-black/20 hover:bg-black/25",
+        selected && "ring-1 ring-white/20",
+        isActiveGroup && "ring-1 ring-white/25",
+      ])}
+    >
+      <button
+        type="button"
+        className="absolute inset-0 z-0 rounded-md border-0 bg-transparent p-0"
+        onClick={(event) => onCueClick(index, cue.lineKey, event)}
+        title="Click to select/deselect. Shift-click for range."
+        aria-label={`Select lyric line ${cue.lineKey}`}
+      />
+      <div className="pointer-events-none relative z-10 p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-xs opacity-60">
+              <span className="opacity-70">{fmtTimeMs(cue.tMs)}</span>
+              <span className="opacity-50">·</span>
+              <span className="truncate">{cue.lineKey}</span>
+            </div>
+
+            <div className="mt-1 text-sm opacity-90 line-clamp-2">
+              {cue.text}
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className={clsx([
+                  "pointer-events-auto relative rounded-full px-2 py-0.5 text-xs",
+                  isMappedCanonical
+                    ? "bg-white/10 hover:bg-white/15"
+                    : "bg-white/5 hover:bg-white/10",
+                ])}
+                onClick={() => onFocusGroup(groupKey)}
+                title="Focus this group"
+              >
+                <span className="opacity-80">group:</span>{" "}
+                <span className="opacity-95">{groupKey}</span>
+              </button>
+
+              <span className="text-xs opacity-60">
+                {isMappedCanonical ? "canonical" : "fallback"}
+              </span>
+            </div>
+          </div>
+
+          <div className="shrink-0 text-xs opacity-60">
+            {selected ? "Selected" : ""}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type CueListProps = Readonly<{
+  lyrics: LyricsApiOk | null;
+  visibleCues: VisibleCue[];
+  selectedLineKeys: Record<string, boolean>;
+  activeGroupKey: string;
+  onCueClick: (index: number, lineKey: string, event: React.MouseEvent) => void;
+  onFocusGroup: (groupKey: string) => void;
+}>;
+
+function CueList(props: CueListProps) {
+  if (!props.lyrics) {
+    return <div className="text-sm opacity-60">Load a track to begin grouping.</div>;
+  }
+  if (props.visibleCues.length === 0) {
+    return (
+      <div className="text-sm opacity-60">
+        No lines match the current filters.
+      </div>
+    );
+  }
+
+  return props.visibleCues.map((row, index) => (
+    <CueRow
+      key={row.cue.lineKey}
+      row={row}
+      index={index}
+      selected={props.selectedLineKeys[row.cue.lineKey] === true}
+      activeGroupKey={props.activeGroupKey}
+      onCueClick={props.onCueClick}
+      onFocusGroup={props.onFocusGroup}
+    />
+  ));
+}
+
+type GroupListProps = Readonly<{
+  lyrics: LyricsApiOk | null;
+  groups: DerivedGroup[];
+  activeGroupKey: string;
+  onFocusGroup: (groupKey: string) => void;
+}>;
+
+function GroupList(props: GroupListProps) {
+  if (!props.lyrics) {
+    return <div className="text-sm opacity-60">Load a track to view groups.</div>;
+  }
+  if (props.groups.length === 0) {
+    return <div className="text-sm opacity-60">No groups match your search.</div>;
+  }
+
+  return props.groups.map((group) => {
+    const isActive = group.key === props.activeGroupKey;
+    const badge = group.isCanonical ? "canonical" : "implicit";
+    return (
+      <button
+        key={group.key}
+        type="button"
+        className={clsx([
+          "w-full rounded-md bg-black/20 p-3 text-left hover:bg-black/25",
+          isActive && "ring-1 ring-white/20",
+        ])}
+        onClick={() => props.onFocusGroup(group.key)}
+        title="Focus group"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="truncate text-sm opacity-90">{group.key}</div>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs opacity-60">
+              <span>{group.count} lines</span>
+              <span className="opacity-40">·</span>
+              <span>{badge}</span>
+              {group.updatedAt ? (
+                <>
+                  <span className="opacity-40">·</span>
+                  <span className="truncate">{group.updatedAt}</span>
+                </>
+              ) : null}
+            </div>
+          </div>
+          <div className="shrink-0 text-xs opacity-60">
+            {isActive ? "Focused" : ""}
+          </div>
+        </div>
+      </button>
+    );
+  });
+}
+
 export default function ExegesisGroupTool() {
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
@@ -165,89 +439,16 @@ export default function ExegesisGroupTool() {
     if (q) void loadGrouping(seed);
 
     // Load known recordingIds for picker (best-effort; don’t block tool usage)
-    void (async () => {
-      setKnownIdsErr("");
-      setKnownIdsBusy(true);
-      try {
-        const r = await fetch("/api/lyrics/catalogue", { cache: "no-store" });
-        const j: unknown = await r.json();
-
-        // Temporary debug so we see the real shape once
-        console.debug("lyrics catalogue payload", j);
-
-        // Accept a few plausible shapes:
-        // 1) { ok:true, recordings: string[] }
-        // 2) { ok:true, items: Array<{ recordingId: string }> }
-        // 3) string[]
-        // 4) Array<{ recordingId: string }>
-        const out: string[] = [];
-
-        // Handle common catalogue shapes safely
-        if (Array.isArray(j)) {
-          for (const it of j) {
-            if (typeof it === "string") out.push(it.trim());
-            else if (
-              typeof it === "object" &&
-              it !== null &&
-              typeof (it as Record<string, unknown>).recordingId === "string"
-            ) {
-              out.push(
-                String((it as Record<string, unknown>).recordingId).trim(),
-              );
-            }
-          }
-        }
-
-        if (
-          typeof j === "object" &&
-          j !== null &&
-          Array.isArray((j as Record<string, unknown>).recordings)
-        ) {
-          for (const it of (j as Record<string, unknown>)
-            .recordings as unknown[]) {
-            if (typeof it === "string") out.push(it.trim());
-            else if (
-              typeof it === "object" &&
-              it !== null &&
-              typeof (it as Record<string, unknown>).recordingId === "string"
-            ) {
-              out.push(
-                String((it as Record<string, unknown>).recordingId).trim(),
-              );
-            }
-          }
-        }
-
-        if (
-          typeof j === "object" &&
-          j !== null &&
-          Array.isArray((j as Record<string, unknown>).items)
-        ) {
-          for (const it of (j as Record<string, unknown>).items as unknown[]) {
-            if (
-              typeof it === "object" &&
-              it !== null &&
-              typeof (it as Record<string, unknown>).recordingId === "string"
-            ) {
-              out.push(
-                String((it as Record<string, unknown>).recordingId).trim(),
-              );
-            }
-          }
-        }
-
-        const uniq = Array.from(new Set(out)).sort((a, b) =>
-          a.localeCompare(b),
-        );
-        setKnownRecordingIds(uniq);
-      } catch (e: unknown) {
+    setKnownIdsErr("");
+    setKnownIdsBusy(true);
+    void fetchKnownRecordingIds()
+      .then(setKnownRecordingIds)
+      .catch((e: unknown) => {
         setKnownIdsErr(
           e instanceof Error ? e.message : "Failed to load catalogue.",
         );
-      } finally {
-        setKnownIdsBusy(false);
-      }
-    })();
+      })
+      .finally(() => setKnownIdsBusy(false));
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -298,7 +499,7 @@ export default function ExegesisGroupTool() {
   const stats = React.useMemo(() => {
     let mappedCount = 0;
     for (const c of cues) {
-      if (Boolean(lineToGroupKey[c.lineKey])) mappedCount += 1;
+      if (lineToGroupKey[c.lineKey]) mappedCount += 1;
     }
     const total = cues.length;
     const unmapped = Math.max(0, total - mappedCount);
@@ -365,7 +566,7 @@ export default function ExegesisGroupTool() {
       const out: Array<{ cue: LyricsApiCue; groupKey: string }> = [];
       for (const c of cues) {
         const gk = getLineGroupKey(c.lineKey);
-        const isUnmapped = !Boolean(lineToGroupKey[c.lineKey]);
+        const isUnmapped = !lineToGroupKey[c.lineKey];
         const isSel = Boolean(selectedLineKeys[c.lineKey]);
 
         if (onlyUnmapped && !isUnmapped) continue;
@@ -394,7 +595,7 @@ export default function ExegesisGroupTool() {
   function toggleSelect(lineKey: string) {
     setSelectedLineKeys((prev) => ({
       ...prev,
-      [lineKey]: !Boolean(prev[lineKey]),
+      [lineKey]: !prev[lineKey],
     }));
   }
 
@@ -459,51 +660,6 @@ export default function ExegesisGroupTool() {
     } finally {
       setBusy(false);
     }
-  }
-
-  async function createNewGroupKey(): Promise<string> {
-    const r = await fetch("/api/admin/exegesis/group-map/new-group", {
-      method: "POST",
-    });
-    const j: unknown = await r.json();
-    if (!isNewGroupOk(j)) {
-      if (isApiErrShape(j))
-        throw new Error(j.error || "Failed to create group.");
-      throw new Error("Failed to create group.");
-    }
-    return j.canonicalGroupKey;
-  }
-
-  async function assignLineKeysToGroup(
-    recordingId: string,
-    canonicalGroupKey: string,
-    lineKeys: string[],
-  ): Promise<number> {
-    const r = await fetch("/api/admin/exegesis/group-map/set", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ recordingId, canonicalGroupKey, lineKeys }),
-    });
-    const j: unknown = await r.json();
-    if (!isSetOk(j)) {
-      if (isApiErrShape(j)) throw new Error(j.error || "Assign failed.");
-      throw new Error("Assign failed.");
-    }
-    return j.updated;
-  }
-
-  async function clearLineKeyMappings(recordingId: string, lineKeys: string[]) {
-    const r = await fetch("/api/admin/exegesis/group-map/clear", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ recordingId, lineKeys }),
-    });
-    const j: unknown = await r.json();
-    if (!isClearOk(j)) {
-      if (isApiErrShape(j)) throw new Error(j.error || "Clear failed.");
-      throw new Error("Clear failed.");
-    }
-    return j.deleted;
   }
 
   async function createGroupFromSelection() {
@@ -668,6 +824,15 @@ export default function ExegesisGroupTool() {
 
   const canAct = Boolean(lyrics && groupMap && loadedRecordingId);
   const hasSelection = selectedKeys.length > 0;
+  const knownRecordingIdsStatus = catalogueStatusText(
+    knownIdsBusy,
+    knownIdsErr,
+    knownRecordingIds.length,
+  );
+
+  function focusGroup(groupKey: string): void {
+    setActiveGroupKey(groupKey);
+  }
 
   return (
     <div className="rounded-xl bg-white/5 p-4">
@@ -703,17 +868,12 @@ export default function ExegesisGroupTool() {
             </datalist>
 
             <div className="mt-1 text-[11px] opacity-60">
-              {knownIdsBusy
-                ? "Loading catalogue…"
-                : knownIdsErr
-                  ? `Catalogue unavailable: ${knownIdsErr}`
-                  : knownRecordingIds.length
-                    ? `${knownRecordingIds.length} known recordingIds`
-                    : "No catalogue entries"}
+              {knownRecordingIdsStatus}
             </div>
           </div>
 
           <button
+            type="button"
             className="rounded-md bg-white/10 px-3 py-2 text-sm hover:bg-white/15 disabled:opacity-40"
             disabled={busy || !recordingIdInput.trim()}
             onClick={() => void loadGrouping()}
@@ -768,7 +928,7 @@ export default function ExegesisGroupTool() {
                   checked={showOnlyUnmapped}
                   onChange={(e) => setShowOnlyUnmapped(e.target.checked)}
                 />
-                Unmapped only
+                <span>Unmapped only</span>
               </label>
               <label className="flex cursor-pointer items-center gap-2 text-xs opacity-75">
                 <input
@@ -776,10 +936,11 @@ export default function ExegesisGroupTool() {
                   checked={showOnlySelected}
                   onChange={(e) => setShowOnlySelected(e.target.checked)}
                 />
-                Selected only
+                <span>Selected only</span>
               </label>
 
               <button
+                type="button"
                 className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
                 disabled={!hasSelection}
                 onClick={() => clearSelection()}
@@ -794,85 +955,19 @@ export default function ExegesisGroupTool() {
             className="mt-3 space-y-2"
             style={{ maxHeight: 560, overflowY: "auto" }}
           >
-            {!lyrics ? (
-              <div className="text-sm opacity-60">
-                Load a track to begin grouping.
-              </div>
-            ) : visibleCues.length === 0 ? (
-              <div className="text-sm opacity-60">
-                No lines match the current filters.
-              </div>
-            ) : (
-              visibleCues.map(({ cue: c, groupKey }, idx) => {
-                const isSel = Boolean(selectedLineKeys[c.lineKey]);
-                const isActiveGroup =
-                  Boolean(activeGroupKey) && groupKey === activeGroupKey;
-                const isMappedCanonical = !startsWithLk(groupKey);
-
-                return (
-                  <button
-                    key={c.lineKey}
-                    className={clsx([
-                      "w-full rounded-md bg-black/20 p-3 text-left hover:bg-black/25",
-                      isSel && "ring-1 ring-white/20",
-                      isActiveGroup && "ring-1 ring-white/25",
-                    ])}
-                    onClick={(e) => onCueClick(idx, c.lineKey, e)}
-                    title="Click to select/deselect. Shift-click for range."
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 text-xs opacity-60">
-                          <span className="opacity-70">{fmtTimeMs(c.tMs)}</span>
-                          <span className="opacity-50">·</span>
-                          <span className="truncate">{c.lineKey}</span>
-                        </div>
-
-                        <div className="mt-1 text-sm opacity-90 line-clamp-2">
-                          {c.text}
-                        </div>
-
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            className={clsx([
-                              "rounded-full px-2 py-0.5 text-xs",
-                              isMappedCanonical
-                                ? "bg-white/10 hover:bg-white/15"
-                                : "bg-white/5 hover:bg-white/10",
-                            ])}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveGroupKey(groupKey);
-                            }}
-                            title="Focus this group"
-                          >
-                            <span className="opacity-80">group:</span>{" "}
-                            <span className="opacity-95">{groupKey}</span>
-                          </button>
-
-                          {isMappedCanonical ? (
-                            <span className="text-xs opacity-60">
-                              canonical
-                            </span>
-                          ) : (
-                            <span className="text-xs opacity-60">fallback</span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="shrink-0 text-xs opacity-60">
-                        {isSel ? "Selected" : ""}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })
-            )}
+            <CueList
+              lyrics={lyrics}
+              visibleCues={visibleCues}
+              selectedLineKeys={selectedLineKeys}
+              activeGroupKey={activeGroupKey}
+              onCueClick={onCueClick}
+              onFocusGroup={focusGroup}
+            />
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
+              type="button"
               className="rounded-md bg-white/10 px-3 py-2 text-sm hover:bg-white/15 disabled:opacity-40"
               disabled={busy || !canAct || !hasSelection}
               onClick={() => void createGroupFromSelection()}
@@ -882,6 +977,7 @@ export default function ExegesisGroupTool() {
             </button>
 
             <button
+              type="button"
               className="rounded-md bg-white/10 px-3 py-2 text-sm hover:bg-white/15 disabled:opacity-40"
               disabled={
                 busy ||
@@ -897,6 +993,7 @@ export default function ExegesisGroupTool() {
             </button>
 
             <button
+              type="button"
               className="rounded-md bg-white/5 px-3 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
               disabled={busy || !canAct || !hasSelection}
               onClick={() => void clearSelectedMapping()}
@@ -929,6 +1026,7 @@ export default function ExegesisGroupTool() {
               onChange={(e) => setGroupSearch(e.target.value)}
             />
             <button
+              type="button"
               className="rounded-md bg-white/5 px-2 py-2 text-xs hover:bg-white/10 disabled:opacity-40"
               disabled={!groupSearch.trim()}
               onClick={() => setGroupSearch("")}
@@ -942,59 +1040,19 @@ export default function ExegesisGroupTool() {
             className="mt-3 space-y-2"
             style={{ maxHeight: 260, overflowY: "auto" }}
           >
-            {!lyrics ? (
-              <div className="text-sm opacity-60">
-                Load a track to view groups.
-              </div>
-            ) : derivedGroups.length === 0 ? (
-              <div className="text-sm opacity-60">
-                No groups match your search.
-              </div>
-            ) : (
-              derivedGroups.map((g) => {
-                const isActive = g.key === activeGroupKey;
-                const badge = g.isCanonical ? "canonical" : "implicit";
-                return (
-                  <button
-                    key={g.key}
-                    className={clsx([
-                      "w-full rounded-md bg-black/20 p-3 text-left hover:bg-black/25",
-                      isActive && "ring-1 ring-white/20",
-                    ])}
-                    onClick={() => setActiveGroupKey(g.key)}
-                    title="Focus group"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="truncate text-sm opacity-90">
-                          {g.key}
-                        </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs opacity-60">
-                          <span>{g.count} lines</span>
-                          <span className="opacity-40">·</span>
-                          <span>{badge}</span>
-                          {g.updatedAt ? (
-                            <>
-                              <span className="opacity-40">·</span>
-                              <span className="truncate">{g.updatedAt}</span>
-                            </>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="shrink-0 text-xs opacity-60">
-                        {isActive ? "Focused" : ""}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })
-            )}
+            <GroupList
+              lyrics={lyrics}
+              groups={derivedGroups}
+              activeGroupKey={activeGroupKey}
+              onFocusGroup={focusGroup}
+            />
           </div>
 
           <div className="mt-4 border-t border-white/10 pt-3">
             <div className="flex items-center justify-between gap-2">
               <div className="text-sm opacity-80">Group inspector</div>
               <button
+                type="button"
                 className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
                 disabled={!activeGroupKey.trim()}
                 onClick={() => setActiveGroupKey("")}
@@ -1024,6 +1082,7 @@ export default function ExegesisGroupTool() {
 
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <button
+                      type="button"
                       className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
                       disabled={
                         busy ||
@@ -1038,6 +1097,7 @@ export default function ExegesisGroupTool() {
                     </button>
 
                     <button
+                      type="button"
                       className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
                       disabled={
                         busy ||
@@ -1052,6 +1112,7 @@ export default function ExegesisGroupTool() {
                     </button>
 
                     <button
+                      type="button"
                       className="rounded-md bg-white/5 px-3 py-1.5 text-sm hover:bg-white/10 disabled:opacity-40"
                       disabled={
                         busy || !canAct || startsWithLk(activeGroup.key)
@@ -1065,6 +1126,7 @@ export default function ExegesisGroupTool() {
 
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <button
+                      type="button"
                       className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
                       disabled={!activeGroup.lineKeys.length}
                       onClick={() => selectActiveGroupLines()}
@@ -1072,6 +1134,7 @@ export default function ExegesisGroupTool() {
                       Select all in group
                     </button>
                     <button
+                      type="button"
                       className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
                       disabled={!activeGroup.lineKeys.length}
                       onClick={() => deselectActiveGroupLines()}
@@ -1090,6 +1153,7 @@ export default function ExegesisGroupTool() {
                     const isSel = Boolean(selectedLineKeys[lk]);
                     return (
                       <button
+                        type="button"
                         key={lk}
                         className={clsx([
                           "w-full rounded-md bg-black/20 p-3 text-left hover:bg-black/25",

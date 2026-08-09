@@ -7,14 +7,20 @@ import type { ArrayOfObjectsInputProps, FormPatch } from "sanity";
 type ImportLyricCue = { tMs: number; text: string; endMs?: number };
 type ImportPayload = { offsetMs?: number; cues: ImportLyricCue[] };
 
+const PARA_BREAK = "__PARA_BREAK__" as const;
+const TIME_TAG_RE =
+  /\[(\d{1,2}:\d{2}(?::\d{2})?(?:\.\d{1,3})?)\]/g;
+const OFFSET_TAG_RE = /^\[offset:\s*(-?\d+)\s*\]/im;
+const METADATA_TAG_RE = /^\[[a-zA-Z]+:/;
+
 function parseTimestampToMs(ts: string): number | null {
   // supports mm:ss.xx , mm:ss.xxx , hh:mm:ss.xx
   const s = ts.trim();
   const parts = s.split(":");
   if (parts.length < 2 || parts.length > 3) return null;
 
-  const secPart = parts[parts.length - 1]!;
-  const minPart = parts[parts.length - 2]!;
+  const secPart = parts.at(-1)!;
+  const minPart = parts.at(-2)!;
   const hourPart = parts.length === 3 ? parts[0]! : null;
 
   const mins = Number(minPart);
@@ -34,25 +40,32 @@ function parseTimestampToMs(ts: string): number | null {
   return ms >= 0 ? ms : null;
 }
 
-const PARA_BREAK = "__PARA_BREAK__" as const;
+function parseGlobalOffsetMs(text: string): number | undefined {
+  const match = OFFSET_TAG_RE.exec(text);
+  if (!match) return undefined;
+
+  const offset = Number(match[1]);
+  if (!Number.isFinite(offset)) return undefined;
+
+  return Math.trunc(offset);
+}
+
+function collectLineTimestamps(line: string): number[] {
+  const times: number[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = TIME_TAG_RE.exec(line))) {
+    const ms = parseTimestampToMs(match[1]!);
+    if (ms != null) times.push(ms);
+  }
+
+  return times;
+}
 
 function parseLrc(text: string): { cues: ImportLyricCue[]; offsetMs?: number } {
   const lines = text.split(/\r?\n/);
   const cues: ImportLyricCue[] = [];
-
-  // matches [mm:ss.xx]text (can be multiple timestamps per line)
-  const timeTag =
-    /\[([0-9]{1,2}:[0-9]{2}(?:\.[0-9]{1,3})?|[0-9]{1,2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,3})?)\]/g;
-
-  // honour [offset: ...] if present (ms, may be negative)
-  let globalOffsetMs: number | undefined;
-  {
-    const m = text.match(/^\[offset:\s*(-?\d+)\s*\]/im);
-    if (m) {
-      const n = Number(m[1]);
-      if (Number.isFinite(n)) globalOffsetMs = Math.trunc(n);
-    }
-  }
+  const globalOffsetMs = parseGlobalOffsetMs(text);
 
   for (const raw of lines) {
     const line = raw.trim();
@@ -60,23 +73,18 @@ function parseLrc(text: string): { cues: ImportLyricCue[]; offsetMs?: number } {
 
     // ignore metadata tags like [ar:], [ti:], [by:], [length:], etc.
     // NOTE: we already captured [offset:] above.
-    if (/^\[[a-zA-Z]+:/.test(line)) continue;
+    if (METADATA_TAG_RE.test(line)) continue;
 
-    const times: number[] = [];
-    let m: RegExpExecArray | null;
-    while ((m = timeTag.exec(line))) {
-      const ms = parseTimestampToMs(m[1]!);
-      if (ms != null) times.push(ms);
-    }
+    const times = collectLineTimestamps(line);
     if (times.length === 0) continue;
 
-    const textOnlyRaw = line.replace(timeTag, "");
+    const textOnlyRaw = line.replace(TIME_TAG_RE, "");
     const textOnly = textOnlyRaw.trim();
 
     // IMPORTANT:
     // A timestamped blank line in LRC (e.g. "[00:35.583]") is meaningful for us:
     // it represents a paragraph break. Preserve it as a sentinel cue.
-    const payloadText = textOnly ? textOnly : PARA_BREAK;
+    const payloadText = textOnly || PARA_BREAK;
 
     for (const baseMs of times) {
       const tMs = baseMs + (globalOffsetMs ?? 0);
@@ -165,12 +173,7 @@ export default function LyricsImportInput(props: ArrayOfObjectsInputProps) {
       return;
     }
 
-    const siblingOffset =
-      asJson?.offsetMs != null
-        ? asJson.offsetMs
-        : offsetFromLrc != null
-          ? offsetFromLrc
-          : undefined;
+    const siblingOffset = asJson?.offsetMs ?? offsetFromLrc;
 
     const cuesWithKeys = cues.map((c) => ({
       _key: makeKey(),

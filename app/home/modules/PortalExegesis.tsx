@@ -64,7 +64,7 @@ function extractDisplayIdFromPath(pathname: string): string | null {
   if (idx < 0) return null;
   const next = parts[idx + 1] ?? "";
   const raw = decodeURIComponent(next).trim();
-  return raw ? raw : null;
+  return raw || null;
 }
 
 function buildCatalogueIndexes(cat: CatalogueOk | null): {
@@ -285,17 +285,19 @@ async function extractCoverTint(url: string): Promise<string | null> {
   return out;
 }
 
-function AlbumCard(props: {
-  a: CatalogueOk["albums"][number];
-  label: string;
-  search: string;
-  onOpenTrack: (
-    event: React.MouseEvent<HTMLAnchorElement>,
-    displayId: string,
-    recordingId: string,
-  ) => void;
-  onPrefetchRoute: (href: string) => void;
-}) {
+function AlbumCard(
+  props: Readonly<{
+    a: CatalogueOk["albums"][number];
+    label: string;
+    search: string;
+    onOpenTrack: (
+      event: React.MouseEvent<HTMLAnchorElement>,
+      displayId: string,
+      recordingId: string,
+    ) => void;
+    onPrefetchRoute: (href: string) => void;
+  }>,
+) {
   const { a, label, search, onOpenTrack, onPrefetchRoute } = props;
 
   const [tint, setTint] = React.useState<string | null>(null);
@@ -322,7 +324,7 @@ function AlbumCard(props: {
   // Use tint as border + subtle glow
   const borderGradient = tint ?? "rgba(255,255,255,0.10)";
   const glowCol = tint
-    ? borderGradient.replace(/0\.45/g, "0.18")
+    ? borderGradient.replaceAll("0.45", "0.18")
     : "rgba(255,255,255,0.06)";
 
   return (
@@ -445,33 +447,44 @@ function AlbumCard(props: {
   );
 }
 
-export default function PortalExegesis(props: { title?: string }) {
-  const pathname = usePathname() ?? "";
-  const router = useRouter();
-  const sp = useSearchParams();
-  const search = sp?.toString() ? `?${sp.toString()}` : "";
+type ExegesisDisplayState = Readonly<{
+  displayId: string | null;
+  exegesisDisplayId: string | null;
+  setExegesisDisplayId: (displayId: string | null) => void;
+  setOptimisticDisplayId: React.Dispatch<
+    React.SetStateAction<string | null | undefined>
+  >;
+  setIsReturningToIndex: React.Dispatch<React.SetStateAction<boolean>>;
+}>;
 
+function resolveDisplayId(
+  optimisticDisplayId: string | null | undefined,
+  isReturningToIndex: boolean,
+  displayIdFromPath: string | null,
+  exegesisDisplayId: string | null,
+): string | null {
+  if (optimisticDisplayId !== undefined) return optimisticDisplayId;
+
+  const resolved = isReturningToIndex
+    ? exegesisDisplayId
+    : (displayIdFromPath ?? exegesisDisplayId);
+
+  return (resolved ?? "").trim() || null;
+}
+
+function useExegesisDisplayState(pathname: string): ExegesisDisplayState {
   const { exegesisDisplayId, setExegesisDisplayId } = usePortalViewer();
   const [optimisticDisplayId, setOptimisticDisplayId] = React.useState<
     string | null | undefined
   >(undefined);
   const [isReturningToIndex, setIsReturningToIndex] = React.useState(false);
-
-  // -------- index state --------
-  const [catalogue, setCatalogue] = React.useState<CatalogueOk | null>(null);
-  const [catalogueErr, setCatalogueErr] = React.useState("");
-  const [catalogueLoading, setCatalogueLoading] = React.useState(false);
-
   const displayIdFromPath = extractDisplayIdFromPath(pathname);
-
-  const displayId =
-    optimisticDisplayId !== undefined
-      ? optimisticDisplayId
-      : (
-          (isReturningToIndex
-            ? exegesisDisplayId
-            : (displayIdFromPath ?? exegesisDisplayId)) ?? ""
-        ).trim() || null;
+  const displayId = resolveDisplayId(
+    optimisticDisplayId,
+    isReturningToIndex,
+    displayIdFromPath,
+    exegesisDisplayId,
+  );
 
   // If we had to fall back to pathname parsing, persist it into context so other
   // components (and subsequent renders) have a stable single source of truth.
@@ -523,19 +536,449 @@ export default function PortalExegesis(props: { title?: string }) {
     isReturningToIndex,
   ]);
 
+  return {
+    displayId,
+    exegesisDisplayId,
+    setExegesisDisplayId,
+    setOptimisticDisplayId,
+    setIsReturningToIndex,
+  };
+}
+
+type CatalogueState = Readonly<{
+  catalogue: CatalogueOk | null;
+  catalogueErr: string;
+  catalogueLoading: boolean;
+}>;
+
+function useCatalogueState(): CatalogueState {
+  const [catalogue, setCatalogue] = React.useState<CatalogueOk | null>(null);
+  const [catalogueErr, setCatalogueErr] = React.useState("");
+  const [catalogueLoading, setCatalogueLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    let alive = true;
+
+    setCatalogueErr("");
+
+    if (CATALOGUE_CACHE) {
+      setCatalogue(CATALOGUE_CACHE);
+      setCatalogueLoading(false);
+      return;
+    }
+
+    setCatalogueLoading(true);
+
+    loadCatalogueCached()
+      .then((nextCatalogue) => {
+        if (!alive) return;
+        setCatalogue(nextCatalogue);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setCatalogue(null);
+        setCatalogueErr("Failed to load catalogue.");
+      })
+      .finally(() => {
+        if (!alive) return;
+        setCatalogueLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  return { catalogue, catalogueErr, catalogueLoading };
+}
+
+type LyricsState = Readonly<{
+  lyrics: LyricsOk | null;
+  lyricsErr: string;
+  lyricsLoading: boolean;
+  setLyrics: React.Dispatch<React.SetStateAction<LyricsOk | null>>;
+  setLyricsErr: React.Dispatch<React.SetStateAction<string>>;
+  setLyricsLoading: React.Dispatch<React.SetStateAction<boolean>>;
+}>;
+
+function useLyricsState(
+  displayId: string | null,
+  catalogue: CatalogueOk | null,
+  catalogueLoading: boolean,
+  recordingId: string | null,
+): LyricsState {
+  const [lyrics, setLyrics] = React.useState<LyricsOk | null>(null);
+  const [lyricsErr, setLyricsErr] = React.useState("");
+  const [lyricsLoading, setLyricsLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!displayId) {
+      setLyrics(null);
+      setLyricsErr("");
+      setLyricsLoading(false);
+      return;
+    }
+
+    if (!catalogue) {
+      setLyrics(null);
+      setLyricsErr("");
+      setLyricsLoading(catalogueLoading);
+      return;
+    }
+
+    if (!recordingId) {
+      setLyrics(null);
+      setLyricsErr("Track not found.");
+      setLyricsLoading(false);
+      return;
+    }
+
+    let alive = true;
+    const tid = recordingId;
+
+    setLyricsErr("");
+
+    const cached = TRACK_CACHE.get(tid);
+    if (cached) {
+      setLyrics(cached);
+      setLyricsLoading(false);
+      return () => {
+        alive = false;
+      };
+    }
+
+    setLyricsLoading(true);
+    setLyrics(null);
+
+    loadTrackCached(tid)
+      .then((nextLyrics) => {
+        if (!alive) return;
+        setLyrics(nextLyrics);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setLyricsErr("Failed to load lyrics.");
+      })
+      .finally(() => {
+        if (!alive) return;
+        setLyricsLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [catalogue, catalogueLoading, displayId, recordingId]);
+
+  return {
+    lyrics,
+    lyricsErr,
+    lyricsLoading,
+    setLyrics,
+    setLyricsErr,
+    setLyricsLoading,
+  };
+}
+
+type TrackMeta = Readonly<{
+  title: string | null;
+  artist: string | null;
+  coverUrl: string | null;
+}>;
+
+const EMPTY_TRACK_META: TrackMeta = {
+  title: null,
+  artist: null,
+  coverUrl: null,
+};
+
+function resolveRecordingId(
+  displayId: string | null,
+  recordingIdByDisplayId: Record<string, string>,
+): string | null {
+  if (!displayId) return null;
+  return recordingIdByDisplayId[displayId] ?? null;
+}
+
+function resolveTrackMeta(
+  recordingId: string | null,
+  trackMetaByRecordingId: Record<string, TrackMeta>,
+): TrackMeta {
+  if (!recordingId) return EMPTY_TRACK_META;
+  return trackMetaByRecordingId[recordingId] ?? EMPTY_TRACK_META;
+}
+
+function TrackContent(
+  props: Readonly<{
+    displayId: string;
+    lyrics: LyricsOk | null;
+    lyricsErr: string;
+    lyricsLoading: boolean;
+    noCatalogueYet: boolean;
+    resolvedTitle: string | null;
+    resolvedArtist: string | null;
+    backButton: React.ReactNode;
+    artworkNode: React.ReactNode;
+  }>,
+) {
+  const {
+    displayId,
+    lyrics,
+    lyricsErr,
+    lyricsLoading,
+    noCatalogueYet,
+    resolvedTitle,
+    resolvedArtist,
+    backButton,
+    artworkNode,
+  } = props;
+
+  if (lyricsLoading) {
+    return (
+      <ExegesisTrackLoadingShell
+        title={resolvedTitle}
+        artist={resolvedArtist}
+        headerLeading={backButton}
+        headerArtwork={artworkNode}
+      />
+    );
+  }
+
+  if (lyricsErr) {
+    return (
+      <div className="mx-auto max-w-5xl px-4 py-6">
+        <div className="rounded-md bg-white/5 p-3 text-sm">{lyricsErr}</div>
+      </div>
+    );
+  }
+
+  if (!lyrics) return null;
+
+  if (lyrics.exegesisEnabled === false) {
+    return (
+      <div className="mx-auto max-w-5xl px-4 py-6">
+        <div className="rounded-xl bg-white/5 p-4">
+          <div className="text-sm font-medium opacity-90">
+            Exegesis is not available for this track.
+          </div>
+          <div className="mt-1 text-sm opacity-60">
+            This may be a skit, interlude, instrumental, or other track that is
+            not open for lyric discussion.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Gate: while catalogue metadata is still loading, keep the tiny header
+  // skeleton rather than flashing recordingId into the track header.
+  if (noCatalogueYet) {
+    return (
+      <div className="mx-auto max-w-5xl px-4 py-6">
+        <div className="h-6 w-72 rounded bg-white/10 animate-pulse" />
+        <div className="mt-2 h-4 w-40 rounded bg-white/5 animate-pulse" />
+      </div>
+    );
+  }
+
+  return (
+    <ExegesisTrackClient
+      recordingId={lyrics.recordingId}
+      trackTitle={resolvedTitle}
+      trackArtist={resolvedArtist}
+      lyrics={lyrics}
+      canonicalPath={`/exegesis/${encodeURIComponent(displayId)}`}
+      headerLeading={backButton}
+      headerArtwork={artworkNode}
+    />
+  );
+}
+
+function TrackView(
+  props: Readonly<{
+    displayId: string;
+    recordingId: string | null;
+    trackMetaByRecordingId: Record<string, TrackMeta>;
+    lyrics: LyricsOk | null;
+    lyricsErr: string;
+    lyricsLoading: boolean;
+    catalogue: CatalogueOk | null;
+    catalogueLoading: boolean;
+    search: string;
+    onReturnToIndex: () => void;
+    onPrefetchRoute: (href: string) => void;
+  }>,
+) {
+  const {
+    displayId,
+    recordingId,
+    trackMetaByRecordingId,
+    lyrics,
+    lyricsErr,
+    lyricsLoading,
+    catalogue,
+    catalogueLoading,
+    search,
+    onReturnToIndex,
+    onPrefetchRoute,
+  } = props;
+
+  const meta = resolveTrackMeta(recordingId, trackMetaByRecordingId);
+  const resolvedTitle = (lyrics?.trackTitle ?? meta.title ?? "").trim() || null;
+  const resolvedArtist =
+    (lyrics?.trackArtist ?? meta.artist ?? "").trim() || null;
+  const resolvedCoverUrl = (meta.coverUrl ?? "").trim() || null;
+  const noCatalogueYet = !catalogue && catalogueLoading;
+  const indexHref = buildIndexHref(search);
+
+  const backButton = (
+    <button
+      type="button"
+      aria-label="Back to all tracks"
+      className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md opacity-70 transition hover:bg-white/5 hover:opacity-100"
+      onMouseEnter={() => onPrefetchRoute(indexHref)}
+      onFocus={() => onPrefetchRoute(indexHref)}
+      onMouseDown={() => onPrefetchRoute(indexHref)}
+      onTouchStart={() => onPrefetchRoute(indexHref)}
+      onClick={onReturnToIndex}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        className="h-5 w-5"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path
+          d="M 9 2 A 1.0001 1.0001 0 0 0 8 3 L 8 8 A 1 1 0 0 0 9 9 A 1 1 0 0 0 10 8 L 10 4 L 18 4 L 18 20 L 10 20 L 10 16 A 1 1 0 0 0 9 15 A 1 1 0 0 0 8 16 L 8 21 A 1.0001 1.0001 0 0 0 9 22 L 19 22 A 1.0001 1.0001 0 0 0 20 21 L 20 3 A 1.0001 1.0001 0 0 0 19 2 L 9 2 z M 7.0292969 9 A 1 1 0 0 0 6.2929688 9.2929688 L 4.3125 11.273438 L 4.2929688 11.292969 A 1.0001 1.0001 0 0 0 4.2832031 11.302734 A 1 1 0 0 0 4.2363281 11.355469 A 1 1 0 0 0 4.1855469 11.421875 A 1 1 0 0 0 4.1464844 11.482422 A 1.0001 1.0001 0 0 0 4.1289062 11.509766 A 1 1 0 0 0 4.0996094 11.566406 A 1 1 0 0 0 4.0683594 11.638672 A 1.0001 1.0001 0 0 0 4.0644531 11.650391 A 1 1 0 0 0 4.0410156 11.714844 A 1.0001 1.0001 0 0 0 4.0332031 11.75 A 1 1 0 0 0 4.0234375 11.791016 A 1.0001 1.0001 0 0 0 4.015625 11.828125 A 1 1 0 0 0 4.0078125 11.871094 A 1.0001 1.0001 0 0 0 4.0019531 11.943359 A 1.0001 1.0001 0 0 0 4 11.988281 A 1 1 0 0 0 4 12 A 1 1 0 0 0 4.0019531 12.029297 A 1.0001 1.0001 0 0 0 4.0039062 12.066406 A 1 1 0 0 0 4.0078125 12.117188 A 1.0001 1.0001 0 0 0 4.0117188 12.146484 A 1 1 0 0 0 4.0253906 12.222656 A 1 1 0 0 0 4.0410156 12.28125 A 1.0001 1.0001 0 0 0 4.0546875 12.324219 A 1 1 0 0 0 4.0585938 12.337891 A 1.0001 1.0001 0 0 0 4.0878906 12.408203 A 1.0001 1.0001 0 0 0 4.1210938 12.474609 A 1 1 0 0 0 4.1347656 12.501953 A 1.0001 1.0001 0 0 0 4.1640625 12.546875 A 1 1 0 0 0 4.1777344 12.568359 A 1.0001 1.0001 0 0 0 4.2011719 12.601562 A 1 1 0 0 0 4.21875 12.623047 A 1.0001 1.0001 0 0 0 4.265625 12.677734 A 1 1 0 0 0 4.2851562 12.699219 A 1.0001 1.0001 0 0 0 4.2929688 12.707031 A 1 1 0 0 0 4.3339844 12.746094 L 6.2929688 14.707031 A 1 1 0 0 0 7.7070312 14.707031 A 1 1 0 0 0 7.7070312 13.292969 L 7.4140625 13 L 14 13 A 1 1 0 0 0 15 12 A 1 1 0 0 0 14 11 L 7.4140625 11 L 7.7070312 10.707031 A 1 1 0 0 0 7.7070312 9.2929688 A 1 1 0 0 0 7.0292969 9 z"
+          fill="currentColor"
+        />
+      </svg>
+      <span className="sr-only">Back to all tracks</span>
+    </button>
+  );
+
+  const artworkNode = resolvedCoverUrl ? (
+    <div
+      className="h-10 w-10 shrink-0 rounded-md"
+      style={{
+        border: "1px solid rgba(255,255,255,0.10)",
+        background: `url(${resolvedCoverUrl}) center/cover no-repeat`,
+        boxShadow: "0 10px 24px rgba(0,0,0,0.22)",
+      }}
+      aria-hidden="true"
+    />
+  ) : null;
+
+  return (
+    <div style={{ minWidth: 0 }}>
+      <TrackContent
+        displayId={displayId}
+        lyrics={lyrics}
+        lyricsErr={lyricsErr}
+        lyricsLoading={lyricsLoading}
+        noCatalogueYet={noCatalogueYet}
+        resolvedTitle={resolvedTitle}
+        resolvedArtist={resolvedArtist}
+        backButton={backButton}
+        artworkNode={artworkNode}
+      />
+    </div>
+  );
+}
+
+function CatalogueIndex(
+  props: Readonly<{
+    catalogue: CatalogueOk | null;
+    catalogueErr: string;
+    catalogueLoading: boolean;
+    search: string;
+    onOpenTrack: (
+      event: React.MouseEvent<HTMLAnchorElement>,
+      displayId: string,
+      recordingId: string,
+    ) => void;
+    onPrefetchRoute: (href: string) => void;
+  }>,
+) {
+  const {
+    catalogue,
+    catalogueErr,
+    catalogueLoading,
+    search,
+    onOpenTrack,
+    onPrefetchRoute,
+  } = props;
+
+  const albums = catalogue?.albums ?? [];
+  let content: React.ReactNode;
+
+  if (catalogueLoading) {
+    content = <div className="mt-6 text-sm opacity-75">Loading…</div>;
+  } else if (catalogueErr) {
+    content = (
+      <div className="mt-6 rounded-md bg-white/5 p-3 text-sm">
+        {catalogueErr}
+      </div>
+    );
+  } else if (!catalogue || albums.length === 0) {
+    content = <div className="mt-6 text-sm opacity-60">No lyrics found.</div>;
+  } else {
+    content = (
+      <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {albums.map((album) => {
+          const label =
+            album.albumTitle || album.albumSlug || album.albumId || "Album";
+          return (
+            <AlbumCard
+              key={album.albumId}
+              a={album}
+              label={label}
+              search={search}
+              onOpenTrack={onOpenTrack}
+              onPrefetchRoute={onPrefetchRoute}
+            />
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full px-4 py-6 pl-0">
+      <div className="mt-1 text-sm opacity-70">
+        Choose a track to read and discuss lyrics.
+      </div>
+      {content}
+    </div>
+  );
+}
+
+export default function PortalExegesis() {
+  const pathname = usePathname() ?? "";
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const searchParamsString = searchParams?.toString() ?? "";
+  const search = searchParamsString ? `?${searchParamsString}` : "";
+
+  const {
+    displayId,
+    setExegesisDisplayId,
+    setOptimisticDisplayId,
+    setIsReturningToIndex,
+  } = useExegesisDisplayState(pathname);
+  const { catalogue, catalogueErr, catalogueLoading } = useCatalogueState();
   const { recordingIdByDisplayId, trackMetaByRecordingId } = React.useMemo(
     () => buildCatalogueIndexes(catalogue),
     [catalogue],
   );
-
-  const recordingId = displayId
-    ? (recordingIdByDisplayId[displayId] ?? null)
-    : null;
-
-  // -------- track state --------
-  const [lyrics, setLyrics] = React.useState<LyricsOk | null>(null);
-  const [lyricsErr, setLyricsErr] = React.useState("");
-  const [lyricsLoading, setLyricsLoading] = React.useState(false);
+  const recordingId = resolveRecordingId(displayId, recordingIdByDisplayId);
+  const {
+    lyrics,
+    lyricsErr,
+    lyricsLoading,
+    setLyrics,
+    setLyricsErr,
+    setLyricsLoading,
+  } = useLyricsState(displayId, catalogue, catalogueLoading, recordingId);
 
   function prefetchRoute(href: string) {
     const target = (href ?? "").trim();
@@ -590,243 +1033,39 @@ export default function PortalExegesis(props: { title?: string }) {
 
     if (currentHref !== nextHref) {
       router.replace(nextHref, { scroll: false });
-    } else {
-      setIsReturningToIndex(false);
-      setOptimisticDisplayId(undefined);
+      return;
     }
+
+    setIsReturningToIndex(false);
+    setOptimisticDisplayId(undefined);
   }
 
-  React.useEffect(() => {
-    let alive = true;
-
-    setCatalogueErr("");
-
-    if (CATALOGUE_CACHE) {
-      setCatalogue(CATALOGUE_CACHE);
-      setCatalogueLoading(false);
-      return;
-    }
-
-    setCatalogueLoading(true);
-
-    loadCatalogueCached()
-      .then((j) => {
-        if (!alive) return;
-        setCatalogue(j);
-      })
-      .catch(() => {
-        if (!alive) return;
-        setCatalogue(null);
-        setCatalogueErr("Failed to load catalogue.");
-      })
-      .finally(() => {
-        if (!alive) return;
-        setCatalogueLoading(false);
-      });
-
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  React.useEffect(() => {
-    if (!displayId) {
-      setLyrics(null);
-      setLyricsErr("");
-      setLyricsLoading(false);
-      return;
-    }
-
-    if (!catalogue) {
-      setLyrics(null);
-      setLyricsErr("");
-      setLyricsLoading(catalogueLoading);
-      return;
-    }
-
-    if (!recordingId) {
-      setLyrics(null);
-      setLyricsErr("Track not found.");
-      setLyricsLoading(false);
-      return;
-    }
-
-    let alive = true;
-    const tid = recordingId;
-
-    setLyricsErr("");
-
-    const cached = TRACK_CACHE.get(tid);
-    if (cached) {
-      setLyrics(cached);
-      setLyricsLoading(false);
-      return () => {
-        alive = false;
-      };
-    }
-
-    setLyricsLoading(true);
-    setLyrics(null);
-
-    loadTrackCached(tid)
-      .then((j) => {
-        if (!alive) return;
-        setLyrics(j);
-      })
-      .catch(() => {
-        if (!alive) return;
-        setLyricsErr("Failed to load lyrics.");
-      })
-      .finally(() => {
-        if (!alive) return;
-        setLyricsLoading(false);
-      });
-
-    return () => {
-      alive = false;
-    };
-  }, [catalogue, catalogueLoading, displayId, recordingId]);
-
-  // -------- render --------
   if (displayId) {
-    const meta = recordingId
-      ? (trackMetaByRecordingId[recordingId] ?? {
-          title: null,
-          artist: null,
-          coverUrl: null,
-        })
-      : { title: null, artist: null, coverUrl: null };
-
-    const resolvedTitle =
-      (lyrics?.trackTitle ?? meta.title ?? "").trim() || null;
-
-    const resolvedArtist =
-      (lyrics?.trackArtist ?? meta.artist ?? "").trim() || null;
-
-    const resolvedCoverUrl = (meta.coverUrl ?? "").trim() || null;
-
-    const noCatalogueYet = !catalogue && catalogueLoading; // still fetching
-
-    const backButton = (
-      <button
-        type="button"
-        aria-label="Back to all tracks"
-        className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md opacity-70 transition hover:bg-white/5 hover:opacity-100"
-        onMouseEnter={() => prefetchRoute(buildIndexHref(search))}
-        onFocus={() => prefetchRoute(buildIndexHref(search))}
-        onMouseDown={() => prefetchRoute(buildIndexHref(search))}
-        onTouchStart={() => prefetchRoute(buildIndexHref(search))}
-        onClick={() => {
-          returnToIndex();
-        }}
-      >
-        <svg
-          viewBox="0 0 24 24"
-          className="h-5 w-5"
-          aria-hidden="true"
-          focusable="false"
-        >
-          <path
-            d="M 9 2 A 1.0001 1.0001 0 0 0 8 3 L 8 8 A 1 1 0 0 0 9 9 A 1 1 0 0 0 10 8 L 10 4 L 18 4 L 18 20 L 10 20 L 10 16 A 1 1 0 0 0 9 15 A 1 1 0 0 0 8 16 L 8 21 A 1.0001 1.0001 0 0 0 9 22 L 19 22 A 1.0001 1.0001 0 0 0 20 21 L 20 3 A 1.0001 1.0001 0 0 0 19 2 L 9 2 z M 7.0292969 9 A 1 1 0 0 0 6.2929688 9.2929688 L 4.3125 11.273438 L 4.2929688 11.292969 A 1.0001 1.0001 0 0 0 4.2832031 11.302734 A 1 1 0 0 0 4.2363281 11.355469 A 1 1 0 0 0 4.1855469 11.421875 A 1 1 0 0 0 4.1464844 11.482422 A 1.0001 1.0001 0 0 0 4.1289062 11.509766 A 1 1 0 0 0 4.0996094 11.566406 A 1 1 0 0 0 4.0683594 11.638672 A 1.0001 1.0001 0 0 0 4.0644531 11.650391 A 1 1 0 0 0 4.0410156 11.714844 A 1.0001 1.0001 0 0 0 4.0332031 11.75 A 1 1 0 0 0 4.0234375 11.791016 A 1.0001 1.0001 0 0 0 4.015625 11.828125 A 1 1 0 0 0 4.0078125 11.871094 A 1.0001 1.0001 0 0 0 4.0019531 11.943359 A 1.0001 1.0001 0 0 0 4 11.988281 A 1 1 0 0 0 4 12 A 1 1 0 0 0 4.0019531 12.029297 A 1.0001 1.0001 0 0 0 4.0039062 12.066406 A 1 1 0 0 0 4.0078125 12.117188 A 1.0001 1.0001 0 0 0 4.0117188 12.146484 A 1 1 0 0 0 4.0253906 12.222656 A 1 1 0 0 0 4.0410156 12.28125 A 1.0001 1.0001 0 0 0 4.0546875 12.324219 A 1 1 0 0 0 4.0585938 12.337891 A 1.0001 1.0001 0 0 0 4.0878906 12.408203 A 1.0001 1.0001 0 0 0 4.1210938 12.474609 A 1 1 0 0 0 4.1347656 12.501953 A 1.0001 1.0001 0 0 0 4.1640625 12.546875 A 1 1 0 0 0 4.1777344 12.568359 A 1.0001 1.0001 0 0 0 4.2011719 12.601562 A 1 1 0 0 0 4.21875 12.623047 A 1.0001 1.0001 0 0 0 4.265625 12.677734 A 1 1 0 0 0 4.2851562 12.699219 A 1.0001 1.0001 0 0 0 4.2929688 12.707031 A 1 1 0 0 0 4.3339844 12.746094 L 6.2929688 14.707031 A 1 1 0 0 0 7.7070312 14.707031 A 1 1 0 0 0 7.7070312 13.292969 L 7.4140625 13 L 14 13 A 1 1 0 0 0 15 12 A 1 1 0 0 0 14 11 L 7.4140625 11 L 7.7070312 10.707031 A 1 1 0 0 0 7.7070312 9.2929688 A 1 1 0 0 0 7.0292969 9 z"
-            fill="currentColor"
-          />
-        </svg>
-        <span className="sr-only">Back to all tracks</span>
-      </button>
-    );
-
-    const artworkNode = resolvedCoverUrl ? (
-      <div
-        className="h-10 w-10 shrink-0 rounded-md"
-        style={{
-          border: "1px solid rgba(255,255,255,0.10)",
-          background: `url(${resolvedCoverUrl}) center/cover no-repeat`,
-          boxShadow: "0 10px 24px rgba(0,0,0,0.22)",
-        }}
-        aria-hidden="true"
-      />
-    ) : null;
-
     return (
-      <div style={{ minWidth: 0 }}>
-        {lyricsLoading ? (
-          <ExegesisTrackLoadingShell
-            title={resolvedTitle}
-            artist={resolvedArtist}
-            headerLeading={backButton}
-            headerArtwork={artworkNode}
-          />
-        ) : lyricsErr ? (
-          <div className="mx-auto max-w-5xl px-4 py-6">
-            <div className="rounded-md bg-white/5 p-3 text-sm">{lyricsErr}</div>
-          </div>
-        ) : lyrics ? (
-          lyrics.exegesisEnabled === false ? (
-            <div className="mx-auto max-w-5xl px-4 py-6">
-              <div className="rounded-xl bg-white/5 p-4">
-                <div className="text-sm font-medium opacity-90">
-                  Exegesis is not available for this track.
-                </div>
-                <div className="mt-1 text-sm opacity-60">
-                  This may be a skit, interlude, instrumental, or other track
-                  that is not open for lyric discussion.
-                </div>
-              </div>
-            </div>
-          ) : // ✅ Gate: if catalogue is still loading, show a tiny header skeleton instead of flashing recordingId
-          noCatalogueYet ? (
-            <div className="mx-auto max-w-5xl px-4 py-6">
-              <div className="h-6 w-72 rounded bg-white/10 animate-pulse" />
-              <div className="mt-2 h-4 w-40 rounded bg-white/5 animate-pulse" />
-            </div>
-          ) : (
-            <ExegesisTrackClient
-              recordingId={lyrics.recordingId}
-              trackTitle={resolvedTitle}
-              trackArtist={resolvedArtist}
-              lyrics={lyrics}
-              canonicalPath={`/exegesis/${encodeURIComponent(displayId)}`}
-              headerLeading={backButton}
-              headerArtwork={artworkNode}
-            />
-          )
-        ) : null}
-      </div>
+      <TrackView
+        displayId={displayId}
+        recordingId={recordingId}
+        trackMetaByRecordingId={trackMetaByRecordingId}
+        lyrics={lyrics}
+        lyricsErr={lyricsErr}
+        lyricsLoading={lyricsLoading}
+        catalogue={catalogue}
+        catalogueLoading={catalogueLoading}
+        search={search}
+        onReturnToIndex={returnToIndex}
+        onPrefetchRoute={prefetchRoute}
+      />
     );
   }
 
-  // index
   return (
-    <div className="w-full px-4 py-6 pl-0">
-      <div className="mt-1 text-sm opacity-70">
-        Choose a track to read and discuss lyrics.
-      </div>
-
-      {catalogueLoading ? (
-        <div className="mt-6 text-sm opacity-75">Loading…</div>
-      ) : catalogueErr ? (
-        <div className="mt-6 rounded-md bg-white/5 p-3 text-sm">
-          {catalogueErr}
-        </div>
-      ) : !catalogue || (catalogue.albums ?? []).length === 0 ? (
-        <div className="mt-6 text-sm opacity-60">No lyrics found.</div>
-      ) : (
-        <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {catalogue.albums.map((a) => {
-            const label = a.albumTitle || a.albumSlug || a.albumId || "Album";
-            return (
-              <AlbumCard
-                key={a.albumId}
-                a={a}
-                label={label}
-                search={search}
-                onOpenTrack={openTrack}
-                onPrefetchRoute={prefetchRoute}
-              />
-            );
-          })}
-        </div>
-      )}
-    </div>
+    <CatalogueIndex
+      catalogue={catalogue}
+      catalogueErr={catalogueErr}
+      catalogueLoading={catalogueLoading}
+      search={search}
+      onOpenTrack={openTrack}
+      onPrefetchRoute={prefetchRoute}
+    />
   );
 }

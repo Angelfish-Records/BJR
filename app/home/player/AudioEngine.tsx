@@ -661,6 +661,7 @@ export default function AudioEngine() {
   const anonSampleSessionRef = React.useRef<{
     id: string;
     expiresAtMs: number;
+    playbackIds: ReadonlySet<string>;
   } | null>(null);
 
   const engineBlockedRef = React.useRef(false);
@@ -918,6 +919,7 @@ export default function AudioEngine() {
     (args: {
       albumId: string;
       st: string | null;
+      mode: "full" | "sample";
       expiresAt: string | number;
       tracks: AlbumSessionToken[];
       sampleSession?: {
@@ -931,6 +933,40 @@ export default function AudioEngine() {
           : Date.parse(String(args.expiresAt));
 
       if (!Number.isFinite(expiresAtMs)) return false;
+
+      const currentShareToken = getShareTokenFromLocation();
+      const requestedShareToken = args.st?.trim() || null;
+
+      if (currentShareToken !== requestedShareToken) {
+        return false;
+      }
+
+      if (isUserLoaded) {
+        const expectsFullAuthority =
+          isSignedIn === true || currentShareToken !== null;
+
+        if (
+          (args.mode === "full" && !expectsFullAuthority) ||
+          (args.mode === "sample" && expectsFullAuthority)
+        ) {
+          return false;
+        }
+      }
+
+      // A server-issued sample is a new, bounded authority context. Purge
+      // broader tokens before caching it so a prior signed/share session can
+      // never leak full-album authority into anonymous playback.
+      if (args.mode === "sample") {
+        tokenCacheRef.current.clear();
+        albumSessionCacheRef.current.clear();
+        standbyRef.current = null;
+        anonSampleSessionRef.current = null;
+      } else {
+        // Full authority supersedes any previous anonymous sample marker. This
+        // is critical because sign-out/share-token removal must then trigger
+        // the ordinary anonymous cache purge rather than preserving full tokens.
+        anonSampleSessionRef.current = null;
+      }
 
       const byPlaybackId = new Map<
         string,
@@ -964,7 +1000,7 @@ export default function AudioEngine() {
         byPlaybackId,
       });
 
-      if (args.sampleSession) {
+      if (args.mode === "sample" && args.sampleSession) {
         const sampleExpiresAtMs =
           typeof args.sampleSession.expiresAt === "number"
             ? args.sampleSession.expiresAt * 1000
@@ -974,22 +1010,39 @@ export default function AudioEngine() {
           anonSampleSessionRef.current = {
             id: args.sampleSession.id,
             expiresAtMs: sampleExpiresAtMs,
+            playbackIds: new Set(byPlaybackId.keys()),
           };
         }
       }
 
       return true;
     },
-    [albumSessionKey],
+    [albumSessionKey, getShareTokenFromLocation, isSignedIn, isUserLoaded],
   );
 
   const getCachedTokenForPlaybackId = React.useCallback(
     (playbackId: string): { token: string; expiresAtMs: number } | null => {
+      const shareToken = getShareTokenFromLocation();
+      const isAnonymousWithoutShare =
+        isUserLoaded && isSignedIn !== true && !shareToken;
+
+      if (isAnonymousWithoutShare) {
+        const sample = anonSampleSessionRef.current;
+
+        if (
+          !sample ||
+          Date.now() >= sample.expiresAtMs - 5_000 ||
+          !sample.playbackIds.has(playbackId)
+        ) {
+          return null;
+        }
+      }
+
       const direct = tokenCacheRef.current.get(playbackId);
       if (direct && Date.now() < direct.expiresAtMs - 5000) return direct;
       return null;
     },
-    [],
+    [getShareTokenFromLocation, isSignedIn, isUserLoaded],
   );
 
   const prefetchAlbumSession = React.useCallback(
@@ -1009,9 +1062,28 @@ export default function AudioEngine() {
       const key = albumSessionKey(albumId, st);
 
       const cached = albumSessionCacheRef.current.get(key);
-      if (cached && Date.now() < cached.expiresAtMs - 5000) return true;
+      const cachedCoversRequestedTrack =
+        !startPlaybackId || cached?.byPlaybackId.has(startPlaybackId) === true;
 
-      const existing = albumSessionInFlightRef.current.get(key);
+      if (
+        cached &&
+        Date.now() < cached.expiresAtMs - 5000 &&
+        cachedCoversRequestedTrack
+      ) {
+        return true;
+      }
+
+      // Different requested starts and auth states can produce different server
+      // authority decisions. Never collapse them into one in-flight request.
+      const authorityKey = !isUserLoaded
+        ? "loading"
+        : isSignedIn === true
+          ? "signed"
+          : "anonymous";
+      const requestKey = `${key}::authority=${authorityKey}::start=${
+        startPlaybackId ?? ""
+      }`;
+      const existing = albumSessionInFlightRef.current.get(requestKey);
       if (existing) return existing;
 
       const promise = (async () => {
@@ -1084,13 +1156,16 @@ export default function AudioEngine() {
             detail: `tracks=${data.tracks.length}`,
           });
 
+          const mode = data.mode === "full" ? "full" : "sample";
+
           return cacheAlbumSessionTokens({
             albumId: data.albumId || albumId,
             st,
+            mode,
             expiresAt: data.expiresAt,
             tracks: data.tracks,
             sampleSession:
-              data.mode === "sample" && data.sampleSession
+              mode === "sample" && data.sampleSession
                 ? data.sampleSession
                 : null,
           });
@@ -1098,16 +1173,18 @@ export default function AudioEngine() {
           return false;
         }
       })().finally(() => {
-        albumSessionInFlightRef.current.delete(key);
+        albumSessionInFlightRef.current.delete(requestKey);
       });
 
-      albumSessionInFlightRef.current.set(key, promise);
+      albumSessionInFlightRef.current.set(requestKey, promise);
       return promise;
     },
     [
       albumSessionKey,
       cacheAlbumSessionTokens,
       getShareTokenFromLocation,
+      isSignedIn,
+      isUserLoaded,
       reportPlaybackGate,
     ],
   );
@@ -1876,7 +1953,7 @@ export default function AudioEngine() {
   }, [playTargetFromUserGesture]);
 
   const prepareStandbyForTrack = React.useCallback(
-    async (track: PlayerTrack): Promise<boolean> => {
+    async (track: PlayerTrack, surfaceGate = false): Promise<boolean> => {
       const playbackId = (track.muxPlaybackId ?? "").trim();
       if (!track.recordingId || !playbackId) return false;
 
@@ -1909,7 +1986,7 @@ export default function AudioEngine() {
       const token = await ensureTokenForTrack({
         track,
         signal: ac.signal,
-        surfaceGate: false,
+        surfaceGate,
       });
 
       if (!token) return false;
@@ -2884,7 +2961,7 @@ export default function AudioEngine() {
         durationMs: completionDurationMs || null,
       });
 
-      const standbyReady = await prepareStandbyForTrack(nextTrack);
+      const standbyReady = await prepareStandbyForTrack(nextTrack, true);
 
       if (!standbyReady) {
         sendAudioDebug({
@@ -2895,6 +2972,15 @@ export default function AudioEngine() {
           source: "AudioEngine",
           detail: `next=${nextTrack.recordingId}`,
         });
+
+        if (engineBlockedRef.current) {
+          hardStopAll();
+          mediaSurface.setStatus("blocked");
+          pRef.current.setStatusExternal("paused");
+          pRef.current.setLoadingReasonExternal(undefined);
+          pRef.current.clearIntent();
+          return;
+        }
 
         playIntentRef.current = true;
         pRef.current.advanceFromEngine();

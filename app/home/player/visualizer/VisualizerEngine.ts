@@ -72,6 +72,22 @@ function easeInOut(x: number) {
   return x * x * (3 - 2 * x);
 }
 
+function isUsableTheme(theme: Theme | null | undefined): theme is Theme {
+  if (!theme) return false;
+  return typeof theme.init === "function" && typeof theme.render === "function";
+}
+
+function disposeThemeSafely(
+  theme: Theme | null | undefined,
+  gl: WebGL2RenderingContext,
+): void {
+  if (!theme) return;
+
+  try {
+    theme.dispose(gl);
+  } catch {}
+}
+
 function isLikelyMobile(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent || "";
@@ -99,10 +115,10 @@ function pickSnapshotCapPx(profile: PerformanceProfile): number {
 }
 
 export class VisualizerEngine {
-  private canvas: HTMLCanvasElement;
-  private gl: WebGL2RenderingContext;
+  private readonly canvas: HTMLCanvasElement;
+  private readonly gl: WebGL2RenderingContext;
 
-  private getAudio: () => AudioFeatures;
+  private readonly getAudio: () => AudioFeatures;
 
   private ro: ResizeObserver | null = null;
   private raf: number | null = null;
@@ -142,18 +158,18 @@ export class VisualizerEngine {
   // Snapshot plumbing (stable sip source)
   private snapReadback: SnapshotReadback | null = null;
   private snapFbo: RenderTarget | null = null;
-  private snapCanvas: HTMLCanvasElement;
-  private snapCtx: CanvasRenderingContext2D;
-  private performanceProfile: PerformanceProfile;
-  private snapCapPx = 768;
-  private snapFps = 12;
+  private readonly snapCanvas: HTMLCanvasElement;
+  private readonly snapCtx: CanvasRenderingContext2D;
+  private readonly performanceProfile: PerformanceProfile;
+  private readonly snapCapPx: number;
+  private readonly snapFps: number;
   private lastSnapAtMs = 0;
   private snapW = 2;
   private snapH = 2;
   private snapBufAB: ArrayBuffer = new ArrayBuffer(2 * 2 * 4);
   private snapBufU8: Uint8Array = new Uint8Array(this.snapBufAB);
 
-  private stageVariant: StageVariant;
+  private readonly stageVariant: StageVariant;
   private themeDebugName = "blank";
   private perfFrames = 0;
   private perfWindowStartMs = 0;
@@ -315,13 +331,7 @@ export class VisualizerEngine {
 
   /** Provide the target theme (track theme). Engine owns it and will dispose old target/theme on swap. */
   setTargetTheme(next: Theme) {
-    if (
-      !next ||
-      typeof next.init !== "function" ||
-      typeof next.render !== "function"
-    )
-      return;
-    if (this.targetTheme === next) return;
+    if (!isUsableTheme(next) || this.targetTheme === next) return;
 
     const gl = this.gl;
     const prevTarget = this.targetTheme;
@@ -329,25 +339,25 @@ export class VisualizerEngine {
     try {
       next.init(gl);
       this.targetTheme = next;
-
-      if (prevTarget && prevTarget !== next) {
-        try {
-          prevTarget.dispose(gl);
-        } catch {}
-      }
+      disposeThemeSafely(prevTarget, gl);
     } catch (err) {
       console.error("[VisualizerEngine] target theme init failed", err);
-
-      if (this.mode.mode === "transition") {
-        this.mode = this.wantPlaying ? { mode: "playing" } : { mode: "idle" };
-        this.tier = this.wantPlaying ? "active" : "idle";
-        this.freeTransitionResources();
-      }
-      this.targetTheme = prevTarget ?? null;
-      try {
-        next.dispose?.(gl);
-      } catch {}
+      this.recoverFromTargetThemeInitFailure(prevTarget, next);
     }
+  }
+
+  private recoverFromTargetThemeInitFailure(
+    prevTarget: Theme | null,
+    failedTheme: Theme,
+  ): void {
+    if (this.mode.mode === "transition") {
+      this.mode = this.wantPlaying ? { mode: "playing" } : { mode: "idle" };
+      this.tier = this.wantPlaying ? "active" : "idle";
+      this.freeTransitionResources();
+    }
+
+    this.targetTheme = prevTarget;
+    disposeThemeSafely(failedTheme, this.gl);
   }
 
   /** Promote an already-initialized theme to current without re-initializing it. */
@@ -491,157 +501,194 @@ export class VisualizerEngine {
       // Ensure FBO sizes match backing store
       this.ensurePresentFboSized();
 
-      if (!this.presentPass || !this.presentFbo || !this.frameRenderer) {
+      if (!this.renderFrame(tNowMs, dtSec)) {
         this.scheduleNextFrame(loop);
         return;
       }
 
-      const gl = this.gl;
-      const audio = this.getAudio();
-      const time = tNowMs / 1000;
-
-      // Route B: render into presentFbo, never into default framebuffer.
-      gl.disable(gl.DEPTH_TEST);
-      gl.disable(gl.BLEND);
-
-      if (this.mode.mode === "transition") {
-        this.ensureTransitionResources();
-        this.resizeTransitionResources(this.presentFbo!.w, this.presentFbo!.h);
-
-        const fromFbo = this.fromFbo!;
-        const toFbo = this.toFbo!;
-        const wipe = this.wipe!;
-
-        // Render "to" theme into toFbo (current frame)
-        const toTheme =
-          this.mode.kind === "toIdle"
-            ? this.idleTheme
-            : (this.targetTheme ?? this.currentTheme);
-
-        toFbo.clear(0, 0, 0, 1);
-
-        this.frameRenderer.renderFrame({
-          theme: toTheme ?? this.currentTheme,
-          time,
-          audio,
-          target: toFbo,
-          presentToScreen: false,
-        });
-
-        const p01 = easeInOut(
-          (tNowMs - this.mode.startMs) / Math.max(1, this.mode.durMs),
-        );
-        const onset01 = clamp(this.mode.onset01, 0, 1);
-
-        this.transitionCompositor?.renderPortalWipe({
-          wipe,
-          from: fromFbo,
-          to: toFbo,
-          target: this.presentFbo,
-          time,
-          progress01: p01,
-          onset01,
-        });
-
-        // onset decay
-        const decay = dtSec * 2.5;
-        this.mode.onset01 = Math.max(0, this.mode.onset01 - decay);
-
-        if (p01 >= 1) {
-          if (this.mode.kind === "toIdle") {
-            if (this.idleTheme) this.setCurrentTheme(this.idleTheme);
-            this.tier = "idle";
-            this.mode = { mode: "idle" };
-          } else {
-            const next = this.targetTheme ?? this.currentTheme;
-            this.setCurrentTheme(next);
-            this.tier = "active";
-            this.mode = { mode: "playing" };
-          }
-          this.freeTransitionResources();
-        }
-      } else {
-        const useIdle = !this.wantPlaying;
-        const theme = useIdle
-          ? (this.idleTheme ?? this.currentTheme)
-          : this.currentTheme;
-
-        this.frameRenderer.clear(0, 0, 0, 1);
-
-        this.frameRenderer.renderFrame({
-          theme,
-          time,
-          audio,
-          presentToScreen: false,
-        });
-      }
-
-      // Present pass: draw presentFbo.tex to the default framebuffer
-      this.presentToScreen();
-
-      // Snapshot pass: occasionally refresh the stable 2D canvas
-      this.maybeUpdateSnapshot(tNowMs);
-
-      // Adaptive DPR target (quality signal)
-      const frameCost = performance.now() - frameStart;
-      this.avgFrameCostMs = this.avgFrameCostMs * 0.9 + frameCost * 0.1;
-
-      if (this.avgFrameCostMs > 20)
-        this.dprScale = Math.max(0.5, this.dprScale * 0.95);
-      else if (this.avgFrameCostMs < 12)
-        this.dprScale = Math.min(1.0, this.dprScale * 1.02);
-
-      const cfg = getTierConfig(this.tier, this.performanceProfile);
-      this.dprScale = clamp(this.dprScale, cfg.dprMin, cfg.dprMax);
-
-      this.perfFrames += 1;
-      if (!this.perfWindowStartMs) this.perfWindowStartMs = tNowMs;
-
-      const perfElapsedMs = tNowMs - this.perfWindowStartMs;
-      if (perfElapsedMs >= 500) {
-        this.fpsObserved =
-          (this.perfFrames * 1000) / Math.max(1, perfElapsedMs);
-        this.perfFrames = 0;
-        this.perfWindowStartMs = tNowMs;
-      }
-
-      if (
-        !this.lastPerfPublishAtMs ||
-        tNowMs - this.lastPerfPublishAtMs >= 250
-      ) {
-        const modeName =
-          this.mode.mode === "transition"
-            ? "transition"
-            : this.mode.mode === "playing"
-              ? "playing"
-              : "idle";
-
-        visualizerPerfSurface.setMetrics(this.stageVariant, {
-          variant: this.stageVariant,
-          profile: this.performanceProfile,
-          themeName: this.themeDebugName,
-          tier: this.tier,
-          mode: modeName,
-          fpsCap: cfg.fpsCap,
-          fpsObserved: this.fpsObserved,
-          avgFrameCostMs: this.avgFrameCostMs,
-          baseDpr: this.baseDpr,
-          dprScale: this.dprScale,
-          appliedDpr: this.appliedDpr || this.baseDpr * this.dprScale,
-          canvasPxW: this.canvas.width,
-          canvasPxH: this.canvas.height,
-          snapshotPxW: this.snapW,
-          snapshotPxH: this.snapH,
-          snapshotFps: this.snapFps,
-          updatedAt: tNowMs,
-        });
-        this.lastPerfPublishAtMs = tNowMs;
-      }
-
+      this.updateFramePerformance(tNowMs, frameStart);
       this.scheduleNextFrame(loop);
     };
 
     this.scheduleNextFrame(loop);
+  }
+
+  private renderFrame(tNowMs: number, dtSec: number): boolean {
+    if (!this.presentPass || !this.presentFbo || !this.frameRenderer) {
+      return false;
+    }
+
+    const gl = this.gl;
+    const audio = this.getAudio();
+    const time = tNowMs / 1000;
+
+    // Route B: render into presentFbo, never into default framebuffer.
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.BLEND);
+
+    if (this.mode.mode === "transition") {
+      this.renderTransitionFrame(tNowMs, dtSec, time, audio);
+    } else {
+      this.renderSteadyFrame(time, audio);
+    }
+
+    // Present pass: draw presentFbo.tex to the default framebuffer
+    this.presentToScreen();
+
+    // Snapshot pass: occasionally refresh the stable 2D canvas
+    this.maybeUpdateSnapshot(tNowMs);
+
+    return true;
+  }
+
+  private renderTransitionFrame(
+    tNowMs: number,
+    dtSec: number,
+    time: number,
+    audio: AudioFeatures,
+  ): void {
+    if (this.mode.mode !== "transition") return;
+
+    this.ensureTransitionResources();
+    this.resizeTransitionResources(this.presentFbo!.w, this.presentFbo!.h);
+
+    const mode = this.mode;
+    const fromFbo = this.fromFbo!;
+    const toFbo = this.toFbo!;
+    const wipe = this.wipe!;
+
+    // Render "to" theme into toFbo (current frame)
+    const toTheme =
+      mode.kind === "toIdle"
+        ? this.idleTheme
+        : (this.targetTheme ?? this.currentTheme);
+
+    toFbo.clear(0, 0, 0, 1);
+
+    this.frameRenderer!.renderFrame({
+      theme: toTheme ?? this.currentTheme,
+      time,
+      audio,
+      target: toFbo,
+      presentToScreen: false,
+    });
+
+    const p01 = easeInOut(
+      (tNowMs - mode.startMs) / Math.max(1, mode.durMs),
+    );
+    const onset01 = clamp(mode.onset01, 0, 1);
+
+    this.transitionCompositor?.renderPortalWipe({
+      wipe,
+      from: fromFbo,
+      to: toFbo,
+      target: this.presentFbo!,
+      time,
+      progress01: p01,
+      onset01,
+    });
+
+    // onset decay
+    const decay = dtSec * 2.5;
+    mode.onset01 = Math.max(0, mode.onset01 - decay);
+
+    if (p01 >= 1) {
+      this.completeTransition(mode.kind);
+    }
+  }
+
+  private completeTransition(kind: "toTheme" | "toIdle" | "themeToTheme"): void {
+    if (kind === "toIdle") {
+      if (this.idleTheme) this.setCurrentTheme(this.idleTheme);
+      this.tier = "idle";
+      this.mode = { mode: "idle" };
+    } else {
+      const next = this.targetTheme ?? this.currentTheme;
+      this.setCurrentTheme(next);
+      this.tier = "active";
+      this.mode = { mode: "playing" };
+    }
+
+    this.freeTransitionResources();
+  }
+
+  private renderSteadyFrame(time: number, audio: AudioFeatures): void {
+    const theme = this.wantPlaying
+      ? this.currentTheme
+      : (this.idleTheme ?? this.currentTheme);
+
+    this.frameRenderer!.clear(0, 0, 0, 1);
+    this.frameRenderer!.renderFrame({
+      theme,
+      time,
+      audio,
+      presentToScreen: false,
+    });
+  }
+
+  private updateFramePerformance(tNowMs: number, frameStart: number): void {
+    const cfg = this.updateAdaptiveDpr(frameStart);
+    this.updateObservedFps(tNowMs);
+    this.publishPerformanceMetrics(tNowMs, cfg);
+  }
+
+  private updateAdaptiveDpr(frameStart: number): TierCfg {
+    // Adaptive DPR target (quality signal)
+    const frameCost = performance.now() - frameStart;
+    this.avgFrameCostMs = this.avgFrameCostMs * 0.9 + frameCost * 0.1;
+
+    if (this.avgFrameCostMs > 20) {
+      this.dprScale = Math.max(0.5, this.dprScale * 0.95);
+    } else if (this.avgFrameCostMs < 12) {
+      this.dprScale = Math.min(1.0, this.dprScale * 1.02);
+    }
+
+    const cfg = getTierConfig(this.tier, this.performanceProfile);
+    this.dprScale = clamp(this.dprScale, cfg.dprMin, cfg.dprMax);
+    return cfg;
+  }
+
+  private updateObservedFps(tNowMs: number): void {
+    this.perfFrames += 1;
+    if (!this.perfWindowStartMs) this.perfWindowStartMs = tNowMs;
+
+    const perfElapsedMs = tNowMs - this.perfWindowStartMs;
+    if (perfElapsedMs < 500) return;
+
+    this.fpsObserved =
+      (this.perfFrames * 1000) / Math.max(1, perfElapsedMs);
+    this.perfFrames = 0;
+    this.perfWindowStartMs = tNowMs;
+  }
+
+  private publishPerformanceMetrics(tNowMs: number, cfg: TierCfg): void {
+    if (
+      this.lastPerfPublishAtMs &&
+      tNowMs - this.lastPerfPublishAtMs < 250
+    ) {
+      return;
+    }
+
+    visualizerPerfSurface.setMetrics(this.stageVariant, {
+      variant: this.stageVariant,
+      profile: this.performanceProfile,
+      themeName: this.themeDebugName,
+      tier: this.tier,
+      mode: this.mode.mode,
+      fpsCap: cfg.fpsCap,
+      fpsObserved: this.fpsObserved,
+      avgFrameCostMs: this.avgFrameCostMs,
+      baseDpr: this.baseDpr,
+      dprScale: this.dprScale,
+      appliedDpr: this.appliedDpr || this.baseDpr * this.dprScale,
+      canvasPxW: this.canvas.width,
+      canvasPxH: this.canvas.height,
+      snapshotPxW: this.snapW,
+      snapshotPxH: this.snapH,
+      snapshotFps: this.snapFps,
+      updatedAt: tNowMs,
+    });
+    this.lastPerfPublishAtMs = tNowMs;
   }
 
   stop() {
@@ -813,16 +860,15 @@ export class VisualizerEngine {
 
   private ensureTransitionResources() {
     const gl = this.gl;
-    if (!this.transitionCompositor) {
-      this.transitionCompositor = new TransitionCompositor(gl);
-    }
+    this.transitionCompositor ??= new TransitionCompositor(gl);
 
     if (!this.wipe) {
       this.wipe = createPortalWipe();
       this.wipe.init(gl);
     }
-    if (!this.fromFbo) this.fromFbo = new RenderTarget(gl, 2, 2);
-    if (!this.toFbo) this.toFbo = new RenderTarget(gl, 2, 2);
+
+    this.fromFbo ??= new RenderTarget(gl, 2, 2);
+    this.toFbo ??= new RenderTarget(gl, 2, 2);
   }
 
   private resizeTransitionResources(w: number, h: number) {
@@ -1006,10 +1052,11 @@ export class VisualizerEngine {
     const allowDprResize =
       !tierIsActive || tierJustChanged || (quietLongEnough && meaningful);
 
-    if (cssChanged) {
-      // CSS size changed: snap to quant.
-      this.appliedDpr = quant;
-    } else if (allowDprResize && meaningful && quietLongEnough) {
+    const shouldAdoptDpr =
+      cssChanged || (allowDprResize && meaningful && quietLongEnough);
+
+    if (shouldAdoptDpr) {
+      // CSS size changes snap immediately; DPR-only changes still respect stability gates.
       this.appliedDpr = quant;
     }
 

@@ -31,13 +31,13 @@ const MailbagFeedbackForm = dynamic(
 
 type DownloadAssetSel = NonNullable<PortalModuleDownloads["assets"]>[number];
 
-type Props = {
+type Props = Readonly<{
   modules: PortalModule[];
   memberId: string | null;
   entitlementKeys: string[];
   memberSummary?: PortalMemberSummary | null;
   isPortalActive: boolean;
-};
+}>;
 
 function hasKey(
   entitlementKeys: string[],
@@ -139,10 +139,12 @@ function isFeedbackRuntimePanelKind(
   return value === "feedbackForm";
 }
 
-function PanelShell(props: {
-  variant: PanelVariant;
-  children: React.ReactNode;
-}) {
+function PanelShell(
+  props: Readonly<{
+    variant: PanelVariant;
+    children: React.ReactNode;
+  }>,
+) {
   const { variant, children } = props;
 
   if (variant !== "gold") return <>{children}</>;
@@ -169,12 +171,13 @@ function PanelShell(props: {
   );
 }
 
-function Panel(props: {
-  title: string;
-  blocks: PortableTextBlock[];
-  locked?: boolean;
-  variant?: "default" | "gold" | "patternPill";
-}) {
+function Panel(
+  props: Readonly<{
+    blocks: PortableTextBlock[];
+    locked?: boolean;
+    variant?: "default" | "gold" | "patternPill";
+  }>,
+) {
   const { blocks, locked, variant = "default" } = props;
 
   return (
@@ -200,11 +203,13 @@ function Panel(props: {
   );
 }
 
-function RuntimeMemberPanelCard(props: {
-  title: string;
-  summary: PortalMemberSummary;
-  variant: PanelVariant;
-}) {
+function RuntimeMemberPanelCard(
+  props: Readonly<{
+    title: string;
+    summary: PortalMemberSummary;
+    variant: PanelVariant;
+  }>,
+) {
   const { title, summary, variant } = props;
 
   return (
@@ -229,12 +234,14 @@ function RuntimeMemberPanelCard(props: {
   );
 }
 
-function RuntimeFeedbackPanelCard(props: {
-  title: string;
-  description?: string | null;
-  submitLabel?: string | null;
-  variant: PanelVariant;
-}) {
+function RuntimeFeedbackPanelCard(
+  props: Readonly<{
+    title: string;
+    description?: string | null;
+    submitLabel?: string | null;
+    variant: PanelVariant;
+  }>,
+) {
   const { title, description, submitLabel, variant } = props;
 
   return (
@@ -293,7 +300,9 @@ function buildAssetsToRender(
   return { assetsToRender, missingConfiguredIds };
 }
 
-function NoteRow(props: { icon: React.ReactNode; children: React.ReactNode }) {
+function NoteRow(
+  props: Readonly<{ icon: React.ReactNode; children: React.ReactNode }>,
+) {
   const { icon, children } = props;
   return (
     <div
@@ -364,15 +373,214 @@ const ICON_DOLLAR = (
   </svg>
 );
 
-function DownloadOfferCard(props: {
-  albumSlug: string;
-  owned: boolean;
-  coverImage?: SanityImage;
-  productLabel?: string;
-  highlights?: string[];
-  techSpec?: string;
-  assets?: DownloadAssetSel[];
-}) {
+type OccurrenceKeyed<T> = Readonly<{
+  key: string;
+  value: T;
+}>;
+
+function addOccurrenceKeys<T>(
+  values: readonly T[],
+  keyOf: (value: T) => string,
+): OccurrenceKeyed<T>[] {
+  const counts = new Map<string, number>();
+
+  return values.map((value) => {
+    const baseKey = keyOf(value);
+    const occurrence = counts.get(baseKey) ?? 0;
+    counts.set(baseKey, occurrence + 1);
+    return { key: `${baseKey}:${occurrence}`, value };
+  });
+}
+
+type AssetsToRender = ReturnType<typeof buildAssetsToRender>["assetsToRender"];
+type MissingConfiguredIds = ReturnType<
+  typeof buildAssetsToRender
+>["missingConfiguredIds"];
+
+function OfferHighlights(
+  props: Readonly<{
+    highlights?: string[];
+  }>,
+) {
+  const { highlights } = props;
+  if (!highlights?.length) return null;
+
+  const keyedHighlights = addOccurrenceKeys(
+    highlights,
+    (highlight) => highlight,
+  );
+
+  return (
+    <div
+      style={{
+        marginTop: 12,
+        display: "grid",
+        gap: 8,
+        fontSize: 13,
+        opacity: 0.78,
+        lineHeight: 1.5,
+      }}
+    >
+      {keyedHighlights.map(({ key, value }) => (
+        <div key={key}>{value}</div>
+      ))}
+    </div>
+  );
+}
+
+function OwnedDownloadActions(
+  props: Readonly<{
+    albumSlug: string;
+    title: string;
+    offerAssets: AlbumOfferAsset[];
+    assetsToRender: AssetsToRender;
+    missingConfiguredIds: MissingConfiguredIds;
+  }>,
+) {
+  const {
+    albumSlug,
+    title,
+    offerAssets,
+    assetsToRender,
+    missingConfiguredIds,
+  } = props;
+
+  if (offerAssets.length === 0) {
+    return (
+      <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
+        <div style={{ fontSize: 13, opacity: 0.75 }}>
+          No downloadable assets configured in <code>albumOffers.ts</code>.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
+      {missingConfiguredIds.length > 0 ? (
+        <div style={{ fontSize: 13, opacity: 0.75 }}>
+          Invalid assetId(s) referenced in Sanity:{" "}
+          {missingConfiguredIds.map((item) => item.assetId).join(", ")}
+        </div>
+      ) : null}
+
+      <div
+        style={{
+          display: "grid",
+          gap: 10,
+          width: "100%",
+          justifyItems: "stretch",
+        }}
+      >
+        {assetsToRender.map(({ asset, labelOverride }, index) => (
+          <DownloadAlbumButton
+            key={asset.id}
+            albumSlug={albumSlug}
+            assetId={asset.id}
+            label={labelOverride ?? asset.label}
+            variant={index === 0 ? "primary" : "ghost"}
+            fullWidth={index === 0}
+            style={index === 0 ? { width: "100%" } : undefined}
+          />
+        ))}
+      </div>
+
+      <div style={{ paddingTop: 2, textAlign: "center" }}>
+        <GiftAlbumButton
+          albumTitle={title}
+          albumSlug={albumSlug}
+          ctaLabel="Send as gift"
+          variant="link"
+        />
+      </div>
+    </div>
+  );
+}
+
+function PurchaseDownloadActions(
+  props: Readonly<{
+    albumSlug: string;
+    title: string;
+  }>,
+) {
+  const { albumSlug, title } = props;
+
+  return (
+    <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
+      <BuyAlbumButton
+        albumSlug={albumSlug}
+        label="Buy Digital Album"
+        variant="primary"
+        fullWidth
+      />
+
+      <div style={{ textAlign: "center" }}>
+        <GiftAlbumButton
+          albumTitle={title}
+          albumSlug={albumSlug}
+          ctaLabel="Send as gift"
+          variant="link"
+        />
+      </div>
+    </div>
+  );
+}
+
+function DownloadOfferActions(
+  props: Readonly<{
+    albumSlug: string;
+    title: string;
+    hasOffer: boolean;
+    owned: boolean;
+    offerAssets: AlbumOfferAsset[];
+    assetsToRender: AssetsToRender;
+    missingConfiguredIds: MissingConfiguredIds;
+  }>,
+) {
+  const {
+    albumSlug,
+    title,
+    hasOffer,
+    owned,
+    offerAssets,
+    assetsToRender,
+    missingConfiguredIds,
+  } = props;
+
+  if (!hasOffer) {
+    return (
+      <div style={{ marginTop: 14, fontSize: 13, opacity: 0.75 }}>
+        Missing AlbumOffer config for <code>{albumSlug}</code>.
+      </div>
+    );
+  }
+
+  if (owned) {
+    return (
+      <OwnedDownloadActions
+        albumSlug={albumSlug}
+        title={title}
+        offerAssets={offerAssets}
+        assetsToRender={assetsToRender}
+        missingConfiguredIds={missingConfiguredIds}
+      />
+    );
+  }
+
+  return <PurchaseDownloadActions albumSlug={albumSlug} title={title} />;
+}
+
+function DownloadOfferCard(
+  props: Readonly<{
+    albumSlug: string;
+    owned: boolean;
+    coverImage?: SanityImage;
+    productLabel?: string;
+    highlights?: string[];
+    techSpec?: string;
+    assets?: DownloadAssetSel[];
+  }>,
+) {
   const {
     albumSlug,
     owned,
@@ -399,7 +607,7 @@ function DownloadOfferCard(props: {
     : null;
 
   const includesText = offerCfg?.includes?.length
-    ? `${offerCfg.includes.join(", ")}`
+    ? offerCfg.includes.join(", ")
     : "Includes streaming + multiple download formats.";
 
   return (
@@ -458,22 +666,7 @@ function DownloadOfferCard(props: {
         </div>
       </div>
 
-      {highlights && highlights.length > 0 ? (
-        <div
-          style={{
-            marginTop: 12,
-            display: "grid",
-            gap: 8,
-            fontSize: 13,
-            opacity: 0.78,
-            lineHeight: 1.5,
-          }}
-        >
-          {highlights.map((h, i) => (
-            <div key={`${i}:${h}`}>{h}</div>
-          ))}
-        </div>
-      ) : null}
+      <OfferHighlights highlights={highlights} />
 
       <div style={{ marginTop: 14, display: "grid", gap: 10, fontSize: 13 }}>
         <NoteRow icon={ICON_WAVE}>{includesText}</NoteRow>
@@ -485,76 +678,15 @@ function DownloadOfferCard(props: {
         </NoteRow>
       </div>
 
-      {!offerCfg ? (
-        <div style={{ marginTop: 14, fontSize: 13, opacity: 0.75 }}>
-          Missing AlbumOffer config for <code>{albumSlug}</code>.
-        </div>
-      ) : owned ? (
-        <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
-          {offerAssets.length === 0 ? (
-            <div style={{ fontSize: 13, opacity: 0.75 }}>
-              No downloadable assets configured in <code>albumOffers.ts</code>.
-            </div>
-          ) : (
-            <>
-              {missingConfiguredIds.length > 0 ? (
-                <div style={{ fontSize: 13, opacity: 0.75 }}>
-                  Invalid assetId(s) referenced in Sanity:{" "}
-                  {missingConfiguredIds.map((x) => x.assetId).join(", ")}
-                </div>
-              ) : null}
-
-              <div
-                style={{
-                  display: "grid",
-                  gap: 10,
-                  width: "100%",
-                  justifyItems: "stretch",
-                }}
-              >
-                {assetsToRender.map(({ asset, labelOverride }, i) => (
-                  <DownloadAlbumButton
-                    key={asset.id}
-                    albumSlug={albumSlug}
-                    assetId={asset.id}
-                    label={labelOverride ?? asset.label}
-                    variant={i === 0 ? "primary" : "ghost"}
-                    fullWidth={i === 0}
-                    style={i === 0 ? { width: "100%" } : undefined}
-                  />
-                ))}
-              </div>
-
-              <div style={{ paddingTop: 2, textAlign: "center" }}>
-                <GiftAlbumButton
-                  albumTitle={title}
-                  albumSlug={albumSlug}
-                  ctaLabel="Send as gift"
-                  variant="link"
-                />
-              </div>
-            </>
-          )}
-        </div>
-      ) : (
-        <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
-          <BuyAlbumButton
-            albumSlug={albumSlug}
-            label="Buy Digital Album"
-            variant="primary"
-            fullWidth
-          />
-
-          <div style={{ textAlign: "center" }}>
-            <GiftAlbumButton
-              albumTitle={title}
-              albumSlug={albumSlug}
-              ctaLabel="Send as gift"
-              variant="link"
-            />
-          </div>
-        </div>
-      )}
+      <DownloadOfferActions
+        albumSlug={albumSlug}
+        title={title}
+        hasOffer={Boolean(offerCfg)}
+        owned={owned}
+        offerAssets={offerAssets}
+        assetsToRender={assetsToRender}
+        missingConfiguredIds={missingConfiguredIds}
+      />
     </div>
   );
 }
@@ -592,251 +724,291 @@ type VisiblePanel =
   | VisibleRuntimeMemberPanel
   | VisibleRuntimeFeedbackPanel;
 
-function renderModule(
-  m: PortalModule,
+type PanelsModule = Extract<PortalModule, { _type: "modulePanels" }>;
+type PanelDefinition = PanelsModule["panels"][number];
+type DownloadGridModule = Extract<
+  PortalModule,
+  { _type: "moduleDownloadGrid" }
+>;
+type DownloadsModule = Extract<PortalModule, { _type: "moduleDownloads" }>;
+type MemberPanelModule = Extract<PortalModule, { _type: "moduleMemberPanel" }>;
+
+function panelIsLocked(
+  panel: PanelDefinition,
+  entitlementKeys: string[],
+): boolean {
+  return (
+    Boolean(panel.requiresEntitlement) &&
+    !hasKey(entitlementKeys, panel.requiresEntitlement)
+  );
+}
+
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function resolveVisiblePanel(
+  panel: PanelDefinition,
   entitlementKeys: string[],
   memberSummary: PortalMemberSummary | null,
-) {
-  if (m._type === "moduleHeading") return null;
+): VisiblePanel | null {
+  const locked = panelIsLocked(panel, entitlementKeys);
+  const variant = panel.styleVariant ?? "default";
+  const runtimeKind = (panel.runtimePanelKind ?? "none") as RuntimePanelKind;
 
-  if (m._type === "modulePanels") {
-    const cols: 1 | 2 | 3 =
-      m.layout === 1 || m.layout === 2 || m.layout === 3 ? m.layout : 2;
+  if (runtimeKind === "memberSummary") {
+    if (
+      locked ||
+      !memberSummary ||
+      !hasMeaningfulMemberSummary(memberSummary)
+    ) {
+      return null;
+    }
 
-    const gridClass =
-      cols === 1
-        ? "grid gap-3"
-        : cols === 2
-          ? "grid gap-3 grid-cols-1 sm:grid-cols-2"
-          : "grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
+    return {
+      key: panel._key,
+      title: panel.title,
+      locked: false,
+      variant,
+      runtimePanelKind: "memberSummary",
+      runtimeSummary: memberSummary,
+    };
+  }
 
-    const visiblePanels: VisiblePanel[] = (m.panels ?? []).flatMap(
-      (p): VisiblePanel[] => {
-        const locked =
-          !!p.requiresEntitlement &&
-          !hasKey(entitlementKeys, p.requiresEntitlement);
+  if (isFeedbackRuntimePanelKind(runtimeKind)) {
+    if (locked) return null;
 
-        const runtimeKind = (p.runtimePanelKind ?? "none") as RuntimePanelKind;
+    return {
+      key: panel._key,
+      title: panel.title,
+      locked: false,
+      variant,
+      runtimePanelKind: runtimeKind,
+      runtimeDescription: optionalString(panel.runtimeDescription),
+      runtimeSubmitLabel: optionalString(panel.runtimeSubmitLabel),
+    };
+  }
 
-        if (runtimeKind === "memberSummary") {
-          if (locked) return [];
-          if (!memberSummary) return [];
-          if (!hasMeaningfulMemberSummary(memberSummary)) return [];
+  const blocks = locked ? panel.teaser : panel.full;
+  if (!portableTextHasContent(blocks)) return null;
 
-          return [
-            {
-              key: p._key,
-              title: p.title,
-              locked: false,
-              variant: p.styleVariant ?? "default",
-              runtimePanelKind: "memberSummary",
-              runtimeSummary: memberSummary,
-            },
-          ];
-        }
+  return {
+    key: panel._key,
+    title: panel.title,
+    blocks: blocks ?? [],
+    locked,
+    variant,
+    runtimePanelKind: "none",
+  };
+}
 
-        if (isFeedbackRuntimePanelKind(runtimeKind)) {
-          if (locked) return [];
+function renderVisiblePanel(panel: VisiblePanel): React.ReactNode {
+  switch (panel.runtimePanelKind) {
+    case "memberSummary":
+      return (
+        <PanelShell key={panel.key} variant={panel.variant}>
+          <RuntimeMemberPanelCard
+            title={panel.title}
+            summary={panel.runtimeSummary}
+            variant={panel.variant}
+          />
+        </PanelShell>
+      );
 
-          return [
-            {
-              key: p._key,
-              title: p.title,
-              locked: false,
-              variant: p.styleVariant ?? "default",
-              runtimePanelKind: runtimeKind,
-              runtimeDescription:
-                typeof p.runtimeDescription === "string"
-                  ? p.runtimeDescription
-                  : null,
-              runtimeSubmitLabel:
-                typeof p.runtimeSubmitLabel === "string"
-                  ? p.runtimeSubmitLabel
-                  : null,
-            },
-          ];
-        }
+    case "feedbackForm":
+      return (
+        <PanelShell key={panel.key} variant={panel.variant}>
+          <RuntimeFeedbackPanelCard
+            title={panel.title}
+            description={panel.runtimeDescription}
+            submitLabel={panel.runtimeSubmitLabel}
+            variant={panel.variant}
+          />
+        </PanelShell>
+      );
 
-        if (locked) {
-          if (!portableTextHasContent(p.teaser)) return [];
-          return [
-            {
-              key: p._key,
-              title: p.title,
-              blocks: p.teaser ?? [],
-              locked: true,
-              variant: p.styleVariant ?? "default",
-              runtimePanelKind: "none",
-            },
-          ];
-        }
+    case "none":
+      return (
+        <PanelShell key={panel.key} variant={panel.variant}>
+          <Panel
+            blocks={panel.blocks}
+            locked={panel.locked}
+            variant={panel.variant}
+          />
+        </PanelShell>
+      );
 
-        if (!portableTextHasContent(p.full)) return [];
-        return [
-          {
-            key: p._key,
-            title: p.title,
-            blocks: p.full ?? [],
-            locked: false,
-            variant: p.styleVariant ?? "default",
-            runtimePanelKind: "none",
-          },
-        ];
-      },
+    default: {
+      const exhaustive: never = panel;
+      return exhaustive;
+    }
+  }
+}
+
+function panelGridClass(layout: PanelsModule["layout"]): string {
+  if (layout === 1) return "grid gap-3";
+  if (layout === 3) {
+    return "grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
+  }
+  return "grid gap-3 grid-cols-1 sm:grid-cols-2";
+}
+
+function renderPanelsModule(
+  module: PanelsModule,
+  entitlementKeys: string[],
+  memberSummary: PortalMemberSummary | null,
+): React.ReactNode {
+  const visiblePanels: VisiblePanel[] = [];
+
+  for (const panel of module.panels ?? []) {
+    const visiblePanel = resolveVisiblePanel(
+      panel,
+      entitlementKeys,
+      memberSummary,
     );
+    if (visiblePanel) visiblePanels.push(visiblePanel);
+  }
 
-    if (visiblePanels.length === 0) return null;
+  if (visiblePanels.length === 0) return null;
 
-    return (
-      <div key={m._key} style={{ width: "100%", minWidth: 0 }}>
-        {m.title ? (
-          <div
-            style={{
-              fontSize: 15,
-              opacity: 0.92,
-              marginBottom: 10,
-              padding: "0 2px",
-            }}
-          >
-            {m.title}
-          </div>
-        ) : null}
-
-        <div className={gridClass}>
-          {visiblePanels.map((p) => {
-            switch (p.runtimePanelKind) {
-              case "memberSummary":
-                return (
-                  <PanelShell key={p.key} variant={p.variant}>
-                    <RuntimeMemberPanelCard
-                      title={p.title}
-                      summary={p.runtimeSummary}
-                      variant={p.variant}
-                    />
-                  </PanelShell>
-                );
-
-              case "feedbackForm":
-                return (
-                  <PanelShell key={p.key} variant={p.variant}>
-                    <RuntimeFeedbackPanelCard
-                      title={p.title}
-                      description={p.runtimeDescription}
-                      submitLabel={p.runtimeSubmitLabel}
-                      variant={p.variant}
-                    />
-                  </PanelShell>
-                );
-
-              case "none":
-                return (
-                  <PanelShell key={p.key} variant={p.variant}>
-                    <Panel
-                      title={p.title}
-                      blocks={p.blocks}
-                      locked={p.locked}
-                      variant={p.variant}
-                    />
-                  </PanelShell>
-                );
-
-              default: {
-                const _exhaustive: never = p;
-                return _exhaustive;
-              }
-            }
-          })}
+  return (
+    <div key={module._key} style={{ width: "100%", minWidth: 0 }}>
+      {module.title ? (
+        <div
+          style={{
+            fontSize: 15,
+            opacity: 0.92,
+            marginBottom: 10,
+            padding: "0 2px",
+          }}
+        >
+          {module.title}
         </div>
+      ) : null}
+
+      <div className={panelGridClass(module.layout)}>
+        {visiblePanels.map(renderVisiblePanel)}
       </div>
-    );
-  }
+    </div>
+  );
+}
 
-  if (m._type === "moduleDownloadGrid") {
-    return (
-      <div
-        key={m._key}
-        className="portalDownloadGrid2up"
-        style={{ minWidth: 0 }}
-      >
-        {m.offers.map((o, idx) => {
-          const offerCfg = getAlbumOffer(o.albumSlug);
-          const owned = !!(
-            offerCfg && entitlementKeys.includes(offerCfg.entitlementKey)
-          );
+function ownsAlbumOffer(albumSlug: string, entitlementKeys: string[]): boolean {
+  const offerCfg = getAlbumOffer(albumSlug);
+  if (!offerCfg) return false;
+  return entitlementKeys.includes(offerCfg.entitlementKey);
+}
 
-          return (
-            <DownloadOfferCard
-              key={`${m._key}:${idx}:${o.albumSlug}`}
-              albumSlug={o.albumSlug}
-              owned={owned}
-              coverImage={o.coverImage}
-              productLabel={o.productLabel}
-              highlights={o.highlights}
-              techSpec={o.techSpec}
-              assets={o.assets}
-            />
-          );
-        })}
-      </div>
-    );
-  }
+function renderDownloadGridModule(
+  module: DownloadGridModule,
+  entitlementKeys: string[],
+): React.ReactNode {
+  const keyedOffers = addOccurrenceKeys(
+    module.offers,
+    (offer) => offer.albumSlug,
+  );
 
-  if (m._type === "moduleDownloads") {
-    const offerCfg = getAlbumOffer(m.albumSlug);
-    const owned = !!(
-      offerCfg && entitlementKeys.includes(offerCfg.entitlementKey)
-    );
-
-    return (
-      <div
-        key={m._key}
-        className="portalDownloadGrid2up"
-        style={{ minWidth: 0 }}
-      >
+  return (
+    <div
+      key={module._key}
+      className="portalDownloadGrid2up"
+      style={{ minWidth: 0 }}
+    >
+      {keyedOffers.map(({ key, value: offer }) => (
         <DownloadOfferCard
-          albumSlug={m.albumSlug}
-          owned={owned}
-          coverImage={m.coverImage}
-          productLabel={m.productLabel}
-          highlights={m.highlights}
-          techSpec={m.techSpec}
-          assets={m.assets}
+          key={`${module._key}:${key}`}
+          albumSlug={offer.albumSlug}
+          owned={ownsAlbumOffer(offer.albumSlug, entitlementKeys)}
+          coverImage={offer.coverImage}
+          productLabel={offer.productLabel}
+          highlights={offer.highlights}
+          techSpec={offer.techSpec}
+          assets={offer.assets}
         />
-      </div>
-    );
-  }
+      ))}
+    </div>
+  );
+}
 
-  if (m._type === "moduleArtistPosts") {
-    return (
-      <PortalArtistPosts
-        key={m._key}
-        title={m.title ?? "Journal"}
-        pageSize={m.pageSize ?? 10}
-        requireAuthAfter={m.requireAuthAfter ?? 3}
-        minVisibility={m.minVisibility ?? "public"}
-        authorAvatarSrc="https://www.brendanjohnroch.com/gfx/BJR_posts_avatar.jpeg"
+function renderDownloadsModule(
+  module: DownloadsModule,
+  entitlementKeys: string[],
+): React.ReactNode {
+  return (
+    <div
+      key={module._key}
+      className="portalDownloadGrid2up"
+      style={{ minWidth: 0 }}
+    >
+      <DownloadOfferCard
+        albumSlug={module.albumSlug}
+        owned={ownsAlbumOffer(module.albumSlug, entitlementKeys)}
+        coverImage={module.coverImage}
+        productLabel={module.productLabel}
+        highlights={module.highlights}
+        techSpec={module.techSpec}
+        assets={module.assets}
       />
-    );
+    </div>
+  );
+}
+
+function renderMemberPanelModule(
+  module: MemberPanelModule,
+  memberSummary: PortalMemberSummary | null,
+): React.ReactNode {
+  if (!memberSummary || !hasMeaningfulMemberSummary(memberSummary)) return null;
+
+  return (
+    <PortalMemberPanel
+      key={module._key}
+      summary={memberSummary}
+      title={module.title ?? "Member"}
+    />
+  );
+}
+
+function renderModule(
+  module: PortalModule,
+  entitlementKeys: string[],
+  memberSummary: PortalMemberSummary | null,
+): React.ReactNode {
+  switch (module._type) {
+    case "moduleHeading":
+      return null;
+
+    case "modulePanels":
+      return renderPanelsModule(module, entitlementKeys, memberSummary);
+
+    case "moduleDownloadGrid":
+      return renderDownloadGridModule(module, entitlementKeys);
+
+    case "moduleDownloads":
+      return renderDownloadsModule(module, entitlementKeys);
+
+    case "moduleArtistPosts":
+      return (
+        <PortalArtistPosts
+          key={module._key}
+          title={module.title ?? "Journal"}
+          pageSize={module.pageSize ?? 10}
+          requireAuthAfter={module.requireAuthAfter ?? 3}
+          minVisibility={module.minVisibility ?? "public"}
+          authorAvatarSrc="https://www.brendanjohnroch.com/gfx/BJR_posts_avatar.jpeg"
+        />
+      );
+
+    case "moduleExegesis":
+      return <PortalExegesis key={module._key} />;
+
+    case "moduleMemberPanel":
+      return renderMemberPanelModule(module, memberSummary);
+
+    default: {
+      const exhaustive: never = module;
+      return exhaustive;
+    }
   }
-
-  if (m._type === "moduleExegesis") {
-    return <PortalExegesis key={m._key} title={m.title ?? "Exegesis"} />;
-  }
-
-  if (m._type === "moduleMemberPanel") {
-    if (!memberSummary) return null;
-    if (!hasMeaningfulMemberSummary(memberSummary)) return null;
-
-    return (
-      <PortalMemberPanel
-        key={m._key}
-        summary={memberSummary}
-        title={m.title ?? "Member"}
-      />
-    );
-  }
-
-  return null;
 }
 
 type BuiltTab = {
@@ -847,67 +1019,84 @@ type BuiltTab = {
   modules: PortalModule[];
 };
 
+type HeadingModule = Extract<PortalModule, { _type: "moduleHeading" }>;
+
+function appendPopulatedTab(tabs: BuiltTab[], current: BuiltTab | null): void {
+  if (!current || current.modules.length === 0) return;
+  tabs.push(current);
+}
+
+function builtTabFromHeading(module: HeadingModule): BuiltTab {
+  const title = (module.title ?? "").trim() || "Portal";
+  return {
+    id: slugify(title) || module._key,
+    title,
+    locked: false,
+    lockedHint: null,
+    modules: [],
+  };
+}
+
+function defaultBuiltTab(): BuiltTab {
+  return {
+    id: "download",
+    title: "Download",
+    locked: false,
+    lockedHint: null,
+    modules: [],
+  };
+}
+
+function panelRequiresEntitlement(panel: PanelDefinition): boolean {
+  return Boolean(panel.requiresEntitlement);
+}
+
+function shouldLockTab(tab: BuiltTab, entitlementKeys: string[]): boolean {
+  const first = tab.modules[0];
+  if (first?._type !== "modulePanels") return false;
+
+  const panels = first.panels ?? [];
+  if (panels.length === 0) return false;
+
+  const entitledToAtLeastOne = panels.some((panel) =>
+    hasKey(entitlementKeys, panel.requiresEntitlement),
+  );
+  const allAreGated = panels.every(panelRequiresEntitlement);
+
+  return allAreGated && !entitledToAtLeastOne;
+}
+
+function applyTabLockState(tab: BuiltTab, entitlementKeys: string[]): void {
+  if (!shouldLockTab(tab, entitlementKeys)) return;
+  tab.locked = true;
+  tab.lockedHint = "Locked";
+}
+
 function inferTabs(
   modules: PortalModule[],
   entitlementKeys: string[],
 ): BuiltTab[] {
-  const out: BuiltTab[] = [];
+  const tabs: BuiltTab[] = [];
   let current: BuiltTab | null = null;
 
-  const pushCurrent = () => {
-    if (!current) return;
-    if (current.modules.length === 0) return;
-    out.push(current);
-  };
-
-  for (const m of modules) {
-    if (m._type === "moduleHeading") {
-      pushCurrent();
-
-      const title = (m.title ?? "").trim() || "Portal";
-      const id = slugify(title) || m._key;
-
-      current = { id, title, locked: false, lockedHint: null, modules: [] };
+  for (const portalModule of modules) {
+    if (portalModule._type === "moduleHeading") {
+      appendPopulatedTab(tabs, current);
+      current = builtTabFromHeading(portalModule);
       continue;
     }
 
-    if (!current) {
-      current = {
-        id: "download",
-        title: "Download",
-        locked: false,
-        lockedHint: null,
-        modules: [],
-      };
-    }
-
-    current.modules.push(m);
+    current ??= defaultBuiltTab();
+    current.modules.push(portalModule);
   }
 
-  pushCurrent();
+  appendPopulatedTab(tabs, current);
 
-  for (const t of out) {
-    const first = t.modules[0] ?? null;
-    if (!first) continue;
-
-    if (first._type === "modulePanels") {
-      const panels = first.panels ?? [];
-      if (panels.length === 0) continue;
-
-      const entitledToAtLeastOne = panels.some((p) =>
-        hasKey(entitlementKeys, p.requiresEntitlement),
-      );
-
-      const allAreGated = panels.every((p) => !!p.requiresEntitlement);
-
-      if (allAreGated && !entitledToAtLeastOne) {
-        t.locked = true;
-        t.lockedHint = "Locked";
-      }
-    }
+  for (const tab of tabs) {
+    applyTabLockState(tab, entitlementKeys);
   }
 
-  return out;
+  return tabs;
 }
 
 export default function PortalModules(props: Props) {

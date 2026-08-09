@@ -34,12 +34,7 @@ type ApiErr = {
   code?: string;
 };
 
-type EnqueueResponse = EnqueueOk | ApiErr;
-type DrainResponse = DrainOk | ApiErr;
-
 type PreviewOk = { ok: true; subject: string; html: string };
-type PreviewResponse = PreviewOk | ApiErr;
-
 const AUDIENCE_FILTERS_KEY = "bjr_campaign_audience_filters_v1";
 const DRAFT_KEY = "bjr_campaign_draft_v1";
 
@@ -123,26 +118,6 @@ async function readJson(res: Response): Promise<unknown> {
 }
 
 // --- toolbar helpers (browser-only, but safe in client comp) ---
-function handleUndoRedoKeydown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-  const isMac =
-    typeof navigator !== "undefined" &&
-    /Mac|iPhone|iPad|iPod/.test(navigator.platform);
-  const key = e.key.toLowerCase();
-
-  const isUndo = (isMac ? e.metaKey : e.ctrlKey) && !e.shiftKey && key === "z";
-  const isRedo =
-    ((isMac ? e.metaKey : e.ctrlKey) && e.shiftKey && key === "z") ||
-    (!isMac && e.ctrlKey && !e.shiftKey && key === "y");
-  if (!isUndo && !isRedo) return;
-
-  e.preventDefault();
-  try {
-    document.execCommand(isUndo ? "undo" : "redo");
-  } catch {
-    // ignore
-  }
-}
-
 function replaceSelection(
   textarea: HTMLTextAreaElement,
   replacement: string,
@@ -233,7 +208,7 @@ function insertAtCursor(
   );
 }
 
-function IconUpload(props: { size?: number }) {
+function IconUpload(props: Readonly<{ size?: number }>) {
   const s = props.size ?? 14;
   return (
     <svg
@@ -266,7 +241,7 @@ function IconUpload(props: { size?: number }) {
   );
 }
 
-function IconImageBlock(props: { size?: number }) {
+function IconImageBlock(props: Readonly<{ size?: number }>) {
   const s = props.size ?? 14;
   return (
     <svg
@@ -298,7 +273,7 @@ function IconImageBlock(props: { size?: number }) {
   );
 }
 
-function IconAlignCenter(props: { size?: number }) {
+function IconAlignCenter(props: Readonly<{ size?: number }>) {
   const s = props.size ?? 14;
   return (
     <svg
@@ -318,7 +293,7 @@ function IconAlignCenter(props: { size?: number }) {
   );
 }
 
-function IconBold(props: { size?: number }) {
+function IconBold(props: Readonly<{ size?: number }>) {
   const s = props.size ?? 14;
   return (
     <svg
@@ -337,7 +312,7 @@ function IconBold(props: { size?: number }) {
     </svg>
   );
 }
-function IconItalic(props: { size?: number }) {
+function IconItalic(props: Readonly<{ size?: number }>) {
   const s = props.size ?? 14;
   return (
     <svg
@@ -356,7 +331,7 @@ function IconItalic(props: { size?: number }) {
     </svg>
   );
 }
-function IconLink(props: { size?: number }) {
+function IconLink(props: Readonly<{ size?: number }>) {
   const s = props.size ?? 14;
   return (
     <svg
@@ -381,7 +356,7 @@ function IconLink(props: { size?: number }) {
     </svg>
   );
 }
-function IconDivider(props: { size?: number }) {
+function IconDivider(props: Readonly<{ size?: number }>) {
   const s = props.size ?? 14;
   return (
     <svg
@@ -406,7 +381,7 @@ function IconDivider(props: { size?: number }) {
     </svg>
   );
 }
-function IconH2(props: { size?: number }) {
+function IconH2(props: Readonly<{ size?: number }>) {
   const s = props.size ?? 14;
   return (
     <svg
@@ -431,7 +406,7 @@ function IconH2(props: { size?: number }) {
     </svg>
   );
 }
-function IconBullets(props: { size?: number }) {
+function IconBullets(props: Readonly<{ size?: number }>) {
   const s = props.size ?? 14;
   return (
     <svg
@@ -506,8 +481,6 @@ type AudienceOptionsOk = {
     engagedEventTypesLimit: number;
   };
 };
-
-type AudienceOptionsResponse = AudienceOptionsOk | ApiErr;
 
 function isAudienceOptionsOk(x: unknown): x is AudienceOptionsOk {
   if (!isObject(x)) return false;
@@ -605,7 +578,7 @@ function buildEnqueueAudiencePayload(filters: AudienceFilter[]) {
       case "purchasedWithinDays":
       case "engagedWithinDays": {
         const n = parseIntOrNull(v);
-        out[f.kind] = n === null ? null : n;
+        out[f.kind] = n;
         break;
       }
     }
@@ -616,8 +589,6 @@ function buildEnqueueAudiencePayload(filters: AudienceFilter[]) {
 
 // ---------- Upload response types + guards (hoisted; fixes hook deps warning) ----------
 type UploadImageOk = { ok: true; key: string; url: string };
-type UploadImageErr = { ok?: false; error: string; message?: string };
-
 function isUploadImageOk(x: unknown): x is UploadImageOk {
   return (
     typeof x === "object" &&
@@ -628,11 +599,891 @@ function isUploadImageOk(x: unknown): x is UploadImageOk {
   );
 }
 
-function isUploadImageErr(x: unknown): x is UploadImageErr {
+type AudienceOptionsState = Readonly<{
+  sources: string[];
+  entitlementKeys: string[];
+  engagedEventTypes: string[];
+}>;
+
+type DrainResultState = Readonly<{
+  sent: number;
+  remainingQueued: number;
+  runId: string;
+}> | null;
+
+type SendStatus =
+  | { state: "idle" }
+  | {
+      state: "sending";
+      campaignId: string;
+      totalSent: number;
+      lastSent: number;
+      remainingQueued: number;
+      loops: number;
+      startedAtMs: number;
+      runId?: string;
+    }
+  | {
+      state: "done";
+      campaignId: string;
+      totalSent: number;
+      endedAtMs: number;
+    }
+  | { state: "cancelled"; campaignId: string; totalSent: number }
+  | { state: "locked"; message: string }
+  | { state: "error"; message: string };
+
+const UI = {
+  maxWidth: 1100,
+  padOuter: 16,
+  gap: 12,
+  radius: 12,
+  radiusSm: 10,
+  font: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial",
+  mono: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+  surfaceBg: "rgba(255,255,255,0.06)",
+  surfaceBorder: "rgba(255,255,255,0.14)",
+  surfaceBgSoft: "rgba(255,255,255,0.035)",
+  dangerBg: "rgba(176,0,32,0.12)",
+  dangerBorder: "1px solid rgba(176,0,32,0.35)",
+  dangerText: "#ffb3c0",
+} as const;
+
+const LABEL_LEFT_STYLE: React.CSSProperties = {
+  fontSize: 10,
+  opacity: 0.7,
+  marginBottom: 6,
+};
+
+const LABEL_RIGHT_STYLE: React.CSSProperties = {
+  fontSize: 12,
+  opacity: 0.7,
+  marginBottom: 6,
+};
+
+const INPUT_STYLE: React.CSSProperties = {
+  width: "100%",
+  padding: 8,
+  borderRadius: UI.radiusSm,
+  border: `1px solid ${UI.surfaceBorder}`,
+  background: UI.surfaceBg,
+  color: "inherit",
+};
+
+const PILL_STYLE: React.CSSProperties = {
+  padding: "8px 12px",
+  borderRadius: UI.radiusSm,
+  background: "rgba(186,156,103,0.18)",
+  border: "1px solid rgba(186,156,103,0.45)",
+  color: "rgba(255,255,255,0.9)",
+  fontSize: 13,
+  fontWeight: 500,
+};
+
+const HAZARD_CARD_STYLE: React.CSSProperties = {
+  marginTop: 14,
+  borderRadius: 14,
+  border: "1px solid rgba(255,205,0,0.35)",
+  background: "rgba(255,255,255,0.035)",
+  boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+  overflow: "hidden",
+};
+
+const HAZARD_EDGE_STYLE: React.CSSProperties = {
+  height: 10,
+  opacity: 0.55,
+  filter: "saturate(1.05)",
+};
+
+function softButtonStyle(
+  opts?: Readonly<{ small?: boolean }>,
+): React.CSSProperties {
+  const small = Boolean(opts?.small);
+  return {
+    padding: small ? "8px 10px" : "10px 14px",
+    borderRadius: UI.radiusSm,
+    fontSize: small ? 10 : 13,
+    background: "rgba(255,255,255,0.04)",
+    border: `1px solid ${UI.surfaceBorder}`,
+    color: "inherit",
+    cursor: "pointer",
+  };
+}
+
+function iconButtonStyle(): React.CSSProperties {
+  return {
+    width: 34,
+    height: 30,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: UI.radiusSm,
+    border: `1px solid ${UI.surfaceBorder}`,
+    background: "rgba(255,255,255,0.04)",
+    color: "inherit",
+    cursor: "pointer",
+    padding: 0,
+  };
+}
+
+function hazardStripe(angleDeg: number): string {
+  return `repeating-linear-gradient(${angleDeg}deg,
+    rgba(255, 205, 0, 0.95) 0px,
+    rgba(255, 205, 0, 0.95) 10px,
+    rgba(0, 0, 0, 0.95) 10px,
+    rgba(0, 0, 0, 0.95) 20px
+  )`;
+}
+
+function apiErrorText(error: Readonly<{ error: string; message?: string }>): string {
+  return error.message ? `${error.error}: ${error.message}` : error.error;
+}
+
+function requireSuccessfulResponse<T>(
+  response: Response,
+  raw: unknown,
+  isSuccess: (value: unknown) => value is T,
+  failureLabel: string,
+  unexpectedShapeMessage: string,
+): T {
+  if (!response.ok) {
+    if (isApiErr(raw)) throw new Error(apiErrorText(raw));
+    throw new Error(`${failureLabel} (${response.status})`);
+  }
+
+  if (isApiErr(raw)) throw new Error(apiErrorText(raw));
+  if (!isSuccess(raw)) throw new Error(unexpectedShapeMessage);
+  return raw;
+}
+
+type DrainFailure = Readonly<{
+  code: unknown;
+  message: string;
+}>;
+
+function readDrainFailure(raw: unknown): DrainFailure {
+  if (!isObject(raw)) {
+    return { code: undefined, message: "Drain failed" };
+  }
+
+  const code = raw.code;
+  if (typeof raw.error === "string" && raw.error) {
+    return { code, message: raw.error };
+  }
+  if (typeof raw.message === "string" && raw.message) {
+    return { code, message: raw.message };
+  }
+  return { code, message: "Drain failed" };
+}
+
+type DrainBatchRequestResult =
+  | Readonly<{ kind: "ok"; data: DrainOk }>
+  | Readonly<{ kind: "locked"; message: string }>;
+
+async function requestDrainBatch(args: Readonly<{
+  campaignId: string;
+  limit: number;
+  signal: AbortSignal;
+}>): Promise<DrainBatchRequestResult> {
+  const response = await fetch("/api/admin/campaigns/drain", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      campaignId: args.campaignId,
+      limit: args.limit,
+    }),
+    signal: args.signal,
+  });
+
+  const raw = await readJson(response);
+
+  if (!response.ok) {
+    const failure = readDrainFailure(raw);
+    if (response.status === 409 || failure.code === "CAMPAIGN_LOCKED") {
+      return { kind: "locked", message: failure.message };
+    }
+    throw new Error(failure.message);
+  }
+
+  if (isApiErr(raw)) throw new Error(apiErrorText(raw));
+  if (!isDrainOk(raw)) {
+    throw new Error("Drain response had unexpected shape");
+  }
+
+  return { kind: "ok", data: raw };
+}
+
+function clearAbortRefIfCurrent(
+  ref: { current: AbortController | null },
+  controller: AbortController,
+): void {
+  if (ref.current === controller) ref.current = null;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+function finiteQueueCount(value: number): number {
+  return Number.isFinite(value) ? value : 0;
+}
+
+type LegacyMediaQueryList = Readonly<{
+  addListener?: (listener: () => void) => void;
+  removeListener?: (listener: () => void) => void;
+}>;
+
+function subscribeToMediaQuery(
+  mediaQuery: MediaQueryList,
+  listener: () => void,
+): () => void {
+  if (typeof mediaQuery.addEventListener === "function") {
+    mediaQuery.addEventListener("change", listener);
+    return () => mediaQuery.removeEventListener("change", listener);
+  }
+
+  const legacyMediaQuery = mediaQuery as unknown as LegacyMediaQueryList;
+  legacyMediaQuery.addListener?.(listener);
+  return () => legacyMediaQuery.removeListener?.(listener);
+}
+
+function audienceFilterDropdown(
+  kind: AudienceFilterKind,
+  options: AudienceOptionsState,
+): readonly string[] | null {
+  if (kind === "source") return options.sources;
+  if (kind === "entitlementKey") return options.entitlementKeys;
+  if (kind === "engagedEventType") return options.engagedEventTypes;
+  return null;
+}
+
+function isNumericAudienceFilterKind(kind: AudienceFilterKind): boolean {
   return (
-    typeof x === "object" &&
-    x !== null &&
-    typeof (x as { error?: unknown }).error === "string"
+    kind === "entitlementExpiresWithinDays" ||
+    kind === "joinedWithinDays" ||
+    kind === "consentVersionMax" ||
+    kind === "purchasedWithinDays" ||
+    kind === "engagedWithinDays"
+  );
+}
+
+function audienceFilterPlaceholder(kind: AudienceFilterKind): string {
+  if (kind === "source") return "e.g. early_access_form";
+  if (kind === "entitlementKey") return "e.g. tier:patron";
+  if (kind === "engagedEventType") return "e.g. played_track";
+  return "Enter a value";
+}
+
+function dedupeAudienceFilters(rows: AudienceFilter[]): AudienceFilter[] {
+  const deduped: AudienceFilter[] = [];
+  const seen = new Set<AudienceFilterKind>();
+
+  for (const row of rows) {
+    if (seen.has(row.kind)) continue;
+    seen.add(row.kind);
+    deduped.push(row);
+  }
+
+  return deduped;
+}
+
+function updateAudienceFilterKind(
+  rows: AudienceFilter[],
+  index: number,
+  kind: AudienceFilterKind,
+): AudienceFilter[] {
+  const next = rows.slice();
+  const current = next[index];
+  if (!current) return rows;
+
+  next[index] = { id: current.id, kind, value: "" };
+  return dedupeAudienceFilters(next);
+}
+
+function updateAudienceFilterValue(
+  rows: AudienceFilter[],
+  index: number,
+  value: string,
+): AudienceFilter[] {
+  const next = rows.slice();
+  const current = next[index];
+  if (!current) return rows;
+
+  next[index] = { ...current, value };
+  return next;
+}
+
+function removeAudienceFilter(
+  rows: AudienceFilter[],
+  id: string,
+): AudienceFilter[] {
+  return rows.filter((row) => row.id !== id);
+}
+
+function SendStatusContent(
+  props: Readonly<{
+    sendStatus: SendStatus;
+  }>,
+) {
+  const { sendStatus } = props;
+
+  switch (sendStatus.state) {
+    case "idle":
+      return <div style={{ fontSize: 12, opacity: 0.8 }}>Ready.</div>;
+
+    case "sending":
+      return (
+        <div style={{ fontSize: 12 }}>
+          <div>
+            <b>Sending…</b> Total sent: <b>{sendStatus.totalSent}</b> • Last
+            batch: {sendStatus.lastSent} • Remaining queued:{" "}
+            <b>
+              {Number.isFinite(sendStatus.remainingQueued)
+                ? sendStatus.remainingQueued
+                : "—"}
+            </b>{" "}
+            • Batches: {sendStatus.loops}
+          </div>
+          {sendStatus.runId ? (
+            <div style={{ marginTop: 6, fontSize: 11, opacity: 0.7 }}>
+              runId:{" "}
+              <code
+                style={{
+                  background: "transparent",
+                  border: `1px solid ${UI.surfaceBorder}`,
+                  padding: "1px 6px",
+                  borderRadius: 6,
+                }}
+              >
+                {sendStatus.runId}
+              </code>
+            </div>
+          ) : null}
+        </div>
+      );
+
+    case "done":
+      return (
+        <div style={{ fontSize: 12 }}>
+          <b>Done.</b> Sent <b>{sendStatus.totalSent}</b> total.
+        </div>
+      );
+
+    case "cancelled":
+      return (
+        <div style={{ fontSize: 12 }}>
+          <b>Cancelled.</b> You can resume with auto-drain again.
+        </div>
+      );
+
+    case "locked":
+      return (
+        <div style={{ fontSize: 12 }}>
+          <b>Blocked:</b> {sendStatus.message}
+          <div style={{ marginTop: 6, fontSize: 11, opacity: 0.7 }}>
+            Another drain is likely running. Try again shortly.
+          </div>
+        </div>
+      );
+
+    case "error":
+      return (
+        <div style={{ fontSize: 12, color: "#ffb3c0" }}>
+          <b>Error:</b> {sendStatus.message}
+        </div>
+      );
+  }
+}
+
+function HazardZone(
+  props: Readonly<{
+    campaignId: string | null;
+    enqueueing: boolean;
+    draining: boolean;
+    canEnqueue: boolean;
+    audienceCount: number | null;
+    sendStatus: SendStatus;
+    enqueueError: string | null;
+    drainError: string | null;
+    drainResult: DrainResultState;
+    onEnqueue: () => void;
+    onSendAutoDrain: () => void;
+    onCancelSending: () => void;
+    onDrainOnce: (limit: number) => void;
+  }>,
+) {
+  return (
+    <div style={HAZARD_CARD_STYLE}>
+      <div
+        style={{ ...HAZARD_EDGE_STYLE, backgroundImage: hazardStripe(45) }}
+      />
+
+      <div style={{ padding: 12 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            justifyContent: "space-between",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: 0.6,
+              opacity: 0.92,
+            }}
+          >
+            SEND CONTROLS{" "}
+            <span style={{ marginLeft: 10, fontWeight: 500, opacity: 0.7 }}>
+              Triggers real email activity.
+            </span>
+          </div>
+          <div style={{ fontSize: 11, opacity: 0.75 }}>
+            Double-check count / copy / links
+          </div>
+        </div>
+
+        <div style={{ height: 10 }} />
+
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <button
+            type="button"
+            onClick={props.onEnqueue}
+            disabled={props.enqueueing || props.draining || !props.canEnqueue}
+            style={softButtonStyle()}
+          >
+            {props.enqueueing ? "Enqueueing…" : "Enqueue campaign"}
+          </button>
+
+          <div style={{ fontSize: 12, opacity: 0.85 }}>
+            Campaign ID:{" "}
+            <code
+              style={{
+                background: UI.surfaceBg,
+                border: `1px solid ${UI.surfaceBorder}`,
+                padding: "2px 6px",
+                borderRadius: 6,
+              }}
+            >
+              {props.campaignId || "—"}
+            </code>
+          </div>
+
+          <div style={{ fontSize: 11, opacity: 0.75 }}>
+            Mailable{" "}
+            <b style={{ marginLeft: 6, opacity: 0.95 }}>
+              {props.audienceCount ?? "—"}
+            </b>
+          </div>
+        </div>
+
+        <div
+          style={{
+            marginTop: 14,
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
+          <button
+            type="button"
+            onClick={props.onSendAutoDrain}
+            disabled={!props.campaignId || props.enqueueing || props.draining}
+            style={softButtonStyle()}
+          >
+            Send campaign (auto-drain)
+          </button>
+
+          <button
+            type="button"
+            onClick={props.onCancelSending}
+            disabled={!props.draining}
+            style={{
+              ...softButtonStyle(),
+              background: props.draining
+                ? "rgba(176,0,32,0.10)"
+                : undefined,
+              border: props.draining
+                ? "1px solid rgba(176,0,32,0.25)"
+                : `1px solid ${UI.surfaceBorder}`,
+            }}
+          >
+            Cancel
+          </button>
+
+          {[25, 50, 100].map((limit) => (
+            <button
+              key={limit}
+              type="button"
+              onClick={() => props.onDrainOnce(limit)}
+              disabled={!props.campaignId || props.enqueueing || props.draining}
+              style={softButtonStyle({ small: true })}
+            >
+              Drain {limit}
+            </button>
+          ))}
+        </div>
+
+        <div
+          style={{
+            marginTop: 10,
+            padding: 10,
+            borderRadius: 12,
+            border: `1px solid ${UI.surfaceBorder}`,
+            background: UI.surfaceBg,
+          }}
+        >
+          <SendStatusContent sendStatus={props.sendStatus} />
+
+          {props.enqueueError ? (
+            <div style={{ marginTop: 8, fontSize: 12, color: "#ffb3c0" }}>
+              <b>Enqueue error:</b> {props.enqueueError}
+            </div>
+          ) : null}
+
+          {props.drainError ? (
+            <div style={{ marginTop: 8, fontSize: 12, color: "#ffb3c0" }}>
+              <b>Drain error:</b> {props.drainError}
+            </div>
+          ) : null}
+
+          {props.drainResult ? (
+            <div style={{ marginTop: 8, fontSize: 11, opacity: 0.8 }}>
+              Last drain: sent {props.drainResult.sent} • remaining{" "}
+              {props.drainResult.remainingQueued} • runId{" "}
+              <code>{props.drainResult.runId}</code>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div
+        style={{ ...HAZARD_EDGE_STYLE, backgroundImage: hazardStripe(-45) }}
+      />
+    </div>
+  );
+}
+
+function AudienceFilterValueControl(
+  props: Readonly<{
+    filter: AudienceFilter;
+    index: number;
+    audienceFilters: AudienceFilter[];
+    audienceOptions: AudienceOptionsState;
+    onChange: (next: AudienceFilter[]) => void;
+  }>,
+) {
+  const { filter, index, audienceFilters, audienceOptions, onChange } = props;
+  const kind = filter.kind;
+
+  const updateValue = (value: string) => {
+    onChange(updateAudienceFilterValue(audienceFilters, index, value));
+  };
+
+  if (kind === "hasPurchased") {
+    return (
+      <select
+        value={filter.value}
+        onChange={(event) => updateValue(event.target.value)}
+        style={{
+          ...INPUT_STYLE,
+          padding: "8px 10px",
+          fontSize: 12,
+        }}
+      >
+        <option value="">(any)</option>
+        <option value="true">Yes</option>
+        <option value="false">No</option>
+      </select>
+    );
+  }
+
+  const dropdown = audienceFilterDropdown(kind, audienceOptions);
+  if (dropdown?.length) {
+    return (
+      <select
+        value={filter.value}
+        onChange={(event) => updateValue(event.target.value)}
+        style={{
+          ...INPUT_STYLE,
+          padding: "8px 10px",
+          fontSize: 12,
+        }}
+      >
+        <option value="">(any)</option>
+        {dropdown.map((value) => (
+          <option key={value} value={value}>
+            {value}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <input
+      value={filter.value}
+      onChange={(event) => updateValue(event.target.value)}
+      style={{
+        ...INPUT_STYLE,
+        padding: "8px 10px",
+        fontSize: 12,
+      }}
+      inputMode={isNumericAudienceFilterKind(kind) ? "numeric" : undefined}
+      placeholder={audienceFilterPlaceholder(kind)}
+    />
+  );
+}
+
+function AudienceFilterRow(
+  props: Readonly<{
+    filter: AudienceFilter;
+    index: number;
+    isNarrow: boolean;
+    audienceFilters: AudienceFilter[];
+    audienceOptions: AudienceOptionsState;
+    onChange: (next: AudienceFilter[]) => void;
+  }>,
+) {
+  const { filter, index, isNarrow, audienceFilters, audienceOptions, onChange } =
+    props;
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: isNarrow ? "1fr" : "1.1fr 1.4fr auto",
+        gap: 8,
+        alignItems: "center",
+        minWidth: 0,
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <select
+          value={filter.kind}
+          onChange={(event) => {
+            const nextKind = event.target.value as AudienceFilterKind;
+            onChange(
+              updateAudienceFilterKind(audienceFilters, index, nextKind),
+            );
+          }}
+          style={{
+            ...INPUT_STYLE,
+            padding: "8px 10px",
+            fontSize: 12,
+          }}
+        >
+          {FILTER_KIND_ORDER.map((kind) => (
+            <option key={kind} value={kind}>
+              {FILTER_KIND_LABEL[kind]}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div style={{ minWidth: 0 }}>
+        <AudienceFilterValueControl
+          filter={filter}
+          index={index}
+          audienceFilters={audienceFilters}
+          audienceOptions={audienceOptions}
+          onChange={onChange}
+        />
+      </div>
+
+      <button
+        type="button"
+        onClick={() => onChange(removeAudienceFilter(audienceFilters, filter.id))}
+        title="Remove filter"
+        aria-label="Remove filter"
+        style={{
+          ...softButtonStyle({ small: true }),
+          padding: "8px 10px",
+          opacity: 0.9,
+          width: isNarrow ? "100%" : undefined,
+        }}
+      >
+        Remove
+      </button>
+    </div>
+  );
+}
+
+function AudienceFiltersSection(
+  props: Readonly<{
+    isNarrow: boolean;
+    audienceCount: number | null;
+    enqueuedCount: number | null;
+    audienceFilters: AudienceFilter[];
+    audienceOptions: AudienceOptionsState;
+    audienceOptionsLoading: boolean;
+    audienceOptionsErr: string | null;
+    onFiltersChange: (next: AudienceFilter[]) => void;
+    onRefreshAudienceOptions: () => Promise<void>;
+  }>,
+) {
+  const addFilter = () => {
+    const kind = firstUnusedKind(props.audienceFilters);
+    props.onFiltersChange([
+      ...props.audienceFilters,
+      { id: newId(), kind, value: "" },
+    ]);
+  };
+
+  const optionsTitle = props.audienceOptionsErr
+    ? `Last error: ${props.audienceOptionsErr}`
+    : "Reload filter dropdown options from DB";
+
+  return (
+    <div
+      style={{
+        padding: 12,
+        borderRadius: UI.radius,
+        marginTop: 10,
+        marginBottom: 16,
+        border: `1px solid ${UI.surfaceBorder}`,
+        background: UI.surfaceBgSoft,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          alignItems: props.isNarrow ? "stretch" : "flex-start",
+          flexWrap: "wrap",
+          flexDirection: props.isNarrow ? "column" : "row",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={PILL_STYLE}>
+            Mailable Contacts{" "}
+            <b style={{ marginLeft: 6 }}>{props.audienceCount ?? "—"}</b>
+          </div>
+
+          <div style={{ fontSize: 12, opacity: 0.75, paddingTop: 9 }}>
+            Enqueued <b>{props.enqueuedCount ?? 0}</b> (this session)
+          </div>
+        </div>
+
+        {!props.isNarrow ? <div style={{ flex: 1 }} /> : null}
+
+        <div
+          style={{
+            minWidth: 0,
+            width: "100%",
+            maxWidth: props.isNarrow ? "100%" : 760,
+            flex: props.isNarrow ? "1 1 auto" : "1 1 520px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: props.isNarrow ? "stretch" : "center",
+              justifyContent: "space-between",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 10,
+                opacity: 0.75,
+                letterSpacing: 0.4,
+                paddingTop: 2,
+              }}
+            >
+              AUDIENCE FILTERS
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                flexWrap: "wrap",
+                width: props.isNarrow ? "100%" : undefined,
+                justifyContent: props.isNarrow ? "flex-start" : "flex-end",
+              }}
+            >
+              <button
+                type="button"
+                style={softButtonStyle({ small: true })}
+                onClick={addFilter}
+              >
+                + Add filter
+              </button>
+
+              <button
+                type="button"
+                style={softButtonStyle({ small: true })}
+                onClick={() => void props.onRefreshAudienceOptions()}
+                disabled={props.audienceOptionsLoading}
+                title={optionsTitle}
+              >
+                {props.audienceOptionsLoading ? "Loading…" : "Refresh options"}
+              </button>
+
+              {props.audienceFilters.length > 0 ? (
+                <button
+                  type="button"
+                  style={softButtonStyle({ small: true })}
+                  onClick={() => props.onFiltersChange([])}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {props.audienceOptionsErr ? (
+            <div style={{ marginTop: 8, fontSize: 11, color: "#ffb3c0" }}>
+              Options load error: {props.audienceOptionsErr}
+            </div>
+          ) : null}
+
+          <div style={{ height: 8 }} />
+
+          {props.audienceFilters.length === 0 ? (
+            <div style={{ fontSize: 12, opacity: 0.7 }}>
+              No filters — sending to all marketing-opt-in contacts (minus
+              suppressions).
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {props.audienceFilters.map((filter, index) => (
+                <AudienceFilterRow
+                  key={filter.id}
+                  filter={filter}
+                  index={index}
+                  isNarrow={props.isNarrow}
+                  audienceFilters={props.audienceFilters}
+                  audienceOptions={props.audienceOptions}
+                  onChange={props.onFiltersChange}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -653,11 +1504,11 @@ export default function CampaignComposerClient() {
   const filtersSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Audience options (DB-backed)
-  const [audienceOptions, setAudienceOptions] = useState<{
-    sources: string[];
-    entitlementKeys: string[];
-    engagedEventTypes: string[];
-  }>({ sources: [], entitlementKeys: [], engagedEventTypes: [] });
+  const [audienceOptions, setAudienceOptions] = useState<AudienceOptionsState>({
+    sources: [],
+    entitlementKeys: [],
+    engagedEventTypes: [],
+  });
   const [audienceOptionsLoading, setAudienceOptionsLoading] = useState(false);
   const [audienceOptionsErr, setAudienceOptionsErr] = useState<string | null>(
     null,
@@ -675,23 +1526,13 @@ export default function CampaignComposerClient() {
       });
 
       const raw = await readJson(res);
-      const data: AudienceOptionsResponse | null =
-        raw as AudienceOptionsResponse | null;
-
-      if (!res.ok) {
-        if (isApiErr(data))
-          throw new Error(
-            `${data.error}${data.message ? `: ${data.message}` : ""}`,
-          );
-        throw new Error(`Failed to load audience options (${res.status})`);
-      }
-
-      if (isApiErr(data))
-        throw new Error(
-          `${data.error}${data.message ? `: ${data.message}` : ""}`,
-        );
-      if (!isAudienceOptionsOk(data))
-        throw new Error("Audience options response had unexpected shape");
+      const data = requireSuccessfulResponse(
+        res,
+        raw,
+        isAudienceOptionsOk,
+        "Failed to load audience options",
+        "Audience options response had unexpected shape",
+      );
 
       setAudienceOptions({
         sources: (data.sources ?? []).filter(
@@ -714,11 +1555,7 @@ export default function CampaignComposerClient() {
   // Drain state (single flag that covers drainOnce + auto loop)
   const [draining, setDraining] = useState(false);
   const [drainError, setDrainError] = useState<string | null>(null);
-  const [drainResult, setDrainResult] = useState<{
-    sent: number;
-    remainingQueued: number;
-    runId: string;
-  } | null>(null);
+  const [drainResult, setDrainResult] = useState<DrainResultState>(null);
 
   // Preview state (server-rendered via React Email)
   const [previewHtml, setPreviewHtml] = useState<string>("");
@@ -832,82 +1669,6 @@ export default function CampaignComposerClient() {
     [draft.bodyTemplate, draft.subjectTemplate],
   );
 
-  // --- UI scale + surfaces (single source of truth) ---
-  const UI = {
-    maxWidth: 1100,
-    padOuter: 16,
-    gap: 12,
-    radius: 12,
-    radiusSm: 10,
-    font: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial",
-    mono: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-    surfaceBg: "rgba(255,255,255,0.06)",
-    surfaceBorder: "rgba(255,255,255,0.14)",
-    surfaceBgSoft: "rgba(255,255,255,0.035)",
-    dangerBg: "rgba(176,0,32,0.12)",
-    dangerBorder: "1px solid rgba(176,0,32,0.35)",
-    dangerText: "#ffb3c0",
-  };
-
-  const labelLeft: React.CSSProperties = {
-    fontSize: 10,
-    opacity: 0.7,
-    marginBottom: 6,
-  };
-  const labelRight: React.CSSProperties = {
-    fontSize: 12,
-    opacity: 0.7,
-    marginBottom: 6,
-  };
-
-  const inputStyle: React.CSSProperties = {
-    width: "100%",
-    padding: 8,
-    borderRadius: UI.radiusSm,
-    border: `1px solid ${UI.surfaceBorder}`,
-    background: UI.surfaceBg,
-    color: "inherit",
-  };
-
-  const pillStyle: React.CSSProperties = {
-    padding: "8px 12px",
-    borderRadius: UI.radiusSm,
-    background: "rgba(186,156,103,0.18)",
-    border: "1px solid rgba(186,156,103,0.45)",
-    color: "rgba(255,255,255,0.9)",
-    fontSize: 13,
-    fontWeight: 500,
-  };
-
-  function softButtonStyle(opts?: { small?: boolean }): React.CSSProperties {
-    const small = !!opts?.small;
-    return {
-      padding: small ? "8px 10px" : "10px 14px",
-      borderRadius: UI.radiusSm,
-      fontSize: small ? 10 : 13,
-      background: "rgba(255,255,255,0.04)",
-      border: `1px solid ${UI.surfaceBorder}`,
-      color: "inherit",
-      cursor: "pointer",
-    };
-  }
-
-  function iconButtonStyle(): React.CSSProperties {
-    return {
-      width: 34,
-      height: 30,
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      borderRadius: UI.radiusSm,
-      border: `1px solid ${UI.surfaceBorder}`,
-      background: "rgba(255,255,255,0.04)",
-      color: "inherit",
-      cursor: "pointer",
-      padding: 0,
-    };
-  }
-
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const [imageUploading, setImageUploading] = useState(false);
   const [imageUploadErr, setImageUploadErr] = useState<string | null>(null);
@@ -928,21 +1689,15 @@ export default function CampaignComposerClient() {
         });
 
         const raw = await readJson(res);
+        const data = requireSuccessfulResponse(
+          res,
+          raw,
+          isUploadImageOk,
+          "Upload failed",
+          "Upload response had unexpected shape",
+        );
 
-        if (!res.ok) {
-          if (isUploadImageErr(raw)) {
-            throw new Error(
-              `${raw.error}${raw.message ? `: ${raw.message}` : ""}`,
-            );
-          }
-          throw new Error(`Upload failed (${res.status})`);
-        }
-
-        if (!isUploadImageOk(raw)) {
-          throw new Error("Upload response had unexpected shape");
-        }
-
-        const url = raw.url;
+        const url = data.url;
         setLastImageUrl(url);
 
         const el = document.getElementById(
@@ -974,51 +1729,12 @@ export default function CampaignComposerClient() {
     [draft, markDirtyAndDebouncePersist],
   );
 
-  const hazardStripe = useCallback(
-    (angleDeg: number) =>
-      `repeating-linear-gradient(${angleDeg}deg,
-        rgba(255, 205, 0, 0.95) 0px,
-        rgba(255, 205, 0, 0.95) 10px,
-        rgba(0, 0, 0, 0.95) 10px,
-        rgba(0, 0, 0, 0.95) 20px
-      )`,
-    [],
-  );
-
-  const hazardCardStyle = useMemo<React.CSSProperties>(
-    () => ({
-      marginTop: 14,
-      borderRadius: 14,
-      border: `1px solid rgba(255,205,0,0.35)`,
-      background: "rgba(255,255,255,0.035)",
-      boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
-      overflow: "hidden",
-    }),
-    [],
-  );
-
-  const hazardEdgeStyle = useMemo<React.CSSProperties>(
-    () => ({
-      height: 10,
-      opacity: 0.55,
-      filter: "saturate(1.05)",
-    }),
-    [],
-  );
-
   const [isNarrow, setIsNarrow] = useState(false);
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 860px)");
     const onChange = () => setIsNarrow(mq.matches);
     onChange();
-    if (typeof mq.addEventListener === "function")
-      mq.addEventListener("change", onChange);
-    else mq.addListener(onChange);
-    return () => {
-      if (typeof mq.removeEventListener === "function")
-        mq.removeEventListener("change", onChange);
-      else mq.removeListener(onChange);
-    };
+    return subscribeToMediaQuery(mq, onChange);
   }, []);
 
   const refreshPreviewHtml = useCallback(async () => {
@@ -1043,26 +1759,17 @@ export default function CampaignComposerClient() {
       });
 
       const raw = await readJson(res);
-      const data: PreviewResponse | null = raw as PreviewResponse | null;
-
-      if (!res.ok) {
-        if (isApiErr(data))
-          throw new Error(
-            `${data.error}${data.message ? `: ${data.message}` : ""}`,
-          );
-        throw new Error(`Preview failed (${res.status})`);
-      }
-
-      if (isApiErr(data))
-        throw new Error(
-          `${data.error}${data.message ? `: ${data.message}` : ""}`,
-        );
-      if (!isPreviewOk(data))
-        throw new Error("Preview response had unexpected shape");
+      const data = requireSuccessfulResponse(
+        res,
+        raw,
+        isPreviewOk,
+        "Preview failed",
+        "Preview response had unexpected shape",
+      );
 
       setPreviewHtml(data.html);
     } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") return;
+      if (isAbortError(e)) return;
       setPreviewErr(errorMessage(e));
       setPreviewHtml("");
     } finally {
@@ -1112,22 +1819,13 @@ export default function CampaignComposerClient() {
       });
 
       const raw = await readJson(res);
-      const data: EnqueueResponse | null = raw as EnqueueResponse | null;
-
-      if (!res.ok) {
-        if (isApiErr(data))
-          throw new Error(
-            `${data.error}${data.message ? `: ${data.message}` : ""}`,
-          );
-        throw new Error(`Enqueue failed (${res.status})`);
-      }
-
-      if (isApiErr(data))
-        throw new Error(
-          `${data.error}${data.message ? `: ${data.message}` : ""}`,
-        );
-      if (!isEnqueueOk(data))
-        throw new Error("Enqueue response had unexpected shape");
+      const data = requireSuccessfulResponse(
+        res,
+        raw,
+        isEnqueueOk,
+        "Enqueue failed",
+        "Enqueue response had unexpected shape",
+      );
 
       setCampaignId(data.campaignId);
       setEnqueuedCount(data.enqueued);
@@ -1155,22 +1853,13 @@ export default function CampaignComposerClient() {
         });
 
         const raw = await readJson(res);
-        const data: DrainResponse | null = raw as DrainResponse | null;
-
-        if (!res.ok) {
-          if (isApiErr(data))
-            throw new Error(
-              `${data.error}${data.message ? `: ${data.message}` : ""}`,
-            );
-          throw new Error(`Drain failed (${res.status})`);
-        }
-
-        if (isApiErr(data))
-          throw new Error(
-            `${data.error}${data.message ? `: ${data.message}` : ""}`,
-          );
-        if (!isDrainOk(data))
-          throw new Error("Drain response had unexpected shape");
+        const data = requireSuccessfulResponse(
+          res,
+          raw,
+          isDrainOk,
+          "Drain failed",
+          "Drain response had unexpected shape",
+        );
 
         setDrainResult({
           sent: data.sent,
@@ -1186,28 +1875,7 @@ export default function CampaignComposerClient() {
     [campaignId, draining],
   );
 
-  const [sendStatus, setSendStatus] = useState<
-    | { state: "idle" }
-    | {
-        state: "sending";
-        campaignId: string;
-        totalSent: number;
-        lastSent: number;
-        remainingQueued: number;
-        loops: number;
-        startedAtMs: number;
-        runId?: string;
-      }
-    | {
-        state: "done";
-        campaignId: string;
-        totalSent: number;
-        endedAtMs: number;
-      }
-    | { state: "cancelled"; campaignId: string; totalSent: number }
-    | { state: "locked"; message: string }
-    | { state: "error"; message: string }
-  >({ state: "idle" });
+  const [sendStatus, setSendStatus] = useState<SendStatus>({ state: "idle" });
 
   const cancelSending = useCallback(() => {
     cancelSeqRef.current += 1;
@@ -1233,7 +1901,7 @@ export default function CampaignComposerClient() {
       if (!campaignId) return;
       if (draining) return;
 
-      if (drainAbortRef.current) drainAbortRef.current.abort();
+      drainAbortRef.current?.abort();
 
       const ac = new AbortController();
       drainAbortRef.current = ac;
@@ -1271,46 +1939,18 @@ export default function CampaignComposerClient() {
 
           loops++;
 
-          const res = await fetch("/api/admin/campaigns/drain", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ campaignId, limit }),
+          const batch = await requestDrainBatch({
+            campaignId,
+            limit,
             signal: ac.signal,
           });
 
-          const raw = await readJson(res);
-
-          if (!res.ok) {
-            const code = isObject(raw)
-              ? (raw as { code?: unknown }).code
-              : undefined;
-            const err = isObject(raw)
-              ? (raw as { error?: unknown; message?: unknown }).error
-              : undefined;
-            const msg =
-              (typeof err === "string" && err) ||
-              (isObject(raw) &&
-              typeof (raw as { message?: unknown }).message === "string"
-                ? (raw as { message: string }).message
-                : "") ||
-              "Drain failed";
-
-            if (res.status === 409 || code === "CAMPAIGN_LOCKED") {
-              setSendStatus({ state: "locked", message: msg });
-              return;
-            }
-
-            throw new Error(msg);
+          if (batch.kind === "locked") {
+            setSendStatus({ state: "locked", message: batch.message });
+            return;
           }
 
-          const data: DrainResponse | null = raw as DrainResponse | null;
-          if (isApiErr(data))
-            throw new Error(
-              `${data.error}${data.message ? `: ${data.message}` : ""}`,
-            );
-          if (!isDrainOk(data))
-            throw new Error("Drain response had unexpected shape");
-
+          const data = batch.data;
           const sentThis = data.sent;
           remainingQueued = data.remainingQueued;
           lastRunId = data.runId;
@@ -1322,17 +1962,13 @@ export default function CampaignComposerClient() {
             campaignId,
             totalSent,
             lastSent: sentThis,
-            remainingQueued: Number.isFinite(remainingQueued)
-              ? remainingQueued
-              : 0,
+            remainingQueued: finiteQueueCount(remainingQueued),
             loops,
             startedAtMs,
             runId: lastRunId,
           });
 
           setDrainResult({ sent: sentThis, remainingQueued, runId: lastRunId });
-
-          if (remainingQueued <= 0) break;
 
           const nextPollMs = clampInt(data.nextPollMs ?? 900, 0, 5000);
           await sleep(nextPollMs, ac.signal);
@@ -1345,13 +1981,13 @@ export default function CampaignComposerClient() {
           endedAtMs: Date.now(),
         });
       } catch (e: unknown) {
-        if (e instanceof DOMException && e.name === "AbortError") {
+        if (isAbortError(e)) {
           setSendStatus({ state: "cancelled", campaignId, totalSent });
           return;
         }
         setSendStatus({ state: "error", message: errorMessage(e) });
       } finally {
-        if (drainAbortRef.current === ac) drainAbortRef.current = null;
+        clearAbortRefIfCurrent(drainAbortRef, ac);
         setDraining(false);
       }
     },
@@ -1370,223 +2006,27 @@ export default function CampaignComposerClient() {
   }, []);
 
   const hazardZone = (
-    <div style={hazardCardStyle}>
-      <div style={{ ...hazardEdgeStyle, backgroundImage: hazardStripe(45) }} />
-
-      <div style={{ padding: 12 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "baseline",
-            justifyContent: "space-between",
-            gap: 10,
-            flexWrap: "wrap",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 12,
-              fontWeight: 700,
-              letterSpacing: 0.6,
-              opacity: 0.92,
-            }}
-          >
-            SEND CONTROLS{" "}
-            <span style={{ marginLeft: 10, fontWeight: 500, opacity: 0.7 }}>
-              Triggers real email activity.
-            </span>
-          </div>
-          <div style={{ fontSize: 11, opacity: 0.75 }}>
-            Double-check count / copy / links
-          </div>
-        </div>
-
-        <div style={{ height: 10 }} />
-
-        <div
-          style={{
-            display: "flex",
-            gap: 10,
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}
-        >
-          <button
-            onClick={() => void enqueue()}
-            disabled={enqueueing || draining || !canEnqueue}
-            style={softButtonStyle()}
-          >
-            {enqueueing ? "Enqueueing…" : "Enqueue campaign"}
-          </button>
-
-          <div style={{ fontSize: 12, opacity: 0.85 }}>
-            Campaign ID:{" "}
-            <code
-              style={{
-                background: UI.surfaceBg,
-                border: `1px solid ${UI.surfaceBorder}`,
-                padding: "2px 6px",
-                borderRadius: 6,
-              }}
-            >
-              {campaignId || "—"}
-            </code>
-          </div>
-
-          <div style={{ fontSize: 11, opacity: 0.75 }}>
-            Mailable{" "}
-            <b style={{ marginLeft: 6, opacity: 0.95 }}>
-              {audienceCount ?? "—"}
-            </b>
-          </div>
-        </div>
-
-        <div
-          style={{
-            marginTop: 14,
-            display: "flex",
-            gap: 10,
-            flexWrap: "wrap",
-            alignItems: "center",
-          }}
-        >
-          <button
-            onClick={() => void sendAutoDrain({ limit: 50, maxLoops: 50 })}
-            disabled={!campaignId || enqueueing || draining}
-            style={softButtonStyle()}
-          >
-            Send campaign (auto-drain)
-          </button>
-
-          <button
-            onClick={cancelSending}
-            disabled={!draining}
-            style={{
-              ...softButtonStyle(),
-              background: draining ? "rgba(176,0,32,0.10)" : undefined,
-              border: draining
-                ? "1px solid rgba(176,0,32,0.25)"
-                : `1px solid ${UI.surfaceBorder}`,
-            }}
-          >
-            Cancel
-          </button>
-
-          <button
-            onClick={() => void drainOnce(25)}
-            disabled={!campaignId || enqueueing || draining}
-            style={softButtonStyle({ small: true })}
-          >
-            Drain 25
-          </button>
-          <button
-            onClick={() => void drainOnce(50)}
-            disabled={!campaignId || enqueueing || draining}
-            style={softButtonStyle({ small: true })}
-          >
-            Drain 50
-          </button>
-          <button
-            onClick={() => void drainOnce(100)}
-            disabled={!campaignId || enqueueing || draining}
-            style={softButtonStyle({ small: true })}
-          >
-            Drain 100
-          </button>
-        </div>
-
-        <div
-          style={{
-            marginTop: 10,
-            padding: 10,
-            borderRadius: 12,
-            border: `1px solid ${UI.surfaceBorder}`,
-            background: UI.surfaceBg,
-          }}
-        >
-          {sendStatus.state === "idle" && (
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Ready.</div>
-          )}
-
-          {sendStatus.state === "sending" && (
-            <div style={{ fontSize: 12 }}>
-              <div>
-                <b>Sending…</b> Total sent: <b>{sendStatus.totalSent}</b> • Last
-                batch: {sendStatus.lastSent} • Remaining queued:{" "}
-                <b>
-                  {Number.isFinite(sendStatus.remainingQueued)
-                    ? sendStatus.remainingQueued
-                    : "—"}
-                </b>{" "}
-                • Batches: {sendStatus.loops}
-              </div>
-              {sendStatus.runId ? (
-                <div style={{ marginTop: 6, fontSize: 11, opacity: 0.7 }}>
-                  runId:{" "}
-                  <code
-                    style={{
-                      background: "transparent",
-                      border: `1px solid ${UI.surfaceBorder}`,
-                      padding: "1px 6px",
-                      borderRadius: 6,
-                    }}
-                  >
-                    {sendStatus.runId}
-                  </code>
-                </div>
-              ) : null}
-            </div>
-          )}
-
-          {sendStatus.state === "done" && (
-            <div style={{ fontSize: 12 }}>
-              <b>Done.</b> Sent <b>{sendStatus.totalSent}</b> total.
-            </div>
-          )}
-
-          {sendStatus.state === "cancelled" && (
-            <div style={{ fontSize: 12 }}>
-              <b>Cancelled.</b> You can resume with auto-drain again.
-            </div>
-          )}
-
-          {sendStatus.state === "locked" && (
-            <div style={{ fontSize: 12 }}>
-              <b>Blocked:</b> {sendStatus.message}
-              <div style={{ marginTop: 6, fontSize: 11, opacity: 0.7 }}>
-                Another drain is likely running. Try again shortly.
-              </div>
-            </div>
-          )}
-
-          {sendStatus.state === "error" && (
-            <div style={{ fontSize: 12, color: "#ffb3c0" }}>
-              <b>Error:</b> {sendStatus.message}
-            </div>
-          )}
-
-          {enqueueError ? (
-            <div style={{ marginTop: 8, fontSize: 12, color: "#ffb3c0" }}>
-              <b>Enqueue error:</b> {enqueueError}
-            </div>
-          ) : null}
-          {drainError ? (
-            <div style={{ marginTop: 8, fontSize: 12, color: "#ffb3c0" }}>
-              <b>Drain error:</b> {drainError}
-            </div>
-          ) : null}
-          {drainResult ? (
-            <div style={{ marginTop: 8, fontSize: 11, opacity: 0.8 }}>
-              Last drain: sent {drainResult.sent} • remaining{" "}
-              {drainResult.remainingQueued} • runId{" "}
-              <code>{drainResult.runId}</code>
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      <div style={{ ...hazardEdgeStyle, backgroundImage: hazardStripe(-45) }} />
-    </div>
+    <HazardZone
+      campaignId={campaignId}
+      enqueueing={enqueueing}
+      draining={draining}
+      canEnqueue={canEnqueue}
+      audienceCount={audienceCount}
+      sendStatus={sendStatus}
+      enqueueError={enqueueError}
+      drainError={drainError}
+      drainResult={drainResult}
+      onEnqueue={() => {
+        void enqueue();
+      }}
+      onSendAutoDrain={() => {
+        void sendAutoDrain({ limit: 50, maxLoops: 50 });
+      }}
+      onCancelSending={cancelSending}
+      onDrainOnce={(limit) => {
+        void drainOnce(limit);
+      }}
+    />
   );
 
   return (
@@ -1659,6 +2099,7 @@ export default function CampaignComposerClient() {
 
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <button
+              type="button"
               onClick={reset}
               disabled={enqueueing || draining}
               style={softButtonStyle()}
@@ -1667,6 +2108,7 @@ export default function CampaignComposerClient() {
             </button>
 
             <button
+              type="button"
               onClick={() => void refreshPreviewHtml()}
               disabled={previewLoading}
               style={softButtonStyle()}
@@ -1676,324 +2118,17 @@ export default function CampaignComposerClient() {
           </div>
         </div>
 
-        <div
-          style={{
-            padding: 12,
-            borderRadius: UI.radius,
-            marginTop: 10,
-            marginBottom: 16,
-            border: `1px solid ${UI.surfaceBorder}`,
-            background: UI.surfaceBgSoft,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              gap: 12,
-              alignItems: isNarrow ? "stretch" : "flex-start",
-              flexWrap: "wrap",
-              flexDirection: isNarrow ? "column" : "row",
-            }}
-          >
-            {/* Left metrics */}
-            <div
-              style={{
-                display: "flex",
-                gap: 12,
-                alignItems: "center",
-                flexWrap: "wrap",
-              }}
-            >
-              <div style={pillStyle}>
-                Mailable Contacts{" "}
-                <b style={{ marginLeft: 6 }}>{audienceCount ?? "—"}</b>
-              </div>
-
-              <div style={{ fontSize: 12, opacity: 0.75, paddingTop: 9 }}>
-                Enqueued <b>{enqueuedCount ?? 0}</b> (this session)
-              </div>
-            </div>
-
-            {/* Spacer only on wide screens */}
-            {!isNarrow ? <div style={{ flex: 1 }} /> : null}
-
-            {/* Audience filters (stackable) */}
-            <div
-              style={{
-                minWidth: 0, // key: allow shrinking
-                width: "100%",
-                maxWidth: isNarrow ? "100%" : 760,
-                flex: isNarrow ? "1 1 auto" : "1 1 520px",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: isNarrow ? "stretch" : "center",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  flexWrap: "wrap",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 10,
-                    opacity: 0.75,
-                    letterSpacing: 0.4,
-                    paddingTop: 2,
-                  }}
-                >
-                  AUDIENCE FILTERS
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 8,
-                    alignItems: "center",
-                    flexWrap: "wrap",
-                    width: isNarrow ? "100%" : undefined,
-                    justifyContent: isNarrow ? "flex-start" : "flex-end",
-                  }}
-                >
-                  <button
-                    type="button"
-                    style={softButtonStyle({ small: true })}
-                    onClick={() => {
-                      const kind = firstUnusedKind(audienceFilters);
-                      setFiltersAndDebouncePersist([
-                        ...audienceFilters,
-                        { id: newId(), kind, value: "" },
-                      ]);
-                    }}
-                  >
-                    + Add filter
-                  </button>
-
-                  <button
-                    type="button"
-                    style={softButtonStyle({ small: true })}
-                    onClick={() => void refreshAudienceOptions()}
-                    disabled={audienceOptionsLoading}
-                    title={
-                      audienceOptionsErr
-                        ? `Last error: ${audienceOptionsErr}`
-                        : "Reload filter dropdown options from DB"
-                    }
-                  >
-                    {audienceOptionsLoading ? "Loading…" : "Refresh options"}
-                  </button>
-
-                  {audienceFilters.length > 0 ? (
-                    <button
-                      type="button"
-                      style={softButtonStyle({ small: true })}
-                      onClick={() => setFiltersAndDebouncePersist([])}
-                    >
-                      Clear
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-
-              {audienceOptionsErr ? (
-                <div style={{ marginTop: 8, fontSize: 11, color: "#ffb3c0" }}>
-                  Options load error: {audienceOptionsErr}
-                </div>
-              ) : null}
-
-              <div style={{ height: 8 }} />
-
-              {audienceFilters.length === 0 ? (
-                <div style={{ fontSize: 12, opacity: 0.7 }}>
-                  No filters — sending to all marketing-opt-in contacts (minus
-                  suppressions).
-                </div>
-              ) : (
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
-                >
-                  {audienceFilters.map((f, idx) => {
-                    const kind = f.kind;
-
-                    const kindSelect = (
-                      <select
-                        value={kind}
-                        onChange={(e) => {
-                          const nextKind = e.target.value as AudienceFilterKind;
-                          const next = audienceFilters.slice();
-                          next[idx] = { id: f.id, kind: nextKind, value: "" };
-
-                          // optional UX: prevent duplicates by kind (keeps backend semantics obvious)
-                          const deduped: AudienceFilter[] = [];
-                          const seen = new Set<AudienceFilterKind>();
-                          for (const row of next) {
-                            if (seen.has(row.kind)) continue;
-                            seen.add(row.kind);
-                            deduped.push(row);
-                          }
-                          setFiltersAndDebouncePersist(deduped);
-                        }}
-                        style={{
-                          ...inputStyle,
-                          padding: "8px 10px",
-                          fontSize: 12,
-                        }}
-                      >
-                        {(
-                          [
-                            "source",
-                            "entitlementKey",
-                            "entitlementExpiresWithinDays",
-                            "joinedWithinDays",
-                            "consentVersionMax",
-                            "hasPurchased",
-                            "purchasedWithinDays",
-                            "engagedEventType",
-                            "engagedWithinDays",
-                          ] as AudienceFilterKind[]
-                        ).map((k) => (
-                          <option key={k} value={k}>
-                            {FILTER_KIND_LABEL[k]}
-                          </option>
-                        ))}
-                      </select>
-                    );
-
-                    const valueControl = (() => {
-                      if (kind === "hasPurchased") {
-                        return (
-                          <select
-                            value={f.value}
-                            onChange={(e) => {
-                              const next = audienceFilters.slice();
-                              next[idx] = { ...f, value: e.target.value };
-                              setFiltersAndDebouncePersist(next);
-                            }}
-                            style={{
-                              ...inputStyle,
-                              padding: "8px 10px",
-                              fontSize: 12,
-                            }}
-                          >
-                            <option value="">(any)</option>
-                            <option value="true">Yes</option>
-                            <option value="false">No</option>
-                          </select>
-                        );
-                      }
-
-                      const dropdown = (() => {
-                        if (kind === "source") return audienceOptions.sources;
-                        if (kind === "entitlementKey")
-                          return audienceOptions.entitlementKeys;
-                        if (kind === "engagedEventType")
-                          return audienceOptions.engagedEventTypes;
-                        return null;
-                      })();
-
-                      if (dropdown && dropdown.length > 0) {
-                        return (
-                          <select
-                            value={f.value}
-                            onChange={(e) => {
-                              const next = audienceFilters.slice();
-                              next[idx] = { ...f, value: e.target.value };
-                              setFiltersAndDebouncePersist(next);
-                            }}
-                            style={{
-                              ...inputStyle,
-                              padding: "8px 10px",
-                              fontSize: 12,
-                            }}
-                          >
-                            <option value="">(any)</option>
-                            {dropdown.map((v) => (
-                              <option key={v} value={v}>
-                                {v}
-                              </option>
-                            ))}
-                          </select>
-                        );
-                      }
-
-                      const isNumber =
-                        kind === "entitlementExpiresWithinDays" ||
-                        kind === "joinedWithinDays" ||
-                        kind === "consentVersionMax" ||
-                        kind === "purchasedWithinDays" ||
-                        kind === "engagedWithinDays";
-
-                      return (
-                        <input
-                          value={f.value}
-                          onChange={(e) => {
-                            const next = audienceFilters.slice();
-                            next[idx] = { ...f, value: e.target.value };
-                            setFiltersAndDebouncePersist(next);
-                          }}
-                          style={{
-                            ...inputStyle,
-                            padding: "8px 10px",
-                            fontSize: 12,
-                          }}
-                          inputMode={isNumber ? "numeric" : undefined}
-                          placeholder={
-                            kind === "source"
-                              ? "e.g. early_access_form"
-                              : kind === "entitlementKey"
-                                ? "e.g. tier:patron"
-                                : kind === "engagedEventType"
-                                  ? "e.g. played_track"
-                                  : "Enter a value"
-                          }
-                        />
-                      );
-                    })();
-
-                    return (
-                      <div
-                        key={f.id}
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: isNarrow
-                            ? "1fr"
-                            : "1.1fr 1.4fr auto",
-                          gap: 8,
-                          alignItems: "center",
-                          minWidth: 0,
-                        }}
-                      >
-                        <div style={{ minWidth: 0 }}>{kindSelect}</div>
-                        <div style={{ minWidth: 0 }}>{valueControl}</div>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const next = audienceFilters.filter(
-                              (x) => x.id !== f.id,
-                            );
-                            setFiltersAndDebouncePersist(next);
-                          }}
-                          title="Remove filter"
-                          aria-label="Remove filter"
-                          style={{
-                            ...softButtonStyle({ small: true }),
-                            padding: "8px 10px",
-                            opacity: 0.9,
-                            width: isNarrow ? "100%" : undefined,
-                          }}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <AudienceFiltersSection
+          isNarrow={isNarrow}
+          audienceCount={audienceCount}
+          enqueuedCount={enqueuedCount}
+          audienceFilters={audienceFilters}
+          audienceOptions={audienceOptions}
+          audienceOptionsLoading={audienceOptionsLoading}
+          audienceOptionsErr={audienceOptionsErr}
+          onFiltersChange={setFiltersAndDebouncePersist}
+          onRefreshAudienceOptions={refreshAudienceOptions}
+        />
 
         <div
           style={{
@@ -2017,7 +2152,7 @@ export default function CampaignComposerClient() {
             </h2>
 
             <label style={{ display: "block", marginBottom: 10 }}>
-              <div style={labelLeft}>Campaign name</div>
+              <div style={LABEL_LEFT_STYLE}>Campaign name</div>
               <input
                 value={draft.campaignName}
                 onChange={(e) =>
@@ -2026,12 +2161,12 @@ export default function CampaignComposerClient() {
                     campaignName: e.target.value,
                   })
                 }
-                style={inputStyle}
+                style={INPUT_STYLE}
               />
             </label>
 
             <label style={{ display: "block", marginBottom: 10 }}>
-              <div style={labelLeft}>Subject</div>
+              <div style={LABEL_LEFT_STYLE}>Subject</div>
               <input
                 value={draft.subjectTemplate}
                 onChange={(e) =>
@@ -2040,12 +2175,12 @@ export default function CampaignComposerClient() {
                     subjectTemplate: e.target.value,
                   })
                 }
-                style={inputStyle}
+                style={INPUT_STYLE}
               />
             </label>
 
             <label style={{ display: "block", marginBottom: 10 }}>
-              <div style={labelLeft}>Body (Markdown)</div>
+              <div style={LABEL_LEFT_STYLE}>Body (Markdown)</div>
 
               <div
                 style={{
@@ -2269,26 +2404,8 @@ export default function CampaignComposerClient() {
                         <button
                           type="button"
                           onClick={() => {
-                            const text = lastImageUrl;
-                            if (!text) return;
-                            if (navigator.clipboard?.writeText) {
-                              void navigator.clipboard.writeText(text);
-                            } else {
-                              // fallback
-                              const ta = document.createElement("textarea");
-                              ta.value = text;
-                              ta.style.position = "fixed";
-                              ta.style.left = "-9999px";
-                              document.body.appendChild(ta);
-                              ta.focus();
-                              ta.select();
-                              try {
-                                document.execCommand("copy");
-                              } catch {
-                                // ignore
-                              }
-                              document.body.removeChild(ta);
-                            }
+                            if (!lastImageUrl) return;
+                            void navigator.clipboard?.writeText(lastImageUrl);
                           }}
                           style={{
                             ...iconButtonStyle(),
@@ -2328,7 +2445,6 @@ export default function CampaignComposerClient() {
                       bodyTemplate: e.target.value,
                     })
                   }
-                  onKeyDown={(e) => handleUndoRedoKeydown(e)}
                   rows={18}
                   style={{
                     width: "100%",
@@ -2394,7 +2510,7 @@ export default function CampaignComposerClient() {
             )}
 
             <div style={{ marginTop: 12 }}>
-              <div style={labelRight}>
+              <div style={LABEL_RIGHT_STYLE}>
                 Rendered plaintext (stored in campaign body)
               </div>
               <pre
