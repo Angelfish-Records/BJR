@@ -80,6 +80,139 @@ function isSubmitResponse(value: unknown): value is SubmitResponse {
   return typeof record.code === "string";
 }
 
+type SubmitFailure = Readonly<{
+  message: string;
+  openMembership: boolean;
+}>;
+
+function isSameInflightRequest(
+  inflight: AbortController | null,
+  inflightKey: string,
+  requestKey: string,
+): boolean {
+  return inflight !== null && inflightKey === requestKey;
+}
+
+function buildArtistPostsUrl(
+  params: Readonly<{
+    pageSize: number;
+    minVisibility: PortalArtistPostsProps["minVisibility"];
+    postTypeFilter: "" | PostType;
+    nextCursor: string;
+  }>,
+): URL {
+  const url = new URL("/api/artist-posts", window.location.origin);
+  url.searchParams.set("limit", String(params.pageSize));
+  url.searchParams.set("minVisibility", params.minVisibility);
+
+  if (params.postTypeFilter) {
+    url.searchParams.set("postType", params.postTypeFilter);
+  }
+
+  if (params.nextCursor !== "0") {
+    url.searchParams.set("offset", params.nextCursor);
+  }
+
+  return url;
+}
+
+function mergeArtistPostPage(
+  current: Post[],
+  nextPosts: Post[],
+  nextCursor: string,
+): Post[] {
+  if (nextCursor === "0") return nextPosts;
+  return [...current, ...nextPosts];
+}
+
+function extractPostSlugs(
+  posts: readonly (Post | null | undefined)[],
+): string[] {
+  const slugs: string[] = [];
+
+  for (const post of posts) {
+    if (typeof post?.slug !== "string") continue;
+    const slug = post.slug.trim();
+    if (slug) slugs.push(slug);
+  }
+
+  return slugs;
+}
+
+function shouldMarkPostsSeen(
+  isSignedIn: boolean,
+  requireAuthAfter: number,
+): boolean {
+  return !isSignedIn && requireAuthAfter > 0;
+}
+
+function startArtistPostsLoading(
+  isFirstPage: boolean,
+  existingPostCount: number,
+  setLoading: React.Dispatch<React.SetStateAction<boolean>>,
+  setRefreshing: React.Dispatch<React.SetStateAction<boolean>>,
+): void {
+  if (isFirstPage && existingPostCount > 0) {
+    setRefreshing(true);
+    return;
+  }
+
+  setLoading(true);
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+function fetchErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return "Failed to load posts";
+}
+
+function submitFailureFor(
+  responseOk: boolean,
+  data: SubmitResponse | null,
+  maxChars: number,
+): SubmitFailure | null {
+  if (responseOk && data?.ok === true) return null;
+
+  if (data?.ok !== false) {
+    return {
+      message: "Couldn’t submit right now. Try again.",
+      openMembership: false,
+    };
+  }
+
+  switch (data.code) {
+    case "TIER_REQUIRED":
+      return {
+        message: "Upgrade to Patron to submit questions.",
+        openMembership: true,
+      };
+    case "RATE_LIMIT":
+      return {
+        message:
+          "You’ve asked three questions today. Hold on until tomorrow to ask another.",
+        openMembership: false,
+      };
+    case "TOO_LONG":
+      return {
+        message: `Keep it under ${maxChars} characters.`,
+        openMembership: false,
+      };
+    case "NOT_AUTHED":
+      return {
+        message: "Please sign in first.",
+        openMembership: false,
+      };
+    default:
+      return {
+        message: "Couldn’t submit right now. Try again.",
+        openMembership: false,
+      };
+  }
+}
+
 function useElementWidth<T extends HTMLElement>(): [
   React.RefObject<T | null>,
   number,
@@ -130,13 +263,8 @@ function useMinWidth(minWidthPx: number): boolean {
 
     setMatches(mediaQuery.matches);
 
-    if (typeof mediaQuery.addEventListener === "function") {
-      mediaQuery.addEventListener("change", onChange);
-      return () => mediaQuery.removeEventListener("change", onChange);
-    }
-
-    mediaQuery.addListener(onChange);
-    return () => mediaQuery.removeListener(onChange);
+    mediaQuery.addEventListener("change", onChange);
+    return () => mediaQuery.removeEventListener("change", onChange);
   }, [minWidthPx]);
 
   return matches;
@@ -356,8 +484,8 @@ export function usePortalArtistPostsController(
           return;
         }
 
-        const ok = raw as Partial<SeenOkResponse>;
-        if (ok && ok.ok === true) return;
+        const ok = raw as Partial<SeenOkResponse> | null;
+        if (ok?.ok === true) return;
       } catch {
         return;
       }
@@ -371,13 +499,21 @@ export function usePortalArtistPostsController(
       if (nextCursor === null) return;
 
       const requestKey = JSON.stringify({
-        nextCursor: nextCursor ?? "",
+        nextCursor,
         pageSize,
         minVisibility,
-        postTypeFilter: postTypeFilter ?? "",
+        postTypeFilter,
       });
 
-      if (inflightRef.current && inflightKeyRef.current === requestKey) return;
+      if (
+        isSameInflightRequest(
+          inflightRef.current,
+          inflightKeyRef.current,
+          requestKey,
+        )
+      ) {
+        return;
+      }
 
       if (inflightRef.current) {
         inflightRef.current.abort();
@@ -393,18 +529,23 @@ export function usePortalArtistPostsController(
       const isFirstPage = nextCursor === "0";
 
       loadingRef.current = true;
-      if (isFirstPage && postsLengthRef.current > 0) setRefreshing(true);
-      else setLoading(true);
+      startArtistPostsLoading(
+        isFirstPage,
+        postsLengthRef.current,
+        setLoading,
+        setRefreshing,
+      );
 
       const filterAtCall = postTypeFilter;
       setErr(null);
 
       try {
-        const url = new URL("/api/artist-posts", window.location.origin);
-        url.searchParams.set("limit", String(pageSize));
-        url.searchParams.set("minVisibility", minVisibility);
-        if (postTypeFilter) url.searchParams.set("postType", postTypeFilter);
-        if (nextCursor !== "0") url.searchParams.set("offset", nextCursor);
+        const url = buildArtistPostsUrl({
+          pageSize,
+          minVisibility,
+          postTypeFilter,
+          nextCursor,
+        });
 
         console.log(`[PortalArtistPosts ${mountIdRef.current}] fetchPage`, {
           nextCursor,
@@ -441,7 +582,7 @@ export function usePortalArtistPostsController(
           return;
         }
 
-        const nextPosts = Array.isArray(parsed.posts) ? parsed.posts : [];
+        const nextPosts = parsed.posts;
 
         console.log(
           `[PortalArtistPosts ${mountIdRef.current}] fetchPage success`,
@@ -454,24 +595,23 @@ export function usePortalArtistPostsController(
         );
 
         setPosts((current) => {
-          const updated =
-            nextCursor !== "0" ? [...current, ...nextPosts] : nextPosts;
+          const updated = mergeArtistPostPage(current, nextPosts, nextCursor);
           postsLengthRef.current = updated.length;
           return updated;
         });
         setCursor(parsed.nextCursor);
 
-        if (!isSignedInRef.current && requireAuthAfterRef.current > 0) {
-          const slugs = nextPosts
-            .map((post) =>
-              post && typeof post.slug === "string" ? post.slug.trim() : "",
-            )
-            .filter((slug) => slug.length > 0);
-
+        if (
+          shouldMarkPostsSeen(
+            isSignedInRef.current,
+            requireAuthAfterRef.current,
+          )
+        ) {
+          const slugs = extractPostSlugs(nextPosts);
           void markSeen(slugs, parsed.correlationId ?? correlationId);
         }
       } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
+        if (isAbortError(error)) {
           console.log(
             `[PortalArtistPosts ${mountIdRef.current}] fetchPage aborted`,
             {
@@ -481,8 +621,7 @@ export function usePortalArtistPostsController(
           return;
         }
 
-        const message =
-          error instanceof Error ? error.message : "Failed to load posts";
+        const message = fetchErrorMessage(error);
 
         console.log(
           `[PortalArtistPosts ${mountIdRef.current}] fetchPage error`,
@@ -624,7 +763,7 @@ export function usePortalArtistPostsController(
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           questionText: text,
-          askerName: nameClean ? nameClean : null,
+          askerName: nameClean || null,
         }),
       });
 
@@ -635,34 +774,11 @@ export function usePortalArtistPostsController(
 
       const raw: unknown = await response.json().catch(() => null);
       const data: SubmitResponse | null = isSubmitResponse(raw) ? raw : null;
+      const failure = submitFailureFor(response.ok, data, MAX_CHARS);
 
-      if (!response.ok || !data || data.ok === false) {
-        const code = data && data.ok === false ? data.code : null;
-
-        if (code === "TIER_REQUIRED") {
-          openMembershipModal();
-          setSubmitErr("Upgrade to Patron to submit questions.");
-          return;
-        }
-
-        if (code === "RATE_LIMIT") {
-          setSubmitErr(
-            "You’ve asked three questions today. Hold on until tomorrow to ask another.",
-          );
-          return;
-        }
-
-        if (code === "TOO_LONG") {
-          setSubmitErr(`Keep it under ${MAX_CHARS} characters.`);
-          return;
-        }
-
-        if (code === "NOT_AUTHED") {
-          setSubmitErr("Please sign in first.");
-          return;
-        }
-
-        setSubmitErr("Couldn’t submit right now. Try again.");
+      if (failure) {
+        if (failure.openMembership) openMembershipModal();
+        setSubmitErr(failure.message);
         return;
       }
 
