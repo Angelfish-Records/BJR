@@ -52,13 +52,15 @@ function tierLabel(t: TierName): string {
   return "Partner+";
 }
 
-function IconCircleBtn(props: {
-  label: string;
-  onClick?: () => void;
-  disabled?: boolean;
-  size?: number;
-  children: React.ReactNode;
-}) {
+function IconCircleBtn(
+  props: Readonly<{
+    label: string;
+    onClick?: () => void;
+    disabled?: boolean;
+    size?: number;
+    children: React.ReactNode;
+  }>,
+) {
   const { label, onClick, disabled, size = 44, children } = props;
   return (
     <button
@@ -87,7 +89,7 @@ function IconCircleBtn(props: {
   );
 }
 
-function PlayPauseBig({ playing }: { playing: boolean }) {
+function PlayPauseBig({ playing }: Readonly<{ playing: boolean }>) {
   return playing ? (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
       <rect x="6.6" y="5" width="4.2" height="14" rx="1.3" />
@@ -286,7 +288,7 @@ function normalizePlatformLinks(
   if (!Array.isArray(links)) return [];
   return links.filter(isPlatformLink);
 }
-function PlatformIcon({ platform }: { platform: StreamingPlatform }) {
+function PlatformIcon({ platform }: Readonly<{ platform: StreamingPlatform }>) {
   const common = { width: 18, height: 18, "aria-hidden": true as const };
 
   switch (platform) {
@@ -372,7 +374,9 @@ function PlatformIcon({ platform }: { platform: StreamingPlatform }) {
   }
 }
 
-function AvailableOnRibbon({ links }: { links: PlatformLink[] }) {
+function AvailableOnRibbon({
+  links,
+}: Readonly<{ links: readonly PlatformLink[] }>) {
   if (!links.length) return null;
 
   const order: StreamingPlatform[] = [
@@ -415,6 +419,733 @@ function AvailableOnRibbon({ links }: { links: PlatformLink[] }) {
           </a>
         ))}
       </div>
+    </div>
+  );
+}
+
+type PlayerApi = ReturnType<typeof usePlayer>;
+
+type FullPlayerProps = Readonly<{
+  bundle: AlbumPlayerBundle;
+  albums: AlbumNavItem[];
+  onSelectAlbum?: (slug: string) => void;
+  isBrowsingAlbum?: boolean;
+  tier?: Tier;
+}>;
+
+type EffectivePlayerView = Readonly<{
+  albumSlug: string;
+  album: AlbumPlayerBundle["album"];
+  tracks: PlayerTrack[];
+}>;
+
+function resolveAccessIdentityKey(
+  params: Readonly<{
+    clerkAuthLoaded: boolean;
+    isSignedIn: boolean | undefined;
+    userId: string | null | undefined;
+    sessionId: string | null | undefined;
+  }>,
+): string {
+  if (!params.clerkAuthLoaded) return "clerk:loading";
+  if (!params.isSignedIn) return "clerk:anonymous";
+
+  return `clerk:user:${params.userId ?? ""}:session:${params.sessionId ?? ""}`;
+}
+
+function resolveEffectivePlayerView(
+  params: Readonly<{
+    bundle: AlbumPlayerBundle;
+    stableView: StableView | null;
+    isBrowsingAlbum: boolean;
+  }>,
+): EffectivePlayerView {
+  const { bundle, stableView, isBrowsingAlbum } = params;
+  const shouldUseStableView = Boolean(
+    isBrowsingAlbum &&
+    stableView?.album &&
+    (!bundle.album || bundle.tracks.length === 0),
+  );
+
+  if (shouldUseStableView && stableView) {
+    return {
+      albumSlug: stableView.albumSlug,
+      album: stableView.album,
+      tracks: stableView.tracks,
+    };
+  }
+
+  return {
+    albumSlug: bundle.albumSlug,
+    album: bundle.album,
+    tracks: bundle.tracks,
+  };
+}
+
+function accessStatesEqual(
+  left: AccessState | null,
+  right: AccessState | null,
+): boolean {
+  if (!left || !right) return left === right;
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function mergeAccessState(
+  previous: AccessState | null,
+  next: AccessState | null,
+): AccessState | null {
+  return accessStatesEqual(previous, next) ? previous : next;
+}
+
+function isAuthOrLegacyCapCode(code: string): boolean {
+  return (
+    code === "AUTH_REQUIRED" ||
+    code === "CAP_REACHED" ||
+    code === "ANON_CAP_REACHED"
+  );
+}
+
+function hasPlaybackIntentForAlbum(
+  player: PlayerApi,
+  pendingInAlbum: boolean,
+): boolean {
+  return (
+    player.playRequestPending ||
+    player.intent === "play" ||
+    player.status === "loading" ||
+    player.status === "playing" ||
+    player.status === "paused" ||
+    pendingInAlbum
+  );
+}
+
+function reconcilePlayerWithAccessDecision(
+  params: Readonly<{
+    player: PlayerApi;
+    decision: AccessState;
+    recordingIds: ReadonlySet<string>;
+    albumKey: string | null;
+  }>,
+): void {
+  const { player, decision, recordingIds, albumKey } = params;
+
+  if (decision.allowed) {
+    if (player.lastError) player.clearError();
+    return;
+  }
+
+  const currentInAlbum = Boolean(
+    player.current?.recordingId && recordingIds.has(player.current.recordingId),
+  );
+  const pendingInAlbum = Boolean(
+    player.pendingRecordingId && recordingIds.has(player.pendingRecordingId),
+  );
+  const queueIsAlbum = Boolean(albumKey && player.queueContextId === albumKey);
+  const hasIntent = hasPlaybackIntentForAlbum(player, pendingInAlbum);
+  const shouldBlockAlbum =
+    currentInAlbum || pendingInAlbum || (queueIsAlbum && hasIntent);
+
+  const code = typeof decision.code === "string" ? decision.code.trim() : "";
+  if (!shouldBlockAlbum || (isAuthOrLegacyCapCode(code) && !hasIntent)) return;
+
+  try {
+    player.pause();
+  } catch {
+    // ignore
+  }
+
+  if (player.status === "loading") {
+    player.setStatusExternal("idle");
+  }
+}
+
+function accessFailureFallback(catalogueId: string): AccessState {
+  return {
+    forCatalogueId: catalogueId,
+    allowed: true,
+    embargoed: false,
+    releaseAt: null,
+    code: "ACCESS_CHECK_ERROR",
+    reason: "Access check failed (client).",
+    corr: null,
+    shareTokenAccess: null,
+    sharePlaybackContext: null,
+    sharePlaybackScopeId: null,
+  };
+}
+
+function resolveAccessForAlbum(
+  catalogueId: string | null,
+  access: AccessState | null,
+): AccessState | null {
+  if (!catalogueId) return null;
+  if (access?.forCatalogueId !== catalogueId) return null;
+  return access;
+}
+
+function isPlayerPlayingish(player: PlayerApi): boolean {
+  return (
+    player.status === "playing" ||
+    player.status === "loading" ||
+    player.playRequestPending
+  );
+}
+
+type PlaybackAccessUiState = Readonly<{
+  accessKnown: boolean;
+  isPlaybackGate: boolean;
+  canPlay: boolean;
+  canAttemptPlay: boolean;
+}>;
+
+function derivePlaybackAccessUiState(
+  tracks: readonly PlayerTrack[],
+  accessForAlbum: AccessState | null,
+): PlaybackAccessUiState {
+  const accessKnown = accessForAlbum !== null;
+  const hasPlayableTracks = tracks.length > 0;
+  const isPlaybackGate = Boolean(
+    hasPlayableTracks &&
+    accessKnown &&
+    accessForAlbum?.allowed === false &&
+    isPlaybackGateCode(accessForAlbum.code),
+  );
+  const canPlay = Boolean(
+    hasPlayableTracks && accessKnown && accessForAlbum?.allowed !== false,
+  );
+
+  return {
+    accessKnown,
+    isPlaybackGate,
+    canPlay,
+    canAttemptPlay: canPlay || isPlaybackGate,
+  };
+}
+
+type EmbargoUiState = Readonly<{
+  releaseAtMs: number;
+  showEmbargo: boolean;
+  showShareTokenEmbargoAccess: boolean;
+}>;
+
+function deriveEmbargoUiState(
+  params: Readonly<{
+    embargo: NonNullable<AlbumPlayerBundle["album"]>["embargo"];
+    accessForAlbum: AccessState | null;
+    shareToken: string | null;
+  }>,
+): EmbargoUiState {
+  const releaseAtMs = params.embargo?.releaseAt
+    ? Date.parse(params.embargo.releaseAt)
+    : Number.NaN;
+  const accessResolved = params.accessForAlbum !== null;
+  const accessAllowsEmbargoBypass = params.accessForAlbum?.allowed === true;
+  const showEmbargo = Boolean(
+    params.embargo?.embargoed &&
+    Number.isFinite(releaseAtMs) &&
+    !accessAllowsEmbargoBypass &&
+    (!params.shareToken || accessResolved),
+  );
+  const showShareTokenEmbargoAccess = Boolean(
+    params.embargo?.embargoed &&
+    params.accessForAlbum?.allowed === true &&
+    params.accessForAlbum.shareTokenAccess,
+  );
+
+  return { releaseAtMs, showEmbargo, showShareTokenEmbargoAccess };
+}
+
+function isAlbumPlaybackActive(
+  albumKey: string | null,
+  queueContextId: string | undefined,
+): boolean {
+  return Boolean(albumKey && queueContextId === albumKey);
+}
+
+type AlbumTransportState = Readonly<{
+  albumIdx: number;
+  prevDisabled: boolean;
+  nextDisabled: boolean;
+}>;
+
+function deriveAlbumTransportState(
+  params: Readonly<{
+    currentRecordingId: string;
+    tracks: readonly PlayerTrack[];
+    transportLock: boolean;
+  }>,
+): AlbumTransportState {
+  const albumIdx = params.currentRecordingId
+    ? params.tracks.findIndex(
+        (track) => track.recordingId === params.currentRecordingId,
+      )
+    : -1;
+
+  if (albumIdx < 0) {
+    return { albumIdx, prevDisabled: true, nextDisabled: true };
+  }
+
+  return {
+    albumIdx,
+    prevDisabled: params.transportLock || albumIdx === 0,
+    nextDisabled: params.transportLock || albumIdx === params.tracks.length - 1,
+  };
+}
+
+function isCoarsePointerDevice(): boolean {
+  if (typeof window === "undefined") return false;
+
+  try {
+    return window.matchMedia?.("(pointer: coarse)").matches ?? false;
+  } catch {
+    return "ontouchstart" in window;
+  }
+}
+
+function trackRowColors(
+  canPlay: boolean,
+  isCurrent: boolean,
+): Readonly<{ titleColor: string; subColor: string }> {
+  if (!canPlay) {
+    return {
+      titleColor: "rgba(255,255,255,0.38)",
+      subColor: "rgba(255,255,255,0.32)",
+    };
+  }
+
+  if (isCurrent) {
+    return {
+      titleColor: "var(--accent)",
+      subColor: "color-mix(in srgb, var(--accent) 70%, rgba(255,255,255,0.70))",
+    };
+  }
+
+  return {
+    titleColor: "rgba(255,255,255,0.92)",
+    subColor: "rgba(255,255,255,0.70)",
+  };
+}
+
+function trackRowRadius(index: number, trackCount: number): string {
+  if (index === 0) return "14px 14px 0 0";
+  if (index === trackCount - 1) return "0 0 14px 14px";
+  return "0";
+}
+
+type TrackRowView = Readonly<{
+  isCurrent: boolean;
+  shimmerTitle: boolean;
+  isNowPlaying: boolean;
+  titleColor: string;
+  subColor: string;
+  restingBackground: string;
+  rowRadius: string;
+  dataReason: string;
+  cursor: "pointer" | "default";
+  opacity: number;
+}>;
+
+function deriveTrackRowView(
+  params: Readonly<{
+    track: PlayerTrack;
+    index: number;
+    trackCount: number;
+    currentRecordingId: string | undefined;
+    pendingRecordingId: string | undefined;
+    playerStatus: PlayerApi["status"];
+    playerIntent: PlayerApi["intent"];
+    loadingReason: PlayerApi["loadingReason"];
+    canPlay: boolean;
+    canAttemptPlay: boolean;
+    isSelected: boolean;
+  }>,
+): TrackRowView {
+  const isCurrent = params.currentRecordingId === params.track.recordingId;
+  const isPending = params.pendingRecordingId === params.track.recordingId;
+  const shimmerTitle =
+    params.playerStatus === "loading" && isPending && !isCurrent;
+  const isNowPlaying = Boolean(
+    isCurrent &&
+    (params.playerStatus === "playing" ||
+      params.playerStatus === "loading" ||
+      params.playerIntent === "play"),
+  );
+  const { titleColor, subColor } = trackRowColors(params.canPlay, isCurrent);
+  const baseBackground = params.isSelected
+    ? "rgba(255,255,255,0.14)"
+    : "transparent";
+  const restingBackground =
+    isCurrent && !params.isSelected ? "transparent" : baseBackground;
+  const dataReason =
+    isCurrent && params.playerStatus === "loading"
+      ? (params.loadingReason ?? "")
+      : "";
+
+  return {
+    isCurrent,
+    shimmerTitle,
+    isNowPlaying,
+    titleColor,
+    subColor,
+    restingBackground,
+    rowRadius: trackRowRadius(params.index, params.trackCount),
+    dataReason,
+    cursor: params.canAttemptPlay ? "pointer" : "default",
+    opacity: params.canPlay ? 1 : 0.75,
+  };
+}
+
+function trackPlayLabel(track: PlayerTrack, index: number): string {
+  const title = track.title?.trim();
+  const subject = title || `track ${index + 1}`;
+  return `Play ${subject}`;
+}
+
+function trackRowActionLabel(
+  track: PlayerTrack,
+  index: number,
+  isCoarsePointer: boolean,
+): string {
+  const title = track.title?.trim();
+  const subject = title || `track ${index + 1}`;
+  const verb = isCoarsePointer ? "Play" : "Select";
+  return `${verb} ${subject}`;
+}
+
+function albumArtworkBackground(artworkUrl: string | null | undefined): string {
+  if (artworkUrl) return `url(${artworkUrl}) center/cover no-repeat`;
+  return "radial-gradient(120px 120px at 30% 20%, rgba(255,255,255,0.14), rgba(255,255,255,0.02))";
+}
+
+function AlbumHero(
+  props: Readonly<{
+    artworkUrl: string | null | undefined;
+    activeListeners: number;
+  }>,
+) {
+  return (
+    <div
+      style={{
+        position: "relative",
+        width: "min(334px, 86vw)",
+        height: "min(334px, 86vw)",
+        borderRadius: 18,
+        border: "1px solid rgba(255,255,255,0.14)",
+        background: albumArtworkBackground(props.artworkUrl),
+        boxShadow: "0 22px 60px rgba(0,0,0,0.35)",
+        overflow: "hidden",
+      }}
+    >
+      {props.activeListeners > 0 ? (
+        <div
+          className="afArtworkLiveBadge"
+          aria-live="polite"
+          aria-label={fmtActiveListeners(props.activeListeners)}
+          title={fmtActiveListeners(props.activeListeners)}
+        >
+          <span className="afLiveBadgeDot" aria-hidden="true" />
+          <span>{fmtActiveListeners(props.activeListeners)}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function EmbargoNotices(
+  props: Readonly<{
+    showEmbargo: boolean;
+    releaseAtMs: number;
+    embargoNote: string | null | undefined;
+    showShareTokenEmbargoAccess: boolean;
+    shareTokenExpiryLabel: string | null;
+    shareTokenRedemptionLimit: string | null;
+  }>,
+) {
+  const note =
+    props.embargoNote?.trim() ||
+    "Playback disabled pre-release. Patrons have instant early access.";
+  const hasShareTokenDetails = Boolean(
+    props.shareTokenExpiryLabel || props.shareTokenRedemptionLimit,
+  );
+
+  return (
+    <>
+      {props.showEmbargo ? (
+        <div
+          role="note"
+          style={{
+            marginTop: 10,
+            padding: "10px 12px",
+            borderRadius: 14,
+            border: "1px solid rgba(255,255,255,0.14)",
+            background: "rgba(0,0,0,0.22)",
+            boxShadow: "0 10px 34px rgba(0,0,0,0.28)",
+            maxWidth: 560,
+            textAlign: "center",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 650,
+              letterSpacing: 0.2,
+              opacity: 0.95,
+            }}
+          >
+            Releases on{" "}
+            {new Date(props.releaseAtMs).toLocaleDateString(undefined, {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}
+          </div>
+
+          <div
+            style={{
+              marginTop: 4,
+              fontSize: 12,
+              opacity: 0.78,
+              lineHeight: 1.35,
+            }}
+          >
+            {note}
+          </div>
+        </div>
+      ) : null}
+
+      {props.showShareTokenEmbargoAccess ? (
+        <div
+          role="note"
+          style={{
+            marginTop: 10,
+            padding: "10px 12px",
+            borderRadius: 14,
+            border: "1px solid rgba(255,255,255,0.16)",
+            background:
+              "color-mix(in srgb, var(--accent) 8%, rgba(0,0,0,0.24))",
+            boxShadow: "0 10px 34px rgba(0,0,0,0.28)",
+            maxWidth: 560,
+            textAlign: "center",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: 0.2,
+              opacity: 0.96,
+            }}
+          >
+            Embargoed access
+          </div>
+
+          <div
+            style={{
+              marginTop: 4,
+              fontSize: 12,
+              opacity: 0.78,
+              lineHeight: 1.35,
+            }}
+          >
+            This private link enables playback during embargo.
+          </div>
+
+          {hasShareTokenDetails ? (
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                justifyContent: "center",
+                gap: "4px 10px",
+                marginTop: 8,
+                fontSize: 11,
+                fontWeight: 650,
+                opacity: 0.76,
+                lineHeight: 1.35,
+              }}
+            >
+              {props.shareTokenExpiryLabel ? (
+                <span>Expires {props.shareTokenExpiryLabel} local time.</span>
+              ) : null}
+
+              {props.shareTokenRedemptionLimit ? (
+                <span>{props.shareTokenRedemptionLimit}</span>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function TransportControls(
+  props: Readonly<{
+    prevDisabled: boolean;
+    nextDisabled: boolean;
+    canAttemptPlay: boolean;
+    canPlay: boolean;
+    playLock: boolean;
+    playingThisAlbum: boolean;
+    onDownload: () => void;
+    onPrevious: () => void;
+    onTogglePlay: () => void;
+    onNext: () => void;
+    onShare: () => void;
+  }>,
+) {
+  const playLabel = props.playingThisAlbum ? "Pause" : "Play";
+  const playClick =
+    props.canAttemptPlay && !props.playLock ? props.onTogglePlay : undefined;
+  const playCursor = props.canAttemptPlay ? "pointer" : "default";
+  const playOpacity = props.canAttemptPlay ? 1 : 0.55;
+  const playShadow = props.playingThisAlbum
+    ? "0 18px 50px rgba(0,0,0,0.35)"
+    : "0 18px 50px rgba(0,0,0,0.30)";
+
+  return (
+    <div className="afTransportRow">
+      <div className="afTransportBadgeSlot" aria-hidden="true" />
+
+      <div className="afTransportControls">
+        <IconCircleBtn label="Download" onClick={props.onDownload}>
+          <DownloadIcon />
+        </IconCircleBtn>
+
+        <IconCircleBtn
+          label="Previous"
+          disabled={props.prevDisabled}
+          onClick={props.onPrevious}
+        >
+          <PrevIcon />
+        </IconCircleBtn>
+
+        <div style={{ position: "relative", width: 64, height: 64 }}>
+          <button
+            type="button"
+            onClick={playClick}
+            disabled={!props.canAttemptPlay || props.playLock}
+            aria-label={playLabel}
+            title={playLabel}
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 999,
+              border: "1px solid rgba(255,255,255,0.12)",
+              background: "rgba(245,245,245,0.95)",
+              color: "rgba(0,0,0,0.92)",
+              display: "grid",
+              placeItems: "center",
+              cursor: playCursor,
+              opacity: playOpacity,
+              boxShadow: playShadow,
+              transform: "translateZ(0)",
+              position: "relative",
+              zIndex: 2,
+            }}
+          >
+            <PlayPauseBig playing={props.playingThisAlbum} />
+          </button>
+
+          {props.canPlay ? (
+            <div
+              style={{
+                position: "absolute",
+                inset: -5,
+                zIndex: 1,
+                pointerEvents: "none",
+                overflow: "visible",
+                isolation: "isolate",
+                transform: "translateZ(0)",
+                display: "grid",
+                placeItems: "center",
+              }}
+            >
+              <PatternRingGlow
+                size={64}
+                ringPx={1}
+                glowPx={2}
+                blurPx={4}
+                opacity={0.45}
+                seed={913}
+              />
+            </div>
+          ) : null}
+        </div>
+
+        <IconCircleBtn
+          label="Next"
+          disabled={props.nextDisabled}
+          onClick={props.onNext}
+        >
+          <NextIcon />
+        </IconCircleBtn>
+
+        <IconCircleBtn label="Share" onClick={props.onShare}>
+          <ShareIcon />
+        </IconCircleBtn>
+      </div>
+
+      <div aria-hidden="true" />
+    </div>
+  );
+}
+
+function TrackIndexCell(
+  props: Readonly<{
+    index: number;
+    track: PlayerTrack;
+    isNowPlaying: boolean;
+    canAttemptPlay: boolean;
+    isCurrent: boolean;
+    subColor: string;
+    onInlinePlay: (track: PlayerTrack) => void;
+  }>,
+) {
+  let content: React.ReactNode = (
+    <span className="afTrackIndexNumber">{props.index + 1}</span>
+  );
+
+  if (props.isNowPlaying) {
+    content = <NowPlayingPip />;
+  } else if (props.canAttemptPlay && !props.isCurrent) {
+    content = (
+      <span className="afTrackIndexSwap">
+        <span className="afTrackIndexNumber">{props.index + 1}</span>
+        <button
+          type="button"
+          className="afTrackInlinePlay"
+          aria-label={trackPlayLabel(props.track, props.index)}
+          title="Play"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            props.onInlinePlay(props.track);
+          }}
+        >
+          <TrackInlinePlayIcon />
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        fontSize: 12,
+        opacity: 0.9,
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        color: props.subColor,
+        paddingLeft: 12,
+        justifyContent: "flex-start",
+        position: "relative",
+        zIndex: 1,
+        pointerEvents: "none",
+      }}
+    >
+      {content}
     </div>
   );
 }
@@ -489,13 +1220,7 @@ function canonicalCarryQuery(): string {
   return q ? `?${q}` : "";
 }
 
-export default function FullPlayer(props: {
-  bundle: AlbumPlayerBundle;
-  albums: AlbumNavItem[];
-  onSelectAlbum?: (slug: string) => void;
-  isBrowsingAlbum?: boolean;
-  tier?: Tier;
-}) {
+export default function FullPlayer(props: FullPlayerProps) {
   const {
     bundle,
     albums,
@@ -504,7 +1229,7 @@ export default function FullPlayer(props: {
     tier = "none",
   } = props;
 
-  const { albumSlug, album, tracks, albumLyrics } = bundle;
+  const { album, tracks, albumLyrics } = bundle;
   const p = usePlayer();
   const { reportGate } = useGateBroker();
   const {
@@ -514,11 +1239,12 @@ export default function FullPlayer(props: {
     sessionId,
   } = useAuth();
 
-  const accessIdentityKey = !clerkAuthLoaded
-    ? "clerk:loading"
-    : isSignedIn
-      ? `clerk:user:${userId ?? ""}:session:${sessionId ?? ""}`
-      : "clerk:anonymous";
+  const accessIdentityKey = resolveAccessIdentityKey({
+    clerkAuthLoaded,
+    isSignedIn,
+    userId,
+    sessionId,
+  });
 
   // near your other hooks
   const searchParams = useSearchParams();
@@ -535,18 +1261,21 @@ export default function FullPlayer(props: {
   const [stableView, setStableView] = React.useState<StableView | null>(null);
 
   React.useEffect(() => {
-    if (album && tracks && tracks.length) {
+    if (album && tracks?.length) {
       setStableView(bundle);
     }
     primeLyricsFromAlbumBundle(albumLyrics ?? null);
   }, [bundle, album, tracks, albumLyrics]);
 
-  const showCached = Boolean(
-    isBrowsingAlbum && stableView?.album && (!album || !tracks?.length),
-  );
-  const effAlbumSlug = showCached ? stableView!.albumSlug : albumSlug;
-  const effAlbum = showCached ? stableView!.album : album;
-  const effTracks = showCached ? stableView!.tracks : tracks;
+  const {
+    albumSlug: effAlbumSlug,
+    album: effAlbum,
+    tracks: effTracks,
+  } = resolveEffectivePlayerView({
+    bundle,
+    stableView,
+    isBrowsingAlbum,
+  });
   // Track membership ref (lets access-check logic test membership without re-triggering fetch)
   const effRecordingIdSetRef = React.useRef<Set<string>>(new Set());
 
@@ -716,8 +1445,7 @@ export default function FullPlayer(props: {
 
   const browseAlbums = albums.filter((a) => a.id !== effAlbum?.id);
 
-  const playingish =
-    p.status === "playing" || p.status === "loading" || p.playRequestPending;
+  const playingish = isPlayerPlayingish(p);
 
   const [activeListeners, setActiveListeners] = React.useState<number>(0);
 
@@ -791,14 +1519,12 @@ export default function FullPlayer(props: {
   const catalogueId = albumKey;
 
   // ✅ album-scoped view (prevents stale flash)
-  const accessForAlbum =
-    catalogueId && access?.forCatalogueId === catalogueId ? access : null;
+  const accessForAlbum = resolveAccessForAlbum(catalogueId, access);
 
   React.useEffect(() => {
     if (!catalogueId || !clerkAuthLoaded) return;
 
     let alive = true;
-
     const accessRequest = {
       catalogueId,
       shareToken: stParam,
@@ -810,104 +1536,32 @@ export default function FullPlayer(props: {
     setAccess(null);
 
     const cached = getCachedPlaybackAccessDecision(accessRequest);
-    setAccess((prev) => {
-      if (!cached && !prev) return prev;
-      if (cached && prev && JSON.stringify(cached) === JSON.stringify(prev))
-        return prev;
-      return cached;
-    });
+    setAccess((previous) => mergeAccessState(previous, cached));
 
-    (async () => {
-      try {
-        const next = await fetchPlaybackAccessDecision(accessRequest);
+    void fetchPlaybackAccessDecision(accessRequest)
+      .then((next) => {
         if (!alive) return;
 
-        setAccess((prev) => {
-          if (prev && JSON.stringify(prev) === JSON.stringify(next))
-            return prev;
-          return next;
+        setAccess((previous) => mergeAccessState(previous, next));
+        reconcilePlayerWithAccessDecision({
+          player: pRef.current,
+          decision: next,
+          recordingIds: effRecordingIdSetRef.current,
+          albumKey,
         });
-
-        const player = pRef.current;
-
-        if (!next.allowed) {
-          const cur = player.current;
-          const set = effRecordingIdSetRef.current;
-          const curInThisAlbum = Boolean(
-            cur?.recordingId && set.has(cur.recordingId),
-          );
-
-          const queueIsThisAlbum = Boolean(
-            albumKey && player.queueContextId === albumKey,
-          );
-          const pendingInThisAlbum = Boolean(
-            player.pendingRecordingId && set.has(player.pendingRecordingId),
-          );
-
-          const code = typeof next.code === "string" ? next.code.trim() : "";
-
-          const isAuthOrCap =
-            code === "AUTH_REQUIRED" ||
-            code === "CAP_REACHED" ||
-            code === "ANON_CAP_REACHED";
-
-          const hasPlaybackIntentForThisAlbum =
-            player.playRequestPending ||
-            player.intent === "play" ||
-            player.status === "loading" ||
-            player.status === "playing" ||
-            player.status === "paused" ||
-            pendingInThisAlbum;
-
-          const shouldBlockThisAlbum =
-            curInThisAlbum ||
-            pendingInThisAlbum ||
-            (queueIsThisAlbum && hasPlaybackIntentForThisAlbum);
-
-          if (
-            shouldBlockThisAlbum &&
-            (!isAuthOrCap || hasPlaybackIntentForThisAlbum)
-          ) {
-            try {
-              player.pause();
-            } catch {
-              // ignore
-            }
-            if (player.status === "loading") {
-              player.setStatusExternal("idle");
-            }
-          }
-        } else {
-          if (player.lastError) {
-            player.clearError();
-          }
-        }
-      } catch (e) {
+      })
+      .catch((error: unknown) => {
         if (!alive) return;
-        console.error("FullPlayer access check failed", e);
-
-        const fallback: AccessState = {
-          forCatalogueId: catalogueId,
-          allowed: true,
-          embargoed: false,
-          releaseAt: null,
-          code: "ACCESS_CHECK_ERROR",
-          reason: "Access check failed (client).",
-          corr: null,
-          shareTokenAccess: null,
-          sharePlaybackContext: null,
-          sharePlaybackScopeId: null,
-        };
+        console.error("FullPlayer access check failed", error);
 
         // Presentation may remain available after a transient request failure,
         // but do not cache this fallback in the shared decision store.
         // PlayerState must still fail closed if real play authorisation fails.
-        setAccess(fallback);
+        setAccess(accessFailureFallback(catalogueId));
 
         const player = pRef.current;
         if (player.lastError) player.clearError();
-      }
-    })();
+      });
 
     return () => {
       alive = false;
@@ -916,55 +1570,29 @@ export default function FullPlayer(props: {
 
   // Unknown access still disables the transport until the access check resolves.
   // A resolved auth/cap block remains clickable so the user can summon the gate.
-  const accessKnown = accessForAlbum !== null;
-  const hasPlayableTracks = effTracks.length > 0;
-
-  const isPlaybackGate =
-    hasPlayableTracks &&
-    accessKnown &&
-    accessForAlbum?.allowed === false &&
-    isPlaybackGateCode(accessForAlbum.code);
-
-  const canPlay =
-    hasPlayableTracks && accessKnown && accessForAlbum?.allowed !== false;
-
-  const canAttemptPlay = canPlay || isPlaybackGate;
-
   const emb = effAlbum?.embargo;
-  const releaseAtMs = emb?.releaseAt ? Date.parse(emb.releaseAt) : NaN;
-
-  const accessResolved = accessForAlbum !== null;
-  const accessAllowsEmbargoBypass = accessForAlbum?.allowed === true;
-
-  const showEmbargo = Boolean(
-    emb?.embargoed &&
-    Number.isFinite(releaseAtMs) &&
-    !accessAllowsEmbargoBypass &&
-    (!stParam || accessResolved),
-  );
+  const { accessKnown, isPlaybackGate, canPlay, canAttemptPlay } =
+    derivePlaybackAccessUiState(effTracks, accessForAlbum);
+  const { releaseAtMs, showEmbargo, showShareTokenEmbargoAccess } =
+    deriveEmbargoUiState({
+      embargo: emb,
+      accessForAlbum,
+      shareToken: stParam,
+    });
+  const isThisAlbumActive = isAlbumPlaybackActive(albumKey, p.queueContextId);
+  const playingThisAlbum = playingish && isThisAlbumActive;
 
   const shareTokenAccess = accessForAlbum?.shareTokenAccess ?? null;
-
-  const showShareTokenEmbargoAccess = Boolean(
-    emb?.embargoed && accessForAlbum?.allowed === true && shareTokenAccess,
-  );
-
   const shareTokenExpiryLabel = formatShareTokenExpiry(
     shareTokenAccess?.expiresAt ?? null,
   );
-
   const shareTokenRedemptionLimit = formatRedemptionLimit(
     shareTokenAccess?.maxRedemptions ?? null,
   );
-
   const queueSharePlaybackContext =
     accessForAlbum?.sharePlaybackContext ?? null;
-
   const queueSharePlaybackScopeId =
     accessForAlbum?.sharePlaybackScopeId ?? null;
-
-  const isThisAlbumActive = Boolean(albumKey && p.queueContextId === albumKey);
-  const playingThisAlbum = playingish && isThisAlbumActive;
 
   const [playLock, setPlayLock] = React.useState(false);
   const lockPlayFor = (ms: number) => {
@@ -1005,7 +1633,7 @@ export default function FullPlayer(props: {
     } catch {}
   };
 
-  const openPlaybackGate = React.useCallback(() => {
+  function openPlaybackGate() {
     reportGate({
       code: isPlaybackGateCode(accessForAlbum?.code)
         ? accessForAlbum.code
@@ -1016,13 +1644,21 @@ export default function FullPlayer(props: {
       message: playbackGateMessage(accessForAlbum?.reason),
       uiMode: "spotlight",
     });
-  }, [
-    accessForAlbum?.action,
-    accessForAlbum?.code,
-    accessForAlbum?.corr,
-    accessForAlbum?.reason,
-    reportGate,
-  ]);
+  }
+
+  const playTrackWithIntent = (
+    track: PlayerTrack,
+    options: Readonly<{
+      ensureQueue: boolean;
+      navigationMode: "push" | "replace";
+    }>,
+  ) => {
+    prefetchAlbumSession(track);
+    if (options.ensureQueue) ensureAlbumQueue();
+    goCanonicalTrack(track.displayId, options.navigationMode);
+    p.play(track);
+    window.dispatchEvent(new Event("af:play-intent"));
+  };
 
   const onTogglePlay = () => {
     lockPlayFor(120);
@@ -1031,22 +1667,18 @@ export default function FullPlayer(props: {
       openPlaybackGate();
       return;
     }
-
     if (!canPlay) return;
 
-    const currentTrackInThisAlbum =
-      isThisAlbumActive && p.current?.recordingId
-        ? (effTracks.find(
-            (track) => track.recordingId === p.current?.recordingId,
-          ) ?? null)
-        : null;
-
-    const directRouteTrack =
-      isPublicAlbumRoute && route.albumSlug === effAlbumSlug && route.displayId
-        ? (effTracks.find((track) => track.displayId === route.displayId) ??
-          null)
-        : null;
-
+    const currentRecordingId = p.current?.recordingId ?? "";
+    const currentTrackInThisAlbum = isThisAlbumActive
+      ? (effTracks.find((track) => track.recordingId === currentRecordingId) ??
+        null)
+      : null;
+    const routeTargetsThisAlbum =
+      isPublicAlbumRoute && route.albumSlug === effAlbumSlug;
+    const directRouteTrack = routeTargetsThisAlbum
+      ? (effTracks.find((track) => track.displayId === route.displayId) ?? null)
+      : null;
     const directRouteTargetsAnotherTrack = Boolean(
       directRouteTrack &&
       directRouteTrack.recordingId !== currentTrackInThisAlbum?.recordingId,
@@ -1061,29 +1693,20 @@ export default function FullPlayer(props: {
     }
 
     if (directRouteTrack && directRouteTargetsAnotherTrack) {
-      prefetchAlbumSession(directRouteTrack);
-      ensureAlbumQueue();
-
-      if (isPublicAlbumRoute) {
-        goCanonicalTrack(directRouteTrack.displayId, "replace");
-      }
-
-      p.play(directRouteTrack);
-      window.dispatchEvent(new Event("af:play-intent"));
+      playTrackWithIntent(directRouteTrack, {
+        ensureQueue: true,
+        navigationMode: "replace",
+      });
       return;
     }
 
     // Same active album, no differently targeted direct-track URL:
     // retain position and resume rather than resetting to track one.
     if (currentTrackInThisAlbum) {
-      prefetchAlbumSession(currentTrackInThisAlbum);
-
-      if (isPublicAlbumRoute) {
-        goCanonicalTrack(currentTrackInThisAlbum.displayId, "replace");
-      }
-
-      p.play(currentTrackInThisAlbum);
-      window.dispatchEvent(new Event("af:play-intent"));
+      playTrackWithIntent(currentTrackInThisAlbum, {
+        ensureQueue: false,
+        navigationMode: "replace",
+      });
       return;
     }
 
@@ -1092,15 +1715,10 @@ export default function FullPlayer(props: {
     const firstTrack = effTracks[0];
     if (!firstTrack) return;
 
-    prefetchAlbumSession(firstTrack);
-    ensureAlbumQueue();
-
-    if (isPublicAlbumRoute) {
-      goCanonicalTrack(firstTrack.displayId, "replace");
-    }
-
-    p.play(firstTrack);
-    window.dispatchEvent(new Event("af:play-intent"));
+    playTrackWithIntent(firstTrack, {
+      ensureQueue: true,
+      navigationMode: "replace",
+    });
   };
 
   const getDurMs = (t: PlayerTrack) =>
@@ -1121,30 +1739,17 @@ export default function FullPlayer(props: {
     string | null
   >(null);
 
-  const isCoarsePointer = (() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return window.matchMedia?.("(pointer: coarse)").matches ?? false;
-    } catch {
-      return "ontouchstart" in window;
-    }
-  })();
+  const isCoarsePointer = isCoarsePointerDevice();
 
   // --- Album-local transport (FullPlayer) ---
   // Only operate within effTracks. Never call p.prev()/p.next() here.
 
   const curId = p.current?.recordingId ?? "";
-  const albumIdx = curId
-    ? effTracks.findIndex((t) => t.recordingId === curId)
-    : -1;
-  const albumHasCurrent = albumIdx >= 0;
-
-  const albumAtStart = albumHasCurrent ? albumIdx === 0 : true;
-  const albumAtEnd = albumHasCurrent ? albumIdx === effTracks.length - 1 : true;
-
-  // Disable album transport if this album isn't the active playback context.
-  const prevDisabled = transportLock || !albumHasCurrent || albumAtStart;
-  const nextDisabled = transportLock || !albumHasCurrent || albumAtEnd;
+  const { albumIdx, prevDisabled, nextDisabled } = deriveAlbumTransportState({
+    currentRecordingId: curId,
+    tracks: effTracks,
+    transportLock,
+  });
 
   function ensureAlbumQueue() {
     // Explicit nulls prevent an earlier private-link attribution context from
@@ -1219,7 +1824,7 @@ export default function FullPlayer(props: {
     route.albumSlug,
     route.displayId,
   ]);
-  
+
   function playAlbumIndex(i: number) {
     const t = effTracks[i];
     if (!t) return;
@@ -1237,6 +1842,53 @@ export default function FullPlayer(props: {
 
   const gotoDownload = () => {
     router.push("/download");
+  };
+
+  const activateTrackRow = (track: PlayerTrack) => {
+    if (isPlaybackGate) {
+      openPlaybackGate();
+      return;
+    }
+    if (!canPlay) return;
+
+    ensureAlbumQueue();
+    goCanonicalTrack(track.displayId, "push");
+
+    if (isCoarsePointer) {
+      prefetchAlbumSession(track);
+      p.play(track);
+      window.dispatchEvent(new Event("af:play-intent"));
+      return;
+    }
+
+    setSelectedRecordingId(track.recordingId);
+  };
+
+  const doubleActivateTrackRow = (track: PlayerTrack) => {
+    if (isCoarsePointer) return;
+    if (isPlaybackGate) {
+      openPlaybackGate();
+      return;
+    }
+    if (!canPlay) return;
+
+    goCanonicalTrack(track.displayId, "push");
+    prefetchAlbumSession(track);
+    p.play(track);
+    window.dispatchEvent(new Event("af:play-intent"));
+  };
+
+  const inlinePlayTrack = (track: PlayerTrack) => {
+    if (isPlaybackGate) {
+      openPlaybackGate();
+      return;
+    }
+
+    ensureAlbumQueue();
+    goCanonicalTrack(track.displayId, "push");
+    prefetchAlbumSession(track);
+    p.play(track);
+    window.dispatchEvent(new Event("af:play-intent"));
   };
 
   return (
@@ -1259,32 +1911,10 @@ export default function FullPlayer(props: {
           padding: "18px 0", // no horizontal inset (fixes mobile “drift”)
         }}
       >
-        <div
-          style={{
-            position: "relative",
-            width: "min(334px, 86vw)",
-            height: "min(334px, 86vw)",
-            borderRadius: 18,
-            border: "1px solid rgba(255,255,255,0.14)",
-            background: effAlbum?.artworkUrl
-              ? `url(${effAlbum.artworkUrl}) center/cover no-repeat`
-              : "radial-gradient(120px 120px at 30% 20%, rgba(255,255,255,0.14), rgba(255,255,255,0.02))",
-            boxShadow: "0 22px 60px rgba(0,0,0,0.35)",
-            overflow: "hidden",
-          }}
-        >
-          {activeListeners > 0 ? (
-            <div
-              className="afArtworkLiveBadge"
-              aria-live="polite"
-              aria-label={fmtActiveListeners(activeListeners)}
-              title={fmtActiveListeners(activeListeners)}
-            >
-              <span className="afLiveBadgeDot" aria-hidden="true" />
-              <span>{fmtActiveListeners(activeListeners)}</span>
-            </div>
-          ) : null}
-        </div>
+        <AlbumHero
+          artworkUrl={effAlbum?.artworkUrl}
+          activeListeners={activeListeners}
+        />
 
         <div
           style={{
@@ -1309,213 +1939,38 @@ export default function FullPlayer(props: {
           {albumDesc}
         </div>
 
-        {showEmbargo ? (
-          <div
-            role="note"
-            style={{
-              marginTop: 10,
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.14)",
-              background: "rgba(0,0,0,0.22)",
-              boxShadow: "0 10px 34px rgba(0,0,0,0.28)",
-              maxWidth: 560,
-              textAlign: "center",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 650,
-                letterSpacing: 0.2,
-                opacity: 0.95,
-              }}
-            >
-              Releases on{" "}
-              {new Date(releaseAtMs).toLocaleDateString(undefined, {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-            </div>
+        <EmbargoNotices
+          showEmbargo={showEmbargo}
+          releaseAtMs={releaseAtMs}
+          embargoNote={effAlbum?.embargo?.note}
+          showShareTokenEmbargoAccess={showShareTokenEmbargoAccess}
+          shareTokenExpiryLabel={shareTokenExpiryLabel}
+          shareTokenRedemptionLimit={shareTokenRedemptionLimit}
+        />
 
-            <div
-              style={{
-                marginTop: 4,
-                fontSize: 12,
-                opacity: 0.78,
-                lineHeight: 1.35,
-              }}
-            >
-              {effAlbum?.embargo?.note?.trim()
-                ? effAlbum.embargo.note.trim()
-                : "Playback disabled pre-release. Patrons have instant early access."}
-            </div>
-          </div>
-        ) : null}
-
-        {showShareTokenEmbargoAccess ? (
-          <div
-            role="note"
-            style={{
-              marginTop: 10,
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.16)",
-              background:
-                "color-mix(in srgb, var(--accent) 8%, rgba(0,0,0,0.24))",
-              boxShadow: "0 10px 34px rgba(0,0,0,0.28)",
-              maxWidth: 560,
-              textAlign: "center",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 700,
-                letterSpacing: 0.2,
-                opacity: 0.96,
-              }}
-            >
-              Embargoed access
-            </div>
-
-            <div
-              style={{
-                marginTop: 4,
-                fontSize: 12,
-                opacity: 0.78,
-                lineHeight: 1.35,
-              }}
-            >
-              This private link enables playback during embargo.
-            </div>
-
-            {shareTokenExpiryLabel || shareTokenRedemptionLimit ? (
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  justifyContent: "center",
-                  gap: "4px 10px",
-                  marginTop: 8,
-                  fontSize: 11,
-                  fontWeight: 650,
-                  opacity: 0.76,
-                  lineHeight: 1.35,
-                }}
-              >
-                {shareTokenExpiryLabel ? (
-                  <span>Expires {shareTokenExpiryLabel} local time.</span>
-                ) : null}
-
-                {shareTokenRedemptionLimit ? (
-                  <span>{shareTokenRedemptionLimit}</span>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className="afTransportRow">
-          <div className="afTransportBadgeSlot" aria-hidden="true" />
-
-          <div className="afTransportControls">
-            <IconCircleBtn label="Download" onClick={gotoDownload}>
-              <DownloadIcon />
-            </IconCircleBtn>
-
-            <IconCircleBtn
-              label="Previous"
-              disabled={prevDisabled}
-              onClick={() => {
-                lockTransportFor(350);
-                if (prevDisabled) return;
-                playAlbumIndex(albumIdx - 1);
-              }}
-            >
-              <PrevIcon />
-            </IconCircleBtn>
-
-            <div style={{ position: "relative", width: 64, height: 64 }}>
-              <button
-                type="button"
-                onClick={canAttemptPlay && !playLock ? onTogglePlay : undefined}
-                disabled={!canAttemptPlay || playLock}
-                aria-label={playingThisAlbum ? "Pause" : "Play"}
-                title={playingThisAlbum ? "Pause" : "Play"}
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: 999,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(245,245,245,0.95)",
-                  color: "rgba(0,0,0,0.92)",
-                  display: "grid",
-                  placeItems: "center",
-                  cursor: canAttemptPlay ? "pointer" : "default",
-                  opacity: canAttemptPlay ? 1 : 0.55,
-                  boxShadow: playingThisAlbum
-                    ? "0 18px 50px rgba(0,0,0,0.35)"
-                    : "0 18px 50px rgba(0,0,0,0.30)",
-                  transform: "translateZ(0)",
-                  position: "relative",
-                  zIndex: 2,
-                }}
-              >
-                <PlayPauseBig playing={playingThisAlbum} />
-              </button>
-
-              {canPlay ? (
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: -5,
-                    zIndex: 1,
-                    pointerEvents: "none",
-                    overflow: "visible",
-                    isolation: "isolate",
-                    transform: "translateZ(0)",
-                    display: "grid",
-                    placeItems: "center",
-                  }}
-                >
-                  <PatternRingGlow
-                    size={64}
-                    ringPx={1}
-                    glowPx={2}
-                    blurPx={4}
-                    opacity={0.45}
-                    seed={913}
-                  />
-                </div>
-              ) : null}
-            </div>
-
-            <IconCircleBtn
-              label="Next"
-              disabled={nextDisabled}
-              onClick={() => {
-                lockTransportFor(350);
-                if (nextDisabled) return;
-                playAlbumIndex(albumIdx + 1);
-              }}
-            >
-              <NextIcon />
-            </IconCircleBtn>
-
-            <IconCircleBtn
-              label="Share"
-              onClick={() => {
-                void shareAlbum(shareCtx);
-              }}
-            >
-              <ShareIcon />
-            </IconCircleBtn>
-          </div>
-
-          <div aria-hidden="true" />
-        </div>
+        <TransportControls
+          prevDisabled={prevDisabled}
+          nextDisabled={nextDisabled}
+          canAttemptPlay={canAttemptPlay}
+          canPlay={canPlay}
+          playLock={playLock}
+          playingThisAlbum={playingThisAlbum}
+          onDownload={gotoDownload}
+          onPrevious={() => {
+            lockTransportFor(350);
+            if (prevDisabled) return;
+            playAlbumIndex(albumIdx - 1);
+          }}
+          onTogglePlay={onTogglePlay}
+          onNext={() => {
+            lockTransportFor(350);
+            if (nextDisabled) return;
+            playAlbumIndex(albumIdx + 1);
+          }}
+          onShare={() => {
+            void shareAlbum(shareCtx);
+          }}
+        />
       </div>
 
       <div style={{ marginTop: 18, padding: "0 0 18px" }}>
@@ -1526,141 +1981,37 @@ export default function FullPlayer(props: {
           }}
         >
           {effTracks.map((t, i) => {
-            const isCur = p.current?.recordingId === t.recordingId;
             const isSelected = selectedRecordingId === t.recordingId;
-            const isPending = p.pendingRecordingId === t.recordingId;
-
-            const shimmerTitle = p.status === "loading" && isPending && !isCur;
-
-            const isNowPlaying =
-              isCur &&
-              (p.status === "playing" ||
-                p.status === "loading" ||
-                p.intent === "play");
-
-            const titleColor = !canPlay
-              ? "rgba(255,255,255,0.38)"
-              : isCur
-                ? "var(--accent)"
-                : "rgba(255,255,255,0.92)";
-
-            const subColor = !canPlay
-              ? "rgba(255,255,255,0.32)"
-              : isCur
-                ? "color-mix(in srgb, var(--accent) 70%, rgba(255,255,255,0.70))"
-                : "rgba(255,255,255,0.70)";
-
-            const baseBg = isSelected
-              ? "rgba(255,255,255,0.14)"
-              : "transparent";
-            const restBg = isCur && !isSelected ? "transparent" : baseBg;
-
-            const isFirst = i === 0;
-            const isLast = i === effTracks.length - 1;
-            const rowRadius = isFirst
-              ? "14px 14px 0 0"
-              : isLast
-                ? "0 0 14px 14px"
-                : "0";
+            const view = deriveTrackRowView({
+              track: t,
+              index: i,
+              trackCount: effTracks.length,
+              currentRecordingId: p.current?.recordingId,
+              pendingRecordingId: p.pendingRecordingId,
+              playerStatus: p.status,
+              playerIntent: p.intent,
+              loadingReason: p.loadingReason,
+              canPlay,
+              canAttemptPlay,
+              isSelected,
+            });
 
             return (
               <div
                 key={t.recordingId}
-                role={canAttemptPlay ? "button" : undefined}
-                tabIndex={canAttemptPlay ? 0 : -1}
-                aria-disabled={canPlay ? undefined : true}
                 className="afTrackRow"
-                onMouseEnter={(e) => {
+                onMouseEnter={(event) => {
                   if (!canAttemptPlay) return;
-                  if (!isCoarsePointer && !isSelected)
-                    e.currentTarget.style.background = "rgba(255,255,255,0.08)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = restBg;
-                }}
-                onClick={() => {
-                  if (isPlaybackGate) {
-                    openPlaybackGate();
-                    return;
-                  }
-
-                  if (!canPlay) return;
-
-                  ensureAlbumQueue();
-
-                  goCanonicalTrack(t.displayId, "push");
-
-                  if (isCoarsePointer) {
-                    prefetchAlbumSession(t);
-                    p.play(t);
-                    window.dispatchEvent(new Event("af:play-intent"));
-                    return;
-                  }
-
-                  setSelectedRecordingId(t.recordingId);
-                }}
-                onDoubleClick={() => {
-                  if (isCoarsePointer) return;
-
-                  if (isPlaybackGate) {
-                    openPlaybackGate();
-                    return;
-                  }
-
-                  if (!canPlay) return;
-
-                  goCanonicalTrack(t.displayId, "push");
-
-                  prefetchAlbumSession(t);
-                  p.play(t);
-                  window.dispatchEvent(new Event("af:play-intent"));
-                }}
-                onKeyDown={(e) => {
-                  if (!canAttemptPlay) return;
-
-                  if (isPlaybackGate && (e.key === "Enter" || e.key === " ")) {
-                    e.preventDefault();
-                    openPlaybackGate();
-                    return;
-                  }
-
-                  if (!canPlay) return;
-
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    ensureAlbumQueue();
-
-                    goCanonicalTrack(t.displayId, "push");
-
-                    if (isCoarsePointer) {
-                      prefetchAlbumSession(t);
-                      p.play(t);
-                      window.dispatchEvent(new Event("af:play-intent"));
-                      return;
-                    }
-
-                    setSelectedRecordingId(t.recordingId);
-                  }
-
-                  if (e.key === " ") {
-                    e.preventDefault();
-
-                    ensureAlbumQueue();
-
-                    goCanonicalTrack(t.displayId, "push");
-
-                    if (isCoarsePointer) {
-                      prefetchAlbumSession(t);
-                      p.play(t);
-                      window.dispatchEvent(new Event("af:play-intent"));
-                      return;
-                    }
-
-                    setSelectedRecordingId(t.recordingId);
+                  if (!isCoarsePointer && !isSelected) {
+                    event.currentTarget.style.background =
+                      "rgba(255,255,255,0.08)";
                   }
                 }}
-                onContextMenu={(e) => {
-                  e.preventDefault();
+                onMouseLeave={(event) => {
+                  event.currentTarget.style.background = view.restingBackground;
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault();
                   void shareTrack(shareCtx, t);
                 }}
                 style={{
@@ -1671,66 +2022,57 @@ export default function FullPlayer(props: {
                   gap: 12,
                   textAlign: "left",
                   padding: "6px 6px",
-                  borderRadius: rowRadius,
+                  borderRadius: view.rowRadius,
                   border: "1px solid rgba(255,255,255,0.00)",
-                  background: restBg,
-                  cursor: canAttemptPlay ? "pointer" : "default",
+                  background: view.restingBackground,
+                  cursor: view.cursor,
                   transform: "translateZ(0)",
                   transition: "background 120ms ease",
-                  opacity: canPlay ? 1 : 0.75,
+                  opacity: view.opacity,
                   outline: "none",
+                  position: "relative",
                 }}
               >
-                <div
+                <button
+                  type="button"
+                  className="afTrackRowAction"
+                  disabled={!canAttemptPlay}
+                  aria-label={trackRowActionLabel(t, i, isCoarsePointer)}
+                  onClick={() => activateTrackRow(t)}
+                  onDoubleClick={() => doubleActivateTrackRow(t)}
                   style={{
-                    fontSize: 12,
-                    opacity: 0.9,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    color: subColor,
-                    paddingLeft: 12,
-                    justifyContent: "flex-start",
+                    position: "absolute",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    border: 0,
+                    borderRadius: view.rowRadius,
+                    background: "transparent",
+                    padding: 0,
+                    cursor: view.cursor,
+                    zIndex: 0,
+                  }}
+                />
+
+                <TrackIndexCell
+                  index={i}
+                  track={t}
+                  isNowPlaying={view.isNowPlaying}
+                  canAttemptPlay={canAttemptPlay}
+                  isCurrent={view.isCurrent}
+                  subColor={view.subColor}
+                  onInlinePlay={inlinePlayTrack}
+                />
+
+                <div
+                  className="afRowMid"
+                  style={{
+                    minWidth: 0,
+                    position: "relative",
+                    zIndex: 1,
+                    pointerEvents: "none",
                   }}
                 >
-                  {isNowPlaying ? (
-                    <NowPlayingPip />
-                  ) : canAttemptPlay && !isCur ? (
-                    <span className="afTrackIndexSwap">
-                      <span className="afTrackIndexNumber">{i + 1}</span>
-
-                      <button
-                        type="button"
-                        className="afTrackInlinePlay"
-                        aria-label={`Play ${t.title ?? `track ${i + 1}`}`}
-                        title="Play"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-
-                          if (isPlaybackGate) {
-                            openPlaybackGate();
-                            return;
-                          }
-
-                          ensureAlbumQueue();
-
-                          goCanonicalTrack(t.displayId, "push");
-
-                          prefetchAlbumSession(t);
-                          p.play(t);
-                          window.dispatchEvent(new Event("af:play-intent"));
-                        }}
-                      >
-                        <TrackInlinePlayIcon />
-                      </button>
-                    </span>
-                  ) : (
-                    <span className="afTrackIndexNumber">{i + 1}</span>
-                  )}
-                </div>
-
-                <div className="afRowMid" style={{ minWidth: 0 }}>
                   <div
                     style={{
                       display: "flex",
@@ -1739,19 +2081,17 @@ export default function FullPlayer(props: {
                       minWidth: 0,
                       fontSize: 13,
                       opacity: 1,
-                      color: titleColor,
+                      color: view.titleColor,
                       whiteSpace: "nowrap",
                       overflow: "hidden",
                       transition: "opacity 160ms ease, color 160ms ease",
                     }}
-                    data-reason={
-                      isCur && p.status === "loading"
-                        ? (p.loadingReason ?? "")
-                        : ""
-                    }
+                    data-reason={view.dataReason}
                   >
                     <span
-                      className={shimmerTitle ? "afShimmerText" : undefined}
+                      className={
+                        view.shimmerTitle ? "afShimmerText" : undefined
+                      }
                       style={{
                         minWidth: 0,
                         overflow: "hidden",
@@ -1785,7 +2125,10 @@ export default function FullPlayer(props: {
                     display: "flex",
                     alignItems: "center",
                     gap: 14,
-                    color: subColor,
+                    color: view.subColor,
+                    position: "relative",
+                    zIndex: 1,
+                    pointerEvents: "none",
                   }}
                 >
                   <button
@@ -1793,9 +2136,9 @@ export default function FullPlayer(props: {
                     className="afRowShare"
                     aria-label="Share track"
                     title="Share"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
                       void shareTrack(shareCtx, t);
                     }}
                     style={{
@@ -1816,14 +2159,18 @@ export default function FullPlayer(props: {
                   {/** ENABLE THIS WHEN TOTALS ARE RESPECTABLE 
                     <div
                     className="afRowPlaysRight"
-                    style={{ fontSize: 12, opacity: 0.38, color: subColor }}
+                    style={{ fontSize: 12, opacity: 0.38, color: view.subColor }}
                   >
                     {renderPlayCount(t)}
                   </div> 
                   */}
                   <div
                     className="afRowDurRight"
-                    style={{ fontSize: 12, opacity: 0.85, color: subColor }}
+                    style={{
+                      fontSize: 12,
+                      opacity: 0.85,
+                      color: view.subColor,
+                    }}
                   >
                     {renderDur(t)}
                   </div>
@@ -2257,7 +2604,12 @@ export default function FullPlayer(props: {
           transform: translateX(0);
         }
 
-        .afTrackRow:focus-visible{
+        .afTrackRowAction{
+          appearance: none;
+          -webkit-appearance: none;
+        }
+
+        .afTrackRowAction:focus-visible{
           outline: 1px solid rgba(255,255,255,0.22);
           outline-offset: -1px;
         }
@@ -2285,6 +2637,7 @@ export default function FullPlayer(props: {
   position: absolute;
   inset: -6px;                 /* slightly larger hit area */
   border: 0;
+  pointer-events: auto;
   background: transparent;
   color: currentColor;
   display: grid;

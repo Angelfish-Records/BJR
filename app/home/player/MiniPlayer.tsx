@@ -200,10 +200,237 @@ function findTrackById(
   return queue.find((t) => t.recordingId === id) ?? null;
 }
 
-export default function MiniPlayer(props: {
+type PlayerApi = ReturnType<typeof usePlayer>;
+
+type MiniPlayerProps = Readonly<{
   onExpand?: () => void;
   artworkUrl?: string | null;
-}) {
+}>;
+
+function isMiniPlayerPlayingish(player: PlayerApi): boolean {
+  return (
+    player.status === "playing" ||
+    player.status === "loading" ||
+    player.intent === "play" ||
+    player.playRequestPending
+  );
+}
+
+type MiniPlayerTransportState = Readonly<{
+  currentRecordingId: string;
+  previousDisabled: boolean;
+  nextDisabled: boolean;
+}>;
+
+function deriveMiniPlayerTransportState(
+  player: PlayerApi,
+  transportLock: boolean,
+): MiniPlayerTransportState {
+  const currentRecordingId = player.current?.recordingId ?? "";
+  const index = currentRecordingId
+    ? player.queue.findIndex(
+        (track) => track.recordingId === currentRecordingId,
+      )
+    : -1;
+  const atStart = index <= 0;
+  const atEnd = index >= 0 && index === player.queue.length - 1;
+
+  return {
+    currentRecordingId,
+    previousDisabled: !player.current || transportLock || atStart,
+    nextDisabled: !player.current || transportLock || atEnd,
+  };
+}
+
+function resolveSafePendingSeconds(
+  pendingSeekMs: number | undefined,
+  durationKnown: boolean,
+  durationSec: number,
+): number | undefined {
+  if (pendingSeekMs == null) return undefined;
+
+  const pendingSec = pendingSeekMs / 1000;
+  if (!durationKnown) return pendingSec;
+
+  return clamp(pendingSec, 0, durationSec);
+}
+
+type MiniPlayerSeekState = Readonly<{
+  durationKnown: boolean;
+  durationSec: number;
+  safePositionSec: number;
+  sliderValue: number;
+}>;
+
+function deriveMiniPlayerSeekState(
+  player: PlayerApi,
+  currentRecordingId: string,
+  scrubbing: boolean,
+  scrubSec: number,
+): MiniPlayerSeekState {
+  const durationMs = Number(
+    (player.durationByRecordingId?.[currentRecordingId] ??
+      player.current?.durationMs ??
+      0) ||
+      0,
+  );
+  const durationKnown = durationMs > 0;
+  const durationSec = Math.max(1, Math.round(durationMs / 1000));
+  const positionSec = (player.positionMs ?? 0) / 1000;
+  const safePositionSec = durationKnown
+    ? clamp(positionSec, 0, durationSec)
+    : 0;
+  const safePendingSec = resolveSafePendingSeconds(
+    player.pendingSeekMs,
+    durationKnown,
+    durationSec,
+  );
+  const sliderValue = scrubbing
+    ? scrubSec
+    : (safePendingSec ?? safePositionSec);
+
+  return {
+    durationKnown,
+    durationSec,
+    safePositionSec,
+    sliderValue,
+  };
+}
+
+type MiniPlayerDisplayState = Readonly<{
+  shimmerMetadata: boolean;
+}>;
+
+function deriveMiniPlayerDisplayState(
+  player: PlayerApi,
+  displayTrack: PlayerTrack | null,
+): MiniPlayerDisplayState {
+  const displayRecordingId = displayTrack?.recordingId ?? null;
+  const isDisplayPending =
+    Boolean(displayRecordingId) &&
+    player.pendingRecordingId === displayRecordingId;
+  const isDisplayCurrent =
+    Boolean(displayRecordingId) &&
+    player.current?.recordingId === displayRecordingId;
+  const shimmerMetadata =
+    player.status === "loading" && isDisplayPending && !isDisplayCurrent;
+
+  return { shimmerMetadata };
+}
+
+function isMiniPlayerMuted(player: PlayerApi): boolean {
+  return player.muted || player.volume <= 0.001;
+}
+
+function miniPlayerProgressPercent(
+  durationKnown: boolean,
+  sliderValue: number,
+  durationSec: number,
+): number {
+  if (!durationKnown) return 0;
+  return (sliderValue / durationSec) * 100;
+}
+
+function miniPlayerArtworkBackground(
+  artworkUrl: string | null | undefined,
+): string {
+  if (!artworkUrl) return "rgba(255,255,255,0.06)";
+  return `url(${artworkUrl}) center/cover no-repeat`;
+}
+
+function miniPlayerPlayPauseLabel(playingish: boolean): string {
+  return playingish ? "Pause" : "Play";
+}
+
+function miniPlayerPlayDisabled(
+  displayTrack: PlayerTrack | null,
+  playLock: boolean,
+): boolean {
+  return !displayTrack || playLock;
+}
+
+type SeekInputAvailability = Readonly<{
+  cursor: "pointer" | "default";
+  opacity: number;
+}>;
+
+function seekInputAvailability(durationKnown: boolean): SeekInputAvailability {
+  if (durationKnown) return { cursor: "pointer", opacity: 1 };
+  return { cursor: "default", opacity: 0.5 };
+}
+
+function miniPlayerStatusLine(
+  lastError: string | null | undefined,
+  displayTrack: PlayerTrack | null,
+): string {
+  if (lastError) return "Playback error";
+  return displayTrack?.artist ?? "";
+}
+
+function MiniPlayerMetadataTitle(
+  props: Readonly<{
+    title: string;
+    shimmer: boolean;
+    loadingReason: string;
+    enabled: boolean;
+    onOpen: () => void;
+  }>,
+) {
+  const className = props.shimmer ? "afShimmerText" : undefined;
+  const commonStyle: React.CSSProperties = {
+    fontSize: 13,
+    opacity: 0.92,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    lineHeight: 1.25,
+    transition: "opacity 160ms ease",
+  };
+
+  if (!props.enabled) {
+    return (
+      <div
+        data-af-meta-title
+        className={className}
+        data-reason={props.loadingReason}
+        style={{ ...commonStyle, cursor: "default" }}
+      >
+        {props.title}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      data-af-meta-title
+      onClick={props.onOpen}
+      aria-label="Open player"
+      className={className}
+      data-reason={props.loadingReason}
+      style={{
+        ...commonStyle,
+        display: "block",
+        width: "100%",
+        margin: 0,
+        border: 0,
+        padding: 0,
+        appearance: "none",
+        WebkitAppearance: "none",
+        backgroundColor: "transparent",
+        color: props.shimmer ? "transparent" : "inherit",
+        fontFamily: "inherit",
+        fontWeight: "inherit",
+        textAlign: "left",
+        cursor: "pointer",
+      }}
+    >
+      {props.title}
+    </button>
+  );
+}
+
+export default function MiniPlayer(props: MiniPlayerProps) {
   const { onExpand, artworkUrl = null } = props;
   const p = usePlayer();
   const router = useRouter();
@@ -286,11 +513,7 @@ export default function MiniPlayer(props: {
     };
   }, [mounted]);
 
-  const playingish =
-    p.status === "playing" ||
-    p.status === "loading" ||
-    p.intent === "play" ||
-    p.playRequestPending;
+  const playingish = isMiniPlayerPlayingish(p);
 
   // Pending-first display (truthy UI during transitions)
   const pendingTrack = findTrackById(p.queue, p.pendingRecordingId) ?? null;
@@ -314,31 +537,19 @@ export default function MiniPlayer(props: {
 
   /* ---------------- Seek (based on current track, not pending) ---------------- */
 
-  const curId = p.current?.recordingId ?? "";
-  const durMs = Number(
-    (p.durationByRecordingId?.[curId] ?? p.current?.durationMs ?? 0) || 0,
-  );
-  const durKnown = durMs > 0;
-  const durSec = Math.max(1, Math.round(durMs / 1000));
-
-  const idx = curId ? p.queue.findIndex((t) => t.recordingId === curId) : -1;
-  const atStart = idx <= 0;
-  const atEnd = idx >= 0 && idx === p.queue.length - 1;
-
-  const prevDisabled = !p.current || transportLock || atStart;
-  const nextDisabled = !p.current || transportLock || atEnd;
-
-  const posSecReal = (p.positionMs ?? 0) / 1000;
-  const safePosReal = durKnown ? clamp(posSecReal, 0, durSec) : 0;
-
-  const pendingSec = p.pendingSeekMs != null ? p.pendingSeekMs / 1000 : null;
-  const safePending =
-    pendingSec != null && durKnown
-      ? clamp(pendingSec, 0, durSec)
-      : (pendingSec ?? undefined);
-
   const [scrubbing, setScrubbing] = React.useState(false);
   const [scrubSec, setScrubSec] = React.useState(0);
+  const {
+    currentRecordingId: curId,
+    previousDisabled: prevDisabled,
+    nextDisabled,
+  } = deriveMiniPlayerTransportState(p, transportLock);
+  const {
+    durationKnown: durKnown,
+    durationSec: durSec,
+    safePositionSec: safePosReal,
+    sliderValue,
+  } = deriveMiniPlayerSeekState(p, curId, scrubbing, scrubSec);
 
   React.useEffect(() => {
     setScrubbing(false);
@@ -348,8 +559,6 @@ export default function MiniPlayer(props: {
   React.useEffect(() => {
     if (!scrubbing) setScrubSec(safePosReal);
   }, [safePosReal, scrubbing]);
-
-  const sliderValue = scrubbing ? scrubSec : (safePending ?? safePosReal);
 
   /* ---------------- Seek tooltip ---------------- */
 
@@ -366,21 +575,21 @@ export default function MiniPlayer(props: {
     y: 0,
   });
 
-  const computeSeekTipFromClientX = React.useCallback(
-    (clientX: number, forceOpen: boolean) => {
-      if (!durKnown) return;
-      const wrap = seekWrapRef.current;
-      if (!wrap) return;
-      const r = wrap.getBoundingClientRect();
-      const pct = clamp((clientX - r.left) / Math.max(1, r.width), 0, 1);
-      const sec = clamp(Math.round(pct * durSec), 0, durSec);
-      const x = r.left + pct * r.width;
-      const y = r.top;
-      setSeekTip({ open: forceOpen, sec, x, y });
-      if (scrubbing) setScrubSec(sec);
-    },
-    [durKnown, durSec, scrubbing],
-  );
+  function computeSeekTipFromClientX(
+    clientX: number,
+    forceOpen: boolean,
+  ): void {
+    if (!durKnown) return;
+    const wrap = seekWrapRef.current;
+    if (!wrap) return;
+    const r = wrap.getBoundingClientRect();
+    const pct = clamp((clientX - r.left) / Math.max(1, r.width), 0, 1);
+    const sec = clamp(Math.round(pct * durSec), 0, durSec);
+    const x = r.left + pct * r.width;
+    const y = r.top;
+    setSeekTip({ open: forceOpen, sec, x, y });
+    if (scrubbing) setScrubSec(sec);
+  }
 
   const closeSeekTip = React.useCallback(() => {
     setSeekTip((s) => (s.open ? { ...s, open: false } : s));
@@ -390,7 +599,7 @@ export default function MiniPlayer(props: {
 
   const [volOpen, setVolOpen] = React.useState(false);
   const vol = p.volume;
-  const muted = p.muted || p.volume <= 0.001;
+  const muted = isMiniPlayerMuted(p);
 
   const volPopupRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -466,9 +675,7 @@ export default function MiniPlayer(props: {
   const title =
     displayTrack?.title ?? displayTrack?.recordingId ?? "Nothing queued";
 
-  const statusLine = p.lastError
-    ? "Playback error"
-    : (displayTrack?.artist ?? "");
+  const statusLine = miniPlayerStatusLine(p.lastError, displayTrack);
 
   /* ---------------- Share ---------------- */
 
@@ -530,17 +737,16 @@ export default function MiniPlayer(props: {
   const SAFE_INSET = "env(safe-area-inset-bottom, 0px)";
   const SEEK_TOP = -((SEEK_H - VIS_H) / 2);
 
-  const progressPct = durKnown ? (sliderValue / durSec) * 100 : 0;
-
-  const displayRecordingId = displayTrack?.recordingId ?? null;
-  const isDisplayPending =
-    Boolean(displayRecordingId) && p.pendingRecordingId === displayRecordingId;
-  const isDisplayCurrent =
-    Boolean(displayRecordingId) &&
-    p.current?.recordingId === displayRecordingId;
-
-  const shimmerMeta =
-    p.status === "loading" && isDisplayPending && !isDisplayCurrent;
+  const progressPct = miniPlayerProgressPercent(durKnown, sliderValue, durSec);
+  const { shimmerMetadata: shimmerMeta } = deriveMiniPlayerDisplayState(
+    p,
+    displayTrack,
+  );
+  const seekAvailability = seekInputAvailability(durKnown);
+  const artworkBackground = miniPlayerArtworkBackground(resolvedArtworkUrl);
+  const playLabel = miniPlayerPlayPauseLabel(playingish);
+  const playDisabled = miniPlayerPlayDisabled(displayTrack, playLock);
+  const metadataEnabled = Boolean(onExpand);
 
   const dock = (
     <div
@@ -700,8 +906,8 @@ export default function MiniPlayer(props: {
               background: "transparent",
               WebkitAppearance: "none",
               appearance: "none",
-              cursor: durKnown ? "pointer" : "default",
-              opacity: durKnown ? 1 : 0.5,
+              cursor: seekAvailability.cursor,
+              opacity: seekAvailability.opacity,
             }}
           />
         </div>
@@ -758,9 +964,7 @@ export default function MiniPlayer(props: {
               top: 0,
               bottom: 0,
               width: `var(--af-dock-h, ${DOCK_H}px)`,
-              background: resolvedArtworkUrl
-                ? `url(${resolvedArtworkUrl}) center/cover no-repeat`
-                : "rgba(255,255,255,0.06)",
+              background: artworkBackground,
               borderRadius: 0,
               borderRight: "1px solid rgba(255,255,255,0.10)",
               zIndex: 0,
@@ -802,7 +1006,7 @@ export default function MiniPlayer(props: {
               </IconBtn>
 
               <IconBtn
-                label={playingish ? "Pause" : "Play"}
+                label={playLabel}
                 onClick={() => {
                   lockPlayFor(120);
 
@@ -818,7 +1022,7 @@ export default function MiniPlayer(props: {
                   p.play(t);
                   window.dispatchEvent(new Event("af:play-intent"));
                 }}
-                disabled={!displayTrack || playLock}
+                disabled={playDisabled}
               >
                 <PlayPauseIcon playing={playingish} />
               </IconBtn>
@@ -837,35 +1041,16 @@ export default function MiniPlayer(props: {
             </div>
 
             <div data-af-meta style={{ minWidth: 0 }}>
-              <div
-                onClick={onExpand ? openPlayerToNowPlaying : undefined}
-                onKeyDown={(e) => {
-                  if (!onExpand) return;
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    openPlayerToNowPlaying();
-                  }
-                }}
-                role={onExpand ? "button" : undefined}
-                tabIndex={onExpand ? 0 : undefined}
-                aria-label={onExpand ? "Open player" : undefined}
-                className={shimmerMeta ? "afShimmerText" : undefined}
-                data-reason={p.loadingReason ?? ""}
-                style={{
-                  fontSize: 13,
-                  opacity: 0.92,
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  lineHeight: 1.25,
-                  transition: "opacity 160ms ease",
-                  cursor: onExpand ? "pointer" : "default",
-                }}
-              >
-                {title}
-              </div>
+              <MiniPlayerMetadataTitle
+                title={title}
+                shimmer={shimmerMeta}
+                loadingReason={p.loadingReason ?? ""}
+                enabled={metadataEnabled}
+                onOpen={openPlayerToNowPlaying}
+              />
 
               <div
+                data-af-meta-status
                 style={{
                   fontSize: 12,
                   opacity: 0.65,
@@ -1110,11 +1295,11 @@ export default function MiniPlayer(props: {
               max-width: 100%;
             }
 
-            div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) > div:first-child{
+            div[data-af-miniplayer] [data-af-meta-title]{
               font-size: 12px !important;
               line-height: 1.15 !important;
             }
-            div[data-af-miniplayer] div[data-af-controls] > :nth-child(2) > div:nth-child(2){
+            div[data-af-miniplayer] [data-af-meta-status]{
               font-size: 10px !important;
               line-height: 1.15 !important;
             }

@@ -12,7 +12,7 @@ import type {
 } from "@/app/home/gating/gateTypes";
 import { gateResultFromPayload } from "@/app/home/gating/fromPayload";
 
-type Props = {
+type Props = Readonly<{
   albumSlug: string;
   assetId?: string; // default: bundle_zip
   label?: string;
@@ -26,7 +26,7 @@ type Props = {
 
   // Optional: client-side cooldown (UX)
   cooldownMs?: number; // default 10s
-};
+}>;
 
 type ApiErr = {
   ok: false;
@@ -59,6 +59,20 @@ type DownloadResponse =
   | ApiErr
   | LegacyBlockedGate
   | { ok: false; error?: string };
+
+const DOWNLOAD_DOMAIN: GateDomain = "downloads";
+const DOWNLOAD_VERB: GateVerb = "download";
+
+type ReportGate = ReturnType<typeof useGateBroker>["reportGate"];
+type ClearGate = ReturnType<typeof useGateBroker>["clearGate"];
+type ReportCode = (code: GateCode, message?: string) => void;
+type SetError = (message: string | null) => void;
+
+type HttpFailure = Readonly<{
+  code: GateCode;
+  reportMessage: string;
+  errorMessage: string;
+}>;
 
 function isApiErrWithGate(v: unknown): v is ApiErr {
   if (!v || typeof v !== "object") return false;
@@ -104,7 +118,7 @@ function mergeStyle(
   a: React.CSSProperties | undefined,
   b: React.CSSProperties | undefined,
 ) {
-  return { ...(a ?? {}), ...(b ?? {}) };
+  return { ...a, ...b };
 }
 
 function readRetryAfterSeconds(res: Response): number | null {
@@ -113,6 +127,182 @@ function readRetryAfterSeconds(res: Response): number | null {
   // Retry-After can be seconds or HTTP date; we handle seconds only.
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function errorMessageFromUnknown(v: unknown): string | null {
+  if (!v || typeof v !== "object") return null;
+  const obj = v as Record<string, unknown>;
+  return typeof obj.error === "string" ? obj.error : null;
+}
+
+function legacyRateLimitErrorFromUnknown(v: unknown): string | null {
+  if (!v || typeof v !== "object") return null;
+  const obj = v as Record<string, unknown>;
+  if (obj.ok !== false) return null;
+  return typeof obj.error === "string" ? obj.error : null;
+}
+
+function rateLimitFallbackMessage(retryAfter: number | null): string {
+  if (retryAfter) return `Please wait ${retryAfter}s and try again.`;
+  return "Please wait and try again.";
+}
+
+function httpFailureForStatus(
+  status: number,
+  serverMessage: string | null,
+): HttpFailure {
+  switch (status) {
+    case 401: {
+      const message = serverMessage ?? "Sign in required.";
+      return { code: "AUTH_REQUIRED", reportMessage: message, errorMessage: message };
+    }
+    case 403: {
+      const message = serverMessage ?? "Not entitled.";
+      return {
+        code: "ENTITLEMENT_REQUIRED",
+        reportMessage: message,
+        errorMessage: message,
+      };
+    }
+    case 400: {
+      const message = serverMessage ?? "Invalid request.";
+      return { code: "INVALID_REQUEST", reportMessage: message, errorMessage: message };
+    }
+    case 404:
+      return {
+        code: "PROVISIONING",
+        reportMessage: serverMessage ?? "Account still provisioning.",
+        errorMessage:
+          serverMessage ?? "Account still provisioning. Try again shortly.",
+      };
+    default: {
+      const message = serverMessage ?? "Temporary issue. Try again.";
+      return { code: "PROVISIONING", reportMessage: message, errorMessage: message };
+    }
+  }
+}
+
+function reportPayloadGate(
+  payload: GatePayload,
+  isSignedIn: boolean,
+  reportGate: ReportGate,
+): void {
+  const result = gateResultFromPayload({
+    payload,
+    attempt: { verb: DOWNLOAD_VERB, domain: DOWNLOAD_DOMAIN },
+    isSignedIn,
+    intent: "explicit",
+  });
+
+  if (result.ok) return;
+
+  reportGate({
+    code: result.reason.code,
+    action: result.reason.action,
+    domain: result.reason.domain,
+    correlationId: result.reason.correlationId ?? null,
+    message: result.reason.message,
+    uiMode: result.uiMode,
+  });
+}
+
+async function handleRateLimitedResponse(
+  params: Readonly<{
+    res: Response;
+    isSignedIn: boolean;
+    reportGate: ReportGate;
+    setErr: SetError;
+    setCooldownForSeconds: (seconds: number) => void;
+  }>,
+): Promise<void> {
+  const { res, isSignedIn, reportGate, setErr, setCooldownForSeconds } = params;
+  const retryAfter = readRetryAfterSeconds(res);
+  if (retryAfter) setCooldownForSeconds(retryAfter);
+
+  const dataUnknown = (await res.json().catch(() => null)) as unknown;
+  const gatePayload = extractGateFromUnknown(dataUnknown);
+
+  if (gatePayload) {
+    reportPayloadGate(gatePayload, isSignedIn, reportGate);
+    setErr(gatePayload.message);
+    return;
+  }
+
+  const message =
+    legacyRateLimitErrorFromUnknown(dataUnknown) ??
+    rateLimitFallbackMessage(retryAfter);
+  setErr(message);
+}
+
+function handleHttpFailure(
+  status: number,
+  dataUnknown: unknown,
+  reportCode: ReportCode,
+  setErr: SetError,
+): void {
+  const failure = httpFailureForStatus(
+    status,
+    errorMessageFromUnknown(dataUnknown),
+  );
+  reportCode(failure.code, failure.reportMessage);
+  setErr(failure.errorMessage);
+}
+
+function successUrlFromUnknown(dataUnknown: unknown): string | null {
+  if (!dataUnknown || typeof dataUnknown !== "object") return null;
+  const data = dataUnknown as DownloadResponse;
+  if (data.ok !== true) return null;
+  if (!data.url) return null;
+  return data.url;
+}
+
+async function handleDownloadResponse(
+  params: Readonly<{
+    res: Response;
+    isSignedIn: boolean;
+    reportGate: ReportGate;
+    reportCode: ReportCode;
+    setErr: SetError;
+    clearGate: ClearGate;
+  }>,
+): Promise<void> {
+  const { res, isSignedIn, reportGate, reportCode, setErr, clearGate } = params;
+  const dataUnknown = (await res.json().catch(() => null)) as unknown;
+
+  const gatePayload = extractGateFromUnknown(dataUnknown);
+  if (gatePayload) {
+    reportPayloadGate(gatePayload, isSignedIn, reportGate);
+    setErr(gatePayload.message);
+    return;
+  }
+
+  if (!res.ok) {
+    handleHttpFailure(res.status, dataUnknown, reportCode, setErr);
+    return;
+  }
+
+  const url = successUrlFromUnknown(dataUnknown);
+  if (!url) {
+    reportCode("PROVISIONING", "Could not start download.");
+    setErr("Could not start download.");
+    return;
+  }
+
+  clearGate({ domain: DOWNLOAD_DOMAIN });
+  window.location.assign(url);
+}
+
+function buttonTextForState(
+  busy: boolean,
+  coolingDown: boolean,
+  remainingMs: number,
+  label: string,
+): string {
+  if (busy) return "Preparing download…";
+  if (coolingDown) {
+    return `Download started. Button disabled for ${Math.ceil(remainingMs / 1000)}s`;
+  }
+  return label;
 }
 
 export default function DownloadAlbumButton(props: Props) {
@@ -137,12 +327,9 @@ export default function DownloadAlbumButton(props: Props) {
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
 
-  const domain: GateDomain = "downloads";
-  const verb: GateVerb = "download";
-
   function reportCode(code: GateCode, message?: string) {
     const result = gate(
-      { verb, domain },
+      { verb: DOWNLOAD_VERB, domain: DOWNLOAD_DOMAIN },
       {
         isSignedIn: Boolean(isSignedIn),
         intent: "explicit",
@@ -238,150 +425,25 @@ export default function DownloadAlbumButton(props: Props) {
         body: JSON.stringify({ albumSlug, assetId }),
       });
 
-      // If server says "slow down", respect it and extend the cooldown.
       if (res.status === 429) {
-        const retryAfter = readRetryAfterSeconds(res);
-        if (retryAfter) setCooldownForSeconds(retryAfter);
-
-        const dataUnknown = (await res.json().catch(() => null)) as unknown;
-
-        const gatePayload = extractGateFromUnknown(dataUnknown);
-        if (gatePayload) {
-          const result = gateResultFromPayload({
-            payload: gatePayload,
-            attempt: { verb, domain },
-            isSignedIn: Boolean(isSignedIn),
-            intent: "explicit",
-          });
-
-          if (!result.ok) {
-            reportGate({
-              code: result.reason.code,
-              action: result.reason.action,
-              domain: result.reason.domain,
-              correlationId: result.reason.correlationId ?? null,
-              message: result.reason.message,
-              uiMode: result.uiMode,
-            });
-          }
-
-          setErr(gatePayload.message);
-          return;
-        }
-
-        // Legacy fallback: { ok:false, error?: string }
-        let msg: string | null = null;
-        if (dataUnknown && typeof dataUnknown === "object") {
-          const obj = dataUnknown as Record<string, unknown>;
-          if (
-            obj.ok === false &&
-            "error" in obj &&
-            typeof obj.error === "string"
-          ) {
-            msg = obj.error;
-          }
-        }
-
-        setErr(
-          msg ??
-            (retryAfter
-              ? `Please wait ${retryAfter}s and try again.`
-              : "Please wait and try again."),
-        );
-        return;
-      }
-
-      const dataUnknown = (await res.json().catch(() => null)) as unknown;
-
-      // Payload-first: if server emitted a gate (preferred wrapped, legacy tolerated), use it.
-      const gatePayload = extractGateFromUnknown(dataUnknown);
-      if (gatePayload) {
-        const decision = gateResultFromPayload({
-          payload: gatePayload,
-          attempt: { verb, domain },
+        await handleRateLimitedResponse({
+          res,
           isSignedIn: Boolean(isSignedIn),
-          intent: "explicit",
+          reportGate,
+          setErr,
+          setCooldownForSeconds,
         });
-
-        if (!decision.ok) {
-          reportGate({
-            code: decision.reason.code,
-            action: decision.reason.action,
-            domain: decision.reason.domain,
-            correlationId: decision.reason.correlationId ?? null,
-            message: decision.reason.message,
-            uiMode: decision.uiMode,
-          });
-        }
-
-        setErr(gatePayload.message);
         return;
       }
 
-      const data = dataUnknown as DownloadResponse | null;
-
-      if (!res.ok) {
-        let msg: string | null = null;
-
-        if (data && typeof data === "object") {
-          const obj = data as Record<string, unknown>;
-          if ("error" in obj && typeof obj.error === "string") {
-            msg = obj.error;
-          }
-        }
-
-        // Fallback mapping (only when payload is missing).
-        if (res.status === 401) {
-          reportCode("AUTH_REQUIRED", msg ?? "Sign in required.");
-          setErr(msg ?? "Sign in required.");
-          return;
-        }
-        if (res.status === 403) {
-          reportCode("ENTITLEMENT_REQUIRED", msg ?? "Not entitled.");
-          setErr(msg ?? "Not entitled.");
-          return;
-        }
-        if (res.status === 400) {
-          reportCode("INVALID_REQUEST", msg ?? "Invalid request.");
-          setErr(msg ?? "Invalid request.");
-          return;
-        }
-        if (res.status === 404) {
-          reportCode("PROVISIONING", msg ?? "Account still provisioning.");
-          setErr(msg ?? "Account still provisioning. Try again shortly.");
-          return;
-        }
-
-        reportCode("PROVISIONING", msg ?? "Temporary issue. Try again.");
-        setErr(msg ?? "Temporary issue. Try again.");
-        return;
-      }
-
-      if (
-        !data ||
-        typeof data !== "object" ||
-        (data as Record<string, unknown>).ok !== true
-      ) {
-        reportCode("PROVISIONING", "Could not start download.");
-        setErr("Could not start download.");
-        return;
-      }
-
-      const okData = data as {
-        ok: true;
-        url: string;
-        albumSlug: string;
-        asset: { id: string; label: string; filename: string };
-      };
-
-      if (!okData.url) {
-        reportCode("PROVISIONING", "Could not start download.");
-        setErr("Could not start download.");
-        return;
-      }
-
-      clearGate({ domain });
-      window.location.assign(okData.url);
+      await handleDownloadResponse({
+        res,
+        isSignedIn: Boolean(isSignedIn),
+        reportGate,
+        reportCode,
+        setErr,
+        clearGate,
+      });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Network error.";
       reportCode("PROVISIONING", msg);
@@ -440,11 +502,12 @@ export default function DownloadAlbumButton(props: Props) {
 
   const computed = mergeStyle(mergeStyle(base, variants[variant]), buttonStyle);
 
-  const buttonText = busy
-    ? "Preparing download…"
-    : coolingDown
-      ? `Download started. Button disabled for ${Math.ceil(remainingMs / 1000)}s`
-      : label;
+  const buttonText = buttonTextForState(
+    busy,
+    coolingDown,
+    remainingMs,
+    label,
+  );
 
   return (
     <div className={className} style={style}>
