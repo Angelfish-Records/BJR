@@ -338,6 +338,8 @@ export default function VisualizerLivePreview(props: Props) {
         previewImageDataRef.current = image;
       }
 
+      if (!image) return;
+
       image.data.set(buffer);
       context.putImageData(image, 0, 0);
     },
