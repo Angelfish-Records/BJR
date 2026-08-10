@@ -3389,7 +3389,7 @@ export default function AudioEngine() {
 
     const maybeArmEarlyHandoff = (args: {
       deckId: DeckId;
-      currentTrack: PlayerTrack | null;
+      currentTrack: PlayerTrack | null | undefined;
       nextTrack: PlayerTrack | null;
       remainingMs: number;
     }): void => {
