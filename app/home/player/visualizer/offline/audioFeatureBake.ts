@@ -113,7 +113,7 @@ function magnitudeSpectrum(frame: Float32Array): Float32Array {
   const bits = Math.log2(n);
 
   if (!Number.isInteger(bits)) {
-    throw new Error(`FFT size must be a power of two, got ${n}`);
+    throw new TypeError(`FFT size must be a power of two, got ${n}`);
   }
 
   const real = new Float32Array(n);
@@ -159,7 +159,7 @@ function magnitudeSpectrum(frame: Float32Array): Float32Array {
   for (let i = 0; i < bins; i += 1) {
     const r = real[i] ?? 0;
     const im = imag[i] ?? 0;
-    spectrum[i] = Math.sqrt(r * r + im * im) / n;
+    spectrum[i] = Math.hypot(r, im) / n;
   }
 
   return spectrum;

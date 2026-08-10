@@ -1,11 +1,16 @@
 // web/lib/exegesis/richText.ts
 import "server-only";
 
+type PMMark = {
+  type?: string;
+  attrs?: Record<string, unknown>;
+};
+
 type PMNode = {
   type?: string;
   text?: string;
   attrs?: Record<string, unknown>;
-  marks?: Array<{ type?: string; attrs?: Record<string, unknown> }>;
+  marks?: PMMark[];
   content?: PMNode[];
 };
 
@@ -47,9 +52,9 @@ function safeString(v: unknown): string {
 function normalizeWhitespace(s: string): string {
   // keep newlines meaningful, but collapse internal runs
   return s
-    .replace(/\r\n/g, "\n")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
+    .replaceAll("\r\n", "\n")
+    .replaceAll(/[ \t]+/g, " ")
+    .replaceAll(/\n{3,}/g, "\n\n")
     .trim();
 }
 
@@ -68,6 +73,66 @@ function isAllowedUrl(href: string): boolean {
   }
 }
 
+function isPMMark(v: unknown): v is PMMark {
+  return typeof v === "object" && v !== null;
+}
+
+function getMarkType(mark: PMMark): string {
+  return safeString(mark.type);
+}
+
+function getMarkHref(mark: PMMark): string {
+  const attrs = mark.attrs;
+  if (!attrs || typeof attrs !== "object") return "";
+  return safeString(attrs.href);
+}
+
+function sanitizeMark(raw: unknown): PMMark | null {
+  if (!isPMMark(raw)) return null;
+
+  const type = getMarkType(raw);
+  if (!type || !ALLOWED_MARK_TYPES.has(type)) return null;
+
+  if (type !== "link") {
+    // Non-link marks keep only their type; all attrs are dropped.
+    return { type };
+  }
+
+  const href = getMarkHref(raw);
+  if (!isAllowedUrl(href)) return null;
+
+  return { type: "link", attrs: { href } };
+}
+
+function sanitizeMarks(marks: PMNode["marks"]): PMNode["marks"] | undefined {
+  if (!Array.isArray(marks) || marks.length === 0) return undefined;
+
+  const sanitized: PMMark[] = [];
+  for (const raw of marks) {
+    const mark = sanitizeMark(raw);
+    if (mark) sanitized.push(mark);
+  }
+
+  return sanitized.length > 0 ? sanitized : undefined;
+}
+
+function sanitizeChildren(
+  content: PMNode["content"],
+  errors: string[],
+): PMNode["content"] | undefined {
+  if (!Array.isArray(content) || content.length === 0) return undefined;
+
+  const sanitized: PMNode[] = [];
+  for (const child of content) {
+    if (!child || typeof child !== "object") continue;
+
+    const next = sanitizeNode(child as PMNode, errors);
+    if (next) sanitized.push(next);
+  }
+
+  return sanitized.length > 0 ? sanitized : undefined;
+}
+
 function sanitizeNode(node: PMNode, errors: string[]): PMNode | null {
   const type = safeString(node.type);
   if (!type) return null;
@@ -79,66 +144,20 @@ function sanitizeNode(node: PMNode, errors: string[]): PMNode | null {
 
   const out: PMNode = { type };
 
-  // text node
   if (type === "text") {
     out.text = safeString(node.text);
   }
 
-  type PMMark = {
-    type?: string;
-    attrs?: Record<string, unknown>;
-  };
-
-  function isPMMark(v: unknown): v is PMMark {
-    return typeof v === "object" && v !== null;
+  const marks = sanitizeMarks(node.marks);
+  if (marks) {
+    out.marks = marks;
   }
 
-  function getMarkType(m: PMMark): string {
-    return safeString(m.type);
-  }
-
-  function getMarkHref(m: PMMark): string {
-    const attrs = m.attrs;
-    if (!attrs || typeof attrs !== "object") return "";
-    return safeString((attrs as Record<string, unknown>).href);
-  }
-
-  // marks
-  if (Array.isArray(node.marks) && node.marks.length) {
-    const marksOut: PMNode["marks"] = [];
-
-    for (const raw of node.marks) {
-      if (!isPMMark(raw)) continue;
-
-      const mt = getMarkType(raw);
-      if (!mt || !ALLOWED_MARK_TYPES.has(mt)) continue;
-
-      if (mt === "link") {
-        const href = getMarkHref(raw);
-        if (!isAllowedUrl(href)) continue;
-        marksOut.push({ type: "link", attrs: { href } });
-        continue;
-      }
-
-      // other marks: keep only the type, drop attrs
-      marksOut.push({ type: mt });
-    }
-
-    if (marksOut.length) out.marks = marksOut;
-  }
-
-  // attrs (only if we later allow headings, etc.)
-  // For now: drop attrs except link marks (handled above)
-
-  // children
-  if (Array.isArray(node.content) && node.content.length) {
-    const next: PMNode[] = [];
-    for (const c of node.content) {
-      if (!c || typeof c !== "object") continue;
-      const sn = sanitizeNode(c as PMNode, errors);
-      if (sn) next.push(sn);
-    }
-    if (next.length) out.content = next;
+  // Node attrs remain intentionally dropped. Link-mark href is the only
+  // attribute currently preserved.
+  const content = sanitizeChildren(node.content, errors);
+  if (content) {
+    out.content = content;
   }
 
   return out;
@@ -155,7 +174,7 @@ export function validateAndSanitizeTipTapDoc(input: unknown):
       error: string;
     } {
   // allow null (legacy/plain-only posting)
-  if (input === null || typeof input === "undefined") {
+  if (input === null || input === undefined) {
     return { ok: false, error: "Missing bodyRich." };
   }
 
@@ -177,7 +196,7 @@ export function validateAndSanitizeTipTapDoc(input: unknown):
   const errors: string[] = [];
   const root = sanitizeNode(input as PMNode, errors);
 
-  if (!root || root.type !== "doc") {
+  if (root?.type !== "doc") {
     return { ok: false, error: "Invalid bodyRich doc." };
   }
 

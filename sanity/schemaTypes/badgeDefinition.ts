@@ -49,7 +49,8 @@ function isAutomaticBadge(parent: unknown): boolean {
 }
 
 function autoQualificationMode(parent: unknown): string {
-  return String(parentObject(parent)?.autoQualificationMode ?? "");
+  const mode = parentObject(parent)?.autoQualificationMode;
+  return typeof mode === "string" ? mode : "";
 }
 
 function hiddenUnlessAutomatic(props: { parent: unknown }): boolean {

@@ -12,10 +12,10 @@ import {
 import type { PreviewRow } from "../_lib/badgeDashboardTypes";
 import { formatDateTime, formatMetric } from "../_lib/badgeDashboardUtils";
 
-type Props = {
+type Props = Readonly<{
   rows: PreviewRow[];
   count: number;
-};
+}>;
 
 const thStyle: React.CSSProperties = {
   textAlign: "left",

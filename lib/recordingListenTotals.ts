@@ -13,7 +13,7 @@ type RecordingPlayCountRow = {
 function asTrimmedRecordingId(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const next = value.trim();
-  return next ? next : null;
+  return next || null;
 }
 
 function asNonNegativeInt(value: number | string | null): number {

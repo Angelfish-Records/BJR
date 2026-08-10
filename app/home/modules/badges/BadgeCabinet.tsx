@@ -15,9 +15,22 @@ import { useBadgeCabinetUnlockSequence } from "./useBadgeCabinetUnlockSequence";
 import { useFlipGridAnimation } from "./useFlipGridAnimation";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 
-type Props = {
+type Props = Readonly<{
   badges: MemberDashboardBadge[];
-};
+}>;
+
+type DebugPanelProps = Readonly<{
+  candidateItems: BadgeCabinetItemModel[];
+  selectedKey: string | null;
+  unlockedKey: string | null;
+  onSelectKey: (key: string | null) => void;
+  onReplaySelected: () => void;
+  onReplayRandom: () => void;
+  onCelebrateSelected: () => void;
+  onCelebrateRandom: () => void;
+  onReset: () => void;
+}>;
+
 const SHOW_DEBUG_PANEL = false;
 const DEBUG_REPLAY_RESET_MS = 72;
 
@@ -38,96 +51,25 @@ function toBadgeAwardNotice(item: BadgeCabinetItemModel): BadgeAwardNotice {
   };
 }
 
-export default function BadgeCabinet(props: Props) {
-  const { badges } = props;
+function buildEffectiveBadges(
+  badges: MemberDashboardBadge[],
+  debugUnlockedKey: string | null,
+): MemberDashboardBadge[] {
+  if (!debugUnlockedKey) return badges;
 
-  const [expanded, setExpanded] = React.useState(false);
+  return badges.map((badge) => {
+    if (badge.key !== debugUnlockedKey) return badge;
+
+    return {
+      ...badge,
+      unlocked: true,
+      unlockedAt: new Date().toISOString(),
+    };
+  });
+}
+
+function useAdminDebugFlag(): boolean {
   const [isAdminDebug, setIsAdminDebug] = React.useState(false);
-  const [debugUnlockedKey, setDebugUnlockedKey] = React.useState<string | null>(
-    null,
-  );
-  const [debugSelectedKey, setDebugSelectedKey] = React.useState<string | null>(
-    null,
-  );
-
-  const prefersReducedMotion = usePrefersReducedMotion();
-  const { announceBadge, resetOverlayDebugState } = useBadgeAwardOverlay();
-  const debugReplayTimeoutRef = React.useRef<number | null>(null);
-
-  const sourceItems = React.useMemo(
-    () => buildBadgeCabinetItems(badges),
-    [badges],
-  );
-
-  const debugCandidateItems = React.useMemo(
-    () => sourceItems.filter((item) => !item.unlocked),
-    [sourceItems],
-  );
-
-  const debugCandidateByKey = React.useMemo(() => {
-    return new Map(debugCandidateItems.map((item) => [item.key, item]));
-  }, [debugCandidateItems]);
-
-  const effectiveBadges = React.useMemo(() => {
-    if (!debugUnlockedKey) return badges;
-
-    return badges.map((badge) => {
-      if (badge.key !== debugUnlockedKey) return badge;
-
-      return {
-        ...badge,
-        unlocked: true,
-        unlockedAt: new Date().toISOString(),
-      };
-    });
-  }, [badges, debugUnlockedKey]);
-
-  const items = React.useMemo(
-    () => buildBadgeCabinetItems(effectiveBadges),
-    [effectiveBadges],
-  );
-
-  const {
-    displayItems,
-    newlyUnlockedKeys,
-    pendingUnlockKeys,
-    unlockPhase,
-    liveAnnouncement,
-    isFlipSuspended,
-    flipDurationMs,
-    flipBaselineToken,
-    resetUnlockSequence,
-  } = useBadgeCabinetUnlockSequence({
-    items,
-  });
-
-  const itemKeys = React.useMemo(
-    () => displayItems.map((item) => item.key),
-    [displayItems],
-  );
-
-  const displayLayoutToken = React.useMemo(
-    () => displayItems.map((item) => item.key).join("|"),
-    [displayItems],
-  );
-
-  const flipLayoutDependency = React.useMemo(
-    () =>
-      [
-        expanded ? "expanded" : "collapsed",
-        displayLayoutToken,
-        unlockPhase,
-      ].join(":"),
-    [displayLayoutToken, expanded, unlockPhase],
-  );
-
-  const { registerItemRef } = useFlipGridAnimation({
-    keys: itemKeys,
-    disabled: prefersReducedMotion || isFlipSuspended,
-    durationMs: flipDurationMs,
-    layoutDependency: flipLayoutDependency,
-    captureBaselineToken: flipBaselineToken,
-  });
 
   React.useEffect(() => {
     if (typeof document === "undefined") return;
@@ -149,61 +91,394 @@ export default function BadgeCabinet(props: Props) {
     };
   }, []);
 
-  React.useEffect(() => {
-    return () => {
-      if (debugReplayTimeoutRef.current !== null) {
-        window.clearTimeout(debugReplayTimeoutRef.current);
-        debugReplayTimeoutRef.current = null;
-      }
-    };
-  }, []);
+  return isAdminDebug;
+}
+
+function useDebugSelection(
+  candidateItems: BadgeCabinetItemModel[],
+): readonly [
+  string | null,
+  React.Dispatch<React.SetStateAction<string | null>>,
+] {
+  const [selectedKey, setSelectedKey] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    if (debugCandidateItems.length === 0) {
-      setDebugSelectedKey(null);
+    if (candidateItems.length === 0) {
+      setSelectedKey(null);
       return;
     }
 
-    setDebugSelectedKey((current) => {
-      if (current && debugCandidateItems.some((item) => item.key === current)) {
-        return current;
-      }
+    setSelectedKey((current) => {
+      const currentStillAvailable =
+        current !== null && candidateItems.some((item) => item.key === current);
 
-      return debugCandidateItems[0]?.key ?? null;
+      return currentStillAvailable ? current : (candidateItems[0]?.key ?? null);
     });
-  }, [debugCandidateItems]);
+  }, [candidateItems]);
 
-  const replayDebugUnlock = React.useCallback((badgeKey: string | null) => {
-    if (!badgeKey) return;
+  return [selectedKey, setSelectedKey] as const;
+}
 
-    if (debugReplayTimeoutRef.current !== null) {
-      window.clearTimeout(debugReplayTimeoutRef.current);
-      debugReplayTimeoutRef.current = null;
-    }
+function useDebugReplay(): Readonly<{
+  debugUnlockedKey: string | null;
+  replayDebugUnlock: (badgeKey: string | null) => void;
+  clearDebugUnlock: () => void;
+}> {
+  const [debugUnlockedKey, setDebugUnlockedKey] = React.useState<string | null>(
+    null,
+  );
+  const debugReplayTimeoutRef = React.useRef<number | null>(null);
 
-    setDebugUnlockedKey(null);
+  const clearReplayTimer = React.useCallback(() => {
+    if (debugReplayTimeoutRef.current === null) return;
 
-    debugReplayTimeoutRef.current = window.setTimeout(() => {
-      setDebugUnlockedKey(badgeKey);
-      debugReplayTimeoutRef.current = null;
-    }, DEBUG_REPLAY_RESET_MS);
+    window.clearTimeout(debugReplayTimeoutRef.current);
+    debugReplayTimeoutRef.current = null;
   }, []);
+
+  React.useEffect(() => {
+    return clearReplayTimer;
+  }, [clearReplayTimer]);
+
+  const replayDebugUnlock = React.useCallback(
+    (badgeKey: string | null) => {
+      if (!badgeKey) return;
+
+      clearReplayTimer();
+      setDebugUnlockedKey(null);
+
+      debugReplayTimeoutRef.current = window.setTimeout(() => {
+        setDebugUnlockedKey(badgeKey);
+        debugReplayTimeoutRef.current = null;
+      }, DEBUG_REPLAY_RESET_MS);
+    },
+    [clearReplayTimer],
+  );
+
+  const clearDebugUnlock = React.useCallback(() => {
+    clearReplayTimer();
+    setDebugUnlockedKey(null);
+  }, [clearReplayTimer]);
+
+  return {
+    debugUnlockedKey,
+    replayDebugUnlock,
+    clearDebugUnlock,
+  };
+}
+
+function BadgeCabinetToggle(
+  props: Readonly<{
+    expanded: boolean;
+    prefersReducedMotion: boolean;
+    onToggle: () => void;
+  }>,
+) {
+  const { expanded, prefersReducedMotion, onToggle } = props;
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={expanded}
+      style={{
+        appearance: "none",
+        border: "none",
+        background: "transparent",
+        padding: 0,
+        margin: 0,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "flex-start",
+        gap: 8,
+        minWidth: 0,
+        width: "fit-content",
+        color: "inherit",
+        cursor: "pointer",
+      }}
+    >
+      <span
+        style={{
+          fontSize: 10,
+          letterSpacing: 0.3,
+          textTransform: "uppercase",
+          lineHeight: 1.2,
+          opacity: 0.5,
+        }}
+      >
+        Badges
+      </span>
+
+      <span
+        aria-hidden="true"
+        style={{
+          display: "inline-block",
+          fontSize: 12,
+          lineHeight: 1,
+          opacity: 0.5,
+          transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
+          transformOrigin: "50% 50%",
+          transition: prefersReducedMotion
+            ? undefined
+            : "transform 220ms ease, opacity 180ms ease",
+        }}
+      >
+        &gt;
+      </span>
+    </button>
+  );
+}
+
+function DebugActionButton(
+  props: Readonly<{
+    label: string;
+    disabled: boolean;
+    onClick: () => void;
+    transparent?: boolean;
+    enabledOpacity?: number;
+    disabledOpacity?: number;
+  }>,
+) {
+  const {
+    label,
+    disabled,
+    onClick,
+    transparent = false,
+    enabledOpacity = 0.9,
+    disabledOpacity = 0.5,
+  } = props;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        appearance: "none",
+        borderRadius: 999,
+        border: "1px solid rgba(255,255,255,0.12)",
+        background: transparent ? "transparent" : "rgba(255,255,255,0.05)",
+        color: "inherit",
+        padding: "7px 10px",
+        fontSize: 12,
+        lineHeight: 1.2,
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? disabledOpacity : enabledOpacity,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function BadgeCabinetDebugPanel(props: DebugPanelProps) {
+  const {
+    candidateItems,
+    selectedKey,
+    unlockedKey,
+    onSelectKey,
+    onReplaySelected,
+    onReplayRandom,
+    onCelebrateSelected,
+    onCelebrateRandom,
+    onReset,
+  } = props;
+
+  const hasCandidates = candidateItems.length > 0;
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 8,
+        minWidth: 0,
+        padding: "8px 10px",
+        borderRadius: 12,
+        border: "1px solid rgba(255,255,255,0.10)",
+        background: "rgba(255,255,255,0.035)",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          letterSpacing: 0.3,
+          textTransform: "uppercase",
+          lineHeight: 1.2,
+          opacity: 0.5,
+        }}
+      >
+        Cabinet debug
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr)",
+          gap: 8,
+        }}
+      >
+        <select
+          value={selectedKey ?? ""}
+          onChange={(event) => {
+            const nextKey = event.target.value.trim();
+            onSelectKey(nextKey || null);
+          }}
+          disabled={!hasCandidates}
+          style={{
+            minWidth: 0,
+            width: "100%",
+            borderRadius: 10,
+            border: "1px solid rgba(255,255,255,0.12)",
+            background: "rgba(0,0,0,0.18)",
+            color: "inherit",
+            padding: "8px 10px",
+            fontSize: 12,
+            lineHeight: 1.3,
+            opacity: hasCandidates ? 0.92 : 0.55,
+          }}
+        >
+          {!hasCandidates ? (
+            <option value="">No locked badges available</option>
+          ) : null}
+
+          {candidateItems.map((item) => (
+            <option key={item.key} value={item.key}>
+              {item.label}
+            </option>
+          ))}
+        </select>
+
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+          }}
+        >
+          <DebugActionButton
+            label="Replay selected"
+            disabled={!selectedKey}
+            onClick={onReplaySelected}
+          />
+          <DebugActionButton
+            label="Replay random"
+            disabled={!hasCandidates}
+            onClick={onReplayRandom}
+          />
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+          }}
+        >
+          <DebugActionButton
+            label="Celebrate selected"
+            disabled={!selectedKey}
+            onClick={onCelebrateSelected}
+          />
+          <DebugActionButton
+            label="Celebrate random"
+            disabled={!hasCandidates}
+            onClick={onCelebrateRandom}
+          />
+          <DebugActionButton
+            label="Reset"
+            disabled={!unlockedKey}
+            onClick={onReset}
+            transparent
+            enabledOpacity={0.78}
+            disabledOpacity={0.45}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function BadgeCabinet(props: Props) {
+  const { badges } = props;
+
+  const [expanded, setExpanded] = React.useState(false);
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const isAdminDebug = useAdminDebugFlag();
+  const { announceBadge, resetOverlayDebugState } = useBadgeAwardOverlay();
+
+  const sourceItems = React.useMemo(
+    () => buildBadgeCabinetItems(badges),
+    [badges],
+  );
+  const debugCandidateItems = React.useMemo(
+    () => sourceItems.filter((item) => !item.unlocked),
+    [sourceItems],
+  );
+  const debugCandidateByKey = React.useMemo(
+    () => new Map(debugCandidateItems.map((item) => [item.key, item])),
+    [debugCandidateItems],
+  );
+  const [debugSelectedKey, setDebugSelectedKey] =
+    useDebugSelection(debugCandidateItems);
+  const { debugUnlockedKey, replayDebugUnlock, clearDebugUnlock } =
+    useDebugReplay();
+
+  const effectiveBadges = React.useMemo(
+    () => buildEffectiveBadges(badges, debugUnlockedKey),
+    [badges, debugUnlockedKey],
+  );
+  const items = React.useMemo(
+    () => buildBadgeCabinetItems(effectiveBadges),
+    [effectiveBadges],
+  );
+
+  const {
+    displayItems,
+    newlyUnlockedKeys,
+    pendingUnlockKeys,
+    unlockPhase,
+    liveAnnouncement,
+    isFlipSuspended,
+    flipDurationMs,
+    flipBaselineToken,
+    resetUnlockSequence,
+  } = useBadgeCabinetUnlockSequence({ items });
+
+  const itemKeys = React.useMemo(
+    () => displayItems.map((item) => item.key),
+    [displayItems],
+  );
+  const displayLayoutToken = React.useMemo(
+    () => displayItems.map((item) => item.key).join("|"),
+    [displayItems],
+  );
+  const flipLayoutDependency = React.useMemo(
+    () =>
+      [
+        expanded ? "expanded" : "collapsed",
+        displayLayoutToken,
+        unlockPhase,
+      ].join(":"),
+    [displayLayoutToken, expanded, unlockPhase],
+  );
+
+  const { registerItemRef } = useFlipGridAnimation({
+    keys: itemKeys,
+    disabled: prefersReducedMotion || isFlipSuspended,
+    durationMs: flipDurationMs,
+    layoutDependency: flipLayoutDependency,
+    captureBaselineToken: flipBaselineToken,
+  });
 
   const announceDebugOverlay = React.useCallback(
     (badgeKey: string | null) => {
       if (!badgeKey) return;
 
       const item = debugCandidateByKey.get(badgeKey);
-      if (!item) return;
-
-      announceBadge(toBadgeAwardNotice(item));
+      if (item) announceBadge(toBadgeAwardNotice(item));
     },
     [announceBadge, debugCandidateByKey],
   );
-
-  const handleReplaySelected = React.useCallback(() => {
-    replayDebugUnlock(debugSelectedKey);
-  }, [debugSelectedKey, replayDebugUnlock]);
 
   const handleReplayRandom = React.useCallback(() => {
     const randomItem = pickRandomItem(debugCandidateItems);
@@ -211,11 +486,7 @@ export default function BadgeCabinet(props: Props) {
 
     setDebugSelectedKey(randomItem.key);
     replayDebugUnlock(randomItem.key);
-  }, [debugCandidateItems, replayDebugUnlock]);
-
-  const handleCelebrateSelected = React.useCallback(() => {
-    announceDebugOverlay(debugSelectedKey);
-  }, [announceDebugOverlay, debugSelectedKey]);
+  }, [debugCandidateItems, replayDebugUnlock, setDebugSelectedKey]);
 
   const handleCelebrateRandom = React.useCallback(() => {
     const randomItem = pickRandomItem(debugCandidateItems);
@@ -223,20 +494,17 @@ export default function BadgeCabinet(props: Props) {
 
     setDebugSelectedKey(randomItem.key);
     announceBadge(toBadgeAwardNotice(randomItem));
-  }, [announceBadge, debugCandidateItems]);
+  }, [announceBadge, debugCandidateItems, setDebugSelectedKey]);
 
   const handleResetDebug = React.useCallback(() => {
-    if (debugReplayTimeoutRef.current !== null) {
-      window.clearTimeout(debugReplayTimeoutRef.current);
-      debugReplayTimeoutRef.current = null;
-    }
-
-    setDebugUnlockedKey(null);
+    clearDebugUnlock();
     resetUnlockSequence();
     resetOverlayDebugState();
-  }, [resetOverlayDebugState, resetUnlockSequence]);
+  }, [clearDebugUnlock, resetOverlayDebugState, resetUnlockSequence]);
 
   if (items.length === 0) return null;
+
+  const showDebugPanel = isAdminDebug && SHOW_DEBUG_PANEL;
 
   return (
     <>
@@ -265,237 +533,24 @@ export default function BadgeCabinet(props: Props) {
             minWidth: 0,
           }}
         >
-          <button
-            type="button"
-            onClick={() => setExpanded((current) => !current)}
-            aria-expanded={expanded}
-            style={{
-              appearance: "none",
-              border: "none",
-              background: "transparent",
-              padding: 0,
-              margin: 0,
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "flex-start",
-              gap: 8,
-              minWidth: 0,
-              width: "fit-content",
-              color: "inherit",
-              cursor: "pointer",
-            }}
-          >
-            <span
-              style={{
-                fontSize: 10,
-                letterSpacing: 0.3,
-                textTransform: "uppercase",
-                lineHeight: 1.2,
-                opacity: 0.5,
-              }}
-            >
-              Badges
-            </span>
+          <BadgeCabinetToggle
+            expanded={expanded}
+            prefersReducedMotion={prefersReducedMotion}
+            onToggle={() => setExpanded((current) => !current)}
+          />
 
-            <span
-              aria-hidden="true"
-              style={{
-                display: "inline-block",
-                fontSize: 12,
-                lineHeight: 1,
-                opacity: 0.5,
-                transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
-                transformOrigin: "50% 50%",
-                transition: prefersReducedMotion
-                  ? undefined
-                  : "transform 220ms ease, opacity 180ms ease",
-              }}
-            >
-              &gt;
-            </span>
-          </button>
-
-          {isAdminDebug && SHOW_DEBUG_PANEL ? (
-            <div
-              style={{
-                display: "grid",
-                gap: 8,
-                minWidth: 0,
-                padding: "8px 10px",
-                borderRadius: 12,
-                border: "1px solid rgba(255,255,255,0.10)",
-                background: "rgba(255,255,255,0.035)",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 10,
-                  letterSpacing: 0.3,
-                  textTransform: "uppercase",
-                  lineHeight: 1.2,
-                  opacity: 0.5,
-                }}
-              >
-                Cabinet debug
-              </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "minmax(0, 1fr)",
-                  gap: 8,
-                }}
-              >
-                <select
-                  value={debugSelectedKey ?? ""}
-                  onChange={(event) => {
-                    const nextKey = event.target.value.trim();
-                    setDebugSelectedKey(nextKey || null);
-                  }}
-                  disabled={debugCandidateItems.length === 0}
-                  style={{
-                    minWidth: 0,
-                    width: "100%",
-                    borderRadius: 10,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(0,0,0,0.18)",
-                    color: "inherit",
-                    padding: "8px 10px",
-                    fontSize: 12,
-                    lineHeight: 1.3,
-                    opacity: debugCandidateItems.length === 0 ? 0.55 : 0.92,
-                  }}
-                >
-                  {debugCandidateItems.length === 0 ? (
-                    <option value="">No locked badges available</option>
-                  ) : null}
-
-                  {debugCandidateItems.map((item) => (
-                    <option key={item.key} value={item.key}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-
-                <div
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: 8,
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={handleReplaySelected}
-                    disabled={!debugSelectedKey}
-                    style={{
-                      appearance: "none",
-                      borderRadius: 999,
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      background: "rgba(255,255,255,0.05)",
-                      color: "inherit",
-                      padding: "7px 10px",
-                      fontSize: 12,
-                      lineHeight: 1.2,
-                      cursor: debugSelectedKey ? "pointer" : "default",
-                      opacity: debugSelectedKey ? 0.9 : 0.5,
-                    }}
-                  >
-                    Replay selected
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleReplayRandom}
-                    disabled={debugCandidateItems.length === 0}
-                    style={{
-                      appearance: "none",
-                      borderRadius: 999,
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      background: "rgba(255,255,255,0.05)",
-                      color: "inherit",
-                      padding: "7px 10px",
-                      fontSize: 12,
-                      lineHeight: 1.2,
-                      cursor:
-                        debugCandidateItems.length > 0 ? "pointer" : "default",
-                      opacity: debugCandidateItems.length > 0 ? 0.9 : 0.5,
-                    }}
-                  >
-                    Replay random
-                  </button>
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: 8,
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={handleCelebrateSelected}
-                    disabled={!debugSelectedKey}
-                    style={{
-                      appearance: "none",
-                      borderRadius: 999,
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      background: "rgba(255,255,255,0.05)",
-                      color: "inherit",
-                      padding: "7px 10px",
-                      fontSize: 12,
-                      lineHeight: 1.2,
-                      cursor: debugSelectedKey ? "pointer" : "default",
-                      opacity: debugSelectedKey ? 0.9 : 0.5,
-                    }}
-                  >
-                    Celebrate selected
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleCelebrateRandom}
-                    disabled={debugCandidateItems.length === 0}
-                    style={{
-                      appearance: "none",
-                      borderRadius: 999,
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      background: "rgba(255,255,255,0.05)",
-                      color: "inherit",
-                      padding: "7px 10px",
-                      fontSize: 12,
-                      lineHeight: 1.2,
-                      cursor:
-                        debugCandidateItems.length > 0 ? "pointer" : "default",
-                      opacity: debugCandidateItems.length > 0 ? 0.9 : 0.5,
-                    }}
-                  >
-                    Celebrate random
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleResetDebug}
-                    disabled={!debugUnlockedKey}
-                    style={{
-                      appearance: "none",
-                      borderRadius: 999,
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      background: "transparent",
-                      color: "inherit",
-                      padding: "7px 10px",
-                      fontSize: 12,
-                      lineHeight: 1.2,
-                      cursor: debugUnlockedKey ? "pointer" : "default",
-                      opacity: debugUnlockedKey ? 0.78 : 0.45,
-                    }}
-                  >
-                    Reset
-                  </button>
-                </div>
-              </div>
-            </div>
+          {showDebugPanel ? (
+            <BadgeCabinetDebugPanel
+              candidateItems={debugCandidateItems}
+              selectedKey={debugSelectedKey}
+              unlockedKey={debugUnlockedKey}
+              onSelectKey={setDebugSelectedKey}
+              onReplaySelected={() => replayDebugUnlock(debugSelectedKey)}
+              onReplayRandom={handleReplayRandom}
+              onCelebrateSelected={() => announceDebugOverlay(debugSelectedKey)}
+              onCelebrateRandom={handleCelebrateRandom}
+              onReset={handleResetDebug}
+            />
           ) : null}
         </div>
 

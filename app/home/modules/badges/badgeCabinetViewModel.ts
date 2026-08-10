@@ -14,6 +14,15 @@ function formatUnlockedAt(value?: string | null): string | null {
   });
 }
 
+function getBadgeStateLabel(
+  unlocked: boolean,
+  unlockedAt: string | null,
+): string {
+  if (!unlocked) return "Locked";
+  if (!unlockedAt) return "Unlocked";
+  return `Unlocked ${unlockedAt}`;
+}
+
 function getBadgeTitle(props: {
   label: string;
   description: string | null;
@@ -25,9 +34,9 @@ function getBadgeTitle(props: {
   return [
     label,
     description?.trim() || null,
-    unlocked ? (unlockedAt ? `Unlocked ${unlockedAt}` : "Unlocked") : "Locked",
+    getBadgeStateLabel(unlocked, unlockedAt),
   ]
-    .filter((value): value is string => Boolean(value && value.trim()))
+    .filter((value): value is string => Boolean(value?.trim()))
     .join("\n");
 }
 

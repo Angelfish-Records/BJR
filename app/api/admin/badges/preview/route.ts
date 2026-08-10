@@ -47,6 +47,26 @@ function isBadgeQualificationMode(
   return value in BADGE_PREVIEW_MODE_DESCRIPTORS;
 }
 
+function requireStringField(
+  body: Record<string, unknown>,
+  key: string,
+  errorMessage: string,
+): string {
+  const value = asString(body[key]);
+  if (!value) throw new Error(errorMessage);
+  return value;
+}
+
+function requirePositiveNumberField(
+  body: Record<string, unknown>,
+  key: string,
+  errorMessage: string,
+): number {
+  const value = asPositiveNumber(body[key]);
+  if (value === null) throw new Error(errorMessage);
+  return value;
+}
+
 function parsePreviewInput(body: unknown): BadgePreviewInput {
   if (!isRecord(body)) {
     throw new Error("Invalid request body.");
@@ -64,165 +84,141 @@ function parsePreviewInput(body: unknown): BadgePreviewInput {
   const limit = asOptionalLimit(body.limit);
 
   switch (mode) {
-    case "minutes_streamed": {
-      const minMinutes = asPositiveNumber(body.minMinutes);
-      if (minMinutes === null) {
-        throw new Error("minMinutes is required.");
-      }
-
+    case "minutes_streamed":
       return {
         mode,
-        minMinutes,
+        minMinutes: requirePositiveNumberField(
+          body,
+          "minMinutes",
+          "minMinutes is required.",
+        ),
         limit,
       };
-    }
 
-    case "play_count": {
-      const minPlayCount = asPositiveNumber(body.minPlayCount);
-      if (minPlayCount === null) {
-        throw new Error("minPlayCount is required.");
-      }
-
+    case "play_count":
       return {
         mode,
-        minPlayCount,
+        minPlayCount: requirePositiveNumberField(
+          body,
+          "minPlayCount",
+          "minPlayCount is required.",
+        ),
         limit,
       };
-    }
 
-    case "complete_count": {
-      const minCompletedCount = asPositiveNumber(body.minCompletedCount);
-      if (minCompletedCount === null) {
-        throw new Error("minCompletedCount is required.");
-      }
-
+    case "complete_count":
       return {
         mode,
-        minCompletedCount,
+        minCompletedCount: requirePositiveNumberField(
+          body,
+          "minCompletedCount",
+          "minCompletedCount is required.",
+        ),
         limit,
       };
-    }
 
-    case "joined_within_window": {
-      const joinedOnOrAfter = asString(body.joinedOnOrAfter);
-      if (!joinedOnOrAfter) {
-        throw new Error("joinedOnOrAfter is required.");
-      }
-
+    case "joined_within_window":
       return {
         mode,
-        joinedOnOrAfter,
+        joinedOnOrAfter: requireStringField(
+          body,
+          "joinedOnOrAfter",
+          "joinedOnOrAfter is required.",
+        ),
         joinedBefore: asOptionalString(body.joinedBefore),
         limit,
       };
-    }
 
-    case "active_within_window": {
-      const activeOnOrAfter = asString(body.activeOnOrAfter);
-      if (!activeOnOrAfter) {
-        throw new Error("activeOnOrAfter is required.");
-      }
-
+    case "active_within_window":
       return {
         mode,
-        activeOnOrAfter,
+        activeOnOrAfter: requireStringField(
+          body,
+          "activeOnOrAfter",
+          "activeOnOrAfter is required.",
+        ),
         activeBefore: asOptionalString(body.activeBefore),
         minPlayCount: asPositiveNumber(body.minPlayCount) ?? 0,
         minProgressCount: asPositiveNumber(body.minProgressCount) ?? 0,
         minCompleteCount: asPositiveNumber(body.minCompleteCount) ?? 0,
         limit,
       };
-    }
 
-    case "recording_minutes_streamed": {
-      const recordingId = asString(body.recordingId);
-      const minMinutes = asPositiveNumber(body.minMinutes);
-
-      if (!recordingId) {
-        throw new Error("recordingId is required.");
-      }
-      if (minMinutes === null) {
-        throw new Error("minMinutes is required.");
-      }
-
+    case "recording_minutes_streamed":
       return {
         mode,
-        recordingId,
-        minMinutes,
+        recordingId: requireStringField(
+          body,
+          "recordingId",
+          "recordingId is required.",
+        ),
+        minMinutes: requirePositiveNumberField(
+          body,
+          "minMinutes",
+          "minMinutes is required.",
+        ),
         limit,
       };
-    }
 
-    case "recording_play_count": {
-      const recordingId = asString(body.recordingId);
-      const minPlayCount = asPositiveNumber(body.minPlayCount);
-
-      if (!recordingId) {
-        throw new Error("recordingId is required.");
-      }
-      if (minPlayCount === null) {
-        throw new Error("minPlayCount is required.");
-      }
-
+    case "recording_play_count":
       return {
         mode,
-        recordingId,
-        minPlayCount,
+        recordingId: requireStringField(
+          body,
+          "recordingId",
+          "recordingId is required.",
+        ),
+        minPlayCount: requirePositiveNumberField(
+          body,
+          "minPlayCount",
+          "minPlayCount is required.",
+        ),
         limit,
       };
-    }
 
-    case "recording_complete_count": {
-      const recordingId = asString(body.recordingId);
-      const minCompletedCount = asPositiveNumber(body.minCompletedCount);
-
-      if (!recordingId) {
-        throw new Error("recordingId is required.");
-      }
-      if (minCompletedCount === null) {
-        throw new Error("minCompletedCount is required.");
-      }
-
+    case "recording_complete_count":
       return {
         mode,
-        recordingId,
-        minCompletedCount,
+        recordingId: requireStringField(
+          body,
+          "recordingId",
+          "recordingId is required.",
+        ),
+        minCompletedCount: requirePositiveNumberField(
+          body,
+          "minCompletedCount",
+          "minCompletedCount is required.",
+        ),
         limit,
       };
-    }
 
-    case "exegesis_contribution_count": {
-      const minContributionCount = asPositiveNumber(body.minContributionCount);
-      if (minContributionCount === null) {
-        throw new Error("minContributionCount is required.");
-      }
-
+    case "exegesis_contribution_count":
       return {
         mode,
-        minContributionCount,
+        minContributionCount: requirePositiveNumberField(
+          body,
+          "minContributionCount",
+          "minContributionCount is required.",
+        ),
         limit,
       };
-    }
 
-    case "exegesis_vote_tally": {
-      const minVoteCount = asPositiveNumber(body.minVoteCount);
-      if (minVoteCount === null) {
-        throw new Error("minVoteCount is required.");
-      }
-
+    case "exegesis_vote_tally":
       return {
         mode,
-        minVoteCount,
+        minVoteCount: requirePositiveNumberField(
+          body,
+          "minVoteCount",
+          "minVoteCount is required.",
+        ),
         limit,
       };
-    }
 
-    case "public_name_unlocked": {
+    case "public_name_unlocked":
       return {
         mode,
         limit,
       };
-    }
 
     default: {
       const exhaustiveCheck: never = mode;
@@ -231,6 +227,12 @@ function parsePreviewInput(body: unknown): BadgePreviewInput {
       );
     }
   }
+}
+
+function getErrorStatus(message: string): number {
+  if (message === "Unauthorized") return 401;
+  if (message === "Forbidden") return 403;
+  return 400;
 }
 
 export async function POST(request: Request) {
@@ -252,8 +254,7 @@ export async function POST(request: Request) {
         ? error.message
         : "Unable to preview badge cohort.";
 
-    const status =
-      message === "Unauthorized" ? 401 : message === "Forbidden" ? 403 : 400;
+    const status = getErrorStatus(message);
 
     return NextResponse.json(
       {

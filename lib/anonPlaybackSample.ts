@@ -1,6 +1,6 @@
 import "server-only";
 
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { sql } from "@vercel/postgres";
 
 import { countAnonDistinctCompletedTracks } from "@/lib/events";

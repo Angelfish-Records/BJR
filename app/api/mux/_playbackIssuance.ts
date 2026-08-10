@@ -1,7 +1,7 @@
 // web/app/api/mux/_playbackIssuance.ts
 import "server-only";
 
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { auth } from "@clerk/nextjs/server";
 import { importPKCS8, SignJWT } from "jose";
 import type { NextRequest, NextResponse } from "next/server";
@@ -68,13 +68,13 @@ function normalizePemMaybe(input: string): string {
   const looksLikePem = raw.includes("-----BEGIN ") && raw.includes("-----END ");
 
   if (looksLikePem) {
-    return raw.replace(/\\n/g, "\n");
+    return raw.replaceAll("\\n", "\n");
   }
 
   return Buffer.from(raw, "base64")
     .toString("utf8")
     .trim()
-    .replace(/\\n/g, "\n");
+    .replaceAll("\\n", "\n");
 }
 
 function toPkcs8Pem(pem: string): string {

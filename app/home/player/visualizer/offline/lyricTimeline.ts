@@ -110,7 +110,7 @@ export function bakeLyricFrameStates(
 
     if (activeCueIndex === null) {
       const silenceDuration =
-        timeToNextLineSec === null ? silenceRampSec : timeToNextLineSec;
+        timeToNextLineSec ?? silenceRampSec;
 
       frames.push(
         emptyLyricFrameState(

@@ -5,7 +5,7 @@ import React from "react";
 
 type SubmissionKind = "suggestion" | "bug_report";
 
-type Props = {
+type Props = Readonly<{
   kind?: SubmissionKind;
   title?: string;
   description?: string;
@@ -13,7 +13,7 @@ type Props = {
   className?: string;
   embedded?: boolean;
   allowKindSwitch?: boolean;
-};
+}>;
 
 type SubmitState = "idle" | "submitting" | "success" | "error";
 
@@ -36,6 +36,11 @@ type ApiErr = {
   limitPerDay?: number;
 };
 
+type SetExpanded = React.Dispatch<React.SetStateAction<boolean>>;
+type SetSubmitState = React.Dispatch<React.SetStateAction<SubmitState>>;
+type SetError = React.Dispatch<React.SetStateAction<string | null>>;
+type SetText = React.Dispatch<React.SetStateAction<string>>;
+
 const MAX_CHARS = 800;
 
 function errorMessage(payload: ApiErr | null): string {
@@ -52,14 +57,249 @@ function errorMessage(payload: ApiErr | null): string {
   if (payload.code === "TOO_LONG") {
     return `Please keep it under ${payload.maxChars ?? MAX_CHARS} characters.`;
   }
-  if (payload.code === "EMPTY")
+  if (payload.code === "EMPTY") {
     return "Please write something before submitting.";
+  }
   return "Something went wrong.";
+}
+
+function defaultTitle(kind: SubmissionKind): string {
+  return kind === "bug_report"
+    ? "Report a small problem"
+    : "Leave a suggestion";
+}
+
+function defaultDescription(kind: SubmissionKind): string {
+  return kind === "bug_report"
+    ? "What happened? What did you expect? How can I reproduce it?"
+    : "What content or features would you like to see here?";
+}
+
+function defaultSubmitLabel(kind: SubmissionKind): string {
+  return kind === "bug_report" ? "Send bug report" : "Send suggestion";
+}
+
+function submitButtonLabel(
+  state: SubmitState,
+  submitLabel: string | undefined,
+  kind: SubmissionKind,
+): string {
+  if (state === "submitting") return "Sending…";
+  return submitLabel ?? defaultSubmitLabel(kind);
+}
+
+function submissionNoun(kind: SubmissionKind): string {
+  return kind === "bug_report" ? "bug report" : "suggestion";
+}
+
+function formStyle(embedded: boolean): React.CSSProperties | undefined {
+  if (embedded) return undefined;
+
+  return {
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 18,
+    padding: 10,
+    background: "rgba(255,255,255,0.025)",
+  };
+}
+
+function promptStyle(embedded: boolean): React.CSSProperties {
+  return {
+    width: "100%",
+    minHeight: 42,
+    border: embedded ? 0 : "1px solid rgba(255,255,255,0.1)",
+    borderRadius: 14,
+    background: embedded ? "transparent" : "rgba(255,255,255,0.035)",
+    color: "rgba(255,255,255,0.76)",
+    fontSize: 12,
+    fontWeight: 800,
+    cursor: "pointer",
+    textAlign: "left",
+    padding: "0 14px",
+  };
+}
+
+function editorStyle(embedded: boolean): React.CSSProperties {
+  return {
+    overflow: "hidden",
+    border: embedded ? 0 : "1px solid rgba(255,255,255,0.12)",
+    borderRadius: 16,
+    background: embedded ? "transparent" : "rgba(255,255,255,0.045)",
+  };
+}
+
+function kindSwitchButtonStyle(
+  nextKind: SubmissionKind,
+  active: boolean,
+): React.CSSProperties {
+  return {
+    height: 36,
+    border: 0,
+    borderRight:
+      nextKind === "suggestion"
+        ? "1px solid rgba(255,255,255,0.08)"
+        : 0,
+    background: active ? "rgba(255,255,255,0.1)" : "transparent",
+    color: active
+      ? "rgba(255,255,255,0.94)"
+      : "rgba(255,255,255,0.58)",
+    fontSize: 11,
+    fontWeight: 900,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
+    cursor: "pointer",
+  };
+}
+
+function kindSwitchLabel(kind: SubmissionKind): string {
+  return kind === "bug_report" ? "Bug report" : "Suggestion";
+}
+
+function submitStyle(
+  isEmpty: boolean,
+  isSubmitting: boolean,
+): React.CSSProperties {
+  return {
+    height: 32,
+    padding: "0 13px",
+    borderRadius: 10,
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: isEmpty
+      ? "rgba(255,255,255,0.055)"
+      : "rgba(255,255,255,0.13)",
+    color: isEmpty ? "rgba(255,255,255,0.42)" : "rgba(255,255,255,0.94)",
+    fontSize: 12,
+    fontWeight: 900,
+    cursor: isSubmitting || isEmpty ? "default" : "pointer",
+    opacity: isSubmitting ? 0.72 : 1,
+  };
+}
+
+function collapseFeedbackForm(params: Readonly<{
+  state: SubmitState;
+  setExpanded: SetExpanded;
+  setError: SetError;
+  setState: SetSubmitState;
+}>): void {
+  params.setExpanded(false);
+  params.setError(null);
+  if (params.state !== "submitting") {
+    params.setState("idle");
+  }
+}
+
+function useOutsideCollapse(params: Readonly<{
+  expanded: boolean;
+  textLength: number;
+  state: SubmitState;
+  rootRef: React.RefObject<HTMLFormElement | null>;
+  setExpanded: SetExpanded;
+  setError: SetError;
+  setState: SetSubmitState;
+}>): void {
+  const {
+    expanded,
+    textLength,
+    state,
+    rootRef,
+    setExpanded,
+    setError,
+    setState,
+  } = params;
+
+  React.useEffect(() => {
+    if (!expanded || textLength > 0) return;
+
+    function onPointerDown(event: PointerEvent) {
+      const root = rootRef.current;
+      const target = event.target;
+
+      if (!root || !(target instanceof Node)) return;
+      if (root.contains(target)) return;
+
+      collapseFeedbackForm({ state, setExpanded, setError, setState });
+    }
+
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [
+    expanded,
+    rootRef,
+    setError,
+    setExpanded,
+    setState,
+    state,
+    textLength,
+  ]);
+}
+
+async function submitFeedback(params: Readonly<{
+  kind: SubmissionKind;
+  text: string;
+  askerName: string;
+}>): Promise<string | null> {
+  try {
+    const res = await fetch("/api/mailbag/questions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: params.kind,
+        questionText: params.text,
+        askerName: params.askerName,
+      }),
+    });
+
+    const raw = (await res.json().catch(() => null)) as ApiOk | ApiErr | null;
+
+    if (!res.ok || raw?.ok !== true) {
+      return errorMessage(raw?.ok === false ? raw : null);
+    }
+
+    return null;
+  } catch {
+    return "Something went wrong.";
+  }
+}
+
+async function handleSubmit(
+  event: React.FormEvent<HTMLFormElement>,
+  params: Readonly<{
+    kind: SubmissionKind;
+    text: string;
+    askerName: string;
+    state: SubmitState;
+    setState: SetSubmitState;
+    setError: SetError;
+    setText: SetText;
+  }>,
+): Promise<void> {
+  event.preventDefault();
+  if (params.state === "submitting") return;
+
+  params.setState("submitting");
+  params.setError(null);
+
+  const submitError = await submitFeedback({
+    kind: params.kind,
+    text: params.text,
+    askerName: params.askerName,
+  });
+
+  if (submitError) {
+    params.setState("error");
+    params.setError(submitError);
+    return;
+  }
+
+  params.setState("success");
+  params.setText("");
 }
 
 export default function MailbagFeedbackForm(props: Props) {
   const {
     kind: kindProp,
+    title,
+    description,
     submitLabel,
     className,
     embedded = false,
@@ -80,107 +320,48 @@ export default function MailbagFeedbackForm(props: Props) {
     if (kindProp) setKind(kindProp);
   }, [kindProp]);
 
-  React.useEffect(() => {
-    if (!expanded || text.length > 0) return;
+  useOutsideCollapse({
+    expanded,
+    textLength: text.length,
+    state,
+    rootRef,
+    setExpanded,
+    setError,
+    setState,
+  });
 
-    function onPointerDown(e: PointerEvent) {
-      const root = rootRef.current;
-      const target = e.target;
-
-      if (!root || !(target instanceof Node)) return;
-      if (root.contains(target)) return;
-
-      setExpanded(false);
-      setError(null);
-      if (state !== "submitting") setState("idle");
-    }
-
-    window.addEventListener("pointerdown", onPointerDown);
-    return () => window.removeEventListener("pointerdown", onPointerDown);
-  }, [expanded, state, text.length]);
-
-  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (state === "submitting") return;
-
-    setState("submitting");
-    setError(null);
-
-    try {
-      const res = await fetch("/api/mailbag/questions", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          kind,
-          questionText: text,
-          askerName,
-        }),
-      });
-
-      const raw = (await res.json().catch(() => null)) as ApiOk | ApiErr | null;
-
-      if (!res.ok || !raw || raw.ok !== true) {
-        setState("error");
-        setError(errorMessage(raw && raw.ok === false ? raw : null));
-        return;
-      }
-
-      setState("success");
-      setText("");
-    } catch {
-      setState("error");
-      setError("Something went wrong.");
-    }
-  }
+  const isEmpty = text.trim().length === 0;
+  const isSubmitting = state === "submitting";
+  const closeForm = () =>
+    collapseFeedbackForm({ state, setExpanded, setError, setState });
 
   return (
     <form
       ref={rootRef}
-      onSubmit={onSubmit}
-      className={className}
-      style={
-        embedded
-          ? undefined
-          : {
-              border: "1px solid rgba(255,255,255,0.08)",
-              borderRadius: 18,
-              padding: 10,
-              background: "rgba(255,255,255,0.025)",
-            }
+      onSubmit={(event) =>
+        void handleSubmit(event, {
+          kind,
+          text,
+          askerName,
+          state,
+          setState,
+          setError,
+          setText,
+        })
       }
+      className={className}
+      style={formStyle(embedded)}
     >
       {!expanded ? (
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          style={{
-            width: "100%",
-            minHeight: 42,
-            border: embedded ? 0 : "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 14,
-            background: embedded ? "transparent" : "rgba(255,255,255,0.035)",
-            color: "rgba(255,255,255,0.76)",
-            fontSize: 12,
-            fontWeight: 800,
-            cursor: "pointer",
-            textAlign: "left",
-            padding: "0 14px",
-          }}
+          style={promptStyle(embedded)}
         >
-          {props.title ??
-            (kind === "bug_report"
-              ? "Report a small problem"
-              : "Leave a suggestion")}
+          {title ?? defaultTitle(kind)}
         </button>
       ) : (
-        <div
-          style={{
-            overflow: "hidden",
-            border: embedded ? 0 : "1px solid rgba(255,255,255,0.12)",
-            borderRadius: 16,
-            background: embedded ? "transparent" : "rgba(255,255,255,0.045)",
-          }}
-        >
+        <div style={editorStyle(embedded)}>
           {allowKindSwitch ? (
             <div
               role="tablist"
@@ -201,27 +382,9 @@ export default function MailbagFeedbackForm(props: Props) {
                     type="button"
                     onClick={() => setKind(nextKind)}
                     aria-pressed={active}
-                    style={{
-                      height: 36,
-                      border: 0,
-                      borderRight:
-                        nextKind === "suggestion"
-                          ? "1px solid rgba(255,255,255,0.08)"
-                          : 0,
-                      background: active
-                        ? "rgba(255,255,255,0.1)"
-                        : "transparent",
-                      color: active
-                        ? "rgba(255,255,255,0.94)"
-                        : "rgba(255,255,255,0.58)",
-                      fontSize: 11,
-                      fontWeight: 900,
-                      letterSpacing: "0.04em",
-                      textTransform: "uppercase",
-                      cursor: "pointer",
-                    }}
+                    style={kindSwitchButtonStyle(nextKind, active)}
                   >
-                    {nextKind === "bug_report" ? "Bug report" : "Suggestion"}
+                    {kindSwitchLabel(nextKind)}
                   </button>
                 );
               })}
@@ -230,13 +393,10 @@ export default function MailbagFeedbackForm(props: Props) {
 
           <textarea
             value={text}
-            onChange={(e) => setText(e.target.value.slice(0, MAX_CHARS))}
-            placeholder={
-              props.description ??
-              (kind === "bug_report"
-                ? "What happened? What did you expect? How can I reproduce it?"
-                : "What content or features would you like to see here?")
+            onChange={(event) =>
+              setText(event.target.value.slice(0, MAX_CHARS))
             }
+            placeholder={description ?? defaultDescription(kind)}
             maxLength={MAX_CHARS}
             autoFocus
             style={{
@@ -265,11 +425,7 @@ export default function MailbagFeedbackForm(props: Props) {
           >
             <button
               type="button"
-              onClick={() => {
-                setExpanded(false);
-                setError(null);
-                if (state !== "submitting") setState("idle");
-              }}
+              onClick={closeForm}
               style={{
                 height: 32,
                 padding: "0 11px",
@@ -287,35 +443,10 @@ export default function MailbagFeedbackForm(props: Props) {
 
             <button
               type="submit"
-              disabled={state === "submitting" || text.trim().length === 0}
-              style={{
-                height: 32,
-                padding: "0 13px",
-                borderRadius: 10,
-                border: "1px solid rgba(255,255,255,0.14)",
-                background:
-                  text.trim().length === 0
-                    ? "rgba(255,255,255,0.055)"
-                    : "rgba(255,255,255,0.13)",
-                color:
-                  text.trim().length === 0
-                    ? "rgba(255,255,255,0.42)"
-                    : "rgba(255,255,255,0.94)",
-                fontSize: 12,
-                fontWeight: 900,
-                cursor:
-                  state === "submitting" || text.trim().length === 0
-                    ? "default"
-                    : "pointer",
-                opacity: state === "submitting" ? 0.72 : 1,
-              }}
+              disabled={isSubmitting || isEmpty}
+              style={submitStyle(isEmpty, isSubmitting)}
             >
-              {state === "submitting"
-                ? "Sending…"
-                : (submitLabel ??
-                  (kind === "bug_report"
-                    ? "Send bug report"
-                    : "Send suggestion"))}
+              {submitButtonLabel(state, submitLabel, kind)}
             </button>
           </div>
         </div>
@@ -323,8 +454,7 @@ export default function MailbagFeedbackForm(props: Props) {
 
       {state === "success" ? (
         <div style={{ marginTop: 8, fontSize: 12, opacity: 0.72 }}>
-          Thanks, your {kind === "bug_report" ? "bug report" : "suggestion"}{" "}
-          has been sent.
+          Thanks, your {submissionNoun(kind)} has been sent.
         </div>
       ) : null}
 

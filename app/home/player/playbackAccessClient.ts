@@ -96,36 +96,40 @@ function parseShareTokenAccess(
   if (!value || typeof value !== "object") return null;
 
   const raw = value as Record<string, unknown>;
-  const hasExpiresAt = Object.prototype.hasOwnProperty.call(raw, "expiresAt");
-  const hasMaxRedemptions = Object.prototype.hasOwnProperty.call(
-    raw,
-    "maxRedemptions",
-  );
+  const hasExpiresAt = Object.hasOwn(raw, "expiresAt");
+  const hasMaxRedemptions = Object.hasOwn(raw, "maxRedemptions");
 
   if (!hasExpiresAt && !hasMaxRedemptions) return null;
 
   const expiresAtRaw = raw.expiresAt;
   const maxRedemptionsRaw = raw.maxRedemptions;
 
-  const expiresAt =
-    expiresAtRaw == null
-      ? null
-      : typeof expiresAtRaw === "string" &&
-          Number.isFinite(Date.parse(expiresAtRaw))
-        ? expiresAtRaw
-        : null;
+  let expiresAt: string | null = null;
 
-  const maxRedemptions =
-    maxRedemptionsRaw == null
-      ? null
-      : typeof maxRedemptionsRaw === "number" &&
-          Number.isFinite(maxRedemptionsRaw) &&
-          maxRedemptionsRaw >= 1
-        ? Math.floor(maxRedemptionsRaw)
-        : null;
+  if (expiresAtRaw != null) {
+    if (
+      typeof expiresAtRaw !== "string" ||
+      !Number.isFinite(Date.parse(expiresAtRaw))
+    ) {
+      return null;
+    }
 
-  if (expiresAtRaw != null && expiresAt == null) return null;
-  if (maxRedemptionsRaw != null && maxRedemptions == null) return null;
+    expiresAt = expiresAtRaw;
+  }
+
+  let maxRedemptions: number | null = null;
+
+  if (maxRedemptionsRaw != null) {
+    if (
+      typeof maxRedemptionsRaw !== "number" ||
+      !Number.isFinite(maxRedemptionsRaw) ||
+      maxRedemptionsRaw < 1
+    ) {
+      return null;
+    }
+
+    maxRedemptions = Math.floor(maxRedemptionsRaw);
+  }
 
   return { expiresAt, maxRedemptions };
 }

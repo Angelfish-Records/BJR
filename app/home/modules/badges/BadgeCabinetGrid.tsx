@@ -3,10 +3,10 @@
 
 import React from "react";
 
-type Props = {
+type Props = Readonly<{
   expanded: boolean;
   children: React.ReactNode;
-};
+}>;
 
 export default function BadgeCabinetGrid(props: Props) {
   const { expanded, children } = props;

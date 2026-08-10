@@ -125,7 +125,7 @@ export class FramePostProcessor {
     const image = this.ctx.getImageData(0, 0, this.width, this.height);
     const cx = this.width / 2;
     const cy = this.height / 2;
-    const maxDist = Math.sqrt(cx * cx + cy * cy);
+    const maxDist = Math.hypot(cx, cy);
 
     for (let i = 0; i < image.data.length; i += 4) {
       const pixel = i / 4;
@@ -150,7 +150,7 @@ export class FramePostProcessor {
       if (this.style.vignette > 0) {
         const dx = x - cx;
         const dy = y - cy;
-        const dist01 = Math.sqrt(dx * dx + dy * dy) / maxDist;
+        const dist01 = Math.hypot(dx, dy) / maxDist;
         const vignetteAmount = 1 - Math.pow(dist01, 1.8) * this.style.vignette;
         r *= vignetteAmount;
         g *= vignetteAmount;

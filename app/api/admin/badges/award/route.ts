@@ -26,6 +26,12 @@ function asStringArray(value: unknown): string[] {
   return rows;
 }
 
+function getErrorStatus(message: string): number {
+  if (message === "Unauthorized") return 401;
+  if (message === "Forbidden") return 403;
+  return 400;
+}
+
 export async function POST(request: Request) {
   try {
     const adminMemberId = await requireAdminMemberId();
@@ -87,8 +93,7 @@ export async function POST(request: Request) {
     const message =
       error instanceof Error ? error.message : "Unable to award badge.";
 
-    const status =
-      message === "Unauthorized" ? 401 : message === "Forbidden" ? 403 : 400;
+    const status = getErrorStatus(message);
 
     return NextResponse.json(
       {

@@ -13,11 +13,17 @@ import {
 import type { BadgeDefinitionOption } from "../_lib/badgeDashboardTypes";
 import { getBadgeCardBorder } from "../_lib/badgeDashboardUtils";
 
-type Props = {
+type Props = Readonly<{
   badges: BadgeDefinitionOption[];
   selectedEntitlementKey: string;
   onSelectEntitlementKey: (entitlementKey: string) => void;
-};
+}>;
+
+function getAwardModeLabel(badge: BadgeDefinitionOption): string {
+  if (badge.awardMode !== "automatic") return "manual";
+  if (!badge.autoQualificationMode) return "auto";
+  return `auto · ${badge.autoQualificationMode}`;
+}
 
 export function BadgeCatalogueSection(props: Props) {
   const { badges, selectedEntitlementKey, onSelectEntitlementKey } = props;
@@ -226,11 +232,7 @@ export function BadgeCatalogueSection(props: Props) {
                           : TEXT_MUTED,
                     }}
                   >
-                    {badge.awardMode === "automatic"
-                      ? badge.autoQualificationMode
-                        ? `auto · ${badge.autoQualificationMode}`
-                        : "auto"
-                      : "manual"}
+                    {getAwardModeLabel(badge)}
                   </span>
                 </div>
               </button>

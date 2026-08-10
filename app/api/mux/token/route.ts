@@ -282,7 +282,7 @@ export async function GET(req: NextRequest) {
     .json()
     .catch(() => null)) as TokenOk | null;
 
-  if (!tokenPayload || tokenPayload.ok !== true || !tokenPayload.token.trim()) {
+  if (tokenPayload?.ok !== true || !tokenPayload.token.trim()) {
     return muxPlaybackGateError(req, {
       correlationId: correlationIdFromRequest(req),
       status: 502,

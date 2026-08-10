@@ -4,19 +4,21 @@
 import React from "react";
 import BuildRevealMaskCanvas from "./BuildRevealMaskCanvas";
 
-type Props = {
+type Props = Readonly<{
   imageUrl: string | null;
   label: string;
   unlocked: boolean;
   isUnlocking: boolean;
   isNewlyUnlocked: boolean;
   variant: "cabinet" | "overlay";
-};
+}>;
 
 const REVEAL_DELAY_MS = 1210;
 const REVEAL_DURATION_MS = 600;
 
-function BadgeFallbackArt(props: { unlocked: boolean; label: string }) {
+function BadgeFallbackArt(
+  props: Readonly<{ unlocked: boolean; label: string }>,
+) {
   const { unlocked, label } = props;
 
   return (
@@ -39,12 +41,14 @@ function BadgeFallbackArt(props: { unlocked: boolean; label: string }) {
   );
 }
 
-function BadgeArtImage(props: {
-  imageUrl: string;
-  alt: string;
-  className?: string;
-  style?: React.CSSProperties;
-}) {
+function BadgeArtImage(
+  props: Readonly<{
+    imageUrl: string;
+    alt: string;
+    className?: string;
+    style?: React.CSSProperties;
+  }>,
+) {
   const { imageUrl, alt, className, style } = props;
 
   return (
@@ -68,11 +72,408 @@ function BadgeArtImage(props: {
   );
 }
 
+function BadgeUnlockedAtmosphere() {
+  return (
+    <>
+      <div
+        className="portal-badge-idle-glow"
+        style={{
+          position: "absolute",
+          inset: -6,
+          borderRadius: "50%",
+          background:
+            "radial-gradient(circle, rgba(255,255,255,0.11) 0%, rgba(255,255,255,0.05) 32%, rgba(255,255,255,0.00) 74%)",
+          filter: "blur(5px)",
+          pointerEvents: "none",
+          transition: "opacity 180ms ease, transform 180ms ease",
+        }}
+      />
+
+      <div
+        className="portal-badge-inner-aura"
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          width: "58%",
+          height: "58%",
+          transform: "translate(-50%, -50%)",
+          borderRadius: "50%",
+          background:
+            "radial-gradient(circle, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.05) 46%, rgba(255,255,255,0) 76%)",
+          filter: "blur(5px)",
+          pointerEvents: "none",
+        }}
+      />
+
+      <div
+        className="portal-badge-embers"
+        style={{
+          position: "absolute",
+          left: "50%",
+          bottom: "-5%",
+          width: "74%",
+          height: "94%",
+          transform: "translateX(-50%)",
+          overflow: "visible",
+          pointerEvents: "none",
+        }}
+      >
+        <div
+          className="portal-badge-spark-a"
+          style={{
+            position: "absolute",
+            left: "31%",
+            bottom: "3%",
+            width: "5.6%",
+            height: "14.4%",
+          }}
+        />
+
+        <div
+          className="portal-badge-spark-b"
+          style={{
+            position: "absolute",
+            left: "45.5%",
+            bottom: "1%",
+            width: "4.8%",
+            height: "12.6%",
+          }}
+        />
+
+        <div
+          className="portal-badge-spark-c"
+          style={{
+            position: "absolute",
+            left: "59.5%",
+            bottom: "3.5%",
+            width: "4.6%",
+            height: "12.2%",
+          }}
+        />
+
+        <div
+          className="portal-badge-burst-a"
+          style={{
+            position: "absolute",
+            left: "37.5%",
+            bottom: "2%",
+            width: "4.2%",
+            height: "10.8%",
+          }}
+        />
+
+        <div
+          className="portal-badge-burst-b"
+          style={{
+            position: "absolute",
+            left: "50.5%",
+            bottom: "2.8%",
+            width: "4.2%",
+            height: "10.4%",
+          }}
+        />
+
+        <div
+          className="portal-badge-burst-c"
+          style={{
+            position: "absolute",
+            left: "62.5%",
+            bottom: "2.2%",
+            width: "3.4%",
+            height: "9.2%",
+          }}
+        />
+      </div>
+    </>
+  );
+}
+
+function UnlockGlint(
+  props: Readonly<{
+    stage: 1 | 2 | 3;
+  }>,
+) {
+  const { stage } = props;
+
+  return (
+    <div
+      className={`portal-badge-quarter-glint portal-badge-quarter-glint--stage-${stage}`}
+    />
+  );
+}
+
+function SpinStages(
+  props: Readonly<{
+    isUnlocking: boolean;
+    children: React.ReactNode;
+  }>,
+) {
+  const { isUnlocking, children } = props;
+  return (
+    <div
+      className={`portal-badge-spin-stage-1${
+        isUnlocking ? " portal-badge-spin-stage-1--unlocking" : ""
+      }`}
+      style={{
+        position: "absolute",
+        inset: 0,
+      }}
+    >
+      {isUnlocking ? <UnlockGlint stage={1} /> : null}
+
+      <div
+        className={`portal-badge-spin-stage-2${
+          isUnlocking ? " portal-badge-spin-stage-2--unlocking" : ""
+        }`}
+        style={{
+          position: "absolute",
+          inset: 0,
+        }}
+      >
+        {isUnlocking ? <UnlockGlint stage={2} /> : null}
+
+        <div
+          className={`portal-badge-spin-stage-3${
+            isUnlocking ? " portal-badge-spin-stage-3--unlocking" : ""
+          }`}
+          style={{
+            position: "absolute",
+            inset: 0,
+          }}
+        >
+          {isUnlocking ? <UnlockGlint stage={3} /> : null}
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FinalBadgeArt(
+  props: Readonly<{
+    imageUrl: string;
+    label: string;
+    unlocked: boolean;
+    isNewlyUnlocked: boolean;
+  }>,
+) {
+  const { imageUrl, label, unlocked, isNewlyUnlocked } = props;
+
+  return (
+    <div
+      className="portal-badge-final-art-shell"
+      style={{
+        position: "absolute",
+        inset: 0,
+      }}
+    >
+      <BadgeArtImage
+        imageUrl={imageUrl}
+        alt={label}
+        className="portal-badge-final-art-image"
+        style={{
+          filter: unlocked
+            ? "drop-shadow(0 0 6px rgba(255,255,255,0.1))"
+            : "grayscale(1) saturate(0) brightness(0.60) contrast(0.85) blur(0.2px)",
+          opacity: unlocked ? 1 : 0.35,
+        }}
+      />
+
+      {isNewlyUnlocked ? (
+        <div
+          className="portal-badge-final-shimmer portal-badge-final-shimmer--celebrating"
+          style={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+            WebkitMaskImage: `url(${imageUrl})`,
+            maskImage: `url(${imageUrl})`,
+            WebkitMaskRepeat: "no-repeat",
+            maskRepeat: "no-repeat",
+            WebkitMaskPosition: "center",
+            maskPosition: "center",
+            WebkitMaskSize: "contain",
+            maskSize: "contain",
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ImageBadgeArt(
+  props: Readonly<{
+    imageUrl: string;
+    label: string;
+    unlocked: boolean;
+    isUnlocking: boolean;
+    isNewlyUnlocked: boolean;
+  }>,
+) {
+  const { imageUrl, label, unlocked, isUnlocking, isNewlyUnlocked } = props;
+  const showGreyscaleBase = !unlocked || isUnlocking;
+
+  return (
+    <>
+      {showGreyscaleBase ? (
+        <BadgeArtImage
+          imageUrl={imageUrl}
+          alt=""
+          className="portal-badge-art-base-greyscale"
+          style={{
+            opacity: isUnlocking ? 0.42 : 0.32,
+            filter:
+              "grayscale(1) saturate(0) brightness(0.96) contrast(0.94) blur(1.4px)",
+            transform: "scale(1.02)",
+          }}
+        />
+      ) : null}
+
+      {isUnlocking ? (
+        <>
+          <BuildRevealMaskCanvas
+            imageUrl={imageUrl}
+            label={label}
+            isActive={true}
+            revealDelayMs={REVEAL_DELAY_MS}
+            revealDurationMs={REVEAL_DURATION_MS}
+            className="portal-badge-reveal-canvas-layer portal-badge-reveal-canvas-layer--unlocking"
+          />
+
+          <div
+            className="portal-badge-unlock-energy-flare"
+            style={{
+              position: "absolute",
+              inset: "-8%",
+              borderRadius: "50%",
+              pointerEvents: "none",
+            }}
+          />
+        </>
+      ) : null}
+
+      {!isUnlocking ? (
+        <FinalBadgeArt
+          imageUrl={imageUrl}
+          label={label}
+          unlocked={unlocked}
+          isNewlyUnlocked={isNewlyUnlocked}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function UnlockEdgeSpines() {
+  return (
+    <>
+      <div
+        className="portal-badge-edge-spine portal-badge-edge-spine--left"
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          width: "4.4%",
+          height: "86%",
+          borderRadius: 999,
+          pointerEvents: "none",
+        }}
+      />
+
+      <div
+        className="portal-badge-edge-spine portal-badge-edge-spine--right"
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          width: "4.4%",
+          height: "86%",
+          borderRadius: 999,
+          pointerEvents: "none",
+        }}
+      />
+    </>
+  );
+}
+
+function CentreRadiance() {
+  return (
+    <div
+      className="portal-badge-centre-radiance"
+      style={{
+        position: "absolute",
+        left: "50%",
+        top: "50%",
+        width: "50%",
+        height: "50%",
+        transform: "translate(-50%, -50%)",
+        borderRadius: "50%",
+        background:
+          "radial-gradient(circle, rgba(255,255,255,0.13) 0%, rgba(255,255,255,0.045) 42%, rgba(255,255,255,0.00) 76%)",
+        filter: "blur(4px)",
+        pointerEvents: "none",
+      }}
+    />
+  );
+}
+
+function BadgeArtShell(
+  props: Readonly<{
+    imageUrl: string | null;
+    label: string;
+    unlocked: boolean;
+    isUnlocking: boolean;
+    isNewlyUnlocked: boolean;
+  }>,
+) {
+  const { imageUrl, label, unlocked, isUnlocking, isNewlyUnlocked } = props;
+
+  return (
+    <div
+      className={`portal-badge-art-shell${
+        isUnlocking ? " portal-badge-art-shell--unlocking" : ""
+      }`}
+      style={{
+        position: "absolute",
+        inset: 0,
+      }}
+    >
+      {imageUrl ? (
+        <ImageBadgeArt
+          imageUrl={imageUrl}
+          label={label}
+          unlocked={unlocked}
+          isUnlocking={isUnlocking}
+          isNewlyUnlocked={isNewlyUnlocked}
+        />
+      ) : (
+        <BadgeFallbackArt unlocked={unlocked} label={label} />
+      )}
+
+      {isUnlocking ? <UnlockEdgeSpines /> : null}
+      {unlocked ? <CentreRadiance /> : null}
+    </div>
+  );
+}
+
+function ImpactFlash() {
+  return (
+    <div
+      className="portal-badge-impact-flash"
+      style={{
+        position: "absolute",
+        inset: "-8%",
+        borderRadius: "50%",
+        pointerEvents: "none",
+      }}
+    />
+  );
+}
+
 export default function BadgeUnlockVisual(props: Props) {
   const { imageUrl, label, unlocked, isUnlocking, isNewlyUnlocked, variant } =
     props;
-
-  const showUnlockedAtmosphere = unlocked;
   const showUnlockEvent = isUnlocking || isNewlyUnlocked;
 
   return (
@@ -90,316 +491,19 @@ export default function BadgeUnlockVisual(props: Props) {
           inset: 0,
         }}
       >
-        {showUnlockedAtmosphere ? (
-          <>
-            <div
-              className="portal-badge-idle-glow"
-              style={{
-                position: "absolute",
-                inset: -6,
-                borderRadius: "50%",
-                background:
-                  "radial-gradient(circle, rgba(255,255,255,0.11) 0%, rgba(255,255,255,0.05) 32%, rgba(255,255,255,0.00) 74%)",
-                filter: "blur(5px)",
-                pointerEvents: "none",
-                transition: "opacity 180ms ease, transform 180ms ease",
-              }}
-            />
+        {unlocked ? <BadgeUnlockedAtmosphere /> : null}
 
-            <div
-              className="portal-badge-inner-aura"
-              style={{
-                position: "absolute",
-                left: "50%",
-                top: "50%",
-                width: "58%",
-                height: "58%",
-                transform: "translate(-50%, -50%)",
-                borderRadius: "50%",
-                background:
-                  "radial-gradient(circle, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.05) 46%, rgba(255,255,255,0) 76%)",
-                filter: "blur(5px)",
-                pointerEvents: "none",
-              }}
-            />
-
-            <div
-              className="portal-badge-embers"
-              style={{
-                position: "absolute",
-                left: "50%",
-                bottom: "-5%",
-                width: "74%",
-                height: "94%",
-                transform: "translateX(-50%)",
-                overflow: "visible",
-                pointerEvents: "none",
-              }}
-            >
-              <div
-                className="portal-badge-spark-a"
-                style={{
-                  position: "absolute",
-                  left: "31%",
-                  bottom: "3%",
-                  width: "5.6%",
-                  height: "14.4%",
-                }}
-              />
-
-              <div
-                className="portal-badge-spark-b"
-                style={{
-                  position: "absolute",
-                  left: "45.5%",
-                  bottom: "1%",
-                  width: "4.8%",
-                  height: "12.6%",
-                }}
-              />
-
-              <div
-                className="portal-badge-spark-c"
-                style={{
-                  position: "absolute",
-                  left: "59.5%",
-                  bottom: "3.5%",
-                  width: "4.6%",
-                  height: "12.2%",
-                }}
-              />
-
-              <div
-                className="portal-badge-burst-a"
-                style={{
-                  position: "absolute",
-                  left: "37.5%",
-                  bottom: "2%",
-                  width: "4.2%",
-                  height: "10.8%",
-                }}
-              />
-
-              <div
-                className="portal-badge-burst-b"
-                style={{
-                  position: "absolute",
-                  left: "50.5%",
-                  bottom: "2.8%",
-                  width: "4.2%",
-                  height: "10.4%",
-                }}
-              />
-
-              <div
-                className="portal-badge-burst-c"
-                style={{
-                  position: "absolute",
-                  left: "62.5%",
-                  bottom: "2.2%",
-                  width: "3.4%",
-                  height: "9.2%",
-                }}
-              />
-            </div>
-          </>
-        ) : null}
-
-        <div
-          className={`portal-badge-spin-stage-1${
-            isUnlocking ? " portal-badge-spin-stage-1--unlocking" : ""
-          }`}
-          style={{
-            position: "absolute",
-            inset: 0,
-          }}
-        >
-          {isUnlocking ? (
-            <div className="portal-badge-quarter-glint portal-badge-quarter-glint--stage-1" />
-          ) : null}
-
-          <div
-            className={`portal-badge-spin-stage-2${
-              isUnlocking ? " portal-badge-spin-stage-2--unlocking" : ""
-            }`}
-            style={{
-              position: "absolute",
-              inset: 0,
-            }}
-          >
-            {isUnlocking ? (
-              <div className="portal-badge-quarter-glint portal-badge-quarter-glint--stage-2" />
-            ) : null}
-
-            <div
-              className={`portal-badge-spin-stage-3${
-                isUnlocking ? " portal-badge-spin-stage-3--unlocking" : ""
-              }`}
-              style={{
-                position: "absolute",
-                inset: 0,
-              }}
-            >
-              {isUnlocking ? (
-                <div className="portal-badge-quarter-glint portal-badge-quarter-glint--stage-3" />
-              ) : null}
-              <div
-                className={`portal-badge-art-shell${
-                  isUnlocking ? " portal-badge-art-shell--unlocking" : ""
-                }`}
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                }}
-              >
-                {imageUrl ? (
-                  <>
-                    {!unlocked || isUnlocking ? (
-                      <BadgeArtImage
-                        imageUrl={imageUrl}
-                        alt=""
-                        className="portal-badge-art-base-greyscale"
-                        style={{
-                          opacity: isUnlocking ? 0.42 : 0.32,
-                          filter:
-                            "grayscale(1) saturate(0) brightness(0.96) contrast(0.94) blur(1.4px)",
-                          transform: "scale(1.02)",
-                        }}
-                      />
-                    ) : null}
-
-                    {isUnlocking ? (
-                      <>
-                        <BuildRevealMaskCanvas
-                          imageUrl={imageUrl}
-                          label={label}
-                          isActive={true}
-                          revealDelayMs={REVEAL_DELAY_MS}
-                          revealDurationMs={REVEAL_DURATION_MS}
-                          className="portal-badge-reveal-canvas-layer portal-badge-reveal-canvas-layer--unlocking"
-                        />
-
-                        <div
-                          className="portal-badge-unlock-energy-flare"
-                          style={{
-                            position: "absolute",
-                            inset: "-8%",
-                            borderRadius: "50%",
-                            pointerEvents: "none",
-                          }}
-                        />
-                      </>
-                    ) : null}
-
-                    {!isUnlocking ? (
-                      <div
-                        className="portal-badge-final-art-shell"
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                        }}
-                      >
-                        <BadgeArtImage
-                          imageUrl={imageUrl}
-                          alt={label}
-                          className="portal-badge-final-art-image"
-                          style={{
-                            filter: unlocked
-                              ? "drop-shadow(0 0 6px rgba(255,255,255,0.1))"
-                              : "grayscale(1) saturate(0) brightness(0.60) contrast(0.85) blur(0.2px)",
-                            opacity: unlocked ? 1 : 0.35,
-                          }}
-                        />
-
-                        {isNewlyUnlocked ? (
-                          <div
-                            className="portal-badge-final-shimmer portal-badge-final-shimmer--celebrating"
-                            style={{
-                              position: "absolute",
-                              inset: 0,
-                              pointerEvents: "none",
-                              WebkitMaskImage: `url(${imageUrl})`,
-                              maskImage: `url(${imageUrl})`,
-                              WebkitMaskRepeat: "no-repeat",
-                              maskRepeat: "no-repeat",
-                              WebkitMaskPosition: "center",
-                              maskPosition: "center",
-                              WebkitMaskSize: "contain",
-                              maskSize: "contain",
-                            }}
-                          />
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </>
-                ) : (
-                  <BadgeFallbackArt unlocked={unlocked} label={label} />
-                )}
-
-                {isUnlocking ? (
-                  <>
-                    <div
-                      className="portal-badge-edge-spine portal-badge-edge-spine--left"
-                      style={{
-                        position: "absolute",
-                        left: "50%",
-                        top: "50%",
-                        width: "4.4%",
-                        height: "86%",
-                        borderRadius: 999,
-                        pointerEvents: "none",
-                      }}
-                    />
-
-                    <div
-                      className="portal-badge-edge-spine portal-badge-edge-spine--right"
-                      style={{
-                        position: "absolute",
-                        left: "50%",
-                        top: "50%",
-                        width: "4.4%",
-                        height: "86%",
-                        borderRadius: 999,
-                        pointerEvents: "none",
-                      }}
-                    />
-                  </>
-                ) : null}
-
-                {unlocked ? (
-                  <div
-                    className="portal-badge-centre-radiance"
-                    style={{
-                      position: "absolute",
-                      left: "50%",
-                      top: "50%",
-                      width: "50%",
-                      height: "50%",
-                      transform: "translate(-50%, -50%)",
-                      borderRadius: "50%",
-                      background:
-                        "radial-gradient(circle, rgba(255,255,255,0.13) 0%, rgba(255,255,255,0.045) 42%, rgba(255,255,255,0.00) 76%)",
-                      filter: "blur(4px)",
-                      pointerEvents: "none",
-                    }}
-                  />
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {showUnlockEvent ? (
-          <div
-            className="portal-badge-impact-flash"
-            style={{
-              position: "absolute",
-              inset: "-8%",
-              borderRadius: "50%",
-              pointerEvents: "none",
-            }}
+        <SpinStages isUnlocking={isUnlocking}>
+          <BadgeArtShell
+            imageUrl={imageUrl}
+            label={label}
+            unlocked={unlocked}
+            isUnlocking={isUnlocking}
+            isNewlyUnlocked={isNewlyUnlocked}
           />
-        ) : null}
+        </SpinStages>
+
+        {showUnlockEvent ? <ImpactFlash /> : null}
       </div>
     </div>
   );

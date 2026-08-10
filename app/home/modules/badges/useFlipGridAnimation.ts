@@ -62,7 +62,7 @@ function snapshotRects(
 
   for (const key of keys) {
     const node = nodeByKey.get(key);
-    if (!node || !node.isConnected) continue;
+    if (!node?.isConnected) continue;
     rects.set(key, getRelativeRect(node));
   }
 
@@ -250,7 +250,7 @@ export function useFlipGridAnimation(options: Options): {
       const previousRect = previousRectsRef.current.get(key);
       const nextRect = nextRects.get(key);
 
-      if (!node || !node.isConnected || !previousRect || !nextRect) continue;
+      if (!node?.isConnected || !previousRect || !nextRect) continue;
 
       const deltaX = previousRect.left - nextRect.left;
       const deltaY = previousRect.top - nextRect.top;

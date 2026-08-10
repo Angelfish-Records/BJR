@@ -18,9 +18,9 @@ const DISPLAY_MS = 5600;
 const EXIT_MS = 220;
 const RECENT_DEDUPE_WINDOW_MS = 10_000;
 
-type ProviderProps = {
+type ProviderProps = Readonly<{
   children: React.ReactNode;
-};
+}>;
 
 function dedupeIncomingBadges(
   badges: BadgeAwardNotice[],

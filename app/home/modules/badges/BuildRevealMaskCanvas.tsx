@@ -3,14 +3,14 @@
 
 import React from "react";
 
-type Props = {
+type Props = Readonly<{
   imageUrl: string;
   label: string;
   isActive: boolean;
   revealDelayMs?: number;
   revealDurationMs?: number;
   className?: string;
-};
+}>;
 
 const CANVAS_SIZE = 192;
 const TAU = Math.PI * 2;
@@ -33,7 +33,15 @@ function hashString(value: string): number {
   let hash = 2166136261;
 
   for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
+    const codePoint = value.codePointAt(index);
+    if (codePoint === undefined) continue;
+
+    const codeUnit =
+      codePoint > 0xffff
+        ? 0xd800 + ((codePoint - 0x10000) >> 10)
+        : codePoint;
+
+    hash ^= codeUnit;
     hash = Math.imul(hash, 16777619);
   }
 

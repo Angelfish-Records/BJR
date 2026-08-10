@@ -3,7 +3,7 @@
 import React from "react";
 import type { RecordingSearchResult } from "../_lib/badgeDashboardTypes";
 
-type Props = {
+type Props = Readonly<{
   label: string;
   helpText: string | null;
   query: string;
@@ -16,7 +16,7 @@ type Props = {
   onRunSearch: () => void;
   onSelectRecording: (recording: RecordingSearchResult) => void;
   onClearSelectedRecording: () => void;
-};
+}>;
 
 export function RecordingPicker(props: Props) {
   const {

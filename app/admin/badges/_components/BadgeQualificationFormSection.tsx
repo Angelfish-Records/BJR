@@ -22,20 +22,14 @@ import type {
 } from "../_lib/badgeDashboardTypes";
 import { RecordingPicker } from "./RecordingPicker";
 
-type ModeDescriptor = {
-  key: string;
-  label: string;
-  description: string;
-  metricFamily: string;
-  requiresRecording?: boolean;
-  supportsDateWindow?: boolean;
-};
+type FormChange = <K extends keyof FormState>(
+  key: K,
+  value: FormState[K],
+) => void;
 
-type Props = {
+type Props = Readonly<{
   badges: BadgeDefinitionOption[];
   form: FormState;
-  selectedBadge: BadgeDefinitionOption | null;
-  selectedMode: ModeDescriptor | null;
   modeInputs: SelectedModeInputRequirements;
   modeFieldText: SelectedModeFieldText;
   previewLoading: boolean;
@@ -49,17 +43,14 @@ type Props = {
   recordingSearchError: string | null;
   recordingSearchLoading: boolean;
   selectedRecording: RecordingSearchResult | null;
-  onFormChange: <K extends keyof FormState>(
-    key: K,
-    value: FormState[K],
-  ) => void;
+  onFormChange: FormChange;
   onRecordingQueryChange: (value: string) => void;
   onRunRecordingSearch: () => void;
   onSelectRecording: (recording: RecordingSearchResult) => void;
   onClearSelectedRecording: () => void;
   onRunPreview: () => void;
   onRunAward: () => void;
-};
+}>;
 
 const labelTextStyle: React.CSSProperties = {
   fontSize: FONT_SIZE_UI,
@@ -96,11 +87,13 @@ const actionButtonBaseStyle: React.CSSProperties = {
   fontWeight: 700,
 };
 
-function Field(props: {
-  label: string;
-  helpText?: string | null;
-  children: React.ReactNode;
-}) {
+function Field(
+  props: Readonly<{
+    label: string;
+    helpText?: string | null;
+    children: React.ReactNode;
+  }>,
+) {
   const { label, helpText, children } = props;
 
   return (
@@ -109,6 +102,411 @@ function Field(props: {
       {children}
       {helpText ? <span style={helpTextStyle}>{helpText}</span> : null}
     </label>
+  );
+}
+
+function BasicQualificationFields(
+  props: Readonly<{
+    form: FormState;
+    modeInputs: SelectedModeInputRequirements;
+    modeFieldText: SelectedModeFieldText;
+    onFormChange: FormChange;
+  }>,
+) {
+  const { form, modeInputs, modeFieldText, onFormChange } = props;
+  const showStandalonePlayCount =
+    modeInputs.minPlayCount && !modeInputs.activeWindow;
+  const showStandaloneCompletedCount =
+    modeInputs.minCompletedCount && !modeInputs.activeWindow;
+
+  return (
+    <>
+      {modeInputs.minMinutes ? (
+        <Field
+          label={modeFieldText.minMinutesLabel}
+          helpText={modeFieldText.minMinutesHelp}
+        >
+          <input
+            value={form.minMinutes}
+            onChange={(event) => onFormChange("minMinutes", event.target.value)}
+            inputMode="numeric"
+            style={controlStyle}
+          />
+        </Field>
+      ) : null}
+
+      {showStandalonePlayCount ? (
+        <Field
+          label={modeFieldText.minPlayCountLabel}
+          helpText={modeFieldText.minPlayCountHelp}
+        >
+          <input
+            value={form.minPlayCount}
+            onChange={(event) =>
+              onFormChange("minPlayCount", event.target.value)
+            }
+            inputMode="numeric"
+            style={controlStyle}
+          />
+        </Field>
+      ) : null}
+
+      {showStandaloneCompletedCount ? (
+        <Field
+          label={modeFieldText.minCompletedCountLabel}
+          helpText={modeFieldText.minCompletedCountHelp}
+        >
+          <input
+            value={form.minCompletedCount}
+            onChange={(event) =>
+              onFormChange("minCompletedCount", event.target.value)
+            }
+            inputMode="numeric"
+            style={controlStyle}
+          />
+        </Field>
+      ) : null}
+
+      {modeInputs.minContributionCount ? (
+        <Field
+          label={modeFieldText.minContributionCountLabel}
+          helpText={modeFieldText.minContributionCountHelp}
+        >
+          <input
+            value={form.minContributionCount}
+            onChange={(event) =>
+              onFormChange("minContributionCount", event.target.value)
+            }
+            inputMode="numeric"
+            style={controlStyle}
+          />
+        </Field>
+      ) : null}
+
+      {modeInputs.minVoteCount ? (
+        <Field
+          label={modeFieldText.minVoteCountLabel}
+          helpText={modeFieldText.minVoteCountHelp}
+        >
+          <input
+            value={form.minVoteCount}
+            onChange={(event) =>
+              onFormChange("minVoteCount", event.target.value)
+            }
+            inputMode="numeric"
+            style={controlStyle}
+          />
+        </Field>
+      ) : null}
+    </>
+  );
+}
+
+function JoinedWindowFields(
+  props: Readonly<{
+    form: FormState;
+    modeInputs: SelectedModeInputRequirements;
+    modeFieldText: SelectedModeFieldText;
+    onFormChange: FormChange;
+  }>,
+) {
+  const { form, modeInputs, modeFieldText, onFormChange } = props;
+  if (!modeInputs.joinedWindow) return null;
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div
+        style={{
+          display: "grid",
+          gap: 12,
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+        }}
+      >
+        <Field label={modeFieldText.joinedOnOrAfterLabel}>
+          <input
+            type="datetime-local"
+            value={form.joinedOnOrAfter}
+            onChange={(event) =>
+              onFormChange("joinedOnOrAfter", event.target.value)
+            }
+            style={controlStyle}
+          />
+        </Field>
+
+        <Field label={modeFieldText.joinedBeforeLabel}>
+          <input
+            type="datetime-local"
+            value={form.joinedBefore}
+            onChange={(event) =>
+              onFormChange("joinedBefore", event.target.value)
+            }
+            style={controlStyle}
+          />
+        </Field>
+      </div>
+
+      {modeFieldText.joinedWindowHelp ? (
+        <span style={helpTextStyle}>{modeFieldText.joinedWindowHelp}</span>
+      ) : null}
+    </div>
+  );
+}
+
+function ActiveWindowFields(
+  props: Readonly<{
+    form: FormState;
+    modeInputs: SelectedModeInputRequirements;
+    modeFieldText: SelectedModeFieldText;
+    onFormChange: FormChange;
+  }>,
+) {
+  const { form, modeInputs, modeFieldText, onFormChange } = props;
+  if (!modeInputs.activeWindow) return null;
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div
+        style={{
+          display: "grid",
+          gap: 12,
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+        }}
+      >
+        <Field label={modeFieldText.activeOnOrAfterLabel}>
+          <input
+            type="datetime-local"
+            value={form.activeOnOrAfter}
+            onChange={(event) =>
+              onFormChange("activeOnOrAfter", event.target.value)
+            }
+            style={controlStyle}
+          />
+        </Field>
+
+        <Field label={modeFieldText.activeBeforeLabel}>
+          <input
+            type="datetime-local"
+            value={form.activeBefore}
+            onChange={(event) =>
+              onFormChange("activeBefore", event.target.value)
+            }
+            style={controlStyle}
+          />
+        </Field>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gap: 12,
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+        }}
+      >
+        <Field
+          label={modeFieldText.minPlayCountLabel}
+          helpText={modeFieldText.minPlayCountHelp}
+        >
+          <input
+            value={form.minPlayCount}
+            onChange={(event) =>
+              onFormChange("minPlayCount", event.target.value)
+            }
+            inputMode="numeric"
+            style={controlStyle}
+          />
+        </Field>
+
+        <Field
+          label={modeFieldText.minProgressCountLabel}
+          helpText={modeFieldText.minProgressCountHelp}
+        >
+          <input
+            value={form.minProgressCount}
+            onChange={(event) =>
+              onFormChange("minProgressCount", event.target.value)
+            }
+            inputMode="numeric"
+            style={controlStyle}
+          />
+        </Field>
+
+        <Field
+          label={modeFieldText.minCompletedCountLabel}
+          helpText={modeFieldText.minCompletedCountHelp}
+        >
+          <input
+            value={form.minCompletedCount}
+            onChange={(event) =>
+              onFormChange("minCompletedCount", event.target.value)
+            }
+            inputMode="numeric"
+            style={controlStyle}
+          />
+        </Field>
+      </div>
+
+      {modeFieldText.activeWindowHelp ? (
+        <span style={helpTextStyle}>{modeFieldText.activeWindowHelp}</span>
+      ) : null}
+    </div>
+  );
+}
+
+function RecordingQualificationField(
+  props: Readonly<{
+    form: FormState;
+    modeInputs: SelectedModeInputRequirements;
+    modeFieldText: SelectedModeFieldText;
+    recordingQuery: string;
+    recordingResults: RecordingSearchResult[];
+    recordingSearchError: string | null;
+    recordingSearchLoading: boolean;
+    selectedRecording: RecordingSearchResult | null;
+    onRecordingQueryChange: (value: string) => void;
+    onRunRecordingSearch: () => void;
+    onSelectRecording: (recording: RecordingSearchResult) => void;
+    onClearSelectedRecording: () => void;
+  }>,
+) {
+  const {
+    form,
+    modeInputs,
+    modeFieldText,
+    recordingQuery,
+    recordingResults,
+    recordingSearchError,
+    recordingSearchLoading,
+    selectedRecording,
+    onRecordingQueryChange,
+    onRunRecordingSearch,
+    onSelectRecording,
+    onClearSelectedRecording,
+  } = props;
+
+  if (!modeInputs.recordingId) return null;
+
+  return (
+    <RecordingPicker
+      label={modeFieldText.recordingIdLabel}
+      helpText={modeFieldText.recordingIdHelp}
+      query={recordingQuery}
+      results={recordingResults}
+      error={recordingSearchError}
+      loading={recordingSearchLoading}
+      selectedRecording={selectedRecording}
+      selectedRecordingId={form.recordingId}
+      onQueryChange={onRecordingQueryChange}
+      onRunSearch={onRunRecordingSearch}
+      onSelectRecording={onSelectRecording}
+      onClearSelectedRecording={onClearSelectedRecording}
+    />
+  );
+}
+
+function QualificationActions(
+  props: Readonly<{
+    previewLoading: boolean;
+    awardLoading: boolean;
+    previewRowCount: number;
+    onRunPreview: () => void;
+    onRunAward: () => void;
+  }>,
+) {
+  const {
+    previewLoading,
+    awardLoading,
+    previewRowCount,
+    onRunPreview,
+    onRunAward,
+  } = props;
+  const awardDisabled = awardLoading || previewLoading || previewRowCount === 0;
+
+  return (
+    <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+      <button
+        type="button"
+        onClick={onRunPreview}
+        disabled={previewLoading}
+        style={{
+          ...actionButtonBaseStyle,
+          background: "rgba(255,255,255,0.04)",
+          cursor: previewLoading ? "default" : "pointer",
+          opacity: previewLoading ? 0.72 : 1,
+        }}
+      >
+        {previewLoading ? "Previewing…" : "Preview cohort"}
+      </button>
+
+      <button
+        type="button"
+        onClick={onRunAward}
+        disabled={awardDisabled}
+        style={{
+          ...actionButtonBaseStyle,
+          background: awardDisabled
+            ? "rgba(255,255,255,0.04)"
+            : "rgba(255,255,255,0.10)",
+          cursor: awardDisabled ? "default" : "pointer",
+          opacity: awardDisabled ? 0.72 : 1,
+        }}
+      >
+        {awardLoading ? "Awarding…" : "Award badge"}
+      </button>
+    </div>
+  );
+}
+
+function FeedbackMessage(
+  props: Readonly<{
+    message: string;
+    kind: "error" | "success";
+  }>,
+) {
+  const { message, kind } = props;
+  const isError = kind === "error";
+
+  return (
+    <div
+      style={{
+        borderRadius: 12,
+        border: isError
+          ? "1px solid rgba(255,143,143,0.22)"
+          : "1px solid rgba(159,240,184,0.22)",
+        background: isError
+          ? "rgba(255,143,143,0.08)"
+          : "rgba(159,240,184,0.08)",
+        padding: "10px 12px",
+        color: isError ? "#ffb1b1" : "#baf4ca",
+        fontSize: FONT_SIZE_UI,
+        lineHeight: 1.5,
+      }}
+    >
+      {message}
+    </div>
+  );
+}
+
+function QualificationFeedback(
+  props: Readonly<{
+    previewError: string | null;
+    awardError: string | null;
+    awardMessage: string | null;
+  }>,
+) {
+  const { previewError, awardError, awardMessage } = props;
+
+  return (
+    <>
+      {previewError ? (
+        <FeedbackMessage message={previewError} kind="error" />
+      ) : null}
+      {awardError ? (
+        <FeedbackMessage message={awardError} kind="error" />
+      ) : null}
+      {awardMessage ? (
+        <FeedbackMessage message={awardMessage} kind="success" />
+      ) : null}
+    </>
   );
 }
 
@@ -214,226 +612,41 @@ export function BadgeQualificationFormSection(props: Props) {
         </Field>
       </div>
 
-      {modeInputs.minMinutes ? (
-        <Field
-          label={modeFieldText.minMinutesLabel}
-          helpText={modeFieldText.minMinutesHelp}
-        >
-          <input
-            value={form.minMinutes}
-            onChange={(event) => onFormChange("minMinutes", event.target.value)}
-            inputMode="numeric"
-            style={controlStyle}
-          />
-        </Field>
-      ) : null}
+      <BasicQualificationFields
+        form={form}
+        modeInputs={modeInputs}
+        modeFieldText={modeFieldText}
+        onFormChange={onFormChange}
+      />
 
-      {modeInputs.minPlayCount && !modeInputs.activeWindow ? (
-        <Field
-          label={modeFieldText.minPlayCountLabel}
-          helpText={modeFieldText.minPlayCountHelp}
-        >
-          <input
-            value={form.minPlayCount}
-            onChange={(event) =>
-              onFormChange("minPlayCount", event.target.value)
-            }
-            inputMode="numeric"
-            style={controlStyle}
-          />
-        </Field>
-      ) : null}
+      <JoinedWindowFields
+        form={form}
+        modeInputs={modeInputs}
+        modeFieldText={modeFieldText}
+        onFormChange={onFormChange}
+      />
 
-      {modeInputs.minCompletedCount && !modeInputs.activeWindow ? (
-        <Field
-          label={modeFieldText.minCompletedCountLabel}
-          helpText={modeFieldText.minCompletedCountHelp}
-        >
-          <input
-            value={form.minCompletedCount}
-            onChange={(event) =>
-              onFormChange("minCompletedCount", event.target.value)
-            }
-            inputMode="numeric"
-            style={controlStyle}
-          />
-        </Field>
-      ) : null}
+      <ActiveWindowFields
+        form={form}
+        modeInputs={modeInputs}
+        modeFieldText={modeFieldText}
+        onFormChange={onFormChange}
+      />
 
-      {modeInputs.minContributionCount ? (
-        <Field
-          label={modeFieldText.minContributionCountLabel}
-          helpText={modeFieldText.minContributionCountHelp}
-        >
-          <input
-            value={form.minContributionCount}
-            onChange={(event) =>
-              onFormChange("minContributionCount", event.target.value)
-            }
-            inputMode="numeric"
-            style={controlStyle}
-          />
-        </Field>
-      ) : null}
-
-      {modeInputs.minVoteCount ? (
-        <Field
-          label={modeFieldText.minVoteCountLabel}
-          helpText={modeFieldText.minVoteCountHelp}
-        >
-          <input
-            value={form.minVoteCount}
-            onChange={(event) =>
-              onFormChange("minVoteCount", event.target.value)
-            }
-            inputMode="numeric"
-            style={controlStyle}
-          />
-        </Field>
-      ) : null}
-
-      {modeInputs.joinedWindow ? (
-        <div style={{ display: "grid", gap: 12 }}>
-          <div
-            style={{
-              display: "grid",
-              gap: 12,
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            }}
-          >
-            <Field label={modeFieldText.joinedOnOrAfterLabel}>
-              <input
-                type="datetime-local"
-                value={form.joinedOnOrAfter}
-                onChange={(event) =>
-                  onFormChange("joinedOnOrAfter", event.target.value)
-                }
-                style={controlStyle}
-              />
-            </Field>
-
-            <Field label={modeFieldText.joinedBeforeLabel}>
-              <input
-                type="datetime-local"
-                value={form.joinedBefore}
-                onChange={(event) =>
-                  onFormChange("joinedBefore", event.target.value)
-                }
-                style={controlStyle}
-              />
-            </Field>
-          </div>
-
-          {modeFieldText.joinedWindowHelp ? (
-            <span style={helpTextStyle}>{modeFieldText.joinedWindowHelp}</span>
-          ) : null}
-        </div>
-      ) : null}
-
-      {modeInputs.activeWindow ? (
-        <div style={{ display: "grid", gap: 12 }}>
-          <div
-            style={{
-              display: "grid",
-              gap: 12,
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            }}
-          >
-            <Field label={modeFieldText.activeOnOrAfterLabel}>
-              <input
-                type="datetime-local"
-                value={form.activeOnOrAfter}
-                onChange={(event) =>
-                  onFormChange("activeOnOrAfter", event.target.value)
-                }
-                style={controlStyle}
-              />
-            </Field>
-
-            <Field label={modeFieldText.activeBeforeLabel}>
-              <input
-                type="datetime-local"
-                value={form.activeBefore}
-                onChange={(event) =>
-                  onFormChange("activeBefore", event.target.value)
-                }
-                style={controlStyle}
-              />
-            </Field>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gap: 12,
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            }}
-          >
-            <Field
-              label={modeFieldText.minPlayCountLabel}
-              helpText={modeFieldText.minPlayCountHelp}
-            >
-              <input
-                value={form.minPlayCount}
-                onChange={(event) =>
-                  onFormChange("minPlayCount", event.target.value)
-                }
-                inputMode="numeric"
-                style={controlStyle}
-              />
-            </Field>
-
-            <Field
-              label={modeFieldText.minProgressCountLabel}
-              helpText={modeFieldText.minProgressCountHelp}
-            >
-              <input
-                value={form.minProgressCount}
-                onChange={(event) =>
-                  onFormChange("minProgressCount", event.target.value)
-                }
-                inputMode="numeric"
-                style={controlStyle}
-              />
-            </Field>
-
-            <Field
-              label={modeFieldText.minCompletedCountLabel}
-              helpText={modeFieldText.minCompletedCountHelp}
-            >
-              <input
-                value={form.minCompletedCount}
-                onChange={(event) =>
-                  onFormChange("minCompletedCount", event.target.value)
-                }
-                inputMode="numeric"
-                style={controlStyle}
-              />
-            </Field>
-          </div>
-
-          {modeFieldText.activeWindowHelp ? (
-            <span style={helpTextStyle}>{modeFieldText.activeWindowHelp}</span>
-          ) : null}
-        </div>
-      ) : null}
-
-      {modeInputs.recordingId ? (
-        <RecordingPicker
-          label={modeFieldText.recordingIdLabel}
-          helpText={modeFieldText.recordingIdHelp}
-          query={recordingQuery}
-          results={recordingResults}
-          error={recordingSearchError}
-          loading={recordingSearchLoading}
-          selectedRecording={selectedRecording}
-          selectedRecordingId={form.recordingId}
-          onQueryChange={onRecordingQueryChange}
-          onRunSearch={onRunRecordingSearch}
-          onSelectRecording={onSelectRecording}
-          onClearSelectedRecording={onClearSelectedRecording}
-        />
-      ) : null}
+      <RecordingQualificationField
+        form={form}
+        modeInputs={modeInputs}
+        modeFieldText={modeFieldText}
+        recordingQuery={recordingQuery}
+        recordingResults={recordingResults}
+        recordingSearchError={recordingSearchError}
+        recordingSearchLoading={recordingSearchLoading}
+        selectedRecording={selectedRecording}
+        onRecordingQueryChange={onRecordingQueryChange}
+        onRunRecordingSearch={onRunRecordingSearch}
+        onSelectRecording={onSelectRecording}
+        onClearSelectedRecording={onClearSelectedRecording}
+      />
 
       <Field label="Grant reason">
         <input
@@ -452,92 +665,19 @@ export function BadgeQualificationFormSection(props: Props) {
         />
       </Field>
 
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <button
-          type="button"
-          onClick={onRunPreview}
-          disabled={previewLoading}
-          style={{
-            ...actionButtonBaseStyle,
-            background: "rgba(255,255,255,0.04)",
-            cursor: previewLoading ? "default" : "pointer",
-            opacity: previewLoading ? 0.72 : 1,
-          }}
-        >
-          {previewLoading ? "Previewing…" : "Preview cohort"}
-        </button>
+      <QualificationActions
+        previewLoading={previewLoading}
+        awardLoading={awardLoading}
+        previewRowCount={previewRowCount}
+        onRunPreview={onRunPreview}
+        onRunAward={onRunAward}
+      />
 
-        <button
-          type="button"
-          onClick={onRunAward}
-          disabled={awardLoading || previewLoading || previewRowCount === 0}
-          style={{
-            ...actionButtonBaseStyle,
-            background:
-              awardLoading || previewLoading || previewRowCount === 0
-                ? "rgba(255,255,255,0.04)"
-                : "rgba(255,255,255,0.10)",
-            cursor:
-              awardLoading || previewLoading || previewRowCount === 0
-                ? "default"
-                : "pointer",
-            opacity:
-              awardLoading || previewLoading || previewRowCount === 0
-                ? 0.72
-                : 1,
-          }}
-        >
-          {awardLoading ? "Awarding…" : "Award badge"}
-        </button>
-      </div>
-
-      {previewError ? (
-        <div
-          style={{
-            borderRadius: 12,
-            border: "1px solid rgba(255,143,143,0.22)",
-            background: "rgba(255,143,143,0.08)",
-            padding: "10px 12px",
-            color: "#ffb1b1",
-            fontSize: FONT_SIZE_UI,
-            lineHeight: 1.5,
-          }}
-        >
-          {previewError}
-        </div>
-      ) : null}
-
-      {awardError ? (
-        <div
-          style={{
-            borderRadius: 12,
-            border: "1px solid rgba(255,143,143,0.22)",
-            background: "rgba(255,143,143,0.08)",
-            padding: "10px 12px",
-            color: "#ffb1b1",
-            fontSize: FONT_SIZE_UI,
-            lineHeight: 1.5,
-          }}
-        >
-          {awardError}
-        </div>
-      ) : null}
-
-      {awardMessage ? (
-        <div
-          style={{
-            borderRadius: 12,
-            border: "1px solid rgba(159,240,184,0.22)",
-            background: "rgba(159,240,184,0.08)",
-            padding: "10px 12px",
-            color: "#baf4ca",
-            fontSize: FONT_SIZE_UI,
-            lineHeight: 1.5,
-          }}
-        >
-          {awardMessage}
-        </div>
-      ) : null}
+      <QualificationFeedback
+        previewError={previewError}
+        awardError={awardError}
+        awardMessage={awardMessage}
+      />
     </section>
   );
 }

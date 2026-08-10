@@ -97,17 +97,15 @@ function loadHlsConstructor(): Promise<HlsJsConstructor> {
     return Promise.resolve(hlsConstructorCache);
   }
 
-  if (!hlsConstructorPromise) {
-    hlsConstructorPromise = import("hls.js")
-      .then((module) => {
-        hlsConstructorCache = module.default;
-        return module.default;
-      })
-      .catch((error: unknown) => {
-        hlsConstructorPromise = null;
-        throw error;
-      });
-  }
+  hlsConstructorPromise ??= import("hls.js")
+    .then((module) => {
+      hlsConstructorCache = module.default;
+      return module.default;
+    })
+    .catch((error: unknown) => {
+      hlsConstructorPromise = null;
+      throw error;
+    });
 
   return hlsConstructorPromise;
 }
@@ -229,7 +227,7 @@ function hasMediaSession(): boolean {
   return (
     typeof navigator !== "undefined" &&
     "mediaSession" in navigator &&
-    typeof navigator.mediaSession !== "undefined"
+    navigator.mediaSession !== undefined
   );
 }
 
@@ -575,6 +573,118 @@ function readQueueSharePlaybackAttribution(queue: {
   }
 
   return { context, scopeId };
+}
+
+type PlaybackTokenCacheEntry = {
+  token: string;
+  expiresAtMs: number;
+};
+
+type AnonSampleSession = {
+  id: string;
+  expiresAtMs: number;
+  playbackIds: ReadonlySet<string>;
+};
+
+function parsePlaybackExpiryMs(value: string | number): number {
+  return typeof value === "number"
+    ? value * 1000
+    : Date.parse(String(value));
+}
+
+function isAlbumSessionAuthorityCompatible(args: {
+  isUserLoaded: boolean;
+  isSignedIn: boolean | undefined;
+  currentShareToken: string | null;
+  mode: "full" | "sample";
+}): boolean {
+  if (!args.isUserLoaded) return true;
+
+  const expectsFullAuthority =
+    args.isSignedIn === true || args.currentShareToken !== null;
+
+  return args.mode === "full"
+    ? expectsFullAuthority
+    : !expectsFullAuthority;
+}
+
+function cacheSessionTrackTokens(
+  tracks: AlbumSessionToken[],
+  tokenCache: Map<string, PlaybackTokenCacheEntry>,
+): Map<string, PlaybackTokenCacheEntry> {
+  const byPlaybackId = new Map<string, PlaybackTokenCacheEntry>();
+
+  for (const track of tracks) {
+    const playbackId = (track.playbackId ?? "").trim();
+    const token = (track.token ?? "").trim();
+    const expiresAtMs = parsePlaybackExpiryMs(track.expiresAt);
+
+    if (!playbackId || !token || !Number.isFinite(expiresAtMs)) {
+      continue;
+    }
+
+    const entry = { token, expiresAtMs };
+    byPlaybackId.set(playbackId, entry);
+    tokenCache.set(playbackId, entry);
+  }
+
+  return byPlaybackId;
+}
+
+function buildAnonSampleSession(
+  sampleSession: { id: string; expiresAt: string | number } | null | undefined,
+  byPlaybackId: Map<string, PlaybackTokenCacheEntry>,
+): AnonSampleSession | null {
+  if (!sampleSession) return null;
+
+  const expiresAtMs = parsePlaybackExpiryMs(sampleSession.expiresAt);
+  if (!Number.isFinite(expiresAtMs)) return null;
+
+  return {
+    id: sampleSession.id,
+    expiresAtMs,
+    playbackIds: new Set(byPlaybackId.keys()),
+  };
+}
+
+function resolvePlaybackAuthorityKey(
+  isUserLoaded: boolean,
+  isSignedIn: boolean | undefined,
+): "loading" | "signed" | "anonymous" {
+  if (!isUserLoaded) return "loading";
+  return isSignedIn === true ? "signed" : "anonymous";
+}
+
+function resolveDeckHlsPath(
+  useStaticM4a: boolean,
+  useNativeHls: boolean,
+): DeckMeta["hlsPath"] {
+  if (useStaticM4a) return "static-m4a";
+  return useNativeHls ? "native" : "hlsjs";
+}
+
+function mediaSessionPlaybackStateForStatus(
+  status: string,
+): MediaSessionPlaybackState {
+  if (status === "playing") return "playing";
+  if (status === "paused" || status === "idle") return "paused";
+  return "none";
+}
+
+function createBooleanSettler(args: {
+  resolve: (ok: boolean) => void;
+  cleanup?: () => void;
+  onSuccess?: () => void;
+}): (ok: boolean) => void {
+  let settled = false;
+
+  return (ok: boolean) => {
+    if (settled) return;
+    settled = true;
+    args.cleanup?.();
+    if (ok) args.onSuccess?.();
+    args.resolve(ok);
+  };
 }
 
 export default function AudioEngine() {
@@ -945,11 +1055,7 @@ export default function AudioEngine() {
         expiresAt: string | number;
       } | null;
     }): boolean => {
-      const expiresAtMs =
-        typeof args.expiresAt === "number"
-          ? args.expiresAt * 1000
-          : Date.parse(String(args.expiresAt));
-
+      const expiresAtMs = parsePlaybackExpiryMs(args.expiresAt);
       if (!Number.isFinite(expiresAtMs)) return false;
 
       const currentShareToken = getShareTokenFromLocation();
@@ -959,55 +1065,30 @@ export default function AudioEngine() {
         return false;
       }
 
-      if (isUserLoaded) {
-        const expectsFullAuthority =
-          isSignedIn === true || currentShareToken !== null;
-
-        if (
-          (args.mode === "full" && !expectsFullAuthority) ||
-          (args.mode === "sample" && expectsFullAuthority)
-        ) {
-          return false;
-        }
+      if (
+        !isAlbumSessionAuthorityCompatible({
+          isUserLoaded,
+          isSignedIn,
+          currentShareToken,
+          mode: args.mode,
+        })
+      ) {
+        return false;
       }
 
-      // A server-issued sample is a new, bounded authority context. Purge
-      // broader tokens before caching it so a prior signed/share session can
-      // never leak full-album authority into anonymous playback.
       if (args.mode === "sample") {
         tokenCacheRef.current.clear();
         albumSessionCacheRef.current.clear();
         standbyRef.current = null;
         anonSampleSessionRef.current = null;
       } else {
-        // Full authority supersedes any previous anonymous sample marker. This
-        // is critical because sign-out/share-token removal must then trigger
-        // the ordinary anonymous cache purge rather than preserving full tokens.
         anonSampleSessionRef.current = null;
       }
 
-      const byPlaybackId = new Map<
-        string,
-        { token: string; expiresAtMs: number }
-      >();
-
-      for (const t of args.tracks) {
-        const playbackId = (t.playbackId ?? "").trim();
-        const token = (t.token ?? "").trim();
-
-        const trackExpiresAtMs =
-          typeof t.expiresAt === "number"
-            ? t.expiresAt * 1000
-            : Date.parse(String(t.expiresAt));
-
-        if (!playbackId || !token || !Number.isFinite(trackExpiresAtMs)) {
-          continue;
-        }
-
-        const entry = { token, expiresAtMs: trackExpiresAtMs };
-        byPlaybackId.set(playbackId, entry);
-        tokenCacheRef.current.set(playbackId, entry);
-      }
+      const byPlaybackId = cacheSessionTrackTokens(
+        args.tracks,
+        tokenCacheRef.current,
+      );
 
       if (byPlaybackId.size === 0) return false;
 
@@ -1018,19 +1099,13 @@ export default function AudioEngine() {
         byPlaybackId,
       });
 
-      if (args.mode === "sample" && args.sampleSession) {
-        const sampleExpiresAtMs =
-          typeof args.sampleSession.expiresAt === "number"
-            ? args.sampleSession.expiresAt * 1000
-            : Date.parse(String(args.sampleSession.expiresAt));
+      const sampleSession = buildAnonSampleSession(
+        args.sampleSession,
+        byPlaybackId,
+      );
 
-        if (Number.isFinite(sampleExpiresAtMs)) {
-          anonSampleSessionRef.current = {
-            id: args.sampleSession.id,
-            expiresAtMs: sampleExpiresAtMs,
-            playbackIds: new Set(byPlaybackId.keys()),
-          };
-        }
+      if (args.mode === "sample" && sampleSession) {
+        anonSampleSessionRef.current = sampleSession;
       }
 
       return true;
@@ -1093,11 +1168,10 @@ export default function AudioEngine() {
 
       // Different requested starts and auth states can produce different server
       // authority decisions. Never collapse them into one in-flight request.
-      const authorityKey = !isUserLoaded
-        ? "loading"
-        : isSignedIn === true
-          ? "signed"
-          : "anonymous";
+      const authorityKey = resolvePlaybackAuthorityKey(
+        isUserLoaded,
+        isSignedIn,
+      );
       const requestKey = `${key}::authority=${authorityKey}::start=${
         startPlaybackId ?? ""
       }`;
@@ -1368,6 +1442,326 @@ export default function AudioEngine() {
     ],
   );
 
+  const markDeckPrepared = React.useCallback(
+    (deckId: DeckId, attachKey: string): void => {
+      const meta = metaByDeckRef.current[deckId];
+
+      if (meta?.attachKey !== attachKey) return;
+
+      metaByDeckRef.current[deckId] = {
+        ...meta,
+        prepared: true,
+      };
+    },
+    [],
+  );
+
+  const attachStaticM4aSource = React.useCallback(
+    (args: {
+      audio: HTMLMediaElement;
+      deckId: DeckId;
+      recordingId: string;
+      playbackId: string;
+      attachKey: string;
+      srcUrl: string;
+      reason: "active" | "standby";
+    }): Promise<boolean> => {
+      const { audio, deckId, recordingId, playbackId, attachKey, srcUrl } =
+        args;
+
+      sendAudioDebug({
+        event:
+          args.reason === "standby"
+            ? "standby-static-m4a-attach"
+            : "active-static-m4a-attach",
+        albumId: pRef.current.queueContextId ?? null,
+        recordingId,
+        playbackId,
+        source: `AudioEngine.${deckId}`,
+      });
+
+      return new Promise<boolean>((resolve) => {
+        let timeoutId: number | null = null;
+
+        const snapshot = () =>
+          JSON.stringify({
+            readyState: audio.readyState,
+            networkState: audio.networkState,
+            currentTimeSec: Number(audio.currentTime.toFixed(3)),
+            bufferedAheadSec: Number(bufferedAheadSeconds(audio).toFixed(3)),
+          });
+
+        const cleanup = () => {
+          audio.removeEventListener("loadedmetadata", onMaybeReady);
+          audio.removeEventListener("canplay", onMaybeReady);
+          audio.removeEventListener("canplaythrough", onMaybeReady);
+          audio.removeEventListener("progress", onMaybeReady);
+          audio.removeEventListener("error", onError);
+
+          if (timeoutId != null) {
+            window.clearTimeout(timeoutId);
+            timeoutId = null;
+          }
+        };
+
+        const finish = createBooleanSettler({
+          resolve,
+          cleanup,
+          onSuccess: () => markDeckPrepared(deckId, attachKey),
+        });
+
+        const onMaybeReady = () => {
+          const ready =
+            args.reason === "standby"
+              ? isStaticM4aStandbyBuffered(audio)
+              : audio.readyState >= HTMLMediaElement.HAVE_METADATA;
+
+          if (!ready) return;
+
+          if (args.reason === "standby") {
+            sendAudioDebug({
+              event: "standby-static-m4a-buffered",
+              albumId: pRef.current.queueContextId ?? null,
+              recordingId,
+              playbackId,
+              source: `AudioEngine.${deckId}`,
+              detail: snapshot(),
+            });
+          }
+
+          finish(true);
+        };
+
+        const onError = () => {
+          sendAudioDebug({
+            event:
+              args.reason === "standby"
+                ? "standby-static-m4a-error"
+                : "active-static-m4a-error",
+            albumId: pRef.current.queueContextId ?? null,
+            recordingId,
+            playbackId,
+            source: `AudioEngine.${deckId}`,
+            detail: snapshot(),
+          });
+
+          finish(false);
+        };
+
+        audio.addEventListener("loadedmetadata", onMaybeReady);
+        audio.addEventListener("canplay", onMaybeReady);
+        audio.addEventListener("canplaythrough", onMaybeReady);
+        audio.addEventListener("progress", onMaybeReady);
+        audio.addEventListener("error", onError);
+
+        try {
+          audio.src = srcUrl;
+          audio.load();
+          onMaybeReady();
+        } catch {
+          onError();
+          return;
+        }
+
+        timeoutId = window.setTimeout(() => {
+          sendAudioDebug({
+            event:
+              args.reason === "standby"
+                ? "standby-static-m4a-buffer-timeout"
+                : "active-static-m4a-timeout",
+            albumId: pRef.current.queueContextId ?? null,
+            recordingId,
+            playbackId,
+            source: `AudioEngine.${deckId}`,
+            detail: snapshot(),
+          });
+
+          finish(false);
+        }, STATIC_M4A_STANDBY_TIMEOUT_MS);
+      });
+    },
+    [markDeckPrepared],
+  );
+
+  const attachNativeHlsSource = React.useCallback(
+    (args: {
+      audio: HTMLMediaElement;
+      deckId: DeckId;
+      recordingId: string;
+      playbackId: string;
+      attachKey: string;
+      srcUrl: string;
+      reason: "active" | "standby";
+    }): Promise<boolean> => {
+      const { audio, deckId, recordingId, playbackId, attachKey, srcUrl } =
+        args;
+
+      sendAudioDebug({
+        event:
+          args.reason === "standby"
+            ? "standby-native-hls-safari"
+            : "active-native-hls-safari",
+        albumId: pRef.current.queueContextId ?? null,
+        recordingId,
+        playbackId,
+        source: `AudioEngine.${deckId}`,
+      });
+
+      return new Promise<boolean>((resolve) => {
+        const cleanup = () => {
+          audio.removeEventListener("loadedmetadata", onReady);
+          audio.removeEventListener("canplay", onReady);
+          audio.removeEventListener("error", onError);
+        };
+
+        const finish = createBooleanSettler({
+          resolve,
+          cleanup,
+          onSuccess: () => markDeckPrepared(deckId, attachKey),
+        });
+
+        const onReady = () => finish(true);
+        const onError = () => finish(false);
+
+        audio.addEventListener("loadedmetadata", onReady);
+        audio.addEventListener("canplay", onReady);
+        audio.addEventListener("error", onError);
+
+        try {
+          audio.src = srcUrl;
+          audio.load();
+        } catch {
+          finish(false);
+        }
+
+        window.setTimeout(() => finish(true), 2500);
+      });
+    },
+    [markDeckPrepared],
+  );
+
+  const attachHlsJsSource = React.useCallback(
+    async (args: {
+      audio: HTMLMediaElement;
+      deckId: DeckId;
+      recordingId: string;
+      playbackId: string;
+      attachKey: string;
+      srcUrl: string;
+      reason: "active" | "standby";
+      seq: number;
+    }): Promise<boolean> => {
+      const { audio, deckId, recordingId, playbackId, attachKey, srcUrl } =
+        args;
+
+      let HlsJs: HlsJsConstructor;
+
+      try {
+        HlsJs = await loadHlsConstructor();
+      } catch {
+        sendAudioDebug({
+          event: "hls-load-failed",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId,
+          playbackId,
+          source: `AudioEngine.${deckId}`,
+        });
+
+        return false;
+      }
+
+      if (args.seq !== loadSeq.current && args.reason === "active") {
+        return false;
+      }
+
+      if (!HlsJs.isSupported()) {
+        sendAudioDebug({
+          event: "hls-unsupported",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId,
+          playbackId,
+          source: `AudioEngine.${deckId}`,
+        });
+
+        return false;
+      }
+
+      sendAudioDebug({
+        event:
+          args.reason === "standby" ? "standby-hlsjs-attach" : "hlsjs-attach",
+        albumId: pRef.current.queueContextId ?? null,
+        recordingId,
+        playbackId,
+        source: `AudioEngine.${deckId}`,
+      });
+
+      return new Promise<boolean>((resolve) => {
+        const hls = new HlsJs({
+          enableWorker: true,
+          lowLatencyMode: false,
+          backBufferLength: 30,
+        });
+
+        hlsByDeckRef.current[deckId] = hls;
+
+        const finish = createBooleanSettler({
+          resolve,
+          onSuccess: () => markDeckPrepared(deckId, attachKey),
+        });
+
+        hls.on(HlsJs.Events.ERROR, (_event, err) => {
+          if (!err?.fatal) return;
+
+          sendAudioDebug({
+            event:
+              args.reason === "standby"
+                ? "standby-hls-fatal"
+                : "active-hls-fatal",
+            albumId: pRef.current.queueContextId ?? null,
+            recordingId,
+            playbackId,
+            source: `AudioEngine.${deckId}.hls`,
+            detail: `${err.type ?? "unknown"}:${err.details ?? "error"}`,
+          });
+
+          finish(false);
+
+          if (args.reason === "active") {
+            reportLocalPlaybackErrorAsGate(
+              "INVALID_REQUEST",
+              `HLS fatal: ${err.details ?? "error"}`,
+            );
+          }
+        });
+
+        hls.once(HlsJs.Events.MANIFEST_PARSED, () => {
+          sendAudioDebug({
+            event:
+              args.reason === "standby"
+                ? "standby-manifest-parsed"
+                : "hls-manifest-parsed",
+            albumId: pRef.current.queueContextId ?? null,
+            recordingId,
+            playbackId,
+            source: `AudioEngine.${deckId}.hls`,
+          });
+
+          finish(true);
+        });
+
+        try {
+          hls.attachMedia(audio);
+          hls.loadSource(srcUrl);
+        } catch {
+          finish(false);
+        }
+
+        window.setTimeout(() => finish(false), 10_000);
+      });
+    },
+    [markDeckPrepared, reportLocalPlaybackErrorAsGate],
+  );
+
   const attachTrackToDeck = React.useCallback(
     async (args: {
       deckId: DeckId;
@@ -1376,8 +1770,8 @@ export default function AudioEngine() {
       seq: number;
       reason: "active" | "standby";
     }): Promise<boolean> => {
-      const a = getAudio(args.deckId);
-      if (!a) return false;
+      const audio = getAudio(args.deckId);
+      if (!audio) return false;
 
       const playbackId = (args.track.muxPlaybackId ?? "").trim();
       const recordingId = args.track.recordingId;
@@ -1385,15 +1779,11 @@ export default function AudioEngine() {
 
       const attachKey = `${playbackId}:${pRef.current.reloadNonce}`;
       const useStaticM4a = shouldUseStaticM4a();
+      const useNativeHls = !useStaticM4a && shouldUseNativeHls(audio);
+      const hlsPath = resolveDeckHlsPath(useStaticM4a, useNativeHls);
       const srcUrl = useStaticM4a
         ? muxSignedStaticAudioUrl(playbackId, args.token)
         : muxSignedHlsUrl(playbackId, args.token);
-      const useNativeHls = !useStaticM4a && shouldUseNativeHls(a);
-      const hlsPath = useStaticM4a
-        ? "static-m4a"
-        : useNativeHls
-          ? "native"
-          : "hlsjs";
 
       sendAudioDebug({
         event: "transport-path-selected",
@@ -1405,8 +1795,10 @@ export default function AudioEngine() {
           epochMs: Date.now(),
           reason: args.reason,
           path: hlsPath,
-          nativeHlsCanPlay: a.canPlayType("application/vnd.apple.mpegurl"),
-          alternateNativeHlsCanPlay: a.canPlayType("application/x-mpegURL"),
+          nativeHlsCanPlay: audio.canPlayType(
+            "application/vnd.apple.mpegurl",
+          ),
+          alternateNativeHlsCanPlay: audio.canPlayType("application/x-mpegURL"),
           hlsJsLoaded: hlsConstructorCache !== null,
           hlsJsSupported: getKnownHlsJsSupport(),
           userAgent:
@@ -1432,11 +1824,11 @@ export default function AudioEngine() {
         return false;
       }
 
-      a.crossOrigin = "anonymous";
-      a.preload =
+      audio.crossOrigin = "anonymous";
+      audio.preload =
         args.reason === "standby" || useStaticM4a ? "auto" : "metadata";
-      a.volume = Math.max(0, Math.min(1, pRef.current.volume));
-      a.muted = pRef.current.muted;
+      audio.volume = Math.max(0, Math.min(1, pRef.current.volume));
+      audio.muted = pRef.current.muted;
 
       metaByDeckRef.current[args.deckId] = {
         deckId: args.deckId,
@@ -1447,303 +1839,36 @@ export default function AudioEngine() {
         hlsPath,
       };
 
+      const sourceArgs = {
+        audio,
+        deckId: args.deckId,
+        recordingId,
+        playbackId,
+        attachKey,
+        srcUrl,
+        reason: args.reason,
+      };
+
       if (useStaticM4a) {
-        sendAudioDebug({
-          event:
-            args.reason === "standby"
-              ? "standby-static-m4a-attach"
-              : "active-static-m4a-attach",
-          albumId: pRef.current.queueContextId ?? null,
-          recordingId,
-          playbackId,
-          source: `AudioEngine.${args.deckId}`,
-        });
-
-        return new Promise<boolean>((resolve) => {
-          let settled = false;
-          let timeoutId: number | null = null;
-
-          const snapshot = () =>
-            JSON.stringify({
-              readyState: a.readyState,
-              networkState: a.networkState,
-              currentTimeSec: Number(a.currentTime.toFixed(3)),
-              bufferedAheadSec: Number(bufferedAheadSeconds(a).toFixed(3)),
-            });
-
-          const cleanup = () => {
-            a.removeEventListener("loadedmetadata", onMaybeReady);
-            a.removeEventListener("canplay", onMaybeReady);
-            a.removeEventListener("canplaythrough", onMaybeReady);
-            a.removeEventListener("progress", onMaybeReady);
-            a.removeEventListener("error", onError);
-
-            if (timeoutId != null) {
-              window.clearTimeout(timeoutId);
-              timeoutId = null;
-            }
-          };
-
-          const finish = (ok: boolean) => {
-            if (settled) return;
-
-            settled = true;
-            cleanup();
-
-            const meta = metaByDeckRef.current[args.deckId];
-
-            if (ok && meta?.attachKey === attachKey) {
-              metaByDeckRef.current[args.deckId] = {
-                ...meta,
-                prepared: true,
-              };
-            }
-
-            resolve(ok);
-          };
-
-          const onMaybeReady = () => {
-            const ready =
-              args.reason === "standby"
-                ? isStaticM4aStandbyBuffered(a)
-                : a.readyState >= HTMLMediaElement.HAVE_METADATA;
-
-            if (!ready) return;
-
-            if (args.reason === "standby") {
-              sendAudioDebug({
-                event: "standby-static-m4a-buffered",
-                albumId: pRef.current.queueContextId ?? null,
-                recordingId,
-                playbackId,
-                source: `AudioEngine.${args.deckId}`,
-                detail: snapshot(),
-              });
-            }
-
-            finish(true);
-          };
-
-          const onError = () => {
-            sendAudioDebug({
-              event:
-                args.reason === "standby"
-                  ? "standby-static-m4a-error"
-                  : "active-static-m4a-error",
-              albumId: pRef.current.queueContextId ?? null,
-              recordingId,
-              playbackId,
-              source: `AudioEngine.${args.deckId}`,
-              detail: snapshot(),
-            });
-
-            finish(false);
-          };
-
-          a.addEventListener("loadedmetadata", onMaybeReady);
-          a.addEventListener("canplay", onMaybeReady);
-          a.addEventListener("canplaythrough", onMaybeReady);
-          a.addEventListener("progress", onMaybeReady);
-          a.addEventListener("error", onError);
-
-          try {
-            a.src = srcUrl;
-            a.load();
-            onMaybeReady();
-          } catch {
-            onError();
-            return;
-          }
-
-          timeoutId = window.setTimeout(() => {
-            sendAudioDebug({
-              event:
-                args.reason === "standby"
-                  ? "standby-static-m4a-buffer-timeout"
-                  : "active-static-m4a-timeout",
-              albumId: pRef.current.queueContextId ?? null,
-              recordingId,
-              playbackId,
-              source: `AudioEngine.${args.deckId}`,
-              detail: snapshot(),
-            });
-
-            finish(false);
-          }, STATIC_M4A_STANDBY_TIMEOUT_MS);
-        });
+        return attachStaticM4aSource(sourceArgs);
       }
 
       if (useNativeHls) {
-        sendAudioDebug({
-          event:
-            args.reason === "standby"
-              ? "standby-native-hls-safari"
-              : "active-native-hls-safari",
-          albumId: pRef.current.queueContextId ?? null,
-          recordingId,
-          playbackId,
-          source: `AudioEngine.${args.deckId}`,
-        });
-
-        return new Promise<boolean>((resolve) => {
-          let settled = false;
-
-          const cleanup = () => {
-            a.removeEventListener("loadedmetadata", onReady);
-            a.removeEventListener("canplay", onReady);
-            a.removeEventListener("error", onError);
-          };
-
-          const finish = (ok: boolean) => {
-            if (settled) return;
-            settled = true;
-            cleanup();
-            const meta = metaByDeckRef.current[args.deckId];
-            if (ok && meta?.attachKey === attachKey) {
-              metaByDeckRef.current[args.deckId] = {
-                ...meta,
-                prepared: true,
-              };
-            }
-            resolve(ok);
-          };
-
-          const onReady = () => finish(true);
-          const onError = () => finish(false);
-
-          a.addEventListener("loadedmetadata", onReady);
-          a.addEventListener("canplay", onReady);
-          a.addEventListener("error", onError);
-
-          try {
-            a.src = srcUrl;
-            a.load();
-          } catch {
-            finish(false);
-          }
-
-          window.setTimeout(() => finish(true), 2500);
-        });
+        return attachNativeHlsSource(sourceArgs);
       }
 
-      let HlsJs: HlsJsConstructor;
-
-      try {
-        HlsJs = await loadHlsConstructor();
-      } catch {
-        sendAudioDebug({
-          event: "hls-load-failed",
-          albumId: pRef.current.queueContextId ?? null,
-          recordingId,
-          playbackId,
-          source: `AudioEngine.${args.deckId}`,
-        });
-
-        return false;
-      }
-
-      if (args.seq !== loadSeq.current && args.reason === "active") {
-        return false;
-      }
-
-      if (!HlsJs.isSupported()) {
-        sendAudioDebug({
-          event: "hls-unsupported",
-          albumId: pRef.current.queueContextId ?? null,
-          recordingId,
-          playbackId,
-          source: `AudioEngine.${args.deckId}`,
-        });
-
-        return false;
-      }
-
-      sendAudioDebug({
-        event:
-          args.reason === "standby" ? "standby-hlsjs-attach" : "hlsjs-attach",
-        albumId: pRef.current.queueContextId ?? null,
-        recordingId,
-        playbackId,
-        source: `AudioEngine.${args.deckId}`,
-      });
-
-      return new Promise<boolean>((resolve) => {
-        let settled = false;
-
-        const hls = new HlsJs({
-          enableWorker: true,
-          lowLatencyMode: false,
-          backBufferLength: 30,
-        });
-
-        hlsByDeckRef.current[args.deckId] = hls;
-
-        const finish = (ok: boolean) => {
-          if (settled) return;
-          settled = true;
-
-          const meta = metaByDeckRef.current[args.deckId];
-          if (ok && meta?.attachKey === attachKey) {
-            metaByDeckRef.current[args.deckId] = {
-              ...meta,
-              prepared: true,
-            };
-          }
-
-          resolve(ok);
-        };
-
-        hls.on(HlsJs.Events.ERROR, (_event, err) => {
-          if (!err?.fatal) return;
-
-          sendAudioDebug({
-            event:
-              args.reason === "standby"
-                ? "standby-hls-fatal"
-                : "active-hls-fatal",
-            albumId: pRef.current.queueContextId ?? null,
-            recordingId,
-            playbackId,
-            source: `AudioEngine.${args.deckId}.hls`,
-            detail: `${err.type ?? "unknown"}:${err.details ?? "error"}`,
-          });
-
-          finish(false);
-
-          if (args.reason === "active") {
-            reportLocalPlaybackErrorAsGate(
-              "INVALID_REQUEST",
-              `HLS fatal: ${err.details ?? "error"}`,
-            );
-          }
-        });
-
-        hls.once(HlsJs.Events.MANIFEST_PARSED, () => {
-          sendAudioDebug({
-            event:
-              args.reason === "standby"
-                ? "standby-manifest-parsed"
-                : "hls-manifest-parsed",
-            albumId: pRef.current.queueContextId ?? null,
-            recordingId,
-            playbackId,
-            source: `AudioEngine.${args.deckId}.hls`,
-          });
-
-          finish(true);
-        });
-
-        try {
-          hls.attachMedia(a);
-          hls.loadSource(srcUrl);
-        } catch {
-          finish(false);
-        }
-
-        window.setTimeout(() => finish(false), 10_000);
+      return attachHlsJsSource({
+        ...sourceArgs,
+        seq: args.seq,
       });
     },
-    [getAudio, reportLocalPlaybackErrorAsGate, stopDeck],
+    [
+      attachHlsJsSource,
+      attachNativeHlsSource,
+      attachStaticM4aSource,
+      getAudio,
+      stopDeck,
+    ],
   );
 
   const playDeck = React.useCallback(
@@ -2089,9 +2214,8 @@ export default function AudioEngine() {
       const prepared = standbyRef.current;
 
       if (
-        !prepared ||
-        prepared.recordingId !== nextTrack.recordingId ||
-        prepared.playbackId !== playbackId
+        prepared?.recordingId !== nextTrack.recordingId ||
+        prepared?.playbackId !== playbackId
       ) {
         sendAudioDebug({
           event: "standby-promote-missing-prepared-deck",
@@ -2161,6 +2285,36 @@ export default function AudioEngine() {
     [playDeck, stopDeck],
   );
 
+  const resumeAttachedActiveDeck = React.useCallback(
+    async (deckId: DeckId, shouldPlay: boolean): Promise<void> => {
+      if (!shouldPlay) return;
+
+      const played = await playDeck(deckId, "active");
+      if (!played) return;
+
+      playIntentRef.current = false;
+      pRef.current.clearIntent();
+    },
+    [playDeck],
+  );
+
+  const playNewlyAttachedDeck = React.useCallback(
+    async (deckId: DeckId, shouldPlay: boolean): Promise<void> => {
+      if (!shouldPlay) return;
+
+      const played = await playDeck(deckId, "active");
+
+      if (played) {
+        playIntentRef.current = false;
+        pRef.current.clearIntent();
+        return;
+      }
+
+      playIntentRef.current = true;
+    },
+    [playDeck],
+  );
+
   const attachActiveTrack = React.useCallback(async () => {
     const s = pRef.current;
     const track = s.current;
@@ -2171,18 +2325,13 @@ export default function AudioEngine() {
 
     const activeDeck = activeDeckRef.current;
     const activeMeta = metaByDeckRef.current[activeDeck];
+    const shouldPlayExisting = s.intent === "play" || playIntentRef.current;
 
     if (
       activeMeta?.recordingId === track.recordingId &&
       activeMeta.playbackId === playbackId
     ) {
-      if (s.intent === "play" || playIntentRef.current) {
-        const played = await playDeck(activeDeck, "active");
-        if (played) {
-          playIntentRef.current = false;
-          pRef.current.clearIntent();
-        }
-      }
+      await resumeAttachedActiveDeck(activeDeck, shouldPlayExisting);
       return;
     }
 
@@ -2222,10 +2371,9 @@ export default function AudioEngine() {
         surfaceGate: true,
       }));
 
-    if (!token) return;
-    if (seq !== loadSeq.current) return;
+    if (!token || seq !== loadSeq.current) return;
 
-    const ok = await attachTrackToDeck({
+    const attached = await attachTrackToDeck({
       deckId: activeDeck,
       track,
       token: token.token,
@@ -2233,28 +2381,22 @@ export default function AudioEngine() {
       reason: "active",
     });
 
-    if (!ok || seq !== loadSeq.current) return;
+    if (!attached || seq !== loadSeq.current) return;
 
-    if (
+    const shouldPlayAttached =
       s.intent === "play" ||
       playIntentRef.current ||
-      s.status === "loading"
-    ) {
-      const played = await playDeck(activeDeck, "active");
-      if (played) {
-        playIntentRef.current = false;
-        pRef.current.clearIntent();
-      } else {
-        playIntentRef.current = true;
-      }
-    }
+      s.status === "loading";
+
+    await playNewlyAttachedDeck(activeDeck, shouldPlayAttached);
   }, [
     attachTrackToDeck,
     ensureTokenForTrack,
     getCachedTokenForPlaybackId,
     hardStopAll,
-    playDeck,
+    playNewlyAttachedDeck,
     resurfacePlaybackGate,
+    resumeAttachedActiveDeck,
   ]);
 
   React.useEffect(() => {
@@ -2473,8 +2615,8 @@ export default function AudioEngine() {
       analyser.getByteTimeDomainData(time);
 
       let sum = 0;
-      for (let i = 0; i < time.length; i++) {
-        const v = (time[i]! - 128) / 128;
+      for (const sample of time) {
+        const v = (sample - 128) / 128;
         sum += v * v;
       }
       const rms = Math.sqrt(sum / time.length);
@@ -3062,9 +3204,8 @@ export default function AudioEngine() {
 
       if (
         !playbackId ||
-        !prepared ||
-        prepared.recordingId !== nextTrack.recordingId ||
-        prepared.playbackId !== playbackId
+        prepared?.recordingId !== nextTrack.recordingId ||
+        prepared?.playbackId !== playbackId
       ) {
         return false;
       }
@@ -3072,8 +3213,7 @@ export default function AudioEngine() {
       const meta = metaByDeckRef.current[prepared.deckId];
 
       return Boolean(
-        meta &&
-        meta.prepared &&
+        meta?.prepared &&
         meta.attachKey === prepared.attachKey &&
         meta.recordingId === nextTrack.recordingId &&
         meta.playbackId === playbackId,
@@ -3112,8 +3252,7 @@ export default function AudioEngine() {
         if (
           !activeAudio ||
           activeDeckRef.current !== args.deckId ||
-          !currentTrack ||
-          currentTrack.recordingId !== args.currentTrack.recordingId ||
+          currentTrack?.recordingId !== args.currentTrack.recordingId ||
           playbackId !== currentPlaybackId ||
           activeAudio.paused ||
           activeAudio.ended
@@ -3165,22 +3304,144 @@ export default function AudioEngine() {
       earlyHandoffFrame = window.requestAnimationFrame(tick);
     };
 
+    const maybeSendProgressHeartbeat = (
+      deckId: DeckId,
+      recordingId: string,
+      progressMs: number,
+      durationMs: number,
+    ): void => {
+      const heartbeatBucket = Math.floor(progressMs / 60_000);
+      if (heartbeatBucket <= 0) return;
+
+      const heartbeatKey = `${recordingId}:${heartbeatBucket}`;
+      if (debugProgressHeartbeatRef.current === heartbeatKey) return;
+
+      debugProgressHeartbeatRef.current = heartbeatKey;
+      sendAudioDebug({
+        event: "playback-progress-heartbeat",
+        albumId: pRef.current.queueContextId ?? null,
+        recordingId,
+        playbackId: pRef.current.current?.muxPlaybackId ?? null,
+        source: `AudioEngine.${deckId}`,
+        detail: `progress=${progressMs};duration=${durationMs}`,
+      });
+    };
+
+    const maybeConfirmStaticM4aProgress = (args: {
+      deckId: DeckId;
+      audio: HTMLMediaElement;
+      recordingId: string;
+      progressMs: number;
+    }): void => {
+      const deckMeta = metaByDeckRef.current[args.deckId];
+      const proofKey = `${args.recordingId}:${
+        telemetrySessionIdRef.current ?? ""
+      }`;
+
+      if (
+        deckMeta?.hlsPath !== "static-m4a" ||
+        args.progressMs < 5_000 ||
+        staticM4aProgressProofRef.current === proofKey
+      ) {
+        return;
+      }
+
+      staticM4aProgressProofRef.current = proofKey;
+
+      sendAudioDebug({
+        event: "static-m4a-progress-confirmed",
+        albumId: pRef.current.queueContextId ?? null,
+        recordingId: args.recordingId,
+        playbackId: pRef.current.current?.muxPlaybackId ?? null,
+        source: `AudioEngine.${args.deckId}`,
+        detail: JSON.stringify({
+          visibility:
+            typeof document === "undefined" ? null : document.visibilityState,
+          currentTimeSec: Number(args.audio.currentTime.toFixed(3)),
+          bufferedAheadSec: Number(bufferedAheadSeconds(args.audio).toFixed(3)),
+        }),
+      });
+    };
+
+    const maybeWarmNextTrack = (args: {
+      recordingId: string;
+      nextTrack: PlayerTrack | null;
+      remainingMs: number;
+    }): void => {
+      if (
+        !args.nextTrack ||
+        args.remainingMs <= 0 ||
+        args.remainingMs > STANDBY_PREPARE_WINDOW_MS
+      ) {
+        return;
+      }
+
+      const warmKey = `${args.recordingId}:${args.nextTrack.recordingId}:${
+        telemetrySessionIdRef.current ?? ""
+      }`;
+
+      if (nearEndWarmKeyRef.current === warmKey) return;
+
+      nearEndWarmKeyRef.current = warmKey;
+      void prefetchCurrentQueueAlbumSession();
+      void prepareStandbyForTrack(args.nextTrack);
+    };
+
+    const maybeArmEarlyHandoff = (args: {
+      deckId: DeckId;
+      currentTrack: PlayerTrack | null;
+      nextTrack: PlayerTrack | null;
+      remainingMs: number;
+    }): void => {
+      if (
+        !args.currentTrack ||
+        !args.nextTrack ||
+        args.remainingMs <= GAPLESS_EARLY_PROMOTION_LEAD_MS ||
+        args.remainingMs > GAPLESS_EARLY_PROMOTION_ARM_WINDOW_MS
+      ) {
+        return;
+      }
+
+      armEarlyHandoff({
+        deckId: args.deckId,
+        currentTrack: args.currentTrack,
+        nextTrack: args.nextTrack,
+      });
+    };
+
+    const maybeReportTelemetryComplete = (args: {
+      recordingId: string;
+      progressMs: number;
+      durationMs: number;
+    }): void => {
+      if (args.progressMs / args.durationMs < 0.9) return;
+
+      void reportTelemetryComplete({
+        recordingId: args.recordingId,
+        playbackId: telemetrySessionIdRef.current ?? "",
+        progressMs: args.progressMs,
+        durationMs: args.durationMs,
+      });
+    };
+
     const onTime = (deckId: DeckId) => {
       if (deckId !== activeDeckRef.current) return;
 
-      const a = getAudio(deckId);
-      if (!a) return;
+      const audio = getAudio(deckId);
+      if (!audio) return;
 
-      const ms = Math.floor(a.currentTime * 1000);
-      mediaSurface.setTime(ms);
-      pRef.current.setPositionMs(ms);
+      const progressMs = Math.floor(audio.currentTime * 1000);
+      mediaSurface.setTime(progressMs);
+      pRef.current.setPositionMs(progressMs);
 
       const currentTrack = pRef.current.current;
-      const curId = currentTrack?.recordingId ?? "";
+      const recordingId = currentTrack?.recordingId ?? "";
       const currentPlaybackId = (currentTrack?.muxPlaybackId ?? "").trim();
 
       const catalogueDurationMs =
-        (curId ? pRef.current.durationByRecordingId[curId] : 0) ||
+        (recordingId
+          ? pRef.current.durationByRecordingId[recordingId]
+          : 0) ||
         currentTrack?.durationMs ||
         0;
 
@@ -3188,122 +3449,67 @@ export default function AudioEngine() {
         ? (pRef.current.assetDurationByPlaybackId[currentPlaybackId] ?? 0)
         : 0;
 
-      // The live element is closest to the actual delivered rendition and is
-      // therefore authoritative for playback, telemetry, and end detection.
-      const liveAssetDurationMs = readFiniteMediaDurationMs(a);
-
-      const durMs =
+      const liveAssetDurationMs = readFiniteMediaDurationMs(audio);
+      const durationMs =
         liveAssetDurationMs || cachedAssetDurationMs || catalogueDurationMs;
 
-      if (durMs <= 0) return;
+      if (durationMs <= 0) return;
 
-      const heartbeatBucket = Math.floor(ms / 60_000);
-      const heartbeatKey = `${curId}:${heartbeatBucket}`;
-
-      if (
-        heartbeatBucket > 0 &&
-        debugProgressHeartbeatRef.current !== heartbeatKey
-      ) {
-        debugProgressHeartbeatRef.current = heartbeatKey;
-        sendAudioDebug({
-          event: "playback-progress-heartbeat",
-          albumId: pRef.current.queueContextId ?? null,
-          recordingId: curId,
-          playbackId: pRef.current.current?.muxPlaybackId ?? null,
-          source: `AudioEngine.${deckId}`,
-          detail: `progress=${ms};duration=${durMs}`,
-        });
-      }
+      maybeSendProgressHeartbeat(
+        deckId,
+        recordingId,
+        progressMs,
+        durationMs,
+      );
 
       setMediaSessionPositionStateSafe({
-        durationSec: durMs / 1000,
-        positionSec: ms / 1000,
+        durationSec: durationMs / 1000,
+        positionSec: progressMs / 1000,
         playbackRate: 1,
       });
 
       reportTelemetryPlay({
-        recordingId: curId,
+        recordingId,
         playbackId: telemetrySessionIdRef.current ?? "",
-        progressMs: ms,
-        durationMs: durMs,
+        progressMs,
+        durationMs,
       });
 
       reportTelemetryProgress({
-        recordingId: curId,
+        recordingId,
         playbackId: telemetrySessionIdRef.current ?? "",
-        progressMs: ms,
-        durationMs: durMs,
+        progressMs,
+        durationMs,
       });
 
-      const deckMeta = metaByDeckRef.current[deckId];
-      const staticM4aProgressProofKey = `${curId}:${
-        telemetrySessionIdRef.current ?? ""
-      }`;
+      maybeConfirmStaticM4aProgress({
+        deckId,
+        audio,
+        recordingId,
+        progressMs,
+      });
 
-      if (
-        deckMeta?.hlsPath === "static-m4a" &&
-        ms >= 5_000 &&
-        staticM4aProgressProofRef.current !== staticM4aProgressProofKey
-      ) {
-        staticM4aProgressProofRef.current = staticM4aProgressProofKey;
-
-        sendAudioDebug({
-          event: "static-m4a-progress-confirmed",
-          albumId: pRef.current.queueContextId ?? null,
-          recordingId: curId,
-          playbackId: pRef.current.current?.muxPlaybackId ?? null,
-          source: `AudioEngine.${deckId}`,
-          detail: JSON.stringify({
-            visibility:
-              typeof document === "undefined" ? null : document.visibilityState,
-            currentTimeSec: Number(a.currentTime.toFixed(3)),
-            bufferedAheadSec: Number(bufferedAheadSeconds(a).toFixed(3)),
-          }),
-        });
-      }
-
-      const remainingMs = durMs - ms;
+      const remainingMs = durationMs - progressMs;
       const nextTrack = getNextTrack();
 
-      if (
-        nextTrack &&
-        remainingMs > 0 &&
-        remainingMs <= STANDBY_PREPARE_WINDOW_MS
-      ) {
-        const warmKey = `${curId}:${nextTrack.recordingId}:${
-          telemetrySessionIdRef.current ?? ""
-        }`;
+      maybeWarmNextTrack({
+        recordingId,
+        nextTrack,
+        remainingMs,
+      });
 
-        if (nearEndWarmKeyRef.current !== warmKey) {
-          nearEndWarmKeyRef.current = warmKey;
-          void prefetchCurrentQueueAlbumSession();
-          void prepareStandbyForTrack(nextTrack);
-        }
-      }
+      maybeArmEarlyHandoff({
+        deckId,
+        currentTrack,
+        nextTrack,
+        remainingMs,
+      });
 
-      if (
-        currentTrack &&
-        nextTrack &&
-        remainingMs > GAPLESS_EARLY_PROMOTION_LEAD_MS &&
-        remainingMs <= GAPLESS_EARLY_PROMOTION_ARM_WINDOW_MS
-      ) {
-        armEarlyHandoff({
-          deckId,
-          currentTrack,
-          nextTrack,
-        });
-      }
-
-      const pct = ms / durMs;
-
-      if (pct >= 0.9) {
-        void reportTelemetryComplete({
-          recordingId: curId,
-          playbackId: telemetrySessionIdRef.current ?? "",
-          progressMs: ms,
-          durationMs: durMs,
-        });
-      }
+      maybeReportTelemetryComplete({
+        recordingId,
+        progressMs,
+        durationMs,
+      });
     };
 
     const onLoadedMeta = (deckId: DeckId) => {
@@ -3745,11 +3951,7 @@ export default function AudioEngine() {
 
     try {
       navigator.mediaSession.playbackState =
-        p.status === "playing"
-          ? "playing"
-          : p.status === "paused" || p.status === "idle"
-            ? "paused"
-            : "none";
+        mediaSessionPlaybackStateForStatus(p.status);
     } catch {}
 
     const setHandler = (
@@ -3903,14 +4105,12 @@ export default function AudioEngine() {
         ref={audioARef}
         crossOrigin="anonymous"
         preload="metadata"
-        playsInline
         style={{ display: "none" }}
       />
       <audio
         ref={audioBRef}
         crossOrigin="anonymous"
         preload="metadata"
-        playsInline
         style={{ display: "none" }}
       />
     </>

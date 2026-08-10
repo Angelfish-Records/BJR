@@ -1,7 +1,7 @@
 // web/lib/shareTokenPlaybackContext.ts
 import "server-only";
 
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { sql } from "@vercel/postgres";
 import {
   getRecordingSummaryByRecordingId,
@@ -220,7 +220,7 @@ export function issueShareTokenPlaybackContext(params: {
 
   const tokenExpiryMs = params.tokenExpiresAt
     ? Date.parse(params.tokenExpiresAt)
-    : NaN;
+    : Number.NaN;
 
   const expiryMs = Number.isFinite(tokenExpiryMs)
     ? Math.min(rollingExpiry, tokenExpiryMs)
@@ -293,7 +293,7 @@ export async function resolveShareTokenPlaybackContext(params: {
   if (tokenScopeId !== expectedScopeId) return null;
   if (token.revoked_at) return null;
 
-  const tokenExpiryMs = token.expires_at ? Date.parse(token.expires_at) : NaN;
+  const tokenExpiryMs = token.expires_at ? Date.parse(token.expires_at) : Number.NaN;
 
   if (Number.isFinite(tokenExpiryMs) && tokenExpiryMs <= Date.now()) {
     return null;

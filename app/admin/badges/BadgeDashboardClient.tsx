@@ -9,7 +9,6 @@ import { BadgeQualificationFormSection } from "./_components/BadgeQualificationF
 import { PreviewResultsSection } from "./_components/PreviewResultsSection";
 import type {
   AwardResponse,
-  BadgeDefinitionOption,
   FormState,
   PreviewResponse,
   PreviewRow,
@@ -22,10 +21,34 @@ import {
   DEFAULT_FORM_STATE,
 } from "./_lib/badgeDashboardUtils";
 
+function pluralize(
+  count: number,
+  singular: string,
+  plural = `${singular}s`,
+): string {
+  return count === 1 ? singular : plural;
+}
+
+function buildAwardMessage(
+  result: NonNullable<AwardResponse["result"]>,
+): string {
+  const { entitlementKey, attempted, inserted, alreadyHeld } = result;
+
+  if (inserted === attempted) {
+    return `Awarded ${entitlementKey} to ${inserted} ${pluralize(inserted, "member")}.`;
+  }
+
+  if (inserted === 0 && alreadyHeld > 0) {
+    return `No new grants were created. ${alreadyHeld} ${pluralize(alreadyHeld, "member")} already held ${entitlementKey}.`;
+  }
+
+  return `Processed ${attempted} ${pluralize(attempted, "member")} for ${entitlementKey}: ${inserted} new ${pluralize(inserted, "grant")}, ${alreadyHeld} already held.`;
+}
+
 export default function BadgeDashboardClient({
   embed,
   badgeDefinitions,
-}: Props) {
+}: Readonly<Props>) {
   const sortedBadges = React.useMemo(() => {
     return [...badgeDefinitions].sort((a, b) => {
       if (a.displayOrder !== b.displayOrder) {
@@ -61,15 +84,6 @@ export default function BadgeDashboardClient({
     React.useState(false);
   const [selectedRecording, setSelectedRecording] =
     React.useState<RecordingSearchResult | null>(null);
-
-  const selectedBadge = React.useMemo(() => {
-    return (
-      sortedBadges.find(
-        (badge: BadgeDefinitionOption) =>
-          badge.entitlementKey === form.entitlementKey,
-      ) ?? null
-    );
-  }, [form.entitlementKey, sortedBadges]);
 
   const selectedMode = React.useMemo(() => {
     return BADGE_PREVIEW_MODES.find((mode) => mode.key === form.mode) ?? null;
@@ -175,7 +189,7 @@ export default function BadgeDashboardClient({
       setSelectedRecording(recording);
       setRecordingQuery(
         [recording.title, recording.artist, recording.albumTitle]
-          .filter((value): value is string => Boolean(value && value.trim()))
+          .filter((value): value is string => Boolean(value?.trim()))
           .join(" • "),
       );
       setRecordingResults([]);
@@ -273,21 +287,7 @@ export default function BadgeDashboardClient({
         throw new Error(json.error || "Unable to award badge.");
       }
 
-      const { entitlementKey, attempted, inserted, alreadyHeld } = json.result;
-
-      if (inserted === attempted) {
-        setAwardMessage(
-          `Awarded ${entitlementKey} to ${inserted} member${inserted === 1 ? "" : "s"}.`,
-        );
-      } else if (inserted === 0 && alreadyHeld > 0) {
-        setAwardMessage(
-          `No new grants were created. ${alreadyHeld} member${alreadyHeld === 1 ? "" : "s"} already held ${entitlementKey}.`,
-        );
-      } else {
-        setAwardMessage(
-          `Processed ${attempted} member${attempted === 1 ? "" : "s"} for ${entitlementKey}: ${inserted} new grant${inserted === 1 ? "" : "s"}, ${alreadyHeld} already held.`,
-        );
-      }
+      setAwardMessage(buildAwardMessage(json.result));
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unable to award badge.";
@@ -343,8 +343,6 @@ export default function BadgeDashboardClient({
         <BadgeQualificationFormSection
           badges={sortedBadges}
           form={form}
-          selectedBadge={selectedBadge}
-          selectedMode={selectedMode}
           modeInputs={modeInputs}
           modeFieldText={modeFieldText}
           previewLoading={previewLoading}

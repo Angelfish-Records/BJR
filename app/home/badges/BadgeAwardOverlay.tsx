@@ -6,15 +6,19 @@ import { createPortal } from "react-dom";
 import BadgeAwardRevealCard from "./BadgeAwardRevealCard";
 import type { BadgeAwardNotice } from "./badgeAwardTypes";
 
-type Props = {
+type Props = Readonly<{
   active: boolean;
   visible: boolean;
   badge: BadgeAwardNotice | null;
   onDismiss: () => void;
   allowAdminRibbonAbove?: boolean;
-};
+}>;
 
-function BodyPortal(props: { children: React.ReactNode }) {
+function BodyPortal(
+  props: Readonly<{
+    children: React.ReactNode;
+  }>,
+) {
   const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
@@ -39,9 +43,7 @@ function useAdminRibbonAboveOverlay(active: boolean) {
     const el = getEl();
     if (!el) return;
 
-    if (debugbarStyleRef.current == null) {
-      debugbarStyleRef.current = el.getAttribute("style") ?? "";
-    }
+    debugbarStyleRef.current ??= el.getAttribute("style") ?? "";
 
     if (active) {
       el.setAttribute(
@@ -81,20 +83,11 @@ export default function BadgeAwardOverlay(props: Props) {
     <BodyPortal>
       <div
         aria-hidden="true"
-        role="button"
-        tabIndex={0}
-        onClick={onDismiss}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onDismiss();
-          }
-        }}
         style={{
           position: "fixed",
           inset: 0,
           zIndex: 21000,
-          pointerEvents: "auto",
+          pointerEvents: "none",
           backdropFilter: "blur(10px)",
           WebkitBackdropFilter: "blur(10px)",
           background: visible ? "rgba(0,0,0,0.24)" : "rgba(0,0,0,0.00)",
@@ -104,25 +97,31 @@ export default function BadgeAwardOverlay(props: Props) {
         }}
       />
 
-      <div
-        role="button"
-        tabIndex={0}
+      <button
+        type="button"
         aria-label="Dismiss badge award overlay"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) onDismiss();
-        }}
-        onKeyDown={(e) => {
-          if (e.target !== e.currentTarget) return;
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onDismiss();
-          }
-        }}
+        onClick={onDismiss}
         style={{
+          appearance: "none",
           position: "fixed",
           inset: 0,
           zIndex: 31000,
-          pointerEvents: "auto",
+          width: "100%",
+          height: "100%",
+          border: "none",
+          padding: 0,
+          margin: 0,
+          background: "transparent",
+          cursor: "default",
+        }}
+      />
+
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 31001,
+          pointerEvents: "none",
           display: "grid",
           placeItems: "center",
           padding: "min(8vh, 64px) 16px",
@@ -139,6 +138,7 @@ export default function BadgeAwardOverlay(props: Props) {
             width: "100%",
             display: "grid",
             placeItems: "center",
+            pointerEvents: "auto",
           }}
         >
           <BadgeAwardRevealCard badge={badge} dismissHintVisible={visible} />

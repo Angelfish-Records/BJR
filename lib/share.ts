@@ -31,9 +31,57 @@ export type ShareTarget =
       url: string;
     };
 
+type AlbumShareInput = {
+  type: "album";
+  methodHint?: ShareMethod;
+  origin?: string;
+  st?: string;
+  album: {
+    slug: string;
+    title: string;
+    artistName?: string;
+    id?: string;
+  };
+};
+
+type TrackShareInput = {
+  type: "track";
+  methodHint?: ShareMethod;
+  origin?: string;
+  st?: string;
+  album: {
+    slug: string;
+    title: string;
+    artistName?: string;
+    id?: string;
+  };
+  track: {
+    recordingId: string;
+    displayId: string;
+    title: string;
+  };
+};
+
+type PostShareInput = {
+  type: "post";
+  methodHint?: ShareMethod;
+  origin?: string;
+  st?: string;
+  post: {
+    slug: string;
+    title?: string;
+    id?: string;
+  };
+  authorName?: string;
+};
+
+type ShareInput = AlbumShareInput | TrackShareInput | PostShareInput;
+type AlbumLikeShareInput = AlbumShareInput | TrackShareInput;
+type ShareTargetType = ShareTarget["type"];
+
 function stripTrailingSlash(s: string) {
   let end = s.length;
-  while (end > 0 && s.charCodeAt(end - 1) === 47) {
+  while (end > 0 && s.codePointAt(end - 1) === 47) {
     end -= 1;
   }
   return s.slice(0, end);
@@ -41,8 +89,10 @@ function stripTrailingSlash(s: string) {
 
 export function getOrigin(explicitOrigin?: string) {
   if (explicitOrigin) return stripTrailingSlash(explicitOrigin);
-  if (typeof window !== "undefined" && window.location?.origin)
+  if (typeof window !== "undefined" && window.location?.origin) {
     return window.location.origin;
+  }
+
   const env = process.env.NEXT_PUBLIC_APP_URL;
   if (env) return stripTrailingSlash(env);
   return "";
@@ -51,7 +101,7 @@ export function getOrigin(explicitOrigin?: string) {
 function addUtm(
   u: URL,
   method: ShareMethod,
-  targetType: "album" | "track" | "post",
+  targetType: ShareTargetType,
 ) {
   u.searchParams.set("utm_source", "share");
   u.searchParams.set("utm_medium", method);
@@ -69,126 +119,122 @@ function encodePathSeg(s: string) {
   return encodeURIComponent(s);
 }
 
-export function buildShareTarget(
-  input:
-    | {
-        type: "album";
-        methodHint?: ShareMethod;
-        origin?: string;
-        st?: string;
-        album: {
-          slug: string;
-          title: string;
-          artistName?: string;
-          id?: string;
-        };
-      }
-    | {
-        type: "track";
-        methodHint?: ShareMethod;
-        origin?: string;
-        st?: string;
-        album: {
-          slug: string;
-          title: string;
-          artistName?: string;
-          id?: string;
-        };
-        track: { recordingId: string; displayId: string; title: string };
-      }
-    | {
-        type: "post";
-        methodHint?: ShareMethod;
-        origin?: string;
-        st?: string;
-        post: { slug: string; title?: string; id?: string };
-        authorName?: string;
-      },
+function buildShareUrl(params: {
+  origin: string;
+  basePath: string;
+  st?: string;
+  method: ShareMethod;
+  targetType: ShareTargetType;
+}): string {
+  if (!params.origin) {
+    return params.basePath;
+  }
+
+  const absoluteUrl = new URL(`${params.origin}${params.basePath}`);
+  maybeAddSt(absoluteUrl, params.st);
+  addUtm(absoluteUrl, params.method, params.targetType);
+  return absoluteUrl.toString();
+}
+
+function resolveAlbumDisplayTitle(
+  rawTitle: string | null | undefined,
+): string {
+  const albumTitleRaw = (rawTitle ?? "").toString().trim();
+
+  if (albumTitleRaw.length === 0) {
+    return "Album";
+  }
+
+  return albumTitleRaw;
+}
+
+function buildPostShareTarget(
+  input: PostShareInput,
+  origin: string,
+  method: ShareMethod,
 ): ShareTarget {
-  const origin = getOrigin(input.origin);
-  const method = input.methodHint ?? "copy";
+  const postTitle = input.post.title?.trim() || "Post";
+  const basePath = `/journal?post=${encodePathSeg(input.post.slug)}`;
+  const url = buildShareUrl({
+    origin,
+    basePath,
+    st: input.st,
+    method,
+    targetType: "post",
+  });
 
-  if (input.type === "post") {
-    const postTitle = input.post.title?.trim() || "Post";
-    const basePath = `/journal?post=${encodePathSeg(input.post.slug)}`;
-    const baseAbs = origin ? `${origin}${basePath}` : basePath;
+  const who = input.authorName?.trim();
+  const title = who ? `${postTitle} · ${who}` : postTitle;
+  const text = who ? `Read “${postTitle}” by ${who}` : `Read “${postTitle}”`;
 
-    const abs = origin ? new URL(baseAbs) : null;
-    if (abs) {
-      maybeAddSt(abs, input.st);
-      addUtm(abs, method, "post");
-    }
+  return {
+    type: "post",
+    postSlug: input.post.slug,
+    postId: input.post.id,
+    title,
+    text,
+    url,
+  };
+}
 
-    const url = abs ? abs.toString() : baseAbs;
-
-    const who = input.authorName?.trim();
-    const title = who ? `${postTitle} · ${who}` : postTitle;
-    const text = who ? `Read “${postTitle}” by ${who}` : `Read “${postTitle}”`;
-
-    return {
-      type: "post",
-      postSlug: input.post.slug,
-      postId: input.post.id,
-      title,
-      text,
-      url,
-    };
-  }
-
+function albumShareMetadata(input: AlbumLikeShareInput): {
+  artist: string | undefined;
+  albumTitle: string;
+  basePath: string;
+} {
   const artist = input.album.artistName?.trim();
-  const albumTitleRaw = (input.album.title ?? "").toString().trim();
-
-  // Never treat slug-ish strings as display titles.
-  // If title is missing, keep it generic rather than leaking `god-defend`.
-  const albumTitle =
-    albumTitleRaw.length > 0 && albumTitleRaw.includes("-") === false
-      ? albumTitleRaw
-      : albumTitleRaw.length > 0
-        ? albumTitleRaw // keep non-empty titles even if they contain hyphens
-        : "Album";
-
-  // ✅ canonical album base path
+  const albumTitle = resolveAlbumDisplayTitle(input.album.title);
   const basePath = `/${encodePathSeg(input.album.slug)}`;
-  const baseAbs = origin ? `${origin}${basePath}` : basePath;
 
-  if (input.type === "album") {
-    const url = origin
-      ? addUtm(
-          maybeAddSt(new URL(baseAbs), input.st),
-          method,
-          "album",
-        ).toString()
-      : baseAbs;
+  return { artist, albumTitle, basePath };
+}
 
-    const title = artist ? `${artist} · ${albumTitle}` : albumTitle;
-    const text = artist
-      ? `Listen to ${albumTitle} by ${artist}`
-      : `Listen to ${albumTitle}`;
+function buildAlbumShareTarget(
+  input: AlbumShareInput,
+  origin: string,
+  method: ShareMethod,
+): ShareTarget {
+  const { artist, albumTitle, basePath } = albumShareMetadata(input);
+  const url = buildShareUrl({
+    origin,
+    basePath,
+    st: input.st,
+    method,
+    targetType: "album",
+  });
 
-    return {
-      type: "album",
-      albumSlug: input.album.slug,
-      albumId: input.album.id,
-      title,
-      text,
-      url,
-    };
-  }
+  const title = artist ? `${artist} · ${albumTitle}` : albumTitle;
+  const text = artist
+    ? `Listen to ${albumTitle} by ${artist}`
+    : `Listen to ${albumTitle}`;
 
-  // ✅ canonical track path (no query-based player state)
+  return {
+    type: "album",
+    albumSlug: input.album.slug,
+    albumId: input.album.id,
+    title,
+    text,
+    url,
+  };
+}
+
+function buildTrackShareTarget(
+  input: TrackShareInput,
+  origin: string,
+  method: ShareMethod,
+): ShareTarget {
+  const { artist, albumTitle } = albumShareMetadata(input);
   const trackTitle = input.track.title?.trim() || "Track";
   const trackPath = `/${encodePathSeg(input.album.slug)}/${encodePathSeg(
     input.track.displayId,
   )}`;
-  const trackAbs = origin ? `${origin}${trackPath}` : trackPath;
-
-  const url = origin
-    ? addUtm(
-        maybeAddSt(new URL(trackAbs), input.st),
-        method,
-        "track",
-      ).toString()
-    : trackAbs;
+  const url = buildShareUrl({
+    origin,
+    basePath: trackPath,
+    st: input.st,
+    method,
+    targetType: "track",
+  });
 
   const title = artist
     ? `${trackTitle} · ${albumTitle} · ${artist}`
@@ -210,57 +256,97 @@ export function buildShareTarget(
   };
 }
 
+export function buildShareTarget(input: ShareInput): ShareTarget {
+  const origin = getOrigin(input.origin);
+  const method = input.methodHint ?? "copy";
+
+  if (input.type === "post") {
+    return buildPostShareTarget(input, origin, method);
+  }
+
+  if (input.type === "album") {
+    return buildAlbumShareTarget(input, origin, method);
+  }
+
+  return buildTrackShareTarget(input, origin, method);
+}
+
 export type ShareResult =
   | { ok: true; method: "native" | "copy"; url: string }
   | { ok: false; reason: "clipboard_unavailable" | "failed"; url: string };
 
+type ShareNavigator = Navigator & {
+  share?: (data: {
+    title?: string;
+    text?: string;
+    url?: string;
+  }) => Promise<void>;
+  canShare?: (data?: {
+    title?: string;
+    text?: string;
+    url?: string;
+    files?: File[];
+  }) => boolean;
+};
+
 function isAbortError(err: unknown) {
   if (!err || typeof err !== "object") return false;
-  const anyErr = err as { name?: unknown; message?: unknown };
-  return anyErr.name === "AbortError";
+  const errorRecord = err as { name?: unknown };
+  return errorRecord.name === "AbortError";
 }
 
-export async function performShare(target: ShareTarget): Promise<ShareResult> {
-  const url = target.url;
+async function tryNativeShare(
+  target: ShareTarget,
+): Promise<ShareResult | null> {
+  if (typeof navigator === "undefined") {
+    return null;
+  }
 
-  if (typeof navigator !== "undefined") {
-    const nav = navigator as Navigator & {
-      share?: (data: {
-        title?: string;
-        text?: string;
-        url?: string;
-      }) => Promise<void>;
-      canShare?: (data?: {
-        title?: string;
-        text?: string;
-        url?: string;
-        files?: File[];
-      }) => boolean;
-    };
+  const nav = navigator as ShareNavigator;
+  if (typeof nav.share !== "function") {
+    return null;
+  }
 
-    if (typeof nav.share === "function") {
-      const payload = { title: target.title, text: target.text, url };
-      if (typeof nav.canShare !== "function" || nav.canShare(payload)) {
-        try {
-          await nav.share(payload);
-          return { ok: true, method: "native", url };
-        } catch (err) {
-          if (isAbortError(err)) {
-            return { ok: false, reason: "failed", url };
-          }
-          // fall through to clipboard
-        }
-      }
-    }
+  const payload = {
+    title: target.title,
+    text: target.text,
+    url: target.url,
+  };
+
+  if (typeof nav.canShare === "function" && !nav.canShare(payload)) {
+    return null;
   }
 
   try {
-    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(url);
-      return { ok: true, method: "copy", url };
+    await nav.share(payload);
+    return { ok: true, method: "native", url: target.url };
+  } catch (err) {
+    if (isAbortError(err)) {
+      return { ok: false, reason: "failed", url: target.url };
     }
-    return { ok: false, reason: "clipboard_unavailable", url };
+
+    return null;
+  }
+}
+
+async function copyShareUrl(url: string): Promise<ShareResult> {
+  try {
+    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+      return { ok: false, reason: "clipboard_unavailable", url };
+    }
+
+    await navigator.clipboard.writeText(url);
+    return { ok: true, method: "copy", url };
   } catch {
     return { ok: false, reason: "failed", url };
   }
+}
+
+export async function performShare(target: ShareTarget): Promise<ShareResult> {
+  const nativeResult = await tryNativeShare(target);
+  if (nativeResult) {
+    return nativeResult;
+  }
+
+  return copyShareUrl(target.url);
 }

@@ -513,21 +513,66 @@ async function upsertPlaybackComplete(params: {
   `;
 }
 
-export async function POST(req: NextRequest) {
-  const correlationId = newCorrelationId();
+type NormalizedPlaybackTelemetry = {
+  event: PlaybackTelemetryEvent;
+  recordingId: string;
+  playbackId: string;
+  milestoneKey: string;
+  listenedMs: number;
+  progressMs: number;
+  durationMs: number | null;
+  albumScopeId: string | null;
+  sharePlaybackContext: string | null;
+};
 
-  let body: PlaybackTelemetryRequest = {};
-  try {
-    body = (await req.json()) as PlaybackTelemetryRequest;
-  } catch {
-    const res = NextResponse.json(
-      { ok: false, error: "invalid_json" },
-      { status: 400 },
-    );
-    res.headers.set("x-correlation-id", correlationId);
-    return res;
+type TelemetryProcessingParams = NormalizedPlaybackTelemetry & {
+  memberId: string | null;
+  userId: string | null;
+  correlationId: string;
+  occurredAtIso: string;
+};
+
+function telemetryResponse(
+  body: Record<string, unknown>,
+  status: number,
+  correlationId: string,
+): NextResponse {
+  const response = NextResponse.json(body, { status });
+  response.headers.set("x-correlation-id", correlationId);
+  return response;
+}
+
+function telemetryResponseWithAnon(
+  body: Record<string, unknown>,
+  status: number,
+  correlationId: string,
+  anonId: string,
+  isNewAnonId: boolean,
+): NextResponse {
+  const response = telemetryResponse(body, status, correlationId);
+
+  if (isNewAnonId) {
+    persistAnonId(response, anonId);
   }
 
+  return response;
+}
+
+async function readPlaybackTelemetryRequest(
+  req: NextRequest,
+): Promise<PlaybackTelemetryRequest | null> {
+  try {
+    return (await req.json()) as PlaybackTelemetryRequest;
+  } catch {
+    return null;
+  }
+}
+
+function normalizePlaybackTelemetryRequest(
+  body: PlaybackTelemetryRequest,
+):
+  | { ok: true; value: NormalizedPlaybackTelemetry }
+  | { ok: false; error: "invalid_request" | "invalid_progress" } {
   const event = body.event;
   const recordingId = asTrimmedString(body.recordingId);
   const playbackId = asTrimmedString(body.playbackId);
@@ -543,230 +588,330 @@ export async function POST(req: NextRequest) {
     !playbackId ||
     !milestoneKey
   ) {
-    const res = NextResponse.json(
-      { ok: false, error: "invalid_request" },
-      { status: 400 },
-    );
-    res.headers.set("x-correlation-id", correlationId);
-    return res;
+    return { ok: false, error: "invalid_request" };
   }
 
   if (event === "progress" && listenedMs <= 0) {
-    const res = NextResponse.json(
-      { ok: false, error: "invalid_progress" },
-      { status: 400 },
-    );
-    res.headers.set("x-correlation-id", correlationId);
-    return res;
+    return { ok: false, error: "invalid_progress" };
   }
 
-  const { userId } = await auth();
-  const memberId = userId ? await getMemberIdByClerkUserId(userId) : null;
+  return {
+    ok: true,
+    value: {
+      event,
+      recordingId,
+      playbackId,
+      milestoneKey,
+      listenedMs,
+      progressMs,
+      durationMs,
+      albumScopeId: asTrimmedString(body.albumScopeId) || null,
+      sharePlaybackContext: asTrimmedString(body.sharePlaybackContext) || null,
+    },
+  };
+}
 
-  const { anonId, isNew: isNewAnonId } = ensureAnonId(req);
+const TELEMETRY_EVENT_TYPES: Record<PlaybackTelemetryEvent, string> = {
+  play: EVENT_TYPES.PLAYBACK_TELEMETRY_PLAY,
+  progress: EVENT_TYPES.PLAYBACK_TELEMETRY_PROGRESS,
+  complete: EVENT_TYPES.PLAYBACK_TELEMETRY_COMPLETE,
+};
 
-  const albumScopeId = asTrimmedString(body.albumScopeId) || null;
-  const sharePlaybackContext =
-    asTrimmedString(body.sharePlaybackContext) || null;
+async function insertTelemetryDedupe(params: {
+  memberId: string | null;
+  anonId: string;
+  recordingId: string;
+  playbackId: string;
+  eventType: string;
+  milestoneKey: string;
+}): Promise<boolean> {
+  if (params.memberId) {
+    return insertDedupeKey({
+      memberId: params.memberId,
+      playbackId: params.playbackId,
+      eventType: params.eventType,
+      milestoneKey: params.milestoneKey,
+    });
+  }
 
-  const shareAttribution = await resolveShareTokenPlaybackContext({
-    context: sharePlaybackContext,
-    scopeId: albumScopeId,
-    memberId,
-    anonId,
-    recordingId,
+  return insertAnonymousDedupeKey({
+    anonId: params.anonId,
+    playbackId: params.playbackId,
+    recordingId: params.recordingId,
+    eventType: params.eventType,
+    milestoneKey: params.milestoneKey,
+  });
+}
+
+async function recordShareAttribution(params: {
+  shareAttribution: Awaited<
+    ReturnType<typeof resolveShareTokenPlaybackContext>
+  >;
+  memberId: string | null;
+  telemetry: NormalizedPlaybackTelemetry;
+  eventType: string;
+  occurredAtIso: string;
+}): Promise<boolean> {
+  if (!params.shareAttribution) return true;
+
+  try {
+    await recordShareTokenPlaybackEvent({
+      shareTokenId: params.shareAttribution.shareTokenId,
+      telemetryLabel: params.shareAttribution.telemetryLabel,
+      scopeId: params.shareAttribution.scopeId,
+      audience: params.memberId ? "member" : "anonymous",
+      memberId: params.memberId,
+      recordingId: params.telemetry.recordingId,
+      playbackId: params.telemetry.playbackId,
+      eventType: params.eventType,
+      milestoneKey: params.telemetry.milestoneKey,
+      listenedMs: params.telemetry.listenedMs,
+      progressMs: params.telemetry.progressMs,
+      durationMs: params.telemetry.durationMs,
+      occurredAtIso: params.occurredAtIso,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function memberTelemetryPayload(
+  params: TelemetryProcessingParams,
+): Record<string, unknown> {
+  return {
+    recording_id: params.recordingId,
+    playback_id: params.playbackId,
+    milestone_key: params.milestoneKey,
+    progress_ms: params.progressMs,
+    duration_ms: params.durationMs,
+    clerk_user_id: params.userId,
+  };
+}
+
+function memberProgressTelemetryPayload(
+  params: TelemetryProcessingParams,
+): Record<string, unknown> {
+  return {
+    recording_id: params.recordingId,
+    playback_id: params.playbackId,
+    milestone_key: params.milestoneKey,
+    listened_ms: params.listenedMs,
+    progress_ms: params.progressMs,
+    duration_ms: params.durationMs,
+    clerk_user_id: params.userId,
+  };
+}
+
+async function processPlayTelemetry(
+  params: TelemetryProcessingParams,
+): Promise<NewlyAwardedBadge[]> {
+  await Promise.all([
+    params.memberId
+      ? upsertPlaybackPlay({
+          memberId: params.memberId,
+          recordingId: params.recordingId,
+          occurredAtIso: params.occurredAtIso,
+        })
+      : Promise.resolve(),
+    upsertRecordingPlaybackPlay({
+      recordingId: params.recordingId,
+      occurredAtIso: params.occurredAtIso,
+    }),
+  ]);
+
+  if (!params.memberId) return [];
+
+  const newlyAwardedBadges = await runPlaybackAutoBadgeAwardsForMember({
+    memberId: params.memberId,
+    recordingId: params.recordingId,
+    event: "play",
+    grantedBy: "system",
+    correlationId: params.correlationId,
   });
 
-  const eventType =
-    event === "play"
-      ? EVENT_TYPES.PLAYBACK_TELEMETRY_PLAY
-      : event === "progress"
-        ? EVENT_TYPES.PLAYBACK_TELEMETRY_PROGRESS
-        : EVENT_TYPES.PLAYBACK_TELEMETRY_COMPLETE;
+  await logPlaybackTelemetryPlay({
+    memberId: params.memberId,
+    source: EVENT_SOURCES.SERVER,
+    correlationId: params.correlationId,
+    payload: memberTelemetryPayload(params),
+  });
 
+  return newlyAwardedBadges;
+}
+
+async function processProgressTelemetry(
+  params: TelemetryProcessingParams,
+): Promise<NewlyAwardedBadge[]> {
+  await Promise.all([
+    params.memberId
+      ? upsertPlaybackProgress({
+          memberId: params.memberId,
+          recordingId: params.recordingId,
+          listenedMs: params.listenedMs,
+          occurredAtIso: params.occurredAtIso,
+        })
+      : Promise.resolve(),
+    upsertRecordingPlaybackProgress({
+      recordingId: params.recordingId,
+      listenedMs: params.listenedMs,
+      occurredAtIso: params.occurredAtIso,
+    }),
+  ]);
+
+  if (!params.memberId) return [];
+
+  const newlyAwardedBadges = await runPlaybackAutoBadgeAwardsForMember({
+    memberId: params.memberId,
+    recordingId: params.recordingId,
+    event: "progress",
+    grantedBy: "system",
+    correlationId: params.correlationId,
+  });
+
+  await logPlaybackTelemetryProgress({
+    memberId: params.memberId,
+    source: EVENT_SOURCES.SERVER,
+    correlationId: params.correlationId,
+    payload: memberProgressTelemetryPayload(params),
+  });
+
+  return newlyAwardedBadges;
+}
+
+async function processCompleteTelemetry(
+  params: TelemetryProcessingParams,
+): Promise<NewlyAwardedBadge[]> {
+  await Promise.all([
+    params.memberId
+      ? upsertPlaybackComplete({
+          memberId: params.memberId,
+          recordingId: params.recordingId,
+          occurredAtIso: params.occurredAtIso,
+        })
+      : Promise.resolve(),
+    upsertRecordingPlaybackComplete({
+      recordingId: params.recordingId,
+      occurredAtIso: params.occurredAtIso,
+    }),
+  ]);
+
+  if (!params.memberId) return [];
+
+  const newlyAwardedBadges = await runPlaybackAutoBadgeAwardsForMember({
+    memberId: params.memberId,
+    recordingId: params.recordingId,
+    event: "complete",
+    grantedBy: "system",
+    correlationId: params.correlationId,
+  });
+
+  await logPlaybackTelemetryComplete({
+    memberId: params.memberId,
+    source: EVENT_SOURCES.SERVER,
+    correlationId: params.correlationId,
+    payload: memberTelemetryPayload(params),
+  });
+
+  return newlyAwardedBadges;
+}
+
+async function processTelemetryEvent(
+  params: TelemetryProcessingParams,
+): Promise<NewlyAwardedBadge[]> {
+  if (params.event === "play") {
+    return processPlayTelemetry(params);
+  }
+
+  if (params.event === "progress") {
+    return processProgressTelemetry(params);
+  }
+
+  return processCompleteTelemetry(params);
+}
+
+export async function POST(req: NextRequest) {
+  const correlationId = newCorrelationId();
+  const body = await readPlaybackTelemetryRequest(req);
+
+  if (!body) {
+    return telemetryResponse(
+      { ok: false, error: "invalid_json" },
+      400,
+      correlationId,
+    );
+  }
+
+  const normalized = normalizePlaybackTelemetryRequest(body);
+
+  if (!normalized.ok) {
+    return telemetryResponse(
+      { ok: false, error: normalized.error },
+      400,
+      correlationId,
+    );
+  }
+
+  const telemetry = normalized.value;
+  const { userId } = await auth();
+  const memberId = userId ? await getMemberIdByClerkUserId(userId) : null;
+  const { anonId, isNew: isNewAnonId } = ensureAnonId(req);
+
+  const shareAttribution = await resolveShareTokenPlaybackContext({
+    context: telemetry.sharePlaybackContext,
+    scopeId: telemetry.albumScopeId,
+    memberId,
+    anonId,
+    recordingId: telemetry.recordingId,
+  });
+
+  const eventType = TELEMETRY_EVENT_TYPES[telemetry.event];
   const occurredAtIso = new Date().toISOString();
 
-  if (shareAttribution) {
-    try {
-      await recordShareTokenPlaybackEvent({
-        shareTokenId: shareAttribution.shareTokenId,
-        telemetryLabel: shareAttribution.telemetryLabel,
-        scopeId: shareAttribution.scopeId,
-        audience: memberId ? "member" : "anonymous",
-        memberId,
-        recordingId,
-        playbackId,
-        eventType,
-        milestoneKey,
-        listenedMs,
-        progressMs,
-        durationMs,
-        occurredAtIso,
-      });
-    } catch {
-      const res = NextResponse.json(
-        {
-          ok: false,
-          error: "share_attribution_write_failed",
-        },
-        { status: 503 },
-      );
+  const shareWriteSucceeded = await recordShareAttribution({
+    shareAttribution,
+    memberId,
+    telemetry,
+    eventType,
+    occurredAtIso,
+  });
 
-      if (isNewAnonId) {
-        persistAnonId(res, anonId);
-      }
-
-      res.headers.set("x-correlation-id", correlationId);
-      return res;
-    }
+  if (!shareWriteSucceeded) {
+    return telemetryResponseWithAnon(
+      { ok: false, error: "share_attribution_write_failed" },
+      503,
+      correlationId,
+      anonId,
+      isNewAnonId,
+    );
   }
 
-  const inserted = memberId
-    ? await insertDedupeKey({
-        memberId,
-        playbackId,
-        eventType,
-        milestoneKey,
-      })
-    : await insertAnonymousDedupeKey({
-        anonId,
-        playbackId,
-        recordingId,
-        eventType,
-        milestoneKey,
-      });
+  const inserted = await insertTelemetryDedupe({
+    memberId,
+    anonId,
+    recordingId: telemetry.recordingId,
+    playbackId: telemetry.playbackId,
+    eventType,
+    milestoneKey: telemetry.milestoneKey,
+  });
 
   if (!inserted) {
-    const res = NextResponse.json({ ok: true, deduped: true });
-
-    if (isNewAnonId) {
-      persistAnonId(res, anonId);
-    }
-
-    res.headers.set("x-correlation-id", correlationId);
-    return res;
+    return telemetryResponseWithAnon(
+      { ok: true, deduped: true },
+      200,
+      correlationId,
+      anonId,
+      isNewAnonId,
+    );
   }
 
-  let newlyAwardedBadges: NewlyAwardedBadge[] = [];
-
-  if (event === "play") {
-    await Promise.all([
-      memberId
-        ? upsertPlaybackPlay({
-            memberId,
-            recordingId,
-            occurredAtIso,
-          })
-        : Promise.resolve(),
-      upsertRecordingPlaybackPlay({
-        recordingId,
-        occurredAtIso,
-      }),
-    ]);
-
-    if (memberId) {
-      newlyAwardedBadges = await runPlaybackAutoBadgeAwardsForMember({
-        memberId,
-        recordingId,
-        event: "play",
-        grantedBy: "system",
-        correlationId,
-      });
-
-      await logPlaybackTelemetryPlay({
-        memberId,
-        source: EVENT_SOURCES.SERVER,
-        correlationId,
-        payload: {
-          recording_id: recordingId,
-          playback_id: playbackId,
-          milestone_key: milestoneKey,
-          progress_ms: progressMs,
-          duration_ms: durationMs,
-          clerk_user_id: userId,
-        },
-      });
-    }
-  } else if (event === "progress") {
-    await Promise.all([
-      memberId
-        ? upsertPlaybackProgress({
-            memberId,
-            recordingId,
-            listenedMs,
-            occurredAtIso,
-          })
-        : Promise.resolve(),
-      upsertRecordingPlaybackProgress({
-        recordingId,
-        listenedMs,
-        occurredAtIso,
-      }),
-    ]);
-
-    if (memberId) {
-      newlyAwardedBadges = await runPlaybackAutoBadgeAwardsForMember({
-        memberId,
-        recordingId,
-        event: "progress",
-        grantedBy: "system",
-        correlationId,
-      });
-
-      await logPlaybackTelemetryProgress({
-        memberId,
-        source: EVENT_SOURCES.SERVER,
-        correlationId,
-        payload: {
-          recording_id: recordingId,
-          playback_id: playbackId,
-          milestone_key: milestoneKey,
-          listened_ms: listenedMs,
-          progress_ms: progressMs,
-          duration_ms: durationMs,
-          clerk_user_id: userId,
-        },
-      });
-    }
-  } else {
-    await Promise.all([
-      memberId
-        ? upsertPlaybackComplete({
-            memberId,
-            recordingId,
-            occurredAtIso,
-          })
-        : Promise.resolve(),
-      upsertRecordingPlaybackComplete({
-        recordingId,
-        occurredAtIso,
-      }),
-    ]);
-
-    if (memberId) {
-      newlyAwardedBadges = await runPlaybackAutoBadgeAwardsForMember({
-        memberId,
-        recordingId,
-        event: "complete",
-        grantedBy: "system",
-        correlationId,
-      });
-
-      await logPlaybackTelemetryComplete({
-        memberId,
-        source: EVENT_SOURCES.SERVER,
-        correlationId,
-        payload: {
-          recording_id: recordingId,
-          playback_id: playbackId,
-          milestone_key: milestoneKey,
-          progress_ms: progressMs,
-          duration_ms: durationMs,
-          clerk_user_id: userId,
-        },
-      });
-    }
-  }
+  const newlyAwardedBadges = await processTelemetryEvent({
+    ...telemetry,
+    memberId,
+    userId,
+    correlationId,
+    occurredAtIso,
+  });
 
   if (memberId && newlyAwardedBadges.length > 0) {
     await markOverlayAnnouncedForAwardedBadges({
@@ -775,12 +920,11 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const res = NextResponse.json({ ok: true, newlyAwardedBadges });
-
-  if (isNewAnonId) {
-    persistAnonId(res, anonId);
-  }
-
-  res.headers.set("x-correlation-id", correlationId);
-  return res;
+  return telemetryResponseWithAnon(
+    { ok: true, newlyAwardedBadges },
+    200,
+    correlationId,
+    anonId,
+    isNewAnonId,
+  );
 }

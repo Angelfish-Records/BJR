@@ -390,36 +390,45 @@ export class LyricTextRenderer {
       const y = block.startY + i * block.lineHeightPx;
       const x = block.anchorX + (shakePx ?? 0);
 
-      if (
-        this.style.contrastStroke &&
-        this.style.contrastStrokeWidthPx &&
-        this.style.contrastStrokeWidthPx > 0
-      ) {
-        ctx.save();
-        ctx.strokeStyle = this.style.contrastStroke;
-        ctx.lineWidth = this.style.contrastStrokeWidthPx;
-        ctx.lineJoin = "round";
-        ctx.shadowBlur = this.style.contrastShadowBlurPx ?? 0;
-        ctx.shadowColor = this.style.contrastShadowColor ?? "rgba(0,0,0,0)";
-        ctx.strokeText(line, x, y);
-        ctx.restore();
-      }
-
-      if (
-        this.style.stroke &&
-        this.style.strokeWidthPx &&
-        this.style.strokeWidthPx > 0
-      ) {
-        ctx.strokeStyle = this.style.stroke;
-        ctx.lineWidth = this.style.strokeWidthPx;
-        ctx.lineJoin = "round";
-        ctx.strokeText(line, x, y);
-      }
-
-      ctx.fillText(line, x, y);
+      this.drawTextLine(ctx, line, x, y);
     }
 
     ctx.restore();
+  }
+
+  private drawTextLine(
+    ctx: CanvasRenderingContext2D,
+    line: string,
+    x: number,
+    y: number,
+  ): void {
+    if (
+      this.style.contrastStroke &&
+      this.style.contrastStrokeWidthPx &&
+      this.style.contrastStrokeWidthPx > 0
+    ) {
+      ctx.save();
+      ctx.strokeStyle = this.style.contrastStroke;
+      ctx.lineWidth = this.style.contrastStrokeWidthPx;
+      ctx.lineJoin = "round";
+      ctx.shadowBlur = this.style.contrastShadowBlurPx ?? 0;
+      ctx.shadowColor = this.style.contrastShadowColor ?? "rgba(0,0,0,0)";
+      ctx.strokeText(line, x, y);
+      ctx.restore();
+    }
+
+    if (
+      this.style.stroke &&
+      this.style.strokeWidthPx &&
+      this.style.strokeWidthPx > 0
+    ) {
+      ctx.strokeStyle = this.style.stroke;
+      ctx.lineWidth = this.style.strokeWidthPx;
+      ctx.lineJoin = "round";
+      ctx.strokeText(line, x, y);
+    }
+
+    ctx.fillText(line, x, y);
   }
 
   private drawBackgroundVeil(

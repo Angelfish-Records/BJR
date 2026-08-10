@@ -6,10 +6,10 @@ import BadgeUnlockVisual from "../modules/badges/BadgeUnlockVisual";
 import BadgeUnlockVisualStyles from "../modules/badges/BadgeUnlockVisualStyles";
 import type { BadgeAwardNotice } from "./badgeAwardTypes";
 
-type Props = {
+type Props = Readonly<{
   badge: BadgeAwardNotice;
   dismissHintVisible: boolean;
-};
+}>;
 
 export default function BadgeAwardRevealCard(props: Props) {
   const { badge, dismissHintVisible } = props;

@@ -261,6 +261,13 @@ function asNumber(value: string | number | null | undefined): number | null {
   return null;
 }
 
+function toMinutesStreamed(listenedMs: number | null): number | null {
+  if (listenedMs === null) return null;
+  if (listenedMs === 0) return 0;
+  if (listenedMs > 0) return Math.floor(listenedMs / 60_000);
+  return null;
+}
+
 function mapAggregateRow(row: AggregateRow): BadgePreviewMemberRow {
   const listenedMs = asNumber(row.listened_ms);
   const playCount = asNumber(row.play_count);
@@ -272,12 +279,7 @@ function mapAggregateRow(row: AggregateRow): BadgePreviewMemberRow {
     email: row.email,
     joinedAt: row.created_at,
     listenedMs,
-    minutesStreamed:
-      listenedMs !== null && listenedMs > 0
-        ? Math.floor(listenedMs / 60_000)
-        : listenedMs === 0
-          ? 0
-          : null,
+    minutesStreamed: toMinutesStreamed(listenedMs),
     playCount,
     completedCount,
     matchedRecordingId: row.recording_id ?? null,

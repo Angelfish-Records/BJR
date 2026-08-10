@@ -11,7 +11,7 @@ function parseTimestampSec(
   const seconds = Number(secondsRaw);
 
   if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) {
-    throw new Error(`Invalid LRC timestamp: ${minutesRaw}:${secondsRaw}`);
+    throw new TypeError(`Invalid LRC timestamp: ${minutesRaw}:${secondsRaw}`);
   }
 
   const fraction =

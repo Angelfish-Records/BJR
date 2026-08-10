@@ -1,14 +1,8 @@
 // web/lib/events.ts
 import "server-only";
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { sql } from "@vercel/postgres";
-import {
-  EVENT_SOURCES,
-  EVENT_TYPES,
-  type AccessAction,
-  type EventSource,
-  type EventType,
-} from "./vocab";
+import { EVENT_SOURCES, EVENT_TYPES } from "./vocab";
 
 export type EventPayload = Record<string, unknown>;
 
@@ -23,8 +17,8 @@ function normCorr(input: unknown): string | null {
 
 export async function logMemberEvent(params: {
   memberId?: string | null;
-  eventType: EventType | string;
-  source?: EventSource | string;
+  eventType: string;
+  source?: string;
   payload?: EventPayload;
   occurredAt?: Date;
   correlationId?: string | null;
@@ -140,7 +134,7 @@ export async function countAnonDistinctCompletedTracks(params: {
 
 export async function logMemberCreated(params: {
   memberId: string;
-  source?: EventSource | string;
+  source?: string;
   correlationId?: string | null;
   payload?: EventPayload;
 }) {
@@ -157,7 +151,7 @@ export async function logEntitlementGranted(params: {
   memberId: string;
   entitlementKey: string;
   scopeId?: string | null;
-  source?: EventSource | string;
+  source?: string;
   correlationId?: string | null;
   payload?: EventPayload;
 }) {
@@ -169,7 +163,7 @@ export async function logEntitlementGranted(params: {
     payload: {
       entitlement_key: params.entitlementKey,
       scope_id: params.scopeId ?? null,
-      ...(params.payload ?? {}),
+      ...params.payload,
     },
   });
 }
@@ -178,7 +172,7 @@ export async function logEntitlementRevoked(params: {
   memberId: string;
   entitlementKey: string;
   scopeId?: string | null;
-  source?: EventSource | string;
+  source?: string;
   correlationId?: string | null;
   payload?: EventPayload;
 }) {
@@ -190,7 +184,7 @@ export async function logEntitlementRevoked(params: {
     payload: {
       entitlement_key: params.entitlementKey,
       scope_id: params.scopeId ?? null,
-      ...(params.payload ?? {}),
+      ...params.payload,
     },
   });
 }
@@ -198,12 +192,12 @@ export async function logEntitlementRevoked(params: {
 export async function logAccessDecision(params: {
   memberId: string;
   allowed: boolean;
-  action: AccessAction | string;
+  action: string;
   resource: { kind: string; id?: string | null };
   requiredEntitlements: string[];
   matchedEntitlement?: { key: string; scope_id: string | null } | null;
   reason?: string | null;
-  source?: EventSource | string;
+  source?: string;
   correlationId?: string | null;
 }) {
   return logMemberEvent({
@@ -226,7 +220,7 @@ export async function logAccessDecision(params: {
 export async function logPlaybackTelemetryPlay(params: {
   memberId: string;
   correlationId?: string | null;
-  source?: EventSource | string;
+  source?: string;
   payload?: EventPayload;
 }) {
   return logMemberEvent({
@@ -241,7 +235,7 @@ export async function logPlaybackTelemetryPlay(params: {
 export async function logPlaybackTelemetryProgress(params: {
   memberId: string;
   correlationId?: string | null;
-  source?: EventSource | string;
+  source?: string;
   payload?: EventPayload;
 }) {
   return logMemberEvent({
@@ -256,7 +250,7 @@ export async function logPlaybackTelemetryProgress(params: {
 export async function logPlaybackTelemetryComplete(params: {
   memberId: string;
   correlationId?: string | null;
-  source?: EventSource | string;
+  source?: string;
   payload?: EventPayload;
 }) {
   return logMemberEvent({
