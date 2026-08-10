@@ -432,7 +432,6 @@ export function VisualizerSnapshotCanvas(
   return (
     <canvas
       ref={canvasRef}
-      role="presentation"
       className={className}
       style={{
         width: "100%",
@@ -630,7 +629,6 @@ function VisualizerRingGlowCanvas(
   return (
     <canvas
       ref={canvasRef}
-      role="presentation"
       style={{
         width: cssSize,
         height: cssSize,

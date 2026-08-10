@@ -13,45 +13,49 @@ import type {
 import { resolveAuthorDisplayIdentity } from "@/lib/memberIdentity";
 import { identityFactsFromDTO } from "../exegesisIdentity";
 
-export default function ExegesisThreadList(props: {
-  roots: Array<ThreadApiOk["roots"][number]>;
-  identities: ThreadApiOk["identities"] | undefined;
-  focusedRootId: string;
-  viewerMemberId: string;
-  viewerKind: "anon" | "member";
-  canPost: boolean;
-  canReport: boolean;
-  canVote: boolean;
-  isLocked: boolean;
-  replyByCommentId: Record<string, ReplyDraft>;
-  editByCommentId: Record<string, EditDraft>;
-  reportByCommentId: Record<string, ReportDraft>;
-  replyMountKey: number;
-  editMountKey: number;
-  previewMaxDepth: number;
-  previewMaxComments: number;
-  rootElByIdRef: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
-  editWrapByIdRef: React.MutableRefObject<
-    Record<string, HTMLDivElement | null>
-  >;
-  replyWrapByIdRef: React.MutableRefObject<
-    Record<string, HTMLDivElement | null>
-  >;
-  reportWrapByIdRef: React.MutableRefObject<
-    Record<string, HTMLDivElement | null>
-  >;
-  onOpenReply: (commentId: string) => void;
-  onOpenReport: (commentId: string) => void;
-  onToggleVote: (commentId: string) => void;
-  onOpenEdit: (comment: CommentDTO) => void;
-  onSubmitEdit: (comment: CommentDTO) => void;
-  onSubmitReply: (comment: CommentDTO) => void;
-  onSubmitReport: (commentId: string) => void;
-  onChangeEditDraft: (commentId: string, next: EditDraft) => void;
-  onChangeReplyDraft: (commentId: string, next: ReplyDraft) => void;
-  onChangeReportDraft: (commentId: string, next: ReportDraft) => void;
-  onFocusRoot: (rootId: string) => void;
-}) {
+export default function ExegesisThreadList(
+  props: Readonly<{
+    roots: Array<ThreadApiOk["roots"][number]>;
+    identities: ThreadApiOk["identities"] | undefined;
+    focusedRootId: string;
+    viewerMemberId: string;
+    viewerKind: "anon" | "member";
+    canPost: boolean;
+    canReport: boolean;
+    canVote: boolean;
+    isLocked: boolean;
+    replyByCommentId: Record<string, ReplyDraft>;
+    editByCommentId: Record<string, EditDraft>;
+    reportByCommentId: Record<string, ReportDraft>;
+    replyMountKey: number;
+    editMountKey: number;
+    previewMaxDepth: number;
+    previewMaxComments: number;
+    rootElByIdRef: React.MutableRefObject<
+      Record<string, HTMLDivElement | null>
+    >;
+    editWrapByIdRef: React.MutableRefObject<
+      Record<string, HTMLDivElement | null>
+    >;
+    replyWrapByIdRef: React.MutableRefObject<
+      Record<string, HTMLDivElement | null>
+    >;
+    reportWrapByIdRef: React.MutableRefObject<
+      Record<string, HTMLDivElement | null>
+    >;
+    onOpenReply: (commentId: string) => void;
+    onOpenReport: (commentId: string) => void;
+    onToggleVote: (commentId: string) => void;
+    onOpenEdit: (comment: CommentDTO) => void;
+    onSubmitEdit: (comment: CommentDTO) => void;
+    onSubmitReply: (comment: CommentDTO) => void;
+    onSubmitReport: (commentId: string) => void;
+    onChangeEditDraft: (commentId: string, next: EditDraft) => void;
+    onChangeReplyDraft: (commentId: string, next: ReplyDraft) => void;
+    onChangeReportDraft: (commentId: string, next: ReportDraft) => void;
+    onFocusRoot: (rootId: string) => void;
+  }>,
+) {
   const {
     roots,
     identities,

@@ -58,11 +58,13 @@ function getRememberedValidTab(
   return resolveValid(remembered);
 }
 
-export default function PortalTabs(props: {
-  tabs: PortalTabSpec[];
-  defaultTabId?: string | null;
-  isPortalActive?: boolean;
-}) {
+export default function PortalTabs(
+  props: Readonly<{
+    tabs: PortalTabSpec[];
+    defaultTabId?: string | null;
+    isPortalActive?: boolean;
+  }>,
+) {
   const { tabs, defaultTabId = null, isPortalActive = true } = props;
 
   // Router is only used here for optional prefetch warming.

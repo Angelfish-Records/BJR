@@ -18,7 +18,7 @@ type HeaderCtx = {
 
 type HeaderRenderer = React.ReactNode | ((ctx: HeaderCtx) => React.ReactNode);
 
-type Props = {
+type Props = Readonly<{
   panels: PortalPanelSpec[];
   defaultPanelId?: string;
 
@@ -48,7 +48,7 @@ type Props = {
 
   // ✅ NEW: panels that should remain mounted even when inactive
   keepMountedPanelIds?: string[];
-};
+}>;
 
 export default function PortalShell(props: Props) {
   const {

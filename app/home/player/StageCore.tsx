@@ -26,14 +26,16 @@ function pickKeyWithCues(
   return (keys.find(Boolean) as string | null) ?? null;
 }
 
-function StageCore(props: {
-  variant: "inline" | "fullscreen";
-  cuesByRecordingId?: CuesByRecordingId;
-  offsetByRecordingId?: OffsetByRecordingId;
-  offsetMs?: number;
-  autoResumeOnSeek?: boolean;
-  lyricsMode?: "embedded" | "none";
-}) {
+function StageCore(
+  props: Readonly<{
+    variant: "inline" | "fullscreen";
+    cuesByRecordingId?: CuesByRecordingId;
+    offsetByRecordingId?: OffsetByRecordingId;
+    offsetMs?: number;
+    autoResumeOnSeek?: boolean;
+    lyricsMode?: "embedded" | "none";
+  }>,
+) {
   const {
     variant,
     cuesByRecordingId: cuesByRecordingIdProp,

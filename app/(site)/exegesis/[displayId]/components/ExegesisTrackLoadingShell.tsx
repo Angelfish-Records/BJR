@@ -1,12 +1,14 @@
 // web/app/(site)/exegesis/[displayId]/components/ExegesisTrackLoadingShell.tsx
 import React from "react";
 
-export default function ExegesisTrackLoadingShell(props: {
-  title?: string | null;
-  artist?: string | null;
-  headerLeading?: React.ReactNode;
-  headerArtwork?: React.ReactNode;
-}) {
+export default function ExegesisTrackLoadingShell(
+  props: Readonly<{
+    title?: string | null;
+    artist?: string | null;
+    headerLeading?: React.ReactNode;
+    headerArtwork?: React.ReactNode;
+  }>,
+) {
   const title = (props.title ?? "").trim();
   const artist = (props.artist ?? "").trim();
 

@@ -34,10 +34,12 @@ function asTab(v: unknown): TabId {
   return s === "entitlements" ? "entitlements" : "tokens";
 }
 
-export default async function AccessDashboard(props: {
-  tab?: unknown;
-  embed?: boolean;
-}) {
+export default async function AccessDashboard(
+  props: Readonly<{
+    tab?: unknown;
+    embed?: boolean;
+  }>,
+) {
   const tab = asTab(props.tab);
   const embed = props.embed === true;
 

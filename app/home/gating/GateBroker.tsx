@@ -34,7 +34,9 @@ type Ctx = {
 
 const GateBrokerContext = React.createContext<Ctx | null>(null);
 
-export function GateBrokerProvider(props: { children: React.ReactNode }) {
+export function GateBrokerProvider(
+  props: Readonly<{ children: React.ReactNode }>,
+) {
   const [gate, setGate] = React.useState<GateState>({
     active: null,
     uiMode: "none",

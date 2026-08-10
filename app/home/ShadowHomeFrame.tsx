@@ -14,25 +14,27 @@ const shadowHomeQuery = `
   }
 `;
 
-export default async function ShadowHomeFrame(props: {
-  children: React.ReactNode;
+export default async function ShadowHomeFrame(
+  props: Readonly<{
+    children: React.ReactNode;
 
-  /**
-   * The lyrics overlay slot is used by StageInlineHost to portal overlays.
-   * Some contexts want it above the stage (z=50), others want it inert (z=0).
-   */
-  lyricsOverlayZIndex?: number;
+    /**
+     * The lyrics overlay slot is used by StageInlineHost to portal overlays.
+     * Some contexts want it above the stage (z=50), others want it inert (z=0).
+     */
+    lyricsOverlayZIndex?: number;
 
-  /**
-   * If you later want to vary stage sizing per subtree without forking layout.
-   */
-  stageHeight?: number;
+    /**
+     * If you later want to vary stage sizing per subtree without forking layout.
+     */
+    stageHeight?: number;
 
-  /**
-   * ShadowHomePage slug to fetch (currently always "home", but keep it flexible).
-   */
-  shadowHomeSlug?: string;
-}) {
+    /**
+     * ShadowHomePage slug to fetch (currently always "home", but keep it flexible).
+     */
+    shadowHomeSlug?: string;
+  }>,
+) {
   const {
     children,
     lyricsOverlayZIndex = 50,

@@ -30,7 +30,9 @@ function makeLinkSafe(href: string): string | null {
   }
 }
 
-export default function TipTapReadOnly(props: { doc: unknown }) {
+export default function TipTapReadOnly(
+  props: Readonly<{ doc: unknown }>,
+) {
   const { doc } = props;
 
   const editor = useEditor({

@@ -5,19 +5,21 @@ import React from "react";
 import type { PortalMemberSummary } from "@/lib/memberDashboard";
 import BadgeCabinet from "./badges/BadgeCabinet";
 
-type Props = {
+type Props = Readonly<{
   summary: PortalMemberSummary;
   title?: string;
   embedded?: boolean;
-};
+}>;
 
-function MetricTable(props: {
-  rows: Array<{
-    label: string;
-    value: React.ReactNode;
-    muted?: boolean;
-  }>;
-}) {
+function MetricTable(
+  props: Readonly<{
+    rows: Array<{
+      label: string;
+      value: React.ReactNode;
+      muted?: boolean;
+    }>;
+  }>,
+) {
   const { rows } = props;
 
   return (

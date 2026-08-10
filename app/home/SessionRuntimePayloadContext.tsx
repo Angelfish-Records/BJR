@@ -19,9 +19,11 @@ type SessionRuntimePayloadContextValue = {
 const SessionRuntimePayloadContext =
   React.createContext<SessionRuntimePayloadContextValue | null>(null);
 
-export function SessionRuntimePayloadProvider(props: {
-  children: React.ReactNode;
-}) {
+export function SessionRuntimePayloadProvider(
+  props: Readonly<{
+    children: React.ReactNode;
+  }>,
+) {
   const [record, setRecord] =
     React.useState<SessionRuntimePayloadRecord | null>(null);
 

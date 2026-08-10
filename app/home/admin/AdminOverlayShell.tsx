@@ -45,20 +45,24 @@ export default function AdminOverlayShell(props: Props) {
   const panel = getAdminPanel(activePanel);
 
   return createPortal(
-    <div
-      role="dialog"
+    <dialog
+      open
       aria-modal="true"
       aria-label="Admin modal"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
       style={{
         position: "fixed",
         inset: 0,
         zIndex: 100000,
+        width: "100%",
+        height: "100%",
+        maxWidth: "none",
+        maxHeight: "none",
+        margin: 0,
+        border: 0,
         display: "grid",
         placeItems: "center",
         padding: "clamp(14px, 2.2vw, 24px)",
+        color: "inherit",
         background: `
           radial-gradient(circle at 50% 18%, rgba(255,220,160,0.09), transparent 34%),
           radial-gradient(circle at 50% 100%, rgba(255,255,255,0.04), transparent 42%),
@@ -68,9 +72,28 @@ export default function AdminOverlayShell(props: Props) {
         WebkitBackdropFilter: "blur(12px)",
       }}
     >
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Close admin modal"
+        onMouseDown={onClose}
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          padding: 0,
+          border: 0,
+          background: "transparent",
+          cursor: "default",
+        }}
+      />
+
       <div
         className="portalPanel--gold"
         style={{
+          position: "relative",
+          zIndex: 1,
           width: "min(92vw, 1480px)",
           height: "min(90vh, 1040px)",
           borderRadius: 28,
@@ -267,7 +290,7 @@ export default function AdminOverlayShell(props: Props) {
           </div>
         </div>
       </div>
-    </div>,
+    </dialog>,
     document.body,
   );
 }

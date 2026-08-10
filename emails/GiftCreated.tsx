@@ -14,7 +14,7 @@ import {
   Text,
 } from "@react-email/components";
 
-export type GiftCreatedEmailProps = {
+export type GiftCreatedEmailProps = Readonly<{
   appName: string;
   toEmail: string;
   albumTitle: string;
@@ -24,7 +24,7 @@ export type GiftCreatedEmailProps = {
   senderName?: string | null;
   giftUrl: string;
   supportEmail?: string;
-};
+}>;
 
 export function GiftCreatedEmail(props: GiftCreatedEmailProps) {
   const {

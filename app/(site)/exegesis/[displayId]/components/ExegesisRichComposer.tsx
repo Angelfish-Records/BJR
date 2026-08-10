@@ -4,7 +4,7 @@
 import React from "react";
 import TipTapEditor from "../TipTapEditor";
 
-type ExegesisRichComposerProps = {
+type ExegesisRichComposerProps = Readonly<{
   editorKey: string;
   valuePlain: string;
   valueDoc: unknown | null;
@@ -20,7 +20,7 @@ type ExegesisRichComposerProps = {
   onChangeDoc: (doc: unknown | null) => void;
   onToggleToolbar: () => void;
   onSubmit: () => void;
-};
+}>;
 
 export default function ExegesisRichComposer({
   editorKey,
@@ -89,6 +89,7 @@ export default function ExegesisRichComposer({
           ) : null}
 
           <button
+            type="button"
             className={[
               "inline-flex h-9 items-center justify-center rounded-lg px-4 text-sm font-medium transition",
               "bg-white/[0.08] text-white/92",

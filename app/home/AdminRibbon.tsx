@@ -51,7 +51,9 @@ function ChevronIcon(props: { collapsed: boolean }) {
   );
 }
 
-function PullTag(props: { collapsed: boolean; onClick: () => void }) {
+function PullTag(
+  props: Readonly<{ collapsed: boolean; onClick: () => void }>,
+) {
   return (
     <button
       type="button"
@@ -107,7 +109,9 @@ function PullTag(props: { collapsed: boolean; onClick: () => void }) {
   );
 }
 
-export default function AdminRibbon(props: { isAdmin: boolean }) {
+export default function AdminRibbon(
+  props: Readonly<{ isAdmin: boolean }>,
+) {
   const [adminOpen, setAdminOpen] = React.useState(false);
   const [adminPanel, setAdminPanel] = React.useState<AdminPanelId>("access");
   const [collapsed, setCollapsed] = React.useState(false);

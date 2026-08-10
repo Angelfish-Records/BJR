@@ -244,6 +244,7 @@ export default function ExegesisModerator() {
           </select>
 
           <button
+            type="button"
             className="rounded-md bg-white/10 px-3 py-2 text-sm hover:bg-white/15 disabled:opacity-40"
             disabled={busy}
             onClick={() => void refresh()}
@@ -316,6 +317,7 @@ export default function ExegesisModerator() {
 
                       <div className="flex flex-col items-end gap-2">
                         <button
+                          type="button"
                           className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
                           disabled={busy}
                           onClick={() =>
@@ -327,6 +329,7 @@ export default function ExegesisModerator() {
                         </button>
 
                         <button
+                          type="button"
                           className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
                           disabled={busy || !t.pinnedCommentId}
                           onClick={() =>
@@ -406,6 +409,7 @@ export default function ExegesisModerator() {
                         {r.commentStatus !== "deleted" ? (
                           <>
                             <button
+                              type="button"
                               className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
                               disabled={busy}
                               onClick={() =>
@@ -422,6 +426,7 @@ export default function ExegesisModerator() {
                             </button>
 
                             <button
+                              type="button"
                               className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
                               disabled={busy}
                               onClick={() =>

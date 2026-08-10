@@ -2,9 +2,11 @@
 import React from "react";
 import SessionRuntime from "../SessionRuntime";
 
-export default async function PortalRuntimePage(props: {
-  params: Promise<{ tab: string }>;
-}) {
+export default async function PortalRuntimePage(
+  props: Readonly<{
+    params: Promise<{ tab: string }>;
+  }>,
+) {
   const { tab } = await props.params;
   const resolvedTab = decodeURIComponent(tab ?? "").trim() || null;
 

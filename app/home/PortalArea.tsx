@@ -21,7 +21,7 @@ import PortalSurface from "./PortalSurface";
 import { useSessionSurfaceController } from "./useSessionSurfaceController";
 import { usePlaybackReconciliation } from "./usePlaybackReconciliation";
 
-export type PortalAreaProps = {
+export type PortalAreaProps = Readonly<{
   portalModules: PortalModule[];
   memberId: string | null;
   entitlementKeys: string[];
@@ -37,7 +37,7 @@ export type PortalAreaProps = {
   // isAdmin is owned at /(site)/layout.tsx via AdminRibbon.
   // PortalArea should not take it as input.
   canManageBilling: boolean;
-};
+}>;
 
 export default function PortalArea(props: PortalAreaProps) {
   const {

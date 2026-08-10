@@ -3,13 +3,13 @@ import * as React from "react";
 import { Html, Head, Preview, Body, Container, Section, Text } from "@react-email/components";
 import { Markdown } from "@react-email/markdown";
 
-export type FanMailoutProps = {
+export type FanMailoutProps = Readonly<{
   previewText?: string;
   brandName?: string;
   heroUrl?: string;
   bodyMarkdown: string;
   unsubscribeUrl?: string;
-};
+}>;
 
 // Dark + regal purple palette (lean, email-safe)
 const PAGE_BG = "#07060B";

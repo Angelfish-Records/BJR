@@ -8,7 +8,9 @@ import ExegesisModerator from "./ExegesisModerator";
 
 type Mode = "grouping" | "moderation";
 
-export default function ExegesisAdminClient(props: { embed: boolean }) {
+export default function ExegesisAdminClient(
+  props: Readonly<{ embed: boolean }>,
+) {
   const [mode, setMode] = React.useState<Mode>("grouping");
 
   const modeActions = (

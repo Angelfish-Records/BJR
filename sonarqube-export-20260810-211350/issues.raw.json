@@ -1,5 +1,359 @@
 [
   {
+    "key": "AZ_q6W-iW1WCANsuVuqE",
+    "rule": "typescript:S6819",
+    "severity": "MAJOR",
+    "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
+    "project": "Angelfish-Records_BJR",
+    "line": 433,
+    "hash": "8d8e78883cb541b5ea126f124886181b",
+    "textRange": {
+      "startLine": 433,
+      "endLine": 449,
+      "startOffset": 4,
+      "endOffset": 6
+    },
+    "flows": [],
+    "status": "OPEN",
+    "message": "Use <img alt=...> instead of the \"presentation\" role to ensure accessibility across all devices.",
+    "effort": "5min",
+    "debt": "5min",
+    "author": "admin@brendanjohnroch.com",
+    "tags": [
+      "accessibility",
+      "react"
+    ],
+    "transitions": [
+      "accept",
+      "confirm",
+      "resolve",
+      "falsepositive",
+      "wontfix"
+    ],
+    "actions": [
+      "set_type",
+      "set_tags",
+      "comment",
+      "set_severity",
+      "assign"
+    ],
+    "comments": [],
+    "creationDate": "2026-08-10T09:02:12+0000",
+    "updateDate": "2026-08-10T09:02:23+0000",
+    "type": "CODE_SMELL",
+    "organization": "angelfish-records",
+    "cleanCodeAttribute": "CONVENTIONAL",
+    "cleanCodeAttributeCategory": "CONSISTENT",
+    "impacts": [
+      {
+        "softwareQuality": "MAINTAINABILITY",
+        "severity": "MEDIUM"
+      }
+    ],
+    "issueStatus": "OPEN",
+    "projectName": "BJR",
+    "internalTags": [],
+    "lastChangeAnalysisUuid": "6fe4d785-8e12-4bd1-9f5c-e92ce5ea4170",
+    "lastChangeSource": "ANALYSIS"
+  },
+  {
+    "key": "AZ_q6W-iW1WCANsuVuqF",
+    "rule": "typescript:S6843",
+    "severity": "MAJOR",
+    "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
+    "project": "Angelfish-Records_BJR",
+    "line": 435,
+    "hash": "025c82ac8402634e3e543bc9a8c9db12",
+    "textRange": {
+      "startLine": 435,
+      "endLine": 435,
+      "startOffset": 6,
+      "endOffset": 25
+    },
+    "flows": [],
+    "status": "OPEN",
+    "message": "Interactive elements should not be assigned non-interactive roles.",
+    "effort": "5min",
+    "debt": "5min",
+    "author": "admin@brendanjohnroch.com",
+    "tags": [
+      "accessibility",
+      "react"
+    ],
+    "transitions": [
+      "accept",
+      "confirm",
+      "resolve",
+      "falsepositive",
+      "wontfix"
+    ],
+    "actions": [
+      "set_type",
+      "set_tags",
+      "comment",
+      "set_severity",
+      "assign"
+    ],
+    "comments": [],
+    "creationDate": "2026-08-10T09:02:12+0000",
+    "updateDate": "2026-08-10T09:02:23+0000",
+    "type": "CODE_SMELL",
+    "organization": "angelfish-records",
+    "cleanCodeAttribute": "CONVENTIONAL",
+    "cleanCodeAttributeCategory": "CONSISTENT",
+    "impacts": [
+      {
+        "softwareQuality": "RELIABILITY",
+        "severity": "MEDIUM"
+      },
+      {
+        "softwareQuality": "MAINTAINABILITY",
+        "severity": "LOW"
+      }
+    ],
+    "issueStatus": "OPEN",
+    "projectName": "BJR",
+    "internalTags": [],
+    "lastChangeAnalysisUuid": "6fe4d785-8e12-4bd1-9f5c-e92ce5ea4170",
+    "lastChangeSource": "ANALYSIS"
+  },
+  {
+    "key": "AZ_q6W-iW1WCANsuVuqG",
+    "rule": "typescript:S6819",
+    "severity": "MAJOR",
+    "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
+    "project": "Angelfish-Records_BJR",
+    "line": 631,
+    "hash": "8d8e78883cb541b5ea126f124886181b",
+    "textRange": {
+      "startLine": 631,
+      "endLine": 641,
+      "startOffset": 4,
+      "endOffset": 6
+    },
+    "flows": [],
+    "status": "OPEN",
+    "message": "Use <img alt=...> instead of the \"presentation\" role to ensure accessibility across all devices.",
+    "effort": "5min",
+    "debt": "5min",
+    "author": "admin@brendanjohnroch.com",
+    "tags": [
+      "accessibility",
+      "react"
+    ],
+    "transitions": [
+      "accept",
+      "confirm",
+      "resolve",
+      "falsepositive",
+      "wontfix"
+    ],
+    "actions": [
+      "set_type",
+      "set_tags",
+      "comment",
+      "set_severity",
+      "assign"
+    ],
+    "comments": [],
+    "creationDate": "2026-08-10T09:02:12+0000",
+    "updateDate": "2026-08-10T09:02:23+0000",
+    "type": "CODE_SMELL",
+    "organization": "angelfish-records",
+    "cleanCodeAttribute": "CONVENTIONAL",
+    "cleanCodeAttributeCategory": "CONSISTENT",
+    "impacts": [
+      {
+        "softwareQuality": "MAINTAINABILITY",
+        "severity": "MEDIUM"
+      }
+    ],
+    "issueStatus": "OPEN",
+    "projectName": "BJR",
+    "internalTags": [],
+    "lastChangeAnalysisUuid": "6fe4d785-8e12-4bd1-9f5c-e92ce5ea4170",
+    "lastChangeSource": "ANALYSIS"
+  },
+  {
+    "key": "AZ_q6W-iW1WCANsuVuqH",
+    "rule": "typescript:S6843",
+    "severity": "MAJOR",
+    "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
+    "project": "Angelfish-Records_BJR",
+    "line": 633,
+    "hash": "025c82ac8402634e3e543bc9a8c9db12",
+    "textRange": {
+      "startLine": 633,
+      "endLine": 633,
+      "startOffset": 6,
+      "endOffset": 25
+    },
+    "flows": [],
+    "status": "OPEN",
+    "message": "Interactive elements should not be assigned non-interactive roles.",
+    "effort": "5min",
+    "debt": "5min",
+    "author": "admin@brendanjohnroch.com",
+    "tags": [
+      "accessibility",
+      "react"
+    ],
+    "transitions": [
+      "accept",
+      "confirm",
+      "resolve",
+      "falsepositive",
+      "wontfix"
+    ],
+    "actions": [
+      "set_type",
+      "set_tags",
+      "comment",
+      "set_severity",
+      "assign"
+    ],
+    "comments": [],
+    "creationDate": "2026-08-10T09:02:12+0000",
+    "updateDate": "2026-08-10T09:02:23+0000",
+    "type": "CODE_SMELL",
+    "organization": "angelfish-records",
+    "cleanCodeAttribute": "CONVENTIONAL",
+    "cleanCodeAttributeCategory": "CONSISTENT",
+    "impacts": [
+      {
+        "softwareQuality": "RELIABILITY",
+        "severity": "MEDIUM"
+      },
+      {
+        "softwareQuality": "MAINTAINABILITY",
+        "severity": "LOW"
+      }
+    ],
+    "issueStatus": "OPEN",
+    "projectName": "BJR",
+    "internalTags": [],
+    "lastChangeAnalysisUuid": "6fe4d785-8e12-4bd1-9f5c-e92ce5ea4170",
+    "lastChangeSource": "ANALYSIS"
+  },
+  {
+    "key": "AZ_q6XKcW1WCANsuVuqI",
+    "rule": "typescript:S6819",
+    "severity": "MAJOR",
+    "component": "Angelfish-Records_BJR:app/internal/render/visualizer/VisualizerLivePreview.tsx",
+    "project": "Angelfish-Records_BJR",
+    "line": 698,
+    "hash": "8d8e78883cb541b5ea126f124886181b",
+    "textRange": {
+      "startLine": 698,
+      "endLine": 710,
+      "startOffset": 6,
+      "endOffset": 8
+    },
+    "flows": [],
+    "status": "OPEN",
+    "message": "Use <img alt=...> instead of the \"presentation\" role to ensure accessibility across all devices.",
+    "effort": "5min",
+    "debt": "5min",
+    "author": "admin@brendanjohnroch.com",
+    "tags": [
+      "accessibility",
+      "react"
+    ],
+    "transitions": [
+      "accept",
+      "confirm",
+      "resolve",
+      "falsepositive",
+      "wontfix"
+    ],
+    "actions": [
+      "set_type",
+      "set_tags",
+      "comment",
+      "set_severity",
+      "assign"
+    ],
+    "comments": [],
+    "creationDate": "2026-08-10T09:02:12+0000",
+    "updateDate": "2026-08-10T09:02:23+0000",
+    "type": "CODE_SMELL",
+    "organization": "angelfish-records",
+    "cleanCodeAttribute": "CONVENTIONAL",
+    "cleanCodeAttributeCategory": "CONSISTENT",
+    "impacts": [
+      {
+        "softwareQuality": "MAINTAINABILITY",
+        "severity": "MEDIUM"
+      }
+    ],
+    "issueStatus": "OPEN",
+    "projectName": "BJR",
+    "internalTags": [],
+    "lastChangeAnalysisUuid": "679ccba0-f040-4210-91c4-fe4393db5eab",
+    "lastChangeSource": "ANALYSIS"
+  },
+  {
+    "key": "AZ_q6XKcW1WCANsuVuqJ",
+    "rule": "typescript:S6843",
+    "severity": "MAJOR",
+    "component": "Angelfish-Records_BJR:app/internal/render/visualizer/VisualizerLivePreview.tsx",
+    "project": "Angelfish-Records_BJR",
+    "line": 700,
+    "hash": "025c82ac8402634e3e543bc9a8c9db12",
+    "textRange": {
+      "startLine": 700,
+      "endLine": 700,
+      "startOffset": 8,
+      "endOffset": 27
+    },
+    "flows": [],
+    "status": "OPEN",
+    "message": "Interactive elements should not be assigned non-interactive roles.",
+    "effort": "5min",
+    "debt": "5min",
+    "author": "admin@brendanjohnroch.com",
+    "tags": [
+      "accessibility",
+      "react"
+    ],
+    "transitions": [
+      "accept",
+      "confirm",
+      "resolve",
+      "falsepositive",
+      "wontfix"
+    ],
+    "actions": [
+      "set_type",
+      "set_tags",
+      "comment",
+      "set_severity",
+      "assign"
+    ],
+    "comments": [],
+    "creationDate": "2026-08-10T09:02:12+0000",
+    "updateDate": "2026-08-10T09:02:23+0000",
+    "type": "CODE_SMELL",
+    "organization": "angelfish-records",
+    "cleanCodeAttribute": "CONVENTIONAL",
+    "cleanCodeAttributeCategory": "CONSISTENT",
+    "impacts": [
+      {
+        "softwareQuality": "RELIABILITY",
+        "severity": "MEDIUM"
+      },
+      {
+        "softwareQuality": "MAINTAINABILITY",
+        "severity": "LOW"
+      }
+    ],
+    "issueStatus": "OPEN",
+    "projectName": "BJR",
+    "internalTags": [],
+    "lastChangeAnalysisUuid": "679ccba0-f040-4210-91c4-fe4393db5eab",
+    "lastChangeSource": "ANALYSIS"
+  },
+  {
     "key": "AZ_qmtAOwpN0uIMdo9hk",
     "rule": "typescript:S6509",
     "severity": "MINOR",
@@ -347,62 +701,6 @@
     "lastChangeSource": "ANALYSIS"
   },
   {
-    "key": "AZ_UqQ2GGA9NVutV3atc",
-    "rule": "typescript:S6653",
-    "severity": "MINOR",
-    "component": "Angelfish-Records_BJR:app/internal/render/visualizer/VisualizerLivePreview.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 123,
-    "hash": "b815a43df1657e4a7ccc917b0fb1156d",
-    "textRange": {
-      "startLine": 123,
-      "endLine": 123,
-      "startOffset": 15,
-      "endOffset": 74
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Use 'Object.hasOwn()' instead of 'Object.prototype.hasOwnProperty.call()'.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "es2022"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-08-06T01:20:09+0000",
-    "updateDate": "2026-08-06T01:20:22+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CLEAR",
-    "cleanCodeAttributeCategory": "INTENTIONAL",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "LOW"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "7ad17f26-660c-4c6e-ad2d-ab2648b0b9ee",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
     "key": "AZ-dzcI6ZiQzo-vEikdd",
     "rule": "typescript:S6754",
     "severity": "MINOR",
@@ -693,425 +991,6 @@
     "projectName": "BJR",
     "internalTags": [],
     "lastChangeAnalysisUuid": "ddf53f8a-675b-4797-a145-9ce41e39ca1a",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZ-S4URm_95_XqQUebOr",
-    "rule": "typescript:S6759",
-    "severity": "MINOR",
-    "component": "Angelfish-Records_BJR:app/internal/render/visualizer/VisualizerLivePreview.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 146,
-    "hash": "1eea6ada1be91f82af7e5055d23ee8f0",
-    "textRange": {
-      "startLine": 146,
-      "endLine": 146,
-      "startOffset": 46,
-      "endOffset": 58
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Mark the props of the component as read-only.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "react",
-      "type-dependent"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-07-24T06:46:42+0000",
-    "updateDate": "2026-07-24T06:46:54+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CONVENTIONAL",
-    "cleanCodeAttributeCategory": "CONSISTENT",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "LOW"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "7ad17f26-660c-4c6e-ad2d-ab2648b0b9ee",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZ-S4URm_95_XqQUebOs",
-    "rule": "typescript:S6582",
-    "severity": "MINOR",
-    "component": "Angelfish-Records_BJR:app/internal/render/visualizer/VisualizerLivePreview.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 264,
-    "hash": "a0212cd6c20deba543ffabd6c204c70a",
-    "textRange": {
-      "startLine": 264,
-      "endLine": 265,
-      "startOffset": 8,
-      "endOffset": 33
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Prefer using an optional chain expression instead, as it's more concise and easier to read.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "editable-source",
-      "type-dependent"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-07-24T06:46:42+0000",
-    "updateDate": "2026-07-24T06:46:54+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CLEAR",
-    "cleanCodeAttributeCategory": "INTENTIONAL",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "LOW"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "7ad17f26-660c-4c6e-ad2d-ab2648b0b9ee",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZ-S4URm_95_XqQUebOt",
-    "rule": "typescript:S3358",
-    "severity": "MAJOR",
-    "component": "Angelfish-Records_BJR:app/internal/render/visualizer/VisualizerLivePreview.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 625,
-    "hash": "448366cb01c788cb7404ca30c91c26b9",
-    "textRange": {
-      "startLine": 625,
-      "endLine": 627,
-      "startOffset": 8,
-      "endOffset": 34
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Extract this nested ternary operation into an independent statement.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "confusing",
-      "editable-source"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-07-24T06:46:42+0000",
-    "updateDate": "2026-07-24T06:46:54+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CLEAR",
-    "cleanCodeAttributeCategory": "INTENTIONAL",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "MEDIUM"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "7ad17f26-660c-4c6e-ad2d-ab2648b0b9ee",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZ-S4URm_95_XqQUebOu",
-    "rule": "typescript:S6825",
-    "severity": "MAJOR",
-    "component": "Angelfish-Records_BJR:app/internal/render/visualizer/VisualizerLivePreview.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 633,
-    "hash": "8d8e78883cb541b5ea126f124886181b",
-    "textRange": {
-      "startLine": 633,
-      "endLine": 645,
-      "startOffset": 6,
-      "endOffset": 8
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "aria-hidden=\"true\" must not be set on focusable elements.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "accessibility",
-      "react"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-07-24T06:46:42+0000",
-    "updateDate": "2026-07-24T06:46:54+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CONVENTIONAL",
-    "cleanCodeAttributeCategory": "CONSISTENT",
-    "impacts": [
-      {
-        "softwareQuality": "RELIABILITY",
-        "severity": "MEDIUM"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "7ad17f26-660c-4c6e-ad2d-ab2648b0b9ee",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZ-S4URm_95_XqQUebOv",
-    "rule": "typescript:S6772",
-    "severity": "MAJOR",
-    "component": "Angelfish-Records_BJR:app/internal/render/visualizer/VisualizerLivePreview.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 701,
-    "hash": "aece516c50753ef033ded35ef5969b26",
-    "textRange": {
-      "startLine": 701,
-      "endLine": 701,
-      "startOffset": 0,
-      "endOffset": 21
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Ambiguous spacing before next element select",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "react"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-07-24T06:46:42+0000",
-    "updateDate": "2026-07-24T06:46:54+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "FORMATTED",
-    "cleanCodeAttributeCategory": "CONSISTENT",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "MEDIUM"
-      },
-      {
-        "softwareQuality": "RELIABILITY",
-        "severity": "LOW"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "7ad17f26-660c-4c6e-ad2d-ab2648b0b9ee",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZ-S4URm_95_XqQUebOw",
-    "rule": "typescript:S4084",
-    "severity": "MINOR",
-    "component": "Angelfish-Records_BJR:app/internal/render/visualizer/VisualizerLivePreview.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 779,
-    "hash": "f60a735107f1d0f359fa85b96c7d91eb",
-    "textRange": {
-      "startLine": 779,
-      "endLine": 779,
-      "startOffset": 11,
-      "endOffset": 16
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Media elements such as <audio> and <video> must have a <track> for captions.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "accessibility",
-      "react"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-07-24T06:46:42+0000",
-    "updateDate": "2026-07-24T06:46:54+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CONVENTIONAL",
-    "cleanCodeAttributeCategory": "CONSISTENT",
-    "impacts": [
-      {
-        "softwareQuality": "RELIABILITY",
-        "severity": "LOW"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "7ad17f26-660c-4c6e-ad2d-ab2648b0b9ee",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZ87qq7CyrfTyaIdPF7P",
-    "rule": "typescript:S4144",
-    "severity": "MAJOR",
-    "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 503,
-    "hash": "b3966db727fb21f094ecd8889a67f24a",
-    "textRange": {
-      "startLine": 503,
-      "endLine": 503,
-      "startOffset": 33,
-      "endOffset": 35
-    },
-    "flows": [
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-            "textRange": {
-              "startLine": 295,
-              "endLine": 295,
-              "startOffset": 33,
-              "endOffset": 35
-            },
-            "msg": "Original implementation"
-          }
-        ]
-      }
-    ],
-    "status": "OPEN",
-    "message": "Update this function so that its implementation is not identical to the one on line 295.",
-    "effort": "15min",
-    "debt": "15min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "confusing",
-      "duplicate",
-      "editable-source",
-      "suspicious"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-07-07T08:20:24+0000",
-    "updateDate": "2026-07-07T08:20:24+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "DISTINCT",
-    "cleanCodeAttributeCategory": "ADAPTABLE",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "MEDIUM"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "4a96c78b-7687-4cbd-b62b-4854259f5ee7",
     "lastChangeSource": "ANALYSIS"
   },
   {
@@ -1457,372 +1336,6 @@
     "lastChangeSource": "ANALYSIS"
   },
   {
-    "key": "AZ31JNENQrjaVR6fY595",
-    "rule": "typescript:S7741",
-    "severity": "MINOR",
-    "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 55,
-    "hash": "29cf5546151023c9a2769a098d97c359",
-    "textRange": {
-      "startLine": 55,
-      "endLine": 55,
-      "startOffset": 9,
-      "endOffset": 15
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Compare with `undefined` directly instead of using `typeof`.",
-    "effort": "2min",
-    "debt": "2min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "readability",
-      "style"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-05-04T22:37:37+0000",
-    "updateDate": "2026-05-04T22:37:37+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CONVENTIONAL",
-    "cleanCodeAttributeCategory": "CONSISTENT",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "LOW"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "90072574-710d-4a4a-ad3d-e2458d9c75e8",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZ31JNENQrjaVR6fY596",
-    "rule": "typescript:S3776",
-    "severity": "CRITICAL",
-    "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 93,
-    "hash": "10a13792e2296193bae2aefc6157f738",
-    "textRange": {
-      "startLine": 93,
-      "endLine": 93,
-      "startOffset": 24,
-      "endOffset": 43
-    },
-    "flows": [
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-            "textRange": {
-              "startLine": 684,
-              "endLine": 684,
-              "startOffset": 37,
-              "endOffset": 39
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-            "textRange": {
-              "startLine": 757,
-              "endLine": 757,
-              "startOffset": 4,
-              "endOffset": 5
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-            "textRange": {
-              "startLine": 759,
-              "endLine": 759,
-              "startOffset": 6,
-              "endOffset": 7
-            },
-            "msg": "+2 (incl. 1 for nesting)"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-            "textRange": {
-              "startLine": 764,
-              "endLine": 764,
-              "startOffset": 6,
-              "endOffset": 7
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-            "textRange": {
-              "startLine": 766,
-              "endLine": 766,
-              "startOffset": 8,
-              "endOffset": 9
-            },
-            "msg": "+2 (incl. 1 for nesting)"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-            "textRange": {
-              "startLine": 770,
-              "endLine": 770,
-              "startOffset": 4,
-              "endOffset": 5
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-            "textRange": {
-              "startLine": 775,
-              "endLine": 775,
-              "startOffset": 37,
-              "endOffset": 38
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-            "textRange": {
-              "startLine": 805,
-              "endLine": 805,
-              "startOffset": 48,
-              "endOffset": 49
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-            "textRange": {
-              "startLine": 805,
-              "endLine": 805,
-              "startOffset": 37,
-              "endOffset": 39
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-            "textRange": {
-              "startLine": 828,
-              "endLine": 828,
-              "startOffset": 30,
-              "endOffset": 31
-            },
-            "msg": "+2 (incl. 1 for nesting)"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-            "textRange": {
-              "startLine": 954,
-              "endLine": 954,
-              "startOffset": 31,
-              "endOffset": 32
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-            "textRange": {
-              "startLine": 960,
-              "endLine": 960,
-              "startOffset": 31,
-              "endOffset": 32
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-            "textRange": {
-              "startLine": 973,
-              "endLine": 973,
-              "startOffset": 46,
-              "endOffset": 47
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-            "textRange": {
-              "startLine": 979,
-              "endLine": 979,
-              "startOffset": 30,
-              "endOffset": 31
-            },
-            "msg": "+1"
-          }
-        ]
-      }
-    ],
-    "status": "OPEN",
-    "message": "Refactor this function to reduce its Cognitive Complexity from 17 to the 15 allowed.",
-    "effort": "7min",
-    "debt": "7min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "brain-overload"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-05-04T22:37:37+0000",
-    "updateDate": "2026-05-04T22:37:37+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "FOCUSED",
-    "cleanCodeAttributeCategory": "ADAPTABLE",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "HIGH"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "70259b0f-7f21-4fbe-b2d7-05bc653a60b6",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZ31JNENQrjaVR6fY598",
-    "rule": "typescript:S3358",
-    "severity": "MAJOR",
-    "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 765,
-    "hash": "caca0b7078a2fc974d98db9eddd84b7c",
-    "textRange": {
-      "startLine": 765,
-      "endLine": 767,
-      "startOffset": 8,
-      "endOffset": 12
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Extract this nested ternary operation into an independent statement.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "confusing"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-05-04T22:37:37+0000",
-    "updateDate": "2026-05-04T22:37:37+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CLEAR",
-    "cleanCodeAttributeCategory": "INTENTIONAL",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "MEDIUM"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "70259b0f-7f21-4fbe-b2d7-05bc653a60b6",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
     "key": "AZ30_tJPOGWn8jWtV1xH",
     "rule": "typescript:S7758",
     "severity": "MINOR",
@@ -1870,11 +1383,11 @@
     "cleanCodeAttributeCategory": "CONSISTENT",
     "impacts": [
       {
-        "softwareQuality": "RELIABILITY",
+        "softwareQuality": "MAINTAINABILITY",
         "severity": "LOW"
       },
       {
-        "softwareQuality": "MAINTAINABILITY",
+        "softwareQuality": "RELIABILITY",
         "severity": "LOW"
       }
     ],
@@ -1932,11 +1445,11 @@
     "cleanCodeAttributeCategory": "CONSISTENT",
     "impacts": [
       {
-        "softwareQuality": "RELIABILITY",
+        "softwareQuality": "MAINTAINABILITY",
         "severity": "LOW"
       },
       {
-        "softwareQuality": "MAINTAINABILITY",
+        "softwareQuality": "RELIABILITY",
         "severity": "LOW"
       }
     ],
@@ -2001,246 +1514,6 @@
     "projectName": "BJR",
     "internalTags": [],
     "lastChangeAnalysisUuid": "2231462f-0f93-4c5d-acde-2deb091b3ef4",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZ3qPOR6DB_MdPLc5EER",
-    "rule": "typescript:S3776",
-    "severity": "CRITICAL",
-    "component": "Angelfish-Records_BJR:lib/albums.ts",
-    "project": "Angelfish-Records_BJR",
-    "line": 349,
-    "hash": "c897c444e72d3dede7c5a674c51936d9",
-    "textRange": {
-      "startLine": 349,
-      "endLine": 349,
-      "startOffset": 22,
-      "endOffset": 54
-    },
-    "flows": [
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:lib/albums.ts",
-            "textRange": {
-              "startLine": 359,
-              "endLine": 359,
-              "startOffset": 2,
-              "endOffset": 4
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:lib/albums.ts",
-            "textRange": {
-              "startLine": 403,
-              "endLine": 403,
-              "startOffset": 39,
-              "endOffset": 40
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:lib/albums.ts",
-            "textRange": {
-              "startLine": 407,
-              "endLine": 407,
-              "startOffset": 2,
-              "endOffset": 4
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:lib/albums.ts",
-            "textRange": {
-              "startLine": 408,
-              "endLine": 408,
-              "startOffset": 4,
-              "endOffset": 7
-            },
-            "msg": "+2 (incl. 1 for nesting)"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:lib/albums.ts",
-            "textRange": {
-              "startLine": 413,
-              "endLine": 413,
-              "startOffset": 6,
-              "endOffset": 8
-            },
-            "msg": "+3 (incl. 2 for nesting)"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:lib/albums.ts",
-            "textRange": {
-              "startLine": 419,
-              "endLine": 419,
-              "startOffset": 10,
-              "endOffset": 11
-            },
-            "msg": "+3 (incl. 2 for nesting)"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:lib/albums.ts",
-            "textRange": {
-              "startLine": 416,
-              "endLine": 416,
-              "startOffset": 41,
-              "endOffset": 43
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:lib/albums.ts",
-            "textRange": {
-              "startLine": 426,
-              "endLine": 426,
-              "startOffset": 43,
-              "endOffset": 44
-            },
-            "msg": "+3 (incl. 2 for nesting)"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:lib/albums.ts",
-            "textRange": {
-              "startLine": 432,
-              "endLine": 432,
-              "startOffset": 32,
-              "endOffset": 34
-            },
-            "msg": "+1"
-          }
-        ]
-      }
-    ],
-    "status": "OPEN",
-    "message": "Refactor this function to reduce its Cognitive Complexity from 16 to the 15 allowed.",
-    "effort": "6min",
-    "debt": "6min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "brain-overload"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-05-02T19:48:27+0000",
-    "updateDate": "2026-05-02T19:48:27+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "FOCUSED",
-    "cleanCodeAttributeCategory": "ADAPTABLE",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "HIGH"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "66a1f46b-41c0-45c1-a107-94701dc8e46c",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZ3qHtmCXYbs7ObcMEy_",
-    "rule": "typescript:S3735",
-    "severity": "CRITICAL",
-    "component": "Angelfish-Records_BJR:app/home/urlState.ts",
-    "project": "Angelfish-Records_BJR",
-    "line": 179,
-    "hash": "676a3547f3d8edcd92240bf1ef81c7c6",
-    "textRange": {
-      "startLine": 179,
-      "endLine": 179,
-      "startOffset": 4,
-      "endOffset": 8
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Remove this use of the \"void\" operator.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "confusing",
-      "type-dependent"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-05-02T19:15:17+0000",
-    "updateDate": "2026-05-02T19:15:17+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CLEAR",
-    "cleanCodeAttributeCategory": "INTENTIONAL",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "HIGH"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "03b86c63-277b-4fe8-9f53-51ae70f6db59",
     "lastChangeSource": "ANALYSIS"
   },
   {
@@ -3071,6 +2344,63 @@
     "issueStatus": "OPEN",
     "projectName": "BJR",
     "internalTags": []
+  },
+  {
+    "key": "AZzknk6eTZE3UWWm5X13",
+    "rule": "typescript:S6819",
+    "severity": "MAJOR",
+    "component": "Angelfish-Records_BJR:app/home/modules/PortalMemberPanel.tsx",
+    "project": "Angelfish-Records_BJR",
+    "line": 24,
+    "hash": "d90c26198ff23a5c54f81269ceed5c01",
+    "textRange": {
+      "startLine": 24,
+      "endLine": 31,
+      "startOffset": 4,
+      "endOffset": 5
+    },
+    "flows": [],
+    "status": "OPEN",
+    "message": "Use <table> instead of the \"table\" role to ensure accessibility across all devices.",
+    "effort": "5min",
+    "debt": "5min",
+    "author": "admin@brendanjohnroch.com",
+    "tags": [
+      "accessibility",
+      "react"
+    ],
+    "transitions": [
+      "accept",
+      "confirm",
+      "resolve",
+      "falsepositive",
+      "wontfix"
+    ],
+    "actions": [
+      "set_type",
+      "set_tags",
+      "comment",
+      "set_severity",
+      "assign"
+    ],
+    "comments": [],
+    "creationDate": "2026-03-13T00:34:01+0000",
+    "updateDate": "2026-08-10T09:02:23+0000",
+    "type": "CODE_SMELL",
+    "organization": "angelfish-records",
+    "cleanCodeAttribute": "CONVENTIONAL",
+    "cleanCodeAttributeCategory": "CONSISTENT",
+    "impacts": [
+      {
+        "softwareQuality": "MAINTAINABILITY",
+        "severity": "MEDIUM"
+      }
+    ],
+    "issueStatus": "OPEN",
+    "projectName": "BJR",
+    "internalTags": [],
+    "lastChangeAnalysisUuid": "6fe4d785-8e12-4bd1-9f5c-e92ce5ea4170",
+    "lastChangeSource": "ANALYSIS"
   },
   {
     "key": "AZzkJgAfIrGbr-VKbWdn",
@@ -4063,77 +3393,6 @@
     "issueStatus": "OPEN",
     "projectName": "BJR",
     "internalTags": []
-  },
-  {
-    "key": "AZzVFzwDuXUW7gR7cgMt",
-    "rule": "typescript:S4782",
-    "severity": "MAJOR",
-    "component": "Angelfish-Records_BJR:lib/albums.ts",
-    "project": "Angelfish-Records_BJR",
-    "line": 165,
-    "hash": "34da3a6c789b8276cce6297ba3b6ed1f",
-    "textRange": {
-      "startLine": 165,
-      "endLine": 165,
-      "startOffset": 21,
-      "endOffset": 22
-    },
-    "flows": [
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:lib/albums.ts",
-            "textRange": {
-              "startLine": 165,
-              "endLine": 165,
-              "startOffset": 33,
-              "endOffset": 42
-            }
-          }
-        ]
-      }
-    ],
-    "status": "OPEN",
-    "message": "Consider removing 'undefined' type or '?' specifier, one of them is redundant.",
-    "effort": "1min",
-    "debt": "1min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "redundant",
-      "type-dependent"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-03-10T00:12:16+0000",
-    "updateDate": "2026-03-10T00:12:16+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CLEAR",
-    "cleanCodeAttributeCategory": "INTENTIONAL",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "MEDIUM"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "66a1f46b-41c0-45c1-a107-94701dc8e46c",
-    "lastChangeSource": "ANALYSIS"
   },
   {
     "key": "AZzUyG2c9xxenMb4Viaw",
@@ -6820,62 +6079,6 @@
     "internalTags": []
   },
   {
-    "key": "AZy9dLGgQh-IuXSn3Bsr",
-    "rule": "typescript:S3358",
-    "severity": "MAJOR",
-    "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 758,
-    "hash": "7a31ab962d9fec9af2a9b129ee052c47",
-    "textRange": {
-      "startLine": 758,
-      "endLine": 760,
-      "startOffset": 6,
-      "endOffset": 48
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Extract this nested ternary operation into an independent statement.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "confusing"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-02-26T23:11:07+0000",
-    "updateDate": "2026-03-09T22:46:13+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CLEAR",
-    "cleanCodeAttributeCategory": "INTENTIONAL",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "MEDIUM"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "70259b0f-7f21-4fbe-b2d7-05bc653a60b6",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
     "key": "AZySC05tUTSi5MH-fFld",
     "rule": "typescript:S7780",
     "severity": "MINOR",
@@ -7241,62 +6444,6 @@
     "internalTags": [],
     "lastChangeAnalysisUuid": "66a1f46b-41c0-45c1-a107-94701dc8e46c",
     "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZyM26KCOXeZGWdnNw9m",
-    "rule": "typescript:S7761",
-    "severity": "MAJOR",
-    "component": "Angelfish-Records_BJR:app/home/player/StageInlineHost.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 64,
-    "hash": "07b01577e3f9c0be041a8021d36681ef",
-    "textRange": {
-      "startLine": 64,
-      "endLine": 64,
-      "startOffset": 4,
-      "endOffset": 36
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Prefer `.dataset` over `getAttribute(…)`.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "api",
-      "dom",
-      "html"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-02-23T23:34:29+0000",
-    "updateDate": "2026-02-23T23:34:29+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CONVENTIONAL",
-    "cleanCodeAttributeCategory": "CONSISTENT",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "HIGH"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": []
   },
   {
     "key": "AZyMteG0gh4KZo0tpZQQ",
@@ -8076,65 +7223,6 @@
     "internalTags": []
   },
   {
-    "key": "AZx6AaLth4LBKj9vjMA9",
-    "rule": "typescript:S7773",
-    "severity": "MINOR",
-    "component": "Angelfish-Records_BJR:app/home/player/StageInlineHost.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 13,
-    "hash": "ca14128bfbcf1435c051ca04dc6757ba",
-    "textRange": {
-      "startLine": 13,
-      "endLine": 13,
-      "startOffset": 28,
-      "endOffset": 31
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Prefer `Number.NaN` over `NaN`.",
-    "effort": "2min",
-    "debt": "2min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "convention",
-      "es2015"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-02-20T07:43:24+0000",
-    "updateDate": "2026-02-20T07:43:24+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CONVENTIONAL",
-    "cleanCodeAttributeCategory": "CONSISTENT",
-    "impacts": [
-      {
-        "softwareQuality": "RELIABILITY",
-        "severity": "MEDIUM"
-      },
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "LOW"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": []
-  },
-  {
     "key": "AZx5143Wn0HW8o61kloV",
     "rule": "typescript:S7750",
     "severity": "MINOR",
@@ -8683,441 +7771,6 @@
     "issueStatus": "OPEN",
     "projectName": "BJR",
     "internalTags": []
-  },
-  {
-    "key": "AZwYMFyySP8JIq-sHuE7",
-    "rule": "typescript:S6582",
-    "severity": "MINOR",
-    "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 274,
-    "hash": "e6c8185527b3b05caa7cd880df8c022c",
-    "textRange": {
-      "startLine": 274,
-      "endLine": 274,
-      "startOffset": 10,
-      "endOffset": 47
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Prefer using an optional chain expression instead, as it's more concise and easier to read.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-02-01T07:51:43+0000",
-    "updateDate": "2026-07-12T09:01:05+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CLEAR",
-    "cleanCodeAttributeCategory": "INTENTIONAL",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "LOW"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "e1eb5c87-7b45-4a7b-af74-8c3d7c45f378",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZwYMFyySP8JIq-sHuE8",
-    "rule": "typescript:S4144",
-    "severity": "MAJOR",
-    "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 480,
-    "hash": "ba30c0e6f6888906fc3bed5591d30d9c",
-    "textRange": {
-      "startLine": 480,
-      "endLine": 480,
-      "startOffset": 39,
-      "endOffset": 41
-    },
-    "flows": [
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-            "textRange": {
-              "startLine": 273,
-              "endLine": 273,
-              "startOffset": 39,
-              "endOffset": 41
-            },
-            "msg": "Original implementation"
-          }
-        ]
-      }
-    ],
-    "status": "OPEN",
-    "message": "Update this function so that its implementation is not identical to the one on line 271.",
-    "effort": "15min",
-    "debt": "15min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "confusing",
-      "duplicate",
-      "suspicious"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-02-01T07:51:43+0000",
-    "updateDate": "2026-07-07T08:20:24+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "DISTINCT",
-    "cleanCodeAttributeCategory": "ADAPTABLE",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "MEDIUM"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "4a96c78b-7687-4cbd-b62b-4854259f5ee7",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZwYMFyySP8JIq-sHuE9",
-    "rule": "typescript:S6582",
-    "severity": "MINOR",
-    "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 481,
-    "hash": "e6c8185527b3b05caa7cd880df8c022c",
-    "textRange": {
-      "startLine": 481,
-      "endLine": 481,
-      "startOffset": 10,
-      "endOffset": 47
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Prefer using an optional chain expression instead, as it's more concise and easier to read.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-02-01T07:51:43+0000",
-    "updateDate": "2026-07-12T09:01:05+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CLEAR",
-    "cleanCodeAttributeCategory": "INTENTIONAL",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "LOW"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "e1eb5c87-7b45-4a7b-af74-8c3d7c45f378",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZwYMFyySP8JIq-sHuE-",
-    "rule": "typescript:S4144",
-    "severity": "MAJOR",
-    "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 489,
-    "hash": "ba30c0e6f6888906fc3bed5591d30d9c",
-    "textRange": {
-      "startLine": 489,
-      "endLine": 489,
-      "startOffset": 39,
-      "endOffset": 41
-    },
-    "flows": [
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-            "textRange": {
-              "startLine": 282,
-              "endLine": 282,
-              "startOffset": 39,
-              "endOffset": 41
-            },
-            "msg": "Original implementation"
-          }
-        ]
-      }
-    ],
-    "status": "OPEN",
-    "message": "Update this function so that its implementation is not identical to the one on line 279.",
-    "effort": "15min",
-    "debt": "15min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "confusing",
-      "duplicate",
-      "suspicious"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-02-01T07:51:43+0000",
-    "updateDate": "2026-07-07T08:20:24+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "DISTINCT",
-    "cleanCodeAttributeCategory": "ADAPTABLE",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "MEDIUM"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "4a96c78b-7687-4cbd-b62b-4854259f5ee7",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZwYFt2yD1QxlHAaPiwv",
-    "rule": "typescript:S6582",
-    "severity": "MINOR",
-    "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 291,
-    "hash": "8427b45a82a97ec55cd317de6584813a",
-    "textRange": {
-      "startLine": 291,
-      "endLine": 291,
-      "startOffset": 10,
-      "endOffset": 50
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Prefer using an optional chain expression instead, as it's more concise and easier to read.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-02-01T07:24:09+0000",
-    "updateDate": "2026-07-12T09:01:05+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CLEAR",
-    "cleanCodeAttributeCategory": "INTENTIONAL",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "LOW"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "e1eb5c87-7b45-4a7b-af74-8c3d7c45f378",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZwYFt2yD1QxlHAaPiwz",
-    "rule": "typescript:S6582",
-    "severity": "MINOR",
-    "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 498,
-    "hash": "8427b45a82a97ec55cd317de6584813a",
-    "textRange": {
-      "startLine": 498,
-      "endLine": 498,
-      "startOffset": 10,
-      "endOffset": 50
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Prefer using an optional chain expression instead, as it's more concise and easier to read.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-02-01T07:24:09+0000",
-    "updateDate": "2026-07-12T09:01:05+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CLEAR",
-    "cleanCodeAttributeCategory": "INTENTIONAL",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "LOW"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "e1eb5c87-7b45-4a7b-af74-8c3d7c45f378",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZwXNQYJqpGt-0oZhohi",
-    "rule": "typescript:S4144",
-    "severity": "MAJOR",
-    "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 448,
-    "hash": "687a54836b6ebf1044d42aae694608ab",
-    "textRange": {
-      "startLine": 448,
-      "endLine": 448,
-      "startOffset": 21,
-      "endOffset": 23
-    },
-    "flows": [
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-            "textRange": {
-              "startLine": 239,
-              "endLine": 239,
-              "startOffset": 21,
-              "endOffset": 23
-            },
-            "msg": "Original implementation"
-          }
-        ]
-      }
-    ],
-    "status": "OPEN",
-    "message": "Update this function so that its implementation is not identical to the one on line 239.",
-    "effort": "15min",
-    "debt": "15min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "confusing",
-      "duplicate",
-      "suspicious"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-02-01T03:17:12+0000",
-    "updateDate": "2026-07-07T08:20:24+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "DISTINCT",
-    "cleanCodeAttributeCategory": "ADAPTABLE",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "MEDIUM"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "4a96c78b-7687-4cbd-b62b-4854259f5ee7",
-    "lastChangeSource": "ANALYSIS"
   },
   {
     "key": "AZwVifJsqpGt-0oZZW5y",
@@ -10510,62 +9163,6 @@
     "lastChangeSource": "ANALYSIS"
   },
   {
-    "key": "AZwOI7_qcp1YM1k1EgZ0",
-    "rule": "typescript:S6767",
-    "severity": "MINOR",
-    "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 407,
-    "hash": "cbfa8aa27a9b4513607ea3c18a738724",
-    "textRange": {
-      "startLine": 407,
-      "endLine": 407,
-      "startOffset": 2,
-      "endOffset": 6
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "'seed' PropType is defined but prop is never used",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "react"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-01-30T09:02:03+0000",
-    "updateDate": "2026-01-30T09:02:03+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CONVENTIONAL",
-    "cleanCodeAttributeCategory": "CONSISTENT",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "LOW"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "4a96c78b-7687-4cbd-b62b-4854259f5ee7",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
     "key": "AZwOI8Aacp1YM1k1EgZ8",
     "rule": "typescript:S3358",
     "severity": "MAJOR",
@@ -10728,67 +9325,6 @@
     "projectName": "BJR",
     "internalTags": [],
     "lastChangeAnalysisUuid": "1077b991-e5d5-4d4d-b281-37d77ebe9e46",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZwOI8T1cp1YM1k1EgdM",
-    "rule": "typescript:S7773",
-    "severity": "MINOR",
-    "component": "Angelfish-Records_BJR:lib/albums.ts",
-    "project": "Angelfish-Records_BJR",
-    "line": 536,
-    "hash": "e2ad6f58ad8b4446eeace0c26f7a5856",
-    "textRange": {
-      "startLine": 536,
-      "endLine": 536,
-      "startOffset": 58,
-      "endOffset": 61
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Prefer `Number.NaN` over `NaN`.",
-    "effort": "2min",
-    "debt": "2min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "convention",
-      "es2015"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-01-30T09:02:03+0000",
-    "updateDate": "2026-01-30T09:02:03+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CONVENTIONAL",
-    "cleanCodeAttributeCategory": "CONSISTENT",
-    "impacts": [
-      {
-        "softwareQuality": "RELIABILITY",
-        "severity": "MEDIUM"
-      },
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "LOW"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "66a1f46b-41c0-45c1-a107-94701dc8e46c",
     "lastChangeSource": "ANALYSIS"
   },
   {
@@ -11486,6 +10022,128 @@
     "internalTags": []
   },
   {
+    "key": "AZwNwHP4XfH1XCSRWNsg",
+    "rule": "typescript:S7781",
+    "severity": "MINOR",
+    "component": "Angelfish-Records_BJR:lib/unsubscribe.ts",
+    "project": "Angelfish-Records_BJR",
+    "line": 36,
+    "hash": "467b33bb15dd278db71edd4f8111e7d7",
+    "textRange": {
+      "startLine": 36,
+      "endLine": 36,
+      "startOffset": 16,
+      "endOffset": 23
+    },
+    "flows": [],
+    "status": "OPEN",
+    "message": "Prefer `String#replaceAll()` over `String#replace()`.",
+    "effort": "5min",
+    "debt": "5min",
+    "author": "admin@brendanjohnroch.com",
+    "tags": [
+      "es2021",
+      "readability"
+    ],
+    "transitions": [
+      "accept",
+      "confirm",
+      "resolve",
+      "falsepositive",
+      "wontfix"
+    ],
+    "actions": [
+      "set_type",
+      "set_tags",
+      "comment",
+      "set_severity",
+      "assign"
+    ],
+    "comments": [],
+    "creationDate": "2026-01-30T07:13:11+0000",
+    "updateDate": "2026-08-10T09:02:23+0000",
+    "type": "CODE_SMELL",
+    "organization": "angelfish-records",
+    "cleanCodeAttribute": "CLEAR",
+    "cleanCodeAttributeCategory": "INTENTIONAL",
+    "impacts": [
+      {
+        "softwareQuality": "MAINTAINABILITY",
+        "severity": "LOW"
+      },
+      {
+        "softwareQuality": "RELIABILITY",
+        "severity": "LOW"
+      }
+    ],
+    "issueStatus": "OPEN",
+    "projectName": "BJR",
+    "internalTags": [],
+    "lastChangeAnalysisUuid": "6fe4d785-8e12-4bd1-9f5c-e92ce5ea4170",
+    "lastChangeSource": "ANALYSIS"
+  },
+  {
+    "key": "AZwNwHP4XfH1XCSRWNsh",
+    "rule": "typescript:S7781",
+    "severity": "MINOR",
+    "component": "Angelfish-Records_BJR:lib/unsubscribe.ts",
+    "project": "Angelfish-Records_BJR",
+    "line": 36,
+    "hash": "467b33bb15dd278db71edd4f8111e7d7",
+    "textRange": {
+      "startLine": 36,
+      "endLine": 36,
+      "startOffset": 35,
+      "endOffset": 42
+    },
+    "flows": [],
+    "status": "OPEN",
+    "message": "Prefer `String#replaceAll()` over `String#replace()`.",
+    "effort": "5min",
+    "debt": "5min",
+    "author": "admin@brendanjohnroch.com",
+    "tags": [
+      "es2021",
+      "readability"
+    ],
+    "transitions": [
+      "accept",
+      "confirm",
+      "resolve",
+      "falsepositive",
+      "wontfix"
+    ],
+    "actions": [
+      "set_type",
+      "set_tags",
+      "comment",
+      "set_severity",
+      "assign"
+    ],
+    "comments": [],
+    "creationDate": "2026-01-30T07:13:11+0000",
+    "updateDate": "2026-08-10T09:02:23+0000",
+    "type": "CODE_SMELL",
+    "organization": "angelfish-records",
+    "cleanCodeAttribute": "CLEAR",
+    "cleanCodeAttributeCategory": "INTENTIONAL",
+    "impacts": [
+      {
+        "softwareQuality": "MAINTAINABILITY",
+        "severity": "LOW"
+      },
+      {
+        "softwareQuality": "RELIABILITY",
+        "severity": "LOW"
+      }
+    ],
+    "issueStatus": "OPEN",
+    "projectName": "BJR",
+    "internalTags": [],
+    "lastChangeAnalysisUuid": "6fe4d785-8e12-4bd1-9f5c-e92ce5ea4170",
+    "lastChangeSource": "ANALYSIS"
+  },
+  {
     "key": "AZwLzKkCzklXLWpzfm9i",
     "rule": "typescript:S6759",
     "severity": "MINOR",
@@ -11590,299 +10248,6 @@
       {
         "softwareQuality": "MAINTAINABILITY",
         "severity": "MEDIUM"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": []
-  },
-  {
-    "key": "AZwBgsqLTjwaFqf8zKkG",
-    "rule": "typescript:S7772",
-    "severity": "MINOR",
-    "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 6,
-    "hash": "6c0c3e9cb6f9877bef551ebcebd4bf4e",
-    "textRange": {
-      "startLine": 6,
-      "endLine": 6,
-      "startOffset": 19,
-      "endOffset": 27
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Prefer `node:crypto` over `crypto`.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "convention",
-      "import",
-      "nodejs"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-01-27T22:10:33+0000",
-    "updateDate": "2026-01-27T22:10:33+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CONVENTIONAL",
-    "cleanCodeAttributeCategory": "CONSISTENT",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "MEDIUM"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": []
-  },
-  {
-    "key": "AZwBgsqLTjwaFqf8zKkH",
-    "rule": "typescript:S3776",
-    "severity": "CRITICAL",
-    "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 94,
-    "hash": "3e6a7cc6173a60ffaac342bd26f0f6ae",
-    "textRange": {
-      "startLine": 94,
-      "endLine": 94,
-      "startOffset": 30,
-      "endOffset": 45
-    },
-    "flows": [
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-            "textRange": {
-              "startLine": 99,
-              "endLine": 99,
-              "startOffset": 2,
-              "endOffset": 4
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-            "textRange": {
-              "startLine": 103,
-              "endLine": 103,
-              "startOffset": 4,
-              "endOffset": 5
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-            "textRange": {
-              "startLine": 108,
-              "endLine": 108,
-              "startOffset": 2,
-              "endOffset": 4
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-            "textRange": {
-              "startLine": 110,
-              "endLine": 110,
-              "startOffset": 23,
-              "endOffset": 24
-            },
-            "msg": "+2 (incl. 1 for nesting)"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-            "textRange": {
-              "startLine": 124,
-              "endLine": 124,
-              "startOffset": 2,
-              "endOffset": 4
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-            "textRange": {
-              "startLine": 155,
-              "endLine": 155,
-              "startOffset": 2,
-              "endOffset": 4
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-            "textRange": {
-              "startLine": 157,
-              "endLine": 157,
-              "startOffset": 2,
-              "endOffset": 4
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-            "textRange": {
-              "startLine": 163,
-              "endLine": 163,
-              "startOffset": 36,
-              "endOffset": 38
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-            "textRange": {
-              "startLine": 165,
-              "endLine": 165,
-              "startOffset": 26,
-              "endOffset": 28
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-            "textRange": {
-              "startLine": 170,
-              "endLine": 170,
-              "startOffset": 2,
-              "endOffset": 4
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-            "textRange": {
-              "startLine": 175,
-              "endLine": 175,
-              "startOffset": 2,
-              "endOffset": 4
-            },
-            "msg": "+1"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-            "textRange": {
-              "startLine": 176,
-              "endLine": 176,
-              "startOffset": 4,
-              "endOffset": 6
-            },
-            "msg": "+2 (incl. 1 for nesting)"
-          }
-        ]
-      },
-      {
-        "locations": [
-          {
-            "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-            "textRange": {
-              "startLine": 180,
-              "endLine": 180,
-              "startOffset": 4,
-              "endOffset": 6
-            },
-            "msg": "+2 (incl. 1 for nesting)"
-          }
-        ]
-      }
-    ],
-    "status": "OPEN",
-    "message": "Refactor this function to reduce its Cognitive Complexity from 16 to the 15 allowed.",
-    "effort": "6min",
-    "debt": "6min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "brain-overload"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-01-27T22:10:33+0000",
-    "updateDate": "2026-01-27T22:10:33+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "FOCUSED",
-    "cleanCodeAttributeCategory": "ADAPTABLE",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "HIGH"
       }
     ],
     "issueStatus": "OPEN",
@@ -12227,120 +10592,6 @@
     "projectName": "BJR",
     "internalTags": [],
     "lastChangeAnalysisUuid": "1d373393-c1b6-43a6-9954-e41fc7320bd1",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZvfjrsHYrfxLBh7pyul",
-    "rule": "typescript:S6825",
-    "severity": "MAJOR",
-    "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 650,
-    "hash": "8d8e78883cb541b5ea126f124886181b",
-    "textRange": {
-      "startLine": 650,
-      "endLine": 660,
-      "startOffset": 4,
-      "endOffset": 6
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "aria-hidden=\"true\" must not be set on focusable elements.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "accessibility",
-      "react"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-01-21T07:56:33+0000",
-    "updateDate": "2026-01-21T07:56:33+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CONVENTIONAL",
-    "cleanCodeAttributeCategory": "CONSISTENT",
-    "impacts": [
-      {
-        "softwareQuality": "RELIABILITY",
-        "severity": "MEDIUM"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "4a96c78b-7687-4cbd-b62b-4854259f5ee7",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZveVUdtbCETsdHbg9kJ",
-    "rule": "typescript:S6759",
-    "severity": "MINOR",
-    "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 664,
-    "hash": "9cdda5e22aa966c9a49e18b0b9b4dd2f",
-    "textRange": {
-      "startLine": 664,
-      "endLine": 671,
-      "startOffset": 32,
-      "endOffset": 1
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Mark the props of the component as read-only.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "react",
-      "type-dependent"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-01-21T02:14:11+0000",
-    "updateDate": "2026-01-21T02:14:11+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CONVENTIONAL",
-    "cleanCodeAttributeCategory": "CONSISTENT",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "LOW"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "4a96c78b-7687-4cbd-b62b-4854259f5ee7",
     "lastChangeSource": "ANALYSIS"
   },
   {
@@ -13012,291 +11263,6 @@
     "issueStatus": "OPEN",
     "projectName": "BJR",
     "internalTags": []
-  },
-  {
-    "key": "AZunZmrdUT7tpfFOVoJH",
-    "rule": "typescript:S6759",
-    "severity": "MINOR",
-    "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 192,
-    "hash": "95d6a4b6306770ac3ddf32334c4b761e",
-    "textRange": {
-      "startLine": 192,
-      "endLine": 201,
-      "startOffset": 41,
-      "endOffset": 1
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Mark the props of the component as read-only.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "react",
-      "type-dependent"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-01-10T10:13:45+0000",
-    "updateDate": "2026-01-10T17:33:24+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CONVENTIONAL",
-    "cleanCodeAttributeCategory": "CONSISTENT",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "LOW"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "4a96c78b-7687-4cbd-b62b-4854259f5ee7",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZunZmrdUT7tpfFOVoJI",
-    "rule": "typescript:S6825",
-    "severity": "MAJOR",
-    "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 381,
-    "hash": "8d8e78883cb541b5ea126f124886181b",
-    "textRange": {
-      "startLine": 381,
-      "endLine": 397,
-      "startOffset": 4,
-      "endOffset": 6
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "aria-hidden=\"true\" must not be set on focusable elements.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "accessibility",
-      "react"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-01-10T10:13:45+0000",
-    "updateDate": "2026-01-10T17:33:24+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CONVENTIONAL",
-    "cleanCodeAttributeCategory": "CONSISTENT",
-    "impacts": [
-      {
-        "softwareQuality": "RELIABILITY",
-        "severity": "MEDIUM"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "4a96c78b-7687-4cbd-b62b-4854259f5ee7",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZunZmrdUT7tpfFOVoJJ",
-    "rule": "typescript:S6759",
-    "severity": "MINOR",
-    "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 401,
-    "hash": "9c7fd64f8a1678b501a3130e0163bf5b",
-    "textRange": {
-      "startLine": 401,
-      "endLine": 411,
-      "startOffset": 34,
-      "endOffset": 1
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Mark the props of the component as read-only.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "react",
-      "type-dependent"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-01-10T10:13:45+0000",
-    "updateDate": "2026-01-10T17:33:24+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CONVENTIONAL",
-    "cleanCodeAttributeCategory": "CONSISTENT",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "LOW"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "4a96c78b-7687-4cbd-b62b-4854259f5ee7",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZunZmrdUT7tpfFOVoJK",
-    "rule": "typescript:S6759",
-    "severity": "MINOR",
-    "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 715,
-    "hash": "11ed6e5de9165eab02cbdb819118c7e8",
-    "textRange": {
-      "startLine": 715,
-      "endLine": 720,
-      "startOffset": 36,
-      "endOffset": 1
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Mark the props of the component as read-only.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "react",
-      "type-dependent"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-01-10T10:13:45+0000",
-    "updateDate": "2026-01-10T17:33:24+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CONVENTIONAL",
-    "cleanCodeAttributeCategory": "CONSISTENT",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "LOW"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "4a96c78b-7687-4cbd-b62b-4854259f5ee7",
-    "lastChangeSource": "ANALYSIS"
-  },
-  {
-    "key": "AZunZmrdUT7tpfFOVoJL",
-    "rule": "typescript:S6759",
-    "severity": "MINOR",
-    "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-    "project": "Angelfish-Records_BJR",
-    "line": 761,
-    "hash": "237f8caab6f9564b2e23ab822cb4f920",
-    "textRange": {
-      "startLine": 761,
-      "endLine": 765,
-      "startOffset": 28,
-      "endOffset": 1
-    },
-    "flows": [],
-    "status": "OPEN",
-    "message": "Mark the props of the component as read-only.",
-    "effort": "5min",
-    "debt": "5min",
-    "author": "admin@brendanjohnroch.com",
-    "tags": [
-      "react",
-      "type-dependent"
-    ],
-    "transitions": [
-      "accept",
-      "confirm",
-      "resolve",
-      "falsepositive",
-      "wontfix"
-    ],
-    "actions": [
-      "set_type",
-      "set_tags",
-      "comment",
-      "set_severity",
-      "assign"
-    ],
-    "comments": [],
-    "creationDate": "2026-01-10T10:13:45+0000",
-    "updateDate": "2026-01-10T17:33:24+0000",
-    "type": "CODE_SMELL",
-    "organization": "angelfish-records",
-    "cleanCodeAttribute": "CONVENTIONAL",
-    "cleanCodeAttributeCategory": "CONSISTENT",
-    "impacts": [
-      {
-        "softwareQuality": "MAINTAINABILITY",
-        "severity": "LOW"
-      }
-    ],
-    "issueStatus": "OPEN",
-    "projectName": "BJR",
-    "internalTags": [],
-    "lastChangeAnalysisUuid": "4a96c78b-7687-4cbd-b62b-4854259f5ee7",
-    "lastChangeSource": "ANALYSIS"
   },
   {
     "key": "AZunHfCZK2uMC-GnZvhI",

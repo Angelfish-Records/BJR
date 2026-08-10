@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "exported_at": "2026-08-10T08:59:30.460946Z",
+  "exported_at": "2026-08-10T09:14:19.837576Z",
   "source": {
     "product": "SonarQube Cloud",
     "base_url": "https://sonarcloud.io",
@@ -15,7 +15,7 @@
       "key": "Angelfish-Records_BJR",
       "name": "BJR",
       "qualifier": "TRK",
-      "analysisDate": "2026-08-10T07:36:32+0000",
+      "analysisDate": "2026-08-10T09:08:03+0000",
       "tags": [],
       "visibility": "public",
       "leakPeriodDate": "2026-01-10T08:54:43+0000",
@@ -57,7 +57,7 @@
           "comparator": "GT",
           "periodIndex": 1,
           "errorThreshold": "3",
-          "actualValue": "2.0"
+          "actualValue": "1.8"
         },
         {
           "status": "OK",
@@ -79,103 +79,96 @@
     }
   },
   "summary": {
-    "issue_count": 244,
+    "issue_count": 218,
     "hotspot_count": 0,
     "issues_by_software_quality": {
-      "MAINTAINABILITY": 230,
-      "RELIABILITY": 32
+      "MAINTAINABILITY": 208,
+      "RELIABILITY": 30
     },
     "issues_by_impact_severity": {
-      "LOW": 165,
-      "MEDIUM": 90,
-      "HIGH": 5
+      "LOW": 152,
+      "MEDIUM": 82
     },
     "issues_by_status": {
-      "OPEN": 244
+      "OPEN": 218
     },
     "issues_by_rule": {
-      "typescript:S6759 — React props should be read-only": 72,
-      "typescript:S3358 — Ternary operators should not be nested": 27,
-      "typescript:S6582 — Optional chaining should be preferred": 17,
+      "typescript:S6759 — React props should be read-only": 66,
+      "typescript:S3358 — Ternary operators should not be nested": 24,
       "typescript:S6571 — Type constituents of unions and intersections should not be redundant": 13,
-      "typescript:S7772 — Node.js built-in modules should be imported using the \"node:\" protocol": 9,
+      "typescript:S6582 — Optional chaining should be preferred": 12,
+      "typescript:S6819 — Prefer tag over ARIA role": 9,
+      "typescript:S7772 — Node.js built-in modules should be imported using the \"node:\" protocol": 8,
       "typescript:S9011 — \"<button>\" elements should have an explicit \"type\" attribute": 7,
       "typescript:S6847 — Non-interactive elements shouldn't have event handlers": 6,
       "typescript:S7744 — Unnecessary fallback objects should not be used when spreading in object literals": 5,
-      "typescript:S6819 — Prefer tag over ARIA role": 5,
-      "typescript:S7773 — Number static methods and properties should be preferred over global equivalents": 5,
       "typescript:S6551 — Objects and classes converted or coerced to strings should define a \"toString()\" method": 5,
-      "typescript:S6825 — Focusable elements should not have \"aria-hidden\" attribute": 4,
-      "typescript:S6772 — Spacing between inline elements should be explicit": 4,
-      "typescript:S4144 — Functions should not have identical implementations": 4,
       "typescript:S6644 — Ternary operator should not be used instead of simpler alternatives": 4,
+      "typescript:S6843 — Interactive DOM elements should not have non-interactive ARIA roles": 3,
       "typescript:S7780 — String literals with escaped backslashes should use `String.raw` template literals": 3,
       "typescript:S6754 — The return value of \"useState\" should be destructured and named symmetrically": 3,
-      "typescript:S7741 — \"typeof\" should not be used to check for \"undefined\"": 3,
-      "typescript:S4084 — Media elements should have captions": 3,
-      "typescript:S3776 — Cognitive Complexity of functions should not be too high": 3,
+      "typescript:S6772 — Spacing between inline elements should be explicit": 3,
       "typescript:S6594 — \"RegExp.exec()\" should be preferred over \"String.match()\"": 3,
       "typescript:S7763 — Re-exports should use \"export...from\" syntax": 3,
       "typescript:S6564 — Redundant type aliases should not be used": 3,
       "typescript:S2933 — Fields that are only assigned in the constructor should be \"readonly\"": 3,
+      "typescript:S7773 — Number static methods and properties should be preferred over global equivalents": 3,
+      "typescript:S7741 — \"typeof\" should not be used to check for \"undefined\"": 2,
       "typescript:S7755 — Complex index access patterns should be replaced with \".at()\" method": 2,
       "typescript:S107 — Functions should not have too many parameters": 2,
       "typescript:S7758 — Unicode-aware string methods should be used for proper character handling": 2,
+      "typescript:S4084 — Media elements should have captions": 2,
       "typescript:S4624 — Template literals should not be nested": 2,
       "css:S4666 — Selectors should not be duplicated": 2,
-      "typescript:S6767 — Unused React typed props should be removed": 2,
+      "typescript:S7781 — Strings should use \"replaceAll()\" instead of \"replace()\" with global regex": 2,
       "typescript:S6509 — Extra boolean casts should be removed": 1,
-      "typescript:S6653 — Use Object.hasOwn static method instead of hasOwnProperty": 1,
       "typescript:S6749 — Redundant JSX fragments should be removed": 1,
-      "typescript:S3735 — \"void\" should not be used": 1,
       "typescript:S7738 — Single-element arrays should not be passed to Promise methods": 1,
-      "typescript:S4782 — Optional property declarations should not use both '?' and 'undefined' syntax": 1,
       "typescript:S1874 — Deprecated APIs should not be used": 1,
       "typescript:S7762 — DOM nodes should be removed using \"remove()\" instead of \"removeChild()\"": 1,
       "typescript:S6606 — Nullish coalescing should be preferred": 1,
       "typescript:S4323 — Type aliases should be used": 1,
-      "typescript:S7761 — Data attributes should be accessed using \".dataset\"": 1,
       "typescript:S7750 — Array methods \".find()\" and \".findLast()\" should be preferred over \".filter()\" for single element retrieval": 1,
       "typescript:S7776 — Arrays used only for existence checks should be Sets": 1,
       "typescript:S7778 — Multiple consecutive calls to methods that accept multiple arguments should be combined": 1,
       "typescript:S6353 — Regular expression quantifiers and character classes should be used concisely": 1,
+      "typescript:S6767 — Unused React typed props should be removed": 1,
       "typescript:S6478 — React components should not be nested": 1,
+      "typescript:S6825 — Focusable elements should not have \"aria-hidden\" attribute": 1,
       "typescript:S6848 — Non-interactive DOM elements should not have an interactive handler": 1,
       "typescript:S7721 — Functions should be moved to the highest possible scope": 1
     },
     "issues_by_file": {
-      "app/home/player/VisualizerPattern.tsx": 16,
-      "app/internal/render/visualizer/VisualizerLivePreview.tsx": 7,
       "app/home/modules/BuyAlbumButton.tsx": 6,
       "app/(site)/exegesis/[displayId]/TipTapEditor.tsx": 6,
+      "lib/unsubscribe.ts": 5,
       "app/home/modules/PortalArtistPostItem.tsx": 5,
       "app/admin/exegesis/ExegesisModerator.tsx": 5,
       "app/home/gating/GateSpotlightOverlay.tsx": 5,
       "app/home/player/StageInline.tsx": 5,
       "app/home/modules/GiftAlbumButton.tsx": 5,
+      "app/home/player/VisualizerPattern.tsx": 4,
       "app/home/StableSessionShell.tsx": 4,
-      "app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx": 4,
       "app/home/modules/PortalArtistPostsComposer.tsx": 4,
       "app/(site)/exegesis/[displayId]/components/ExegesisRichComposer.tsx": 4,
       "app/admin/share-tokens/AdminMintShareTokenForm.tsx": 4,
       "app/api/admin/campaigns/images/upload/route.ts": 4,
       "app/api/exegesis/comment/route.ts": 3,
       "app/home/player/share.ts": 3,
-      "lib/unsubscribe.ts": 3,
-      "lib/albums.ts": 3,
       "sanity/schemaTypes/modulePanels.ts": 3,
       "app/home/modules/portalArtistPostsPortableText.tsx": 3,
+      "app/home/modules/PortalMemberPanel.tsx": 3,
       "lib/vocab.ts": 3,
       "app/home/player/StageCore.tsx": 3,
       "app/home/PortalTabs.tsx": 3,
       "app/api/artist-posts/route.ts": 3,
       "app/api/webhooks/clerk/route.ts": 3,
       "app/api/admin/campaigns/enqueue/route.ts": 3,
+      "app/internal/render/visualizer/VisualizerLivePreview.tsx": 2,
       "app/api/mux/_playbackIssuance.ts": 2,
       "app/home/ActivationGate.tsx": 2,
       "app/internal/render/visualizer/page.tsx": 2,
       "app/home/player/AudioEngine.tsx": 2,
-      "app/home/modules/PortalMemberPanel.tsx": 2,
       "app/home/AdminRibbon.tsx": 2,
       "app/(site)/(session)/layout.tsx": 2,
       "app/home/useSessionSurfaceController.ts": 2,
@@ -187,7 +180,6 @@
       "app/home/admin/AdminOverlayShell.tsx": 2,
       "app/home/gating/GateBroker.tsx": 2,
       "app/(site)/PlayerHost.tsx": 2,
-      "app/home/player/StageInlineHost.tsx": 2,
       "emails/MailbagAnswered.tsx": 2,
       "app/home/MembershipModalProvider.tsx": 2,
       "app/api/downloads/album/route.ts": 2,
@@ -196,7 +188,6 @@
       "app/home/PortalShell.tsx": 2,
       "app/home/player/mediaSurface.ts": 2,
       "lib/entitlementOps.ts": 2,
-      "app/gift/[giftId]/page.tsx": 2,
       "app/home/player/PlayerController.tsx": 2,
       "app/home/player/VisualizerCanvas.tsx": 2,
       "app/home/player/MuxUploader.tsx": 2,
@@ -208,7 +199,6 @@
       "lib/stripePurchases.ts": 1,
       "app/home/player/visualizer/gl/fbo.ts": 1,
       "lib/nav/preservedQuery.ts": 1,
-      "app/home/urlState.ts": 1,
       "app/home/player/visualizer/gl/pingpong.ts": 1,
       "app/api/admin/recordings/search/route.ts": 1,
       "app/(site)/exegesis/[displayId]/components/ExegesisTrackLoadingShell.tsx": 1,
@@ -272,6 +262,285 @@
   },
   "warnings": [],
   "issues": [
+    {
+      "finding_kind": "issue",
+      "issue_key": "AZ_q6W-iW1WCANsuVuqE",
+      "project_key": "Angelfish-Records_BJR",
+      "branch": "main",
+      "component_key": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
+      "file_path": "app/home/player/VisualizerPattern.tsx",
+      "line": 433,
+      "end_line": 449,
+      "start_offset": 4,
+      "end_offset": 6,
+      "message": "Use <img alt=...> instead of the \"presentation\" role to ensure accessibility across all devices.",
+      "rule_key": "typescript:S6819",
+      "rule_name": "Prefer tag over ARIA role",
+      "status": "OPEN",
+      "resolution": "",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "software_qualities": [
+        "MAINTAINABILITY"
+      ],
+      "impact_severities": [
+        "MEDIUM"
+      ],
+      "impacts": [
+        "MAINTAINABILITY:MEDIUM"
+      ],
+      "clean_code_attribute": "CONVENTIONAL",
+      "clean_code_category": "CONSISTENT",
+      "effort": "5min",
+      "author": "admin@brendanjohnroch.com",
+      "assignee": "",
+      "tags": [
+        "accessibility",
+        "react"
+      ],
+      "creation_date": "2026-08-10T09:02:12+0000",
+      "update_date": "2026-08-10T09:02:23+0000",
+      "quick_fix_available": "",
+      "rule_description": "",
+      "remediation_guidance": "",
+      "flows": [],
+      "comments": [],
+      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ_q6W-iW1WCANsuVuqE&open=AZ_q6W-iW1WCANsuVuqE"
+    },
+    {
+      "finding_kind": "issue",
+      "issue_key": "AZ_q6W-iW1WCANsuVuqF",
+      "project_key": "Angelfish-Records_BJR",
+      "branch": "main",
+      "component_key": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
+      "file_path": "app/home/player/VisualizerPattern.tsx",
+      "line": 435,
+      "end_line": 435,
+      "start_offset": 6,
+      "end_offset": 25,
+      "message": "Interactive elements should not be assigned non-interactive roles.",
+      "rule_key": "typescript:S6843",
+      "rule_name": "Interactive DOM elements should not have non-interactive ARIA roles",
+      "status": "OPEN",
+      "resolution": "",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "software_qualities": [
+        "MAINTAINABILITY",
+        "RELIABILITY"
+      ],
+      "impact_severities": [
+        "LOW",
+        "MEDIUM"
+      ],
+      "impacts": [
+        "RELIABILITY:MEDIUM",
+        "MAINTAINABILITY:LOW"
+      ],
+      "clean_code_attribute": "CONVENTIONAL",
+      "clean_code_category": "CONSISTENT",
+      "effort": "5min",
+      "author": "admin@brendanjohnroch.com",
+      "assignee": "",
+      "tags": [
+        "accessibility",
+        "react"
+      ],
+      "creation_date": "2026-08-10T09:02:12+0000",
+      "update_date": "2026-08-10T09:02:23+0000",
+      "quick_fix_available": "",
+      "rule_description": "",
+      "remediation_guidance": "",
+      "flows": [],
+      "comments": [],
+      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ_q6W-iW1WCANsuVuqF&open=AZ_q6W-iW1WCANsuVuqF"
+    },
+    {
+      "finding_kind": "issue",
+      "issue_key": "AZ_q6W-iW1WCANsuVuqG",
+      "project_key": "Angelfish-Records_BJR",
+      "branch": "main",
+      "component_key": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
+      "file_path": "app/home/player/VisualizerPattern.tsx",
+      "line": 631,
+      "end_line": 641,
+      "start_offset": 4,
+      "end_offset": 6,
+      "message": "Use <img alt=...> instead of the \"presentation\" role to ensure accessibility across all devices.",
+      "rule_key": "typescript:S6819",
+      "rule_name": "Prefer tag over ARIA role",
+      "status": "OPEN",
+      "resolution": "",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "software_qualities": [
+        "MAINTAINABILITY"
+      ],
+      "impact_severities": [
+        "MEDIUM"
+      ],
+      "impacts": [
+        "MAINTAINABILITY:MEDIUM"
+      ],
+      "clean_code_attribute": "CONVENTIONAL",
+      "clean_code_category": "CONSISTENT",
+      "effort": "5min",
+      "author": "admin@brendanjohnroch.com",
+      "assignee": "",
+      "tags": [
+        "accessibility",
+        "react"
+      ],
+      "creation_date": "2026-08-10T09:02:12+0000",
+      "update_date": "2026-08-10T09:02:23+0000",
+      "quick_fix_available": "",
+      "rule_description": "",
+      "remediation_guidance": "",
+      "flows": [],
+      "comments": [],
+      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ_q6W-iW1WCANsuVuqG&open=AZ_q6W-iW1WCANsuVuqG"
+    },
+    {
+      "finding_kind": "issue",
+      "issue_key": "AZ_q6W-iW1WCANsuVuqH",
+      "project_key": "Angelfish-Records_BJR",
+      "branch": "main",
+      "component_key": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
+      "file_path": "app/home/player/VisualizerPattern.tsx",
+      "line": 633,
+      "end_line": 633,
+      "start_offset": 6,
+      "end_offset": 25,
+      "message": "Interactive elements should not be assigned non-interactive roles.",
+      "rule_key": "typescript:S6843",
+      "rule_name": "Interactive DOM elements should not have non-interactive ARIA roles",
+      "status": "OPEN",
+      "resolution": "",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "software_qualities": [
+        "MAINTAINABILITY",
+        "RELIABILITY"
+      ],
+      "impact_severities": [
+        "LOW",
+        "MEDIUM"
+      ],
+      "impacts": [
+        "RELIABILITY:MEDIUM",
+        "MAINTAINABILITY:LOW"
+      ],
+      "clean_code_attribute": "CONVENTIONAL",
+      "clean_code_category": "CONSISTENT",
+      "effort": "5min",
+      "author": "admin@brendanjohnroch.com",
+      "assignee": "",
+      "tags": [
+        "accessibility",
+        "react"
+      ],
+      "creation_date": "2026-08-10T09:02:12+0000",
+      "update_date": "2026-08-10T09:02:23+0000",
+      "quick_fix_available": "",
+      "rule_description": "",
+      "remediation_guidance": "",
+      "flows": [],
+      "comments": [],
+      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ_q6W-iW1WCANsuVuqH&open=AZ_q6W-iW1WCANsuVuqH"
+    },
+    {
+      "finding_kind": "issue",
+      "issue_key": "AZ_q6XKcW1WCANsuVuqI",
+      "project_key": "Angelfish-Records_BJR",
+      "branch": "main",
+      "component_key": "Angelfish-Records_BJR:app/internal/render/visualizer/VisualizerLivePreview.tsx",
+      "file_path": "app/internal/render/visualizer/VisualizerLivePreview.tsx",
+      "line": 698,
+      "end_line": 710,
+      "start_offset": 6,
+      "end_offset": 8,
+      "message": "Use <img alt=...> instead of the \"presentation\" role to ensure accessibility across all devices.",
+      "rule_key": "typescript:S6819",
+      "rule_name": "Prefer tag over ARIA role",
+      "status": "OPEN",
+      "resolution": "",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "software_qualities": [
+        "MAINTAINABILITY"
+      ],
+      "impact_severities": [
+        "MEDIUM"
+      ],
+      "impacts": [
+        "MAINTAINABILITY:MEDIUM"
+      ],
+      "clean_code_attribute": "CONVENTIONAL",
+      "clean_code_category": "CONSISTENT",
+      "effort": "5min",
+      "author": "admin@brendanjohnroch.com",
+      "assignee": "",
+      "tags": [
+        "accessibility",
+        "react"
+      ],
+      "creation_date": "2026-08-10T09:02:12+0000",
+      "update_date": "2026-08-10T09:02:23+0000",
+      "quick_fix_available": "",
+      "rule_description": "",
+      "remediation_guidance": "",
+      "flows": [],
+      "comments": [],
+      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ_q6XKcW1WCANsuVuqI&open=AZ_q6XKcW1WCANsuVuqI"
+    },
+    {
+      "finding_kind": "issue",
+      "issue_key": "AZ_q6XKcW1WCANsuVuqJ",
+      "project_key": "Angelfish-Records_BJR",
+      "branch": "main",
+      "component_key": "Angelfish-Records_BJR:app/internal/render/visualizer/VisualizerLivePreview.tsx",
+      "file_path": "app/internal/render/visualizer/VisualizerLivePreview.tsx",
+      "line": 700,
+      "end_line": 700,
+      "start_offset": 8,
+      "end_offset": 27,
+      "message": "Interactive elements should not be assigned non-interactive roles.",
+      "rule_key": "typescript:S6843",
+      "rule_name": "Interactive DOM elements should not have non-interactive ARIA roles",
+      "status": "OPEN",
+      "resolution": "",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "software_qualities": [
+        "MAINTAINABILITY",
+        "RELIABILITY"
+      ],
+      "impact_severities": [
+        "LOW",
+        "MEDIUM"
+      ],
+      "impacts": [
+        "RELIABILITY:MEDIUM",
+        "MAINTAINABILITY:LOW"
+      ],
+      "clean_code_attribute": "CONVENTIONAL",
+      "clean_code_category": "CONSISTENT",
+      "effort": "5min",
+      "author": "admin@brendanjohnroch.com",
+      "assignee": "",
+      "tags": [
+        "accessibility",
+        "react"
+      ],
+      "creation_date": "2026-08-10T09:02:12+0000",
+      "update_date": "2026-08-10T09:02:23+0000",
+      "quick_fix_available": "",
+      "rule_description": "",
+      "remediation_guidance": "",
+      "flows": [],
+      "comments": [],
+      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ_q6XKcW1WCANsuVuqJ&open=AZ_q6XKcW1WCANsuVuqJ"
+    },
     {
       "finding_kind": "issue",
       "issue_key": "AZ_qmtAOwpN0uIMdo9hk",
@@ -548,50 +817,6 @@
     },
     {
       "finding_kind": "issue",
-      "issue_key": "AZ_UqQ2GGA9NVutV3atc",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/internal/render/visualizer/VisualizerLivePreview.tsx",
-      "file_path": "app/internal/render/visualizer/VisualizerLivePreview.tsx",
-      "line": 123,
-      "end_line": 123,
-      "start_offset": 15,
-      "end_offset": 74,
-      "message": "Use 'Object.hasOwn()' instead of 'Object.prototype.hasOwnProperty.call()'.",
-      "rule_key": "typescript:S6653",
-      "rule_name": "Use Object.hasOwn static method instead of hasOwnProperty",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MINOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "LOW"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:LOW"
-      ],
-      "clean_code_attribute": "CLEAR",
-      "clean_code_category": "INTENTIONAL",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "es2022"
-      ],
-      "creation_date": "2026-08-06T01:20:09+0000",
-      "update_date": "2026-08-06T01:20:22+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ_UqQ2GGA9NVutV3atc&open=AZ_UqQ2GGA9NVutV3atc"
-    },
-    {
-      "finding_kind": "issue",
       "issue_key": "AZ-dzcI6ZiQzo-vEikdd",
       "project_key": "Angelfish-Records_BJR",
       "branch": "main",
@@ -821,340 +1046,6 @@
       "flows": [],
       "comments": [],
       "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ-dSrBTBaRu4znBxjrQ&open=AZ-dSrBTBaRu4znBxjrQ"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZ-S4URm_95_XqQUebOr",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/internal/render/visualizer/VisualizerLivePreview.tsx",
-      "file_path": "app/internal/render/visualizer/VisualizerLivePreview.tsx",
-      "line": 146,
-      "end_line": 146,
-      "start_offset": 46,
-      "end_offset": 58,
-      "message": "Mark the props of the component as read-only.",
-      "rule_key": "typescript:S6759",
-      "rule_name": "React props should be read-only",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MINOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "LOW"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:LOW"
-      ],
-      "clean_code_attribute": "CONVENTIONAL",
-      "clean_code_category": "CONSISTENT",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "react",
-        "type-dependent"
-      ],
-      "creation_date": "2026-07-24T06:46:42+0000",
-      "update_date": "2026-07-24T06:46:54+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ-S4URm_95_XqQUebOr&open=AZ-S4URm_95_XqQUebOr"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZ-S4URm_95_XqQUebOs",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/internal/render/visualizer/VisualizerLivePreview.tsx",
-      "file_path": "app/internal/render/visualizer/VisualizerLivePreview.tsx",
-      "line": 264,
-      "end_line": 265,
-      "start_offset": 8,
-      "end_offset": 33,
-      "message": "Prefer using an optional chain expression instead, as it's more concise and easier to read.",
-      "rule_key": "typescript:S6582",
-      "rule_name": "Optional chaining should be preferred",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MINOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "LOW"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:LOW"
-      ],
-      "clean_code_attribute": "CLEAR",
-      "clean_code_category": "INTENTIONAL",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "editable-source",
-        "type-dependent"
-      ],
-      "creation_date": "2026-07-24T06:46:42+0000",
-      "update_date": "2026-07-24T06:46:54+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ-S4URm_95_XqQUebOs&open=AZ-S4URm_95_XqQUebOs"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZ-S4URm_95_XqQUebOt",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/internal/render/visualizer/VisualizerLivePreview.tsx",
-      "file_path": "app/internal/render/visualizer/VisualizerLivePreview.tsx",
-      "line": 625,
-      "end_line": 627,
-      "start_offset": 8,
-      "end_offset": 34,
-      "message": "Extract this nested ternary operation into an independent statement.",
-      "rule_key": "typescript:S3358",
-      "rule_name": "Ternary operators should not be nested",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MAJOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "MEDIUM"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:MEDIUM"
-      ],
-      "clean_code_attribute": "CLEAR",
-      "clean_code_category": "INTENTIONAL",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "confusing",
-        "editable-source"
-      ],
-      "creation_date": "2026-07-24T06:46:42+0000",
-      "update_date": "2026-07-24T06:46:54+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ-S4URm_95_XqQUebOt&open=AZ-S4URm_95_XqQUebOt"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZ-S4URm_95_XqQUebOu",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/internal/render/visualizer/VisualizerLivePreview.tsx",
-      "file_path": "app/internal/render/visualizer/VisualizerLivePreview.tsx",
-      "line": 633,
-      "end_line": 645,
-      "start_offset": 6,
-      "end_offset": 8,
-      "message": "aria-hidden=\"true\" must not be set on focusable elements.",
-      "rule_key": "typescript:S6825",
-      "rule_name": "Focusable elements should not have \"aria-hidden\" attribute",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MAJOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "RELIABILITY"
-      ],
-      "impact_severities": [
-        "MEDIUM"
-      ],
-      "impacts": [
-        "RELIABILITY:MEDIUM"
-      ],
-      "clean_code_attribute": "CONVENTIONAL",
-      "clean_code_category": "CONSISTENT",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "accessibility",
-        "react"
-      ],
-      "creation_date": "2026-07-24T06:46:42+0000",
-      "update_date": "2026-07-24T06:46:54+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ-S4URm_95_XqQUebOu&open=AZ-S4URm_95_XqQUebOu"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZ-S4URm_95_XqQUebOv",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/internal/render/visualizer/VisualizerLivePreview.tsx",
-      "file_path": "app/internal/render/visualizer/VisualizerLivePreview.tsx",
-      "line": 701,
-      "end_line": 701,
-      "start_offset": 0,
-      "end_offset": 21,
-      "message": "Ambiguous spacing before next element select",
-      "rule_key": "typescript:S6772",
-      "rule_name": "Spacing between inline elements should be explicit",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MAJOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY",
-        "RELIABILITY"
-      ],
-      "impact_severities": [
-        "LOW",
-        "MEDIUM"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:MEDIUM",
-        "RELIABILITY:LOW"
-      ],
-      "clean_code_attribute": "FORMATTED",
-      "clean_code_category": "CONSISTENT",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "react"
-      ],
-      "creation_date": "2026-07-24T06:46:42+0000",
-      "update_date": "2026-07-24T06:46:54+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ-S4URm_95_XqQUebOv&open=AZ-S4URm_95_XqQUebOv"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZ-S4URm_95_XqQUebOw",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/internal/render/visualizer/VisualizerLivePreview.tsx",
-      "file_path": "app/internal/render/visualizer/VisualizerLivePreview.tsx",
-      "line": 779,
-      "end_line": 779,
-      "start_offset": 11,
-      "end_offset": 16,
-      "message": "Media elements such as <audio> and <video> must have a <track> for captions.",
-      "rule_key": "typescript:S4084",
-      "rule_name": "Media elements should have captions",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MINOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "RELIABILITY"
-      ],
-      "impact_severities": [
-        "LOW"
-      ],
-      "impacts": [
-        "RELIABILITY:LOW"
-      ],
-      "clean_code_attribute": "CONVENTIONAL",
-      "clean_code_category": "CONSISTENT",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "accessibility",
-        "react"
-      ],
-      "creation_date": "2026-07-24T06:46:42+0000",
-      "update_date": "2026-07-24T06:46:54+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ-S4URm_95_XqQUebOw&open=AZ-S4URm_95_XqQUebOw"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZ87qq7CyrfTyaIdPF7P",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-      "file_path": "app/home/player/VisualizerPattern.tsx",
-      "line": 503,
-      "end_line": 503,
-      "start_offset": 33,
-      "end_offset": 35,
-      "message": "Update this function so that its implementation is not identical to the one on line 295.",
-      "rule_key": "typescript:S4144",
-      "rule_name": "Functions should not have identical implementations",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MAJOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "MEDIUM"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:MEDIUM"
-      ],
-      "clean_code_attribute": "DISTINCT",
-      "clean_code_category": "ADAPTABLE",
-      "effort": "15min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "confusing",
-        "duplicate",
-        "editable-source",
-        "suspicious"
-      ],
-      "creation_date": "2026-07-07T08:20:24+0000",
-      "update_date": "2026-07-07T08:20:24+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-              "textRange": {
-                "startLine": 295,
-                "endLine": 295,
-                "startOffset": 33,
-                "endOffset": 35
-              },
-              "msg": "Original implementation"
-            }
-          ]
-        }
-      ],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ87qq7CyrfTyaIdPF7P&open=AZ87qq7CyrfTyaIdPF7P"
     },
     {
       "finding_kind": "issue",
@@ -1427,336 +1318,6 @@
     },
     {
       "finding_kind": "issue",
-      "issue_key": "AZ31JNENQrjaVR6fY595",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-      "file_path": "app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-      "line": 55,
-      "end_line": 55,
-      "start_offset": 9,
-      "end_offset": 15,
-      "message": "Compare with `undefined` directly instead of using `typeof`.",
-      "rule_key": "typescript:S7741",
-      "rule_name": "\"typeof\" should not be used to check for \"undefined\"",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MINOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "LOW"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:LOW"
-      ],
-      "clean_code_attribute": "CONVENTIONAL",
-      "clean_code_category": "CONSISTENT",
-      "effort": "2min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "readability",
-        "style"
-      ],
-      "creation_date": "2026-05-04T22:37:37+0000",
-      "update_date": "2026-05-04T22:37:37+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ31JNENQrjaVR6fY595&open=AZ31JNENQrjaVR6fY595"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZ31JNENQrjaVR6fY596",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-      "file_path": "app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-      "line": 93,
-      "end_line": 93,
-      "start_offset": 24,
-      "end_offset": 43,
-      "message": "Refactor this function to reduce its Cognitive Complexity from 17 to the 15 allowed.",
-      "rule_key": "typescript:S3776",
-      "rule_name": "Cognitive Complexity of functions should not be too high",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "CRITICAL",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "HIGH"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:HIGH"
-      ],
-      "clean_code_attribute": "FOCUSED",
-      "clean_code_category": "ADAPTABLE",
-      "effort": "7min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "brain-overload"
-      ],
-      "creation_date": "2026-05-04T22:37:37+0000",
-      "update_date": "2026-05-04T22:37:37+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-              "textRange": {
-                "startLine": 684,
-                "endLine": 684,
-                "startOffset": 37,
-                "endOffset": 39
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-              "textRange": {
-                "startLine": 757,
-                "endLine": 757,
-                "startOffset": 4,
-                "endOffset": 5
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-              "textRange": {
-                "startLine": 759,
-                "endLine": 759,
-                "startOffset": 6,
-                "endOffset": 7
-              },
-              "msg": "+2 (incl. 1 for nesting)"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-              "textRange": {
-                "startLine": 764,
-                "endLine": 764,
-                "startOffset": 6,
-                "endOffset": 7
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-              "textRange": {
-                "startLine": 766,
-                "endLine": 766,
-                "startOffset": 8,
-                "endOffset": 9
-              },
-              "msg": "+2 (incl. 1 for nesting)"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-              "textRange": {
-                "startLine": 770,
-                "endLine": 770,
-                "startOffset": 4,
-                "endOffset": 5
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-              "textRange": {
-                "startLine": 775,
-                "endLine": 775,
-                "startOffset": 37,
-                "endOffset": 38
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-              "textRange": {
-                "startLine": 805,
-                "endLine": 805,
-                "startOffset": 48,
-                "endOffset": 49
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-              "textRange": {
-                "startLine": 805,
-                "endLine": 805,
-                "startOffset": 37,
-                "endOffset": 39
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-              "textRange": {
-                "startLine": 828,
-                "endLine": 828,
-                "startOffset": 30,
-                "endOffset": 31
-              },
-              "msg": "+2 (incl. 1 for nesting)"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-              "textRange": {
-                "startLine": 954,
-                "endLine": 954,
-                "startOffset": 31,
-                "endOffset": 32
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-              "textRange": {
-                "startLine": 960,
-                "endLine": 960,
-                "startOffset": 31,
-                "endOffset": 32
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-              "textRange": {
-                "startLine": 973,
-                "endLine": 973,
-                "startOffset": 46,
-                "endOffset": 47
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-              "textRange": {
-                "startLine": 979,
-                "endLine": 979,
-                "startOffset": 30,
-                "endOffset": 31
-              },
-              "msg": "+1"
-            }
-          ]
-        }
-      ],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ31JNENQrjaVR6fY596&open=AZ31JNENQrjaVR6fY596"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZ31JNENQrjaVR6fY598",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-      "file_path": "app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-      "line": 765,
-      "end_line": 767,
-      "start_offset": 8,
-      "end_offset": 12,
-      "message": "Extract this nested ternary operation into an independent statement.",
-      "rule_key": "typescript:S3358",
-      "rule_name": "Ternary operators should not be nested",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MAJOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "MEDIUM"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:MEDIUM"
-      ],
-      "clean_code_attribute": "CLEAR",
-      "clean_code_category": "INTENTIONAL",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "confusing"
-      ],
-      "creation_date": "2026-05-04T22:37:37+0000",
-      "update_date": "2026-05-04T22:37:37+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ31JNENQrjaVR6fY598&open=AZ31JNENQrjaVR6fY598"
-    },
-    {
-      "finding_kind": "issue",
       "issue_key": "AZ30_tJPOGWn8jWtV1xH",
       "project_key": "Angelfish-Records_BJR",
       "branch": "main",
@@ -1781,8 +1342,8 @@
         "LOW"
       ],
       "impacts": [
-        "RELIABILITY:LOW",
-        "MAINTAINABILITY:LOW"
+        "MAINTAINABILITY:LOW",
+        "RELIABILITY:LOW"
       ],
       "clean_code_attribute": "CONVENTIONAL",
       "clean_code_category": "CONSISTENT",
@@ -1829,8 +1390,8 @@
         "LOW"
       ],
       "impacts": [
-        "RELIABILITY:LOW",
-        "MAINTAINABILITY:LOW"
+        "MAINTAINABILITY:LOW",
+        "RELIABILITY:LOW"
       ],
       "clean_code_attribute": "CONVENTIONAL",
       "clean_code_category": "CONSISTENT",
@@ -1895,222 +1456,6 @@
       "flows": [],
       "comments": [],
       "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ3wC1CskHL9_JSpyWFR&open=AZ3wC1CskHL9_JSpyWFR"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZ3qPOR6DB_MdPLc5EER",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:lib/albums.ts",
-      "file_path": "lib/albums.ts",
-      "line": 349,
-      "end_line": 349,
-      "start_offset": 22,
-      "end_offset": 54,
-      "message": "Refactor this function to reduce its Cognitive Complexity from 16 to the 15 allowed.",
-      "rule_key": "typescript:S3776",
-      "rule_name": "Cognitive Complexity of functions should not be too high",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "CRITICAL",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "HIGH"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:HIGH"
-      ],
-      "clean_code_attribute": "FOCUSED",
-      "clean_code_category": "ADAPTABLE",
-      "effort": "6min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "brain-overload"
-      ],
-      "creation_date": "2026-05-02T19:48:27+0000",
-      "update_date": "2026-05-02T19:48:27+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:lib/albums.ts",
-              "textRange": {
-                "startLine": 359,
-                "endLine": 359,
-                "startOffset": 2,
-                "endOffset": 4
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:lib/albums.ts",
-              "textRange": {
-                "startLine": 403,
-                "endLine": 403,
-                "startOffset": 39,
-                "endOffset": 40
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:lib/albums.ts",
-              "textRange": {
-                "startLine": 407,
-                "endLine": 407,
-                "startOffset": 2,
-                "endOffset": 4
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:lib/albums.ts",
-              "textRange": {
-                "startLine": 408,
-                "endLine": 408,
-                "startOffset": 4,
-                "endOffset": 7
-              },
-              "msg": "+2 (incl. 1 for nesting)"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:lib/albums.ts",
-              "textRange": {
-                "startLine": 413,
-                "endLine": 413,
-                "startOffset": 6,
-                "endOffset": 8
-              },
-              "msg": "+3 (incl. 2 for nesting)"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:lib/albums.ts",
-              "textRange": {
-                "startLine": 419,
-                "endLine": 419,
-                "startOffset": 10,
-                "endOffset": 11
-              },
-              "msg": "+3 (incl. 2 for nesting)"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:lib/albums.ts",
-              "textRange": {
-                "startLine": 416,
-                "endLine": 416,
-                "startOffset": 41,
-                "endOffset": 43
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:lib/albums.ts",
-              "textRange": {
-                "startLine": 426,
-                "endLine": 426,
-                "startOffset": 43,
-                "endOffset": 44
-              },
-              "msg": "+3 (incl. 2 for nesting)"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:lib/albums.ts",
-              "textRange": {
-                "startLine": 432,
-                "endLine": 432,
-                "startOffset": 32,
-                "endOffset": 34
-              },
-              "msg": "+1"
-            }
-          ]
-        }
-      ],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ3qPOR6DB_MdPLc5EER&open=AZ3qPOR6DB_MdPLc5EER"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZ3qHtmCXYbs7ObcMEy_",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/home/urlState.ts",
-      "file_path": "app/home/urlState.ts",
-      "line": 179,
-      "end_line": 179,
-      "start_offset": 4,
-      "end_offset": 8,
-      "message": "Remove this use of the \"void\" operator.",
-      "rule_key": "typescript:S3735",
-      "rule_name": "\"void\" should not be used",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "CRITICAL",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "HIGH"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:HIGH"
-      ],
-      "clean_code_attribute": "CLEAR",
-      "clean_code_category": "INTENTIONAL",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "confusing",
-        "type-dependent"
-      ],
-      "creation_date": "2026-05-02T19:15:17+0000",
-      "update_date": "2026-05-02T19:15:17+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZ3qHtmCXYbs7ObcMEy_&open=AZ3qHtmCXYbs7ObcMEy_"
     },
     {
       "finding_kind": "issue",
@@ -2787,6 +2132,51 @@
       "flows": [],
       "comments": [],
       "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZzknk6eTZE3UWWm5X12&open=AZzknk6eTZE3UWWm5X12"
+    },
+    {
+      "finding_kind": "issue",
+      "issue_key": "AZzknk6eTZE3UWWm5X13",
+      "project_key": "Angelfish-Records_BJR",
+      "branch": "main",
+      "component_key": "Angelfish-Records_BJR:app/home/modules/PortalMemberPanel.tsx",
+      "file_path": "app/home/modules/PortalMemberPanel.tsx",
+      "line": 24,
+      "end_line": 31,
+      "start_offset": 4,
+      "end_offset": 5,
+      "message": "Use <table> instead of the \"table\" role to ensure accessibility across all devices.",
+      "rule_key": "typescript:S6819",
+      "rule_name": "Prefer tag over ARIA role",
+      "status": "OPEN",
+      "resolution": "",
+      "severity": "MAJOR",
+      "type": "CODE_SMELL",
+      "software_qualities": [
+        "MAINTAINABILITY"
+      ],
+      "impact_severities": [
+        "MEDIUM"
+      ],
+      "impacts": [
+        "MAINTAINABILITY:MEDIUM"
+      ],
+      "clean_code_attribute": "CONVENTIONAL",
+      "clean_code_category": "CONSISTENT",
+      "effort": "5min",
+      "author": "admin@brendanjohnroch.com",
+      "assignee": "",
+      "tags": [
+        "accessibility",
+        "react"
+      ],
+      "creation_date": "2026-03-13T00:34:01+0000",
+      "update_date": "2026-08-10T09:02:23+0000",
+      "quick_fix_available": "",
+      "rule_description": "",
+      "remediation_guidance": "",
+      "flows": [],
+      "comments": [],
+      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZzknk6eTZE3UWWm5X13&open=AZzknk6eTZE3UWWm5X13"
     },
     {
       "finding_kind": "issue",
@@ -3589,65 +2979,6 @@
       "flows": [],
       "comments": [],
       "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZzWjmBO-AVnfe6I4DOs&open=AZzWjmBO-AVnfe6I4DOs"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZzVFzwDuXUW7gR7cgMt",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:lib/albums.ts",
-      "file_path": "lib/albums.ts",
-      "line": 165,
-      "end_line": 165,
-      "start_offset": 21,
-      "end_offset": 22,
-      "message": "Consider removing 'undefined' type or '?' specifier, one of them is redundant.",
-      "rule_key": "typescript:S4782",
-      "rule_name": "Optional property declarations should not use both '?' and 'undefined' syntax",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MAJOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "MEDIUM"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:MEDIUM"
-      ],
-      "clean_code_attribute": "CLEAR",
-      "clean_code_category": "INTENTIONAL",
-      "effort": "1min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "redundant",
-        "type-dependent"
-      ],
-      "creation_date": "2026-03-10T00:12:16+0000",
-      "update_date": "2026-03-10T00:12:16+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:lib/albums.ts",
-              "textRange": {
-                "startLine": 165,
-                "endLine": 165,
-                "startOffset": 33,
-                "endOffset": 42
-              }
-            }
-          ]
-        }
-      ],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZzVFzwDuXUW7gR7cgMt&open=AZzVFzwDuXUW7gR7cgMt"
     },
     {
       "finding_kind": "issue",
@@ -5822,50 +5153,6 @@
     },
     {
       "finding_kind": "issue",
-      "issue_key": "AZy9dLGgQh-IuXSn3Bsr",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-      "file_path": "app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx",
-      "line": 758,
-      "end_line": 760,
-      "start_offset": 6,
-      "end_offset": 48,
-      "message": "Extract this nested ternary operation into an independent statement.",
-      "rule_key": "typescript:S3358",
-      "rule_name": "Ternary operators should not be nested",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MAJOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "MEDIUM"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:MEDIUM"
-      ],
-      "clean_code_attribute": "CLEAR",
-      "clean_code_category": "INTENTIONAL",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "confusing"
-      ],
-      "creation_date": "2026-02-26T23:11:07+0000",
-      "update_date": "2026-03-09T22:46:13+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZy9dLGgQh-IuXSn3Bsr&open=AZy9dLGgQh-IuXSn3Bsr"
-    },
-    {
-      "finding_kind": "issue",
       "issue_key": "AZySC05tUTSi5MH-fFld",
       "project_key": "Angelfish-Records_BJR",
       "branch": "main",
@@ -6162,52 +5449,6 @@
       "flows": [],
       "comments": [],
       "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZyOz7BKqpZc8OiKyP8s&open=AZyOz7BKqpZc8OiKyP8s"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZyM26KCOXeZGWdnNw9m",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/home/player/StageInlineHost.tsx",
-      "file_path": "app/home/player/StageInlineHost.tsx",
-      "line": 64,
-      "end_line": 64,
-      "start_offset": 4,
-      "end_offset": 36,
-      "message": "Prefer `.dataset` over `getAttribute(…)`.",
-      "rule_key": "typescript:S7761",
-      "rule_name": "Data attributes should be accessed using \".dataset\"",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MAJOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "HIGH"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:HIGH"
-      ],
-      "clean_code_attribute": "CONVENTIONAL",
-      "clean_code_category": "CONSISTENT",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "api",
-        "dom",
-        "html"
-      ],
-      "creation_date": "2026-02-23T23:34:29+0000",
-      "update_date": "2026-02-23T23:34:29+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZyM26KCOXeZGWdnNw9m&open=AZyM26KCOXeZGWdnNw9m"
     },
     {
       "finding_kind": "issue",
@@ -6842,54 +6083,6 @@
     },
     {
       "finding_kind": "issue",
-      "issue_key": "AZx6AaLth4LBKj9vjMA9",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/home/player/StageInlineHost.tsx",
-      "file_path": "app/home/player/StageInlineHost.tsx",
-      "line": 13,
-      "end_line": 13,
-      "start_offset": 28,
-      "end_offset": 31,
-      "message": "Prefer `Number.NaN` over `NaN`.",
-      "rule_key": "typescript:S7773",
-      "rule_name": "Number static methods and properties should be preferred over global equivalents",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MINOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY",
-        "RELIABILITY"
-      ],
-      "impact_severities": [
-        "LOW",
-        "MEDIUM"
-      ],
-      "impacts": [
-        "RELIABILITY:MEDIUM",
-        "MAINTAINABILITY:LOW"
-      ],
-      "clean_code_attribute": "CONVENTIONAL",
-      "clean_code_category": "CONSISTENT",
-      "effort": "2min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "convention",
-        "es2015"
-      ],
-      "creation_date": "2026-02-20T07:43:24+0000",
-      "update_date": "2026-02-20T07:43:24+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZx6AaLth4LBKj9vjMA9&open=AZx6AaLth4LBKj9vjMA9"
-    },
-    {
-      "finding_kind": "issue",
       "issue_key": "AZx5143Wn0HW8o61kloV",
       "project_key": "Angelfish-Records_BJR",
       "branch": "main",
@@ -7334,357 +6527,6 @@
       "flows": [],
       "comments": [],
       "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZxqxKFmArDv13B6sDmP&open=AZxqxKFmArDv13B6sDmP"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZwYMFyySP8JIq-sHuE7",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-      "file_path": "app/home/player/VisualizerPattern.tsx",
-      "line": 274,
-      "end_line": 274,
-      "start_offset": 10,
-      "end_offset": 47,
-      "message": "Prefer using an optional chain expression instead, as it's more concise and easier to read.",
-      "rule_key": "typescript:S6582",
-      "rule_name": "Optional chaining should be preferred",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MINOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "LOW"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:LOW"
-      ],
-      "clean_code_attribute": "CLEAR",
-      "clean_code_category": "INTENTIONAL",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [],
-      "creation_date": "2026-02-01T07:51:43+0000",
-      "update_date": "2026-07-12T09:01:05+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZwYMFyySP8JIq-sHuE7&open=AZwYMFyySP8JIq-sHuE7"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZwYMFyySP8JIq-sHuE8",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-      "file_path": "app/home/player/VisualizerPattern.tsx",
-      "line": 480,
-      "end_line": 480,
-      "start_offset": 39,
-      "end_offset": 41,
-      "message": "Update this function so that its implementation is not identical to the one on line 271.",
-      "rule_key": "typescript:S4144",
-      "rule_name": "Functions should not have identical implementations",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MAJOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "MEDIUM"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:MEDIUM"
-      ],
-      "clean_code_attribute": "DISTINCT",
-      "clean_code_category": "ADAPTABLE",
-      "effort": "15min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "confusing",
-        "duplicate",
-        "suspicious"
-      ],
-      "creation_date": "2026-02-01T07:51:43+0000",
-      "update_date": "2026-07-07T08:20:24+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-              "textRange": {
-                "startLine": 273,
-                "endLine": 273,
-                "startOffset": 39,
-                "endOffset": 41
-              },
-              "msg": "Original implementation"
-            }
-          ]
-        }
-      ],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZwYMFyySP8JIq-sHuE8&open=AZwYMFyySP8JIq-sHuE8"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZwYMFyySP8JIq-sHuE9",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-      "file_path": "app/home/player/VisualizerPattern.tsx",
-      "line": 481,
-      "end_line": 481,
-      "start_offset": 10,
-      "end_offset": 47,
-      "message": "Prefer using an optional chain expression instead, as it's more concise and easier to read.",
-      "rule_key": "typescript:S6582",
-      "rule_name": "Optional chaining should be preferred",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MINOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "LOW"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:LOW"
-      ],
-      "clean_code_attribute": "CLEAR",
-      "clean_code_category": "INTENTIONAL",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [],
-      "creation_date": "2026-02-01T07:51:43+0000",
-      "update_date": "2026-07-12T09:01:05+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZwYMFyySP8JIq-sHuE9&open=AZwYMFyySP8JIq-sHuE9"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZwYMFyySP8JIq-sHuE-",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-      "file_path": "app/home/player/VisualizerPattern.tsx",
-      "line": 489,
-      "end_line": 489,
-      "start_offset": 39,
-      "end_offset": 41,
-      "message": "Update this function so that its implementation is not identical to the one on line 279.",
-      "rule_key": "typescript:S4144",
-      "rule_name": "Functions should not have identical implementations",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MAJOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "MEDIUM"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:MEDIUM"
-      ],
-      "clean_code_attribute": "DISTINCT",
-      "clean_code_category": "ADAPTABLE",
-      "effort": "15min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "confusing",
-        "duplicate",
-        "suspicious"
-      ],
-      "creation_date": "2026-02-01T07:51:43+0000",
-      "update_date": "2026-07-07T08:20:24+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-              "textRange": {
-                "startLine": 282,
-                "endLine": 282,
-                "startOffset": 39,
-                "endOffset": 41
-              },
-              "msg": "Original implementation"
-            }
-          ]
-        }
-      ],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZwYMFyySP8JIq-sHuE-&open=AZwYMFyySP8JIq-sHuE-"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZwYFt2yD1QxlHAaPiwv",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-      "file_path": "app/home/player/VisualizerPattern.tsx",
-      "line": 291,
-      "end_line": 291,
-      "start_offset": 10,
-      "end_offset": 50,
-      "message": "Prefer using an optional chain expression instead, as it's more concise and easier to read.",
-      "rule_key": "typescript:S6582",
-      "rule_name": "Optional chaining should be preferred",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MINOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "LOW"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:LOW"
-      ],
-      "clean_code_attribute": "CLEAR",
-      "clean_code_category": "INTENTIONAL",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [],
-      "creation_date": "2026-02-01T07:24:09+0000",
-      "update_date": "2026-07-12T09:01:05+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZwYFt2yD1QxlHAaPiwv&open=AZwYFt2yD1QxlHAaPiwv"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZwYFt2yD1QxlHAaPiwz",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-      "file_path": "app/home/player/VisualizerPattern.tsx",
-      "line": 498,
-      "end_line": 498,
-      "start_offset": 10,
-      "end_offset": 50,
-      "message": "Prefer using an optional chain expression instead, as it's more concise and easier to read.",
-      "rule_key": "typescript:S6582",
-      "rule_name": "Optional chaining should be preferred",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MINOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "LOW"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:LOW"
-      ],
-      "clean_code_attribute": "CLEAR",
-      "clean_code_category": "INTENTIONAL",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [],
-      "creation_date": "2026-02-01T07:24:09+0000",
-      "update_date": "2026-07-12T09:01:05+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZwYFt2yD1QxlHAaPiwz&open=AZwYFt2yD1QxlHAaPiwz"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZwXNQYJqpGt-0oZhohi",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-      "file_path": "app/home/player/VisualizerPattern.tsx",
-      "line": 448,
-      "end_line": 448,
-      "start_offset": 21,
-      "end_offset": 23,
-      "message": "Update this function so that its implementation is not identical to the one on line 239.",
-      "rule_key": "typescript:S4144",
-      "rule_name": "Functions should not have identical implementations",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MAJOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "MEDIUM"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:MEDIUM"
-      ],
-      "clean_code_attribute": "DISTINCT",
-      "clean_code_category": "ADAPTABLE",
-      "effort": "15min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "confusing",
-        "duplicate",
-        "suspicious"
-      ],
-      "creation_date": "2026-02-01T03:17:12+0000",
-      "update_date": "2026-07-07T08:20:24+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-              "textRange": {
-                "startLine": 239,
-                "endLine": 239,
-                "startOffset": 21,
-                "endOffset": 23
-              },
-              "msg": "Original implementation"
-            }
-          ]
-        }
-      ],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZwXNQYJqpGt-0oZhohi&open=AZwXNQYJqpGt-0oZhohi"
     },
     {
       "finding_kind": "issue",
@@ -8803,50 +7645,6 @@
     },
     {
       "finding_kind": "issue",
-      "issue_key": "AZwOI7_qcp1YM1k1EgZ0",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-      "file_path": "app/home/player/VisualizerPattern.tsx",
-      "line": 407,
-      "end_line": 407,
-      "start_offset": 2,
-      "end_offset": 6,
-      "message": "'seed' PropType is defined but prop is never used",
-      "rule_key": "typescript:S6767",
-      "rule_name": "Unused React typed props should be removed",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MINOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "LOW"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:LOW"
-      ],
-      "clean_code_attribute": "CONVENTIONAL",
-      "clean_code_category": "CONSISTENT",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "react"
-      ],
-      "creation_date": "2026-01-30T09:02:03+0000",
-      "update_date": "2026-01-30T09:02:03+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZwOI7_qcp1YM1k1EgZ0&open=AZwOI7_qcp1YM1k1EgZ0"
-    },
-    {
-      "finding_kind": "issue",
       "issue_key": "AZwOI8Aacp1YM1k1EgZ8",
       "project_key": "Angelfish-Records_BJR",
       "branch": "main",
@@ -8975,54 +7773,6 @@
       "flows": [],
       "comments": [],
       "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZwOI8VPcp1YM1k1EgdS&open=AZwOI8VPcp1YM1k1EgdS"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZwOI8T1cp1YM1k1EgdM",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:lib/albums.ts",
-      "file_path": "lib/albums.ts",
-      "line": 536,
-      "end_line": 536,
-      "start_offset": 58,
-      "end_offset": 61,
-      "message": "Prefer `Number.NaN` over `NaN`.",
-      "rule_key": "typescript:S7773",
-      "rule_name": "Number static methods and properties should be preferred over global equivalents",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MINOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY",
-        "RELIABILITY"
-      ],
-      "impact_severities": [
-        "LOW",
-        "MEDIUM"
-      ],
-      "impacts": [
-        "RELIABILITY:MEDIUM",
-        "MAINTAINABILITY:LOW"
-      ],
-      "clean_code_attribute": "CONVENTIONAL",
-      "clean_code_category": "CONSISTENT",
-      "effort": "2min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "convention",
-        "es2015"
-      ],
-      "creation_date": "2026-01-30T09:02:03+0000",
-      "update_date": "2026-01-30T09:02:03+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZwOI8T1cp1YM1k1EgdM&open=AZwOI8T1cp1YM1k1EgdM"
     },
     {
       "finding_kind": "issue",
@@ -9590,6 +8340,100 @@
     },
     {
       "finding_kind": "issue",
+      "issue_key": "AZwNwHP4XfH1XCSRWNsg",
+      "project_key": "Angelfish-Records_BJR",
+      "branch": "main",
+      "component_key": "Angelfish-Records_BJR:lib/unsubscribe.ts",
+      "file_path": "lib/unsubscribe.ts",
+      "line": 36,
+      "end_line": 36,
+      "start_offset": 16,
+      "end_offset": 23,
+      "message": "Prefer `String#replaceAll()` over `String#replace()`.",
+      "rule_key": "typescript:S7781",
+      "rule_name": "Strings should use \"replaceAll()\" instead of \"replace()\" with global regex",
+      "status": "OPEN",
+      "resolution": "",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "software_qualities": [
+        "MAINTAINABILITY",
+        "RELIABILITY"
+      ],
+      "impact_severities": [
+        "LOW"
+      ],
+      "impacts": [
+        "MAINTAINABILITY:LOW",
+        "RELIABILITY:LOW"
+      ],
+      "clean_code_attribute": "CLEAR",
+      "clean_code_category": "INTENTIONAL",
+      "effort": "5min",
+      "author": "admin@brendanjohnroch.com",
+      "assignee": "",
+      "tags": [
+        "es2021",
+        "readability"
+      ],
+      "creation_date": "2026-01-30T07:13:11+0000",
+      "update_date": "2026-08-10T09:02:23+0000",
+      "quick_fix_available": "",
+      "rule_description": "",
+      "remediation_guidance": "",
+      "flows": [],
+      "comments": [],
+      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZwNwHP4XfH1XCSRWNsg&open=AZwNwHP4XfH1XCSRWNsg"
+    },
+    {
+      "finding_kind": "issue",
+      "issue_key": "AZwNwHP4XfH1XCSRWNsh",
+      "project_key": "Angelfish-Records_BJR",
+      "branch": "main",
+      "component_key": "Angelfish-Records_BJR:lib/unsubscribe.ts",
+      "file_path": "lib/unsubscribe.ts",
+      "line": 36,
+      "end_line": 36,
+      "start_offset": 35,
+      "end_offset": 42,
+      "message": "Prefer `String#replaceAll()` over `String#replace()`.",
+      "rule_key": "typescript:S7781",
+      "rule_name": "Strings should use \"replaceAll()\" instead of \"replace()\" with global regex",
+      "status": "OPEN",
+      "resolution": "",
+      "severity": "MINOR",
+      "type": "CODE_SMELL",
+      "software_qualities": [
+        "MAINTAINABILITY",
+        "RELIABILITY"
+      ],
+      "impact_severities": [
+        "LOW"
+      ],
+      "impacts": [
+        "MAINTAINABILITY:LOW",
+        "RELIABILITY:LOW"
+      ],
+      "clean_code_attribute": "CLEAR",
+      "clean_code_category": "INTENTIONAL",
+      "effort": "5min",
+      "author": "admin@brendanjohnroch.com",
+      "assignee": "",
+      "tags": [
+        "es2021",
+        "readability"
+      ],
+      "creation_date": "2026-01-30T07:13:11+0000",
+      "update_date": "2026-08-10T09:02:23+0000",
+      "quick_fix_available": "",
+      "rule_description": "",
+      "remediation_guidance": "",
+      "flows": [],
+      "comments": [],
+      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZwNwHP4XfH1XCSRWNsh&open=AZwNwHP4XfH1XCSRWNsh"
+    },
+    {
+      "finding_kind": "issue",
       "issue_key": "AZwLzKkCzklXLWpzfm9i",
       "project_key": "Angelfish-Records_BJR",
       "branch": "main",
@@ -9678,279 +8522,6 @@
       "flows": [],
       "comments": [],
       "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZwLzKiKzklXLWpzfm9h&open=AZwLzKiKzklXLWpzfm9h"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZwBgsqLTjwaFqf8zKkG",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-      "file_path": "app/gift/[giftId]/page.tsx",
-      "line": 6,
-      "end_line": 6,
-      "start_offset": 19,
-      "end_offset": 27,
-      "message": "Prefer `node:crypto` over `crypto`.",
-      "rule_key": "typescript:S7772",
-      "rule_name": "Node.js built-in modules should be imported using the \"node:\" protocol",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MINOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "MEDIUM"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:MEDIUM"
-      ],
-      "clean_code_attribute": "CONVENTIONAL",
-      "clean_code_category": "CONSISTENT",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "convention",
-        "import",
-        "nodejs"
-      ],
-      "creation_date": "2026-01-27T22:10:33+0000",
-      "update_date": "2026-01-27T22:10:33+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZwBgsqLTjwaFqf8zKkG&open=AZwBgsqLTjwaFqf8zKkG"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZwBgsqLTjwaFqf8zKkH",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-      "file_path": "app/gift/[giftId]/page.tsx",
-      "line": 94,
-      "end_line": 94,
-      "start_offset": 30,
-      "end_offset": 45,
-      "message": "Refactor this function to reduce its Cognitive Complexity from 16 to the 15 allowed.",
-      "rule_key": "typescript:S3776",
-      "rule_name": "Cognitive Complexity of functions should not be too high",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "CRITICAL",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "HIGH"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:HIGH"
-      ],
-      "clean_code_attribute": "FOCUSED",
-      "clean_code_category": "ADAPTABLE",
-      "effort": "6min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "brain-overload"
-      ],
-      "creation_date": "2026-01-27T22:10:33+0000",
-      "update_date": "2026-01-27T22:10:33+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-              "textRange": {
-                "startLine": 99,
-                "endLine": 99,
-                "startOffset": 2,
-                "endOffset": 4
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-              "textRange": {
-                "startLine": 103,
-                "endLine": 103,
-                "startOffset": 4,
-                "endOffset": 5
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-              "textRange": {
-                "startLine": 108,
-                "endLine": 108,
-                "startOffset": 2,
-                "endOffset": 4
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-              "textRange": {
-                "startLine": 110,
-                "endLine": 110,
-                "startOffset": 23,
-                "endOffset": 24
-              },
-              "msg": "+2 (incl. 1 for nesting)"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-              "textRange": {
-                "startLine": 124,
-                "endLine": 124,
-                "startOffset": 2,
-                "endOffset": 4
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-              "textRange": {
-                "startLine": 155,
-                "endLine": 155,
-                "startOffset": 2,
-                "endOffset": 4
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-              "textRange": {
-                "startLine": 157,
-                "endLine": 157,
-                "startOffset": 2,
-                "endOffset": 4
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-              "textRange": {
-                "startLine": 163,
-                "endLine": 163,
-                "startOffset": 36,
-                "endOffset": 38
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-              "textRange": {
-                "startLine": 165,
-                "endLine": 165,
-                "startOffset": 26,
-                "endOffset": 28
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-              "textRange": {
-                "startLine": 170,
-                "endLine": 170,
-                "startOffset": 2,
-                "endOffset": 4
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-              "textRange": {
-                "startLine": 175,
-                "endLine": 175,
-                "startOffset": 2,
-                "endOffset": 4
-              },
-              "msg": "+1"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-              "textRange": {
-                "startLine": 176,
-                "endLine": 176,
-                "startOffset": 4,
-                "endOffset": 6
-              },
-              "msg": "+2 (incl. 1 for nesting)"
-            }
-          ]
-        },
-        {
-          "locations": [
-            {
-              "component": "Angelfish-Records_BJR:app/gift/[giftId]/page.tsx",
-              "textRange": {
-                "startLine": 180,
-                "endLine": 180,
-                "startOffset": 4,
-                "endOffset": 6
-              },
-              "msg": "+2 (incl. 1 for nesting)"
-            }
-          ]
-        }
-      ],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZwBgsqLTjwaFqf8zKkH&open=AZwBgsqLTjwaFqf8zKkH"
     },
     {
       "finding_kind": "issue",
@@ -10222,96 +8793,6 @@
       "flows": [],
       "comments": [],
       "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZvnZJIWH4r_HAPRKjgy&open=AZvnZJIWH4r_HAPRKjgy"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZvfjrsHYrfxLBh7pyul",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-      "file_path": "app/home/player/VisualizerPattern.tsx",
-      "line": 650,
-      "end_line": 660,
-      "start_offset": 4,
-      "end_offset": 6,
-      "message": "aria-hidden=\"true\" must not be set on focusable elements.",
-      "rule_key": "typescript:S6825",
-      "rule_name": "Focusable elements should not have \"aria-hidden\" attribute",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MAJOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "RELIABILITY"
-      ],
-      "impact_severities": [
-        "MEDIUM"
-      ],
-      "impacts": [
-        "RELIABILITY:MEDIUM"
-      ],
-      "clean_code_attribute": "CONVENTIONAL",
-      "clean_code_category": "CONSISTENT",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "accessibility",
-        "react"
-      ],
-      "creation_date": "2026-01-21T07:56:33+0000",
-      "update_date": "2026-01-21T07:56:33+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZvfjrsHYrfxLBh7pyul&open=AZvfjrsHYrfxLBh7pyul"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZveVUdtbCETsdHbg9kJ",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-      "file_path": "app/home/player/VisualizerPattern.tsx",
-      "line": 664,
-      "end_line": 671,
-      "start_offset": 32,
-      "end_offset": 1,
-      "message": "Mark the props of the component as read-only.",
-      "rule_key": "typescript:S6759",
-      "rule_name": "React props should be read-only",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MINOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "LOW"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:LOW"
-      ],
-      "clean_code_attribute": "CONVENTIONAL",
-      "clean_code_category": "CONSISTENT",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "react",
-        "type-dependent"
-      ],
-      "creation_date": "2026-01-21T02:14:11+0000",
-      "update_date": "2026-01-21T02:14:11+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZveVUdtbCETsdHbg9kJ&open=AZveVUdtbCETsdHbg9kJ"
     },
     {
       "finding_kind": "issue",
@@ -10849,231 +9330,6 @@
       "flows": [],
       "comments": [],
       "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZusgts5D4_uMWluIGuO&open=AZusgts5D4_uMWluIGuO"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZunZmrdUT7tpfFOVoJH",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-      "file_path": "app/home/player/VisualizerPattern.tsx",
-      "line": 192,
-      "end_line": 201,
-      "start_offset": 41,
-      "end_offset": 1,
-      "message": "Mark the props of the component as read-only.",
-      "rule_key": "typescript:S6759",
-      "rule_name": "React props should be read-only",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MINOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "LOW"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:LOW"
-      ],
-      "clean_code_attribute": "CONVENTIONAL",
-      "clean_code_category": "CONSISTENT",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "react",
-        "type-dependent"
-      ],
-      "creation_date": "2026-01-10T10:13:45+0000",
-      "update_date": "2026-01-10T17:33:24+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZunZmrdUT7tpfFOVoJH&open=AZunZmrdUT7tpfFOVoJH"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZunZmrdUT7tpfFOVoJI",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-      "file_path": "app/home/player/VisualizerPattern.tsx",
-      "line": 381,
-      "end_line": 397,
-      "start_offset": 4,
-      "end_offset": 6,
-      "message": "aria-hidden=\"true\" must not be set on focusable elements.",
-      "rule_key": "typescript:S6825",
-      "rule_name": "Focusable elements should not have \"aria-hidden\" attribute",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MAJOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "RELIABILITY"
-      ],
-      "impact_severities": [
-        "MEDIUM"
-      ],
-      "impacts": [
-        "RELIABILITY:MEDIUM"
-      ],
-      "clean_code_attribute": "CONVENTIONAL",
-      "clean_code_category": "CONSISTENT",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "accessibility",
-        "react"
-      ],
-      "creation_date": "2026-01-10T10:13:45+0000",
-      "update_date": "2026-01-10T17:33:24+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZunZmrdUT7tpfFOVoJI&open=AZunZmrdUT7tpfFOVoJI"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZunZmrdUT7tpfFOVoJJ",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-      "file_path": "app/home/player/VisualizerPattern.tsx",
-      "line": 401,
-      "end_line": 411,
-      "start_offset": 34,
-      "end_offset": 1,
-      "message": "Mark the props of the component as read-only.",
-      "rule_key": "typescript:S6759",
-      "rule_name": "React props should be read-only",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MINOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "LOW"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:LOW"
-      ],
-      "clean_code_attribute": "CONVENTIONAL",
-      "clean_code_category": "CONSISTENT",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "react",
-        "type-dependent"
-      ],
-      "creation_date": "2026-01-10T10:13:45+0000",
-      "update_date": "2026-01-10T17:33:24+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZunZmrdUT7tpfFOVoJJ&open=AZunZmrdUT7tpfFOVoJJ"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZunZmrdUT7tpfFOVoJK",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-      "file_path": "app/home/player/VisualizerPattern.tsx",
-      "line": 715,
-      "end_line": 720,
-      "start_offset": 36,
-      "end_offset": 1,
-      "message": "Mark the props of the component as read-only.",
-      "rule_key": "typescript:S6759",
-      "rule_name": "React props should be read-only",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MINOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "LOW"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:LOW"
-      ],
-      "clean_code_attribute": "CONVENTIONAL",
-      "clean_code_category": "CONSISTENT",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "react",
-        "type-dependent"
-      ],
-      "creation_date": "2026-01-10T10:13:45+0000",
-      "update_date": "2026-01-10T17:33:24+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZunZmrdUT7tpfFOVoJK&open=AZunZmrdUT7tpfFOVoJK"
-    },
-    {
-      "finding_kind": "issue",
-      "issue_key": "AZunZmrdUT7tpfFOVoJL",
-      "project_key": "Angelfish-Records_BJR",
-      "branch": "main",
-      "component_key": "Angelfish-Records_BJR:app/home/player/VisualizerPattern.tsx",
-      "file_path": "app/home/player/VisualizerPattern.tsx",
-      "line": 761,
-      "end_line": 765,
-      "start_offset": 28,
-      "end_offset": 1,
-      "message": "Mark the props of the component as read-only.",
-      "rule_key": "typescript:S6759",
-      "rule_name": "React props should be read-only",
-      "status": "OPEN",
-      "resolution": "",
-      "severity": "MINOR",
-      "type": "CODE_SMELL",
-      "software_qualities": [
-        "MAINTAINABILITY"
-      ],
-      "impact_severities": [
-        "LOW"
-      ],
-      "impacts": [
-        "MAINTAINABILITY:LOW"
-      ],
-      "clean_code_attribute": "CONVENTIONAL",
-      "clean_code_category": "CONSISTENT",
-      "effort": "5min",
-      "author": "admin@brendanjohnroch.com",
-      "assignee": "",
-      "tags": [
-        "react",
-        "type-dependent"
-      ],
-      "creation_date": "2026-01-10T10:13:45+0000",
-      "update_date": "2026-01-10T17:33:24+0000",
-      "quick_fix_available": "",
-      "rule_description": "",
-      "remediation_guidance": "",
-      "flows": [],
-      "comments": [],
-      "sonar_url": "https://sonarcloud.io/project/issues?id=Angelfish-Records_BJR&branch=main&issues=AZunZmrdUT7tpfFOVoJL&open=AZunZmrdUT7tpfFOVoJL"
     },
     {
       "finding_kind": "issue",
@@ -11883,9 +10139,9 @@
   ],
   "security_hotspots": [],
   "rules": {
-    "typescript:S6509": {
-      "key": "typescript:S6509",
-      "name": "Extra boolean casts should be removed",
+    "typescript:S6819": {
+      "key": "typescript:S6819",
+      "name": "Prefer tag over ARIA role",
       "language": "TypeScript",
       "status": "READY",
       "severity": "",
@@ -11908,28 +10164,6 @@
     "typescript:S4323": {
       "key": "typescript:S4323",
       "name": "Type aliases should be used",
-      "language": "TypeScript",
-      "status": "READY",
-      "severity": "",
-      "type": "",
-      "scope": "",
-      "tags": [],
-      "system_tags": [],
-      "clean_code_attribute": "",
-      "clean_code_category": "",
-      "impacts": [],
-      "description": "",
-      "gap_description": "",
-      "default_remediation_type": "",
-      "default_remediation_coefficient": "",
-      "risk_description": "",
-      "vulnerability_description": "",
-      "fix_recommendations": "",
-      "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
-    },
-    "typescript:S7761": {
-      "key": "typescript:S7761",
-      "name": "Data attributes should be accessed using \".dataset\"",
       "language": "TypeScript",
       "status": "READY",
       "severity": "",
@@ -12257,6 +10491,28 @@
       "fix_recommendations": "",
       "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
     },
+    "typescript:S6843": {
+      "key": "typescript:S6843",
+      "name": "Interactive DOM elements should not have non-interactive ARIA roles",
+      "language": "TypeScript",
+      "status": "READY",
+      "severity": "",
+      "type": "",
+      "scope": "",
+      "tags": [],
+      "system_tags": [],
+      "clean_code_attribute": "",
+      "clean_code_category": "",
+      "impacts": [],
+      "description": "",
+      "gap_description": "",
+      "default_remediation_type": "",
+      "default_remediation_coefficient": "",
+      "risk_description": "",
+      "vulnerability_description": "",
+      "fix_recommendations": "",
+      "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
+    },
     "typescript:S6749": {
       "key": "typescript:S6749",
       "name": "Redundant JSX fragments should be removed",
@@ -12323,9 +10579,9 @@
       "fix_recommendations": "",
       "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
     },
-    "typescript:S3776": {
-      "key": "typescript:S3776",
-      "name": "Cognitive Complexity of functions should not be too high",
+    "typescript:S4624": {
+      "key": "typescript:S4624",
+      "name": "Template literals should not be nested",
       "language": "TypeScript",
       "status": "READY",
       "severity": "",
@@ -12345,9 +10601,9 @@
       "fix_recommendations": "",
       "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
     },
-    "typescript:S4624": {
-      "key": "typescript:S4624",
-      "name": "Template literals should not be nested",
+    "typescript:S7781": {
+      "key": "typescript:S7781",
+      "name": "Strings should use \"replaceAll()\" instead of \"replace()\" with global regex",
       "language": "TypeScript",
       "status": "READY",
       "severity": "",
@@ -12389,28 +10645,6 @@
       "fix_recommendations": "",
       "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
     },
-    "typescript:S6819": {
-      "key": "typescript:S6819",
-      "name": "Prefer tag over ARIA role",
-      "language": "TypeScript",
-      "status": "READY",
-      "severity": "",
-      "type": "",
-      "scope": "",
-      "tags": [],
-      "system_tags": [],
-      "clean_code_attribute": "",
-      "clean_code_category": "",
-      "impacts": [],
-      "description": "",
-      "gap_description": "",
-      "default_remediation_type": "",
-      "default_remediation_coefficient": "",
-      "risk_description": "",
-      "vulnerability_description": "",
-      "fix_recommendations": "",
-      "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
-    },
     "typescript:S7773": {
       "key": "typescript:S7773",
       "name": "Number static methods and properties should be preferred over global equivalents",
@@ -12433,53 +10667,9 @@
       "fix_recommendations": "",
       "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
     },
-    "typescript:S4782": {
-      "key": "typescript:S4782",
-      "name": "Optional property declarations should not use both '?' and 'undefined' syntax",
-      "language": "TypeScript",
-      "status": "READY",
-      "severity": "",
-      "type": "",
-      "scope": "",
-      "tags": [],
-      "system_tags": [],
-      "clean_code_attribute": "",
-      "clean_code_category": "",
-      "impacts": [],
-      "description": "",
-      "gap_description": "",
-      "default_remediation_type": "",
-      "default_remediation_coefficient": "",
-      "risk_description": "",
-      "vulnerability_description": "",
-      "fix_recommendations": "",
-      "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
-    },
     "typescript:S6644": {
       "key": "typescript:S6644",
       "name": "Ternary operator should not be used instead of simpler alternatives",
-      "language": "TypeScript",
-      "status": "READY",
-      "severity": "",
-      "type": "",
-      "scope": "",
-      "tags": [],
-      "system_tags": [],
-      "clean_code_attribute": "",
-      "clean_code_category": "",
-      "impacts": [],
-      "description": "",
-      "gap_description": "",
-      "default_remediation_type": "",
-      "default_remediation_coefficient": "",
-      "risk_description": "",
-      "vulnerability_description": "",
-      "fix_recommendations": "",
-      "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
-    },
-    "typescript:S3735": {
-      "key": "typescript:S3735",
-      "name": "\"void\" should not be used",
       "language": "TypeScript",
       "status": "READY",
       "severity": "",
@@ -12524,28 +10714,6 @@
     "typescript:S6825": {
       "key": "typescript:S6825",
       "name": "Focusable elements should not have \"aria-hidden\" attribute",
-      "language": "TypeScript",
-      "status": "READY",
-      "severity": "",
-      "type": "",
-      "scope": "",
-      "tags": [],
-      "system_tags": [],
-      "clean_code_attribute": "",
-      "clean_code_category": "",
-      "impacts": [],
-      "description": "",
-      "gap_description": "",
-      "default_remediation_type": "",
-      "default_remediation_coefficient": "",
-      "risk_description": "",
-      "vulnerability_description": "",
-      "fix_recommendations": "",
-      "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
-    },
-    "typescript:S4144": {
-      "key": "typescript:S4144",
-      "name": "Functions should not have identical implementations",
       "language": "TypeScript",
       "status": "READY",
       "severity": "",
@@ -12873,9 +11041,9 @@
       "fix_recommendations": "",
       "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
     },
-    "typescript:S3358": {
-      "key": "typescript:S3358",
-      "name": "Ternary operators should not be nested",
+    "typescript:S6509": {
+      "key": "typescript:S6509",
+      "name": "Extra boolean casts should be removed",
       "language": "TypeScript",
       "status": "READY",
       "severity": "",
@@ -12895,9 +11063,9 @@
       "fix_recommendations": "",
       "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
     },
-    "typescript:S6653": {
-      "key": "typescript:S6653",
-      "name": "Use Object.hasOwn static method instead of hasOwnProperty",
+    "typescript:S3358": {
+      "key": "typescript:S3358",
+      "name": "Ternary operators should not be nested",
       "language": "TypeScript",
       "status": "READY",
       "severity": "",

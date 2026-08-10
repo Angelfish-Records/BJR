@@ -12,14 +12,14 @@ import {
   Text,
 } from "@react-email/components";
 
-export type MailbagAnsweredEmailProps = {
+export type MailbagAnsweredEmailProps = Readonly<{
   appName: string;
   toEmail: string;
   questionText: string;
   postTitle?: string | null;
   postUrl: string;
   supportEmail?: string;
-};
+}>;
 
 export function MailbagAnsweredEmail(props: MailbagAnsweredEmailProps) {
   const { appName, toEmail, questionText, postTitle, postUrl, supportEmail } =

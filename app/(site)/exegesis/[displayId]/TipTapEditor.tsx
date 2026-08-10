@@ -206,13 +206,13 @@ function ToolbarSeparator() {
   return <div className="h-5 w-px shrink-0 bg-white/10" aria-hidden="true" />;
 }
 
-type ToolbarBtnProps = {
+type ToolbarBtnProps = Readonly<{
   title: string;
   onClick: () => void;
   active?: boolean;
   disabled?: boolean;
   children: React.ReactNode;
-};
+}>;
 
 function ToolbarBtn({
   title,
@@ -315,7 +315,9 @@ function submitLinkDraft(editor: Editor, draft: LinkDraft, close: () => void) {
   close();
 }
 
-function TipTapToolbar(props: { editor: Editor | null; disabled?: boolean }) {
+function TipTapToolbar(
+  props: Readonly<{ editor: Editor | null; disabled?: boolean }>,
+) {
   const editor = props.editor;
   const disabled = Boolean(props.disabled);
 
@@ -499,16 +501,18 @@ function TipTapToolbar(props: { editor: Editor | null; disabled?: boolean }) {
   );
 }
 
-export default function TipTapEditor(props: {
-  valuePlain: string;
-  valueDoc?: unknown | null;
-  disabled?: boolean;
-  showToolbar?: boolean;
-  placeholder?: string;
-  autofocus?: boolean;
-  onChangePlain: (plain: string) => void;
-  onChangeDoc: (doc: TipTapDoc) => void;
-}) {
+export default function TipTapEditor(
+  props: Readonly<{
+    valuePlain: string;
+    valueDoc?: unknown | null;
+    disabled?: boolean;
+    showToolbar?: boolean;
+    placeholder?: string;
+    autofocus?: boolean;
+    onChangePlain: (plain: string) => void;
+    onChangeDoc: (doc: TipTapDoc) => void;
+  }>,
+) {
   const {
     valuePlain,
     disabled,

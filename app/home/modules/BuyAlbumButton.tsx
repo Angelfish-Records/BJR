@@ -3,7 +3,7 @@
 
 import React from "react";
 
-type Props = {
+type Props = Readonly<{
   albumSlug: string;
   label?: string;
   disabled?: boolean;
@@ -14,7 +14,7 @@ type Props = {
   variant?: "default" | "primary" | "ghost" | "link";
   fullWidth?: boolean;
   buttonStyle?: React.CSSProperties;
-};
+}>;
 
 type CreateCheckoutResponse =
   | { ok: true; url: string }

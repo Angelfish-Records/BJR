@@ -4,7 +4,9 @@ import React from "react";
 import { usePlayer } from "@/app/home/player/PlayerState";
 import MiniPlayer from "./player/MiniPlayer";
 
-export default function MiniPlayerHost(props: { onExpand: () => void }) {
+export default function MiniPlayerHost(
+  props: Readonly<{ onExpand: () => void }>,
+) {
   const { onExpand } = props;
   const p = usePlayer();
 

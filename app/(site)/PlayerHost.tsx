@@ -9,9 +9,9 @@ import StageInlineHost from "@/app/home/player/StageInlineHost";
 
 export default function PlayerHost({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   React.useEffect(() => {
     if (
       typeof window === "undefined" ||

@@ -9,7 +9,7 @@ import {
   isSameGroup,
 } from "../exegesisUi";
 
-type ExegesisLyricsRailProps = {
+type ExegesisLyricsRailProps = Readonly<{
   lyrics: LyricsApiOk;
   selectedLineKey: string;
   selectedGroupKey: string;
@@ -29,7 +29,7 @@ type ExegesisLyricsRailProps = {
     tMs: number;
     groupKey?: string;
   }) => void;
-};
+}>;
 
 export default function ExegesisLyricsRail({
   lyrics,

@@ -2,9 +2,11 @@
 import React from "react";
 import SessionRuntime from "../../SessionRuntime";
 
-export default async function PortalExegesisTrackRuntimePage(props: {
-  params: Promise<{ displayId: string }>;
-}) {
+export default async function PortalExegesisTrackRuntimePage(
+  props: Readonly<{
+    params: Promise<{ displayId: string }>;
+  }>,
+) {
   const { displayId } = await props.params;
   const resolvedDisplayId = decodeURIComponent(displayId ?? "").trim() || null;
 

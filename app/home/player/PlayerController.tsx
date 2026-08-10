@@ -5,14 +5,16 @@ import React from "react";
 import FullPlayer from "./FullPlayer";
 import type { AlbumPlayerBundle, AlbumNavItem, Tier } from "@/lib/types";
 
-export default function PlayerController(props: {
-  openPlayerPanel: () => void;
-  bundle: AlbumPlayerBundle;
-  albums: AlbumNavItem[];
-  onSelectAlbum: (slug: string) => void;
-  isBrowsingAlbum: boolean;
-  tier?: Tier;
-}) {
+export default function PlayerController(
+  props: Readonly<{
+    openPlayerPanel: () => void;
+    bundle: AlbumPlayerBundle;
+    albums: AlbumNavItem[];
+    onSelectAlbum: (slug: string) => void;
+    isBrowsingAlbum: boolean;
+    tier?: Tier;
+  }>,
+) {
   const {
     bundle,
     albums,

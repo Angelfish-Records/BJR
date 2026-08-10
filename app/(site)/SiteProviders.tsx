@@ -8,7 +8,9 @@ import { GateBrokerProvider } from "@/app/home/gating/GateBroker";
 import AdminRibbonBootstrap from "@/app/home/AdminRibbonBootstrap";
 import { BadgeAwardOverlayProvider } from "@/app/home/badges/BadgeAwardOverlayProvider";
 
-export default function SiteProviders(props: { children: React.ReactNode }) {
+export default function SiteProviders(
+  props: Readonly<{ children: React.ReactNode }>,
+) {
   return (
     <GateBrokerProvider>
       <BadgeAwardOverlayProvider>

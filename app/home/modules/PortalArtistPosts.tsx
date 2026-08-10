@@ -229,9 +229,6 @@ export default function PortalArtistPosts(
               color: "inherit",
               font: "inherit",
             }}
-            onMouseDown={(event: React.MouseEvent<HTMLDialogElement>) => {
-              event.stopPropagation();
-            }}
           >
             <div
               style={{

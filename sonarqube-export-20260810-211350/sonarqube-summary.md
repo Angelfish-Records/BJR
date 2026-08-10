@@ -2,9 +2,9 @@
 
 - **Project:** `Angelfish-Records_BJR`
 - **Branch:** `main`
-- **Exported:** 2026-08-10T08:59:30.460946Z
+- **Exported:** 2026-08-10T09:14:19.837576Z
 - **Quality Gate:** OK
-- **Unresolved issues:** 244
+- **Unresolved issues:** 218
 - **Security Hotspots awaiting review:** 0
 
 ## Recommended working order
@@ -18,86 +18,85 @@
 
 | Value | Count |
 |---|---:|
-| MAINTAINABILITY | 230 |
-| RELIABILITY | 32 |
+| MAINTAINABILITY | 208 |
+| RELIABILITY | 30 |
 
 ## Issues by impact severity
 
 | Value | Count |
 |---|---:|
-| LOW | 165 |
-| MEDIUM | 90 |
-| HIGH | 5 |
+| LOW | 152 |
+| MEDIUM | 82 |
 
 ## Most frequent issue rules
 
 | Value | Count |
 |---|---:|
-| typescript:S6759 — React props should be read-only | 72 |
-| typescript:S3358 — Ternary operators should not be nested | 27 |
-| typescript:S6582 — Optional chaining should be preferred | 17 |
+| typescript:S6759 — React props should be read-only | 66 |
+| typescript:S3358 — Ternary operators should not be nested | 24 |
 | typescript:S6571 — Type constituents of unions and intersections should not be redundant | 13 |
-| typescript:S7772 — Node.js built-in modules should be imported using the "node:" protocol | 9 |
+| typescript:S6582 — Optional chaining should be preferred | 12 |
+| typescript:S6819 — Prefer tag over ARIA role | 9 |
+| typescript:S7772 — Node.js built-in modules should be imported using the "node:" protocol | 8 |
 | typescript:S9011 — "<button>" elements should have an explicit "type" attribute | 7 |
 | typescript:S6847 — Non-interactive elements shouldn't have event handlers | 6 |
 | typescript:S7744 — Unnecessary fallback objects should not be used when spreading in object literals | 5 |
-| typescript:S6819 — Prefer tag over ARIA role | 5 |
-| typescript:S7773 — Number static methods and properties should be preferred over global equivalents | 5 |
 | typescript:S6551 — Objects and classes converted or coerced to strings should define a "toString()" method | 5 |
-| typescript:S6825 — Focusable elements should not have "aria-hidden" attribute | 4 |
-| typescript:S6772 — Spacing between inline elements should be explicit | 4 |
-| typescript:S4144 — Functions should not have identical implementations | 4 |
 | typescript:S6644 — Ternary operator should not be used instead of simpler alternatives | 4 |
+| typescript:S6843 — Interactive DOM elements should not have non-interactive ARIA roles | 3 |
 | typescript:S7780 — String literals with escaped backslashes should use `String.raw` template literals | 3 |
 | typescript:S6754 — The return value of "useState" should be destructured and named symmetrically | 3 |
-| typescript:S7741 — "typeof" should not be used to check for "undefined" | 3 |
-| typescript:S4084 — Media elements should have captions | 3 |
-| typescript:S3776 — Cognitive Complexity of functions should not be too high | 3 |
+| typescript:S6772 — Spacing between inline elements should be explicit | 3 |
 | typescript:S6594 — "RegExp.exec()" should be preferred over "String.match()" | 3 |
 | typescript:S7763 — Re-exports should use "export...from" syntax | 3 |
 | typescript:S6564 — Redundant type aliases should not be used | 3 |
 | typescript:S2933 — Fields that are only assigned in the constructor should be "readonly" | 3 |
+| typescript:S7773 — Number static methods and properties should be preferred over global equivalents | 3 |
+| typescript:S7741 — "typeof" should not be used to check for "undefined" | 2 |
 | typescript:S7755 — Complex index access patterns should be replaced with ".at()" method | 2 |
 | typescript:S107 — Functions should not have too many parameters | 2 |
 | typescript:S7758 — Unicode-aware string methods should be used for proper character handling | 2 |
+| typescript:S4084 — Media elements should have captions | 2 |
 | typescript:S4624 — Template literals should not be nested | 2 |
 | css:S4666 — Selectors should not be duplicated | 2 |
-| typescript:S6767 — Unused React typed props should be removed | 2 |
+| typescript:S7781 — Strings should use "replaceAll()" instead of "replace()" with global regex | 2 |
+| typescript:S6509 — Extra boolean casts should be removed | 1 |
+| typescript:S6749 — Redundant JSX fragments should be removed | 1 |
 
 ## Files with the most issues
 
 | Value | Count |
 |---|---:|
-| app/home/player/VisualizerPattern.tsx | 16 |
-| app/internal/render/visualizer/VisualizerLivePreview.tsx | 7 |
 | app/home/modules/BuyAlbumButton.tsx | 6 |
 | app/(site)/exegesis/[displayId]/TipTapEditor.tsx | 6 |
+| lib/unsubscribe.ts | 5 |
 | app/home/modules/PortalArtistPostItem.tsx | 5 |
 | app/admin/exegesis/ExegesisModerator.tsx | 5 |
 | app/home/gating/GateSpotlightOverlay.tsx | 5 |
 | app/home/player/StageInline.tsx | 5 |
 | app/home/modules/GiftAlbumButton.tsx | 5 |
+| app/home/player/VisualizerPattern.tsx | 4 |
 | app/home/StableSessionShell.tsx | 4 |
-| app/(site)/exegesis/[displayId]/ExegesisTrackClient.tsx | 4 |
 | app/home/modules/PortalArtistPostsComposer.tsx | 4 |
 | app/(site)/exegesis/[displayId]/components/ExegesisRichComposer.tsx | 4 |
 | app/admin/share-tokens/AdminMintShareTokenForm.tsx | 4 |
 | app/api/admin/campaigns/images/upload/route.ts | 4 |
 | app/api/exegesis/comment/route.ts | 3 |
 | app/home/player/share.ts | 3 |
-| lib/unsubscribe.ts | 3 |
-| lib/albums.ts | 3 |
 | sanity/schemaTypes/modulePanels.ts | 3 |
 | app/home/modules/portalArtistPostsPortableText.tsx | 3 |
+| app/home/modules/PortalMemberPanel.tsx | 3 |
 | lib/vocab.ts | 3 |
 | app/home/player/StageCore.tsx | 3 |
 | app/home/PortalTabs.tsx | 3 |
 | app/api/artist-posts/route.ts | 3 |
 | app/api/webhooks/clerk/route.ts | 3 |
 | app/api/admin/campaigns/enqueue/route.ts | 3 |
+| app/internal/render/visualizer/VisualizerLivePreview.tsx | 2 |
 | app/api/mux/_playbackIssuance.ts | 2 |
 | app/home/ActivationGate.tsx | 2 |
 | app/internal/render/visualizer/page.tsx | 2 |
+| app/home/player/AudioEngine.tsx | 2 |
 
 ## Hotspots by review probability
 

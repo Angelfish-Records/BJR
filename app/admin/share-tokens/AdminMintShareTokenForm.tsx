@@ -4,7 +4,7 @@
 import React from "react";
 import type { AlbumBrowseItem } from "@/lib/albums";
 
-type Props = { albums: AlbumBrowseItem[] };
+type Props = Readonly<{ albums: AlbumBrowseItem[] }>;
 
 type MintOk = {
   ok: true;

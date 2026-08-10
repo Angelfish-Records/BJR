@@ -1,7 +1,7 @@
 {
-  "typescript:S6509": {
-    "key": "typescript:S6509",
-    "name": "Extra boolean casts should be removed",
+  "typescript:S6819": {
+    "key": "typescript:S6819",
+    "name": "Prefer tag over ARIA role",
     "lang": "ts",
     "status": "READY",
     "langName": "TypeScript",
@@ -10,14 +10,6 @@
   "typescript:S4323": {
     "key": "typescript:S4323",
     "name": "Type aliases should be used",
-    "lang": "ts",
-    "status": "READY",
-    "langName": "TypeScript",
-    "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
-  },
-  "typescript:S7761": {
-    "key": "typescript:S7761",
-    "name": "Data attributes should be accessed using \".dataset\"",
     "lang": "ts",
     "status": "READY",
     "langName": "TypeScript",
@@ -135,6 +127,14 @@
     "langName": "TypeScript",
     "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
   },
+  "typescript:S6843": {
+    "key": "typescript:S6843",
+    "name": "Interactive DOM elements should not have non-interactive ARIA roles",
+    "lang": "ts",
+    "status": "READY",
+    "langName": "TypeScript",
+    "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
+  },
   "typescript:S6749": {
     "key": "typescript:S6749",
     "name": "Redundant JSX fragments should be removed",
@@ -159,17 +159,17 @@
     "langName": "TypeScript",
     "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
   },
-  "typescript:S3776": {
-    "key": "typescript:S3776",
-    "name": "Cognitive Complexity of functions should not be too high",
+  "typescript:S4624": {
+    "key": "typescript:S4624",
+    "name": "Template literals should not be nested",
     "lang": "ts",
     "status": "READY",
     "langName": "TypeScript",
     "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
   },
-  "typescript:S4624": {
-    "key": "typescript:S4624",
-    "name": "Template literals should not be nested",
+  "typescript:S7781": {
+    "key": "typescript:S7781",
+    "name": "Strings should use \"replaceAll()\" instead of \"replace()\" with global regex",
     "lang": "ts",
     "status": "READY",
     "langName": "TypeScript",
@@ -183,14 +183,6 @@
     "langName": "TypeScript",
     "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
   },
-  "typescript:S6819": {
-    "key": "typescript:S6819",
-    "name": "Prefer tag over ARIA role",
-    "lang": "ts",
-    "status": "READY",
-    "langName": "TypeScript",
-    "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
-  },
   "typescript:S7773": {
     "key": "typescript:S7773",
     "name": "Number static methods and properties should be preferred over global equivalents",
@@ -199,25 +191,9 @@
     "langName": "TypeScript",
     "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
   },
-  "typescript:S4782": {
-    "key": "typescript:S4782",
-    "name": "Optional property declarations should not use both '?' and 'undefined' syntax",
-    "lang": "ts",
-    "status": "READY",
-    "langName": "TypeScript",
-    "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
-  },
   "typescript:S6644": {
     "key": "typescript:S6644",
     "name": "Ternary operator should not be used instead of simpler alternatives",
-    "lang": "ts",
-    "status": "READY",
-    "langName": "TypeScript",
-    "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
-  },
-  "typescript:S3735": {
-    "key": "typescript:S3735",
-    "name": "\"void\" should not be used",
     "lang": "ts",
     "status": "READY",
     "langName": "TypeScript",
@@ -234,14 +210,6 @@
   "typescript:S6825": {
     "key": "typescript:S6825",
     "name": "Focusable elements should not have \"aria-hidden\" attribute",
-    "lang": "ts",
-    "status": "READY",
-    "langName": "TypeScript",
-    "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
-  },
-  "typescript:S4144": {
-    "key": "typescript:S4144",
-    "name": "Functions should not have identical implementations",
     "lang": "ts",
     "status": "READY",
     "langName": "TypeScript",
@@ -359,17 +327,17 @@
     "langName": "CSS",
     "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
   },
-  "typescript:S3358": {
-    "key": "typescript:S3358",
-    "name": "Ternary operators should not be nested",
+  "typescript:S6509": {
+    "key": "typescript:S6509",
+    "name": "Extra boolean casts should be removed",
     "lang": "ts",
     "status": "READY",
     "langName": "TypeScript",
     "detail_error": "SonarQube API request failed: HTTP 400 for /api/rules/show. The 'organization' parameter is missing"
   },
-  "typescript:S6653": {
-    "key": "typescript:S6653",
-    "name": "Use Object.hasOwn static method instead of hasOwnProperty",
+  "typescript:S3358": {
+    "key": "typescript:S3358",
+    "name": "Ternary operators should not be nested",
     "lang": "ts",
     "status": "READY",
     "langName": "TypeScript",

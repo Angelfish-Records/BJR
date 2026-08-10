@@ -104,7 +104,7 @@ const ICON_CHECK = (
   </svg>
 );
 
-function DefaultAvatar(props: { label: string }) {
+function DefaultAvatar(props: Readonly<{ label: string }>) {
   const { label } = props;
 
   return (
@@ -132,7 +132,9 @@ function DefaultAvatar(props: { label: string }) {
   );
 }
 
-function Avatar(props: { label: string; src?: string; alt?: string }) {
+function Avatar(
+  props: Readonly<{ label: string; src?: string; alt?: string }>,
+) {
   const { label, src, alt } = props;
 
   if (!src) return <DefaultAvatar label={label} />;
@@ -168,11 +170,13 @@ function Avatar(props: { label: string; src?: string; alt?: string }) {
   );
 }
 
-function ActionBtn(props: {
-  onClick: () => void;
-  children: React.ReactNode;
-  label: string;
-}) {
+function ActionBtn(
+  props: Readonly<{
+    onClick: () => void;
+    children: React.ReactNode;
+    label: string;
+  }>,
+) {
   return (
     <button
       type="button"
@@ -208,7 +212,7 @@ function ActionBtn(props: {
   );
 }
 
-function TypeBadge(props: { t?: PostType | null }) {
+function TypeBadge(props: Readonly<{ t?: PostType | null }>) {
   const postType = asPostType(props.t ?? null) ?? "creative";
   const theme = typeBadgeTheme(postType);
 
@@ -238,7 +242,7 @@ function TypeBadge(props: { t?: PostType | null }) {
   );
 }
 
-type Props = {
+type Props = Readonly<{
   post: Post;
   index: number;
   deepSlug: string | null;
@@ -250,7 +254,7 @@ type Props = {
   portableTextComponents: PortableTextComponents;
   registerPostElement: (slug: string, node: HTMLDivElement | null) => void;
   onShare: (post: { slug: string; title?: string }) => void | Promise<void>;
-};
+}>;
 
 export default function PortalArtistPostItem(props: Props) {
   const {

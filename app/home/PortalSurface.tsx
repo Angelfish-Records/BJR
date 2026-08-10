@@ -4,13 +4,13 @@ import PortalModules from "@/app/home/PortalModules";
 import type { PortalModule } from "@/lib/portal";
 import type { PortalMemberSummary } from "@/lib/memberDashboard";
 
-type Props = {
+type Props = Readonly<{
   modules: PortalModule[];
   memberId: string | null;
   entitlementKeys: string[];
   memberSummary?: PortalMemberSummary | null;
   isPortalActive: boolean;
-};
+}>;
 
 export default function PortalSurface(props: Props) {
   // Runtime-native portal composition boundary.

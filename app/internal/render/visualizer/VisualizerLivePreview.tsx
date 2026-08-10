@@ -697,7 +697,6 @@ export default function VisualizerLivePreview(props: Props) {
     <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
       <canvas
         ref={renderCanvasRef}
-        role="presentation"
         style={{
           position: "fixed",
           left: -10000,
@@ -705,6 +704,7 @@ export default function VisualizerLivePreview(props: Props) {
           width: 1,
           height: 1,
           pointerEvents: "none",
+          visibility: "hidden",
           opacity: 0,
         }}
       />

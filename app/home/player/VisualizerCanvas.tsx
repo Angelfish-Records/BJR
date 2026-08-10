@@ -16,7 +16,9 @@ import {
   type ThemeName,
 } from "./visualizer/core/themeRegistry";
 
-export default function VisualizerCanvas(props: { variant: StageVariant }) {
+export default function VisualizerCanvas(
+  props: Readonly<{ variant: StageVariant }>,
+) {
   const { variant } = props;
   const player = usePlayerVisual();
 

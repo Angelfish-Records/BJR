@@ -65,11 +65,13 @@ function toAlbumNavItems(
     }));
 }
 
-export default async function SessionLayout(props: {
-  // Parallel route slot:
-  // we render ALL “player vs portal” runtime inside this slot.
-  runtime: React.ReactNode;
-}) {
+export default async function SessionLayout(
+  props: Readonly<{
+    // Parallel route slot:
+    // we render ALL “player vs portal” runtime inside this slot.
+    runtime: React.ReactNode;
+  }>,
+) {
   const [shellConfig, featured, browseAlbumsRaw] = await Promise.all([
     getCachedSessionShellConfig(),
     getFeaturedAlbumSlugFromSanity(),

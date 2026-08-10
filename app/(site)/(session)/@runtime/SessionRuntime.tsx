@@ -14,13 +14,15 @@ import { SessionRuntimePayloadBridge } from "@/app/home/SessionRuntimePayloadCon
 import type { SessionRuntimePayload } from "@/app/home/sessionRuntimePayload";
 import { getAlbumBySlug } from "@/lib/albums";
 
-export default async function SessionRuntime(props: {
-  // When present, this is the “player album” canonical slug for /album/:slug routes.
-  albumSlugOverride?: string | null;
-  featuredAlbumSlug?: string | null;
-  initialPortalTabId?: string | null;
-  initialExegesisDisplayId?: string | null;
-}) {
+export default async function SessionRuntime(
+  props: Readonly<{
+    // When present, this is the “player album” canonical slug for /album/:slug routes.
+    albumSlugOverride?: string | null;
+    featuredAlbumSlug?: string | null;
+    initialPortalTabId?: string | null;
+    initialExegesisDisplayId?: string | null;
+  }>,
+) {
   // Important: this file is now a route-payload loader only.
   // It must not directly instantiate the persistent session shell.
   const selectedAlbumSlug =

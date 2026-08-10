@@ -3,7 +3,7 @@
 
 import React from "react";
 
-type Props = {
+type Props = Readonly<{
   albumTitle: string;
   albumSlug: string;
   ctaLabel?: string;
@@ -12,7 +12,7 @@ type Props = {
   fullWidth?: boolean;
   style?: React.CSSProperties;
   buttonStyle?: React.CSSProperties;
-};
+}>;
 
 type GiftCreateOk = {
   ok: true;
@@ -95,10 +95,6 @@ export default function GiftAlbumButton(props: Props) {
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [open]);
-
-  const onBackdropMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) setOpen(false);
-  };
 
   async function createGift(): Promise<GiftCreateOk> {
     const returnTo = `${window.location.pathname}${window.location.search}`;
@@ -261,15 +257,19 @@ export default function GiftAlbumButton(props: Props) {
       </button>
 
       {open ? (
-        <div
-          role="dialog"
+        <dialog
+          open
           aria-modal="true"
           aria-label={`Send ${albumTitle} as a gift`}
-          onMouseDown={onBackdropMouseDown}
           style={{
             position: "fixed",
             inset: 0,
             zIndex: 9999,
+            width: "100%",
+            height: "100%",
+            maxHeight: "none",
+            margin: 0,
+            border: 0,
             background:
               "radial-gradient(circle at 18% 12%, rgba(255,255,255,0.12), transparent 28%), radial-gradient(circle at 82% 86%, rgba(126,119,255,0.14), transparent 34%), rgba(0,0,0,0.68)",
             backdropFilter: "blur(14px)",
@@ -278,11 +278,30 @@ export default function GiftAlbumButton(props: Props) {
             padding: 16,
             overflowX: "clip",
             maxWidth: "100vw",
+            color: "inherit",
           }}
         >
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label={`Close gift dialog for ${albumTitle}`}
+            onMouseDown={() => setOpen(false)}
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              padding: 0,
+              border: 0,
+              background: "transparent",
+              cursor: "default",
+            }}
+          />
+
           <div
             style={{
               position: "relative",
+              zIndex: 1,
               width: "min(640px, 100%)",
               borderRadius: 28,
               border: "1px solid rgba(255,255,255,0.16)",
@@ -491,7 +510,7 @@ export default function GiftAlbumButton(props: Props) {
               </div>
             </div>
           </div>
-        </div>
+        </dialog>
       ) : null}
     </div>
   );

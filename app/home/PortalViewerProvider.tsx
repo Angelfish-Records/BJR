@@ -26,15 +26,17 @@ export function usePortalViewer(): ViewerCtx {
   return ctx;
 }
 
-export function PortalViewerProvider(props: {
-  value: {
-    tier: Tier;
-    isSignedIn: boolean;
-  };
-  children: React.ReactNode;
-  initialPortalTabId?: string | null;
-  initialExegesisDisplayId?: string | null;
-}) {
+export function PortalViewerProvider(
+  props: Readonly<{
+    value: {
+      tier: Tier;
+      isSignedIn: boolean;
+    };
+    children: React.ReactNode;
+    initialPortalTabId?: string | null;
+    initialExegesisDisplayId?: string | null;
+  }>,
+) {
   const [portalTabId, setPortalTabId] = React.useState<string | null>(
     (props.initialPortalTabId ?? null)
       ? String(props.initialPortalTabId)

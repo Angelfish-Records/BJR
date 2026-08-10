@@ -99,7 +99,7 @@ function useIdleCursor(active: boolean, timeoutMs: number) {
   return hidden;
 }
 
-function IconFullscreen(props: { size?: number }) {
+function IconFullscreen(props: Readonly<{ size?: number }>) {
   const { size = 18 } = props;
   return (
     <svg
@@ -119,7 +119,7 @@ function IconFullscreen(props: { size?: number }) {
   );
 }
 
-function IconClose(props: { size?: number }) {
+function IconClose(props: Readonly<{ size?: number }>) {
   const { size = 18 } = props;
   return (
     <svg
@@ -182,7 +182,6 @@ const FullscreenStageOverlay = React.memo(
     cursorHidden: boolean;
     isMobile: boolean;
     showPerfHud: boolean;
-    onBackdropMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
     onRequestFullscreen: () => void;
     onClose: () => void;
   }) {
@@ -190,23 +189,25 @@ const FullscreenStageOverlay = React.memo(
       cursorHidden,
       isMobile,
       showPerfHud,
-      onBackdropMouseDown,
       onRequestFullscreen,
       onClose,
     } = props;
 
     return (
-      <div
+      <dialog
+        open
         id="af-stage-overlay"
-        role="dialog"
         aria-modal="true"
         aria-label="Stage"
-        onMouseDown={onBackdropMouseDown}
         style={{
           position: "fixed",
           inset: 0,
           width: "100%",
           height: "100dvh",
+          maxWidth: "none",
+          maxHeight: "none",
+          margin: 0,
+          border: 0,
           zIndex: 200000,
           cursor: cursorHidden ? "none" : "default",
           background: "rgba(0,0,0,0.80)",
@@ -214,6 +215,7 @@ const FullscreenStageOverlay = React.memo(
           WebkitBackdropFilter: "blur(10px)",
           padding: 0,
           display: "grid",
+          color: "inherit",
         }}
       >
         <div
@@ -283,12 +285,14 @@ const FullscreenStageOverlay = React.memo(
 
           <StageTransportBar />
         </div>
-      </div>
+      </dialog>
     );
   },
 );
 
-export default function StageInline(props: { height?: number }) {
+export default function StageInline(
+  props: Readonly<{ height?: number }>,
+) {
   const { height = 300 } = props;
   const p = usePlayer();
 
@@ -376,13 +380,6 @@ export default function StageInline(props: { height?: number }) {
 
   const nothingPlaying = p.queue.length === 0 && !p.current?.recordingId;
 
-  const handleOverlayBackdropMouseDown = React.useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (e.target === e.currentTarget) setOpen(false);
-    },
-    [],
-  );
-
   const handleOverlayClose = React.useCallback(() => {
     setOpen(false);
   }, []);
@@ -398,7 +395,6 @@ export default function StageInline(props: { height?: number }) {
             cursorHidden={cursorHidden}
             isMobile={isMobile}
             showPerfHud={isAdmin}
-            onBackdropMouseDown={handleOverlayBackdropMouseDown}
             onRequestFullscreen={handleOverlayRequestFullscreen}
             onClose={handleOverlayClose}
           />,

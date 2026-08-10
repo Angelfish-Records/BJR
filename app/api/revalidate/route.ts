@@ -11,7 +11,7 @@ type SanityWebhookPayload = {
   };
 };
 
-const CACHE_PROFILE = "default" as const;
+const IMMEDIATE_REVALIDATION = { expire: 0 } as const;
 
 function getBearerToken(authHeader: string): string {
   const trimmed = authHeader.trim();
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
 
   const { docType, docId } = getDocMeta(body);
 
-  const reTag = (tag: string) => revalidateTag(tag, CACHE_PROFILE);
+  const reTag = (tag: string) => revalidateTag(tag, IMMEDIATE_REVALIDATION);
 
   if (!docType) {
     return Response.json({
@@ -106,7 +106,8 @@ export async function POST(req: Request) {
   // Album metadata, tracks, browse lists, and canonical metadata helpers.
   if (docType === "album") {
     tags.push("albums");
-    revalidatePath("/albums");
+    revalidatePath("/album/[slug]", "page");
+    revalidatePath("/album/[slug]/track/[displayId]", "page");
   }
 
   // Lyrics are independently cached, but album payload construction depends on
@@ -114,7 +115,8 @@ export async function POST(req: Request) {
   if (docType === "lyrics") {
     tags.push("lyrics");
     tags.push("albums");
-    revalidatePath("/albums");
+    revalidatePath("/album/[slug]", "page");
+    revalidatePath("/album/[slug]/track/[displayId]", "page");
   }
 
   if (tags.length === 0) {

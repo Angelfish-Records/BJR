@@ -2,9 +2,11 @@
 import React from "react";
 import SessionRuntime from "../../SessionRuntime";
 
-export default async function AlbumRuntimePage(props: {
-  params: Promise<{ slug: string }>;
-}) {
+export default async function AlbumRuntimePage(
+  props: Readonly<{
+    params: Promise<{ slug: string }>;
+  }>,
+) {
   const { slug } = await props.params;
   const resolvedSlug = decodeURIComponent(slug ?? "").trim() || null;
 

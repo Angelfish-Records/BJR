@@ -3,10 +3,10 @@
 
 import React from "react";
 
-type TermsModalProps = {
+type TermsModalProps = Readonly<{
   open: boolean;
   onClose: () => void;
-};
+}>;
 
 function TermsModal(props: TermsModalProps) {
   const { open, onClose } = props;
@@ -25,18 +25,22 @@ function TermsModal(props: TermsModalProps) {
   if (!open) return null;
 
   return (
-    <div
-      role="dialog"
+    <dialog
+      open
       aria-modal="true"
       aria-label="Question terms and conditions"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
       style={{
         position: "fixed",
         inset: 0,
         zIndex: 100000,
+        width: "100%",
+        height: "100%",
+        maxWidth: "none",
+        maxHeight: "none",
+        margin: 0,
+        border: 0,
         background: "rgba(0,0,0,0.55)",
+        color: "inherit",
         backdropFilter: "blur(8px)",
         WebkitBackdropFilter: "blur(8px)",
         display: "grid",
@@ -44,9 +48,28 @@ function TermsModal(props: TermsModalProps) {
         padding: 16,
       }}
     >
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Close question terms and conditions"
+        onMouseDown={onClose}
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          padding: 0,
+          border: 0,
+          background: "transparent",
+          cursor: "default",
+        }}
+      />
+
       <div
         className="portalPanelFrame--gold"
         style={{
+          position: "relative",
+          zIndex: 1,
           width: "min(520px, 100%)",
           borderRadius: 20,
           padding: 1,
@@ -152,11 +175,11 @@ function TermsModal(props: TermsModalProps) {
           </div>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }
 
-type Props = {
+type Props = Readonly<{
   open: boolean;
   termsOpen: boolean;
   askerName: string;
@@ -171,7 +194,7 @@ type Props = {
   onChangeAskerName: (value: string) => void;
   onChangeQuestionText: (value: string) => void;
   onSubmit: () => void | Promise<void>;
-};
+}>;
 
 export default function PortalArtistPostsComposer(props: Props) {
   const {

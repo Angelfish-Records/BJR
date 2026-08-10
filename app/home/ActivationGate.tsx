@@ -660,7 +660,6 @@ function MembershipModal(props: MembershipModalProps) {
         <dialog
           open
           aria-label="Membership options"
-          onMouseDown={(event) => event.stopPropagation()}
           style={{
             position: "relative",
             display: "block",

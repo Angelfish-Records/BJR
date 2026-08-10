@@ -20,9 +20,11 @@ function cardStyle(): React.CSSProperties {
   };
 }
 
-export default async function UnsubscribePage(props: {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
-}) {
+export default async function UnsubscribePage(
+  props: Readonly<{
+    searchParams?: Promise<Record<string, string | string[] | undefined>>;
+  }>,
+) {
   headers();
 
   const sp = (await props.searchParams) ?? {};

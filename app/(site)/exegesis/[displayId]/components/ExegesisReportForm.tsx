@@ -5,12 +5,14 @@ import React from "react";
 import { REPORT_CATEGORIES } from "../exegesisTypes";
 import type { ReportDraft } from "../exegesisTypes";
 
-export default function ExegesisReportForm(props: {
-  draft: ReportDraft;
-  onChange: (next: ReportDraft) => void;
-  onSubmit: () => void;
-  containerRef?: React.Ref<HTMLDivElement>;
-}) {
+export default function ExegesisReportForm(
+  props: Readonly<{
+    draft: ReportDraft;
+    onChange: (next: ReportDraft) => void;
+    onSubmit: () => void;
+    containerRef?: React.Ref<HTMLDivElement>;
+  }>,
+) {
   const { draft, onChange, onSubmit, containerRef } = props;
 
   const reasonLength = (draft.reason ?? "").trim().length;
@@ -76,6 +78,7 @@ export default function ExegesisReportForm(props: {
         <div className="flex items-center justify-between">
           <div className="text-xs opacity-60">{reasonLength}/300</div>
           <button
+            type="button"
             className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
             disabled={submitDisabled}
             onClick={onSubmit}

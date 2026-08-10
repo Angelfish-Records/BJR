@@ -4,12 +4,12 @@
 import React from "react";
 import ActivationGate from "@/app/home/ActivationGate";
 
-type ExegesisInlineGateOverlayProps = {
+type ExegesisInlineGateOverlayProps = Readonly<{
   open: boolean;
   message: string;
   dismissible: boolean;
   onDismiss: () => void;
-};
+}>;
 
 export default function ExegesisInlineGateOverlay({
   open,

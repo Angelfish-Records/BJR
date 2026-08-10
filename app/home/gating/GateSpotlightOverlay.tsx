@@ -158,13 +158,15 @@ function useAdminRibbonAboveOverlay(active: boolean) {
   }, [active]);
 }
 
-export default function GateSpotlightOverlay(props: {
-  active: boolean;
-  gateNode: React.ReactNode;
-  ariaLabel?: string;
-  // Keep your current behavior: admin debugbar stays clickable above overlay.
-  allowAdminRibbonAbove?: boolean;
-}) {
+export default function GateSpotlightOverlay(
+  props: Readonly<{
+    active: boolean;
+    gateNode: React.ReactNode;
+    ariaLabel?: string;
+    // Keep your current behavior: admin debugbar stays clickable above overlay.
+    allowAdminRibbonAbove?: boolean;
+  }>,
+) {
   const { active, gateNode, ariaLabel = "Authentication required", allowAdminRibbonAbove = true } =
     props;
 

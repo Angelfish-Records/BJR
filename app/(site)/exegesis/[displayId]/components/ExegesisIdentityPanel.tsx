@@ -3,7 +3,7 @@
 
 import React from "react";
 
-type ExegesisIdentityPanelProps = {
+type ExegesisIdentityPanelProps = Readonly<{
   show: boolean;
   authorLabel: string;
   hasClaimedPublicName: boolean;
@@ -16,7 +16,7 @@ type ExegesisIdentityPanelProps = {
   onChangeClaimName: (value: string) => void;
   onCancelClaim: () => void;
   onSubmitClaim: () => void;
-};
+}>;
 
 export default function ExegesisIdentityPanel({
   show,

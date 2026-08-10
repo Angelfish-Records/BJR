@@ -17,14 +17,16 @@ type UploadStatusResponse =
     }
   | { ok: false; error: string };
 
-export default function MuxUploader(props: {
-  onReady: (payload: {
-    uploadId: string;
-    assetId?: string;
-    playbackId: string;
-  }) => void;
-  disabled?: boolean;
-}) {
+export default function MuxUploader(
+  props: Readonly<{
+    onReady: (payload: {
+      uploadId: string;
+      assetId?: string;
+      playbackId: string;
+    }) => void;
+    disabled?: boolean;
+  }>,
+) {
   const { onReady, disabled = false } = props;
 
   const [uploadId, setUploadId] = React.useState<string | null>(null);

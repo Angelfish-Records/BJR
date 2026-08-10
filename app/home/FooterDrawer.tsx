@@ -28,10 +28,12 @@ function useIsMobile(breakpointPx = 640) {
   return isMobile;
 }
 
-export default function FooterDrawer(props: {
-  emailTo?: string;
-  licensingHref?: string;
-}) {
+export default function FooterDrawer(
+  props: Readonly<{
+    emailTo?: string;
+    licensingHref?: string;
+  }>,
+) {
   const emailTo = props.emailTo ?? "hello@angelfishrecords.com";
   const licensingHref = props.licensingHref ?? "";
 

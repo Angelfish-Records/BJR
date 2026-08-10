@@ -1,13 +1,13 @@
 import React from "react";
 
-type Props = {
+type Props = Readonly<{
   title: string;
   subtitle?: string;
   embed?: boolean;
   maxWidth?: number;
   headerActions?: React.ReactNode;
   children: React.ReactNode;
-};
+}>;
 
 export default function AdminPageFrame(props: Props) {
   const {

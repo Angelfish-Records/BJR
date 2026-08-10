@@ -44,10 +44,12 @@ function toPortalAreaProps(
   };
 }
 
-function StableSessionViewport(props: {
-  runtime: React.ReactNode;
-  shell: ShellConfig;
-}) {
+function StableSessionViewport(
+  props: Readonly<{
+    runtime: React.ReactNode;
+    shell: ShellConfig;
+  }>,
+) {
   const record = useSessionRuntimePayloadRecord();
   const payload = record?.payload ?? null;
   const router = useRouter();
@@ -143,14 +145,16 @@ function StableSessionViewport(props: {
   );
 }
 
-export default function StableSessionShell(props: {
-  runtime: React.ReactNode;
-  topLogoUrl: string | null;
-  topLogoHeight: number | null;
-  featuredAlbumSlug: string;
-  albums: PortalAreaProps["albums"];
-  portalModules: PortalAreaProps["portalModules"];
-}) {
+export default function StableSessionShell(
+  props: Readonly<{
+    runtime: React.ReactNode;
+    topLogoUrl: string | null;
+    topLogoHeight: number | null;
+    featuredAlbumSlug: string;
+    albums: PortalAreaProps["albums"];
+    portalModules: PortalAreaProps["portalModules"];
+  }>,
+) {
   const shell: ShellConfig = {
     topLogoUrl: props.topLogoUrl,
     topLogoHeight: props.topLogoHeight,
