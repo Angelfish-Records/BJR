@@ -88,7 +88,8 @@ export function usePlaybackReconciliation(props: {
       // Share-token context is URL-authoritative. A tokenless current URL
       // must remain tokenless rather than reviving a prior session value.
       const query = out.toString();
-      routerPush(`/${encodeURIComponent(slug)}${query ? `?${query}` : ""}`);
+      const querySuffix = query ? `?${query}` : "";
+      routerPush(`/${encodeURIComponent(slug)}${querySuffix}`);
     },
     [routerPush],
   );

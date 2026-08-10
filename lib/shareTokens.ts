@@ -1,6 +1,6 @@
 // web/lib/shareTokens.ts
 import "server-only";
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { sql } from "@vercel/postgres";
 
 export type TokenGrant = {
@@ -104,34 +104,36 @@ function normalizeScopeId(input: string | null | undefined): string | null {
   return s ? `alb:${s}` : null;
 }
 
+function optionalTrimmedString(value: unknown): string | null {
+  if (value == null || typeof value !== "string") return null;
+  return value.trim() || null;
+}
+
+function coerceTokenGrant(item: unknown): TokenGrant | null {
+  if (!isPlainObject(item)) return null;
+
+  const key = typeof item.key === "string" ? item.key.trim() : "";
+  if (!key) return null;
+
+  const scopeId = optionalTrimmedString(item.scopeId);
+  const scopeMeta = isPlainObject(item.scopeMeta)
+    ? item.scopeMeta
+    : undefined;
+  const expiresAt = optionalTrimmedString(item.expiresAt);
+
+  return { key, scopeId, scopeMeta, expiresAt };
+}
+
 function coerceTokenGrants(input: unknown): TokenGrant[] {
   if (!Array.isArray(input)) return [];
+
   const out: TokenGrant[] = [];
+
   for (const item of input) {
-    if (!isPlainObject(item)) continue;
-    const key = typeof item.key === "string" ? item.key.trim() : "";
-    if (!key) continue;
-
-    const scopeId =
-      item.scopeId == null
-        ? null
-        : typeof item.scopeId === "string"
-          ? item.scopeId.trim() || null
-          : null;
-
-    const scopeMeta = isPlainObject(item.scopeMeta)
-      ? item.scopeMeta
-      : undefined;
-
-    const expiresAt =
-      item.expiresAt == null
-        ? null
-        : typeof item.expiresAt === "string"
-          ? item.expiresAt.trim() || null
-          : null;
-
-    out.push({ key, scopeId, scopeMeta, expiresAt });
+    const grant = coerceTokenGrant(item);
+    if (grant) out.push(grant);
   }
+
   return out;
 }
 
@@ -388,49 +390,42 @@ export async function createShareToken(params: {
   };
 }
 
-export async function redeemShareTokenForMember(params: {
+type ShareTokenFailureCode =
+  | "INVALID"
+  | "EXPIRED"
+  | "REVOKED"
+  | "SCOPE_MISMATCH"
+  | "CAP_REACHED";
+
+type ShareTokenFailure = {
+  ok: false;
+  code: ShareTokenFailureCode;
+};
+
+type MemberRedemptionParams = {
   token: string;
   memberId: string;
   expectedScopeId?: string | null;
   resourceKind?: string;
   resourceId?: string | null;
-  action?: string; // default: 'redeem'
-}): Promise<
-  | {
-      ok: true;
-      tokenId: string;
-      scopeId: string | null;
-      kind: string;
-      grants: TokenGrant[];
-      shareTokenAccess: ShareTokenAccessSummary;
-      telemetryLabel: string | null;
-    }
-  | {
-      ok: false;
-      code:
-        | "INVALID"
-        | "EXPIRED"
-        | "REVOKED"
-        | "SCOPE_MISMATCH"
-        | "CAP_REACHED";
-    }
-> {
-  const action = normalizeAction(params.action, "redeem");
-  const tokenHash = hashShareToken((params.token ?? "").trim());
+  action?: string;
+};
 
-  if (!tokenHash) return { ok: false, code: "INVALID" };
+type MemberRedemptionContext = {
+  row: ShareTokenRow;
+  action: string;
+  expected: string | null;
+  found: string | null;
+  resourceKind: string;
+  resourceId: string | null;
+};
 
-  const row = await loadTokenRow(tokenHash);
-  if (!row) return { ok: false, code: "INVALID" };
+async function memberRedemptionValidationFailure(
+  params: MemberRedemptionParams,
+  context: MemberRedemptionContext,
+): Promise<ShareTokenFailure | null> {
+  const { row, action, expected, found, resourceKind, resourceId } = context;
 
-  const expected = normalizeScopeId(params.expectedScopeId ?? null);
-  const found = normalizeScopeId(row.scope_id);
-
-  // Precompute logging fields
-  const resourceKind = params.resourceKind ?? "album";
-  const resourceId = params.resourceId ?? row.scope_id ?? null;
-
-  // Validate
   if (row.revoked_at) {
     await logPlay({
       tokenId: row.id,
@@ -443,6 +438,7 @@ export async function redeemShareTokenForMember(params: {
     });
     return { ok: false, code: "REVOKED" };
   }
+
   if (isExpired(row.expires_at)) {
     await logPlay({
       tokenId: row.id,
@@ -455,6 +451,7 @@ export async function redeemShareTokenForMember(params: {
     });
     return { ok: false, code: "EXPIRED" };
   }
+
   if (expected && found && found !== expected) {
     await logPlay({
       tokenId: row.id,
@@ -469,46 +466,47 @@ export async function redeemShareTokenForMember(params: {
     return { ok: false, code: "SCOPE_MISMATCH" };
   }
 
-  // Strict cap (distinct consumers)
-  if (typeof row.max_redemptions === "number" && row.max_redemptions > 0) {
-    const ck = consumerKeyFor({ memberId: params.memberId });
-    if (!ck) {
-      await logPlay({
-        tokenId: row.id,
-        memberId: params.memberId,
-        anonId: null,
-        resourceKind,
-        resourceId,
-        action,
-        outcome: "invalid",
-      });
-      return { ok: false, code: "INVALID" };
-    }
+  return null;
+}
 
-    const capBucket = "*"; // we explicitly want cross-action caps by default
-    const cap = await enforceDistinctConsumerCap({
-      tokenId: row.id,
-      max: row.max_redemptions,
-      action,
-      capBucket,
-      consumerKey: ck,
-    });
-    if (!cap.ok) {
-      await logPlay({
-        tokenId: row.id,
-        memberId: params.memberId,
-        anonId: null,
-        resourceKind,
-        resourceId,
-        action,
-        outcome: "quota_exceeded",
-        metadata: { cap_bucket: capBucket, max: row.max_redemptions },
-      });
-      return { ok: false, code: "CAP_REACHED" };
-    }
+async function memberRedemptionCapFailure(
+  params: MemberRedemptionParams,
+  context: MemberRedemptionContext,
+): Promise<ShareTokenFailure | null> {
+  const { row, action, resourceKind, resourceId } = context;
+
+  if (
+    typeof row.max_redemptions !== "number" ||
+    row.max_redemptions <= 0
+  ) {
+    return null;
   }
 
-  const grants = coerceTokenGrants(row.grants);
+  const ck = consumerKeyFor({ memberId: params.memberId });
+
+  if (!ck) {
+    await logPlay({
+      tokenId: row.id,
+      memberId: params.memberId,
+      anonId: null,
+      resourceKind,
+      resourceId,
+      action,
+      outcome: "invalid",
+    });
+    return { ok: false, code: "INVALID" };
+  }
+
+  const capBucket = "*";
+  const cap = await enforceDistinctConsumerCap({
+    tokenId: row.id,
+    max: row.max_redemptions,
+    action,
+    capBucket,
+    consumerKey: ck,
+  });
+
+  if (cap.ok) return null;
 
   await logPlay({
     tokenId: row.id,
@@ -517,12 +515,18 @@ export async function redeemShareTokenForMember(params: {
     resourceKind,
     resourceId,
     action,
-    outcome: "allowed",
-    metadata: { cap_bucket: "*" },
+    outcome: "quota_exceeded",
+    metadata: { cap_bucket: capBucket, max: row.max_redemptions },
   });
 
-  // Apply grants (idempotent-ish)
-  for (const g of grants) {
+  return { ok: false, code: "CAP_REACHED" };
+}
+
+async function applyTokenGrants(params: {
+  memberId: string;
+  grants: TokenGrant[];
+}): Promise<void> {
+  for (const g of params.grants) {
     const key = (g?.key ?? "").toString().trim();
     if (!key) continue;
 
@@ -562,6 +566,70 @@ export async function redeemShareTokenForMember(params: {
       )
     `;
   }
+}
+
+export async function redeemShareTokenForMember(
+  params: MemberRedemptionParams,
+): Promise<
+  | {
+      ok: true;
+      tokenId: string;
+      scopeId: string | null;
+      kind: string;
+      grants: TokenGrant[];
+      shareTokenAccess: ShareTokenAccessSummary;
+      telemetryLabel: string | null;
+    }
+  | ShareTokenFailure
+> {
+  const action = normalizeAction(params.action, "redeem");
+  const tokenHash = hashShareToken((params.token ?? "").trim());
+
+  if (!tokenHash) return { ok: false, code: "INVALID" };
+
+  const row = await loadTokenRow(tokenHash);
+  if (!row) return { ok: false, code: "INVALID" };
+
+  const expected = normalizeScopeId(params.expectedScopeId ?? null);
+  const found = normalizeScopeId(row.scope_id);
+  const resourceKind = params.resourceKind ?? "album";
+  const resourceId = params.resourceId ?? row.scope_id ?? null;
+
+  const context: MemberRedemptionContext = {
+    row,
+    action,
+    expected,
+    found,
+    resourceKind,
+    resourceId,
+  };
+
+  const validationFailure = await memberRedemptionValidationFailure(
+    params,
+    context,
+  );
+  if (validationFailure) return validationFailure;
+
+  const capFailure = await memberRedemptionCapFailure(params, context);
+  if (capFailure) return capFailure;
+
+  const grants = coerceTokenGrants(row.grants);
+
+  await logPlay({
+    tokenId: row.id,
+    memberId: params.memberId,
+    anonId: null,
+    resourceKind,
+    resourceId,
+    action,
+    outcome: "allowed",
+    metadata: { cap_bucket: "*" },
+  });
+
+  await applyTokenGrants({
+    memberId: params.memberId,
+    grants,
+  });
 
   return {
     ok: true,

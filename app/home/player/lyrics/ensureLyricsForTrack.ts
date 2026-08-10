@@ -5,11 +5,64 @@ import { lyricsSurface } from "./lyricsSurface";
 import { fetchLyricsByrecordingId } from "./fetchLyricsByRecordingId";
 import type { AlbumLyricsBundle } from "@/lib/types";
 
+type CuesByRecordingId = AlbumLyricsBundle["cuesByRecordingId"];
+type OffsetByRecordingId = AlbumLyricsBundle["offsetByRecordingId"];
+
 // Module-scope in-flight map so *any* caller (any surface) dedupes fetches.
 const inFlight = new Map<string, AbortController>();
 
-function hasOwn(obj: object, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(obj, key);
+function mergeMissingCues(
+  current: CuesByRecordingId,
+  incoming: CuesByRecordingId,
+): CuesByRecordingId {
+  let next = current;
+
+  for (const [recordingIdRaw, cuesRaw] of Object.entries(incoming)) {
+    const id = (recordingIdRaw ?? "").trim();
+    if (!id || Object.hasOwn(next, id)) continue;
+
+    const cues = Array.isArray(cuesRaw) ? cuesRaw : [];
+    next = { ...next, [id]: cues };
+  }
+
+  return next;
+}
+
+function mergeMissingOffsets(
+  current: OffsetByRecordingId,
+  incoming: OffsetByRecordingId,
+): OffsetByRecordingId {
+  let next = current;
+
+  for (const [recordingIdRaw, offRaw] of Object.entries(incoming)) {
+    const id = (recordingIdRaw ?? "").trim();
+    if (!id || Object.hasOwn(next, id)) continue;
+
+    const n =
+      typeof offRaw === "number" && Number.isFinite(offRaw)
+        ? Math.floor(offRaw)
+        : 0;
+
+    next = { ...next, [id]: n };
+  }
+
+  return next;
+}
+
+function nextCuesMap(
+  current: CuesByRecordingId,
+  recordingId: string,
+  cues: CuesByRecordingId[string],
+): CuesByRecordingId {
+  if (Array.isArray(cues) && cues.length > 0) {
+    return { ...current, [recordingId]: cues };
+  }
+
+  if (Object.hasOwn(current, recordingId)) {
+    return current;
+  }
+
+  return { ...current, [recordingId]: [] };
 }
 
 /**
@@ -25,39 +78,22 @@ export function primeLyricsFromAlbumBundle(
 
   const snap = lyricsSurface.getSnapshot();
 
-  const cuesIn = bundle.cuesByRecordingId ?? {};
-  const offIn = bundle.offsetByRecordingId ?? {};
-
-  // Build merged maps but only add keys that are currently unknown.
-  let cuesOut = snap.cuesByRecordingId;
-  let offOut = snap.offsetByRecordingId;
-
-  for (const [recordingIdRaw, cuesRaw] of Object.entries(cuesIn)) {
-    const id = (recordingIdRaw ?? "").trim();
-    if (!id) continue;
-
-    if (hasOwn(cuesOut, id)) continue; // don't overwrite existing (including [] known-no-lyrics)
-
-    const cues = Array.isArray(cuesRaw) ? cuesRaw : [];
-    cuesOut = { ...cuesOut, [id]: cues };
-  }
-
-  for (const [recordingIdRaw, offRaw] of Object.entries(offIn)) {
-    const id = (recordingIdRaw ?? "").trim();
-    if (!id) continue;
-
-    if (hasOwn(offOut, id)) continue; // don't overwrite existing
-
-    const n =
-      typeof offRaw === "number" && Number.isFinite(offRaw)
-        ? Math.floor(offRaw)
-        : 0;
-
-    offOut = { ...offOut, [id]: n };
-  }
+  const cuesOut = mergeMissingCues(
+    snap.cuesByRecordingId,
+    bundle.cuesByRecordingId ?? {},
+  );
+  const offOut = mergeMissingOffsets(
+    snap.offsetByRecordingId,
+    bundle.offsetByRecordingId ?? {},
+  );
 
   // Only write if something changed (cheap reference check).
-  if (cuesOut === snap.cuesByRecordingId && offOut === snap.offsetByRecordingId) return;
+  if (
+    cuesOut === snap.cuesByRecordingId &&
+    offOut === snap.offsetByRecordingId
+  ) {
+    return;
+  }
 
   lyricsSurface.setMaps({
     cuesByrecordingId: cuesOut,
@@ -82,7 +118,7 @@ export async function ensureLyricsForTrack(
   const snap = lyricsSurface.getSnapshot();
   const existing = snap.cuesByRecordingId[id];
 
-  const knownKey = hasOwn(snap.cuesByRecordingId, id);
+  const knownKey = Object.hasOwn(snap.cuesByRecordingId, id);
   const hasCues = Array.isArray(existing) && existing.length > 0;
   const knownNoLyrics =
     knownKey && Array.isArray(existing) && existing.length === 0;
@@ -111,12 +147,11 @@ export async function ensureLyricsForTrack(
 
     const prev = lyricsSurface.getSnapshot();
 
-    const nextCuesByrecordingId =
-      Array.isArray(r.cues) && r.cues.length
-        ? { ...prev.cuesByRecordingId, [id]: r.cues }
-        : hasOwn(prev.cuesByRecordingId, id)
-          ? prev.cuesByRecordingId
-          : { ...prev.cuesByRecordingId, [id]: [] };
+    const nextCuesByrecordingId = nextCuesMap(
+      prev.cuesByRecordingId,
+      id,
+      r.cues,
+    );
 
     const nextOffsetByrecordingId =
       typeof r.offsetMs === "number" && Number.isFinite(r.offsetMs)

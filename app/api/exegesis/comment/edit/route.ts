@@ -65,132 +65,165 @@ async function requireCanPost(memberId: string): Promise<boolean> {
   ]);
 }
 
-export async function POST(req: NextRequest) {
-  const correlationId = correlationIdFromRequest(req);
 
+type EditCommand = {
+  commentId: string;
+  bodyRichJson: string;
+  bodyPlain: string;
+};
+
+type ValidationResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; status: number; error: string };
+
+type EditAuthorityResult =
+  | { ok: true; memberId: string }
+  | { ok: false; response: ReturnType<typeof gateError> };
+
+type EditRow = {
+  guard_err: string | null;
+  id: string | null;
+  track_id: string | null;
+  group_key: string | null;
+  line_key: string | null;
+  parent_id: string | null;
+  root_id: string | null;
+  depth: number | null;
+  body_rich: unknown;
+  body_plain: string | null;
+  t_ms: number | null;
+  line_text_snapshot: string | null;
+  lyrics_version: string | null;
+  created_by_member_id: string | null;
+  status: "live" | "hidden" | "deleted" | null;
+  created_at: string | null;
+  edited_at: string | null;
+  edit_count: number | null;
+  vote_count: number | null;
+  meta_track_id: string | null;
+  meta_group_key: string | null;
+  meta_pinned_comment_id: string | null;
+  meta_locked: boolean | null;
+  meta_comment_count: number | null;
+  meta_last_activity_at: string | null;
+  meta_created_at: string | null;
+  meta_updated_at: string | null;
+};
+
+function validationError(
+  status: number,
+  error: string,
+): ValidationResult<never> {
+  return { ok: false, status, error };
+}
+
+async function readEditCommand(
+  req: NextRequest,
+): Promise<ValidationResult<EditCommand>> {
   let raw: unknown;
+
   try {
     raw = await req.json();
   } catch {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Invalid JSON body.",
-    });
+    return validationError(400, "Invalid JSON body.");
   }
 
-  const b = bodyRecord(raw);
-  if (!b) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Invalid JSON body.",
-    });
-  }
+  const body = bodyRecord(raw);
+  if (!body) return validationError(400, "Invalid JSON body.");
 
-  const commentId = normString(b.commentId);
+  const commentId = normString(body.commentId);
   if (!commentId || !isUuid(commentId)) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Invalid commentId.",
-    });
+    return validationError(400, "Invalid commentId.");
   }
 
-  if (!("bodyRich" in b)) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Missing bodyRich.",
-    });
-  }
-  const bodyRichInput: unknown = b.bodyRich ?? null;
-
-  const v = validateAndSanitizeTipTapDoc(bodyRichInput);
-  if (!v.ok) {
-    return jsonErr(correlationId, 400, { ok: false, error: v.error });
+  if (!("bodyRich" in body)) {
+    return validationError(400, "Missing bodyRich.");
   }
 
-  const bodyPlain = v.plain;
+  const bodyRichInput: unknown = body.bodyRich ?? null;
+  const validated = validateAndSanitizeTipTapDoc(bodyRichInput);
+  if (!validated.ok) return validationError(400, validated.error);
 
   let bodyRichJson = "";
   try {
-    bodyRichJson = JSON.stringify(v.doc);
+    bodyRichJson = JSON.stringify(validated.doc);
   } catch {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Invalid bodyRich.",
-    });
+    return validationError(400, "Invalid bodyRich.");
   }
 
   if (bodyRichJson.length > 200_000) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "bodyRich too large.",
-    });
+    return validationError(400, "bodyRich too large.");
   }
 
+  return {
+    ok: true,
+    value: {
+      commentId,
+      bodyRichJson,
+      bodyPlain: validated.plain,
+    },
+  };
+}
+
+async function resolveEditAuthority(
+  req: NextRequest,
+  correlationId: string,
+): Promise<EditAuthorityResult> {
   const memberId = await requireExegesisMemberId();
+
   if (!memberId) {
-    return gateError(req, {
-      correlationId,
-      status: 401,
-      domain: "exegesis",
-      code: "AUTH_REQUIRED",
-      action: "login",
-      message: "Sign in to edit a comment.",
-    });
+    return {
+      ok: false,
+      response: gateError(req, {
+        correlationId,
+        status: 401,
+        domain: "exegesis",
+        code: "AUTH_REQUIRED",
+        action: "login",
+        message: "Sign in to edit a comment.",
+      }),
+    };
   }
 
   if (!isUuid(memberId)) {
-    return gateError(req, {
-      correlationId,
-      status: 403,
-      domain: "exegesis",
-      code: "PROVISIONING",
-      action: "wait",
-      message: "Provisioning required.",
-    });
+    return {
+      ok: false,
+      response: gateError(req, {
+        correlationId,
+        status: 403,
+        domain: "exegesis",
+        code: "PROVISIONING",
+        action: "wait",
+        message: "Provisioning required.",
+      }),
+    };
   }
 
   const canPost = await requireCanPost(memberId);
   if (!canPost) {
-    return gateError(req, {
-      correlationId,
-      status: 403,
-      domain: "exegesis",
-      code: "TIER_REQUIRED",
-      action: "subscribe",
-      message: "Editing requires Patron or Partner.",
-    });
+    return {
+      ok: false,
+      response: gateError(req, {
+        correlationId,
+        status: 403,
+        domain: "exegesis",
+        code: "TIER_REQUIRED",
+        action: "subscribe",
+        message: "Editing requires Patron or Partner.",
+      }),
+    };
   }
 
-  try {
-    const q = await sql<{
-      guard_err: string | null;
-      id: string | null;
-      track_id: string | null;
-      group_key: string | null;
-      line_key: string | null;
-      parent_id: string | null;
-      root_id: string | null;
-      depth: number | null;
-      body_rich: unknown | null;
-      body_plain: string | null;
-      t_ms: number | null;
-      line_text_snapshot: string | null;
-      lyrics_version: string | null;
-      created_by_member_id: string | null;
-      status: "live" | "hidden" | "deleted" | null;
-      created_at: string | null;
-      edited_at: string | null;
-      edit_count: number | null;
-      vote_count: number | null;
-      meta_track_id: string | null;
-      meta_group_key: string | null;
-      meta_pinned_comment_id: string | null;
-      meta_locked: boolean | null;
-      meta_comment_count: number | null;
-      meta_last_activity_at: string | null;
-      meta_created_at: string | null;
-      meta_updated_at: string | null;
-    }>`
+  return { ok: true, memberId };
+}
+
+async function updateComment(
+  command: EditCommand,
+  memberId: string,
+): Promise<EditRow | null> {
+  const { commentId, bodyRichJson, bodyPlain } = command;
+
+  const result = await sql<EditRow>`
     with
 one as (select 1 as one),
 params as (
@@ -314,9 +347,116 @@ left join guard_row g on true
 left join upd u on true
 left join meta_out m on true
 limit 1
-    `;
+  `;
 
-    const row = q.rows?.[0] ?? null;
+  return result.rows?.[0] ?? null;
+}
+
+function editGuardFailureResponse(
+  req: NextRequest,
+  correlationId: string,
+  error: string,
+): ReturnType<typeof jsonErr> | ReturnType<typeof gateError> {
+  switch (error) {
+    case "NOT_FOUND":
+      return jsonErr(correlationId, 404, {
+        ok: false,
+        error: "Comment not found.",
+      });
+    case "LOCKED":
+      return gateError(req, {
+        correlationId,
+        status: 403,
+        domain: "exegesis",
+        code: "INVALID_REQUEST",
+        action: "wait",
+        message: "Thread is locked.",
+      });
+    case "FORBIDDEN":
+      return gateError(req, {
+        correlationId,
+        status: 403,
+        domain: "exegesis",
+        code: "INVALID_REQUEST",
+        action: "wait",
+        message: "You can only edit your own comments.",
+      });
+    case "DELETED":
+      return jsonErr(correlationId, 400, {
+        ok: false,
+        error: "Cannot edit a deleted comment.",
+      });
+    case "HIDDEN":
+      return gateError(req, {
+        correlationId,
+        status: 403,
+        domain: "exegesis",
+        code: "INVALID_REQUEST",
+        action: "wait",
+        message: "Cannot edit a hidden comment.",
+      });
+    default:
+      return jsonErr(correlationId, 400, {
+        ok: false,
+        error: "Cannot edit comment.",
+      });
+  }
+}
+
+function buildEditedComment(row: EditRow): CommentDTO {
+  return {
+    id: row.id ?? "",
+    recordingId: row.track_id ?? "",
+    groupKey: row.group_key ?? "",
+    lineKey: row.line_key ?? "",
+    parentId: row.parent_id ?? null,
+    rootId: row.root_id ?? row.id ?? "",
+    depth: Number(row.depth ?? 0),
+    bodyRich: row.body_rich ?? {},
+    bodyPlain: row.body_plain ?? "",
+    tMs: row.t_ms ?? null,
+    lineTextSnapshot: row.line_text_snapshot ?? "",
+    lyricsVersion: row.lyrics_version ?? null,
+    createdByMemberId: row.created_by_member_id ?? "",
+    status: row.status ?? "live",
+    createdAt: row.created_at ?? "",
+    editedAt: row.edited_at ?? null,
+    editCount: Number(row.edit_count ?? 0),
+    voteCount: Number(row.vote_count ?? 0),
+    viewerHasVoted: false,
+  };
+}
+
+function buildEditedThreadMeta(row: EditRow): ThreadMetaDTO {
+  return {
+    recordingId: String(row.meta_track_id ?? row.track_id),
+    groupKey: String(row.meta_group_key ?? row.group_key),
+    pinnedCommentId: row.meta_pinned_comment_id ?? null,
+    locked: Boolean(row.meta_locked),
+    commentCount: Number(row.meta_comment_count ?? 0),
+    lastActivityAt: String(row.meta_last_activity_at ?? ""),
+    createdAt: String(row.meta_created_at ?? ""),
+    updatedAt: String(row.meta_updated_at ?? ""),
+  };
+}
+
+export async function POST(req: NextRequest) {
+  const correlationId = correlationIdFromRequest(req);
+  const command = await readEditCommand(req);
+
+  if (!command.ok) {
+    return jsonErr(correlationId, command.status, {
+      ok: false,
+      error: command.error,
+    });
+  }
+
+  const authority = await resolveEditAuthority(req, correlationId);
+  if (!authority.ok) return authority.response;
+
+  try {
+    const row = await updateComment(command.value, authority.memberId);
+
     if (!row) {
       return jsonErr(correlationId, 500, {
         ok: false,
@@ -325,52 +465,7 @@ limit 1
     }
 
     if (row.guard_err) {
-      if (row.guard_err === "NOT_FOUND") {
-        return jsonErr(correlationId, 404, {
-          ok: false,
-          error: "Comment not found.",
-        });
-      }
-      if (row.guard_err === "LOCKED") {
-        return gateError(req, {
-          correlationId,
-          status: 403,
-          domain: "exegesis",
-          code: "INVALID_REQUEST",
-          action: "wait",
-          message: "Thread is locked.",
-        });
-      }
-      if (row.guard_err === "FORBIDDEN") {
-        return gateError(req, {
-          correlationId,
-          status: 403,
-          domain: "exegesis",
-          code: "INVALID_REQUEST",
-          action: "wait",
-          message: "You can only edit your own comments.",
-        });
-      }
-      if (row.guard_err === "DELETED") {
-        return jsonErr(correlationId, 400, {
-          ok: false,
-          error: "Cannot edit a deleted comment.",
-        });
-      }
-      if (row.guard_err === "HIDDEN") {
-        return gateError(req, {
-          correlationId,
-          status: 403,
-          domain: "exegesis",
-          code: "INVALID_REQUEST",
-          action: "wait",
-          message: "Cannot edit a hidden comment.",
-        });
-      }
-      return jsonErr(correlationId, 400, {
-        ok: false,
-        error: "Cannot edit comment.",
-      });
+      return editGuardFailureResponse(req, correlationId, row.guard_err);
     }
 
     if (!row.id || !row.track_id || !row.group_key) {
@@ -380,45 +475,16 @@ limit 1
       });
     }
 
-    const comment: CommentDTO = {
-      id: row.id,
-      recordingId: row.track_id,
-      groupKey: row.group_key,
-      lineKey: row.line_key ?? "",
-      parentId: row.parent_id ?? null,
-      rootId: row.root_id ?? row.id,
-      depth: Number(row.depth ?? 0),
-      bodyRich: row.body_rich ?? {},
-      bodyPlain: row.body_plain ?? "",
-      tMs: row.t_ms ?? null,
-      lineTextSnapshot: row.line_text_snapshot ?? "",
-      lyricsVersion: row.lyrics_version ?? null,
-      createdByMemberId: row.created_by_member_id ?? "",
-      status: (row.status ?? "live") as "live" | "hidden" | "deleted",
-      createdAt: row.created_at ?? "",
-      editedAt: row.edited_at ?? null,
-      editCount: Number(row.edit_count ?? 0),
-      voteCount: Number(row.vote_count ?? 0),
-      viewerHasVoted: false,
-    };
-
-    const meta: ThreadMetaDTO = {
-      recordingId: String(row.meta_track_id ?? row.track_id),
-      groupKey: String(row.meta_group_key ?? row.group_key),
-      pinnedCommentId: row.meta_pinned_comment_id ?? null,
-      locked: Boolean(row.meta_locked),
-      commentCount: Number(row.meta_comment_count ?? 0),
-      lastActivityAt: String(row.meta_last_activity_at ?? ""),
-      createdAt: String(row.meta_created_at ?? ""),
-      updatedAt: String(row.meta_updated_at ?? ""),
-    };
+    const comment = buildEditedComment(row);
+    const meta = buildEditedThreadMeta(row);
 
     return jsonOk<ApiOk>({ ok: true, comment, meta }, { correlationId });
-  } catch (e: unknown) {
-    console.error("[exegesis/comment/edit] POST failed", e);
+  } catch (error: unknown) {
+    console.error("[exegesis/comment/edit] POST failed", error);
+
     return jsonErr(correlationId, 500, {
       ok: false,
-      error: e instanceof Error ? e.message : "Unknown error.",
+      error: error instanceof Error ? error.message : "Unknown error.",
     });
   }
 }

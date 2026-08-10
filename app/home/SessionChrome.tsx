@@ -54,122 +54,163 @@ function IconPortal() {
   );
 }
 
-function FullWidthBanner(props: {
+type FullWidthBannerProps = Readonly<{
   kind: "gift" | "checkout" | null;
   code: string | null;
   checkoutPurchase?: string | null;
-  checkoutPurchaseAlbum?: string | null;
   onSignInClick?: () => void;
   onDismiss: () => void;
-}) {
-  const {
-    kind,
-    code,
-    checkoutPurchase,
-    checkoutPurchaseAlbum,
-    onSignInClick,
-    onDismiss,
-  } = props;
+}>;
 
-  if (!kind || !code) return null;
+type BannerContent = Readonly<{
+  tone: BannerTone;
+  text: React.ReactNode;
+}>;
 
-  let tone: BannerTone = "neutral";
-  let text: React.ReactNode = null;
+function albumPurchaseSuccessText(
+  onSignInClick: FullWidthBannerProps["onSignInClick"],
+): React.ReactNode {
+  return (
+    <>
+      Payment confirmed, thank you.{" "}
+      <button
+        type="button"
+        onClick={onSignInClick}
+        style={{
+          border: "none",
+          background: "transparent",
+          color: "rgba(255,255,255,0.95)",
+          padding: 0,
+          font: "inherit",
+          fontWeight: 800,
+          textDecoration: "underline",
+          textUnderlineOffset: 3,
+          cursor: "pointer",
+        }}
+      >
+        Sign in
+      </button>{" "}
+      with the email you used at checkout to access your download.
+    </>
+  );
+}
 
-  if (kind === "checkout") {
-    if (code === "success") {
-      tone = "success";
+function checkoutBannerContent(
+  code: string,
+  checkoutPurchase: string | null | undefined,
+  onSignInClick: FullWidthBannerProps["onSignInClick"],
+): BannerContent | null {
+  if (code === "success") {
+    const text =
+      checkoutPurchase === "album" ? (
+        albumPurchaseSuccessText(onSignInClick)
+      ) : (
+        <>
+          Your account has been updated. Thank you for supporting future work
+          on this independent platform.
+        </>
+      );
 
-      if (checkoutPurchase === "album") {
-        text = (
-          <>
-            Payment confirmed, thank you.{" "}
-            <button
-              type="button"
-              onClick={onSignInClick}
-              style={{
-                border: "none",
-                background: "transparent",
-                color: "rgba(255,255,255,0.95)",
-                padding: 0,
-                font: "inherit",
-                fontWeight: 800,
-                textDecoration: "underline",
-                textUnderlineOffset: 3,
-                cursor: "pointer",
-              }}
-            >
-              Sign in
-            </button>{" "}
-            with the email you used at checkout to access your download.
-          </>
-        );
-      } else {
-        text = (
-          <>
-            Your account has been updated. Thank you for supporting future work
-            on this independent platform.
-          </>
-        );
-      }
-    } else if (code === "cancel") {
-      tone = "neutral";
-      text = <>Checkout cancelled.</>;
-    } else {
-      return null;
-    }
+    return { tone: "success", text };
   }
 
-  if (kind === "gift") {
-    if (code === "ready") {
-      tone = "success";
-      text = <>Gift activated. Your content is now available.</>;
-    } else if (code === "not_paid") {
-      tone = "neutral";
-      text = (
+  if (code === "cancel") {
+    return { tone: "neutral", text: <>Checkout cancelled.</> };
+  }
+
+  return null;
+}
+
+function giftBannerContent(code: string): BannerContent | null {
+  if (code === "ready") {
+    return {
+      tone: "success",
+      text: <>Gift activated. Your content is now available.</>,
+    };
+  }
+
+  if (code === "not_paid") {
+    return {
+      tone: "neutral",
+      text: (
         <>
           This gift hasn&apos;t completed payment yet. If you just paid, refresh
           in a moment.
         </>
-      );
-    } else if (code === "wrong_account") {
-      tone = "warn";
-      text = (
+      ),
+    };
+  }
+
+  if (code === "wrong_account") {
+    return {
+      tone: "warn",
+      text: (
         <>
           This gift was sent to a different email. Sign in with the recipient
           account.
         </>
-      );
-    } else if (code === "claim_code_missing") {
-      tone = "warn";
-      text = (
+      ),
+    };
+  }
+
+  if (code === "claim_code_missing") {
+    return {
+      tone: "warn",
+      text: (
         <>
           That link is missing its claim code. Open the exact link from the
           email.
         </>
-      );
-    } else if (code === "invalid_claim") {
-      tone = "warn";
-      text = (
+      ),
+    };
+  }
+
+  if (code === "invalid_claim") {
+    return {
+      tone: "warn",
+      text: (
         <>
           That claim code doesn&apos;t match this gift. Open the exact link from
           the email.
         </>
-      );
-    } else if (code === "missing") {
-      tone = "warn";
-      text = <>That gift link looks invalid.</>;
-    } else {
-      return null;
-    }
+      ),
+    };
   }
 
-  const toneClasses =
-    tone === "success"
-      ? "border-emerald-400/30 bg-white/5"
-      : tone === "warn"
-        ? "border-amber-400/30 bg-white/5"
-        : "border-white/10 bg-white/5";
+  if (code === "missing") {
+    return { tone: "warn", text: <>That gift link looks invalid.</> };
+  }
+
+  return null;
+}
+
+function resolveBannerContent(
+  props: FullWidthBannerProps,
+): BannerContent | null {
+  if (!props.kind || !props.code) return null;
+
+  if (props.kind === "checkout") {
+    return checkoutBannerContent(
+      props.code,
+      props.checkoutPurchase,
+      props.onSignInClick,
+    );
+  }
+
+  return giftBannerContent(props.code);
+}
+
+function bannerToneClasses(tone: BannerTone): string {
+  if (tone === "success") return "border-emerald-400/30 bg-white/5";
+  if (tone === "warn") return "border-amber-400/30 bg-white/5";
+  return "border-white/10 bg-white/5";
+}
+
+function FullWidthBanner(props: FullWidthBannerProps) {
+  const content = resolveBannerContent(props);
+  if (!content) return null;
+
+  const toneClasses = bannerToneClasses(content.tone);
 
   return (
     <div
@@ -182,12 +223,12 @@ function FullWidthBanner(props: {
         toneClasses,
       ].join(" ")}
     >
-      <div className="pr-10">{text}</div>
+      <div className="pr-10">{content.text}</div>
 
       <button
         type="button"
         aria-label="Dismiss message"
-        onClick={onDismiss}
+        onClick={props.onDismiss}
         className={[
           "absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full",
           "border border-white/10 bg-white/5 text-white/70",
@@ -201,7 +242,7 @@ function FullWidthBanner(props: {
   );
 }
 
-export type SessionChromeProps = {
+export type SessionChromeProps = Readonly<{
   topLogoUrl?: string | null;
   topLogoHeight?: number | null;
   effectiveIsPlayer: boolean;
@@ -219,7 +260,7 @@ export type SessionChromeProps = {
   onPrefetchPortal: () => void;
   onOpenPlayer: () => void;
   onOpenPortal: (tabId: string) => void;
-};
+}>;
 
 export default function SessionChrome(props: SessionChromeProps) {
   const {
@@ -234,7 +275,6 @@ export default function SessionChrome(props: SessionChromeProps) {
     bannerKind,
     bannerCode,
     checkoutPurchase,
-    checkoutPurchaseAlbum,
     onDismissBanner,
     onPrefetchPlayer,
     onPrefetchPortal,
@@ -295,7 +335,6 @@ export default function SessionChrome(props: SessionChromeProps) {
         kind={bannerKind}
         code={bannerCode}
         checkoutPurchase={checkoutPurchase}
-        checkoutPurchaseAlbum={checkoutPurchaseAlbum}
         onSignInClick={
           albumPurchaseSuccess ? openAlbumPurchaseSignInGate : undefined
         }

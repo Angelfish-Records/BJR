@@ -98,13 +98,187 @@ function isDebug(req: Request): boolean {
   return (req.headers.get("x-debug") ?? "") === "1";
 }
 
+async function memberStripeCustomerId(userId: string): Promise<string> {
+  const row = await sql`
+    select id as member_id, stripe_customer_id
+    from members
+    where clerk_user_id = ${userId}
+    limit 1
+  `;
+  const member = (row.rows[0] as MemberStripeRow | undefined) ?? null;
+  return (member?.stripe_customer_id ?? "").toString().trim();
+}
+
+function normalizeSubscriptionList(value: unknown): Stripe.Subscription[] {
+  if (Array.isArray(value)) {
+    return value as Stripe.Subscription[];
+  }
+
+  if (
+    value &&
+    typeof value === "object" &&
+    "data" in value &&
+    Array.isArray((value as { data?: unknown }).data)
+  ) {
+    return (value as { data: Stripe.Subscription[] }).data;
+  }
+
+  return [];
+}
+
+function activeSubscriptions(
+  subscriptions: Stripe.Subscription[],
+): Stripe.Subscription[] {
+  const activeSet = new Set(["active", "trialing", "past_due", "unpaid"]);
+  return subscriptions.filter((subscription) =>
+    activeSet.has(String(subscription.status ?? "")),
+  );
+}
+
+async function readDebugStripeState(userId: string): Promise<unknown> {
+  try {
+    const result = await sql`
+      select id, stripe_customer_id
+      from members
+      where clerk_user_id = ${userId}
+      limit 1
+    `;
+
+    return {
+      memberRow: result.rows[0] ?? null,
+    };
+  } catch (error) {
+    return { error: safeErrMessage(error) };
+  }
+}
+
+function debugSubscriptionRows(
+  subscriptions: Stripe.Subscription[],
+): Array<{
+  id: string;
+  status: string;
+  cancel_at_period_end: boolean | null;
+  current_period_end: number | null;
+  itemsCount: number;
+  priceIds: string[];
+}> {
+  return subscriptions.map((subscription) => {
+    const currentPeriodEnd =
+      typeof (subscription as unknown as { current_period_end?: unknown })
+        .current_period_end === "number"
+        ? (subscription as unknown as { current_period_end: number })
+            .current_period_end
+        : null;
+
+    return {
+      id: subscription.id,
+      status: subscription.status,
+      cancel_at_period_end: subscription.cancel_at_period_end ?? null,
+      current_period_end: currentPeriodEnd,
+      itemsCount: (subscription.items?.data ?? []).length,
+      priceIds: (subscription.items?.data ?? [])
+        .map((item) => item.price?.id ?? null)
+        .filter((value): value is string => Boolean(value)),
+    };
+  });
+}
+
+async function debugCancellationResponse(params: {
+  userId: string;
+  customerId: string;
+  stripeSecretKey: string;
+  rawSubscriptions: unknown;
+  subscriptions: Stripe.Subscription[];
+  targetCount: number;
+}) {
+  const {
+    userId,
+    customerId,
+    stripeSecretKey,
+    rawSubscriptions,
+    subscriptions,
+    targetCount,
+  } = params;
+  const dbStripeState = await readDebugStripeState(userId);
+
+  return NextResponse.json({
+    ok: true,
+    debug: true,
+    userId,
+    customerId,
+    stripeKeyHint: stripeSecretKey.slice(0, 7) + "...",
+    subsShape: {
+      isArray: Array.isArray(rawSubscriptions),
+      hasDataProp: Boolean(
+        rawSubscriptions &&
+          typeof rawSubscriptions === "object" &&
+          "data" in rawSubscriptions,
+      ),
+      keys:
+        rawSubscriptions && typeof rawSubscriptions === "object"
+          ? Object.keys(rawSubscriptions).slice(0, 10)
+          : [],
+      listCount: subscriptions.length,
+      targetCount,
+    },
+    subs: debugSubscriptionRows(subscriptions),
+    db: dbStripeState,
+  });
+}
+
+type UpdatedSubscription = {
+  id: string;
+  cancel_at_period_end: boolean;
+  current_period_end: number | null;
+};
+
+async function cancelSubscriptionsAtPeriodEnd(
+  stripe: Stripe,
+  subscriptions: Stripe.Subscription[],
+): Promise<UpdatedSubscription[]> {
+  const updated: UpdatedSubscription[] = [];
+
+  for (const subscription of subscriptions) {
+    const result = await stripe.subscriptions.update(subscription.id, {
+      cancel_at_period_end: true,
+    });
+    const updatedSubscription = unwrapStripeResponse(result);
+
+    const itemEnd =
+      updatedSubscription.items?.data?.[0]?.current_period_end ??
+      readNumberProp(updatedSubscription, "current_period_end");
+
+    updated.push({
+      id: updatedSubscription.id,
+      cancel_at_period_end: Boolean(
+        updatedSubscription.cancel_at_period_end,
+      ),
+      current_period_end: typeof itemEnd === "number" ? itemEnd : null,
+    });
+  }
+
+  return updated;
+}
+
+function latestAccessEndMs(
+  updated: UpdatedSubscription[],
+): number | null {
+  return updated.reduce<number | null>((acc, subscription) => {
+    if (typeof subscription.current_period_end !== "number") return acc;
+
+    const currentEndMs = subscription.current_period_end * 1000;
+    if (acc === null) return currentEndMs;
+
+    return Math.max(acc, currentEndMs);
+  }, null);
+}
+
 export async function POST(req: Request) {
   const stripeSecretKey = assertStripeSecretKey(STRIPE_SECRET_KEY);
   must(APP_URL, "NEXT_PUBLIC_APP_URL");
 
   const debug = isDebug(req);
 
-  // Optional guard; auth is the real gate.
   if (!sameOriginOrAllowed(req)) {
     return NextResponse.json(
       { ok: false, error: "Bad origin" },
@@ -120,15 +294,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const row = await sql`
-    select id as member_id, stripe_customer_id
-    from members
-    where clerk_user_id = ${userId}
-    limit 1
-  `;
-  const m = (row.rows[0] as MemberStripeRow | undefined) ?? null;
-  const customerId = (m?.stripe_customer_id ?? "").toString().trim();
-
+  const customerId = await memberStripeCustomerId(userId);
   if (!customerId) {
     return NextResponse.json(
       { ok: false, error: "No stripe_customer_id linked for this member" },
@@ -137,88 +303,24 @@ export async function POST(req: Request) {
   }
 
   const stripe = new Stripe(stripeSecretKey);
-
-  // List subs for this customer
   const subsRes = await stripe.subscriptions.list({
     customer: customerId,
     status: "all",
     limit: 100,
   });
   const subs = unwrapStripeResponse(subsRes);
-
-  // Normalize shapes into Stripe.Subscription[]
-  let list: Stripe.Subscription[] = [];
-  if (Array.isArray(subs)) {
-    list = subs as Stripe.Subscription[];
-  } else if (
-    subs &&
-    typeof subs === "object" &&
-    "data" in (subs as object) &&
-    Array.isArray((subs as Stripe.ApiList<Stripe.Subscription>).data)
-  ) {
-    list = (subs as Stripe.ApiList<Stripe.Subscription>).data;
-  }
-
-  const activeSet = new Set(["active", "trialing", "past_due", "unpaid"]);
-  const target = list.filter((s) => activeSet.has(String(s.status ?? "")));
+  const list = normalizeSubscriptionList(subs);
+  const target = activeSubscriptions(list);
 
   if (debug) {
-    // Optional DB cross-check: if you store subscriptions somewhere, surface it.
-    // This query is safe to keep even if table doesn't exist (wrap in try/catch).
-    let dbStripeState: unknown = null;
-    try {
-      const r = await sql`
-      select id, stripe_customer_id
-      from members
-      where clerk_user_id = ${userId}
-      limit 1
-    `;
-      dbStripeState = {
-        memberRow: r.rows[0] ?? null,
-      };
-    } catch (e) {
-      dbStripeState = { error: safeErrMessage(e) };
-    }
-
-    const snapshot = {
-      ok: true,
-      debug: true,
+    return debugCancellationResponse({
       userId,
       customerId,
-      stripeKeyHint: stripeSecretKey.slice(0, 7) + "...", // proves which env key is in use
-      subsShape: {
-        isArray: Array.isArray(subs),
-        hasDataProp: !!(
-          subs &&
-          typeof subs === "object" &&
-          "data" in (subs as object)
-        ),
-        keys:
-          subs && typeof subs === "object"
-            ? Object.keys(subs as object).slice(0, 10)
-            : [],
-        listCount: list.length,
-        targetCount: target.length,
-      },
-      subs: list.map((s) => ({
-        id: s.id,
-        status: s.status,
-        cancel_at_period_end: s.cancel_at_period_end ?? null,
-        current_period_end:
-          typeof (s as unknown as { current_period_end?: unknown })
-            .current_period_end === "number"
-            ? (s as unknown as { current_period_end: number })
-                .current_period_end
-            : null,
-        itemsCount: (s.items?.data ?? []).length,
-        priceIds: (s.items?.data ?? [])
-          .map((it) => it.price?.id ?? null)
-          .filter((v): v is string => !!v),
-      })),
-      db: dbStripeState,
-    };
-
-    return NextResponse.json(snapshot);
+      stripeSecretKey,
+      rawSubscriptions: subs,
+      subscriptions: list,
+      targetCount: target.length,
+    });
   }
 
   if (target.length === 0) {
@@ -229,40 +331,8 @@ export async function POST(req: Request) {
     });
   }
 
-  const updated: Array<{
-    id: string;
-    cancel_at_period_end: boolean;
-    current_period_end: number | null;
-  }> = [];
-
-  for (const s of target) {
-    // “Cancel now” = stop renewal, keep access until end of paid period
-    const res = await stripe.subscriptions.update(s.id, {
-      cancel_at_period_end: true,
-    });
-    const sub = unwrapStripeResponse(res);
-
-    // Avoid `sub.current_period_end` (your Stripe typings don’t expose it).
-    // Pull from first subscription item (present in real payloads) or fall back to a safe prop read.
-    const itemEnd =
-      sub.items?.data?.[0]?.current_period_end ??
-      readNumberProp(sub, "current_period_end"); // fallback if it exists at runtime
-
-    updated.push({
-      id: sub.id,
-      cancel_at_period_end: !!sub.cancel_at_period_end,
-      current_period_end: typeof itemEnd === "number" ? itemEnd : null,
-    });
-  }
-
-  // IMPORTANT: do not mutate entitlements here.
-  // Webhook (subscription.updated/deleted) will reconcile into entitlement_grants.
-  const maxEndMs = updated.reduce<number | null>((acc, u) => {
-    if (typeof u.current_period_end !== "number") return acc;
-    const ms = u.current_period_end * 1000;
-    if (acc === null) return ms;
-    return Math.max(acc, ms);
-  }, null);
+  const updated = await cancelSubscriptionsAtPeriodEnd(stripe, target);
+  const maxEndMs = latestAccessEndMs(updated);
 
   return NextResponse.json({
     ok: true,

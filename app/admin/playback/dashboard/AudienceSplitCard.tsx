@@ -19,11 +19,11 @@ import {
 
 type SliceKey = "member" | "anonymous";
 
-type AudienceDonutProps = {
+type AudienceDonutProps = Readonly<{
   label: string;
   member: number;
   anonymous: number;
-};
+}>;
 
 type SegmentArc = {
   key: SliceKey;
@@ -212,7 +212,6 @@ function AudienceDonut(props: AudienceDonutProps) {
               overflow: "visible",
             }}
             aria-label={`${label} audience split`}
-            role="img"
           >
             {segments.map((segment) => {
               const isHovered = hovered === segment.key;
@@ -220,13 +219,14 @@ function AudienceDonut(props: AudienceDonutProps) {
                 segment.key === "member"
                   ? memberLabelVisible
                   : anonymousLabelVisible;
+              const opacity = hovered === null || isHovered ? 1 : 0.42;
 
               return (
                 <g key={segment.key}>
                   <path
                     d={segment.path}
                     fill={segment.color}
-                    opacity={hovered === null ? 1 : isHovered ? 1 : 0.42}
+                    opacity={opacity}
                     style={{
                       cursor: "default",
                       transition: "opacity 160ms ease, filter 160ms ease",
@@ -324,7 +324,9 @@ function AudienceDonut(props: AudienceDonutProps) {
   );
 }
 
-export function AudienceSplitCard(props: { snapshot: PlaybackAdminSnapshot }) {
+export function AudienceSplitCard(
+  props: Readonly<{ snapshot: PlaybackAdminSnapshot }>,
+) {
   const allTimeMember = props.snapshot.audienceSplit.allTimeMemberPlayCount;
   const allTimeAnonymous =
     props.snapshot.audienceSplit.allTimeAnonymousPlayCount;

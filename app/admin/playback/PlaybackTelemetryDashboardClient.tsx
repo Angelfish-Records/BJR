@@ -27,10 +27,12 @@ import {
 } from "./dashboard/playbackTelemetryDashboardFormatters";
 import type { TrendRangeKey } from "./dashboard/types";
 
-export default function PlaybackTelemetryDashboardClient(props: {
-  embed: boolean;
-  initialSnapshot: PlaybackAdminSnapshot;
-}) {
+export default function PlaybackTelemetryDashboardClient(
+  props: Readonly<{
+    embed: boolean;
+    initialSnapshot: PlaybackAdminSnapshot;
+  }>,
+) {
   const router = useRouter();
   const [autoRefresh, setAutoRefresh] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);

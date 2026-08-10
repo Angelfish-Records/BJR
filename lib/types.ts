@@ -124,40 +124,52 @@ export type TrackLyricsApiOk = {
   albumCatalogueId?: string | null;
 };
 
+function normalizeLyricCue(input: unknown): LyricCue | null {
+  if (!input || typeof input !== "object") return null;
+
+  const raw = input as {
+    lineKey?: unknown;
+    tMs?: unknown;
+    text?: unknown;
+    endMs?: unknown;
+    canonicalGroupKey?: unknown;
+  };
+
+  const lineKey = raw.lineKey;
+  const tMs = raw.tMs;
+  const text = raw.text;
+  const endMs = raw.endMs;
+  const canonicalGroupKey = raw.canonicalGroupKey;
+
+  if (typeof lineKey !== "string" || lineKey.trim().length === 0) return null;
+  if (typeof tMs !== "number" || !Number.isFinite(tMs) || tMs < 0) return null;
+  if (typeof text !== "string" || text.trim().length === 0) return null;
+
+  const cue: LyricCue = {
+    lineKey: lineKey.trim(),
+    tMs: Math.floor(tMs),
+    text: text.trim(),
+  };
+
+  if (typeof endMs === "number" && Number.isFinite(endMs) && endMs >= 0) {
+    cue.endMs = Math.floor(endMs);
+  }
+
+  // optional enrichment
+  if (typeof canonicalGroupKey === "string" && canonicalGroupKey.trim()) {
+    cue.canonicalGroupKey = canonicalGroupKey.trim();
+  }
+
+  return cue;
+}
+
 export function normalizeLyricCues(input: unknown): LyricCue[] {
   if (!Array.isArray(input)) return [];
+
   const out: LyricCue[] = [];
-
-  for (const c of input) {
-    if (!c || typeof c !== "object") continue;
-
-    const lineKey = (c as { lineKey?: unknown }).lineKey;
-    const tMs = (c as { tMs?: unknown }).tMs;
-    const text = (c as { text?: unknown }).text;
-    const endMs = (c as { endMs?: unknown }).endMs;
-    const canonicalGroupKey = (c as { canonicalGroupKey?: unknown })
-      .canonicalGroupKey;
-
-    if (typeof lineKey !== "string" || lineKey.trim().length === 0) continue;
-    if (typeof tMs !== "number" || !Number.isFinite(tMs) || tMs < 0) continue;
-    if (typeof text !== "string" || text.trim().length === 0) continue;
-
-    const cue: LyricCue = {
-      lineKey: lineKey.trim(),
-      tMs: Math.floor(tMs),
-      text: text.trim(),
-    };
-
-    if (typeof endMs === "number" && Number.isFinite(endMs) && endMs >= 0) {
-      cue.endMs = Math.floor(endMs);
-    }
-
-    // optional enrichment
-    if (typeof canonicalGroupKey === "string" && canonicalGroupKey.trim()) {
-      cue.canonicalGroupKey = canonicalGroupKey.trim();
-    }
-
-    out.push(cue);
+  for (const raw of input) {
+    const cue = normalizeLyricCue(raw);
+    if (cue) out.push(cue);
   }
 
   out.sort((a, b) => a.tMs - b.tMs);

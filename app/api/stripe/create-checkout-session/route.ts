@@ -108,6 +108,167 @@ async function customerHasActiveSubscription(
   );
 }
 
+async function checkoutEmail(
+  userId: string | null,
+  body: Body,
+): Promise<string> {
+  const user = userId ? await currentUser() : null;
+  const emailFromClerk =
+    user?.primaryEmailAddress?.emailAddress ??
+    user?.emailAddresses?.[0]?.emailAddress ??
+    "";
+  const emailFromBody = typeof body.email === "string" ? body.email : "";
+
+  return normalizeEmail(emailFromClerk || emailFromBody);
+}
+
+type CheckoutIdentityResult =
+  | {
+      ok: true;
+      customer: string | undefined;
+    }
+  | {
+      ok: false;
+      response: NextResponse;
+    };
+
+async function prepareCheckoutIdentity(params: {
+  stripe: Stripe;
+  userId: string | null;
+  email: string;
+  tier: "patron" | "partner";
+}): Promise<CheckoutIdentityResult> {
+  const { stripe, userId, email, tier } = params;
+
+  if (!userId) {
+    if (!email) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { ok: false, error: "Email required when logged out" },
+          { status: 400 },
+        ),
+      };
+    }
+
+    await ensureMemberByEmail({
+      email,
+      source: "checkout",
+      sourceDetail: { intent: "stripe_checkout", tier },
+      marketingOptIn: true,
+    });
+
+    return { ok: true, customer: undefined };
+  }
+
+  if (!email) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { ok: false, error: "Missing email for signed-in user" },
+        { status: 500 },
+      ),
+    };
+  }
+
+  const { customerId } = await ensureStripeCustomerForClerkUser({
+    stripe,
+    clerkUserId: userId,
+    email,
+  });
+
+  return { ok: true, customer: customerId };
+}
+
+function checkoutReturnUrls(
+  body: Body,
+): {
+  successUrl: string;
+  cancelUrl: string;
+  billingReturnUrl: string;
+} {
+  const { pathname, params } = safeReturnToFromBody(
+    APP_URL,
+    body.returnTo,
+    "/player",
+  );
+
+  return {
+    successUrl: buildReturnUrl(APP_URL, pathname, params, {
+      checkout: "success",
+    }),
+    cancelUrl: buildReturnUrl(APP_URL, pathname, params, {
+      checkout: "cancel",
+    }),
+    billingReturnUrl: buildReturnUrl(APP_URL, pathname, params, {
+      checkout: null,
+    }),
+  };
+}
+
+async function existingSubscriptionPortalResponse(params: {
+  stripe: Stripe;
+  userId: string | null;
+  customer: string | undefined;
+  billingReturnUrl: string;
+}): Promise<NextResponse | null> {
+  const { stripe, userId, customer, billingReturnUrl } = params;
+  if (!userId || !customer) return null;
+
+  const hasActive = await customerHasActiveSubscription(stripe, customer);
+  if (!hasActive) return null;
+
+  const portal = await stripe.billingPortal.sessions.create({
+    customer,
+    return_url: billingReturnUrl,
+  });
+
+  return NextResponse.json({
+    ok: true,
+    url: portal.url,
+    via: "billing_portal",
+  });
+}
+
+async function createSubscriptionCheckout(params: {
+  stripe: Stripe;
+  priceId: string;
+  successUrl: string;
+  cancelUrl: string;
+  userId: string | null;
+  customer: string | undefined;
+  email: string;
+  tier: "patron" | "partner";
+}) {
+  const {
+    stripe,
+    priceId,
+    successUrl,
+    cancelUrl,
+    userId,
+    customer,
+    email,
+    tier,
+  } = params;
+
+  return stripe.checkout.sessions.create({
+    mode: "subscription",
+    payment_method_types: ["card"],
+    line_items: [{ price: priceId, quantity: 1 }],
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    client_reference_id: userId ?? undefined,
+    customer,
+    customer_email: !customer && email ? email : undefined,
+    allow_promotion_codes: true,
+    metadata: {
+      requested_tier: tier,
+      clerk_user_id: userId ?? "",
+      source: "create-checkout-session",
+    },
+  });
+}
+
 export async function POST(req: Request) {
   const stripeSecretKey = assertStripeSecretKey(STRIPE_SECRET_KEY);
   must(APP_URL, "NEXT_PUBLIC_APP_URL");
@@ -121,117 +282,43 @@ export async function POST(req: Request) {
 
   const stripe = new Stripe(stripeSecretKey);
   const { userId } = await auth();
-
   const body = (await req.json().catch(() => ({}))) as Body;
-
-  const user = userId ? await currentUser() : null;
-  const emailFromClerk =
-    user?.primaryEmailAddress?.emailAddress ??
-    user?.emailAddresses?.[0]?.emailAddress ??
-    "";
-  const emailFromBody = typeof body.email === "string" ? body.email : "";
-
-  const email = normalizeEmail(emailFromClerk || emailFromBody);
-
+  const email = await checkoutEmail(userId, body);
   const tier = pickTier(body.tier);
   const priceId = priceForTier(tier);
 
-  // Logged out: require email so we can attach to canonical member row.
-  if (!userId && !email) {
-    return NextResponse.json(
-      { ok: false, error: "Email required when logged out" },
-      { status: 400 },
-    );
-  }
-
-  // Pre-create/claim member for logged-out flow so canonical row exists immediately.
-  if (!userId && email) {
-    await ensureMemberByEmail({
-      email,
-      source: "checkout",
-      sourceDetail: { intent: "stripe_checkout", tier },
-      marketingOptIn: true,
-    });
-  }
-
-  // Logged-in: ensure we have a Stripe customer (prevents duplicate customers + prefilled Checkout)
-  let customer: string | undefined;
-  if (userId) {
-    if (!email) {
-      return NextResponse.json(
-        { ok: false, error: "Missing email for signed-in user" },
-        { status: 500 },
-      );
-    }
-
-    const { customerId } = await ensureStripeCustomerForClerkUser({
-      stripe,
-      clerkUserId: userId,
-      email,
-    });
-    customer = customerId;
-  }
-
-  const { pathname, params } = safeReturnToFromBody(
-    APP_URL,
-    body.returnTo,
-    "/player",
-  );
-
-  const success_url = buildReturnUrl(APP_URL, pathname, params, {
-    checkout: "success",
-  });
-  const cancel_url = buildReturnUrl(APP_URL, pathname, params, {
-    checkout: "cancel",
+  const identity = await prepareCheckoutIdentity({
+    stripe,
+    userId,
+    email,
+    tier,
   });
 
-  // billing portal return_url should not carry checkout; just return to the surface
-  const billing_return_url = buildReturnUrl(APP_URL, pathname, params, {
-    checkout: null,
-  });
-
-  // If logged-in and already subscribed, send to billing portal to avoid multiple subscriptions.
-  if (userId && customer) {
-    const hasActive = await customerHasActiveSubscription(stripe, customer);
-    if (hasActive) {
-      const portal = await stripe.billingPortal.sessions.create({
-        customer,
-        return_url: billing_return_url,
-      });
-      return NextResponse.json({
-        ok: true,
-        url: portal.url,
-        via: "billing_portal",
-      });
-    }
+  if (!identity.ok) {
+    return identity.response;
   }
 
-  // Otherwise: create a new subscription checkout for the chosen tier.
-  const session = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    payment_method_types: ["card"],
-    line_items: [{ price: priceId, quantity: 1 }],
-    success_url,
-    cancel_url,
+  const customer = identity.customer;
+  const { successUrl, cancelUrl, billingReturnUrl } =
+    checkoutReturnUrls(body);
 
-    // Logged-in path: webhook can resolve via clerk_user_id
-    client_reference_id: userId ?? undefined,
-
-    // Reuse if known
+  const portalResponse = await existingSubscriptionPortalResponse({
+    stripe,
+    userId,
     customer,
+    billingReturnUrl,
+  });
+  if (portalResponse) return portalResponse;
 
-    // Prefill email when we don't yet know the Stripe customer (logged-in or logged-out).
-    // If `customer` is set, Stripe already knows the email and won't need this.
-    customer_email: !customer && email ? email : undefined,
-
-    allow_promotion_codes: true,
-
-    // Helpful for debugging in Stripe (not relied upon for auth)
-    metadata: {
-      requested_tier: tier,
-      clerk_user_id: userId ?? "",
-      source: "create-checkout-session",
-    },
+  const session = await createSubscriptionCheckout({
+    stripe,
+    priceId,
+    successUrl,
+    cancelUrl,
+    userId,
+    customer,
+    email,
+    tier,
   });
 
   return NextResponse.json({ ok: true, url: session.url, via: "checkout" });

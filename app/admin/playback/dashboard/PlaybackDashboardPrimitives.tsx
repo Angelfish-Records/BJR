@@ -13,12 +13,14 @@ import {
   TEXT_PRIMARY,
 } from "./playbackTelemetryDashboardStyles";
 
-export function SectionCard(props: {
-  title: string;
-  subtitle?: string;
-  children: React.ReactNode;
-  headerRight?: React.ReactNode;
-}) {
+export function SectionCard(
+  props: Readonly<{
+    title: string;
+    subtitle?: string;
+    children: React.ReactNode;
+    headerRight?: React.ReactNode;
+  }>,
+) {
   return (
     <section
       style={{
@@ -74,7 +76,9 @@ export function SectionCard(props: {
   );
 }
 
-export function TableShell(props: { children: React.ReactNode }) {
+export function TableShell(
+  props: Readonly<{ children: React.ReactNode }>,
+) {
   return (
     <div
       style={{
@@ -89,7 +93,9 @@ export function TableShell(props: { children: React.ReactNode }) {
   );
 }
 
-export function MetricPill(props: { label: string; value: string }) {
+export function MetricPill(
+  props: Readonly<{ label: string; value: string }>,
+) {
   return (
     <div
       style={{
@@ -127,7 +133,9 @@ export function MetricPill(props: { label: string; value: string }) {
   );
 }
 
-export function AudienceBadge(props: { audience: "member" | "anonymous" }) {
+export function AudienceBadge(
+  props: Readonly<{ audience: "member" | "anonymous" }>,
+) {
   const isMember = props.audience === "member";
 
   return (
@@ -154,10 +162,12 @@ export function AudienceBadge(props: { audience: "member" | "anonymous" }) {
   );
 }
 
-export function TrendRangeToggle(props: {
-  value: TrendRangeKey;
-  onChange: (value: TrendRangeKey) => void;
-}) {
+export function TrendRangeToggle(
+  props: Readonly<{
+    value: TrendRangeKey;
+    onChange: (value: TrendRangeKey) => void;
+  }>,
+) {
   const options: Array<{ key: TrendRangeKey; label: string }> = [
     { key: "hour", label: "Hour" },
     { key: "day", label: "Day" },

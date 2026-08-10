@@ -68,156 +68,291 @@ async function requireCanVote(memberId: string): Promise<boolean> {
   ]);
 }
 
-export async function POST(req: NextRequest) {
-  const correlationId = correlationIdFromRequest(req);
+type VoteRow = {
+  ok: boolean;
+  viewer_has_voted: boolean;
+  vote_count: number;
+  err: string | null;
+  author_member_id: string | null;
+};
 
+type VoteCommandResult =
+  | { ok: true; commentId: string }
+  | { ok: false; response: NextResponse };
+
+type VotingAuthorityResult =
+  | { ok: true; memberId: string }
+  | { ok: false; response: NextResponse };
+
+async function readVoteCommand(
+  req: NextRequest,
+  correlationId: string,
+): Promise<VoteCommandResult> {
   let raw: unknown;
+
   try {
     raw = await req.json();
   } catch {
-    return jsonErr(correlationId, 400, {
+    return {
       ok: false,
-      error: "Invalid JSON body.",
-    });
+      response: jsonErr(correlationId, 400, {
+        ok: false,
+        error: "Invalid JSON body.",
+      }),
+    };
   }
 
-  const b =
+  const body =
     typeof raw === "object" && raw !== null
       ? (raw as Record<string, unknown>)
       : null;
-  if (!b) {
-    return jsonErr(correlationId, 400, {
+
+  if (!body) {
+    return {
       ok: false,
-      error: "Invalid JSON body.",
-    });
+      response: jsonErr(correlationId, 400, {
+        ok: false,
+        error: "Invalid JSON body.",
+      }),
+    };
   }
 
-  const commentId = norm(b.commentId);
+  const commentId = norm(body.commentId);
   if (!commentId) {
-    return jsonErr(correlationId, 400, {
+    return {
       ok: false,
-      error: "Missing commentId.",
-    });
-  }
-  if (!isUuid(commentId)) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Invalid commentId.",
-    });
+      response: jsonErr(correlationId, 400, {
+        ok: false,
+        error: "Missing commentId.",
+      }),
+    };
   }
 
+  if (!isUuid(commentId)) {
+    return {
+      ok: false,
+      response: jsonErr(correlationId, 400, {
+        ok: false,
+        error: "Invalid commentId.",
+      }),
+    };
+  }
+
+  return { ok: true, commentId };
+}
+
+async function resolveVotingAuthority(
+  req: NextRequest,
+  correlationId: string,
+): Promise<VotingAuthorityResult> {
   const memberId = await requireMemberId();
+
   if (!memberId) {
-    return gateError(req, {
-      correlationId,
-      status: 401,
-      domain: "exegesis",
-      code: "AUTH_REQUIRED",
-      action: "login",
-      message: "Sign in to vote.",
-    });
+    return {
+      ok: false,
+      response: gateError(req, {
+        correlationId,
+        status: 401,
+        domain: "exegesis",
+        code: "AUTH_REQUIRED",
+        action: "login",
+        message: "Sign in to vote.",
+      }),
+    };
   }
 
   if (!isUuid(memberId)) {
-    return gateError(req, {
-      correlationId,
-      status: 403,
-      domain: "exegesis",
-      code: "PROVISIONING",
-      action: "wait",
-      message: "Provisioning required.",
-    });
+    return {
+      ok: false,
+      response: gateError(req, {
+        correlationId,
+        status: 403,
+        domain: "exegesis",
+        code: "PROVISIONING",
+        action: "wait",
+        message: "Provisioning required.",
+      }),
+    };
   }
 
   const canVote = await requireCanVote(memberId);
   if (!canVote) {
-    return gateError(req, {
-      correlationId,
-      status: 403,
-      domain: "exegesis",
-      code: "TIER_REQUIRED",
-      action: "subscribe",
-      message: "Voting requires Friend tier or higher.",
-    });
+    return {
+      ok: false,
+      response: gateError(req, {
+        correlationId,
+        status: 403,
+        domain: "exegesis",
+        code: "TIER_REQUIRED",
+        action: "subscribe",
+        message: "Voting requires Friend tier or higher.",
+      }),
+    };
   }
 
-  try {
-    const r = await sql<{
-      ok: boolean;
-      viewer_has_voted: boolean;
-      vote_count: number;
-      err: string | null;
-      author_member_id: string | null;
-    }>`
-      with
-      c as (
-        select
-          id,
-          status::text as status,
-          track_id,
-          group_key,
-          vote_count,
-          created_by_member_id
-        from exegesis_comment
-        where id = ${commentId}::uuid
-        limit 1
-      ),
-      m as (
-        select locked
-        from exegesis_thread_meta
-        where track_id = (select track_id from c)
-          and group_key = (select group_key from c)
-        limit 1
-      ),
-      guard as (
-        select
-          case
-            when (select id from c) is null then 'NOT_FOUND'
-            when (select status from c) = 'deleted' then 'DELETED'
-            when (select status from c) = 'hidden' then 'HIDDEN'
-            when coalesce((select locked from m), false) = true then 'LOCKED'
-            else null
-          end as err
-      ),
-      del as (
-        delete from exegesis_vote
-        where member_id = ${memberId}::uuid
-          and comment_id = ${commentId}::uuid
-          and (select err from guard) is null
-        returning 1 as deleted
-      ),
-      ins as (
-        insert into exegesis_vote (member_id, comment_id)
-        select ${memberId}::uuid, ${commentId}::uuid
-        where (select err from guard) is null
-          and not exists (select 1 from del)
-        on conflict (member_id, comment_id) do nothing
-        returning 1 as inserted
-      ),
-      upd as (
-        update exegesis_comment
-        set vote_count = greatest(
-          vote_count + (case when exists (select 1 from ins) then 1 else 0 end)
-                     - (case when exists (select 1 from del) then 1 else 0 end),
-          0
-        )
-        where id = ${commentId}::uuid
-          and (select err from guard) is null
-        returning vote_count
-      )
-       select
-        (select err from guard) is null as ok,
-        case
-          when (select err from guard) is not null then false
-          when exists (select 1 from ins) then true
-          else false
-        end as viewer_has_voted,
-        coalesce((select vote_count from upd), (select vote_count from c), 0)::int as vote_count,
-        (select err from guard) as err,
-        (select created_by_member_id::text from c) as author_member_id
-    `;
+  return { ok: true, memberId };
+}
 
-    const row = r.rows?.[0] ?? null;
+async function toggleVote(
+  memberId: string,
+  commentId: string,
+): Promise<VoteRow | null> {
+  const result = await sql<VoteRow>`
+    with
+    c as (
+      select
+        id,
+        status::text as status,
+        track_id,
+        group_key,
+        vote_count,
+        created_by_member_id
+      from exegesis_comment
+      where id = ${commentId}::uuid
+      limit 1
+    ),
+    m as (
+      select locked
+      from exegesis_thread_meta
+      where track_id = (select track_id from c)
+        and group_key = (select group_key from c)
+      limit 1
+    ),
+    guard as (
+      select
+        case
+          when (select id from c) is null then 'NOT_FOUND'
+          when (select status from c) = 'deleted' then 'DELETED'
+          when (select status from c) = 'hidden' then 'HIDDEN'
+          when coalesce((select locked from m), false) = true then 'LOCKED'
+          else null
+        end as err
+    ),
+    del as (
+      delete from exegesis_vote
+      where member_id = ${memberId}::uuid
+        and comment_id = ${commentId}::uuid
+        and (select err from guard) is null
+      returning 1 as deleted
+    ),
+    ins as (
+      insert into exegesis_vote (member_id, comment_id)
+      select ${memberId}::uuid, ${commentId}::uuid
+      where (select err from guard) is null
+        and not exists (select 1 from del)
+      on conflict (member_id, comment_id) do nothing
+      returning 1 as inserted
+    ),
+    upd as (
+      update exegesis_comment
+      set vote_count = greatest(
+        vote_count + (case when exists (select 1 from ins) then 1 else 0 end)
+                   - (case when exists (select 1 from del) then 1 else 0 end),
+        0
+      )
+      where id = ${commentId}::uuid
+        and (select err from guard) is null
+      returning vote_count
+    )
+     select
+      (select err from guard) is null as ok,
+      case
+        when (select err from guard) is not null then false
+        when exists (select 1 from ins) then true
+        else false
+      end as viewer_has_voted,
+      coalesce((select vote_count from upd), (select vote_count from c), 0)::int as vote_count,
+      (select err from guard) as err,
+      (select created_by_member_id::text from c) as author_member_id
+  `;
+
+  return result.rows?.[0] ?? null;
+}
+
+function voteGuardFailureResponse(
+  req: NextRequest,
+  correlationId: string,
+  error: string | null,
+): NextResponse {
+  switch (error) {
+    case "NOT_FOUND":
+      return jsonErr(correlationId, 404, {
+        ok: false,
+        error: "Comment not found.",
+      });
+    case "DELETED":
+      return gateError(req, {
+        correlationId,
+        status: 400,
+        domain: "exegesis",
+        code: "INVALID_REQUEST",
+        action: "wait",
+        message: "Cannot vote on deleted comment.",
+      });
+    case "HIDDEN":
+      return gateError(req, {
+        correlationId,
+        status: 403,
+        domain: "exegesis",
+        code: "INVALID_REQUEST",
+        action: "wait",
+        message: "Cannot vote on hidden comment.",
+      });
+    case "LOCKED":
+      return gateError(req, {
+        correlationId,
+        status: 403,
+        domain: "exegesis",
+        code: "INVALID_REQUEST",
+        action: "wait",
+        message: "Thread is locked.",
+      });
+    default:
+      return jsonErr(correlationId, 400, {
+        ok: false,
+        error: "Cannot vote on this comment.",
+      });
+  }
+}
+
+async function runVoteBadgeEffects(
+  authorMemberId: string | null,
+  correlationId: string,
+): Promise<NewlyAwardedBadge[]> {
+  if (!authorMemberId || !isUuid(authorMemberId)) return [];
+
+  const newlyAwardedBadges = await runAutoBadgeAwardsForMember({
+    memberId: authorMemberId,
+    trigger: "exegesis_vote_updated",
+    grantedBy: "system",
+    correlationId,
+  });
+
+  await markOverlayAnnouncedForAwardedBadges({
+    memberId: authorMemberId,
+    badges: newlyAwardedBadges,
+  });
+
+  return newlyAwardedBadges;
+}
+
+function describeVoteError(error: unknown): string {
+  if (error instanceof Error) return norm(error.message);
+  if (typeof error === "string") return norm(error);
+  return "";
+}
+
+export async function POST(req: NextRequest) {
+  const correlationId = correlationIdFromRequest(req);
+  const command = await readVoteCommand(req, correlationId);
+  if (!command.ok) return command.response;
+
+  const authority = await resolveVotingAuthority(req, correlationId);
+  if (!authority.ok) return authority.response;
+
+  try {
+    const row = await toggleVote(authority.memberId, command.commentId);
+
     if (!row) {
       return jsonErr(correlationId, 500, {
         ok: false,
@@ -226,84 +361,30 @@ export async function POST(req: NextRequest) {
     }
 
     if (!row.ok) {
-      if (row.err === "NOT_FOUND") {
-        return jsonErr(correlationId, 404, {
-          ok: false,
-          error: "Comment not found.",
-        });
-      }
-      if (row.err === "DELETED") {
-        return gateError(req, {
-          correlationId,
-          status: 400,
-          domain: "exegesis",
-          code: "INVALID_REQUEST",
-          action: "wait",
-          message: "Cannot vote on deleted comment.",
-        });
-      }
-      if (row.err === "HIDDEN") {
-        return gateError(req, {
-          correlationId,
-          status: 403,
-          domain: "exegesis",
-          code: "INVALID_REQUEST",
-          action: "wait",
-          message: "Cannot vote on hidden comment.",
-        });
-      }
-      if (row.err === "LOCKED") {
-        return gateError(req, {
-          correlationId,
-          status: 403,
-          domain: "exegesis",
-          code: "INVALID_REQUEST",
-          action: "wait",
-          message: "Thread is locked.",
-        });
-      }
-
-      return jsonErr(correlationId, 400, {
-        ok: false,
-        error: "Cannot vote on this comment.",
-      });
+      return voteGuardFailureResponse(req, correlationId, row.err);
     }
 
-    const newlyAwardedBadges =
-      row.author_member_id && isUuid(row.author_member_id)
-        ? await runAutoBadgeAwardsForMember({
-            memberId: row.author_member_id,
-            trigger: "exegesis_vote_updated",
-            grantedBy: "system",
-            correlationId,
-          })
-        : [];
-
-    if (row.author_member_id && isUuid(row.author_member_id)) {
-      await markOverlayAnnouncedForAwardedBadges({
-        memberId: row.author_member_id,
-        badges: newlyAwardedBadges,
-      });
-    }
+    const newlyAwardedBadges = await runVoteBadgeEffects(
+      row.author_member_id,
+      correlationId,
+    );
 
     return jsonOk<ApiOk>(
       {
         ok: true,
-        commentId,
+        commentId: command.commentId,
         viewerHasVoted: row.viewer_has_voted,
         voteCount: Number(row.vote_count ?? 0),
         newlyAwardedBadges,
       },
       { correlationId },
     );
-  } catch (e: unknown) {
-    const msg =
-      e instanceof Error
-        ? norm(e.message)
-        : norm(typeof e === "string" ? e : "");
+  } catch (error: unknown) {
+    const message = describeVoteError(error);
+
     return jsonErr(correlationId, 500, {
       ok: false,
-      error: msg || "Unknown error.",
+      error: message || "Unknown error.",
     });
   }
 }

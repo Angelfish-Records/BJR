@@ -4,7 +4,7 @@ import React from "react";
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import Stripe from "stripe";
-import crypto from "crypto";
+import crypto from "node:crypto";
 
 import { ensureMemberByEmail, normalizeEmail } from "../../../../lib/members";
 import { grantEntitlement } from "../../../../lib/entitlementOps";
@@ -571,6 +571,226 @@ async function finalizeGiftPurchase(
   });
 }
 
+
+function isRefundEventType(eventType: string): boolean {
+  return (
+    eventType === "refund.created" ||
+    eventType === "refund.updated" ||
+    eventType === "refund.failed"
+  );
+}
+
+function isSubscriptionLifecycleEventType(eventType: string): boolean {
+  return (
+    eventType === "customer.subscription.created" ||
+    eventType === "customer.subscription.updated" ||
+    eventType === "customer.subscription.deleted"
+  );
+}
+
+function isGiftCheckoutSession(session: Stripe.Checkout.Session): boolean {
+  const md = (session.metadata ?? {}) as Record<string, string>;
+  return Boolean(
+    (md.kind ?? "") === "gift" ||
+      (md.giftId ?? "").trim() ||
+      (md.giftTokenHash ?? "").trim(),
+  );
+}
+
+async function markWebhookHandled(eventId: string) {
+  await recordStripeWebhookHandled(eventId);
+  return NextResponse.json({ ok: true });
+}
+
+async function handleRefundEvent(event: Stripe.Event) {
+  const refund = event.data.object as Stripe.Refund;
+  const outcome = await recordStripeRefund({
+    refund,
+    correlationId: event.id,
+  });
+
+  if (!outcome.matched) {
+    console.warn("Stripe refund did not match a direct purchase", {
+      eventId: event.id,
+      refundId: refund.id,
+    });
+  }
+
+  return markWebhookHandled(event.id);
+}
+
+async function handleSubscriptionLifecycleEvent(
+  stripe: Stripe,
+  event: Stripe.Event,
+) {
+  const sub = event.data.object as Stripe.Subscription;
+  await reconcileStripeSubscription({ stripe, subscription: sub });
+  return markWebhookHandled(event.id);
+}
+
+async function handleGiftCheckoutIfApplicable(
+  stripe: Stripe,
+  event: Stripe.Event,
+): Promise<NextResponse | null> {
+  if (
+    event.type !== "checkout.session.completed" &&
+    event.type !== "checkout.session.async_payment_succeeded"
+  ) {
+    return null;
+  }
+
+  const session = event.data.object as Stripe.Checkout.Session;
+  if (!isGiftCheckoutSession(session)) return null;
+
+  const md = (session.metadata ?? {}) as Record<string, string>;
+  await finalizeGiftPurchase(stripe, session.id, md);
+  return markWebhookHandled(event.id);
+}
+
+async function handleSubscriptionCheckout(
+  stripe: Stripe,
+  event: Stripe.Event,
+  sessionSnapshot: Stripe.Checkout.Session,
+) {
+  const subscriptionId = readStripeId(sessionSnapshot.subscription as unknown);
+
+  if (!subscriptionId) {
+    throw new Error(
+      `Subscription Checkout session ${sessionSnapshot.id} has no subscription id`,
+    );
+  }
+
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
+    expand: ["latest_invoice.payment_intent"],
+  });
+
+  await reconcileStripeSubscription({ stripe, subscription });
+  return markWebhookHandled(event.id);
+}
+
+async function handleDirectCheckoutPurchase(
+  stripe: Stripe,
+  event: Stripe.Event,
+  sessionSnapshot: Stripe.Checkout.Session,
+) {
+  const session = await stripe.checkout.sessions.retrieve(sessionSnapshot.id, {
+    expand: ["payment_intent.latest_charge"],
+  });
+
+  if (!sessionIsPaid(session)) {
+    throw new Error(
+      `Checkout session ${session.id} completed without a settled payment`,
+    );
+  }
+
+  const { memberId, customerId } = await resolveMemberIdFromSession(session);
+  if (!memberId) {
+    throw new Error(
+      `Paid checkout session ${session.id} could not resolve or create a member`,
+    );
+  }
+
+  if (customerId) await attachStripeCustomerId(memberId, customerId);
+
+  const lineItems = await stripe.checkout.sessions.listLineItems(session.id, {
+    limit: 100,
+  });
+
+  const items = Array.isArray(lineItems?.data) ? lineItems.data : [];
+  const priceIds = items
+    .map((li) => li.price?.id)
+    .filter((v): v is string => !!v);
+
+  if (priceIds.length === 0) {
+    throw new Error(
+      `Paid Checkout session ${session.id} has no line-item price IDs`,
+    );
+  }
+
+  const mapped = await sql`
+      select price_id, entitlement_key, scope_id, scope_meta
+      from stripe_price_entitlements
+      where price_id in (
+        select jsonb_array_elements_text(${JSON.stringify(priceIds)}::jsonb)
+      )
+    `;
+  const rows = mapped.rows as PriceEntitlementRow[];
+
+  const mappedPriceIds = new Set(rows.map((row) => row.price_id));
+  const unmappedPriceIds = priceIds.filter(
+    (priceId) => !mappedPriceIds.has(priceId),
+  );
+
+  if (unmappedPriceIds.length > 0) {
+    throw new Error(
+      `Stripe checkout session ${session.id} has unmapped price IDs: ${unmappedPriceIds.join(", ")}`,
+    );
+  }
+
+  if (rows.length === 0) {
+    throw new Error(
+      `Stripe checkout session ${session.id} completed with no mapped entitlements`,
+    );
+  }
+
+  await recordPaidStripeCheckoutPurchase({
+    session,
+    memberId,
+    correlationId: event.id,
+    entitlements: rows.map((row) => ({
+      priceId: row.price_id,
+      entitlementKey: row.entitlement_key,
+      scopeId: row.scope_id,
+      scopeMeta: (row.scope_meta ?? {}) as Record<string, unknown>,
+    })),
+  });
+
+  return markWebhookHandled(event.id);
+}
+
+async function processClaimedStripeWebhookEvent(
+  stripe: Stripe,
+  event: Stripe.Event,
+) {
+  if (isRefundEventType(event.type)) {
+    return handleRefundEvent(event);
+  }
+
+  if (isSubscriptionLifecycleEventType(event.type)) {
+    return handleSubscriptionLifecycleEvent(stripe, event);
+  }
+
+  const giftResponse = await handleGiftCheckoutIfApplicable(stripe, event);
+  if (giftResponse) return giftResponse;
+
+  if (event.type === "checkout.session.async_payment_failed") {
+    return markWebhookHandled(event.id);
+  }
+
+  if (event.type !== "checkout.session.completed") {
+    return markWebhookHandled(event.id);
+  }
+
+  const sessionSnapshot = event.data.object as Stripe.Checkout.Session;
+  if (sessionSnapshot.mode === "subscription") {
+    return handleSubscriptionCheckout(stripe, event, sessionSnapshot);
+  }
+
+  return handleDirectCheckoutPurchase(stripe, event, sessionSnapshot);
+}
+
+function webhookFailureResponse(event: Stripe.Event, err: unknown) {
+  const message = safeErrMessage(err);
+
+  console.error("stripe webhook handler error", {
+    eventId: event.id,
+    type: event.type,
+    message,
+  });
+
+  return { message };
+}
+
 export async function POST(req: Request) {
   const STRIPE_SECRET_KEY = assertStripeSecretKey(
     process.env.STRIPE_SECRET_KEY ?? "",
@@ -623,175 +843,9 @@ export async function POST(req: Request) {
   }
 
   try {
-    if (
-      event.type === "refund.created" ||
-      event.type === "refund.updated" ||
-      event.type === "refund.failed"
-    ) {
-      const refund = event.data.object as Stripe.Refund;
-      const outcome = await recordStripeRefund({
-        refund,
-        correlationId: event.id,
-      });
-
-      if (!outcome.matched) {
-        console.warn("Stripe refund did not match a direct purchase", {
-          eventId: event.id,
-          refundId: refund.id,
-        });
-      }
-
-      await recordStripeWebhookHandled(event.id);
-      return NextResponse.json({ ok: true });
-    }
-
-    // Subscription lifecycle
-    if (
-      event.type === "customer.subscription.created" ||
-      event.type === "customer.subscription.updated" ||
-      event.type === "customer.subscription.deleted"
-    ) {
-      const sub = event.data.object as Stripe.Subscription;
-      await reconcileStripeSubscription({ stripe, subscription: sub });
-      await recordStripeWebhookHandled(event.id);
-      return NextResponse.json({ ok: true });
-    }
-
-    // Gifts: finalize on both immediate + async success
-    if (
-      event.type === "checkout.session.completed" ||
-      event.type === "checkout.session.async_payment_succeeded"
-    ) {
-      const s = event.data.object as Stripe.Checkout.Session;
-      const md = (s.metadata ?? {}) as Record<string, string>;
-      const looksGift =
-        (md.kind ?? "") === "gift" ||
-        (md.giftId ?? "").trim() ||
-        (md.giftTokenHash ?? "").trim();
-
-      if (looksGift) {
-        await finalizeGiftPurchase(stripe, s.id, md);
-        await recordStripeWebhookHandled(event.id);
-        return NextResponse.json({ ok: true });
-      }
-      // fall through to normal checkout logic (completed only)
-    }
-
-    if (event.type === "checkout.session.async_payment_failed") {
-      await recordStripeWebhookHandled(event.id);
-      return NextResponse.json({ ok: true });
-    }
-
-    // Non-gift: only act on checkout.session.completed
-    if (event.type !== "checkout.session.completed") {
-      await recordStripeWebhookHandled(event.id);
-      return NextResponse.json({ ok: true });
-    }
-
-    const sessionSnapshot = event.data.object as Stripe.Checkout.Session;
-
-    if (sessionSnapshot.mode === "subscription") {
-      const subscriptionId = readStripeId(
-        sessionSnapshot.subscription as unknown,
-      );
-
-      if (!subscriptionId) {
-        throw new Error(
-          `Subscription Checkout session ${sessionSnapshot.id} has no subscription id`,
-        );
-      }
-
-      const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
-        expand: ["latest_invoice.payment_intent"],
-      });
-
-      await reconcileStripeSubscription({ stripe, subscription });
-      await recordStripeWebhookHandled(event.id);
-      return NextResponse.json({ ok: true });
-    }
-
-    const session = await stripe.checkout.sessions.retrieve(
-      sessionSnapshot.id,
-      { expand: ["payment_intent.latest_charge"] },
-    );
-
-    if (!sessionIsPaid(session)) {
-      throw new Error(
-        `Checkout session ${session.id} completed without a settled payment`,
-      );
-    }
-
-    const { memberId, customerId } = await resolveMemberIdFromSession(session);
-    if (!memberId) {
-      throw new Error(
-        `Paid checkout session ${session.id} could not resolve or create a member`,
-      );
-    }
-
-    if (customerId) await attachStripeCustomerId(memberId, customerId);
-
-    const lineItems = await stripe.checkout.sessions.listLineItems(session.id, {
-      limit: 100,
-    });
-
-    const items = Array.isArray(lineItems?.data) ? lineItems.data : [];
-    const priceIds = items
-      .map((li) => li.price?.id)
-      .filter((v): v is string => !!v);
-    if (priceIds.length === 0) {
-      throw new Error(
-        `Paid Checkout session ${session.id} has no line-item price IDs`,
-      );
-    }
-
-    const mapped = await sql`
-      select price_id, entitlement_key, scope_id, scope_meta
-      from stripe_price_entitlements
-      where price_id in (
-        select jsonb_array_elements_text(${JSON.stringify(priceIds)}::jsonb)
-      )
-    `;
-    const rows = mapped.rows as PriceEntitlementRow[];
-
-    const mappedPriceIds = new Set(rows.map((row) => row.price_id));
-    const unmappedPriceIds = priceIds.filter(
-      (priceId) => !mappedPriceIds.has(priceId),
-    );
-
-    if (unmappedPriceIds.length > 0) {
-      throw new Error(
-        `Stripe checkout session ${session.id} has unmapped price IDs: ${unmappedPriceIds.join(", ")}`,
-      );
-    }
-
-    if (rows.length === 0) {
-      throw new Error(
-        `Stripe checkout session ${session.id} completed with no mapped entitlements`,
-      );
-    }
-
-    await recordPaidStripeCheckoutPurchase({
-      session,
-      memberId,
-      correlationId: event.id,
-      entitlements: rows.map((row) => ({
-        priceId: row.price_id,
-        entitlementKey: row.entitlement_key,
-        scopeId: row.scope_id,
-        scopeMeta: (row.scope_meta ?? {}) as Record<string, unknown>,
-      })),
-    });
-
-    await recordStripeWebhookHandled(event.id);
-    return NextResponse.json({ ok: true });
+    return await processClaimedStripeWebhookEvent(stripe, event);
   } catch (err) {
-    const message = safeErrMessage(err);
-
-    console.error("stripe webhook handler error", {
-      eventId: event.id,
-      type: event.type,
-      message,
-    });
+    const { message } = webhookFailureResponse(event, err);
 
     await recordStripeWebhookFailure({
       eventId: event.id,

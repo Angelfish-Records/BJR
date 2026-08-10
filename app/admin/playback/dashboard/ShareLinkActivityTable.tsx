@@ -26,9 +26,11 @@ function formatListenedMs(ms: number): string {
   return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
 }
 
-export function ShareLinkActivityTable(props: {
-  rows: PlaybackAdminSnapshot["shareLinkActivity"];
-}) {
+export function ShareLinkActivityTable(
+  props: Readonly<{
+    rows: PlaybackAdminSnapshot["shareLinkActivity"];
+  }>,
+) {
   const { rows } = props;
 
   return (

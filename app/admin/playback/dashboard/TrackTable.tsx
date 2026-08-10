@@ -18,7 +18,15 @@ import {
 const POPULARITY_TRACK_BG = "rgba(255,255,255,0.08)";
 const POPULARITY_TRACK_FILL = "rgba(255,255,255,0.78)";
 
-export function TrackTable(props: { rows: TrackRow[]; emptyLabel?: string }) {
+function trackColumnWidth(label: string): string {
+  if (label === "Track") return "44%";
+  if (label === "Popularity") return "28%";
+  return "1%";
+}
+
+export function TrackTable(
+  props: Readonly<{ rows: TrackRow[]; emptyLabel?: string }>,
+) {
   const topListenedMs = props.rows.reduce(
     (max, row) => Math.max(max, row.listenedMs),
     0,
@@ -55,12 +63,7 @@ export function TrackTable(props: { rows: TrackRow[]; emptyLabel?: string }) {
                     color: TEXT_MUTED,
                     borderBottom: ROW_BORDER,
                     whiteSpace: "nowrap",
-                    width:
-                      label === "Track"
-                        ? "44%"
-                        : label === "Popularity"
-                          ? "28%"
-                          : "1%",
+                    width: trackColumnWidth(label),
                   }}
                 >
                   {label}

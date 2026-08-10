@@ -78,167 +78,235 @@ function validateCategory(raw: string): string | null {
   return CATEGORIES.has(c) ? c : null;
 }
 
-export async function POST(req: NextRequest) {
-  const correlationId = correlationIdFromRequest(req);
 
+type ReportCommand = {
+  commentId: string;
+  category: string;
+  reason: string;
+};
+
+type ValidationResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; status: number; error: string };
+
+type ReportingAuthorityResult =
+  | { ok: true; memberId: string }
+  | { ok: false; response: NextResponse };
+
+type ReportInsertRow = {
+  id: string | null;
+  comment_status: "live" | "hidden" | "deleted" | null;
+};
+
+type ReportInsertResolution =
+  | { ok: true; reportId: string }
+  | { ok: false; response: NextResponse };
+
+function validationError(
+  status: number,
+  error: string,
+): ValidationResult<never> {
+  return { ok: false, status, error };
+}
+
+async function readReportCommand(
+  req: NextRequest,
+): Promise<ValidationResult<ReportCommand>> {
   let raw: unknown;
+
   try {
     raw = await req.json();
   } catch {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Invalid JSON body.",
-    });
+    return validationError(400, "Invalid JSON body.");
   }
 
-  const b =
+  const body =
     typeof raw === "object" && raw !== null
       ? (raw as Record<string, unknown>)
       : null;
-  if (!b) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Invalid JSON body.",
-    });
-  }
 
-  const commentId = norm(b.commentId);
-  const categoryRaw = norm(b.category);
-  const reason = norm(b.reason);
+  if (!body) return validationError(400, "Invalid JSON body.");
 
-  if (!commentId) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Missing commentId.",
-    });
-  }
-  if (!isUuid(commentId)) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Invalid commentId.",
-    });
-  }
+  const commentId = norm(body.commentId);
+  if (!commentId) return validationError(400, "Missing commentId.");
+  if (!isUuid(commentId)) return validationError(400, "Invalid commentId.");
 
-  const category = validateCategory(categoryRaw);
-  if (!category) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Invalid category.",
-    });
-  }
+  const category = validateCategory(norm(body.category));
+  if (!category) return validationError(400, "Invalid category.");
 
+  const reason = norm(body.reason);
   if (reason.length < 20) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Reason must be at least 20 characters.",
-    });
+    return validationError(400, "Reason must be at least 20 characters.");
   }
   if (reason.length > 300) {
-    return jsonErr(correlationId, 400, {
-      ok: false,
-      error: "Reason must be 300 characters or less.",
-    });
+    return validationError(400, "Reason must be 300 characters or less.");
   }
 
+  return {
+    ok: true,
+    value: { commentId, category, reason },
+  };
+}
+
+async function resolveReportingAuthority(
+  req: NextRequest,
+  correlationId: string,
+): Promise<ReportingAuthorityResult> {
   const memberId = await requireMemberId();
+
   if (!memberId) {
-    return gateError(req, {
-      correlationId,
-      status: 401,
-      domain: "exegesis",
-      code: "AUTH_REQUIRED",
-      action: "login",
-      message: "Sign in to report a comment.",
-    });
+    return {
+      ok: false,
+      response: gateError(req, {
+        correlationId,
+        status: 401,
+        domain: "exegesis",
+        code: "AUTH_REQUIRED",
+        action: "login",
+        message: "Sign in to report a comment.",
+      }),
+    };
   }
 
   if (!isUuid(memberId)) {
-    return gateError(req, {
-      correlationId,
-      status: 403,
-      domain: "exegesis",
-      code: "PROVISIONING",
-      action: "wait",
-      message: "Provisioning required.",
-    });
+    return {
+      ok: false,
+      response: gateError(req, {
+        correlationId,
+        status: 403,
+        domain: "exegesis",
+        code: "PROVISIONING",
+        action: "wait",
+        message: "Provisioning required.",
+      }),
+    };
   }
 
   const canReport = await requireCanReport(memberId);
   if (!canReport) {
-    return gateError(req, {
-      correlationId,
-      status: 403,
-      domain: "exegesis",
-      code: "TIER_REQUIRED",
-      action: "subscribe",
-      message: "Reporting requires Friend tier or higher.",
-    });
+    return {
+      ok: false,
+      response: gateError(req, {
+        correlationId,
+        status: 403,
+        domain: "exegesis",
+        code: "TIER_REQUIRED",
+        action: "subscribe",
+        message: "Reporting requires Friend tier or higher.",
+      }),
+    };
   }
 
-  try {
-    const ins = await sql<{ id: string; comment_status: string | null }>`
-      with c as (
-        select id, status::text as status
-        from exegesis_comment
-        where id = ${commentId}::uuid
-        limit 1
-      ),
-      inserted as (
-        insert into exegesis_report (comment_id, reporter_member_id, category, reason)
-        select
-          c.id,
-          ${memberId}::uuid,
-          ${category},
-          ${reason}
-        from c
-        where c.id is not null
-          and c.status <> 'deleted'
-          and not exists (
-            select 1
-            from exegesis_report r
-            where r.comment_id = c.id
-              and r.reporter_member_id = ${memberId}::uuid
-          )
-        returning id
-      )
+  return { ok: true, memberId };
+}
+
+async function insertReport(
+  command: ReportCommand,
+  memberId: string,
+): Promise<ReportInsertRow | null> {
+  const { commentId, category, reason } = command;
+
+  const result = await sql<ReportInsertRow>`
+    with c as (
+      select id, status::text as status
+      from exegesis_comment
+      where id = ${commentId}::uuid
+      limit 1
+    ),
+    inserted as (
+      insert into exegesis_report (comment_id, reporter_member_id, category, reason)
       select
-        (select id from inserted limit 1) as id,
-        (select status from c limit 1) as comment_status
-    `;
+        c.id,
+        ${memberId}::uuid,
+        ${category},
+        ${reason}
+      from c
+      where c.id is not null
+        and c.status <> 'deleted'
+        and not exists (
+          select 1
+          from exegesis_report r
+          where r.comment_id = c.id
+            and r.reporter_member_id = ${memberId}::uuid
+        )
+      returning id
+    )
+    select
+      (select id from inserted limit 1) as id,
+      (select status from c limit 1) as comment_status
+  `;
 
-    const reportId = ins.rows?.[0]?.id ?? "";
-    const commentStatus = (ins.rows?.[0]?.comment_status ?? null) as
-      | "live"
-      | "hidden"
-      | "deleted"
-      | null;
+  return result.rows?.[0] ?? null;
+}
 
-    if (!commentStatus) {
-      return jsonErr(correlationId, 404, {
+function resolveReportInsert(
+  row: ReportInsertRow | null,
+  correlationId: string,
+): ReportInsertResolution {
+  const reportId = row?.id ?? "";
+  const commentStatus = row?.comment_status ?? null;
+
+  if (!commentStatus) {
+    return {
+      ok: false,
+      response: jsonErr(correlationId, 404, {
         ok: false,
         error: "Comment not found.",
-      });
-    }
-    if (commentStatus === "deleted") {
-      return jsonErr(correlationId, 400, {
+      }),
+    };
+  }
+
+  if (commentStatus === "deleted") {
+    return {
+      ok: false,
+      response: jsonErr(correlationId, 400, {
         ok: false,
         error: "Cannot report a deleted comment.",
-      });
-    }
+      }),
+    };
+  }
 
-    if (!reportId) {
-      return jsonErr(correlationId, 409, {
+  if (!reportId) {
+    return {
+      ok: false,
+      response: jsonErr(correlationId, 409, {
         ok: false,
         code: "ALREADY_REPORTED",
         error: "You’ve already reported this comment.",
-      });
-    }
+      }),
+    };
+  }
 
-    return jsonOk<ApiOk>({ ok: true, reportId }, { correlationId });
-  } catch (e: unknown) {
+  return { ok: true, reportId };
+}
+
+export async function POST(req: NextRequest) {
+  const correlationId = correlationIdFromRequest(req);
+  const command = await readReportCommand(req);
+
+  if (!command.ok) {
+    return jsonErr(correlationId, command.status, {
+      ok: false,
+      error: command.error,
+    });
+  }
+
+  const authority = await resolveReportingAuthority(req, correlationId);
+  if (!authority.ok) return authority.response;
+
+  try {
+    const row = await insertReport(command.value, authority.memberId);
+    const insert = resolveReportInsert(row, correlationId);
+    if (!insert.ok) return insert.response;
+
+    return jsonOk<ApiOk>(
+      { ok: true, reportId: insert.reportId },
+      { correlationId },
+    );
+  } catch (error: unknown) {
     return jsonErr(correlationId, 500, {
       ok: false,
-      error: e instanceof Error ? e.message : "Unknown error.",
+      error: error instanceof Error ? error.message : "Unknown error.",
     });
   }
 }

@@ -25,9 +25,11 @@ import {
   resolveDedupeIdentityLabel,
 } from "./playbackTelemetryDashboardModel";
 
-export function DedupeTable(props: {
-  rows: PlaybackAdminSnapshot["recentDedupe"];
-}) {
+export function DedupeTable(
+  props: Readonly<{
+    rows: PlaybackAdminSnapshot["recentDedupe"];
+  }>,
+) {
   const rawRows = props.rows as DedupeRow[];
   const rows = React.useMemo(() => buildDedupeSessionRows(rawRows), [rawRows]);
 

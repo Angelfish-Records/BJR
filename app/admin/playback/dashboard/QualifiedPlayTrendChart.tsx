@@ -66,10 +66,12 @@ type StackedLayer = {
   linePath: string;
 };
 
-export function QualifiedPlayTrendChart(props: {
-  rows: TrendBucket[];
-  range: TrendRangeKey;
-}) {
+export function QualifiedPlayTrendChart(
+  props: Readonly<{
+    rows: TrendBucket[];
+    range: TrendRangeKey;
+  }>,
+) {
   const rows = props.rows;
   const width = 920;
   const height = 240;
@@ -218,7 +220,6 @@ export function QualifiedPlayTrendChart(props: {
         <svg
           viewBox={`0 0 ${width} ${height}`}
           style={{ width: "100%", height: "auto", display: "block" }}
-          role="img"
           aria-label={`Qualified plays over the selected ${props.range} range`}
         >
           {yTicks.map((tick) => (
@@ -284,10 +285,10 @@ export function QualifiedPlayTrendChart(props: {
             );
           })}
 
-          {stackedLayers[stackedLayers.length - 1]?.upperPoints.map(
+          {stackedLayers.at(-1)?.upperPoints.map(
             (point, index) => (
               <circle
-                key={`point:${index}`}
+                key={rows[index]?.bucketStart ?? `point-x:${point.x}`}
                 cx={point.x}
                 cy={point.y}
                 r="2"

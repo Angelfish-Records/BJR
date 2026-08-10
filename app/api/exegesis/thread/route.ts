@@ -188,161 +188,217 @@ async function capsForMember(memberId: string): Promise<{
   return { canVote, canReport, canPost };
 }
 
-export async function GET(req: NextRequest) {
-  const correlationId = correlationIdFromRequest(req);
-  const url = new URL(req.url);
+type ThreadRequest = {
+  recordingId: string;
+  sort: ThreadSort;
+  rawGroupKey: string;
+  lineKey: string;
+};
 
+type ThreadRequestResult =
+  | { ok: true; value: ThreadRequest }
+  | { ok: false; response: NextResponse };
+
+type GroupKeyResult =
+  | { ok: true; groupKey: string }
+  | { ok: false; response: NextResponse };
+
+function readThreadRequest(
+  req: NextRequest,
+  correlationId: string,
+): ThreadRequestResult {
+  const url = new URL(req.url);
   const recordingId = norm(url.searchParams.get("recordingId"));
   const sortParam = norm(url.searchParams.get("sort")) || "top";
   const sort: ThreadSort = isSort(sortParam) ? sortParam : "top";
 
   if (!recordingId) {
-    return jsonErr(correlationId, 400, {
+    return {
       ok: false,
-      error: "Missing recordingId.",
-    });
+      response: jsonErr(correlationId, 400, {
+        ok: false,
+        error: "Missing recordingId.",
+      }),
+    };
   }
+
   if (recordingId.length > 200) {
-    return jsonErr(correlationId, 400, {
+    return {
       ok: false,
-      error: "Invalid recordingId.",
-    });
+      response: jsonErr(correlationId, 400, {
+        ok: false,
+        error: "Invalid recordingId.",
+      }),
+    };
   }
 
-  const rawGroupKey = norm(url.searchParams.get("groupKey"));
-  const lineKey = norm(url.searchParams.get("lineKey"));
+  return {
+    ok: true,
+    value: {
+      recordingId,
+      sort,
+      rawGroupKey: norm(url.searchParams.get("groupKey")),
+      lineKey: norm(url.searchParams.get("lineKey")),
+    },
+  };
+}
 
-  let groupKey = "";
+async function resolveThreadGroupKey(
+  request: ThreadRequest,
+  correlationId: string,
+): Promise<GroupKeyResult> {
+  const { recordingId, rawGroupKey, lineKey } = request;
 
   if (lineKey) {
     const resolved = await resolveGroupKeyForAnchor({ recordingId, lineKey });
-    groupKey = resolved.groupKey;
+    const groupKey = resolved.groupKey;
 
     if (rawGroupKey && norm(rawGroupKey) !== groupKey) {
-      return jsonErr(correlationId, 409, {
+      return {
         ok: false,
-        error: "Group key changed. Refresh and try again.",
-      });
+        response: jsonErr(correlationId, 409, {
+          ok: false,
+          error: "Group key changed. Refresh and try again.",
+        }),
+      };
     }
-  } else {
-    if (!rawGroupKey) {
-      return jsonErr(correlationId, 400, {
+
+    if (!groupKey) {
+      return {
+        ok: false,
+        response: jsonErr(correlationId, 400, {
+          ok: false,
+          error: "Invalid group key.",
+        }),
+      };
+    }
+
+    return { ok: true, groupKey };
+  }
+
+  if (!rawGroupKey) {
+    return {
+      ok: false,
+      response: jsonErr(correlationId, 400, {
         ok: false,
         error: "Missing lineKey (or groupKey).",
-      });
-    }
-
-    const g = norm(rawGroupKey);
-
-    if (isGroupKeyV1(g)) {
-      groupKey = g;
-    } else {
-      const ok = await isKnownCanonicalGroupKey({ recordingId, groupKey: g });
-      if (!ok) {
-        return jsonErr(correlationId, 400, {
-          ok: false,
-          error: "Unknown groupKey.",
-        });
-      }
-      groupKey = g;
-    }
+      }),
+    };
   }
 
-  if (!groupKey) {
-    return jsonErr(correlationId, 400, {
+  const groupKey = norm(rawGroupKey);
+  if (isGroupKeyV1(groupKey)) {
+    return { ok: true, groupKey };
+  }
+
+  const known = await isKnownCanonicalGroupKey({ recordingId, groupKey });
+  if (!known) {
+    return {
       ok: false,
-      error: "Invalid group key.",
-    });
+      response: jsonErr(correlationId, 400, {
+        ok: false,
+        error: "Unknown groupKey.",
+      }),
+    };
   }
 
-  const bootstrapRes = jsonOk({ ok: true }, { correlationId });
-  const ensured = ensureAnonId(req, bootstrapRes);
-  const { anonId } = ensured;
+  return { ok: true, groupKey };
+}
 
-  const viewer = await getViewer(req, anonId);
-
-  const viewerMemberId =
-    viewer.kind === "member" && isUuid(viewer.memberId)
-      ? viewer.memberId
-      : null;
-
-  if (viewerMemberId) {
-    await ensureMemberIdentity(viewerMemberId);
-  }
-
-  if (viewer.kind === "anon") {
-    const LIMIT = 8;
-    const sessionId = anonId;
-
-    await sql`
-      insert into anon_exegesis_sessions (id, anon_id)
-      values (${sessionId}, ${anonId})
-      on conflict (id) do nothing
-    `;
-
-    const gateRes = await sql<{
-      already: boolean;
-      allowed: boolean;
-      n_before: number;
-      n_after: number;
-    }>`
-      with
-      already as (
-        select exists(
-          select 1
-          from anon_exegesis_thread_opens
-          where session_id = ${sessionId}
-            and track_id = ${recordingId}
-            and group_key = ${groupKey}
-        ) as already
-      ),
-      cnt_before as (
-        select count(*)::int as n_before
-        from anon_exegesis_thread_opens
-        where session_id = ${sessionId}
-      ),
-      attempt as (
-        insert into anon_exegesis_thread_opens (session_id, track_id, group_key)
-        select ${sessionId}, ${recordingId}, ${groupKey}
-        where (select already from already) = false
-          and (select n_before from cnt_before) < ${LIMIT}
-        on conflict (session_id, track_id, group_key) do nothing
-        returning 1
-      ),
-      cnt_after as (
-        select count(*)::int as n_after
-        from anon_exegesis_thread_opens
-        where session_id = ${sessionId}
-      )
-      select
-        (select already from already) as already,
-        ((select already from already) = true or exists(select 1 from attempt)) as allowed,
-        (select n_before from cnt_before) as n_before,
-        (select n_after from cnt_after) as n_after
-    `;
-
-    const row = gateRes.rows?.[0];
-    const allowed = Boolean(row?.allowed);
-
-    if (!allowed) {
-      const message = "Sign in to keep reading.";
-
-      return gateError(req, {
-        correlationId,
-        status: 403,
-        domain: "exegesis",
-        code: "EXEGESIS_THREAD_READ_CAP_REACHED",
-        action: "login",
-        message,
-        onResponse: (res) => {
-          for (const [k, v] of bootstrapRes.headers.entries()) {
-            if (k.toLowerCase() === "set-cookie") res.headers.append(k, v);
-          }
-        },
-      });
+function copySetCookieHeaders(from: Response, to: NextResponse): void {
+  for (const [key, value] of from.headers.entries()) {
+    if (key.toLowerCase() === "set-cookie") {
+      to.headers.append(key, value);
     }
   }
+}
 
+async function enforceAnonThreadReadCap(params: {
+  req: NextRequest;
+  correlationId: string;
+  bootstrapRes: NextResponse;
+  anonId: string;
+  recordingId: string;
+  groupKey: string;
+}): Promise<NextResponse | null> {
+  const {
+    req,
+    correlationId,
+    bootstrapRes,
+    anonId,
+    recordingId,
+    groupKey,
+  } = params;
+  const LIMIT = 8;
+  const sessionId = anonId;
+
+  await sql`
+    insert into anon_exegesis_sessions (id, anon_id)
+    values (${sessionId}, ${anonId})
+    on conflict (id) do nothing
+  `;
+
+  const gateRes = await sql<{
+    already: boolean;
+    allowed: boolean;
+    n_before: number;
+    n_after: number;
+  }>`
+    with
+    already as (
+      select exists(
+        select 1
+        from anon_exegesis_thread_opens
+        where session_id = ${sessionId}
+          and track_id = ${recordingId}
+          and group_key = ${groupKey}
+      ) as already
+    ),
+    cnt_before as (
+      select count(*)::int as n_before
+      from anon_exegesis_thread_opens
+      where session_id = ${sessionId}
+    ),
+    attempt as (
+      insert into anon_exegesis_thread_opens (session_id, track_id, group_key)
+      select ${sessionId}, ${recordingId}, ${groupKey}
+      where (select already from already) = false
+        and (select n_before from cnt_before) < ${LIMIT}
+      on conflict (session_id, track_id, group_key) do nothing
+      returning 1
+    ),
+    cnt_after as (
+      select count(*)::int as n_after
+      from anon_exegesis_thread_opens
+      where session_id = ${sessionId}
+    )
+    select
+      (select already from already) as already,
+      ((select already from already) = true or exists(select 1 from attempt)) as allowed,
+      (select n_before from cnt_before) as n_before,
+      (select n_after from cnt_after) as n_after
+  `;
+
+  const row = gateRes.rows?.[0];
+  if (Boolean(row?.allowed)) return null;
+
+  const message = "Sign in to keep reading.";
+
+  return gateError(req, {
+    correlationId,
+    status: 403,
+    domain: "exegesis",
+    code: "EXEGESIS_THREAD_READ_CAP_REACHED",
+    action: "login",
+    message,
+    onResponse: (res) => copySetCookieHeaders(bootstrapRes, res),
+  });
+}
+
+async function loadThreadMeta(
+  recordingId: string,
+  groupKey: string,
+): Promise<DbThreadMetaRow | null> {
   const metaRes = await sql<DbThreadMetaRow>`
     select track_id, group_key, pinned_comment_id, locked, comment_count, last_activity_at, created_at, updated_at
     from exegesis_thread_meta
@@ -350,7 +406,17 @@ export async function GET(req: NextRequest) {
       and group_key = ${groupKey}
     limit 1
   `;
-  const metaRow = metaRes.rows?.[0] ?? null;
+
+  return metaRes.rows?.[0] ?? null;
+}
+
+async function loadThreadComments(params: {
+  recordingId: string;
+  groupKey: string;
+  viewerMemberId: string | null;
+  sort: ThreadSort;
+}): Promise<DbCommentRow[]> {
+  const { recordingId, groupKey, viewerMemberId, sort } = params;
 
   const commentsRes = await sql<DbCommentRow>`
     with base as (
@@ -401,59 +467,47 @@ export async function GET(req: NextRequest) {
       created_at asc
   `;
 
-  const rows = commentsRes.rows ?? [];
+  return commentsRes.rows ?? [];
+}
+
+function commentDtoFromRow(row: DbCommentRow): CommentDTO {
+  return {
+    id: row.id,
+    recordingId: row.track_id,
+    groupKey: row.group_key,
+    lineKey: row.line_key,
+    parentId: row.parent_id,
+    rootId: row.root_id,
+    depth: row.depth,
+    bodyRich: row.body_rich,
+    bodyPlain: row.body_plain,
+    tMs: row.t_ms,
+    lineTextSnapshot: row.line_text_snapshot,
+    lyricsVersion: row.lyrics_version,
+    createdByMemberId: row.created_by_member_id,
+    status: row.status,
+    createdAt: row.created_at,
+    editedAt: row.edited_at,
+    editCount: row.edit_count,
+    voteCount: row.vote_count,
+    viewerHasVoted: row.viewer_has_voted,
+  };
+}
+
+function buildThreadRoots(rows: DbCommentRow[]): {
+  roots: ApiOk["roots"];
+  authorIds: Set<string>;
+} {
   const byRoot = new Map<string, CommentDTO[]>();
   const authorIds = new Set<string>();
 
-  for (const r of rows) {
-    authorIds.add(r.created_by_member_id);
+  for (const row of rows) {
+    authorIds.add(row.created_by_member_id);
 
-    const dto: CommentDTO = {
-      id: r.id,
-      recordingId: r.track_id,
-      groupKey: r.group_key,
-      lineKey: r.line_key,
-      parentId: r.parent_id,
-      rootId: r.root_id,
-      depth: r.depth,
-      bodyRich: r.body_rich,
-      bodyPlain: r.body_plain,
-      tMs: r.t_ms,
-      lineTextSnapshot: r.line_text_snapshot,
-      lyricsVersion: r.lyrics_version,
-      createdByMemberId: r.created_by_member_id,
-      status: r.status,
-      createdAt: r.created_at,
-      editedAt: r.edited_at,
-      editCount: r.edit_count,
-      voteCount: r.vote_count,
-      viewerHasVoted: r.viewer_has_voted,
-    };
-
-    const arr = byRoot.get(dto.rootId) ?? [];
-    arr.push(dto);
-    byRoot.set(dto.rootId, arr);
-  }
-
-  const identities: Record<string, IdentityDTO> = {};
-  const wantIds = new Set<string>();
-
-  for (const id of Array.from(authorIds)) {
-    const s = (id ?? "").trim();
-    if (isUuid(s)) wantIds.add(s);
-  }
-  if (viewer.kind === "member") {
-    const me = (viewer.memberId ?? "").trim();
-    if (isUuid(me)) wantIds.add(me);
-  }
-
-  const uuids = Array.from(wantIds);
-
-  if (uuids.length > 0) {
-    const built = await buildExegesisIdentityDtoMap(uuids);
-    for (const [memberId, identity] of Object.entries(built)) {
-      identities[memberId] = identity;
-    }
+    const dto = commentDtoFromRow(row);
+    const comments = byRoot.get(dto.rootId) ?? [];
+    comments.push(dto);
+    byRoot.set(dto.rootId, comments);
   }
 
   const roots = Array.from(byRoot.entries()).map(([rootId, comments]) => ({
@@ -461,40 +515,148 @@ export async function GET(req: NextRequest) {
     comments,
   }));
 
-  const meta: ThreadMetaDTO | null = metaRow
-    ? {
-        recordingId: metaRow.track_id,
-        groupKey: metaRow.group_key,
-        pinnedCommentId: metaRow.pinned_comment_id,
-        locked: metaRow.locked,
-        commentCount: metaRow.comment_count,
-        lastActivityAt: metaRow.last_activity_at,
-        createdAt: metaRow.created_at,
-        updatedAt: metaRow.updated_at,
-      }
-    : null;
+  return { roots, authorIds };
+}
 
-  let viewerDto: ViewerDTO;
+function collectIdentityIds(
+  authorIds: Set<string>,
+  viewer: Viewer,
+): string[] {
+  const wantIds = new Set<string>();
 
-  if (!viewerMemberId) {
-    viewerDto = { kind: "anon" };
-  } else {
-    const cap0 = await capsForMember(viewerMemberId);
-    const locked = Boolean(metaRow?.locked);
-    const me = identities[viewerMemberId];
-    const canClaimName =
-      !!me && !me.publicName && me.publicNameUnlockedAt != null;
-
-    viewerDto = {
-      kind: "member",
-      memberId: viewerMemberId,
-      cap: {
-        ...cap0,
-        canPost: locked ? false : cap0.canPost,
-        canClaimName,
-      },
-    };
+  for (const id of authorIds) {
+    const normalized = (id ?? "").trim();
+    if (isUuid(normalized)) {
+      wantIds.add(normalized);
+    }
   }
+
+  if (viewer.kind === "member") {
+    const memberId = (viewer.memberId ?? "").trim();
+    if (isUuid(memberId)) {
+      wantIds.add(memberId);
+    }
+  }
+
+  return Array.from(wantIds);
+}
+
+async function loadThreadIdentities(
+  authorIds: Set<string>,
+  viewer: Viewer,
+): Promise<Record<string, IdentityDTO>> {
+  const identities: Record<string, IdentityDTO> = {};
+  const memberIds = collectIdentityIds(authorIds, viewer);
+
+  if (memberIds.length === 0) return identities;
+
+  const built = await buildExegesisIdentityDtoMap(memberIds);
+  for (const [memberId, identity] of Object.entries(built)) {
+    identities[memberId] = identity;
+  }
+
+  return identities;
+}
+
+function threadMetaDtoFromRow(
+  row: DbThreadMetaRow | null,
+): ThreadMetaDTO | null {
+  if (!row) return null;
+
+  return {
+    recordingId: row.track_id,
+    groupKey: row.group_key,
+    pinnedCommentId: row.pinned_comment_id,
+    locked: row.locked,
+    commentCount: row.comment_count,
+    lastActivityAt: row.last_activity_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function buildViewerDto(params: {
+  viewerMemberId: string | null;
+  metaRow: DbThreadMetaRow | null;
+  identities: Record<string, IdentityDTO>;
+}): Promise<ViewerDTO> {
+  const { viewerMemberId, metaRow, identities } = params;
+
+  if (!viewerMemberId) return { kind: "anon" };
+
+  const cap0 = await capsForMember(viewerMemberId);
+  const locked = Boolean(metaRow?.locked);
+  const identity = identities[viewerMemberId];
+  const canClaimName =
+    identity != null &&
+    !identity.publicName &&
+    identity.publicNameUnlockedAt != null;
+
+  return {
+    kind: "member",
+    memberId: viewerMemberId,
+    cap: {
+      ...cap0,
+      canPost: locked ? false : cap0.canPost,
+      canClaimName,
+    },
+  };
+}
+
+export async function GET(req: NextRequest) {
+  const correlationId = correlationIdFromRequest(req);
+  const request = readThreadRequest(req, correlationId);
+  if (!request.ok) return request.response;
+
+  const groupKeyResult = await resolveThreadGroupKey(
+    request.value,
+    correlationId,
+  );
+  if (!groupKeyResult.ok) return groupKeyResult.response;
+
+  const { recordingId, sort } = request.value;
+  const { groupKey } = groupKeyResult;
+
+  const bootstrapRes = jsonOk({ ok: true }, { correlationId });
+  const { anonId } = ensureAnonId(req, bootstrapRes);
+  const viewer = await getViewer(req, anonId);
+  const viewerMemberId =
+    viewer.kind === "member" && isUuid(viewer.memberId)
+      ? viewer.memberId
+      : null;
+
+  if (viewerMemberId) {
+    await ensureMemberIdentity(viewerMemberId);
+  }
+
+  if (viewer.kind === "anon") {
+    const gateResponse = await enforceAnonThreadReadCap({
+      req,
+      correlationId,
+      bootstrapRes,
+      anonId,
+      recordingId,
+      groupKey,
+    });
+
+    if (gateResponse) return gateResponse;
+  }
+
+  const metaRow = await loadThreadMeta(recordingId, groupKey);
+  const rows = await loadThreadComments({
+    recordingId,
+    groupKey,
+    viewerMemberId,
+    sort,
+  });
+  const { roots, authorIds } = buildThreadRoots(rows);
+  const identities = await loadThreadIdentities(authorIds, viewer);
+  const meta = threadMetaDtoFromRow(metaRow);
+  const viewerDto = await buildViewerDto({
+    viewerMemberId,
+    metaRow,
+    identities,
+  });
 
   const okRes = jsonOk<ApiOk>(
     {
@@ -510,9 +672,6 @@ export async function GET(req: NextRequest) {
     { correlationId },
   );
 
-  for (const [k, v] of bootstrapRes.headers.entries()) {
-    if (k.toLowerCase() === "set-cookie") okRes.headers.append(k, v);
-  }
-
+  copySetCookieHeaders(bootstrapRes, okRes);
   return okRes;
 }
