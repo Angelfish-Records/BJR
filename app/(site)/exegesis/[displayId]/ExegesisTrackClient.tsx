@@ -51,8 +51,23 @@ type InlineGateState = Readonly<{
   dismissible: boolean;
 }>;
 
+function composerPromptLabel(canPost: boolean, isAnon: boolean): string {
+  if (canPost) return "Join the conversation";
+  if (isAnon) return "Become a member to find out how to join the discussion";
+  return "Become a Patron to join the discussion";
+}
+
+function composerHelperText(
+  viewerKind: "anon" | "member" | undefined,
+  canPost: boolean,
+): string {
+  if (viewerKind === "anon") return "Tip: sign in to vote; upgrade to post.";
+  if (!canPost) return "Posting requires Patron or Partner.";
+  return "";
+}
+
 function hasBrowserWindow(): boolean {
-  return typeof globalThis.window !== "undefined";
+  return globalThis.window !== undefined;
 }
 
 function getBrowserWindow(): Window | null {
@@ -753,18 +768,8 @@ export default function ExegesisTrackClient(props: ExegesisTrackClientProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMobile, selected?.lineKey]);
 
-  const composerPromptLabel = canPost
-    ? "Join the conversation"
-    : isAnon
-      ? "Become a member to find out how to join the discussion"
-      : "Become a Patron to join the discussion";
-
-  const composerHelperText =
-    thread?.viewer.kind === "anon"
-      ? "Tip: sign in to vote; upgrade to post."
-      : !canPost
-        ? "Posting requires Patron or Partner."
-        : "";
+  const composerPrompt = composerPromptLabel(canPost, isAnon);
+  const helperText = composerHelperText(thread?.viewer.kind, canPost);
 
   const mobileDrawerTransform = drawerOpen
     ? "translateX(0)"
@@ -798,7 +803,7 @@ export default function ExegesisTrackClient(props: ExegesisTrackClientProps) {
             openMembershipModal();
           }}
         >
-          {composerPromptLabel}
+          {composerPrompt}
         </button>
       ) : null}
 
@@ -825,8 +830,8 @@ export default function ExegesisTrackClient(props: ExegesisTrackClientProps) {
             onSubmit={() => void postComment()}
           />
 
-          {composerHelperText ? (
-            <div className="mt-2 text-xs opacity-60">{composerHelperText}</div>
+          {helperText ? (
+            <div className="mt-2 text-xs opacity-60">{helperText}</div>
           ) : null}
         </>
       ) : null}

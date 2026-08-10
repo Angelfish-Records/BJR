@@ -50,12 +50,12 @@ type RevisionResponse = {
   sourceRevision: string;
 };
 
-type Props = {
+type Props = Readonly<{
   renderCanvasRef: RefObject<HTMLCanvasElement | null>;
   rendererApiReady: boolean;
   rendererMessage: string;
-  audioFiles: RenderAssetOption[];
-  lrcFiles: RenderAssetOption[];
+  audioFiles: readonly RenderAssetOption[];
+  lrcFiles: readonly RenderAssetOption[];
   selectedTheme: string;
   selectedAudioFile: string;
   selectedLrcFile: string;
@@ -66,7 +66,7 @@ type Props = {
   height: number;
   fps: number;
   seed: number;
-};
+}>;
 
 type PreviewState = "idle" | "baking" | "initialising" | "ready" | "error";
 
@@ -120,7 +120,7 @@ function resolveRenderFormatName(
   width: number,
   height: number,
 ): RenderFormatName {
-  if (value && Object.prototype.hasOwnProperty.call(RENDER_FORMATS, value)) {
+  if (value && Object.hasOwn(RENDER_FORMATS, value)) {
     return value;
   }
 
@@ -133,6 +133,71 @@ function formatTime(value: number): string {
   const seconds = safe - minutes * 60;
 
   return `${minutes}:${seconds.toFixed(2).padStart(5, "0")}`;
+}
+
+const EMPTY_CAPTIONS_TRACK = "data:text/vtt;charset=utf-8,WEBVTT%0A%0A";
+
+function formatVttTimestamp(valueSec: number): string {
+  const totalMs = Math.max(0, Math.round(valueSec * 1000));
+  const hours = Math.floor(totalMs / 3_600_000);
+  const minutes = Math.floor((totalMs % 3_600_000) / 60_000);
+  const seconds = Math.floor((totalMs % 60_000) / 1000);
+  const milliseconds = totalMs % 1000;
+
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(
+    2,
+    "0",
+  )}:${String(seconds).padStart(2, "0")}.${String(milliseconds).padStart(
+    3,
+    "0",
+  )}`;
+}
+
+function buildCaptionTrackSrc(
+  timeline: PreviewSourceTimeline | null,
+  fps: number,
+): string {
+  const frames = timeline?.lyricFrames;
+  if (!timeline || !frames?.length) return EMPTY_CAPTIONS_TRACK;
+
+  const lines = ["WEBVTT", ""];
+  let activeText = "";
+  let startFrame = 0;
+
+  const appendCue = (endFrame: number): void => {
+    if (!activeText) return;
+
+    const startSec = startFrame / fps;
+    const endSec = Math.min(
+      timeline.durationSec,
+      Math.max(startSec + 0.001, endFrame / fps),
+    );
+
+    lines.push(
+      `${formatVttTimestamp(startSec)} --> ${formatVttTimestamp(endSec)}`,
+      activeText.replace(/\r?\n/g, " "),
+      "",
+    );
+  };
+
+  frames.forEach((frame, frameIndex) => {
+    const nextText = frame.activeText?.trim() ?? "";
+    if (nextText === activeText) return;
+
+    appendCue(frameIndex);
+    activeText = nextText;
+    startFrame = frameIndex;
+  });
+
+  appendCue(frames.length);
+
+  return `data:text/vtt;charset=utf-8,${encodeURIComponent(lines.join("\n"))}`;
+}
+
+function previewBorderForState(state: PreviewState): string {
+  if (state === "error") return "rgba(255,92,92,0.52)";
+  if (state === "ready") return "rgba(255,255,255,0.22)";
+  return "rgba(255,255,255,0.13)";
 }
 
 function getRendererApi(): PreviewRendererApi | null {
@@ -236,6 +301,10 @@ export default function VisualizerLivePreview(props: Props) {
   const safeFps = Math.max(1, Math.min(exportFps, previewProfile.fpsCap));
 
   const durationSec = timeline?.durationSec ?? 0;
+  const captionTrackSrc = useMemo(
+    () => buildCaptionTrackSrc(timeline, safeFps),
+    [safeFps, timeline],
+  );
 
   const updatePreviewTime = useCallback((timeSec: number): void => {
     previewTimeRef.current = timeSec;
@@ -259,13 +328,12 @@ export default function VisualizerLivePreview(props: Props) {
       }
 
       let image = previewImageDataRef.current;
+      const imageMatchesBuffer =
+        image?.width === safeWidth &&
+        image?.height === safeHeight &&
+        image?.data.length === buffer.length;
 
-      if (
-        !image ||
-        image.width !== safeWidth ||
-        image.height !== safeHeight ||
-        image.data.length !== buffer.length
-      ) {
+      if (!imageMatchesBuffer) {
         image = context.createImageData(safeWidth, safeHeight);
         previewImageDataRef.current = image;
       }
@@ -619,12 +687,7 @@ export default function VisualizerLivePreview(props: Props) {
     [durationSec, scheduleStaticRebuild, updatePreviewTime],
   );
 
-  const previewBorder =
-    previewState === "error"
-      ? "rgba(255,92,92,0.52)"
-      : previewState === "ready"
-        ? "rgba(255,255,255,0.22)"
-        : "rgba(255,255,255,0.13)";
+  const previewBorder = previewBorderForState(previewState);
 
   const activeStyle = LYRIC_STYLES[selectedLyricStyle];
 
@@ -632,7 +695,7 @@ export default function VisualizerLivePreview(props: Props) {
     <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
       <canvas
         ref={renderCanvasRef}
-        aria-hidden="true"
+        role="presentation"
         style={{
           position: "fixed",
           left: -10000,
@@ -697,7 +760,7 @@ export default function VisualizerLivePreview(props: Props) {
                 opacity: 0.78,
               }}
             >
-              Preview
+              <span>Preview</span>
               <select
                 value={previewQuality}
                 onChange={(event) =>
@@ -797,7 +860,14 @@ export default function VisualizerLivePreview(props: Props) {
             }}
             style={{ width: "100%" }}
             controls
-          />
+          >
+            <track
+              kind="captions"
+              src={captionTrackSrc}
+              label="Lyric captions"
+              default
+            />
+          </audio>
 
           <div
             style={{

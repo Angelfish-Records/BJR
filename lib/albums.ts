@@ -162,7 +162,7 @@ export type NormalizedAlbumTrack = {
 
 export function normalizeAlbumTracks(
   tracks: AlbumDocTrack[] | null | undefined,
-  args?: { albumTheme?: string | undefined },
+  args?: { albumTheme?: string },
 ): NormalizedAlbumTrack[] {
   const albumTheme = normTheme(args?.albumTheme);
   if (!Array.isArray(tracks)) return [];
@@ -340,6 +340,37 @@ export type AlbumPlaybackSessionAsset = {
   durationMs?: number;
 };
 
+type AlbumPlaybackSessionTrackDoc = {
+  recordingId?: string;
+  displayId?: string;
+  muxPlaybackId?: string;
+  durationMs?: number;
+};
+
+function normalizeAlbumPlaybackSessionAsset(
+  track: AlbumPlaybackSessionTrackDoc,
+): AlbumPlaybackSessionAsset | null {
+  const recordingId = normStr(track.recordingId);
+  const displayId = normStr(track.displayId);
+  const playbackId = normStr(track.muxPlaybackId);
+
+  if (!recordingId || !displayId || !playbackId) return null;
+
+  const durationMs =
+    typeof track.durationMs === "number" &&
+    Number.isFinite(track.durationMs) &&
+    track.durationMs > 0
+      ? Math.floor(track.durationMs)
+      : undefined;
+
+  return {
+    recordingId,
+    displayId,
+    playbackId,
+    ...(typeof durationMs === "number" ? { durationMs } : {}),
+  };
+}
+
 function normalizeAlbumScopeId(raw: string): string {
   let s = (raw ?? "").trim();
   while (s.startsWith("alb:")) s = s.slice(4);
@@ -391,42 +422,17 @@ export async function getAlbumPlaybackAssetsForSession(params: {
   const doc = await client.fetch<{
     _id?: string;
     catalogueId?: string | null;
-    tracks?: Array<{
-      recordingId?: string;
-      displayId?: string;
-      muxPlaybackId?: string;
-      durationMs?: number;
-    }>;
+    tracks?: AlbumPlaybackSessionTrackDoc[];
   } | null>(q, { albumId }, { next: { tags: ["albums"] } });
 
   const resolvedAlbumId = normStr(doc?.catalogueId) ?? normStr(doc?._id) ?? "";
   const albumScopeId = resolvedAlbumId ? `alb:${resolvedAlbumId}` : "";
 
-  const tracks: AlbumPlaybackSessionAsset[] = [];
-
-  if (Array.isArray(doc?.tracks)) {
-    for (const t of doc.tracks) {
-      const recordingId = normStr(t.recordingId);
-      const displayId = normStr(t.displayId);
-      const playbackId = normStr(t.muxPlaybackId);
-
-      if (!recordingId || !displayId || !playbackId) continue;
-
-      const durationMs =
-        typeof t.durationMs === "number" &&
-        Number.isFinite(t.durationMs) &&
-        t.durationMs > 0
-          ? Math.floor(t.durationMs)
-          : undefined;
-
-      tracks.push({
-        recordingId,
-        displayId,
-        playbackId,
-        ...(typeof durationMs === "number" ? { durationMs } : {}),
-      });
-    }
-  }
+  const tracks = (Array.isArray(doc?.tracks) ? doc.tracks : [])
+    .map(normalizeAlbumPlaybackSessionAsset)
+    .filter(
+      (track): track is AlbumPlaybackSessionAsset => track !== null,
+    );
 
   return {
     ok: Boolean(resolvedAlbumId && tracks.length > 0),
@@ -533,7 +539,7 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
   // This remains outside the long-lived catalogue cache. An album must become
   // non-embargoed as its release timestamp passes, without a fresh publish.
   const releaseAt = doc.releaseAt ?? null;
-  const releaseAtMs = releaseAt ? Date.parse(releaseAt) : NaN;
+  const releaseAtMs = releaseAt ? Date.parse(releaseAt) : Number.NaN;
   const isEmbargoedByDate = Boolean(
     releaseAt && Number.isFinite(releaseAtMs) && releaseAtMs > Date.now(),
   );

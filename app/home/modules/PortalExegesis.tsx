@@ -885,6 +885,50 @@ function TrackView(
   );
 }
 
+const ALBUM_MASONRY_GAP_PX = 24;
+
+function AlbumMasonryItem(props: Readonly<{ children: React.ReactNode }>) {
+  const contentRef = React.useRef<HTMLDivElement | null>(null);
+  const [rowSpan, setRowSpan] = React.useState(1);
+
+  React.useLayoutEffect(() => {
+    const element = contentRef.current;
+    if (!element) return;
+
+    const updateRowSpan = () => {
+      const contentHeight = element.getBoundingClientRect().height;
+      const nextRowSpan = Math.max(
+        1,
+        Math.ceil(contentHeight + ALBUM_MASONRY_GAP_PX),
+      );
+
+      setRowSpan((currentRowSpan) =>
+        currentRowSpan === nextRowSpan ? currentRowSpan : nextRowSpan,
+      );
+    };
+
+    updateRowSpan();
+
+    const resizeObserver = new ResizeObserver(updateRowSpan);
+    resizeObserver.observe(element);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  return (
+    <div
+      style={{
+        minWidth: 0,
+        gridRowEnd: `span ${rowSpan}`,
+      }}
+    >
+      <div ref={contentRef}>{props.children}</div>
+    </div>
+  );
+}
+
 function CatalogueIndex(
   props: Readonly<{
     catalogue: CatalogueOk | null;
@@ -923,19 +967,28 @@ function CatalogueIndex(
     content = <div className="mt-6 text-sm opacity-60">No lyrics found.</div>;
   } else {
     content = (
-      <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div
+        className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+        style={{
+          columnGap: ALBUM_MASONRY_GAP_PX,
+          gridAutoFlow: "row dense",
+          gridAutoRows: "1px",
+        }}
+      >
         {albums.map((album) => {
           const label =
             album.albumTitle || album.albumSlug || album.albumId || "Album";
+
           return (
-            <AlbumCard
-              key={album.albumId}
-              a={album}
-              label={label}
-              search={search}
-              onOpenTrack={onOpenTrack}
-              onPrefetchRoute={onPrefetchRoute}
-            />
+            <AlbumMasonryItem key={album.albumId}>
+              <AlbumCard
+                a={album}
+                label={label}
+                search={search}
+                onOpenTrack={onOpenTrack}
+                onPrefetchRoute={onPrefetchRoute}
+              />
+            </AlbumMasonryItem>
           );
         })}
       </div>

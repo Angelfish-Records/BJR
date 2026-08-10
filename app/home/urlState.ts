@@ -175,10 +175,10 @@ export function usePersistentSecondaryHref(href: string): string {
   const sp = useClientSearchParams();
   const qs = React.useMemo(() => sp.toString(), [sp]);
 
-  return React.useMemo(() => {
-    void qs;
-    return appendPersistentSecondaryQueryToHref(href);
-  }, [href, qs]);
+  return React.useMemo(
+    () => appendPersistentSecondaryQueryToHref(href),
+    [href, qs],
+  );
 }
 
 /**

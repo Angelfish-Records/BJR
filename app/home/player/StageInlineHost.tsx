@@ -10,7 +10,7 @@ type SlotConfig = {
 };
 
 function safeParseHeight(v: string | null | undefined, fallback: number) {
-  const n = v ? Number(v) : NaN;
+  const n = v ? Number(v) : Number.NaN;
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
@@ -61,7 +61,7 @@ function readSlotConfig(
   if (!slot) return fallback;
 
   const height = safeParseHeight(
-    slot.getAttribute("data-height"),
+    slot.dataset.height,
     fallback.height,
   );
   return { height };

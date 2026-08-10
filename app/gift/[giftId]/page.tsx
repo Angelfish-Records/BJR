@@ -3,13 +3,25 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { sql } from "@vercel/postgres";
 import { auth } from "@clerk/nextjs/server";
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { grantEntitlement } from "@/lib/entitlementOps";
 
 export const runtime = "nodejs";
 
 function sha256Hex(s: string): string {
   return crypto.createHash("sha256").update(s).digest("hex");
+}
+
+type GiftClaimValidationError = "claim_code_missing" | "invalid_claim";
+
+function validateGiftClaimCode(
+  giftClaimCodeHash: string | null,
+  claimCode: string,
+): GiftClaimValidationError | null {
+  if (!giftClaimCodeHash) return null;
+  if (!claimCode) return "claim_code_missing";
+  if (sha256Hex(claimCode) !== giftClaimCodeHash) return "invalid_claim";
+  return null;
 }
 
 function appOrigin(): string {
@@ -172,14 +184,12 @@ export default async function GiftLandingPage(props: {
   }
 
   // If claim hash exists, require and validate claim code.
-  if (row.gift_claim_code_hash) {
-    if (!claimCodeTrimmed) {
-      redirect(withGiftBanner(baseReturnTo, "claim_code_missing"));
-    }
-    const h = sha256Hex(claimCodeTrimmed);
-    if (h !== row.gift_claim_code_hash) {
-      redirect(withGiftBanner(baseReturnTo, "invalid_claim"));
-    }
+  const claimError = validateGiftClaimCode(
+    row.gift_claim_code_hash,
+    claimCodeTrimmed,
+  );
+  if (claimError) {
+    redirect(withGiftBanner(baseReturnTo, claimError));
   }
 
   // Mark claimed + clear claim hash (idempotent)

@@ -64,6 +64,127 @@ function getSrcSize(src: HTMLCanvasElement): { srcW: number; srcH: number } {
   return { srcW, srcH };
 }
 
+type CanvasPixelSize = Readonly<{
+  pxW: number;
+  pxH: number;
+  dpr: number;
+}>;
+
+type CanvasRenderResources = {
+  ctx: CanvasRenderingContext2D | null;
+  backCanvas: HTMLCanvasElement | null;
+  backCtx: CanvasRenderingContext2D | null;
+};
+
+function useCanvasPixelSize(
+  canvasRef: React.RefObject<HTMLCanvasElement | null>,
+): React.RefObject<CanvasPixelSize> {
+  const sizeRef = React.useRef<CanvasPixelSize>({ pxW: 1, pxH: 1, dpr: 1 });
+
+  React.useEffect(() => {
+    const dst = canvasRef.current;
+    if (!dst) return;
+
+    const apply = () => {
+      const { cssW, cssH } = cssBoxSize(dst);
+      const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
+      const pxW = Math.max(1, Math.round(cssW * dpr));
+      const pxH = Math.max(1, Math.round(cssH * dpr));
+
+      sizeRef.current = { pxW, pxH, dpr };
+      if (dst.width !== pxW) dst.width = pxW;
+      if (dst.height !== pxH) dst.height = pxH;
+    };
+
+    const observer = new ResizeObserver(apply);
+    observer.observe(dst);
+    apply();
+
+    return () => observer.disconnect();
+  }, [canvasRef]);
+
+  return sizeRef;
+}
+
+function createCanvasRenderResources(): CanvasRenderResources {
+  return {
+    ctx: null,
+    backCanvas: null,
+    backCtx: null,
+  };
+}
+
+function ensureCanvasContext(
+  resources: CanvasRenderResources,
+  canvas: HTMLCanvasElement,
+): CanvasRenderingContext2D | null {
+  if (resources.ctx?.canvas === canvas) return resources.ctx;
+  resources.ctx = canvas.getContext("2d", { alpha: true });
+  return resources.ctx;
+}
+
+function ensureBackbuffer(
+  resources: CanvasRenderResources,
+  width: number,
+  height: number,
+): CanvasRenderingContext2D | null {
+  let canvas = resources.backCanvas;
+
+  if (!canvas) {
+    canvas = document.createElement("canvas");
+    resources.backCanvas = canvas;
+  }
+
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
+
+  if (resources.backCtx?.canvas === canvas) return resources.backCtx;
+  resources.backCtx = canvas.getContext("2d", { alpha: true });
+  return resources.backCtx;
+}
+
+type FrameScheduler = Readonly<{
+  schedule: () => void;
+  cancel: () => void;
+}>;
+
+function createFrameScheduler(
+  getFps: () => number,
+  onFrame: () => void,
+): FrameScheduler {
+  let raf: number | null = null;
+  let timer: number | null = null;
+  let lastDrawMs = 0;
+
+  const schedule = () => {
+    const interval = 1000 / Math.max(1, getFps());
+    const elapsedMs = lastDrawMs ? performance.now() - lastDrawMs : interval;
+    const delayMs = Math.max(0, interval - elapsedMs);
+
+    const queueFrame = () => {
+      timer = null;
+      raf = window.requestAnimationFrame((timeMs) => {
+        raf = null;
+        lastDrawMs = timeMs;
+        onFrame();
+      });
+    };
+
+    if (delayMs <= 1) {
+      queueFrame();
+    } else {
+      timer = window.setTimeout(queueFrame, delayMs);
+    }
+  };
+
+  const cancel = () => {
+    if (raf != null) window.cancelAnimationFrame(raf);
+    if (timer != null) window.clearTimeout(timer);
+  };
+
+  return { schedule, cancel };
+}
+
 function useVisualSnapshotSource() {
   const srcRef = React.useRef<HTMLCanvasElement | null>(null);
   const [hasSnapshotSource, setHasSnapshotSource] = React.useState(false);
@@ -189,16 +310,18 @@ function coverMap(
   return { dX, dY, dW, dH };
 }
 
-export function VisualizerSnapshotCanvas(props: {
-  className?: string;
-  style?: React.CSSProperties;
-  fps?: number;
-  opacity?: number;
-  sourceRect?: SourceRect;
-  active?: boolean;
-  /** Optional canvas-side filter (avoids CSS filter compositor flicker) */
-  ctxFilter?: string;
-}) {
+export function VisualizerSnapshotCanvas(
+  props: Readonly<{
+    className?: string;
+    style?: React.CSSProperties;
+    fps?: number;
+    opacity?: number;
+    sourceRect?: SourceRect;
+    active?: boolean;
+    /** Optional canvas-side filter (avoids CSS filter compositor flicker) */
+    ctxFilter?: string;
+  }>,
+) {
   const {
     className,
     style,
@@ -231,115 +354,46 @@ export function VisualizerSnapshotCanvas(props: {
   }, [fps, opacity, sourceRect, ctxFilter]);
 
   // Canvas sizing via ResizeObserver (no per-frame layout reads).
-  const sizeRef = React.useRef({ pxW: 1, pxH: 1, dpr: 1 });
-  React.useEffect(() => {
-    const dst = canvasRef.current;
-    if (!dst) return;
-
-    const apply = () => {
-      const { cssW, cssH } = cssBoxSize(dst);
-      const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
-      const pxW = Math.max(1, Math.round(cssW * dpr));
-      const pxH = Math.max(1, Math.round(cssH * dpr));
-
-      sizeRef.current = { pxW, pxH, dpr };
-      if (dst.width !== pxW) dst.width = pxW;
-      if (dst.height !== pxH) dst.height = pxH;
-    };
-
-    const ro = new ResizeObserver(apply);
-    ro.observe(dst);
-    apply();
-    return () => ro.disconnect();
-  }, []);
+  const sizeRef = useCanvasPixelSize(canvasRef);
 
   // Draw only while the canvas is visible, active, and backed by a snapshot.
   React.useEffect(() => {
     if (!shouldRender) return;
 
-    let raf: number | null = null;
-    let timer: number | null = null;
-    let lastDrawMs = 0;
-
     // Cache contexts + a backbuffer to avoid blanking on transient draw failures.
-    const backRef = {
-      canvas: null as HTMLCanvasElement | null,
-      ctx: null as CanvasRenderingContext2D | null,
-    };
-    const ctxRef = { ctx: null as CanvasRenderingContext2D | null };
+    const resources = createCanvasRenderResources();
 
-    const ensure2d = (
-      c: HTMLCanvasElement,
-    ): CanvasRenderingContext2D | null => {
-      if (ctxRef.ctx && ctxRef.ctx.canvas === c) return ctxRef.ctx;
-      ctxRef.ctx = c.getContext("2d", { alpha: true });
-      return ctxRef.ctx;
-    };
+    let scheduler: FrameScheduler;
 
-    const ensureBack = (
-      w: number,
-      h: number,
-    ): CanvasRenderingContext2D | null => {
-      let bc = backRef.canvas;
-      if (!bc) {
-        bc = document.createElement("canvas");
-        backRef.canvas = bc;
-      }
-      if (bc.width !== w) bc.width = w;
-      if (bc.height !== h) bc.height = h;
-
-      if (backRef.ctx && backRef.ctx.canvas === bc) return backRef.ctx;
-      backRef.ctx = bc.getContext("2d", { alpha: true });
-      return backRef.ctx;
-    };
-    const scheduleNextFrame = () => {
-      const interval = 1000 / Math.max(1, fpsRef.current);
-      const elapsedMs = lastDrawMs ? performance.now() - lastDrawMs : interval;
-      const delayMs = Math.max(0, interval - elapsedMs);
-
-      const queueFrame = () => {
-        timer = null;
-        raf = window.requestAnimationFrame(tick);
-      };
-
-      if (delayMs <= 1) {
-        queueFrame();
-      } else {
-        timer = window.setTimeout(queueFrame, delayMs);
-      }
-    };
-
-    const tick = (t: number) => {
-      raf = null;
-      lastDrawMs = t;
+    const tick = () => {
 
       const dst = canvasRef.current;
       const src = srcRef.current;
 
       if (!dst || !src) {
-        scheduleNextFrame();
+        scheduler.schedule();
         return;
       }
 
       const { pxW, pxH } = sizeRef.current;
-      const ctx = ensure2d(dst);
+      const ctx = ensureCanvasContext(resources, dst);
 
       if (!ctx) {
-        scheduleNextFrame();
+        scheduler.schedule();
         return;
       }
 
       const { srcW, srcH } = getSrcSize(src);
 
       if (srcW < 2 || srcH < 2) {
-        scheduleNextFrame();
+        scheduler.schedule();
         return;
       }
 
-      const bctx = ensureBack(pxW, pxH);
+      const bctx = ensureBackbuffer(resources, pxW, pxH);
 
-      if (!bctx || !backRef.canvas) {
-        scheduleNextFrame();
+      if (!bctx || !resources.backCanvas) {
+        scheduler.schedule();
         return;
       }
 
@@ -361,26 +415,24 @@ export function VisualizerSnapshotCanvas(props: {
         ctx.globalAlpha = 1;
         ctx.filter = "none";
         ctx.globalCompositeOperation = "copy";
-        ctx.drawImage(backRef.canvas, 0, 0);
+        ctx.drawImage(resources.backCanvas, 0, 0);
       } catch {
         // Keep the last good onscreen frame.
       }
 
-      scheduleNextFrame();
+      scheduler.schedule();
     };
 
-    scheduleNextFrame();
+    scheduler = createFrameScheduler(() => fpsRef.current, tick);
+    scheduler.schedule();
 
-    return () => {
-      if (raf != null) window.cancelAnimationFrame(raf);
-      if (timer != null) window.clearTimeout(timer);
-    };
+    return scheduler.cancel;
   }, [shouldRender, srcRef]);
 
   return (
     <canvas
       ref={canvasRef}
-      aria-hidden="true"
+      role="presentation"
       className={className}
       style={{
         width: "100%",
@@ -398,17 +450,18 @@ export function VisualizerSnapshotCanvas(props: {
   );
 }
 
-function VisualizerRingGlowCanvas(props: {
-  size: number;
-  ringPx: number;
-  glowPx: number;
-  blurPx: number;
-  opacity: number;
-  seed: number;
-  fps: number;
-  active: boolean;
-  sourceRect: SourceRect;
-}) {
+function VisualizerRingGlowCanvas(
+  props: Readonly<{
+    size: number;
+    ringPx: number;
+    glowPx: number;
+    blurPx: number;
+    opacity: number;
+    fps: number;
+    active: boolean;
+    sourceRect: SourceRect;
+  }>,
+) {
   const { size, ringPx, glowPx, blurPx, opacity, fps, active, sourceRect } =
     props;
 
@@ -439,108 +492,38 @@ function VisualizerRingGlowCanvas(props: {
     sourceRectRef.current = sourceRect;
   }, [fps, opacity, blurPx, ringPx, glowPx, size, sourceRect]);
 
-  // Size canvas via ResizeObserver on its own CSS box (explicit width/height set by parent).
-  const sizeRef = React.useRef({ pxW: 1, pxH: 1, dpr: 1 });
-  React.useEffect(() => {
-    const dst = canvasRef.current;
-    if (!dst) return;
-
-    const apply = () => {
-      const { cssW, cssH } = cssBoxSize(dst);
-      const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
-      const pxW = Math.max(1, Math.round(cssW * dpr));
-      const pxH = Math.max(1, Math.round(cssH * dpr));
-
-      sizeRef.current = { pxW, pxH, dpr };
-      if (dst.width !== pxW) dst.width = pxW;
-      if (dst.height !== pxH) dst.height = pxH;
-    };
-
-    const ro = new ResizeObserver(apply);
-    ro.observe(dst);
-    apply();
-    return () => ro.disconnect();
-  }, []);
+  // Size canvas via ResizeObserver on its own CSS box.
+  const sizeRef = useCanvasPixelSize(canvasRef);
 
   React.useEffect(() => {
     if (!shouldRender) return;
 
-    let raf: number | null = null;
-    let timer: number | null = null;
-    let lastDrawMs = 0;
+    const resources = createCanvasRenderResources();
 
-    const backRef = {
-      canvas: null as HTMLCanvasElement | null,
-      ctx: null as CanvasRenderingContext2D | null,
-    };
-    const ctxRef = { ctx: null as CanvasRenderingContext2D | null };
+    let scheduler: FrameScheduler;
 
-    const ensure2d = (
-      c: HTMLCanvasElement,
-    ): CanvasRenderingContext2D | null => {
-      if (ctxRef.ctx && ctxRef.ctx.canvas === c) return ctxRef.ctx;
-      ctxRef.ctx = c.getContext("2d", { alpha: true });
-      return ctxRef.ctx;
-    };
-
-    const ensureBack = (
-      w: number,
-      h: number,
-    ): CanvasRenderingContext2D | null => {
-      let bc = backRef.canvas;
-      if (!bc) {
-        bc = document.createElement("canvas");
-        backRef.canvas = bc;
-      }
-      if (bc.width !== w) bc.width = w;
-      if (bc.height !== h) bc.height = h;
-
-      if (backRef.ctx && backRef.ctx.canvas === bc) return backRef.ctx;
-      backRef.ctx = bc.getContext("2d", { alpha: true });
-      return backRef.ctx;
-    };
-
-    const scheduleNextFrame = () => {
-      const interval = 1000 / Math.max(1, fpsRef.current);
-      const elapsedMs = lastDrawMs ? performance.now() - lastDrawMs : interval;
-      const delayMs = Math.max(0, interval - elapsedMs);
-
-      const queueFrame = () => {
-        timer = null;
-        raf = window.requestAnimationFrame(tick);
-      };
-
-      if (delayMs <= 1) {
-        queueFrame();
-      } else {
-        timer = window.setTimeout(queueFrame, delayMs);
-      }
-    };
-
-    const tick = (t: number) => {
-      raf = null;
-      lastDrawMs = t;
+    const tick = () => {
 
       const dst = canvasRef.current;
       const src = srcRef.current;
 
       if (!dst || !src) {
-        scheduleNextFrame();
+        scheduler.schedule();
         return;
       }
 
       const { pxW, pxH, dpr } = sizeRef.current;
-      const ctx = ensure2d(dst);
+      const ctx = ensureCanvasContext(resources, dst);
 
       if (!ctx) {
-        scheduleNextFrame();
+        scheduler.schedule();
         return;
       }
 
       const { srcW, srcH } = getSrcSize(src);
 
       if (srcW < 2 || srcH < 2) {
-        scheduleNextFrame();
+        scheduler.schedule();
         return;
       }
 
@@ -564,10 +547,10 @@ function VisualizerRingGlowCanvas(props: {
       // cover fill: keep aspect, crop if needed
       const { dX, dY, dW, dH } = coverMap(pxW, pxH, sw, sh);
 
-      const bctx = ensureBack(pxW, pxH);
+      const bctx = ensureBackbuffer(resources, pxW, pxH);
 
-      if (!bctx || !backRef.canvas) {
-        scheduleNextFrame();
+      if (!bctx || !resources.backCanvas) {
+        scheduler.schedule();
         return;
       }
 
@@ -624,20 +607,18 @@ function VisualizerRingGlowCanvas(props: {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.globalAlpha = 1;
         ctx.globalCompositeOperation = "copy";
-        ctx.drawImage(backRef.canvas, 0, 0);
+        ctx.drawImage(resources.backCanvas, 0, 0);
       } catch {
         // Keep the last good onscreen frame.
       }
 
-      scheduleNextFrame();
+      scheduler.schedule();
     };
 
-    scheduleNextFrame();
+    scheduler = createFrameScheduler(() => fpsRef.current, tick);
+    scheduler.schedule();
 
-    return () => {
-      if (raf != null) window.cancelAnimationFrame(raf);
-      if (timer != null) window.clearTimeout(timer);
-    };
+    return scheduler.cancel;
   }, [shouldRender, srcRef]);
 
   // CSS size is controlled by parent, but we set explicit dimensions for clarity
@@ -649,7 +630,7 @@ function VisualizerRingGlowCanvas(props: {
   return (
     <canvas
       ref={canvasRef}
-      aria-hidden="true"
+      role="presentation"
       style={{
         width: cssSize,
         height: cssSize,
@@ -661,14 +642,16 @@ function VisualizerRingGlowCanvas(props: {
   );
 }
 
-export function PatternRingGlow(props: {
-  size: number;
-  ringPx?: number;
-  glowPx?: number;
-  blurPx?: number;
-  opacity?: number;
-  seed?: number;
-}) {
+export function PatternRingGlow(
+  props: Readonly<{
+    size: number;
+    ringPx?: number;
+    glowPx?: number;
+    blurPx?: number;
+    opacity?: number;
+    seed?: number;
+  }>,
+) {
   const {
     size,
     ringPx = 2,
@@ -703,7 +686,6 @@ export function PatternRingGlow(props: {
         glowPx={glowPx}
         blurPx={blurPx}
         opacity={opacity}
-        seed={seed}
         fps={12}
         active
         sourceRect={{ mode: "random", seed, scale: 0.55 }}
@@ -712,12 +694,14 @@ export function PatternRingGlow(props: {
   );
 }
 
-export function PatternPillUnderlay(props: {
-  radius?: number;
-  opacity?: number;
-  seed?: number;
-  active?: boolean;
-}) {
+export function PatternPillUnderlay(
+  props: Readonly<{
+    radius?: number;
+    opacity?: number;
+    seed?: number;
+    active?: boolean;
+  }>,
+) {
   const { radius = 999, opacity = 0.35, seed = 2024, active = true } = props;
   return (
     <div
@@ -758,11 +742,13 @@ export function PatternPillUnderlay(props: {
   );
 }
 
-export function PatternRail(props: {
-  height: number;
-  progress01: number;
-  active?: boolean;
-}) {
+export function PatternRail(
+  props: Readonly<{
+    height: number;
+    progress01: number;
+    active?: boolean;
+  }>,
+) {
   const { height, progress01, active = true } = props;
   const pct = Math.max(0, Math.min(1, progress01)) * 100;
 
