@@ -15,7 +15,7 @@ function debugEnabled(): boolean {
 }
 
 class VisualSurface {
-  private listeners = new Set<Listener>();
+  private readonly listeners = new Set<Listener>();
 
   private inlineCanvas: HTMLCanvasElement | null = null;
   private fullscreenCanvas: HTMLCanvasElement | null = null;
@@ -57,12 +57,15 @@ class VisualSurface {
     }
 
     if (debugEnabled()) {
+      let activeVariant: StageVariant | null = null;
+      if (this.fullscreenCanvas) {
+        activeVariant = "fullscreen";
+      } else if (this.inlineCanvas) {
+        activeVariant = "inline";
+      }
+
       console.log("[vis] recompute", {
-        activeVariant: this.fullscreenCanvas
-          ? "fullscreen"
-          : this.inlineCanvas
-            ? "inline"
-            : null,
+        activeVariant,
         hasCanvas: Boolean(this.active),
         hasSnapshot: Boolean(this.activeSnapshot),
       });

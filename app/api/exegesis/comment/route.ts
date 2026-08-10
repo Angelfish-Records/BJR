@@ -201,7 +201,7 @@ function parseCommentContent(
   const legacyBodyPlain = normString(body.bodyPlain);
   const bodyRichInput = "bodyRich" in body ? (body.bodyRich ?? null) : null;
 
-  if (bodyRichInput === null || typeof bodyRichInput === "undefined") {
+  if (bodyRichInput === null || bodyRichInput === undefined) {
     if (!legacyBodyPlain) return validationError(400, "Missing bodyPlain.");
     if (legacyBodyPlain.length > 5000) {
       return validationError(400, "bodyPlain too long.");

@@ -18,5 +18,5 @@ export default async function Page(props: {
   }
 
   const suffix = qs.toString();
-  redirect(`/admin/access${suffix ? `?${suffix}` : ""}`);
+  redirect(suffix ? `/admin/access?${suffix}` : "/admin/access");
 }

@@ -36,7 +36,23 @@
   }
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
 body {
+  height: 100%;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
   background:
     radial-gradient(
       circle at 50% 0%,
@@ -46,23 +62,6 @@ body {
     linear-gradient(180deg, var(--af-page-bg) 0%, var(--af-page-bg-deep) 100%);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
-}
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-html,
-body {
-  height: 100%;
-  width: 100%;
-  max-width: 100%;
-  overflow-x: clip;
-}
-body {
-  margin: 0;
-  overflow-x: hidden;
 }
 
 @supports not (overflow-x: clip) {
@@ -102,17 +101,13 @@ body {
 @media (max-width: 900px) {
   .shadowHomeGrid {
     grid-template-columns: 1fr;
+    gap: 16px;
   }
 
   .shadowHomeSidebar {
     order: -1; /* sidebar above portal */
     position: relative !important; /* disable sticky */
     top: auto !important;
-  }
-
-  /* Optional: slightly reduce spacing on mobile */
-  .shadowHomeGrid {
-    gap: 16px;
   }
 }
 

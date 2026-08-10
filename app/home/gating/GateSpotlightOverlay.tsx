@@ -103,13 +103,13 @@ function useFocusTrap(enabled: boolean, rootRef: React.RefObject<HTMLElement | n
         document.activeElement instanceof HTMLElement ? document.activeElement : null;
       const idx = activeEl ? items.indexOf(activeEl) : -1;
 
-      const nextIdx = e.shiftKey
-        ? idx <= 0
-          ? items.length - 1
-          : idx - 1
-        : idx >= items.length - 1
-          ? 0
-          : idx + 1;
+      let nextIdx: number;
+
+      if (e.shiftKey) {
+        nextIdx = idx <= 0 ? items.length - 1 : idx - 1;
+      } else {
+        nextIdx = idx >= items.length - 1 ? 0 : idx + 1;
+      }
 
       e.preventDefault();
       items[nextIdx]?.focus();
@@ -132,9 +132,7 @@ function useAdminRibbonAboveOverlay(active: boolean) {
     const el = getEl();
     if (!el) return;
 
-    if (debugbarStyleRef.current == null) {
-      debugbarStyleRef.current = el.getAttribute("style") ?? "";
-    }
+    debugbarStyleRef.current ??= el.getAttribute("style") ?? "";
 
     if (active) {
       el.setAttribute(
@@ -170,7 +168,7 @@ export default function GateSpotlightOverlay(
   const { active, gateNode, ariaLabel = "Authentication required", allowAdminRibbonAbove = true } =
     props;
 
-  const modalRef = React.useRef<HTMLDivElement | null>(null);
+  const modalRef = React.useRef<HTMLDialogElement | null>(null);
 
   useFocusTrap(active, modalRef);
 
@@ -211,17 +209,20 @@ export default function GateSpotlightOverlay(
           padding: "min(7vh, 56px) 16px",
         }}
       >
-        <div
+        <dialog
           ref={modalRef}
-          role="dialog"
+          open
           aria-modal="true"
           aria-label={ariaLabel}
           style={{
+            position: "relative",
             width: "100%",
             maxWidth: "min(92vw, 520px)",
+            margin: 0,
             borderRadius: 24,
             border: "1px solid rgba(255,255,255,0.16)",
             background: "rgba(10,10,14,0.92)",
+            color: "inherit",
             backdropFilter: "blur(14px)",
             WebkitBackdropFilter: "blur(14px)",
             boxShadow: `
@@ -246,7 +247,7 @@ export default function GateSpotlightOverlay(
           >
             {gateNode}
           </div>
-        </div>
+        </dialog>
       </div>
     </BodyPortal>
   );

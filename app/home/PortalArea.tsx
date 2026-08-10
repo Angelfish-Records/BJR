@@ -220,7 +220,7 @@ export default function PortalArea(props: PortalAreaProps) {
               else forceSurface("portal");
             }}
             headerPortalId="af-portal-topbar-slot"
-            header={() => (
+            header={
               <SessionChrome
                 topLogoUrl={props.topLogoUrl}
                 topLogoHeight={props.topLogoHeight}
@@ -240,7 +240,7 @@ export default function PortalArea(props: PortalAreaProps) {
                 onOpenPlayer={openPlayer}
                 onOpenPortal={openPortal}
               />
-            )}
+            }
           />
         </PortalViewerProvider>
         <MiniPlayerHost onExpand={() => forceSurface("player")} />

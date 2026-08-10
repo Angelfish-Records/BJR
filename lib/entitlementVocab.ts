@@ -1,6 +1,4 @@
 // web/lib/entitlementVocab.ts
-export type StructuredEntitlementKey = string;
-
 function stableStringify(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
   if (value && typeof value === "object") {
@@ -13,7 +11,7 @@ function stableStringify(value: unknown): string {
   return JSON.stringify(value);
 }
 
-export function entKey(obj: Record<string, unknown>): StructuredEntitlementKey {
+export function entKey(obj: Record<string, unknown>): string {
   return stableStringify(obj);
 }
 

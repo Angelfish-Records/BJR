@@ -51,7 +51,7 @@ function mergeStyle(
   a: React.CSSProperties | undefined,
   b: React.CSSProperties | undefined,
 ): React.CSSProperties {
-  return { ...(a ?? {}), ...(b ?? {}) };
+  return { ...a, ...b };
 }
 
 export default function GiftAlbumButton(props: Props) {

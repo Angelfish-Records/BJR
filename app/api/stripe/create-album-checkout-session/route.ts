@@ -43,7 +43,11 @@ export async function POST(req: Request) {
   }
 
   const body = (await req.json().catch(() => null)) as Body | null;
-  const albumSlug = (body?.albumSlug ?? "").toString().trim().toLowerCase();
+  const rawAlbumSlug = body?.albumSlug;
+  const albumSlug =
+    typeof rawAlbumSlug === "string"
+      ? rawAlbumSlug.trim().toLowerCase()
+      : "";
 
   if (!albumSlug) {
     return NextResponse.json(

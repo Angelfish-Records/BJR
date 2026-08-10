@@ -27,36 +27,14 @@ function fmtLocalInputValue(d: Date) {
 async function copyText(text: string): Promise<boolean> {
   try {
     if (
-      typeof navigator !== "undefined" &&
-      navigator.clipboard &&
-      typeof navigator.clipboard.writeText === "function"
+      typeof navigator === "undefined" ||
+      typeof navigator.clipboard?.writeText !== "function"
     ) {
-      await navigator.clipboard.writeText(text);
-      return true;
+      return false;
     }
-  } catch {
-    // fall through to legacy path
-  }
 
-  try {
-    if (typeof document === "undefined") return false;
-
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.setAttribute("readonly", "");
-    ta.style.position = "fixed";
-    ta.style.top = "-9999px";
-    ta.style.left = "-9999px";
-    ta.style.opacity = "0";
-
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    ta.setSelectionRange(0, ta.value.length);
-
-    const ok = document.execCommand("copy");
-    document.body.removeChild(ta);
-    return ok;
+    await navigator.clipboard.writeText(text);
+    return true;
   } catch {
     return false;
   }

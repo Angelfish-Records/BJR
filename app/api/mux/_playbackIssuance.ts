@@ -68,13 +68,13 @@ function normalizePemMaybe(input: string): string {
   const looksLikePem = raw.includes("-----BEGIN ") && raw.includes("-----END ");
 
   if (looksLikePem) {
-    return raw.replaceAll("\\n", "\n");
+    return raw.replaceAll(String.raw`\n`, "\n");
   }
 
   return Buffer.from(raw, "base64")
     .toString("utf8")
     .trim()
-    .replaceAll("\\n", "\n");
+    .replaceAll(String.raw`\n`, "\n");
 }
 
 function toPkcs8Pem(pem: string): string {

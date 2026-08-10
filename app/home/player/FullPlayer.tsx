@@ -25,7 +25,7 @@ import { deriveShareContext, shareAlbum, shareTrack } from "./share";
 import { PatternRingGlow } from "./VisualizerPattern";
 
 const LIVE_LISTENER_COUNT_ENABLED =
-  process.env.NEXT_PUBLIC_LIVE_LISTENER_COUNT_ENABLED === "true";
+  process.env.NEXT_PUBLIC_LIVE_LISTENER_COUNT_ENABLED !== "false";
 
 function fmtTime(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));

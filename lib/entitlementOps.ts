@@ -1,7 +1,7 @@
 // web/lib/entitlementOps.ts
 import "server-only";
 import { sql } from "@vercel/postgres";
-import { EVENT_SOURCES, type EventSource } from "./vocab";
+import { EVENT_SOURCES } from "./vocab";
 import { logEntitlementGranted, logEntitlementRevoked } from "./events";
 
 const uuidOk = (v: string) =>

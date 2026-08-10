@@ -152,7 +152,6 @@ export default function InternalVisualizerRenderPage() {
   const pixelBufferRef = useRef<Uint8Array | null>(null);
   const lastFrameRef = useRef<OfflineFrame | null>(null);
   const cameraPixelScaleRef = useRef(1);
-  const [, setStatus] = useState<RendererStatus>("idle");
   const [rendererApiReady, setRendererApiReady] = useState(false);
   const [message, setMessage] = useState("Renderer not initialised");
   const [themes, setThemes] = useState<string[]>([]);
@@ -271,12 +270,10 @@ export default function InternalVisualizerRenderPage() {
             config.height,
             scalePostStyle(postStyle, effectPixelScale),
           );
-          setStatus("ready");
           setMessage(
             `Ready: ${config.themeName} ${config.width}×${config.height} @ ${config.fps}fps`,
           );
         } catch (err) {
-          setStatus("error");
           setMessage(
             err instanceof Error ? err.message : "Renderer init failed",
           );
@@ -336,7 +333,6 @@ export default function InternalVisualizerRenderPage() {
         pixelBufferRef.current = null;
         lastFrameRef.current = null;
         cameraPixelScaleRef.current = 1;
-        setStatus("disposed");
         setMessage("Renderer disposed");
       },
 

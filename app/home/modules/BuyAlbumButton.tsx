@@ -24,7 +24,7 @@ function mergeStyle(
   a: React.CSSProperties | undefined,
   b: React.CSSProperties | undefined,
 ) {
-  return { ...(a ?? {}), ...(b ?? {}) };
+  return { ...a, ...b };
 }
 
 export default function BuyAlbumButton(props: Props) {
@@ -141,7 +141,7 @@ export default function BuyAlbumButton(props: Props) {
       <div
         className={className}
         style={{
-          ...(style ?? {}),
+          ...style,
           display: "grid",
           gap: 8,
           padding: "12px 14px",

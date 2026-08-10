@@ -25,6 +25,8 @@ type FboResources = {
   useFloat: boolean;
 };
 
+type FboSize = Pick<FboTex, "w" | "h">;
+
 function clampDimension(value: number): number {
   if (!Number.isFinite(value)) return 1;
   return Math.max(1, Math.floor(value));
@@ -163,15 +165,14 @@ function canUseFloatFramebuffer(gl: WebGL2RenderingContext): boolean {
 function clearFbo(
   gl: WebGL2RenderingContext,
   fbo: WebGLFramebuffer,
-  w: number,
-  h: number,
+  size: FboSize,
   r: number,
   g: number,
   b: number,
   a: number,
 ): void {
   gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-  gl.viewport(0, 0, w, h);
+  gl.viewport(0, 0, size.w, size.h);
   gl.clearColor(r, g, b, a);
   gl.clear(gl.COLOR_BUFFER_BIT);
 }
@@ -198,7 +199,7 @@ export function createFboTex(
     clear: (gl2, r = 0, g = 0, b = 0, a = 0) => {
       if (disposed) throw new Error("FboTex has been disposed");
 
-      clearFbo(gl2, resources.fbo, api.w, api.h, r, g, b, a);
+      clearFbo(gl2, resources.fbo, api, r, g, b, a);
       gl2.bindFramebuffer(gl2.FRAMEBUFFER, null);
     },
 

@@ -80,18 +80,20 @@ function StageCore(
 
   const displayId = playerDisplayId;
 
-  const cues: LyricCue[] | null = recordingId
-    ? Array.isArray(cuesByRecordingId?.[recordingId]) &&
-      cuesByRecordingId[recordingId].length
-      ? cuesByRecordingId[recordingId]
-      : null
-    : null;
+  let cues: LyricCue[] | null = null;
+  if (recordingId) {
+    const recordingCues = cuesByRecordingId?.[recordingId];
+    if (Array.isArray(recordingCues) && recordingCues.length) {
+      cues = recordingCues;
+    }
+  }
 
+  const recordingOffset = recordingId
+    ? offsetByRecordingId?.[recordingId]
+    : undefined;
   const trackOffsetMs =
-    recordingId && typeof offsetByRecordingId?.[recordingId] === "number"
-      ? Number.isFinite(offsetByRecordingId[recordingId])
-        ? offsetByRecordingId[recordingId]
-        : 0
+    typeof recordingOffset === "number" && Number.isFinite(recordingOffset)
+      ? recordingOffset
       : 0;
 
   const effectiveOffsetMs = trackOffsetMs + globalOffsetMs;

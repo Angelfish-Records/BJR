@@ -34,10 +34,7 @@ export async function GET(req: NextRequest) {
     generatedAt: new Date().toISOString(),
   });
 
-  res.headers.set(
-    "Cache-Control",
-    "public, max-age=5, s-maxage=15, stale-while-revalidate=45",
-  );
+  res.headers.set("Cache-Control", "no-store");
 
   return res;
 }

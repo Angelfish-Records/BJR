@@ -2,9 +2,6 @@
 import "server-only";
 import { sql } from "@vercel/postgres";
 
-export type EntitlementScopeId = string;
-export type EntitlementKey = string;
-
 export type EntitlementMatch = {
   entitlementKey: string;
   scopeId: string | null;
@@ -37,8 +34,8 @@ function normCatalogue(opts: HasEntitlementOptions) {
  */
 export async function findEntitlement(
   memberId: string,
-  entitlementKey: EntitlementKey,
-  scopeId?: EntitlementScopeId | null,
+  entitlementKey: string,
+  scopeId?: string | null,
   opts: HasEntitlementOptions = {},
 ): Promise<EntitlementMatch | null> {
   if (!uuidOk(memberId)) return null;
@@ -82,8 +79,8 @@ export async function findEntitlement(
 
 export async function findAnyEntitlement(
   memberId: string,
-  entitlementKeys: EntitlementKey[],
-  scopeId?: EntitlementScopeId | null,
+  entitlementKeys: string[],
+  scopeId?: string | null,
   opts: HasEntitlementOptions = {},
 ): Promise<EntitlementMatch | null> {
   if (!uuidOk(memberId)) return null;
@@ -134,8 +131,8 @@ export async function findAnyEntitlement(
 // (rest of file unchanged)
 export async function hasEntitlement(
   memberId: string,
-  entitlementKey: EntitlementKey,
-  scopeId?: EntitlementScopeId | null,
+  entitlementKey: string,
+  scopeId?: string | null,
   opts: HasEntitlementOptions = {},
 ): Promise<boolean> {
   return (
@@ -145,8 +142,8 @@ export async function hasEntitlement(
 
 export async function hasAnyEntitlement(
   memberId: string,
-  entitlementKeys: EntitlementKey[],
-  scopeId?: EntitlementScopeId | null,
+  entitlementKeys: string[],
+  scopeId?: string | null,
   opts: HasEntitlementOptions = {},
 ): Promise<boolean> {
   return (
@@ -175,7 +172,7 @@ export async function listCurrentEntitlements(
 
 export async function listCurrentEntitlementKeys(
   memberId: string,
-): Promise<EntitlementKey[]> {
+): Promise<string[]> {
   const matches = await listCurrentEntitlements(memberId);
   return matches.map((m) => m.entitlementKey);
 }

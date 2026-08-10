@@ -57,13 +57,14 @@ export function useMembershipModal(): Ctx {
 export function MembershipModalProvider(
   props: Readonly<{ children: React.ReactNode }>,
 ) {
-  const [isMembershipOpen, setOpen] = React.useState(false);
+  const [isMembershipOpen, setIsMembershipOpen] =
+    React.useState(false);
 
   const value = React.useMemo<Ctx>(
     () => ({
       isMembershipOpen,
-      openMembershipModal: () => setOpen(true),
-      closeMembershipModal: () => setOpen(false),
+      openMembershipModal: () => setIsMembershipOpen(true),
+      closeMembershipModal: () => setIsMembershipOpen(false),
     }),
     [isMembershipOpen],
   );

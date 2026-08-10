@@ -78,7 +78,7 @@ export default async function SessionLayout(
     listAlbumsForBrowse(),
   ]);
 
-  const [portalPage] = await Promise.all([fetchPortalPage("home")]);
+  const portalPage = await fetchPortalPage("home");
 
   const portalModules = portalPage?.modules ?? [];
 

@@ -113,8 +113,7 @@ export async function POST(req: Request) {
   // Lyrics are independently cached, but album payload construction depends on
   // them, so invalidate both cache families together.
   if (docType === "lyrics") {
-    tags.push("lyrics");
-    tags.push("albums");
+    tags.push("lyrics", "albums");
     revalidatePath("/album/[slug]", "page");
     revalidatePath("/album/[slug]/track/[displayId]", "page");
   }

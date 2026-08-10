@@ -33,6 +33,8 @@ type PingPongResources = {
   useFloat: boolean;
 };
 
+type PingPongSize = Pick<PingPong, "w" | "h">;
+
 function clampDimension(value: number): number {
   if (!Number.isFinite(value)) return 1;
   return Math.max(1, Math.floor(value));
@@ -193,15 +195,14 @@ function canUseFloatFramebuffers(gl: WebGL2RenderingContext): boolean {
 function clearFbo(
   gl: WebGL2RenderingContext,
   fbo: WebGLFramebuffer,
-  w: number,
-  h: number,
+  size: PingPongSize,
   r: number,
   g: number,
   b: number,
   a: number,
 ): void {
   gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-  gl.viewport(0, 0, w, h);
+  gl.viewport(0, 0, size.w, size.h);
   gl.clearColor(r, g, b, a);
   gl.clear(gl.COLOR_BUFFER_BIT);
 }
@@ -251,8 +252,8 @@ export function createPingPong(
     clear: (gl2, r = 0, g = 0, b = 0, a = 0) => {
       if (disposed) throw new Error("PingPong has been disposed");
 
-      clearFbo(gl2, resources.fboA, api.w, api.h, r, g, b, a);
-      clearFbo(gl2, resources.fboB, api.w, api.h, r, g, b, a);
+      clearFbo(gl2, resources.fboA, api, r, g, b, a);
+      clearFbo(gl2, resources.fboB, api, r, g, b, a);
 
       gl2.bindFramebuffer(gl2.FRAMEBUFFER, null);
     },

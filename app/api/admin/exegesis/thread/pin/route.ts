@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   const recordingId = norm(body?.recordingId);
   const groupKey = norm(body?.groupKey);
   const pinnedCommentIdRaw = norm(body?.pinnedCommentId);
-  const pinnedCommentId = pinnedCommentIdRaw ? pinnedCommentIdRaw : null;
+  const pinnedCommentId = pinnedCommentIdRaw || null;
 
   if (!recordingId) return json(400, { ok: false, error: "Missing recordingId." });
   if (!groupKey) return json(400, { ok: false, error: "Missing groupKey." });

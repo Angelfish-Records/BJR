@@ -1460,7 +1460,7 @@ function ActivationGateView(props: ActivationGateViewProps) {
           {otpPanels}
         </div>
 
-        {isActive && <>{children}</>}
+        {isActive && children}
       </div>
     </div>
   );

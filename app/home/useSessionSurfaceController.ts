@@ -316,7 +316,7 @@ export function useSessionSurfaceController(props: {
   React.useEffect(() => {
     if (!pathnameResolved) return;
 
-    const key = `${isPlayer ? "player" : `portal:${portalTabId ?? ""}`}`;
+    const key = isPlayer ? "player" : `portal:${portalTabId ?? ""}`;
     const prev = lastSurfaceKeyRef.current;
 
     // Establish the first real route state without treating hydration as
@@ -339,7 +339,13 @@ export function useSessionSurfaceController(props: {
     pathnameResolved,
   ]);
 
-  const bannerKind: BannerKind = gift ? "gift" : checkout ? "checkout" : null;
+  let bannerKind: BannerKind = null;
+  if (gift) {
+    bannerKind = "gift";
+  } else if (checkout) {
+    bannerKind = "checkout";
+  }
+
   const bannerCode =
     !bannerDismissed && (gift ?? checkout ?? null)
       ? (gift ?? checkout ?? null)

@@ -21,7 +21,7 @@ function clampInt(n: number, min: number, max: number) {
 function parsePxLike(v: unknown): number | null {
   if (typeof v === "number") return clampInt(v, 160, 1400);
   if (typeof v === "string") {
-    const match = v.trim().match(/^(\d{2,4})/);
+    const match = /^(\d{2,4})/.exec(v.trim());
     if (!match) return null;
     return clampInt(Number(match[1]), 160, 1400);
   }
@@ -62,8 +62,8 @@ function parseWidthHintFromUrl(url: string): number | null {
     return null;
   } catch {
     const match =
-      url.match(/[?#&](?:maxWidth|mw|w|width)=(\d{2,4})/i) ??
-      url.match(/#(?:maxWidth|mw|w|width)=(\d{2,4})/i);
+      /[?#&](?:maxWidth|mw|w|width)=(\d{2,4})/i.exec(url) ??
+      /#(?:maxWidth|mw|w|width)=(\d{2,4})/i.exec(url);
 
     if (!match?.[1]) return null;
     return clampInt(Number(match[1]), 160, 1400);

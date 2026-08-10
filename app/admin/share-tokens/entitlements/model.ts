@@ -69,8 +69,7 @@ export function buildJoinChart(
     .join(" ");
 
   const firstX = coordinates[0]?.x.toFixed(2) ?? "0";
-  const lastX =
-    coordinates[coordinates.length - 1]?.x.toFixed(2) ?? String(width);
+  const lastX = coordinates.at(-1)?.x.toFixed(2) ?? String(width);
 
   const areaPath = [
     `M ${firstX} ${height}`,

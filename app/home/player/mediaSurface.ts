@@ -13,7 +13,7 @@ export type MediaEvent =
 type Listener = (e: MediaEvent) => void;
 
 class MediaSurface {
-  private listeners = new Set<Listener>();
+  private readonly listeners = new Set<Listener>();
   private lastTimeMs = 0;
   private lastStatus: MediaStatus = "idle";
   private lastRecordingId: string | null = null;
@@ -67,12 +67,13 @@ class MediaSurface {
   /* ---------------- stage authority ---------------- */
 
   private recomputeStage() {
-    const next: StageVariant | null =
-      this.fullscreenCount > 0
-        ? "fullscreen"
-        : this.inlineCount > 0
-          ? "inline"
-          : null;
+    let next: StageVariant | null = null;
+    if (this.fullscreenCount > 0) {
+      next = "fullscreen";
+    } else if (this.inlineCount > 0) {
+      next = "inline";
+    }
+
     if (next === this.activeStage) return;
     this.activeStage = next;
     for (const fn of this.listeners) fn({ type: "stage", variant: next });

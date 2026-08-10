@@ -11,14 +11,25 @@ function must(v: string | undefined, name: string) {
 }
 
 function asTrimmedOrNull(v: unknown): string | null {
-  if (v === null || v === undefined) return null;
-  const s = String(v).trim();
-  return s ? s : null;
+  if (typeof v !== "string") return null;
+
+  const s = v.trim();
+  return s || null;
 }
 
 function asIntOrNull(v: unknown): number | null {
   if (v === null || v === undefined || v === "") return null;
-  const n = typeof v === "number" ? v : Number(String(v));
+
+  let n: number;
+
+  if (typeof v === "number") {
+    n = v;
+  } else if (typeof v === "string") {
+    n = Number(v);
+  } else {
+    return null;
+  }
+
   if (!Number.isFinite(n)) return null;
   return Math.floor(n);
 }

@@ -20,9 +20,8 @@ export type PortalTabSpec = {
 
 function tabFromPathname(pathname: string | null): string | null {
   const p = (pathname ?? "").split("?")[0] ?? "";
-  const parts = p.split("/").filter(Boolean);
+  const head = (p.split("/").find(Boolean) ?? "").trim().toLowerCase();
 
-  const head = (parts[0] ?? "").trim().toLowerCase();
   if (!head) return null;
 
   if (head === "player") return null;
@@ -192,7 +191,8 @@ export default function PortalTabs(
       if (!btns.length) return;
 
       const first = btns[0];
-      const last = btns[btns.length - 1];
+      const last = btns.at(-1);
+      if (!last) return;
 
       const firstRect = first.getBoundingClientRect();
       const lastRect = last.getBoundingClientRect();

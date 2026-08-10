@@ -93,7 +93,7 @@ export async function GET(req: Request) {
           OR q.kind = ${kind === "all" ? "question" : kind}::mailbag_submission_kind
         )
         AND (
-          ${decoded ? true : false} = false
+          ${decoded !== null} = false
           OR (q.created_at, q.id) < (${decoded?.createdAtIso ?? null}::timestamptz, ${decoded?.id ?? null}::uuid)
         )
       ORDER BY q.created_at DESC, q.id DESC

@@ -17,6 +17,13 @@ type UploadStatusResponse =
     }
   | { ok: false; error: string };
 
+async function createUpload(): Promise<{ uploadId: string; url: string }> {
+  const res = await fetch("/api/mux/create-upload", { method: "POST" });
+  const data = (await res.json()) as CreateUploadResponse;
+  if (!data.ok) throw new Error(data.error || "Failed to create upload");
+  return { uploadId: data.uploadId, url: data.url };
+}
+
 export default function MuxUploader(
   props: Readonly<{
     onReady: (payload: {
@@ -34,13 +41,6 @@ export default function MuxUploader(
   const [playbackId, setPlaybackId] = React.useState<string | null>(null);
   const [err, setErr] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
-
-  async function createUpload(): Promise<{ uploadId: string; url: string }> {
-    const res = await fetch("/api/mux/create-upload", { method: "POST" });
-    const data = (await res.json()) as CreateUploadResponse;
-    if (!data.ok) throw new Error(data.error || "Failed to create upload");
-    return { uploadId: data.uploadId, url: data.url };
-  }
 
   async function pollUntilReady(
     id: string,

@@ -365,11 +365,13 @@ export async function recordStripeRefund(params: {
   }
 
   const fullyRefunded = refundedAmountCents >= purchaseRow.amount_cents;
-  const purchaseStatus = fullyRefunded
-    ? "refunded"
-    : refundedAmountCents > 0
-      ? "partially_refunded"
-      : "paid";
+
+  let purchaseStatus: "paid" | "partially_refunded" | "refunded" = "paid";
+  if (fullyRefunded) {
+    purchaseStatus = "refunded";
+  } else if (refundedAmountCents > 0) {
+    purchaseStatus = "partially_refunded";
+  }
 
   await sql`
     update purchases

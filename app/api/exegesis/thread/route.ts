@@ -380,7 +380,7 @@ async function enforceAnonThreadReadCap(params: {
   `;
 
   const row = gateRes.rows?.[0];
-  if (Boolean(row?.allowed)) return null;
+  if (row?.allowed) return null;
 
   const message = "Sign in to keep reading.";
 

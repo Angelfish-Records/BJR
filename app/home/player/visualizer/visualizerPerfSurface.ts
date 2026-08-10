@@ -30,7 +30,7 @@ class VisualizerPerfSurface {
     fullscreen: null,
   };
 
-  private listenersByVariant: Record<StageVariant, Set<Listener>> = {
+  private readonly listenersByVariant: Record<StageVariant, Set<Listener>> = {
     inline: new Set<Listener>(),
     fullscreen: new Set<Listener>(),
   };

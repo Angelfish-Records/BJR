@@ -121,6 +121,15 @@ export default function PortalShell(props: Props) {
   const headerPortalEl =
     mounted && headerPortalId ? document.getElementById(headerPortalId) : null;
 
+  let renderedHeader: React.ReactNode = null;
+  if (headerNode) {
+    if (headerPortalEl) {
+      renderedHeader = createPortal(headerNode, headerPortalEl);
+    } else {
+      renderedHeader = headerNode;
+    }
+  }
+
   const keepMounted = React.useMemo(() => {
     const ids = props.keepMountedPanelIds ?? [];
     return new Set(ids.map((x) => (x ?? "").trim()).filter(Boolean));
@@ -131,11 +140,7 @@ export default function PortalShell(props: Props) {
       className="portalShell"
       style={{ display: "grid", gap: 14, minWidth: 0, alignContent: "start" }}
     >
-      {headerNode
-        ? headerPortalEl
-          ? createPortal(headerNode, headerPortalEl)
-          : headerNode
-        : null}
+      {renderedHeader}
 
       <div style={{ display: "grid", minWidth: 0, justifyItems: "center" }}>
         <div

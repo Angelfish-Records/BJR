@@ -169,11 +169,21 @@ export async function POST(req: Request) {
   const raw = await req.json().catch(() => null);
   const body = parseBody(raw);
 
-  const albumSlug = (body?.albumSlug ?? "").toString().trim().toLowerCase();
-  const assetId = (body?.assetId ?? "bundle_zip")
-    .toString()
-    .trim()
-    .toLowerCase();
+  const rawAlbumSlug = body?.albumSlug;
+  const albumSlug =
+    typeof rawAlbumSlug === "string"
+      ? rawAlbumSlug.trim().toLowerCase()
+      : "";
+
+  const rawAssetId = body?.assetId;
+  let assetId = "bundle_zip";
+
+  if (rawAssetId !== undefined && rawAssetId !== null) {
+    assetId =
+      typeof rawAssetId === "string"
+        ? rawAssetId.trim().toLowerCase()
+        : "";
+  }
 
   if (!albumSlug) {
     return gateError(req, {

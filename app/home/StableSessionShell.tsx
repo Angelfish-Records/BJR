@@ -56,13 +56,14 @@ function StableSessionViewport(
 
   const { isLoaded: clerkAuthLoaded, isSignedIn, userId } = useAuth();
 
-  const runtimeAuthKey = !clerkAuthLoaded
-    ? null
-    : isSignedIn === true
-      ? userId
-        ? `member:${userId}`
-        : null
-      : "anonymous";
+  let runtimeAuthKey: string | null = null;
+  if (clerkAuthLoaded) {
+    if (isSignedIn === true && userId) {
+      runtimeAuthKey = `member:${userId}`;
+    } else if (isSignedIn !== true) {
+      runtimeAuthKey = "anonymous";
+    }
+  }
 
   const previousRuntimeAuthKeyRef = React.useRef<string | null>(null);
   const awaitingMemberRuntimeKeyRef = React.useRef<string | null>(null);

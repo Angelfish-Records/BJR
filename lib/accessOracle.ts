@@ -12,7 +12,6 @@ import {
   ACCESS_ACTIONS,
   ENTITLEMENTS,
   SCOPE_CATALOGUE,
-  type AccessAction,
 } from "@/lib/vocab";
 
 export type AccessOracleCode =

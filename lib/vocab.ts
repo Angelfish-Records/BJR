@@ -1,6 +1,7 @@
 // web/lib/vocab.ts
 import "server-only";
-import { ENT, entKey, type StructuredEntitlementKey } from "./entitlementVocab";
+
+export { ENT, entKey } from "./entitlementVocab";
 
 export const ENTITLEMENTS = {
   // permissions (capabilities)
@@ -71,9 +72,6 @@ export type AccessAction = (typeof ACCESS_ACTIONS)[keyof typeof ACCESS_ACTIONS];
  * ---- Structured entitlement keys (still strings) ----
  * Goal: granular semantics without ever leaving “string keys” as the canonical storage type.
  */
-
-export { ENT, entKey };
-export type { StructuredEntitlementKey };
 
 export type Tier = "none" | "friend" | "patron" | "partner";
 

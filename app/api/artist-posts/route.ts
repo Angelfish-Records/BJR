@@ -8,12 +8,12 @@ export const revalidate = 0;
 type Visibility = "public" | "friend" | "patron" | "partner";
 type PostType = "qa" | "creative" | "civic" | "cosmic";
 
-const VALID_POST_TYPES: readonly PostType[] = [
+const VALID_POST_TYPES = new Set<PostType>([
   "qa",
   "creative",
   "civic",
   "cosmic",
-];
+]);
 
 type SanityPostDoc = {
   _id: string;
@@ -77,7 +77,7 @@ function meetsMinVisibility(postVisibility: Visibility, minVisibility: Visibilit
 function asPostType(v: unknown): PostType {
   if (typeof v === "string") {
     const s = v.trim().toLowerCase();
-    if (VALID_POST_TYPES.includes(s as PostType)) return s as PostType;
+    if (VALID_POST_TYPES.has(s as PostType)) return s as PostType;
   }
   return "creative";
 }
@@ -85,7 +85,7 @@ function asPostType(v: unknown): PostType {
 function parsePostTypeFilter(v: string | null): PostType | null {
   const s = (v ?? "").trim().toLowerCase();
   if (!s || s === "all") return null;
-  if (VALID_POST_TYPES.includes(s as PostType)) return s as PostType;
+  if (VALID_POST_TYPES.has(s as PostType)) return s as PostType;
   return null;
 }
 

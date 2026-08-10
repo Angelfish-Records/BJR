@@ -327,12 +327,10 @@ function useCheckoutAction(props: CheckoutActionProps): {
 } {
   const { tier, disabled } = props;
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [, setError] = React.useState<string | null>(null);
 
   async function checkout(): Promise<void> {
     if (disabled || isSubmitting) return;
 
-    setError(null);
     setIsSubmitting(true);
 
     try {
@@ -340,7 +338,6 @@ function useCheckoutAction(props: CheckoutActionProps): {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Unable to start checkout";
-      setError(message);
       console.error("SubscribeButton checkout error", {
         tier,
         message,

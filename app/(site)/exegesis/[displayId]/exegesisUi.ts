@@ -64,7 +64,7 @@ export function isTipTapDoc(
   if (!value || typeof value !== "object") return false;
   const obj = value as { type?: unknown; content?: unknown };
   if (obj.type !== "doc") return false;
-  if (typeof obj.content === "undefined") return true;
+  if (obj.content === undefined) return true;
   return Array.isArray(obj.content);
 }
 

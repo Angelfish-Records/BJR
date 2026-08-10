@@ -7,6 +7,8 @@ import AudioEngine from "@/app/home/player/AudioEngine";
 import TrackTitleSync from "@/app/home/player/TrackTitleSync";
 import StageInlineHost from "@/app/home/player/StageInlineHost";
 
+type HistoryUrl = string | URL | null;
+
 export default function PlayerHost({
   children,
 }: Readonly<{
@@ -26,7 +28,7 @@ export default function PlayerHost({
 
     const log = (
       kind: "pushState" | "replaceState",
-      url?: string | URL | null,
+      url?: HistoryUrl,
     ) => {
       try {
         const href = String(url ?? "");
@@ -54,7 +56,7 @@ export default function PlayerHost({
     window.history.pushState = function (
       data: unknown,
       unused: string,
-      url?: string | URL | null,
+      url?: HistoryUrl,
     ): void {
       log("pushState", url);
       origPush(data, unused, url);
@@ -63,7 +65,7 @@ export default function PlayerHost({
     window.history.replaceState = function (
       data: unknown,
       unused: string,
-      url?: string | URL | null,
+      url?: HistoryUrl,
     ): void {
       log("replaceState", url);
       origReplace(data, unused, url);
