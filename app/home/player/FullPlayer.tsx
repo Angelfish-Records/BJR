@@ -1749,6 +1749,10 @@ export default function FullPlayer(props: FullPlayerProps) {
     string | null
   >(null);
 
+  React.useEffect(() => {
+    setSelectedRecordingId(null);
+  }, [effAlbumSlug]);
+
   const isCoarsePointer = isCoarsePointerDevice();
 
   // --- Album-local transport (FullPlayer) ---
@@ -2008,7 +2012,7 @@ export default function FullPlayer(props: FullPlayerProps) {
 
             return (
               <div
-                key={t.recordingId}
+                key={`${effAlbumSlug}:${t.displayId}`}
                 className="afTrackRow"
                 onMouseEnter={(event) => {
                   if (!canAttemptPlay) return;
