@@ -22,7 +22,8 @@ export function correlationIdFromRequest(req: Request): string {
     req.headers.get("x-request-id") ??
     null;
 
-  if (h && h.trim()) return h.trim();
+  const correlationId = h?.trim();
+  if (correlationId) return correlationId;
 
   const cryptoObj = globalThis.crypto;
   const uuid = cryptoObj?.randomUUID?.();

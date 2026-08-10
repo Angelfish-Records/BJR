@@ -36,7 +36,7 @@ export async function GET(req: Request) {
     );
   }
 
-  if (!emailRaw || !emailRaw.includes("@")) {
+  if (!emailRaw?.includes("@")) {
     return NextResponse.json(
       { ok: false, reason: "missing_email" },
       { status: 400 },

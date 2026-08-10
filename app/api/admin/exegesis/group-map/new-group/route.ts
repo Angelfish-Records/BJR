@@ -1,6 +1,6 @@
 //web/app/api/admin/exegesis/group-map/new-group/route.ts
 import "server-only";
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireAdminMemberId } from "@/lib/adminAuth";
 

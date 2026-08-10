@@ -71,12 +71,17 @@ export function musicAlbumJsonLd(args: {
       : undefined;
 
   // Prefer embargo/public releaseAt if we store it in policy, else year
-  const datePublished =
-    (album.policy?.releaseAt && typeof album.policy.releaseAt === "string" && album.policy.releaseAt.trim())
-      ? album.policy.releaseAt
-      : (typeof album.year === "number" && Number.isFinite(album.year))
-        ? `${album.year}-01-01`
-        : undefined;
+  const releaseAt = album.policy?.releaseAt;
+  let datePublished: string | undefined;
+
+  if (typeof releaseAt === "string" && releaseAt.trim()) {
+    datePublished = releaseAt;
+  } else if (
+    typeof album.year === "number" &&
+    Number.isFinite(album.year)
+  ) {
+    datePublished = `${album.year}-01-01`;
+  }
 
   const out: JsonLd = stripUndefined({
     "@context": "https://schema.org",

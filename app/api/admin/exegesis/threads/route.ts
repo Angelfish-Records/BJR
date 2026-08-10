@@ -24,7 +24,7 @@ function json(status: number, body: ApiOk | ApiErr) {
 }
 
 function clampInt(v: string | null, def: number, min: number, max: number) {
-  const n = v ? Number(v) : NaN;
+  const n = v ? Number(v) : Number.NaN;
   if (!Number.isFinite(n)) return def;
   const x = Math.trunc(n);
   if (x < min) return min;

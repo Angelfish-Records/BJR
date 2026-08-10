@@ -1,6 +1,6 @@
 // web/lib/anon.ts
 import "server-only";
-import crypto from "crypto";
+import crypto from "node:crypto";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 

@@ -76,6 +76,13 @@ export default function ExegesisLyricsRail({
           const inPreview =
             isSelected || inSelectedGroup || inHoverGroup || inHoverLine;
 
+          let backgroundColor = "var(--lxRow)";
+          if (isSelected) {
+            backgroundColor = "var(--lxSelected)";
+          } else if (inPreview) {
+            backgroundColor = "var(--lxHover)";
+          }
+
           return (
             <button
               key={cue.lineKey}
@@ -100,13 +107,7 @@ export default function ExegesisLyricsRail({
             >
               <span
                 className="inline-block rounded px-1.5 py-0.5 text-sm leading-snug transition-colors duration-75"
-                style={{
-                  backgroundColor: isSelected
-                    ? "var(--lxSelected)"
-                    : inPreview
-                      ? "var(--lxHover)"
-                      : "var(--lxRow)",
-                }}
+                style={{ backgroundColor }}
               >
                 <span className="opacity-90">{cue.text}</span>
               </span>

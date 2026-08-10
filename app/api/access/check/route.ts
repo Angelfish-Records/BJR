@@ -579,6 +579,11 @@ async function resolveMemberAccess(params: {
     decision.allowed || params.shareState.shareTokenAllowsAccess,
   );
 
+  let reason: string | null = null;
+  if (!allowed && !decision.allowed) {
+    reason = decision.reason;
+  }
+
   return baseJson(
     {
       ok: true,
@@ -587,7 +592,7 @@ async function resolveMemberAccess(params: {
       releaseAt,
       code: allowed ? null : "NO_ENTITLEMENT",
       action: allowed ? null : ("subscribe" satisfies Action),
-      reason: allowed ? null : "reason" in decision ? decision.reason : null,
+      reason,
       correlationId: params.correlationId,
       redeemed: params.shareState.redeemed,
       shareTokenAccess:

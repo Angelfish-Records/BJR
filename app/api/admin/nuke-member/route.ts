@@ -5,8 +5,9 @@ import { sql } from "@vercel/postgres";
 
 function mustEnv(name: string): string {
   const v = process.env[name];
-  if (!v || !v.trim()) throw new Error(`Missing env var: ${name}`);
-  return v.trim();
+  const trimmed = v?.trim();
+  if (!trimmed) throw new Error(`Missing env var: ${name}`);
+  return trimmed;
 }
 
 function normalizeEmail(input: string): string {

@@ -504,7 +504,7 @@ function TipTapToolbar(
 export default function TipTapEditor(
   props: Readonly<{
     valuePlain: string;
-    valueDoc?: unknown | null;
+    valueDoc?: unknown;
     disabled?: boolean;
     showToolbar?: boolean;
     placeholder?: string;
@@ -566,9 +566,7 @@ export default function TipTapEditor(
     ],
     content: isJsonDoc(props.valueDoc)
       ? (props.valueDoc as JSONContent)
-      : valuePlain
-        ? valuePlain
-        : "",
+      : valuePlain,
     editorProps: {
       attributes: {
         "data-placeholder": placeholder,

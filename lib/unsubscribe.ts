@@ -1,5 +1,5 @@
 // web/lib/unsubscribe.ts
-import crypto from "crypto";
+import crypto from "node:crypto";
 
 export type UnsubscribeTokenPayload = {
   v: 1;
@@ -19,7 +19,7 @@ function mustEnv(name: string): string {
 
 function stripTrailingEquals(value: string): string {
   let end = value.length;
-  while (end > 0 && value.charCodeAt(end - 1) === 61) {
+  while (end > 0 && value.codePointAt(end - 1) === 61) {
     end -= 1;
   }
   return value.slice(0, end);
@@ -125,7 +125,7 @@ export function verifyUnsubscribeToken(
   const decoded = safeJsonParse<UnsubscribeTokenPayload>(
     base64UrlDecode(body).toString("utf8"),
   );
-  if (!decoded || decoded.v !== 1)
+  if (decoded?.v !== 1)
     return { ok: false, error: "INVALID_PAYLOAD" };
 
   if (typeof decoded.email !== "string" || !decoded.email.trim())

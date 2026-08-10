@@ -20,7 +20,7 @@ type ClerkUser = {
 };
 
 type ClerkEvent = {
-  type: "user.created" | "user.updated" | "user.deleted" | string;
+  type: string;
   data: unknown;
 };
 

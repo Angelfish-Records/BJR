@@ -71,11 +71,10 @@ export default function BuyAlbumButton(props: Props) {
         .json()
         .catch(() => null)) as CreateCheckoutResponse | null;
 
-      if (!res.ok || !data || data.ok !== true || !data.url) {
+      if (!res.ok || data?.ok !== true || !data?.url) {
         const msg =
-          data && data.ok === false && data.error
-            ? data.error
-            : "Could not start checkout.";
+          (data?.ok === false ? data.error : undefined) ||
+          "Could not start checkout.";
         setErr(msg);
         return;
       }

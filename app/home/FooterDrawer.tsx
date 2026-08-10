@@ -156,7 +156,7 @@ export default function FooterDrawer(
             >
               Email us
             </a>
-            .
+            {"."}
           </>
         ),
       },

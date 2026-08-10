@@ -58,13 +58,13 @@ export function GateBrokerProvider(
       // Idempotent-ish: don’t churn state if nothing meaningful changed.
       const prevActive = prev.active;
       const same =
-        prevActive &&
-        prevActive.code === nextReason.code &&
-        prevActive.action === nextReason.action &&
-        prevActive.message === nextReason.message &&
-        (prevActive.correlationId ?? null) ===
+        prevActive?.code === nextReason.code &&
+        prevActive?.action === nextReason.action &&
+        prevActive?.message === nextReason.message &&
+        (prevActive?.correlationId ?? null) ===
           (nextReason.correlationId ?? null) &&
-        (prevActive.domain ?? "generic") === (nextReason.domain ?? "generic");
+        (prevActive?.domain ?? "generic") ===
+          (nextReason.domain ?? "generic");
 
       if (same) return prev;
 

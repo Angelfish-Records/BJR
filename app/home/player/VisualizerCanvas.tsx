@@ -161,6 +161,7 @@ export default function VisualizerCanvas(
     <canvas
       ref={canvasRef}
       aria-hidden="true"
+      tabIndex={-1}
       style={{
         position: "absolute",
         inset: 0,

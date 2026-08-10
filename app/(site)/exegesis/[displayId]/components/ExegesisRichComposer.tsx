@@ -7,7 +7,7 @@ import TipTapEditor from "../TipTapEditor";
 type ExegesisRichComposerProps = Readonly<{
   editorKey: string;
   valuePlain: string;
-  valueDoc: unknown | null;
+  valueDoc: unknown;
   disabled: boolean;
   showToolbar: boolean;
   autofocus?: boolean;
@@ -17,7 +17,7 @@ type ExegesisRichComposerProps = Readonly<{
   submitLabel: string;
   submitDisabled: boolean;
   onChangePlain: (plain: string) => void;
-  onChangeDoc: (doc: unknown | null) => void;
+  onChangeDoc: (doc: unknown) => void;
   onToggleToolbar: () => void;
   onSubmit: () => void;
 }>;

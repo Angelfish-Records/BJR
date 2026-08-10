@@ -127,7 +127,7 @@ export type ReplyDraft = {
   open: boolean;
   ui: MiniStage;
   plain: string;
-  doc: unknown | null;
+  doc: unknown;
   posting: boolean;
   err: string;
 };
@@ -136,7 +136,7 @@ export type EditDraft = {
   open: boolean;
   ui: MiniStage;
   plain: string;
-  doc: unknown | null;
+  doc: unknown;
   posting: boolean;
   err: string;
 };

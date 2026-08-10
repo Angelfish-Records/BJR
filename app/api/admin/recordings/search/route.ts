@@ -21,6 +21,12 @@ function asLimit(value: unknown): number | undefined {
   return undefined;
 }
 
+function getErrorStatus(message: string): number {
+  if (message === "Unauthorized") return 401;
+  if (message === "Forbidden") return 403;
+  return 400;
+}
+
 export async function GET(request: Request) {
   try {
     await requireAdminMemberId();
@@ -53,8 +59,7 @@ export async function GET(request: Request) {
         ? error.message
         : "Unable to search recordings.";
 
-    const status =
-      message === "Unauthorized" ? 401 : message === "Forbidden" ? 403 : 400;
+    const status = getErrorStatus(message);
 
     return NextResponse.json(
       {

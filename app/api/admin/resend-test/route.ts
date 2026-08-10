@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
   // Pick a real sending identity we have verified in the BJR Resend account.
   // This does NOT require the inbox to exist; only DNS domain verification matters.
   const from =
-    (body?.from && body.from.trim()) ||
+    body?.from?.trim() ||
     must(process.env.RESEND_FROM_MARKETING, "RESEND_FROM_MARKETING"); // e.g. "BJR <oracle@post.brendanjohnroch.com>"
 
   const subject =

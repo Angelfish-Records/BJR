@@ -706,7 +706,7 @@ export default function InternalVisualizerRenderPage() {
               type="checkbox"
               checked={writeProRes}
               onChange={(event) => setWriteProRes(event.target.checked)}
-            />
+            />{" "}
             Write ProRes master
           </label>
 

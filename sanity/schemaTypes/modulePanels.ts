@@ -154,12 +154,13 @@ export const modulePanels = defineType({
               runtimePanelKind: "runtimePanelKind",
             },
             prepare({ title, requiresEntitlement, runtimePanelKind }) {
-              const kind =
-                runtimePanelKind === "memberSummary"
-                  ? "Runtime member panel"
-                  : runtimePanelKind === "feedbackForm"
-                    ? "Runtime feedback form"
-                    : "Authored panel";
+              let kind = "Authored panel";
+
+              if (runtimePanelKind === "memberSummary") {
+                kind = "Runtime member panel";
+              } else if (runtimePanelKind === "feedbackForm") {
+                kind = "Runtime feedback form";
+              }
 
               const access = requiresEntitlement ? "Gated" : "Ungated";
 
@@ -179,14 +180,15 @@ export const modulePanels = defineType({
     select: { title: "title", panels: "panels", layout: "layout" },
     prepare({ title, panels, layout }) {
       const count = Array.isArray(panels) ? panels.length : 0;
-      const cols =
-        layout === 1
-          ? "1-up"
-          : layout === 2
-            ? "2-up"
-            : layout === 3
-              ? "3-up"
-              : "?";
+
+      let cols = "?";
+      if (layout === 1) {
+        cols = "1-up";
+      } else if (layout === 2) {
+        cols = "2-up";
+      } else if (layout === 3) {
+        cols = "3-up";
+      }
 
       return {
         title: title ?? "Panels",

@@ -4,7 +4,7 @@ import { ENT } from "./entitlementVocab";
 const GOD_DEFEND_PRICE_ID = process.env.STRIPE_PRICE_ALBUM_GOD_DEFEND ?? "";
 
 export type AlbumOfferAsset = {
-  id: "bundle_zip" | string;
+  id: string;
   label: string;
   r2Key: string; // object key in the bucket
   filename: string;

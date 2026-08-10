@@ -1,6 +1,6 @@
 // web/app/api/exegesis/comment/route.ts
 import "server-only";
-import crypto from "crypto";
+import crypto from "node:crypto";
 import type { NextRequest, NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 
@@ -113,7 +113,7 @@ type CommentInsertRow = {
   parent_id: string | null;
   root_id: string | null;
   depth: number | null;
-  body_rich: unknown | null;
+  body_rich: unknown;
   body_plain: string | null;
   t_ms: number | null;
   line_text_snapshot: string | null;

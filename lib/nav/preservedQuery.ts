@@ -19,11 +19,15 @@ const DIRECT_PRESERVED_KEYS = [
 function first(sp: PageSearchParams | undefined, key: string): string {
   const value = sp?.[key];
 
-  return Array.isArray(value)
-    ? (value[0] ?? "").trim()
-    : typeof value === "string"
-      ? value.trim()
-      : "";
+  if (Array.isArray(value)) {
+    return (value[0] ?? "").trim();
+  }
+
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  return "";
 }
 
 function queryStringFromParams(params: URLSearchParams): string {

@@ -16,8 +16,9 @@ type R2Env = {
 };
 
 function must(v: string | undefined, name: string): string {
-  if (!v || !v.trim()) throw new Error(`Missing ${name}`);
-  return v.trim();
+  const trimmed = v?.trim();
+  if (!trimmed) throw new Error(`Missing ${name}`);
+  return trimmed;
 }
 
 function readEnv(): R2Env {

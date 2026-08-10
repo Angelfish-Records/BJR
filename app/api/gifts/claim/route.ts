@@ -1,7 +1,7 @@
 // web/app/api/gifts/claim/route.ts
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { sql } from "@vercel/postgres";
 import { auth } from "@clerk/nextjs/server";
 import { grantEntitlement } from "@/lib/entitlementOps";

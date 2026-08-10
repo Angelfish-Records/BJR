@@ -118,7 +118,10 @@ export function ShareMenu(props: {
   return createPortal(
     <>
       {/* click-catcher */}
-      <div
+      <button
+        type="button"
+        aria-label="Close share menu"
+        tabIndex={-1}
         onMouseDown={(e) => {
           e.preventDefault();
           onClose();
@@ -127,6 +130,11 @@ export function ShareMenu(props: {
           position: "fixed",
           inset: 0,
           zIndex: 100000,
+          appearance: "none",
+          margin: 0,
+          padding: 0,
+          border: 0,
+          background: "transparent",
           // guardrail: never widen document
           overflowX: "clip",
         }}

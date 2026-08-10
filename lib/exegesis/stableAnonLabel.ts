@@ -1,4 +1,4 @@
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { EXEGESIS_ANON_LABEL_WORDS } from "@/lib/exegesis/anonLabelWords";
 
 export function stableAnonLabel(memberId: string): string {

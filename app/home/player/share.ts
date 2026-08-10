@@ -36,7 +36,7 @@ type AlbumResolveResponse = AlbumResolveOk | AlbumResolveErr;
 
 function trimTrailingSlashes(value: string): string {
   let end = value.length;
-  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+  while (end > 0 && value.codePointAt(end - 1) === 47) {
     end -= 1;
   }
   return value.slice(0, end);
@@ -68,9 +68,9 @@ async function resolveAlbumMeta(
     .json()
     .catch(() => null)) as AlbumResolveResponse | null;
 
-  if (!res.ok || !data || data.ok !== true) {
+  if (!res.ok || data?.ok !== true) {
     const msg =
-      data && data.ok === false
+      data?.ok === false
         ? data.error
         : `Album resolve failed (${res.status})`;
     throw new Error(`Cannot share: ${msg}`);

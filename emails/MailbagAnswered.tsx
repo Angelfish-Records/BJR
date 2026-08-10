@@ -69,7 +69,7 @@ export function MailbagAnsweredEmail(props: MailbagAnsweredEmailProps) {
               <span style={{ color: "#ffffff", fontWeight: 700 }}>
                 {postTitle?.trim() ? postTitle.trim() : "a new post"}
               </span>
-              .
+              {"."}
             </Text>
           </Section>
 

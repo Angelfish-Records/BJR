@@ -251,8 +251,8 @@ function defaultCardSpec(tier: SubscribeTier): CardSpec {
 }
 
 function cardSubcopy(tier: SubscribeTier): string {
-  if (tier === "partner") return "Billed annually. Cancel anytime.";
-  return "Billed monthly. Cancel anytime.";
+  if (tier === "partner") return "Billed annually in NZD. Cancel anytime.";
+  return "Billed monthly in NZD. Cancel anytime.";
 }
 
 function cardGlowSeed(tier: SubscribeTier): number {

@@ -20,7 +20,7 @@ type GrantParams = {
   grantSourceRef?: string | null;
   expiresAt?: Date | null;
   correlationId?: string | null;
-  eventSource?: EventSource | string;
+  eventSource?: string;
 };
 
 export type GrantEntitlementResult =
@@ -138,7 +138,7 @@ export async function revokeEntitlement(params: {
   revokedBy?: string;
   revokeReason?: string | null;
   correlationId?: string | null;
-  eventSource?: EventSource | string;
+  eventSource?: string;
 }): Promise<RevokeEntitlementResult> {
   if (!uuidOk(params.memberId)) throw new Error("Invalid memberId");
 

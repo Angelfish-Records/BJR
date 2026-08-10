@@ -1,12 +1,13 @@
 // web/app/api/admin/campaigns/images/upload/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { requireAdminMemberId } from "@/lib/adminAuth";
 
 function must(v: string | undefined, name: string): string {
-  if (!v || !v.trim()) throw new Error(`Missing env: ${name}`);
-  return v.trim();
+  const trimmed = v?.trim();
+  if (!trimmed) throw new Error(`Missing env: ${name}`);
+  return trimmed;
 }
 
 function safeName(name: string): string {
@@ -29,6 +30,12 @@ function extFromType(contentType: string): string {
 type UploadOk = { ok: true; key: string; url: string };
 type UploadErr = { ok?: false; error: string; message?: string; code?: string };
 
+function getAwsErrorCode(rec: Record<string, unknown>): string | undefined {
+  if (typeof rec.Code === "string") return rec.Code;
+  if (typeof rec.code === "string") return rec.code;
+  return undefined;
+}
+
 // Narrow AWS / R2 error shape without `any`
 function asAwsError(
   e: unknown,
@@ -49,12 +56,7 @@ function asAwsError(
 
   return {
     message: typeof rec.message === "string" ? rec.message : undefined,
-    code:
-      typeof rec.Code === "string"
-        ? rec.Code
-        : typeof rec.code === "string"
-          ? rec.code
-          : undefined,
+    code: getAwsErrorCode(rec),
     httpStatusCode:
       typeof meta.httpStatusCode === "number"
         ? meta.httpStatusCode
@@ -63,6 +65,12 @@ function asAwsError(
       typeof meta.requestId === "string" ? meta.requestId : undefined,
     cfId: typeof meta.cfId === "string" ? meta.cfId : undefined,
   };
+}
+
+function getUploadErrorStatus(message: string): number {
+  if (message === "Unauthorized") return 401;
+  if (message === "Forbidden") return 403;
+  return 500;
 }
 
 export async function POST(req: NextRequest) {
@@ -173,7 +181,7 @@ export async function POST(req: NextRequest) {
       aws.message ??
       (e instanceof Error ? e.message : "Unknown upload error");
 
-    const status = msg === "Unauthorized" ? 401 : msg === "Forbidden" ? 403 : 500;
+    const status = getUploadErrorStatus(msg);
 
     const body: UploadErr = {
       ok: false,

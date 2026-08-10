@@ -30,7 +30,7 @@ export type AlbumPlaybackOracleParams = {
   memberId: string | null;
   albumId: string;
   correlationId: string;
-  action?: AccessAction | string;
+  action?: string;
   shareTokenAllowsPlayback?: boolean;
 };
 

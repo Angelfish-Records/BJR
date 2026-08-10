@@ -409,8 +409,8 @@ export default function AdminMintShareTokenForm({ albums }: Props) {
         </div>
       </div>
 
-      {result ? (
-        result.ok ? (
+      {result &&
+        (result.ok ? (
           <div style={cardStyle}>
             <div
               style={{ fontSize: 12, letterSpacing: "0.04em", opacity: 0.56 }}
@@ -497,8 +497,7 @@ export default function AdminMintShareTokenForm({ albums }: Props) {
               {result.error}
             </code>
           </div>
-        )
-      ) : null}
+        ))}
     </div>
   );
 }

@@ -90,7 +90,9 @@ function parsePostTypeFilter(v: string | null): PostType | null {
 }
 
 function clampMaxWidthPx(v: unknown): number | undefined {
-  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+  if (typeof v !== "number" && typeof v !== "string") return undefined;
+
+  const n = typeof v === "number" ? v : Number(v);
   if (!Number.isFinite(n)) return undefined;
   return Math.max(160, Math.min(1400, Math.round(n)));
 }
