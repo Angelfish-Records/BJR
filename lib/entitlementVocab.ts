@@ -27,5 +27,7 @@ export const ENT = {
     entKey({ kind: "media_play", recordingId }),
   download: (assetId: string) => entKey({ kind: "download", assetId }),
   downloadAlbum: (slug: string) => `download_album_${slug}`,
+  playAlbum: () => "play_album",
+  albumShareGrant: () => "album_share_grant",
   tier: (name: "friend" | "patron" | "partner") => `tier_${name}`,
 } as const;

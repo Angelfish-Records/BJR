@@ -2,8 +2,8 @@
 
 import type { ChangeEvent } from "react";
 
+import { ENT } from "@/lib/entitlementVocab";
 import {
-  buildAccessHealth,
   formatDateOnly,
   formatDateTime,
   getSelectedJoinedAt,
@@ -14,7 +14,6 @@ import {
 import {
   cardStyle,
   fieldStyle,
-  healthCardStyle,
   primaryButtonStyle,
   sectionHeaderStyle,
   subtleButtonStyle,
@@ -54,6 +53,7 @@ type StripeWebhookLedgerProps = Readonly<{
 }>;
 
 type GrantAuditProps = Readonly<{
+  albums: AlbumForScope[];
   grants: GrantRow[];
   open: boolean;
   revokeBusyId: string | null;
@@ -67,22 +67,165 @@ type SelectedMemberSectionsProps = Readonly<
     GrantAuditProps
 >;
 
-function MemberMetadata(props: Readonly<{
-  selected: MemberRow;
-  memberDetails: SelectedMemberDetails | null;
-}>) {
+type GrantMode =
+  | ""
+  | "friend"
+  | "patron"
+  | "partner"
+  | "catalogue-playback"
+  | "album-playback"
+  | "album-download";
+
+type EntitlementDisplay = {
+  label: string;
+  technical: string;
+};
+
+const DOWNLOAD_ALBUM_PREFIX = ENT.downloadAlbum("");
+
+function albumFromScope(
+  albums: AlbumForScope[],
+  scopeId: string | null,
+): AlbumForScope | null {
+  if (!scopeId?.startsWith("alb:")) return null;
+
+  const albumId = scopeId.slice(4);
+  return albums.find((album) => album.id === albumId) ?? null;
+}
+
+function albumFromDownloadKey(
+  albums: AlbumForScope[],
+  entitlementKey: string,
+): AlbumForScope | null {
+  if (!entitlementKey.startsWith(DOWNLOAD_ALBUM_PREFIX)) return null;
+
+  const slug = entitlementKey.slice(DOWNLOAD_ALBUM_PREFIX.length);
+  return albums.find((album) => album.slug === slug) ?? null;
+}
+
+function humanizeEntitlementKey(entitlementKey: string): string {
+  if (entitlementKey.startsWith("{")) return "Technical entitlement";
+
+  const words = entitlementKey.replaceAll("_", " ").trim();
+  if (!words) return "Entitlement";
+
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function describeEntitlement(
+  entitlementKey: string,
+  scopeId: string | null,
+  albums: AlbumForScope[],
+): EntitlementDisplay {
+  const technical = scopeId
+    ? `${entitlementKey} — ${scopeId}`
+    : entitlementKey;
+
+  if (entitlementKey === ENT.tier("friend")) {
+    return { label: "Friend membership", technical };
+  }
+
+  if (entitlementKey === ENT.tier("patron")) {
+    return { label: "Patron membership", technical };
+  }
+
+  if (entitlementKey === ENT.tier("partner")) {
+    return { label: "Partner membership", technical };
+  }
+
+  if (entitlementKey === ENT.playAlbum()) {
+    if (!scopeId || scopeId === "catalogue") {
+      return { label: "Catalogue playback", technical };
+    }
+
+    const album = albumFromScope(albums, scopeId);
+    return {
+      label: album ? `${album.title} playback` : "Album playback",
+      technical,
+    };
+  }
+
+  if (entitlementKey.startsWith(DOWNLOAD_ALBUM_PREFIX)) {
+    const album = albumFromDownloadKey(albums, entitlementKey);
+    return {
+      label: album ? `${album.title} download` : "Album download",
+      technical,
+    };
+  }
+
+  if (entitlementKey === ENT.albumShareGrant()) {
+    const album = albumFromScope(albums, scopeId);
+    return {
+      label: album
+        ? `${album.title} pre-release override`
+        : "Album pre-release override",
+      technical,
+    };
+  }
+
+  return {
+    label: humanizeEntitlementKey(entitlementKey),
+    technical,
+  };
+}
+
+function resolveMembershipLabel(
+  current: CurrentEntitlementRow[],
+): string {
+  const keys = new Set(current.map((row) => row.entitlement_key));
+
+  if (keys.has(ENT.tier("partner"))) return "Partner";
+  if (keys.has(ENT.tier("patron"))) return "Patron";
+  if (keys.has(ENT.tier("friend"))) return "Friend";
+  return "None";
+}
+
+function resolvePlaybackLabel(
+  current: CurrentEntitlementRow[],
+): string {
+  const playback = current.filter(
+    (row) => row.entitlement_key === ENT.playAlbum(),
+  );
+
+  if (
+    playback.some(
+      (row) => !row.scope_id || row.scope_id === "catalogue",
+    )
+  ) {
+    return "Whole catalogue";
+  }
+
+  const albumCount = playback.filter((row) =>
+    row.scope_id?.startsWith("alb:"),
+  ).length;
+
+  if (albumCount === 1) return "1 album";
+  if (albumCount > 1) return `${albumCount} albums`;
+
+  return "No direct grant";
+}
+
+function MemberSummary(
+  props: Readonly<{
+    selected: MemberRow;
+    memberDetails: SelectedMemberDetails | null;
+    current: CurrentEntitlementRow[];
+  }>,
+) {
   const items = [
     {
-      label: "Source",
-      value: props.memberDetails?.source ?? "—",
+      label: "Membership",
+      value: resolveMembershipLabel(props.current),
     },
     {
-      label: "Clerk",
-      value: props.memberDetails?.clerk_user_id ? "Linked" : "Not linked",
+      label: "Playback",
+      value: resolvePlaybackLabel(props.current),
     },
     {
-      label: "Stripe",
-      value: props.memberDetails?.stripe_customer_id ? "Linked" : "Not linked",
+      label: "Billing",
+      value: props.memberDetails?.stripe_customer_id
+        ? "Stripe connected"
+        : "No Stripe customer",
     },
     {
       label: "Joined",
@@ -112,7 +255,7 @@ function MemberMetadata(props: Readonly<{
           }}
         >
           <div style={{ fontSize: 11, opacity: 0.58 }}>{item.label}</div>
-          <div style={{ marginTop: 4, fontSize: 12, fontWeight: 700 }}>
+          <div style={{ marginTop: 4, fontSize: 13, fontWeight: 800 }}>
             {item.value}
           </div>
         </div>
@@ -121,77 +264,191 @@ function MemberMetadata(props: Readonly<{
   );
 }
 
-function AccessHealthCards(props: Readonly<{
-  current: CurrentEntitlementRow[];
-  memberDetails: SelectedMemberDetails | null;
-  stripeWebhookEvents: StripeWebhookEventRow[];
-}>) {
-  const accessHealth = buildAccessHealth(props);
-
-  const playback = accessHealth.hasCataloguePlayback ? "ready" : "missing";
-  const download = accessHealth.hasGodDefendDownload ? "download" : "missing";
-  const stripe = accessHealth.hasStripeCustomer ? "linked" : "not linked";
-  const webhooks =
-    accessHealth.failedWebhookCount > 0
-      ? `${accessHealth.failedWebhookCount} failed`
-      : "clean";
-
-  const items = [
-    ["Tier", accessHealth.tier],
-    ["Playback", playback],
-    ["GOD DEFEND", download],
-    ["Stripe", stripe],
-    ["Webhooks", webhooks],
-  ] as const;
-
+function TechnicalIdentityDetails(
+  props: Readonly<{
+    selected: MemberRow;
+    memberDetails: SelectedMemberDetails | null;
+  }>,
+) {
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-        gap: 10,
-        marginTop: 14,
-      }}
-    >
-      {items.map(([label, value]) => {
-        const needsAttention =
-          value === "missing" || String(value).includes("failed");
+    <details style={{ marginTop: 2 }}>
+      <summary
+        style={{
+          cursor: "pointer",
+          fontSize: 11,
+          opacity: 0.58,
+        }}
+      >
+        Technical identity
+      </summary>
 
-        return (
-          <div key={label} style={healthCardStyle}>
-            <div style={{ fontSize: 11, opacity: 0.56 }}>{label}</div>
-            <div
-              style={{
-                marginTop: 5,
-                fontSize: 14,
-                fontWeight: 900,
-                color: needsAttention
-                  ? "#ffd0d0"
-                  : "rgba(255,255,255,0.94)",
-              }}
-            >
-              {value}
-            </div>
-          </div>
-        );
-      })}
-    </div>
+      <div
+        style={{
+          display: "grid",
+          gap: 5,
+          marginTop: 8,
+          paddingLeft: 2,
+          fontSize: 11,
+          opacity: 0.62,
+          wordBreak: "break-all",
+        }}
+      >
+        <div>Member ID: {props.selected.id}</div>
+        <div>
+          Clerk: {props.memberDetails?.clerk_user_id ?? "not linked"}
+        </div>
+        <div>
+          Stripe customer:{" "}
+          {props.memberDetails?.stripe_customer_id ?? "not linked"}
+        </div>
+        <div>Source: {props.memberDetails?.source ?? "—"}</div>
+      </div>
+    </details>
   );
 }
 
-function ManualOverrideSection(props: Readonly<{
-  albums: AlbumForScope[];
-  open: boolean;
-  entitlementKey: string;
-  scopeId: string;
-  reason: string;
-  busy: boolean;
-  onOpenChange: (value: boolean) => void;
-  onEntitlementKeyChange: (value: string) => void;
-  onScopeIdChange: (value: string) => void;
-  onReasonChange: (value: string) => void;
-  onGrant: () => Promise<void>;
-}>) {
+function grantModeFromFields(
+  entitlementKey: string,
+  scopeId: string,
+): GrantMode {
+  if (entitlementKey === ENT.tier("friend")) return "friend";
+  if (entitlementKey === ENT.tier("patron")) return "patron";
+  if (entitlementKey === ENT.tier("partner")) return "partner";
+
+  if (entitlementKey === ENT.playAlbum()) {
+    if (scopeId.startsWith("alb:")) return "album-playback";
+    return "catalogue-playback";
+  }
+
+  if (entitlementKey.startsWith(DOWNLOAD_ALBUM_PREFIX)) {
+    return "album-download";
+  }
+
+  return "";
+}
+
+function ManualOverrideSection(
+  props: Readonly<{
+    albums: AlbumForScope[];
+    memberDetails: SelectedMemberDetails | null;
+    open: boolean;
+    entitlementKey: string;
+    scopeId: string;
+    reason: string;
+    busy: boolean;
+    reconcileBusy: boolean;
+    onOpenChange: (value: boolean) => void;
+    onEntitlementKeyChange: (value: string) => void;
+    onScopeIdChange: (value: string) => void;
+    onReasonChange: (value: string) => void;
+    onGrant: () => Promise<void>;
+    onReconcileStripe: () => Promise<void>;
+  }>,
+) {
+  const grantMode = grantModeFromFields(
+    props.entitlementKey,
+    props.scopeId,
+  );
+
+  const scopedAlbum = albumFromScope(
+    props.albums,
+    props.scopeId || null,
+  );
+  const downloadAlbum = albumFromDownloadKey(
+    props.albums,
+    props.entitlementKey,
+  );
+
+  const selectedAlbum =
+    grantMode === "album-download" ? downloadAlbum : scopedAlbum;
+
+  const needsAlbum =
+    grantMode === "album-playback" ||
+    grantMode === "album-download";
+
+  const grantDisabled =
+    props.busy ||
+    !grantMode ||
+    (needsAlbum && !selectedAlbum);
+
+  function selectGrantMode(nextMode: GrantMode) {
+    const firstAlbum = props.albums[0] ?? null;
+
+    if (nextMode === "friend") {
+      props.onEntitlementKeyChange(ENT.tier("friend"));
+      props.onScopeIdChange("");
+      return;
+    }
+
+    if (nextMode === "patron") {
+      props.onEntitlementKeyChange(ENT.tier("patron"));
+      props.onScopeIdChange("");
+      return;
+    }
+
+    if (nextMode === "partner") {
+      props.onEntitlementKeyChange(ENT.tier("partner"));
+      props.onScopeIdChange("");
+      return;
+    }
+
+    if (nextMode === "catalogue-playback") {
+      props.onEntitlementKeyChange(ENT.playAlbum());
+      props.onScopeIdChange("catalogue");
+      return;
+    }
+
+    if (!firstAlbum) {
+      props.onEntitlementKeyChange("");
+      props.onScopeIdChange("");
+      return;
+    }
+
+    if (nextMode === "album-playback") {
+      props.onEntitlementKeyChange(ENT.playAlbum());
+      props.onScopeIdChange(`alb:${firstAlbum.id}`);
+      return;
+    }
+
+    if (nextMode === "album-download") {
+      props.onEntitlementKeyChange(
+        ENT.downloadAlbum(firstAlbum.slug),
+      );
+      props.onScopeIdChange("");
+      return;
+    }
+
+    props.onEntitlementKeyChange("");
+    props.onScopeIdChange("");
+  }
+
+  function selectAlbum(albumId: string) {
+    const album =
+      props.albums.find((candidate) => candidate.id === albumId) ??
+      null;
+
+    if (!album) return;
+
+    if (grantMode === "album-download") {
+      props.onEntitlementKeyChange(
+        ENT.downloadAlbum(album.slug),
+      );
+      props.onScopeIdChange("");
+      return;
+    }
+
+    props.onScopeIdChange(`alb:${album.id}`);
+  }
+
+  const isTierGrant =
+    grantMode === "friend" ||
+    grantMode === "patron" ||
+    grantMode === "partner";
+
+  const hasStripeCustomer = Boolean(
+    props.memberDetails?.stripe_customer_id,
+  );
+
   return (
     <div style={{ display: "grid", gap: 10 }}>
       <button
@@ -207,104 +464,207 @@ function ManualOverrideSection(props: Readonly<{
           fontWeight: 900,
         }}
       >
-        <span>Manual override</span>
-        <span style={{ opacity: 0.6 }}>{props.open ? "−" : "+"}</span>
+        <span>Admin tools</span>
+        <span style={{ opacity: 0.6 }}>
+          {props.open ? "−" : "+"}
+        </span>
       </button>
 
       {props.open ? (
-        <>
-          <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.72 }}>
-            Grant entitlement
-          </div>
-
-          <div style={{ display: "grid", gap: 6 }}>
-            <div style={{ fontSize: 12, opacity: 0.66 }}>
-              Entitlement key
+        <div style={{ display: "grid", gap: 16 }}>
+          <div style={{ display: "grid", gap: 10 }}>
+            <div>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 800,
+                  opacity: 0.78,
+                }}
+              >
+                Grant access
+              </div>
+              <div
+                style={{
+                  marginTop: 3,
+                  fontSize: 11,
+                  opacity: 0.52,
+                }}
+              >
+                Choose the access you want to add. Canonical keys and
+                scopes are handled automatically.
+              </div>
             </div>
-            <input
-              value={props.entitlementKey}
-              onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                props.onEntitlementKeyChange(event.target.value)
-              }
-              placeholder="e.g. tier_patron, play_album"
-              style={fieldStyle}
-            />
-          </div>
 
-          <div style={{ display: "grid", gap: 6 }}>
-            <div style={{ fontSize: 12, opacity: 0.66 }}>Scope ID</div>
-            <input
-              value={props.scopeId}
-              onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                props.onScopeIdChange(event.target.value)
-              }
-              placeholder="catalogue OR alb:<albumId>"
-              style={fieldStyle}
-            />
-          </div>
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontSize: 12, opacity: 0.66 }}>
+                Access type
+              </span>
+              <select
+                value={grantMode}
+                onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+                  selectGrantMode(event.target.value as GrantMode)
+                }
+                style={fieldStyle}
+              >
+                <option value="">Choose access…</option>
 
-          <div style={{ display: "grid", gap: 6 }}>
-            <div style={{ fontSize: 12, opacity: 0.66 }}>
-              Quick scope helpers
-            </div>
-            <div
-              style={{
-                display: "flex",
-                gap: 8,
-                flexWrap: "wrap",
-                marginTop: 2,
-              }}
-            >
+                <optgroup label="Membership tier">
+                  <option value="friend">Friend membership</option>
+                  <option value="patron">Patron membership</option>
+                  <option value="partner">Partner membership</option>
+                </optgroup>
+
+                <optgroup label="Playback">
+                  <option value="catalogue-playback">
+                    Whole catalogue playback
+                  </option>
+                  <option value="album-playback">
+                    Specific album playback
+                  </option>
+                </optgroup>
+
+                <optgroup label="Downloads">
+                  <option value="album-download">
+                    Specific album download
+                  </option>
+                </optgroup>
+              </select>
+            </label>
+
+            {needsAlbum ? (
+              <label style={{ display: "grid", gap: 6 }}>
+                <span style={{ fontSize: 12, opacity: 0.66 }}>
+                  Album
+                </span>
+                <select
+                  value={selectedAlbum?.id ?? ""}
+                  onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+                    selectAlbum(event.target.value)
+                  }
+                  style={fieldStyle}
+                >
+                  {props.albums.map((album) => (
+                    <option key={album.id} value={album.id}>
+                      {album.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+
+            {isTierGrant ? (
+              <div
+                style={{
+                  padding: "9px 10px",
+                  borderRadius: 10,
+                  background: "rgba(255,255,255,0.035)",
+                  fontSize: 11,
+                  lineHeight: 1.45,
+                  opacity: 0.62,
+                }}
+              >
+                Membership tier and playback permission are separate
+                grants. Add catalogue playback separately if this member
+                should also receive unrestricted listening access.
+              </div>
+            ) : null}
+
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontSize: 12, opacity: 0.66 }}>
+                Admin note
+                <span style={{ opacity: 0.55 }}> · optional</span>
+              </span>
+              <input
+                value={props.reason}
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                  props.onReasonChange(event.target.value)
+                }
+                placeholder="Why is this access being granted?"
+                style={fieldStyle}
+              />
+            </label>
+
+            <div>
               <button
                 type="button"
-                onClick={() => props.onScopeIdChange("catalogue")}
-                style={subtleButtonStyle}
+                onClick={() => {
+                  void props.onGrant();
+                }}
+                disabled={grantDisabled}
+                style={{
+                  ...primaryButtonStyle,
+                  opacity: grantDisabled ? 0.5 : 1,
+                  cursor: grantDisabled ? "default" : "pointer",
+                }}
               >
-                scope: catalogue
+                {props.busy ? "Granting…" : "Grant access"}
               </button>
-              {props.albums.slice(0, 6).map((album) => (
-                <button
-                  key={album.slug}
-                  type="button"
-                  onClick={() => props.onScopeIdChange(`alb:${album.id}`)}
-                  style={subtleButtonStyle}
-                  title={album.title}
-                >
-                  alb:{album.id}
-                </button>
-              ))}
             </div>
           </div>
 
-          <div style={{ display: "grid", gap: 6 }}>
-            <div style={{ fontSize: 12, opacity: 0.66 }}>Reason</div>
-            <input
-              value={props.reason}
-              onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                props.onReasonChange(event.target.value)
-              }
-              placeholder="reason"
-              style={fieldStyle}
-            />
-          </div>
+          <div
+            style={{
+              display: "grid",
+              gap: 8,
+              paddingTop: 14,
+              borderTop: "1px solid rgba(255,255,255,0.08)",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 800,
+                  opacity: 0.78,
+                }}
+              >
+                Subscription access
+              </div>
+              <div
+                style={{
+                  marginTop: 3,
+                  maxWidth: 620,
+                  fontSize: 11,
+                  lineHeight: 1.45,
+                  opacity: 0.52,
+                }}
+              >
+                Re-check this member&apos;s Stripe subscriptions and
+                refresh subscription-derived grants. This does not
+                reconcile one-off album purchases.
+              </div>
+            </div>
 
-          <div style={{ paddingTop: 2 }}>
-            <button
-              type="button"
-              onClick={() => {
-                void props.onGrant();
-              }}
-              disabled={props.busy}
-              style={{
-                ...primaryButtonStyle,
-                opacity: props.busy ? 0.6 : 1,
-                cursor: props.busy ? "default" : "pointer",
-              }}
-            >
-              {props.busy ? "Granting…" : "Grant"}
-            </button>
+            <div>
+              <button
+                type="button"
+                onClick={() => {
+                  void props.onReconcileStripe();
+                }}
+                disabled={!hasStripeCustomer || props.reconcileBusy}
+                style={{
+                  ...subtleButtonStyle,
+                  opacity:
+                    !hasStripeCustomer || props.reconcileBusy ? 0.45 : 1,
+                  cursor:
+                    !hasStripeCustomer || props.reconcileBusy
+                      ? "default"
+                      : "pointer",
+                }}
+              >
+                {props.reconcileBusy
+                  ? "Syncing…"
+                  : "Sync subscription access"}
+              </button>
+            </div>
+
+            {!hasStripeCustomer ? (
+              <div style={{ fontSize: 11, opacity: 0.46 }}>
+                No Stripe customer is linked to this member.
+              </div>
+            ) : null}
           </div>
-        </>
+        </div>
       ) : null}
     </div>
   );
@@ -316,12 +676,15 @@ function getRevokeOpacity(active: boolean, revokeBusy: boolean): number {
   return 1;
 }
 
-function EffectiveEntitlementsSection(props: Readonly<{
-  current: CurrentEntitlementRow[];
-  busy: boolean;
-}>) {
+function EffectiveEntitlementsSection(
+  props: Readonly<{
+    albums: AlbumForScope[];
+    current: CurrentEntitlementRow[];
+    busy: boolean;
+  }>,
+) {
   return (
-    <div style={{ display: "grid", gap: 10 }}>
+    <div style={{ display: "grid", gap: 8 }}>
       <div
         style={{
           display: "flex",
@@ -331,56 +694,84 @@ function EffectiveEntitlementsSection(props: Readonly<{
         }}
       >
         <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.72 }}>
-          Effective entitlements
+          Current access
         </div>
         {props.busy ? (
-          <div style={{ fontSize: 11, opacity: 0.56 }}>Refreshing…</div>
+          <div style={{ fontSize: 11, opacity: 0.56 }}>
+            Refreshing…
+          </div>
         ) : null}
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gap: 8,
-          alignContent: "start",
-        }}
-      >
-        {props.current.map((entitlement) => (
-          <div
-            key={`${entitlement.entitlement_key}-${entitlement.scope_id ?? "global"}`}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid rgba(255,255,255,0.10)",
-              background: "rgba(255,255,255,0.03)",
-              fontSize: 12,
-            }}
-          >
-            <div style={{ opacity: 0.92, fontWeight: 700 }}>
-              {entitlement.entitlement_key}
-              {entitlement.scope_id ? (
-                <span style={{ opacity: 0.62, fontWeight: 400 }}>
-                  {" "}
-                  — {entitlement.scope_id}
-                </span>
-              ) : null}
-            </div>
+      <div style={{ display: "grid" }}>
+        {props.current.map((entitlement, index) => {
+          const display = describeEntitlement(
+            entitlement.entitlement_key,
+            entitlement.scope_id,
+            props.albums,
+          );
 
-            {entitlement.granted_at || entitlement.expires_at ? (
-              <div style={{ marginTop: 4, fontSize: 11, opacity: 0.56 }}>
-                {entitlement.granted_at
-                  ? `granted ${formatDateTime(entitlement.granted_at)}`
-                  : "granted —"}
-                {entitlement.expires_at
-                  ? ` · expires ${formatDateTime(entitlement.expires_at)}`
-                  : ""}
+          return (
+            <div
+              key={`${entitlement.entitlement_key}-${entitlement.scope_id ?? "global"}`}
+              style={{
+                padding: "10px 2px",
+                borderTop:
+                  index === 0
+                    ? "none"
+                    : "1px solid rgba(255,255,255,0.07)",
+              }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 800 }}>
+                {display.label}
               </div>
-            ) : null}
-          </div>
-        ))}
+
+              {entitlement.granted_at || entitlement.expires_at ? (
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: 11,
+                    opacity: 0.52,
+                  }}
+                >
+                  {entitlement.granted_at
+                    ? `Granted ${formatDateTime(entitlement.granted_at)}`
+                    : ""}
+                  {entitlement.expires_at
+                    ? ` · expires ${formatDateTime(entitlement.expires_at)}`
+                    : ""}
+                </div>
+              ) : null}
+
+              <details style={{ marginTop: 4 }}>
+                <summary
+                  style={{
+                    cursor: "pointer",
+                    fontSize: 10,
+                    opacity: 0.38,
+                  }}
+                >
+                  Technical details
+                </summary>
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: 10,
+                    opacity: 0.44,
+                    wordBreak: "break-all",
+                  }}
+                >
+                  {display.technical}
+                </div>
+              </details>
+            </div>
+          );
+        })}
 
         {props.current.length === 0 ? (
-          <div style={{ fontSize: 12, opacity: 0.58 }}>None.</div>
+          <div style={{ fontSize: 12, opacity: 0.58 }}>
+            No active access grants.
+          </div>
         ) : null}
       </div>
     </div>
@@ -388,91 +779,57 @@ function EffectiveEntitlementsSection(props: Readonly<{
 }
 
 function AccessOperationsSection(props: AccessOperationsProps) {
-  const canReconcile = Boolean(props.memberDetails?.stripe_customer_id);
-  const reconcileDisabled = props.reconcileBusy || !canReconcile;
-
   return (
     <div style={cardStyle}>
-      <div style={sectionHeaderStyle}>Access operations</div>
+      <div style={sectionHeaderStyle}>Member access</div>
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          gap: 14,
-          flexWrap: "wrap",
-          marginTop: 8,
-        }}
-      >
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 18, fontWeight: 900 }}>
-            {props.selected.email}
-          </div>
-          <div
-            style={{
-              marginTop: 5,
-              fontSize: 11,
-              opacity: 0.56,
-              wordBreak: "break-all",
-            }}
-          >
-            {props.selected.id}
-          </div>
+      <div style={{ marginTop: 8 }}>
+        <div style={{ fontSize: 18, fontWeight: 900 }}>
+          {props.selected.email}
         </div>
-
-        <button
-          type="button"
-          onClick={() => {
-            void props.onReconcileStripe();
-          }}
-          disabled={reconcileDisabled}
-          style={{
-            ...primaryButtonStyle,
-            opacity: reconcileDisabled ? 0.45 : 1,
-            cursor: reconcileDisabled ? "default" : "pointer",
-          }}
-        >
-          {props.reconcileBusy ? "Reconciling…" : "Reconcile Stripe"}
-        </button>
       </div>
 
-      <MemberMetadata
+      <MemberSummary
         selected={props.selected}
         memberDetails={props.memberDetails}
-      />
-
-      <AccessHealthCards
         current={props.current}
-        memberDetails={props.memberDetails}
-        stripeWebhookEvents={props.stripeWebhookEvents}
       />
 
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr)",
           gap: 14,
-          marginTop: 14,
+          marginTop: 16,
+          paddingTop: 14,
+          borderTop: "1px solid rgba(255,255,255,0.08)",
         }}
       >
+        <EffectiveEntitlementsSection
+          albums={props.albums}
+          current={props.current}
+          busy={props.memberBusy}
+        />
+
+        <TechnicalIdentityDetails
+          selected={props.selected}
+          memberDetails={props.memberDetails}
+        />
+
         <ManualOverrideSection
           albums={props.albums}
+          memberDetails={props.memberDetails}
           open={props.manualOpen}
           entitlementKey={props.entitlementKey}
           scopeId={props.scopeId}
           reason={props.reason}
           busy={props.grantBusy}
+          reconcileBusy={props.reconcileBusy}
           onOpenChange={props.onManualOpenChange}
           onEntitlementKeyChange={props.onEntitlementKeyChange}
           onScopeIdChange={props.onScopeIdChange}
           onReasonChange={props.onReasonChange}
           onGrant={props.onGrant}
-        />
-
-        <EffectiveEntitlementsSection
-          current={props.current}
-          busy={props.memberBusy}
+          onReconcileStripe={props.onReconcileStripe}
         />
       </div>
     </div>
@@ -480,84 +837,125 @@ function AccessOperationsSection(props: AccessOperationsProps) {
 }
 
 function StripeWebhookLedgerSection(props: StripeWebhookLedgerProps) {
+  const failedCount = props.events.filter((event) =>
+    Boolean(event.handler_error),
+  ).length;
+
   return (
     <div style={cardStyle}>
-      <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.72 }}>
-        Stripe webhook ledger
-      </div>
+      <details>
+        <summary
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            cursor: "pointer",
+            fontSize: 12,
+            fontWeight: 800,
+            opacity: 0.72,
+          }}
+        >
+          <span>Payment diagnostics</span>
+          <span
+            style={{
+              fontWeight: 600,
+              color:
+                failedCount > 0
+                  ? "#ffd0d0"
+                  : "rgba(255,255,255,0.58)",
+            }}
+          >
+            {failedCount > 0
+              ? `${failedCount} failed`
+              : `${props.events.length} events`}
+          </span>
+        </summary>
 
-      <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
-        {props.events.map((event) => {
-          const failed = Boolean(event.handler_error);
+        <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+          {props.events.map((event) => {
+            const failed = Boolean(event.handler_error);
 
-          return (
-            <div
-              key={event.event_id}
-              style={{
-                padding: "11px 12px",
-                borderRadius: 12,
-                border: failed
-                  ? "1px solid rgba(255,120,120,0.28)"
-                  : "1px solid rgba(255,255,255,0.10)",
-                background: failed
-                  ? "rgba(120,0,0,0.16)"
-                  : "rgba(255,255,255,0.03)",
-              }}
-            >
+            return (
               <div
+                key={event.event_id}
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  flexWrap: "wrap",
+                  padding: "11px 12px",
+                  borderRadius: 12,
+                  border: failed
+                    ? "1px solid rgba(255,120,120,0.28)"
+                    : "1px solid rgba(255,255,255,0.10)",
+                  background: failed
+                    ? "rgba(120,0,0,0.16)"
+                    : "rgba(255,255,255,0.03)",
                 }}
               >
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 800 }}>
-                    {event.type}
-                  </div>
-                  <div style={{ marginTop: 4, fontSize: 11, opacity: 0.58 }}>
-                    {event.event_id}
-                  </div>
-                </div>
-
                 <div
                   style={{
-                    fontSize: 11,
-                    opacity: 0.68,
-                    textAlign: "right",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    flexWrap: "wrap",
                   }}
                 >
-                  {getWebhookStatusLabel(event)}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800 }}>
+                      {event.type}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 4,
+                        fontSize: 11,
+                        opacity: 0.58,
+                      }}
+                    >
+                      {event.event_id}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 11,
+                      opacity: 0.68,
+                      textAlign: "right",
+                    }}
+                  >
+                    {getWebhookStatusLabel(event)}
+                  </div>
                 </div>
-              </div>
 
-              <div style={{ marginTop: 8, fontSize: 11, opacity: 0.64 }}>
-                {getWebhookObjectLabel(event)}
-              </div>
-
-              {event.handler_error ? (
                 <div
                   style={{
                     marginTop: 8,
                     fontSize: 11,
-                    color: "#ffd0d0",
-                    wordBreak: "break-word",
+                    opacity: 0.64,
                   }}
                 >
-                  {event.handler_error}
+                  {getWebhookObjectLabel(event)}
                 </div>
-              ) : null}
-            </div>
-          );
-        })}
 
-        {props.events.length === 0 ? (
-          <div style={{ fontSize: 12, opacity: 0.58 }}>
-            No Stripe webhook events linked to this member.
-          </div>
-        ) : null}
-      </div>
+                {event.handler_error ? (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      fontSize: 11,
+                      color: "#ffd0d0",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {event.handler_error}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+
+          {props.events.length === 0 ? (
+            <div style={{ fontSize: 12, opacity: 0.58 }}>
+              No Stripe webhook events are linked to this member.
+            </div>
+          ) : null}
+        </div>
+      </details>
     </div>
   );
 }
@@ -578,7 +976,7 @@ function GrantAuditSection(props: GrantAuditProps) {
           fontWeight: 900,
         }}
       >
-        <span>Audit history ({props.grants.length} grants)</span>
+        <span>Grant history ({props.grants.length})</span>
         <span style={{ opacity: 0.6 }}>{props.open ? "−" : "+"}</span>
       </button>
 
@@ -588,6 +986,11 @@ function GrantAuditSection(props: GrantAuditProps) {
             const active = isGrantActive(grant);
             const revokeBusy = props.revokeBusyId === grant.id;
             const revokeDisabled = !active || revokeBusy;
+            const display = describeEntitlement(
+              grant.entitlement_key,
+              grant.scope_id,
+              props.albums,
+            );
 
             return (
               <div
@@ -605,23 +1008,54 @@ function GrantAuditSection(props: GrantAuditProps) {
               >
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 12, opacity: 0.94 }}>
-                    <span style={{ fontWeight: 700 }}>
-                      {grant.entitlement_key}
+                    <span style={{ fontWeight: 800 }}>
+                      {display.label}
                     </span>
-                    {grant.scope_id ? (
-                      <span style={{ opacity: 0.62 }}>
-                        {" "}
-                        — {grant.scope_id}
-                      </span>
-                    ) : null}
                   </div>
-                  <div style={{ marginTop: 4, fontSize: 11, opacity: 0.56 }}>
-                    {active ? "active" : "inactive"} · created{" "}
+
+                  <div
+                    style={{
+                      marginTop: 4,
+                      fontSize: 11,
+                      opacity: 0.56,
+                    }}
+                  >
+                    {active ? "Active" : "Inactive"} · created{" "}
                     {formatDateTime(grant.created_at)}
                     {grant.expires_at
                       ? ` · expires ${formatDateTime(grant.expires_at)}`
                       : ""}
+                    {grant.grant_source
+                      ? ` · ${grant.grant_source}`
+                      : ""}
                   </div>
+
+                  <details style={{ marginTop: 4 }}>
+                    <summary
+                      style={{
+                        cursor: "pointer",
+                        fontSize: 10,
+                        opacity: 0.38,
+                      }}
+                    >
+                      Technical details
+                    </summary>
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: 3,
+                        marginTop: 4,
+                        fontSize: 10,
+                        opacity: 0.44,
+                        wordBreak: "break-all",
+                      }}
+                    >
+                      <div>{display.technical}</div>
+                      {grant.grant_reason ? (
+                        <div>Reason: {grant.grant_reason}</div>
+                      ) : null}
+                    </div>
+                  </details>
                 </div>
 
                 <button
@@ -665,6 +1099,7 @@ export function SelectedMemberSections(props: SelectedMemberSectionsProps) {
       <AccessOperationsSection {...props} />
       <StripeWebhookLedgerSection events={props.events} />
       <GrantAuditSection
+        albums={props.albums}
         grants={props.grants}
         open={props.open}
         revokeBusyId={props.revokeBusyId}

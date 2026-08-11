@@ -42,7 +42,7 @@ export function useAdminEntitlementsController(): AdminEntitlementsController {
 
   const [entitlementKey, setEntitlementKey] = React.useState("");
   const [scopeId, setScopeId] = React.useState("");
-  const [reason, setReason] = React.useState("admin_ui");
+  const [reason, setReason] = React.useState("");
 
   const [dashboardBusy, setDashboardBusy] = React.useState(false);
   const [searchBusy, setSearchBusy] = React.useState(false);
@@ -119,6 +119,11 @@ export function useAdminEntitlementsController(): AdminEntitlementsController {
   const selectMember = React.useCallback(
     async (member: MemberRow) => {
       setSelected(member);
+      setEntitlementKey("");
+      setScopeId("");
+      setReason("");
+      setManualOpen(false);
+      setAuditOpen(false);
       await loadMember(member.id);
     },
     [loadMember],
