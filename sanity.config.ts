@@ -19,6 +19,13 @@ const SINGLETON_TEMPLATE_IDS = new Set(["siteFlags"]);
 const SINGLETON_SCHEMA_TYPES = new Set(["siteFlags"]);
 const SINGLETON_DOCUMENT_IDS = new Set(["siteFlags"]);
 
+const IDENTITY_PROTECTED_SCHEMA_TYPES = new Set(["lyrics"]);
+const IDENTITY_DESTRUCTIVE_ACTIONS = new Set([
+  "delete",
+  "duplicate",
+  "unpublish",
+]);
+
 function isSingleton(ctx: { schemaType?: string; documentId?: string }) {
   return (
     (ctx.schemaType ? SINGLETON_SCHEMA_TYPES.has(ctx.schemaType) : false) ||
@@ -50,7 +57,8 @@ export default defineConfig({
       return prev;
     },
 
-    // Lock down singleton actions (no delete/duplicate).
+    // Lock down singleton actions (no delete/duplicate) and prevent
+    // ordinary Studio actions from destroying established lyric identities.
     actions: (prev, context) => {
       if (
         isSingleton({
@@ -62,6 +70,14 @@ export default defineConfig({
           (a) => a.action !== "delete" && a.action !== "duplicate",
         );
       }
+
+      if (IDENTITY_PROTECTED_SCHEMA_TYPES.has(context.schemaType)) {
+        return prev.filter(
+          (action) =>
+            !IDENTITY_DESTRUCTIVE_ACTIONS.has(action.action ?? ""),
+        );
+      }
+
       return prev;
     },
   },

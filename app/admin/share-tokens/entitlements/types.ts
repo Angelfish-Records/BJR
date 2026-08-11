@@ -75,6 +75,7 @@ export type DashboardStats = {
   };
   tiers: DashboardTierStat[];
   recentJoins: DashboardRecentJoin[];
+  latestMembers: MemberRow[];
 };
 
 export type DashboardResponse =

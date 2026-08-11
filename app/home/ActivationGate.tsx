@@ -732,7 +732,7 @@ function MembershipModal(props: MembershipModalProps) {
                   }}
                 >
                   {isFriend
-                    ? "Support future work, access exclusive content."
+                    ? "Support future work, access deeper participation."
                     : "Change or cancel your membership below. Thank you for supporting future work on this independent platform."}
                 </div>
               </div>

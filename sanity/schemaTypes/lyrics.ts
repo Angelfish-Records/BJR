@@ -1,11 +1,122 @@
 //web/sanity/schemaTypes/lyrics.ts
 import { defineField, defineType } from "sanity";
 import LyricsImportInput from "../components/LyricsImportInput";
+import { apiVersion } from "../lib/env";
+
+type LyricsIdentityDocument = {
+  _id?: string;
+  recordingId?: string;
+  cues?: Array<{ _key?: string }>;
+};
+
+type PublishedLyricsIdentity = {
+  recordingId?: string;
+  cueKeys?: Array<string | null>;
+};
+
+function norm(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function publishedIdFromStudioDocumentId(documentId: string): string | null {
+  if (!documentId) return null;
+
+  if (documentId.startsWith("drafts.")) {
+    return documentId.slice("drafts.".length);
+  }
+
+  if (documentId.startsWith("versions.")) {
+    return null;
+  }
+
+  return documentId;
+}
+
+function cueKeySet(cues: LyricsIdentityDocument["cues"]): Set<string> {
+  const keys = new Set<string>();
+
+  for (const cue of cues ?? []) {
+    const key = norm(cue?._key);
+    if (key) keys.add(key);
+  }
+
+  return keys;
+}
 
 export default defineType({
   name: "lyrics",
   title: "Lyrics",
   type: "document",
+  validation: (rule) =>
+    rule.custom(async (value: unknown, context) => {
+      const current = value as LyricsIdentityDocument | null;
+      const contextDocument = context.document as
+        | LyricsIdentityDocument
+        | undefined;
+
+      const documentId = norm(contextDocument?._id ?? current?._id);
+      if (!documentId) return true;
+
+      const publishedId = publishedIdFromStudioDocumentId(documentId);
+      if (!publishedId) {
+        return "Lyrics Content Release versions are blocked because Exegesis identity protection only supports direct draft/publish editing.";
+      }
+
+      try {
+        const client = context
+          .getClient({ apiVersion })
+          .withConfig({ perspective: "published", useCdn: false });
+
+        const published = await client.fetch<PublishedLyricsIdentity | null>(
+          `*[_type == "lyrics" && _id == $publishedId][0]{
+            recordingId,
+            "cueKeys": cues[]._key
+          }`,
+          { publishedId },
+        );
+
+        if (!published) return true;
+
+        const currentRecordingId = norm(current?.recordingId);
+        const publishedRecordingId = norm(published.recordingId);
+
+        if (
+          publishedRecordingId &&
+          currentRecordingId !== publishedRecordingId
+        ) {
+          return {
+            message:
+              "Recording ID is immutable after publication because Exegesis state is keyed to it.",
+            path: ["recordingId"],
+          };
+        }
+
+        const currentKeys = cueKeySet(current?.cues);
+        const publishedKeys = (published.cueKeys ?? []).filter(
+          (key): key is string =>
+            typeof key === "string" && key.trim().length > 0,
+        );
+
+        const missingKeys = publishedKeys.filter(
+          (key) => !currentKeys.has(key.trim()),
+        );
+
+        if (missingKeys.length > 0) {
+          return {
+            message:
+              `This edit removes ${missingKeys.length} established lyric cue ` +
+              "identity/identities. Publishing is blocked to protect Exegesis " +
+              "groups, discussions, and line links. Restore the cues or use an " +
+              "explicit migration workflow.",
+            path: ["cues"],
+          };
+        }
+
+        return true;
+      } catch {
+        return "Could not verify established lyric identities. Publishing is blocked until Sanity identity validation succeeds.";
+      }
+    }),
   fields: [
     defineField({
       name: "recordingId",

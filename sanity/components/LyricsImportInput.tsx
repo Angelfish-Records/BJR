@@ -1,11 +1,118 @@
 //web/sanity/components/LyricsImportInput.tsx
 import React from "react";
-import { Stack, Card, Text, Button, Flex } from "@sanity/ui";
-import { set, unset, useFormValue, PatchEvent } from "sanity";
+import { Stack, Card, Text, Button } from "@sanity/ui";
+import { set, useFormValue, PatchEvent } from "sanity";
 import type { ArrayOfObjectsInputProps, FormPatch } from "sanity";
 
 type ImportLyricCue = { tMs: number; text: string; endMs?: number };
 type ImportPayload = { offsetMs?: number; cues: ImportLyricCue[] };
+
+type ExistingLyricCue = {
+  _key: string;
+  text: string;
+};
+
+type KeyedImportLyricCue = ImportLyricCue & {
+  _key: string;
+  _type: "cue";
+};
+
+type ReconciledImport =
+  | {
+      ok: true;
+      cues: KeyedImportLyricCue[];
+      preservedExistingKeys: boolean;
+    }
+  | {
+      ok: false;
+      error: string;
+    };
+
+function readExistingCues(value: unknown): ExistingLyricCue[] | null {
+  if (!Array.isArray(value)) return [];
+
+  const cues: ExistingLyricCue[] = [];
+
+  for (const item of value) {
+    if (!item || typeof item !== "object") return null;
+
+    const row = item as Record<string, unknown>;
+    const key = typeof row._key === "string" ? row._key.trim() : "";
+    const text = typeof row.text === "string" ? row.text : null;
+
+    if (!key || text === null) return null;
+    cues.push({ _key: key, text });
+  }
+
+  return cues;
+}
+
+function identityText(text: string): string {
+  return text.trim();
+}
+
+function reconcileImportCues(
+  existing: ExistingLyricCue[],
+  incoming: ImportLyricCue[],
+): ReconciledImport {
+  if (existing.length === 0) {
+    return {
+      ok: true,
+      preservedExistingKeys: false,
+      cues: incoming.map((cue) => ({
+        _key: makeKey(),
+        _type: "cue",
+        tMs: cue.tMs,
+        text: cue.text,
+        ...(typeof cue.endMs === "number" ? { endMs: cue.endMs } : {}),
+      })),
+    };
+  }
+
+  if (existing.length !== incoming.length) {
+    return {
+      ok: false,
+      error:
+        `Import stopped: the existing document has ${existing.length} cues, ` +
+        `but the import has ${incoming.length}. Structural lyric changes require ` +
+        "manual editing or an explicit identity-migration workflow.",
+    };
+  }
+
+  for (let index = 0; index < existing.length; index += 1) {
+    const current = existing[index];
+    const next = incoming[index];
+
+    if (!current || !next) {
+      return {
+        ok: false,
+        error: "Import stopped: cue reconciliation failed unexpectedly.",
+      };
+    }
+
+    if (identityText(current.text) !== identityText(next.text)) {
+      return {
+        ok: false,
+        error:
+          `Import stopped at cue ${index + 1}: the lyric text differs from the ` +
+          "existing cue sequence. Edit text manually so its existing Exegesis " +
+          "line identity is preserved.",
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    preservedExistingKeys: true,
+    cues: incoming.map((cue, index) => ({
+      _key: existing[index]!._key,
+      _type: "cue",
+      tMs: cue.tMs,
+      text: cue.text,
+      ...(typeof cue.endMs === "number" ? { endMs: cue.endMs } : {}),
+    })),
+  };
+}
 
 const PARA_BREAK = "__PARA_BREAK__" as const;
 const TIME_TAG_RE =
@@ -174,17 +281,24 @@ export default function LyricsImportInput(props: ArrayOfObjectsInputProps) {
     }
 
     const siblingOffset = asJson?.offsetMs ?? offsetFromLrc;
+    const existingCues = readExistingCues(value);
 
-    const cuesWithKeys = cues.map((c) => ({
-      _key: makeKey(),
-      _type: "cue",
-      tMs: c.tMs,
-      text: c.text,
-      ...(typeof c.endMs === "number" ? { endMs: c.endMs } : {}),
-    }));
+    if (existingCues === null) {
+      setStatus(
+        "Import stopped: existing cues are missing stable Sanity keys. " +
+          "Resolve the cue identities before importing.",
+      );
+      return;
+    }
+
+    const reconciled = reconcileImportCues(existingCues, cues);
+    if (!reconciled.ok) {
+      setStatus(reconciled.error);
+      return;
+    }
 
     const patches: FormPatch[] = [];
-    patches.push(set(cuesWithKeys));
+    patches.push(set(reconciled.cues));
 
     if (siblingOffset != null) {
       patches.push(set(siblingOffset, ["..", "offsetMs"]));
@@ -193,13 +307,12 @@ export default function LyricsImportInput(props: ArrayOfObjectsInputProps) {
     onChange(PatchEvent.from(patches));
 
     const extra = siblingOffset != null ? ` (offset ${siblingOffset}ms)` : "";
-    setStatus(`Imported ${cues.length} cues.${extra}`);
-  }, [importText, onChange]);
+    const identityStatus = reconciled.preservedExistingKeys
+      ? " Preserved all existing Exegesis line identities."
+      : "";
 
-  const clear = React.useCallback(() => {
-    onChange(PatchEvent.from([unset()]));
-    setStatus("Cleared cues.");
-  }, [onChange]);
+    setStatus(`Imported ${cues.length} cues.${extra}${identityStatus}`);
+  }, [importText, onChange, value]);
 
   return (
     <Stack space={3}>
@@ -210,10 +323,13 @@ export default function LyricsImportInput(props: ArrayOfObjectsInputProps) {
             or JSON. LRC <code>[offset: …]</code> is honoured.
           </Text>
 
-          <Flex gap={2}>
-            <Button text="Apply import → Cues" tone="primary" onClick={apply} />
-            <Button text="Clear cues" tone="critical" onClick={clear} />
-          </Flex>
+          <Text size={1} muted>
+            Existing cue identities are protected. Re-imports may update timing
+            only when the lyric cue sequence is unchanged; structural or text
+            changes must be edited manually.
+          </Text>
+
+          <Button text="Apply import → Cues" tone="primary" onClick={apply} />
 
           {status ? (
             <Text size={1} muted>

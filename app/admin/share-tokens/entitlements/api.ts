@@ -71,6 +71,7 @@ export async function fetchDashboard(
     totals: json.totals,
     tiers: Array.isArray(json.tiers) ? json.tiers : [],
     recentJoins: Array.isArray(json.recentJoins) ? json.recentJoins : [],
+    latestMembers: Array.isArray(json.latestMembers) ? json.latestMembers : [],
   };
 }
 

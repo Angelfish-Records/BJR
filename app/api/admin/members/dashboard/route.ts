@@ -29,6 +29,13 @@ type RecentJoinRow = {
   count: number | string;
 };
 
+type LatestMemberRow = {
+  id: string;
+  email: string;
+  clerk_user_id: string | null;
+  created_at: string;
+};
+
 function toInt(value: number | string): number {
   return typeof value === "number" ? value : Number(value);
 }
@@ -72,6 +79,17 @@ export async function GET(req: Request) {
       limit 14
     `;
 
+    const latestMembersResult = await sql<LatestMemberRow>`
+      select
+        id,
+        email,
+        clerk_user_id,
+        created_at
+      from members
+      order by created_at desc, id desc
+      limit 8
+    `;
+
     const totalsRow = totalsResult.rows[0] ?? {
       members: 0,
       joined_in_period: 0,
@@ -96,6 +114,7 @@ export async function GET(req: Request) {
         date: row.date,
         count: toInt(row.count),
       })),
+      latestMembers: latestMembersResult.rows,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "error";

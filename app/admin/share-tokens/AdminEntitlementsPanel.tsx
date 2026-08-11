@@ -18,8 +18,10 @@ export default function AdminEntitlementsPanel(props: Props) {
       <MembershipDashboardSection
         dashboard={controller.dashboard}
         periodDays={controller.periodDays}
+        selectedId={controller.selected?.id ?? null}
         busy={controller.dashboardBusy}
         onPeriodChange={controller.setPeriodDays}
+        onSelectMember={controller.selectMember}
       />
 
       <MemberSearchSection
