@@ -199,171 +199,190 @@ export function MembershipDashboardSection(props: Props) {
 
   return (
     <div style={cardStyle}>
-      <div>
-        <div style={{ fontSize: 12, letterSpacing: "0.04em", opacity: 0.56 }}>
-          MEMBERSHIP DASHBOARD
-        </div>
-        <div style={{ marginTop: 6, fontSize: 14, fontWeight: 700 }}>
-          Membership overview
-        </div>
+      <div
+        style={{
+          fontSize: 12,
+          letterSpacing: "0.04em",
+          opacity: 0.56,
+        }}
+      >
+        MEMBERSHIP DASHBOARD
       </div>
 
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1.35fr) repeat(5, minmax(0, 1fr))",
-          gap: 10,
-          marginTop: 14,
+          display: "flex",
+          gap: 32,
+          flexWrap: "wrap",
+          alignItems: "flex-start",
+          marginTop: 16,
         }}
       >
-        <div
-          style={{
-            padding: "14px 14px",
-            borderRadius: 14,
-            border: "1px solid rgba(255,255,255,0.16)",
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.05))",
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
-          }}
-        >
-          <div style={{ fontSize: 11, opacity: 0.66 }}>Total members</div>
-          <div style={{ marginTop: 6, fontSize: 28, fontWeight: 900 }}>
-            {props.dashboard?.totals.members ?? "—"}
-          </div>
-        </div>
-
-        {metrics.map((item) => (
-          <MembershipMetricCard
-            key={item.label}
-            label={item.label}
-            value={item.value}
+        <div style={{ flex: "0.9 1 360px", minWidth: 0 }}>
+          <LatestMembers
+            members={props.dashboard?.latestMembers ?? []}
+            selectedId={props.selectedId}
+            onSelectMember={props.onSelectMember}
           />
-        ))}
-      </div>
-
-      <div
-        style={{
-          marginTop: 18,
-          paddingTop: 16,
-          borderTop: "1px solid rgba(255,255,255,0.10)",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 12,
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}
-        >
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.72 }}>
-              Membership joins
-            </div>
-            <div style={{ marginTop: 4, fontSize: 11, opacity: 0.56 }}>
-              {getDashboardRangeDescription(props.periodDays)}
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {DASHBOARD_RANGE_OPTIONS.map((option) => {
-              const active = props.periodDays === option.value;
-              const inactiveBusy = props.busy && !active;
-
-              return (
-                <button
-                  key={option.label}
-                  type="button"
-                  onClick={() => props.onPeriodChange(option.value)}
-                  disabled={props.busy}
-                  style={{
-                    ...subtleButtonStyle,
-                    background: active
-                      ? "rgba(255,255,255,0.12)"
-                      : "rgba(255,255,255,0.04)",
-                    opacity: inactiveBusy ? 0.7 : 1,
-                    cursor: props.busy ? "default" : "pointer",
-                  }}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
-          </div>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            gap: 32,
-            flexWrap: "wrap",
-            alignItems: "flex-start",
-            marginTop: 16,
-          }}
-        >
-          <div style={{ flex: "1 1 340px", minWidth: 0 }}>
-            <LatestMembers
-              members={props.dashboard?.latestMembers ?? []}
-              selectedId={props.selectedId}
-              onSelectMember={props.onSelectMember}
-            />
+        <div style={{ flex: "2.1 1 760px", minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>
+            Membership overview
           </div>
 
-          <div style={{ flex: "1.7 1 560px", minWidth: 0 }}>
-            {joinsChart.points.length > 0 ? (
-              <>
-                <JoinSummary
-                  joinedInPeriod={props.dashboard?.totals.joinedInPeriod ?? "—"}
-                  peakDay={joinsChart.maxCount}
-                />
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              gap: 10,
+              marginTop: 14,
+            }}
+          >
+            <div
+              style={{
+                padding: "14px 14px",
+                borderRadius: 14,
+                border: "1px solid rgba(255,255,255,0.16)",
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.05))",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+              }}
+            >
+              <div style={{ fontSize: 11, opacity: 0.66 }}>Total members</div>
+              <div style={{ marginTop: 6, fontSize: 28, fontWeight: 900 }}>
+                {props.dashboard?.totals.members ?? "—"}
+              </div>
+            </div>
 
-                <div style={{ width: "100%", height: 220 }}>
-                  <svg
-                    viewBox="0 0 100 100"
-                    preserveAspectRatio="none"
-                    style={{ width: "100%", height: "100%", display: "block" }}
-                    role="img"
-                    aria-labelledby="membership-joins-chart-title"
-                  >
-                    <title id="membership-joins-chart-title">
-                      Membership joins chart
-                    </title>
-                    <path
-                      d={joinsChart.areaPath}
-                      fill="rgba(255,255,255,0.10)"
-                    />
-                    <path
-                      d={joinsChart.path}
-                      fill="none"
-                      stroke="rgba(255,255,255,0.88)"
-                      strokeWidth="1.8"
-                      vectorEffect="non-scaling-stroke"
-                      strokeLinejoin="round"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                </div>
+            {metrics.map((item) => (
+              <MembershipMetricCard
+                key={item.label}
+                label={item.label}
+                value={item.value}
+              />
+            ))}
+          </div>
 
+          <div
+            style={{
+              marginTop: 20,
+              paddingTop: 16,
+              borderTop: "1px solid rgba(255,255,255,0.10)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
                 <div
                   style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    marginTop: 8,
-                    fontSize: 11,
-                    opacity: 0.56,
+                    fontSize: 12,
+                    fontWeight: 800,
+                    opacity: 0.72,
                   }}
                 >
-                  <span>{firstDate}</span>
-                  <span>{lastDate}</span>
+                  Membership joins
                 </div>
-              </>
-            ) : (
-              <div style={{ fontSize: 12, opacity: 0.58 }}>
-                No membership join data available for this range.
+                <div style={{ marginTop: 4, fontSize: 11, opacity: 0.56 }}>
+                  {getDashboardRangeDescription(props.periodDays)}
+                </div>
               </div>
-            )}
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {DASHBOARD_RANGE_OPTIONS.map((option) => {
+                  const active = props.periodDays === option.value;
+                  const inactiveBusy = props.busy && !active;
+
+                  return (
+                    <button
+                      key={option.label}
+                      type="button"
+                      onClick={() => props.onPeriodChange(option.value)}
+                      disabled={props.busy}
+                      style={{
+                        ...subtleButtonStyle,
+                        background: active
+                          ? "rgba(255,255,255,0.12)"
+                          : "rgba(255,255,255,0.04)",
+                        opacity: inactiveBusy ? 0.7 : 1,
+                        cursor: props.busy ? "default" : "pointer",
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              {joinsChart.points.length > 0 ? (
+                <>
+                  <JoinSummary
+                    joinedInPeriod={
+                      props.dashboard?.totals.joinedInPeriod ?? "—"
+                    }
+                    peakDay={joinsChart.maxCount}
+                  />
+
+                  <div style={{ width: "100%", height: 220 }}>
+                    <svg
+                      viewBox="0 0 100 100"
+                      preserveAspectRatio="none"
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        display: "block",
+                      }}
+                      role="img"
+                      aria-labelledby="membership-joins-chart-title"
+                    >
+                      <title id="membership-joins-chart-title">
+                        Membership joins chart
+                      </title>
+                      <path
+                        d={joinsChart.areaPath}
+                        fill="rgba(255,255,255,0.10)"
+                      />
+                      <path
+                        d={joinsChart.path}
+                        fill="none"
+                        stroke="rgba(255,255,255,0.88)"
+                        strokeWidth="1.8"
+                        vectorEffect="non-scaling-stroke"
+                        strokeLinejoin="round"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      marginTop: 8,
+                      fontSize: 11,
+                      opacity: 0.56,
+                    }}
+                  >
+                    <span>{firstDate}</span>
+                    <span>{lastDate}</span>
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 12, opacity: 0.58 }}>
+                  No membership join data available for this range.
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
