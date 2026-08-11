@@ -104,18 +104,25 @@ export async function POST(req: Request) {
   }
 
   // Album metadata, tracks, browse lists, and canonical metadata helpers.
+  //
+  // Album runtime payloads are rendered beneath the persistent /(site)/(session)
+  // layout through its @runtime parallel slot. Invalidate that shared route tree
+  // as well as the leaf album pages so a cached RSC payload cannot retain stale
+  // recording identity after the tagged catalogue data has been refreshed.
   if (docType === "album") {
     tags.push("albums");
     revalidatePath("/album/[slug]", "page");
     revalidatePath("/album/[slug]/track/[displayId]", "page");
+    revalidatePath("/(site)/(session)", "layout");
   }
 
   // Lyrics are independently cached, but album payload construction depends on
-  // them, so invalidate both cache families together.
+  // them, so invalidate both cache families and the same session runtime tree.
   if (docType === "lyrics") {
     tags.push("lyrics", "albums");
     revalidatePath("/album/[slug]", "page");
     revalidatePath("/album/[slug]/track/[displayId]", "page");
+    revalidatePath("/(site)/(session)", "layout");
   }
 
   if (tags.length === 0) {
