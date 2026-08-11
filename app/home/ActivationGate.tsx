@@ -1004,8 +1004,7 @@ function SignedInIdentity(props: SignedInIdentityProps) {
           opacity: 0.95,
         }}
       >
-        <>
-          <span style={{ opacity: 0.72 }} title={tier}>
+        <span style={{ opacity: 0.72 }} title={tier}>
             {tier}
           </span>
 
@@ -1069,10 +1068,9 @@ function SignedInIdentity(props: SignedInIdentityProps) {
             </span>
           )}
 
-          <span aria-hidden style={{ opacity: 0.35 }}>
-            |
-          </span>
-        </>
+        <span aria-hidden style={{ opacity: 0.35 }}>
+          |
+        </span>
 
         <button
           type="button"

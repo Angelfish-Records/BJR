@@ -67,7 +67,7 @@ export default function ExegesisAdminClient(
       title="Exegesis admin"
       subtitle={
         mode === "grouping"
-          ? "Review lyric line grouping and canonical mapping for imported cues."
+          ? "Arrange lyric lines into the discussion groups readers will see."
           : "Moderate threads, lock or pin discussion, and manage reports."
       }
       headerActions={modeActions}

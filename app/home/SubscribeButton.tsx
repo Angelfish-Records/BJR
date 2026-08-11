@@ -115,7 +115,7 @@ function PriceBlock(props: Readonly<{ price: string; subcopy: string }>) {
       style={{
         display: "grid",
         justifyItems: "end",
-        textAlign: "center",
+        textAlign: "right",
         gap: 8,
         alignSelf: "center",
       }}
@@ -139,6 +139,7 @@ function PriceBlock(props: Readonly<{ price: string; subcopy: string }>) {
           lineHeight: "14px",
           opacity: 0.72,
           maxWidth: "none",
+          whiteSpace: "pre-line",
         }}
       >
         {subcopy}
@@ -251,8 +252,11 @@ function defaultCardSpec(tier: SubscribeTier): CardSpec {
 }
 
 function cardSubcopy(tier: SubscribeTier): string {
-  if (tier === "partner") return "Billed annually in NZD. Cancel anytime.";
-  return "Billed monthly in NZD. Cancel anytime.";
+  if (tier === "partner") {
+    return "Billed annually in NZD.\nCancel anytime.";
+  }
+
+  return "Billed monthly in NZD.\nCancel anytime.";
 }
 
 function cardGlowSeed(tier: SubscribeTier): number {

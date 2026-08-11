@@ -44,6 +44,9 @@ type DerivedGroup = {
   count: number;
   updatedAt: string | null;
   lineKeys: string[];
+  firstCueIndex: number;
+  previewLines: string[];
+  searchText: string;
 };
 
 type NewGroupOk = { ok: true; canonicalGroupKey: string };
@@ -106,6 +109,12 @@ function fmtTimeMs(ms: number): string {
 
 function normalize(s: string): string {
   return (s ?? "").toLowerCase().trim();
+}
+
+const PARA_BREAK = "__PARA_BREAK__";
+
+function isGroupableCue(cue: LyricsApiCue): boolean {
+  return cue.text.trim() !== PARA_BREAK;
 }
 
 function startsWithLk(groupKey: string): boolean {
@@ -227,7 +236,7 @@ function catalogueStatusText(
 ): string {
   if (busy) return "Loading catalogue…";
   if (error) return `Catalogue unavailable: ${error}`;
-  if (knownCount > 0) return `${knownCount} known recordingIds`;
+  if (knownCount > 0) return `${knownCount} tracks available`;
   return "No catalogue entries";
 }
 
@@ -238,69 +247,81 @@ type CueRowProps = Readonly<{
   index: number;
   selected: boolean;
   activeGroupKey: string;
+  groupLabel: string | null;
+  showTechnicalDetails: boolean;
   onCueClick: (index: number, lineKey: string, event: React.MouseEvent) => void;
   onFocusGroup: (groupKey: string) => void;
 }>;
 
 function CueRow(props: CueRowProps) {
-  const { row, index, selected, activeGroupKey, onCueClick, onFocusGroup } =
-    props;
+  const {
+    row,
+    index,
+    selected,
+    activeGroupKey,
+    groupLabel,
+    showTechnicalDetails,
+    onCueClick,
+    onFocusGroup,
+  } = props;
   const { cue, groupKey } = row;
   const isActiveGroup = activeGroupKey.length > 0 && groupKey === activeGroupKey;
-  const isMappedCanonical = !startsWithLk(groupKey);
 
   return (
     <div
+      id={`exegesis-line-${cue.lineKey}`}
       className={clsx([
-        "relative w-full rounded-md bg-black/20 hover:bg-black/25",
-        selected && "ring-1 ring-white/20",
-        isActiveGroup && "ring-1 ring-white/25",
+        "relative w-full rounded-lg border border-white/5 bg-black/20 transition hover:bg-black/25",
+        selected && "bg-white/10 ring-1 ring-white/30",
+        isActiveGroup && "bg-white/5 ring-1 ring-white/20",
       ])}
+      style={
+        isActiveGroup
+          ? { boxShadow: "inset 3px 0 0 rgba(255,255,255,0.42)" }
+          : undefined
+      }
     >
       <button
         type="button"
-        className="absolute inset-0 z-0 rounded-md border-0 bg-transparent p-0"
+        className="absolute inset-0 z-0 rounded-lg border-0 bg-transparent p-0"
         onClick={(event) => onCueClick(index, cue.lineKey, event)}
-        title="Click to select/deselect. Shift-click for range."
-        aria-label={`Select lyric line ${cue.lineKey}`}
+        title="Click to select. Shift-click for a range; Command/Ctrl-click to add or remove."
+        aria-label={`Select lyric line: ${cue.text}`}
       />
+
       <div className="pointer-events-none relative z-10 p-3">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2 text-xs opacity-60">
-              <span className="opacity-70">{fmtTimeMs(cue.tMs)}</span>
-              <span className="opacity-50">·</span>
-              <span className="truncate">{cue.lineKey}</span>
-            </div>
-
-            <div className="mt-1 text-sm opacity-90 line-clamp-2">
-              {cue.text}
-            </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm leading-6 opacity-95">{cue.text}</div>
 
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                className={clsx([
-                  "pointer-events-auto relative rounded-full px-2 py-0.5 text-xs",
-                  isMappedCanonical
-                    ? "bg-white/10 hover:bg-white/15"
-                    : "bg-white/5 hover:bg-white/10",
-                ])}
-                onClick={() => onFocusGroup(groupKey)}
-                title="Focus this group"
-              >
-                <span className="opacity-80">group:</span>{" "}
-                <span className="opacity-95">{groupKey}</span>
-              </button>
+              {groupLabel ? (
+                <button
+                  type="button"
+                  className="pointer-events-auto relative rounded-full bg-white/10 px-2 py-0.5 text-xs hover:bg-white/15"
+                  onClick={() => onFocusGroup(groupKey)}
+                  title={`Highlight ${groupLabel}`}
+                >
+                  {groupLabel}
+                </button>
+              ) : (
+                <span className="rounded-full bg-white/5 px-2 py-0.5 text-xs opacity-60">
+                  Ungrouped
+                </span>
+              )}
 
-              <span className="text-xs opacity-60">
-                {isMappedCanonical ? "canonical" : "fallback"}
-              </span>
+              {selected ? (
+                <span className="text-xs font-medium opacity-80">Selected</span>
+              ) : null}
             </div>
-          </div>
 
-          <div className="shrink-0 text-xs opacity-60">
-            {selected ? "Selected" : ""}
+            {showTechnicalDetails ? (
+              <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[11px] opacity-45">
+                <span>{fmtTimeMs(cue.tMs)}</span>
+                <span>{cue.lineKey}</span>
+                <span>{groupKey}</span>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -313,6 +334,8 @@ type CueListProps = Readonly<{
   visibleCues: VisibleCue[];
   selectedLineKeys: Record<string, boolean>;
   activeGroupKey: string;
+  groupOrdinalByKey: Record<string, number>;
+  showTechnicalDetails: boolean;
   onCueClick: (index: number, lineKey: string, event: React.MouseEvent) => void;
   onFocusGroup: (groupKey: string) => void;
 }>;
@@ -324,28 +347,35 @@ function CueList(props: CueListProps) {
   if (props.visibleCues.length === 0) {
     return (
       <div className="text-sm opacity-60">
-        No lines match the current filters.
+        No lyric lines match the current filters.
       </div>
     );
   }
 
-  return props.visibleCues.map((row, index) => (
-    <CueRow
-      key={row.cue.lineKey}
-      row={row}
-      index={index}
-      selected={props.selectedLineKeys[row.cue.lineKey] === true}
-      activeGroupKey={props.activeGroupKey}
-      onCueClick={props.onCueClick}
-      onFocusGroup={props.onFocusGroup}
-    />
-  ));
+  return props.visibleCues.map((row, index) => {
+    const ordinal = props.groupOrdinalByKey[row.groupKey];
+    return (
+      <CueRow
+        key={row.cue.lineKey}
+        row={row}
+        index={index}
+        selected={props.selectedLineKeys[row.cue.lineKey] === true}
+        activeGroupKey={props.activeGroupKey}
+        groupLabel={ordinal ? `Group ${ordinal}` : null}
+        showTechnicalDetails={props.showTechnicalDetails}
+        onCueClick={props.onCueClick}
+        onFocusGroup={props.onFocusGroup}
+      />
+    );
+  });
 }
 
 type GroupListProps = Readonly<{
   lyrics: LyricsApiOk | null;
   groups: DerivedGroup[];
   activeGroupKey: string;
+  groupOrdinalByKey: Record<string, number>;
+  showTechnicalDetails: boolean;
   onFocusGroup: (groupKey: string) => void;
 }>;
 
@@ -354,40 +384,61 @@ function GroupList(props: GroupListProps) {
     return <div className="text-sm opacity-60">Load a track to view groups.</div>;
   }
   if (props.groups.length === 0) {
-    return <div className="text-sm opacity-60">No groups match your search.</div>;
+    return (
+      <div className="text-sm opacity-60">
+        No groups yet. Select lyric lines and choose Group selected.
+      </div>
+    );
   }
 
   return props.groups.map((group) => {
     const isActive = group.key === props.activeGroupKey;
-    const badge = group.isCanonical ? "canonical" : "implicit";
+    const ordinal = props.groupOrdinalByKey[group.key];
+    const label = ordinal ? `Group ${ordinal}` : "Group";
+
     return (
       <button
         key={group.key}
         type="button"
         className={clsx([
-          "w-full rounded-md bg-black/20 p-3 text-left hover:bg-black/25",
-          isActive && "ring-1 ring-white/20",
+          "w-full rounded-lg border border-white/5 bg-black/20 p-3 text-left transition hover:bg-black/25",
+          isActive && "bg-white/5 ring-1 ring-white/25",
         ])}
         onClick={() => props.onFocusGroup(group.key)}
-        title="Focus group"
+        title={`Highlight ${label}`}
       >
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="truncate text-sm opacity-90">{group.key}</div>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs opacity-60">
-              <span>{group.count} lines</span>
-              <span className="opacity-40">·</span>
-              <span>{badge}</span>
-              {group.updatedAt ? (
-                <>
-                  <span className="opacity-40">·</span>
-                  <span className="truncate">{group.updatedAt}</span>
-                </>
-              ) : null}
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold opacity-95">{label}</div>
+
+            <div className="mt-2 space-y-1">
+              {group.previewLines.map((line, index) => (
+                <div
+                  key={`${group.key}:preview:${index}`}
+                  className="truncate text-sm opacity-75"
+                >
+                  {line}
+                </div>
+              ))}
             </div>
+
+            <div className="mt-2 text-xs opacity-55">
+              {group.count} {group.count === 1 ? "line" : "lines"}
+              {group.count > group.previewLines.length
+                ? ` · +${group.count - group.previewLines.length} more`
+                : ""}
+            </div>
+
+            {props.showTechnicalDetails ? (
+              <div className="mt-2 break-all text-[11px] opacity-40">
+                {group.key}
+                {group.updatedAt ? ` · updated ${group.updatedAt}` : ""}
+              </div>
+            ) : null}
           </div>
+
           <div className="shrink-0 text-xs opacity-60">
-            {isActive ? "Focused" : ""}
+            {isActive ? "Highlighted" : ""}
           </div>
         </div>
       </button>
@@ -411,14 +462,16 @@ export default function ExegesisGroupTool() {
   const [activeGroupKey, setActiveGroupKey] = React.useState<string>("");
 
   const [groupSearch, setGroupSearch] = React.useState<string>("");
+  const [showTechnicalDetails, setShowTechnicalDetails] =
+    React.useState<boolean>(false);
   const [showOnlyUnmapped, setShowOnlyUnmapped] =
     React.useState<boolean>(false);
   const [showOnlySelected, setShowOnlySelected] =
     React.useState<boolean>(false);
 
-  const [lastClickedIdx, setLastClickedIdx] = React.useState<number | null>(
-    null,
-  );
+  const [lastClickedLineKey, setLastClickedLineKey] = React.useState<
+    string | null
+  >(null);
 
   const [knownRecordingIds, setKnownRecordingIds] = React.useState<string[]>(
     [],
@@ -474,7 +527,7 @@ export default function ExegesisGroupTool() {
     }, [groupMap?.groups]);
 
   const cues: LyricsApiCue[] = React.useMemo(() => {
-    return lyrics?.cues ?? [];
+    return (lyrics?.cues ?? []).filter(isGroupableCue);
   }, [lyrics]);
 
   const lineToGroupKey: Record<string, string> = React.useMemo(() => {
@@ -503,91 +556,114 @@ export default function ExegesisGroupTool() {
     }
     const total = cues.length;
     const unmapped = Math.max(0, total - mappedCount);
-    const canonCount = (groupMap?.groups ?? []).length;
-    return { total, mappedCount, unmapped, canonCount };
-  }, [cues, lineToGroupKey, groupMap?.groups]);
+    return { total, mappedCount, unmapped };
+  }, [cues, lineToGroupKey]);
 
-  const derivedGroups: DerivedGroup[] = React.useMemo(() => {
+  const allDerivedGroups: DerivedGroup[] = React.useMemo(() => {
     const members: Record<string, string[]> = {};
-    for (const c of cues) {
-      const gk = getLineGroupKey(c.lineKey);
-      if (!members[gk]) members[gk] = [];
-      members[gk].push(c.lineKey);
+    const firstCueIndexByGroup: Record<string, number> = {};
+    const textByLineKey: Record<string, string> = {};
+
+    for (let index = 0; index < cues.length; index += 1) {
+      const cue = cues[index];
+      const groupKey = getLineGroupKey(cue.lineKey);
+      if (!members[groupKey]) members[groupKey] = [];
+      members[groupKey].push(cue.lineKey);
+      textByLineKey[cue.lineKey] = cue.text;
+      if (firstCueIndexByGroup[groupKey] === undefined) {
+        firstCueIndexByGroup[groupKey] = index;
+      }
     }
 
     const out: DerivedGroup[] = [];
-    const keys = Object.keys(members);
 
-    for (const key of keys) {
+    for (const key of Object.keys(members)) {
       const meta = canonicalMetaByKey[key];
-      const isCanonical = Boolean(meta) || isProbablyCanonicalGroupKey(key);
+      const isCanonical =
+        Boolean(meta) || (isProbablyCanonicalGroupKey(key) && !startsWithLk(key));
+      const lineKeys = members[key] ?? [];
+      const allLines = lineKeys
+        .map((lineKey) => textByLineKey[lineKey] ?? "")
+        .filter(Boolean);
+
       out.push({
         key,
-        isCanonical: Boolean(meta) || (isCanonical && !startsWithLk(key)),
-        count: members[key]?.length ?? 0,
+        isCanonical,
+        count: lineKeys.length,
         updatedAt: meta?.updatedAt ?? null,
-        lineKeys: members[key] ?? [],
+        lineKeys,
+        firstCueIndex: firstCueIndexByGroup[key] ?? Number.MAX_SAFE_INTEGER,
+        previewLines: allLines.slice(0, 3),
+        searchText: allLines.join(" "),
       });
     }
 
-    // Sort: canonical first, then by count desc, then by updatedAt desc, then key
     out.sort((a, b) => {
       if (a.isCanonical !== b.isCanonical) return a.isCanonical ? -1 : 1;
-      if (a.count !== b.count) return b.count - a.count;
-      const ta = a.updatedAt ? Date.parse(a.updatedAt) : 0;
-      const tb = b.updatedAt ? Date.parse(b.updatedAt) : 0;
-      if (ta !== tb) return tb - ta;
+      if (a.firstCueIndex !== b.firstCueIndex) {
+        return a.firstCueIndex - b.firstCueIndex;
+      }
       return a.key.localeCompare(b.key);
     });
 
-    // Filter search
-    const q = normalize(groupSearch);
-    if (!q) return out;
-    return out.filter((g) => normalize(g.key).includes(q));
-  }, [cues, canonicalMetaByKey, groupSearch, getLineGroupKey]);
+    return out;
+  }, [cues, canonicalMetaByKey, getLineGroupKey]);
+
+  const canonicalGroups = React.useMemo(
+    () => allDerivedGroups.filter((group) => group.isCanonical),
+    [allDerivedGroups],
+  );
+
+  const groupOrdinalByKey: Record<string, number> = React.useMemo(() => {
+    const out: Record<string, number> = {};
+    canonicalGroups.forEach((group, index) => {
+      out[group.key] = index + 1;
+    });
+    return out;
+  }, [canonicalGroups]);
+
+  const derivedGroups: DerivedGroup[] = React.useMemo(() => {
+    const query = normalize(groupSearch);
+    if (!query) return canonicalGroups;
+    return canonicalGroups.filter((group) =>
+      normalize(group.searchText).includes(query),
+    );
+  }, [canonicalGroups, groupSearch]);
 
   const activeGroup: DerivedGroup | null = React.useMemo(() => {
-    const gk = activeGroupKey.trim();
-    if (!gk) return null;
-    return derivedGroups.find((g) => g.key === gk) ?? null;
-  }, [activeGroupKey, derivedGroups]);
+    const groupKey = activeGroupKey.trim();
+    if (!groupKey) return null;
+    return allDerivedGroups.find((group) => group.key === groupKey) ?? null;
+  }, [activeGroupKey, allDerivedGroups]);
 
-  const cueByLineKey: Record<string, LyricsApiCue> = React.useMemo(() => {
-    const out: Record<string, LyricsApiCue> = {};
-    for (const c of cues) out[c.lineKey] = c;
+  const visibleCues: VisibleCue[] = React.useMemo(() => {
+    const out: VisibleCue[] = [];
+
+    for (const cue of cues) {
+      const groupKey = getLineGroupKey(cue.lineKey);
+      const isUnmapped = !lineToGroupKey[cue.lineKey];
+      const isSelected = Boolean(selectedLineKeys[cue.lineKey]);
+
+      if (showOnlyUnmapped && !isUnmapped) continue;
+      if (showOnlySelected && !isSelected) continue;
+
+      out.push({ cue, groupKey });
+    }
+
     return out;
-  }, [cues]);
-
-  const visibleCues: Array<{ cue: LyricsApiCue; groupKey: string }> =
-    React.useMemo(() => {
-      const onlyUnmapped = showOnlyUnmapped;
-      const onlySelected = showOnlySelected;
-
-      const out: Array<{ cue: LyricsApiCue; groupKey: string }> = [];
-      for (const c of cues) {
-        const gk = getLineGroupKey(c.lineKey);
-        const isUnmapped = !lineToGroupKey[c.lineKey];
-        const isSel = Boolean(selectedLineKeys[c.lineKey]);
-
-        if (onlyUnmapped && !isUnmapped) continue;
-        if (onlySelected && !isSel) continue;
-
-        out.push({ cue: c, groupKey: gk });
-      }
-      return out;
-    }, [
-      cues,
-      getLineGroupKey,
-      lineToGroupKey,
-      selectedLineKeys,
-      showOnlySelected,
-      showOnlyUnmapped,
-    ]);
+  }, [
+    cues,
+    getLineGroupKey,
+    lineToGroupKey,
+    selectedLineKeys,
+    showOnlySelected,
+    showOnlyUnmapped,
+  ]);
 
   function setSelectionForLineKeys(lineKeys: string[], value: boolean) {
     setSelectedLineKeys((prev) => {
       const next: Record<string, boolean> = { ...prev };
-      for (const lk of lineKeys) next[lk] = value;
+      for (const lineKey of lineKeys) next[lineKey] = value;
       return next;
     });
   }
@@ -601,24 +677,42 @@ export default function ExegesisGroupTool() {
 
   function clearSelection() {
     setSelectedLineKeys({});
-    setLastClickedIdx(null);
+    setLastClickedLineKey(null);
   }
 
-  function onCueClick(idx: number, lineKey: string, e: React.MouseEvent) {
-    // Shift range select within the *current visible list*
-    if (e.shiftKey && lastClickedIdx !== null) {
-      const lo = Math.min(lastClickedIdx, idx);
-      const hi = Math.max(lastClickedIdx, idx);
-      const slice = visibleCues.slice(lo, hi + 1).map((x) => x.cue.lineKey);
+  function onCueClick(index: number, lineKey: string, event: React.MouseEvent) {
+    const anchorIndex = lastClickedLineKey
+      ? visibleCues.findIndex((row) => row.cue.lineKey === lastClickedLineKey)
+      : -1;
 
-      const allSelected = slice.every((lk) => Boolean(selectedLineKeys[lk]));
-      setSelectionForLineKeys(slice, !allSelected);
-      setLastClickedIdx(idx);
+    if (event.shiftKey && anchorIndex >= 0) {
+      const lo = Math.min(anchorIndex, index);
+      const hi = Math.max(anchorIndex, index);
+      const rangeLineKeys = visibleCues
+        .slice(lo, hi + 1)
+        .map((row) => row.cue.lineKey);
+
+      if (event.metaKey || event.ctrlKey) {
+        setSelectionForLineKeys(rangeLineKeys, true);
+      } else {
+        const next: Record<string, boolean> = {};
+        for (const key of rangeLineKeys) next[key] = true;
+        setSelectedLineKeys(next);
+      }
+
+      setLastClickedLineKey(lineKey);
       return;
     }
 
-    toggleSelect(lineKey);
-    setLastClickedIdx(idx);
+    if (event.metaKey || event.ctrlKey) {
+      toggleSelect(lineKey);
+    } else {
+      const isOnlySelected =
+        selectedKeys.length === 1 && Boolean(selectedLineKeys[lineKey]);
+      setSelectedLineKeys(isOnlySelected ? {} : { [lineKey]: true });
+    }
+
+    setLastClickedLineKey(lineKey);
   }
 
   async function loadGrouping(seed?: string) {
@@ -663,7 +757,7 @@ export default function ExegesisGroupTool() {
   }
 
   async function createGroupFromSelection() {
-    const recordingId = recordingIdInput.trim();
+    const recordingId = loadedRecordingId.trim();
     if (!recordingId) return;
 
     if (!lyrics || !groupMap) {
@@ -678,12 +772,14 @@ export default function ExegesisGroupTool() {
     setErr("");
     setBusy(true);
     try {
+      const selection = [...selectedKeys];
       const gk = await createNewGroupKey();
-      await assignLineKeysToGroup(recordingId, gk, selectedKeys);
+      await assignLineKeysToGroup(recordingId, gk, selection);
       await loadGrouping(recordingId);
       setActiveGroupKey(gk);
-      // Keep selection so you can immediately confirm what moved
-      setSelectedLineKeys((prev) => ({ ...prev }));
+      const nextSelection: Record<string, boolean> = {};
+      for (const lineKey of selection) nextSelection[lineKey] = true;
+      setSelectedLineKeys(nextSelection);
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Create group failed.");
     } finally {
@@ -692,7 +788,7 @@ export default function ExegesisGroupTool() {
   }
 
   async function assignSelectionToActiveGroup() {
-    const recordingId = recordingIdInput.trim();
+    const recordingId = loadedRecordingId.trim();
     if (!recordingId) return;
 
     const gk = activeGroupKey.trim();
@@ -712,9 +808,13 @@ export default function ExegesisGroupTool() {
     setErr("");
     setBusy(true);
     try {
-      await assignLineKeysToGroup(recordingId, gk, selectedKeys);
+      const selection = [...selectedKeys];
+      await assignLineKeysToGroup(recordingId, gk, selection);
       await loadGrouping(recordingId);
       setActiveGroupKey(gk);
+      const nextSelection: Record<string, boolean> = {};
+      for (const lineKey of selection) nextSelection[lineKey] = true;
+      setSelectedLineKeys(nextSelection);
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Assign failed.");
     } finally {
@@ -723,7 +823,7 @@ export default function ExegesisGroupTool() {
   }
 
   async function clearSelectedMapping() {
-    const recordingId = recordingIdInput.trim();
+    const recordingId = loadedRecordingId.trim();
     if (!recordingId) return;
 
     if (!lyrics || !groupMap) {
@@ -738,8 +838,12 @@ export default function ExegesisGroupTool() {
     setErr("");
     setBusy(true);
     try {
-      await clearLineKeyMappings(recordingId, selectedKeys);
+      const selection = [...selectedKeys];
+      await clearLineKeyMappings(recordingId, selection);
       await loadGrouping(recordingId);
+      const nextSelection: Record<string, boolean> = {};
+      for (const lineKey of selection) nextSelection[lineKey] = true;
+      setSelectedLineKeys(nextSelection);
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Clear failed.");
     } finally {
@@ -747,83 +851,20 @@ export default function ExegesisGroupTool() {
     }
   }
 
-  async function clearActiveGroupMappings() {
-    const recordingId = recordingIdInput.trim();
-    if (!recordingId) return;
 
-    if (!lyrics || !groupMap) {
-      setErr("Load a track first.");
-      return;
-    }
-    if (!activeGroup || startsWithLk(activeGroup.key)) {
-      setErr("Choose a canonical group first.");
-      return;
-    }
-
-    setErr("");
-    setBusy(true);
-    try {
-      await clearLineKeyMappings(recordingId, activeGroup.lineKeys);
-      await loadGrouping(recordingId);
-      setActiveGroupKey("");
-      clearSelection();
-    } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "Clear group failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function splitSelectionIntoNewGroup() {
-    const recordingId = recordingIdInput.trim();
-    if (!recordingId) return;
-
-    if (!lyrics || !groupMap) {
-      setErr("Load a track first.");
-      return;
-    }
-    if (!activeGroup || startsWithLk(activeGroup.key)) {
-      setErr("Choose a canonical group first.");
-      return;
-    }
-    if (selectedKeys.length === 0) {
-      setErr("Select at least one line to split.");
-      return;
-    }
-
-    const activeMembers = new Set<string>(activeGroup.lineKeys);
-    const toSplit = selectedKeys.filter((lk) => activeMembers.has(lk));
-    if (toSplit.length === 0) {
-      setErr("Your selection has no lines from the active group.");
-      return;
-    }
-
-    setErr("");
-    setBusy(true);
-    try {
-      const newKey = await createNewGroupKey();
-      await assignLineKeysToGroup(recordingId, newKey, toSplit);
-      await loadGrouping(recordingId);
-      setActiveGroupKey(newKey);
-    } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "Split failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function selectActiveGroupLines() {
-    if (!activeGroup) return;
-    setSelectionForLineKeys(activeGroup.lineKeys, true);
-  }
-
-  function deselectActiveGroupLines() {
-    if (!activeGroup) return;
-    setSelectionForLineKeys(activeGroup.lineKeys, false);
-  }
-
-  const canAct = Boolean(lyrics && groupMap && loadedRecordingId);
+  const canAct = Boolean(
+    lyrics &&
+      groupMap &&
+      loadedRecordingId &&
+      recordingIdInput.trim() === loadedRecordingId,
+  );
   const hasSelection = selectedKeys.length > 0;
+  const activeGroupOrdinal = activeGroup
+    ? groupOrdinalByKey[activeGroup.key] ?? null
+    : null;
+  const activeGroupLabel = activeGroupOrdinal
+    ? `Group ${activeGroupOrdinal}`
+    : null;
   const knownRecordingIdsStatus = catalogueStatusText(
     knownIdsBusy,
     knownIdsErr,
@@ -831,21 +872,33 @@ export default function ExegesisGroupTool() {
   );
 
   function focusGroup(groupKey: string): void {
+    const group = allDerivedGroups.find((candidate) => candidate.key === groupKey);
     setActiveGroupKey(groupKey);
+    setShowOnlyUnmapped(false);
+    setShowOnlySelected(false);
+
+    const firstLineKey = group?.lineKeys[0];
+    if (!firstLineKey || typeof window === "undefined") return;
+
+    window.setTimeout(() => {
+      document
+        .getElementById(`exegesis-line-${firstLineKey}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 0);
   }
 
   return (
     <div className="rounded-xl bg-white/5 p-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-sm opacity-70">Line grouping (Phase B1)</div>
-          <div className="mt-1 text-xs opacity-60">
-            Map multiple lineKeys → one canonical groupKey, then UI/comments
-            resolve to the group.
+          <div className="text-sm font-semibold opacity-90">Lyric groups</div>
+          <div className="mt-1 max-w-2xl text-xs opacity-60">
+            Select lyric lines on the left. Create a group, or choose a group on
+            the right and add selected lines to it.
           </div>
           <div className="mt-2 text-xs opacity-60">
-            {stats.total} cues · {stats.mappedCount} mapped · {stats.unmapped}{" "}
-            unmapped · {stats.canonCount} canonical groups
+            {stats.total} lyric lines · {stats.mappedCount} grouped · {stats.unmapped}{" "}
+            ungrouped · {canonicalGroups.length} groups
           </div>
         </div>
 
@@ -854,11 +907,11 @@ export default function ExegesisGroupTool() {
             <input
               list="exegesis-recordingId-catalogue"
               className="w-[360px] max-w-[56vw] rounded-md bg-black/20 px-3 py-2 text-sm outline-none"
-              placeholder="recordingId"
+              placeholder="Choose a track"
               value={recordingIdInput}
-              onChange={(e) => setRecordingIdInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void loadGrouping();
+              onChange={(event) => setRecordingIdInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void loadGrouping();
               }}
             />
             <datalist id="exegesis-recordingId-catalogue">
@@ -887,93 +940,50 @@ export default function ExegesisGroupTool() {
         <div className="mt-3 rounded-md bg-white/5 p-3 text-sm">{err}</div>
       ) : null}
 
-      {lyrics ? (
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs opacity-60">
-          <div>
-            loaded: <span className="opacity-90">{lyrics.recordingId}</span>
-          </div>
-          <div>·</div>
-          <div>lyrics v{lyrics.version}</div>
+      {lyrics && showTechnicalDetails ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs opacity-50">
+          <span>{lyrics.recordingId}</span>
+          <span>·</span>
+          <span>lyrics v{lyrics.version}</span>
           {lyrics.geniusUrl ? (
             <>
-              <div>·</div>
+              <span>·</span>
               <a
                 className="underline underline-offset-2 opacity-80 hover:opacity-95"
                 href={lyrics.geniusUrl}
                 target="_blank"
                 rel="noreferrer"
               >
-                genius
+                Genius
               </a>
             </>
           ) : null}
         </div>
       ) : null}
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-        {/* LEFT: cues */}
-        <div className="rounded-xl bg-black/15 p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <div className="text-sm opacity-80">Lines</div>
-              <div className="text-xs opacity-60">
-                {visibleCues.length} shown · {selectedKeys.length} selected
-              </div>
+      {lyrics ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-black/15 p-3">
+          <div>
+            <div className="text-sm font-medium opacity-90">
+              {hasSelection
+                ? `${selectedKeys.length} ${selectedKeys.length === 1 ? "line" : "lines"} selected`
+                : "Select lyric lines to begin"}
             </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="flex cursor-pointer items-center gap-2 text-xs opacity-75">
-                <input
-                  type="checkbox"
-                  checked={showOnlyUnmapped}
-                  onChange={(e) => setShowOnlyUnmapped(e.target.checked)}
-                />
-                <span>Unmapped only</span>
-              </label>
-              <label className="flex cursor-pointer items-center gap-2 text-xs opacity-75">
-                <input
-                  type="checkbox"
-                  checked={showOnlySelected}
-                  onChange={(e) => setShowOnlySelected(e.target.checked)}
-                />
-                <span>Selected only</span>
-              </label>
-
-              <button
-                type="button"
-                className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
-                disabled={!hasSelection}
-                onClick={() => clearSelection()}
-                title="Clear selection"
-              >
-                Deselect all
-              </button>
+            <div className="mt-1 text-xs opacity-55">
+              Click for one line · Command/Ctrl-click to add or remove · Shift-click for a range
+              {activeGroupLabel ? ` · ${activeGroupLabel} highlighted` : ""}
             </div>
           </div>
 
-          <div
-            className="mt-3 space-y-2"
-            style={{ maxHeight: 560, overflowY: "auto" }}
-          >
-            <CueList
-              lyrics={lyrics}
-              visibleCues={visibleCues}
-              selectedLineKeys={selectedLineKeys}
-              activeGroupKey={activeGroupKey}
-              onCueClick={onCueClick}
-              onFocusGroup={focusGroup}
-            />
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               className="rounded-md bg-white/10 px-3 py-2 text-sm hover:bg-white/15 disabled:opacity-40"
               disabled={busy || !canAct || !hasSelection}
               onClick={() => void createGroupFromSelection()}
-              title="Creates a new canonical group and assigns the current selection to it"
+              title="Create a new group from the selected lyric lines"
             >
-              Create group from selection
+              Group selected
             </button>
 
             <button
@@ -983,13 +993,12 @@ export default function ExegesisGroupTool() {
                 busy ||
                 !canAct ||
                 !hasSelection ||
-                !activeGroupKey.trim() ||
-                startsWithLk(activeGroupKey.trim())
+                !activeGroup?.isCanonical
               }
               onClick={() => void assignSelectionToActiveGroup()}
-              title="Assign selection to the focused canonical group"
+              title="Add the selected lyric lines to the highlighted group"
             >
-              Add selection to focused group
+              {activeGroupLabel ? `Add to ${activeGroupLabel}` : "Add to group"}
             </button>
 
             <button
@@ -997,33 +1006,95 @@ export default function ExegesisGroupTool() {
               className="rounded-md bg-white/5 px-3 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
               disabled={busy || !canAct || !hasSelection}
               onClick={() => void clearSelectedMapping()}
-              title="Remove mapping and fall back to v1 lk:<lineKey>"
+              title="Remove selected lyric lines from their current groups"
             >
-              Clear mapping for selection
+              Ungroup
+            </button>
+
+            <button
+              type="button"
+              className="rounded-md bg-white/5 px-2 py-2 text-xs hover:bg-white/10 disabled:opacity-40"
+              disabled={!hasSelection}
+              onClick={clearSelection}
+            >
+              Clear selection
+            </button>
+
+            <button
+              type="button"
+              className="rounded-md bg-white/5 px-2 py-2 text-xs hover:bg-white/10"
+              onClick={() => setShowTechnicalDetails((value) => !value)}
+            >
+              {showTechnicalDetails ? "Hide details" : "Details"}
             </button>
           </div>
-
-          <div className="mt-2 text-xs opacity-60">
-            Tip: click a “group:” pill to focus it. Shift-click for range
-            selection.
-          </div>
         </div>
+      ) : null}
 
-        {/* RIGHT: groups + inspector */}
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1.6fr_1fr]">
         <div className="rounded-xl bg-black/15 p-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-sm opacity-80">Groups</div>
-            <div className="text-xs opacity-60">
-              {derivedGroups.length} found
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-medium opacity-85">Lyrics</div>
+              <div className="text-xs opacity-55">
+                {visibleCues.length} shown · {selectedKeys.length} selected
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex cursor-pointer items-center gap-2 text-xs opacity-75">
+                <input
+                  type="checkbox"
+                  checked={showOnlyUnmapped}
+                  onChange={(event) => setShowOnlyUnmapped(event.target.checked)}
+                />
+                <span>Ungrouped only</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-xs opacity-75">
+                <input
+                  type="checkbox"
+                  checked={showOnlySelected}
+                  onChange={(event) => setShowOnlySelected(event.target.checked)}
+                />
+                <span>Selected only</span>
+              </label>
             </div>
           </div>
 
-          <div className="mt-2 flex items-center gap-2">
+          <div
+            className="mt-3 space-y-2"
+            style={{ maxHeight: 620, overflowY: "auto" }}
+          >
+            <CueList
+              lyrics={lyrics}
+              visibleCues={visibleCues}
+              selectedLineKeys={selectedLineKeys}
+              activeGroupKey={activeGroupKey}
+              groupOrdinalByKey={groupOrdinalByKey}
+              showTechnicalDetails={showTechnicalDetails}
+              onCueClick={onCueClick}
+              onFocusGroup={focusGroup}
+            />
+          </div>
+        </div>
+
+        <div className="rounded-xl bg-black/15 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-sm font-medium opacity-85">Groups</div>
+              <div className="mt-1 text-xs opacity-55">
+                Click a group to highlight its lyric lines.
+              </div>
+            </div>
+            <div className="text-xs opacity-55">{canonicalGroups.length}</div>
+          </div>
+
+          <div className="mt-3 flex items-center gap-2">
             <input
               className="w-full rounded-md bg-black/20 px-3 py-2 text-sm outline-none"
-              placeholder="Search groups…"
+              placeholder="Search group lyrics…"
               value={groupSearch}
-              onChange={(e) => setGroupSearch(e.target.value)}
+              onChange={(event) => setGroupSearch(event.target.value)}
             />
             <button
               type="button"
@@ -1038,156 +1109,42 @@ export default function ExegesisGroupTool() {
 
           <div
             className="mt-3 space-y-2"
-            style={{ maxHeight: 260, overflowY: "auto" }}
+            style={{ maxHeight: 560, overflowY: "auto" }}
           >
             <GroupList
               lyrics={lyrics}
               groups={derivedGroups}
               activeGroupKey={activeGroupKey}
+              groupOrdinalByKey={groupOrdinalByKey}
+              showTechnicalDetails={showTechnicalDetails}
               onFocusGroup={focusGroup}
             />
           </div>
 
-          <div className="mt-4 border-t border-white/10 pt-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-sm opacity-80">Group inspector</div>
+          {activeGroup?.isCanonical ? (
+            <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/10 pt-3">
+              <div className="min-w-0">
+                <div className="text-xs opacity-55">Highlighted</div>
+                <div className="mt-1 text-sm font-medium opacity-90">
+                  {activeGroupLabel}
+                </div>
+                <div className="mt-1 text-xs opacity-55">
+                  {activeGroup.count} {activeGroup.count === 1 ? "line" : "lines"}
+                </div>
+              </div>
               <button
                 type="button"
-                className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
-                disabled={!activeGroupKey.trim()}
+                className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
                 onClick={() => setActiveGroupKey("")}
               >
-                Clear focus
+                Clear highlight
               </button>
             </div>
+          ) : null}
 
-            {!activeGroup ? (
-              <div className="mt-2 text-sm opacity-60">
-                Focus a group (from the list, or by clicking a line’s “group:”
-                pill).
-              </div>
-            ) : (
-              <>
-                <div className="mt-2 rounded-md bg-black/20 p-3">
-                  <div className="text-sm font-semibold opacity-90">
-                    {activeGroup.key}
-                  </div>
-                  <div className="mt-1 text-xs opacity-60">
-                    {activeGroup.count} lines ·{" "}
-                    {activeGroup.isCanonical ? "canonical" : "implicit"}
-                    {activeGroup.updatedAt
-                      ? `· updated ${activeGroup.updatedAt}`
-                      : ""}
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
-                      disabled={
-                        busy ||
-                        !canAct ||
-                        !hasSelection ||
-                        startsWithLk(activeGroup.key)
-                      }
-                      onClick={() => void assignSelectionToActiveGroup()}
-                      title="Assign selection to this canonical group"
-                    >
-                      Add selection here
-                    </button>
-
-                    <button
-                      type="button"
-                      className="rounded-md bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15 disabled:opacity-40"
-                      disabled={
-                        busy ||
-                        !canAct ||
-                        !hasSelection ||
-                        startsWithLk(activeGroup.key)
-                      }
-                      onClick={() => void splitSelectionIntoNewGroup()}
-                      title="Create a new canonical group and move the selected subset of this group into it"
-                    >
-                      Split selection → new group
-                    </button>
-
-                    <button
-                      type="button"
-                      className="rounded-md bg-white/5 px-3 py-1.5 text-sm hover:bg-white/10 disabled:opacity-40"
-                      disabled={
-                        busy || !canAct || startsWithLk(activeGroup.key)
-                      }
-                      onClick={() => void clearActiveGroupMappings()}
-                      title="Clear mapping for all lines currently in this canonical group"
-                    >
-                      Clear entire group
-                    </button>
-                  </div>
-
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
-                      disabled={!activeGroup.lineKeys.length}
-                      onClick={() => selectActiveGroupLines()}
-                    >
-                      Select all in group
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
-                      disabled={!activeGroup.lineKeys.length}
-                      onClick={() => deselectActiveGroupLines()}
-                    >
-                      Deselect all in group
-                    </button>
-                  </div>
-                </div>
-
-                <div
-                  className="mt-3 space-y-2"
-                  style={{ maxHeight: 280, overflowY: "auto" }}
-                >
-                  {activeGroup.lineKeys.map((lk) => {
-                    const c = cueByLineKey[lk];
-                    const isSel = Boolean(selectedLineKeys[lk]);
-                    return (
-                      <button
-                        type="button"
-                        key={lk}
-                        className={clsx([
-                          "w-full rounded-md bg-black/20 p-3 text-left hover:bg-black/25",
-                          isSel && "ring-1 ring-white/20",
-                        ])}
-                        onClick={() => toggleSelect(lk)}
-                        title="Click to select/deselect"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="text-xs opacity-60">
-                              {c ? fmtTimeMs(c.tMs) : ""}
-                              <span className="opacity-50"> · </span>
-                              {lk}
-                            </div>
-                            <div className="mt-1 text-sm opacity-90 line-clamp-2">
-                              {c ? c.text : "(Missing cue text)"}
-                            </div>
-                          </div>
-                          <div className="shrink-0 text-xs opacity-60">
-                            {isSel ? "Selected" : ""}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-3 text-xs opacity-60">
-                  Note: grouping changes how lineKey resolves to a canonical
-                  thread; it doesn’t move existing comments yet.
-                </div>
-              </>
-            )}
+          <div className="mt-3 text-xs leading-5 opacity-45">
+            Lines with existing discussion are protected from regrouping until
+            discussion migration is supported.
           </div>
         </div>
       </div>

@@ -395,6 +395,7 @@ export default function GiftAlbumButton(props: Props) {
                   maxWidth: 520,
                   fontSize: 15,
                   lineHeight: 1.55,
+                  textAlign: "left",
                   color: "rgba(255,255,255,0.66)",
                 }}
               >
