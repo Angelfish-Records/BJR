@@ -9,10 +9,7 @@ import {
   formatDateTime,
   getDashboardRangeDescription,
 } from "./model";
-import {
-  cardStyle,
-  subtleButtonStyle,
-} from "./styles";
+import { cardStyle, subtleButtonStyle } from "./styles";
 import type { DashboardStats, MemberRow } from "./types";
 
 type Props = Readonly<{
@@ -24,10 +21,12 @@ type Props = Readonly<{
   onSelectMember: (member: MemberRow) => Promise<void>;
 }>;
 
-function MembershipMetricCard(props: Readonly<{
-  label: string;
-  value: number | string;
-}>) {
+function MembershipMetricCard(
+  props: Readonly<{
+    label: string;
+    value: number | string;
+  }>,
+) {
   return (
     <div
       style={{
@@ -45,10 +44,12 @@ function MembershipMetricCard(props: Readonly<{
   );
 }
 
-function JoinSummary(props: Readonly<{
-  joinedInPeriod: number | string;
-  peakDay: number;
-}>) {
+function JoinSummary(
+  props: Readonly<{
+    joinedInPeriod: number | string;
+    peakDay: number;
+  }>,
+) {
   const items = [
     { label: "New in range", value: props.joinedInPeriod },
     { label: "Peak day", value: props.peakDay },
@@ -194,8 +195,7 @@ export function MembershipDashboardSection(props: Props) {
   ];
 
   const firstDate = joinsChart.points[0]?.date ?? "—";
-  const lastDate =
-    joinsChart.points[joinsChart.points.length - 1]?.date ?? "—";
+  const lastDate = joinsChart.points[joinsChart.points.length - 1]?.date ?? "—";
 
   return (
     <div style={cardStyle}>
@@ -296,19 +296,25 @@ export function MembershipDashboardSection(props: Props) {
         <div
           style={{
             display: "flex",
-            gap: 28,
+            gap: 32,
             flexWrap: "wrap",
             alignItems: "flex-start",
             marginTop: 16,
           }}
         >
-          <div style={{ flex: "2 1 520px", minWidth: 0 }}>
+          <div style={{ flex: "1 1 340px", minWidth: 0 }}>
+            <LatestMembers
+              members={props.dashboard?.latestMembers ?? []}
+              selectedId={props.selectedId}
+              onSelectMember={props.onSelectMember}
+            />
+          </div>
+
+          <div style={{ flex: "1.7 1 560px", minWidth: 0 }}>
             {joinsChart.points.length > 0 ? (
               <>
                 <JoinSummary
-                  joinedInPeriod={
-                    props.dashboard?.totals.joinedInPeriod ?? "—"
-                  }
+                  joinedInPeriod={props.dashboard?.totals.joinedInPeriod ?? "—"}
                   peakDay={joinsChart.maxCount}
                 />
 
@@ -358,14 +364,6 @@ export function MembershipDashboardSection(props: Props) {
                 No membership join data available for this range.
               </div>
             )}
-          </div>
-
-          <div style={{ flex: "1 1 280px", minWidth: 0 }}>
-            <LatestMembers
-              members={props.dashboard?.latestMembers ?? []}
-              selectedId={props.selectedId}
-              onSelectMember={props.onSelectMember}
-            />
           </div>
         </div>
       </div>

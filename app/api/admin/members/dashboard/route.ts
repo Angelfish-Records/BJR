@@ -87,7 +87,7 @@ export async function GET(req: Request) {
         created_at
       from members
       order by created_at desc, id desc
-      limit 8
+      limit 16
     `;
 
     const totalsRow = totalsResult.rows[0] ?? {
