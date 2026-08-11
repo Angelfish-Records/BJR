@@ -113,8 +113,16 @@ function SelectedLineExcerpt(
   const { lyrics, selected } = props;
   const groupKey = (selected.groupKey ?? "").trim();
 
+  const selectedLineStyle: React.CSSProperties = {
+    fontSize: 18,
+    lineHeight: 1.35,
+    fontWeight: 700,
+    color: "rgba(255,255,255,0.96)",
+    letterSpacing: "-0.01em",
+  };
+
   if (!groupKey) {
-    return <div className="py-1">{selected.lineText}</div>;
+    return <div style={selectedLineStyle}>{selected.lineText}</div>;
   }
 
   const groupCues = (lyrics.cues ?? []).filter((cue) =>
@@ -127,9 +135,11 @@ function SelectedLineExcerpt(
       : [{ lineKey: selected.lineKey, text: selected.lineText }];
 
   return (
-    <div className="space-y-1 py-1">
+    <div style={{ display: "grid", gap: 5 }}>
       {lines.map((cue) => (
-        <div key={cue.lineKey}>{cue.text}</div>
+        <div key={cue.lineKey} style={selectedLineStyle}>
+          {cue.text}
+        </div>
       ))}
     </div>
   );
