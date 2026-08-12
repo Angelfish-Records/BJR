@@ -179,7 +179,7 @@ export class LyricTextRenderer {
   private readonly trailCtx: CanvasRenderingContext2D;
   private readonly trailScratchCanvas: HTMLCanvasElement;
   private readonly trailScratchCtx: CanvasRenderingContext2D;
-  private readonly style: LyricTextStyle;
+  private style: LyricTextStyle;
 
   constructor(
     private readonly width: number,
@@ -200,6 +200,13 @@ export class LyricTextRenderer {
     this.trailScratchCanvas = trailScratch.canvas;
     this.trailScratchCtx = trailScratch.ctx;
 
+    this.style = {
+      ...DEFAULT_STYLE,
+      ...style,
+    };
+  }
+
+  setStyle(style?: Partial<LyricTextStyle>): void {
     this.style = {
       ...DEFAULT_STYLE,
       ...style,
@@ -515,26 +522,35 @@ export class LyricTextRenderer {
   }
 
   private wrapText(text: string, maxWidth: number, font: string): string[] {
-    const words = splitWords(text);
     const lines: string[] = [];
-    let current = "";
 
     this.frameCtx.font = font;
     this.applyLetterSpacing(this.frameCtx, this.style.letterSpacingPx);
 
-    for (const word of words) {
-      const candidate = current ? `${current} ${word}` : word;
-      const measured = this.frameCtx.measureText(candidate);
+    for (const sourceLine of text.replace(/\r\n?/g, "\n").split("\n")) {
+      const words = splitWords(sourceLine);
 
-      if (measured.width <= maxWidth || !current) {
-        current = candidate;
-      } else {
-        lines.push(current);
-        current = word;
+      if (words.length === 0) {
+        lines.push("");
+        continue;
       }
-    }
 
-    if (current) lines.push(current);
+      let current = "";
+
+      for (const word of words) {
+        const candidate = current ? `${current} ${word}` : word;
+        const measured = this.frameCtx.measureText(candidate);
+
+        if (measured.width <= maxWidth || !current) {
+          current = candidate;
+        } else {
+          lines.push(current);
+          current = word;
+        }
+      }
+
+      if (current) lines.push(current);
+    }
 
     return lines;
   }

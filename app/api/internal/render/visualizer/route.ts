@@ -17,6 +17,11 @@ import {
   isRenderFormatName,
   type RenderFormatName,
 } from "../../../../home/player/visualizer/offline/renderFormats";
+import { directionSidecarFilenameForLrc } from "../../../../home/player/visualizer/offline/lyricDirections";
+import {
+  isTextRenderMode,
+  type TextRenderMode,
+} from "../../../../home/player/visualizer/offline/textTimeline";
 
 export const runtime = "nodejs";
 
@@ -46,6 +51,9 @@ type RenderRequest = {
   themeName: ThemeName;
   audioFile: string;
   lrcFile?: string;
+  lyricDirectionsFile?: string;
+  textMode?: TextRenderMode;
+  promoText?: string;
   lyricStyleName?: LyricStyleName;
   postPresetName?: PostPresetName;
   renderFormatName?: RenderFormatName;
@@ -264,6 +272,10 @@ async function listLrcFiles(): Promise<RenderAssetOption[]> {
   return listRenderAssets(/\.lrc$/i);
 }
 
+async function listLyricDirectionFiles(): Promise<RenderAssetOption[]> {
+  return listRenderAssets(/\.lyric-directions\.json$/i);
+}
+
 function assertThemeName(themeName: string): void {
   if (!isThemeName(themeName)) {
     throw new Error(`Invalid themeName: ${themeName}`);
@@ -302,7 +314,37 @@ function resolveLrcAsset(
   return lrc;
 }
 
+function resolveLyricDirectionsAsset(
+  files: readonly RenderAssetOption[],
+  lrc: RenderAssetOption | undefined,
+  requestedFile: string | undefined,
+): RenderAssetOption | undefined {
+  if (!lrc || requestedFile === "__none__") {
+    return undefined;
+  }
+
+  const isAuto = !requestedFile || requestedFile === "__auto__";
+  const filename = isAuto
+    ? directionSidecarFilenameForLrc(lrc.file)
+    : requestedFile;
+  const asset = files.find((item) => item.file === filename);
+
+  if (!asset && !isAuto) {
+    throw new Error(
+      `Lyric directions file not found in web/public/render-test: ${filename}`,
+    );
+  }
+
+  return asset;
+}
+
 function assertRenderSettings(body: RenderRequest): void {
+  const textMode = body.textMode ?? "lyrics";
+
+  if (!isTextRenderMode(textMode)) {
+    throw new Error(`Invalid textMode: ${String(body.textMode)}`);
+  }
+
   if (
     body.lyricStyleName !== undefined &&
     !isLyricStyleName(body.lyricStyleName)
@@ -345,6 +387,18 @@ function assertRenderSettings(body: RenderRequest): void {
   ) {
     throw new Error("endSec must be greater than startSec");
   }
+
+  if (textMode === "promo") {
+    if (!body.promoText?.trim()) {
+      throw new Error("promoText is required when textMode is promo");
+    }
+
+    if (body.startSec === undefined || body.endSec === undefined) {
+      throw new Error(
+        "Promo exports require both startSec and endSec",
+      );
+    }
+  }
 }
 
 export async function GET(req: Request): Promise<NextResponse> {
@@ -362,9 +416,10 @@ export async function GET(req: Request): Promise<NextResponse> {
     );
   }
 
-  const [audioFiles, lrcFiles] = await Promise.all([
+  const [audioFiles, lrcFiles, lyricDirectionFiles] = await Promise.all([
     listAudioFiles(),
     listLrcFiles(),
+    listLyricDirectionFiles(),
   ]);
 
   return NextResponse.json(
@@ -372,6 +427,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       themes: THEMES,
       audioFiles,
       lrcFiles,
+      lyricDirectionFiles,
       sourceRevision,
     },
     {
@@ -388,18 +444,34 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     assertThemeName(body.themeName);
 
-    const [audioFiles, lrcFiles] = await Promise.all([
+    const [audioFiles, lrcFiles, lyricDirectionFiles] = await Promise.all([
       listAudioFiles(),
       listLrcFiles(),
+      listLyricDirectionFiles(),
     ]);
-
-    const audio = resolveAudioAsset(audioFiles, body.audioFile);
-    const lrc = resolveLrcAsset(lrcFiles, body.lrcFile);
 
     assertRenderSettings(body);
 
+    const textMode = body.textMode ?? "lyrics";
+    const audio = resolveAudioAsset(audioFiles, body.audioFile);
+    const lrc =
+      textMode === "lyrics"
+        ? resolveLrcAsset(lrcFiles, body.lrcFile)
+        : undefined;
+    const lyricDirections =
+      textMode === "lyrics"
+        ? resolveLyricDirectionsAsset(
+            lyricDirectionFiles,
+            lrc,
+            body.lyricDirectionsFile,
+          )
+        : undefined;
+
     const recordingId = body.recordingId.trim() || safeStem(body.audioFile);
-    const outputDir = `exports/${recordingId}_${body.themeName}`;
+    const textVariant =
+      textMode === "lyrics" ? "" : `_${textMode}`;
+    const outputDir =
+      `exports/${recordingId}${textVariant}_${body.themeName}`;
     const renderFormatName =
       body.renderFormatName ?? inferRenderFormatName(body.width, body.height);
 
@@ -415,6 +487,10 @@ export async function POST(req: Request): Promise<NextResponse> {
       audioPath: audio.path,
       lrcUrl: lrc?.url,
       lrcPath: lrc?.path,
+      lyricDirectionsUrl: lyricDirections?.url,
+      lyricDirectionsPath: lyricDirections?.path,
+      textMode,
+      promoText: textMode === "promo" ? body.promoText?.trim() : undefined,
       lyricStyleName: body.lyricStyleName,
       postPresetName: body.postPresetName,
       outputDir,

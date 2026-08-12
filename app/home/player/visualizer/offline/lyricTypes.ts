@@ -1,3 +1,16 @@
+import type { LyricStyleName } from "./lyricStyles";
+
+export type LyricDirection = {
+  styleName?: LyricStyleName;
+  fontScale?: number;
+  anchorX01?: number;
+  anchorY01?: number;
+  maxWidth01?: number;
+  previousGhostOpacity?: number;
+  nextEchoOpacity?: number;
+  revealMode?: "none" | "line-wipe";
+};
+
 export type LyricCue = {
   index: number;
   startSec: number;
@@ -16,4 +29,5 @@ export type LyricFrameState = {
   isLineStart: boolean;
   isLineEnd: boolean;
   silence01: number;
+  direction?: LyricDirection;
 };

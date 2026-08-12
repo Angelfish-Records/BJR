@@ -19,6 +19,11 @@ import {
   LYRIC_STYLES,
   type LyricStyleName,
 } from "../../../home/player/visualizer/offline/lyricStyles";
+import {
+  applyLyricDirectionsToFrameStates,
+  directionSidecarFilenameForLrc,
+  parseLyricDirections,
+} from "../../../home/player/visualizer/offline/lyricDirections";
 import type {
   OfflineFrame,
   OfflineRenderConfig,
@@ -33,6 +38,10 @@ import {
   bakePreviewSourceTimeline,
   type PreviewSourceTimeline,
 } from "../../../home/player/visualizer/offline/previewTimeline";
+import {
+  bakePromoTextFrameStates,
+  type TextRenderMode,
+} from "../../../home/player/visualizer/offline/textTimeline";
 
 type RenderAssetOption = {
   file: string;
@@ -56,9 +65,15 @@ type Props = Readonly<{
   rendererMessage: string;
   audioFiles: readonly RenderAssetOption[];
   lrcFiles: readonly RenderAssetOption[];
+  lyricDirectionFiles: readonly RenderAssetOption[];
   selectedTheme: string;
   selectedAudioFile: string;
   selectedLrcFile: string;
+  selectedLyricDirectionsFile: string;
+  textMode: TextRenderMode;
+  promoText: string;
+  startSec: string;
+  endSec: string;
   selectedLyricStyle: LyricStyleName;
   selectedPostPreset: PostPresetName;
   renderFormatName: RenderFormatName;
@@ -133,6 +148,26 @@ function formatTime(value: number): string {
   const seconds = safe - minutes * 60;
 
   return `${minutes}:${seconds.toFixed(2).padStart(5, "0")}`;
+}
+
+function optionalSeconds(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+async function fetchTextAsset(url: string, label: string): Promise<string> {
+  const response = await fetch(url, { cache: "no-store" });
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch ${label}: ${response.status} ${response.statusText}`,
+    );
+  }
+
+  return response.text();
 }
 
 const EMPTY_CAPTIONS_TRACK = "data:text/vtt;charset=utf-8,WEBVTT%0A%0A";
@@ -215,9 +250,15 @@ export default function VisualizerLivePreview(props: Props) {
     rendererMessage,
     audioFiles,
     lrcFiles,
+    lyricDirectionFiles,
     selectedTheme,
     selectedAudioFile,
     selectedLrcFile,
+    selectedLyricDirectionsFile,
+    textMode,
+    promoText,
+    startSec,
+    endSec,
     selectedLyricStyle,
     selectedPostPreset,
     renderFormatName,
@@ -267,15 +308,29 @@ export default function VisualizerLivePreview(props: Props) {
     [lrcFiles, selectedLrcFile],
   );
 
-  const cameraFrames = useMemo(() => {
-    if (!timeline) return [];
+  const selectedLyricDirections = useMemo(() => {
+    if (
+      textMode !== "lyrics" ||
+      selectedLyricDirectionsFile === "__none__" ||
+      !selectedLrc
+    ) {
+      return null;
+    }
 
-    return bakeCameraFrameStates({
-      audioFrames: timeline.audioFrames,
-      lyricFrames: timeline.lyricFrames,
-      seed,
-    });
-  }, [seed, timeline]);
+    const filename =
+      selectedLyricDirectionsFile === "__auto__"
+        ? directionSidecarFilenameForLrc(selectedLrc.file)
+        : selectedLyricDirectionsFile;
+
+    return (
+      lyricDirectionFiles.find((item) => item.file === filename) ?? null
+    );
+  }, [
+    lyricDirectionFiles,
+    selectedLrc,
+    selectedLyricDirectionsFile,
+    textMode,
+  ]);
 
   const exportWidth = Math.max(16, Math.floor(width));
   const exportHeight = Math.max(16, Math.floor(height));
@@ -300,10 +355,49 @@ export default function VisualizerLivePreview(props: Props) {
   const safeHeight = Math.max(16, Math.round(exportHeight * previewScale));
   const safeFps = Math.max(1, Math.min(exportFps, previewProfile.fpsCap));
 
+  const effectiveLyricFrames = useMemo(() => {
+    if (!timeline) return null;
+
+    if (textMode === "none") {
+      return null;
+    }
+
+    if (textMode === "promo") {
+      return bakePromoTextFrameStates({
+        text: promoText,
+        fps: safeFps,
+        durationSec: timeline.durationSec,
+        startSec: optionalSeconds(startSec),
+        endSec: optionalSeconds(endSec),
+      });
+    }
+
+    return timeline.lyricFrames;
+  }, [endSec, promoText, safeFps, startSec, textMode, timeline]);
+
+  const cameraFrames = useMemo(() => {
+    if (!timeline) return [];
+
+    return bakeCameraFrameStates({
+      audioFrames: timeline.audioFrames,
+      lyricFrames: effectiveLyricFrames,
+      seed,
+    });
+  }, [effectiveLyricFrames, seed, timeline]);
+
+  const captionTimeline = useMemo<PreviewSourceTimeline | null>(() => {
+    if (!timeline) return null;
+
+    return {
+      ...timeline,
+      lyricFrames: effectiveLyricFrames,
+    };
+  }, [effectiveLyricFrames, timeline]);
+
   const durationSec = timeline?.durationSec ?? 0;
   const captionTrackSrc = useMemo(
-    () => buildCaptionTrackSrc(timeline, safeFps),
-    [safeFps, timeline],
+    () => buildCaptionTrackSrc(captionTimeline, safeFps),
+    [captionTimeline, safeFps],
   );
 
   const updatePreviewTime = useCallback((timeSec: number): void => {
@@ -373,7 +467,7 @@ export default function VisualizerLivePreview(props: Props) {
       if (!sourceAudio) return;
 
       const sequenceFrameIndex = renderSequenceRef.current;
-      const lyric = timeline.lyricFrames?.[sourceFrameIndex];
+      const lyric = effectiveLyricFrames?.[sourceFrameIndex];
       const camera = cameraFrames[sourceFrameIndex];
 
       const frame: OfflineFrame = {
@@ -401,7 +495,14 @@ export default function VisualizerLivePreview(props: Props) {
         setActiveLyric(lyric?.activeText?.trim() ?? "");
       }
     },
-    [cameraFrames, presentBuffer, safeFps, timeline, updatePreviewTime],
+    [
+      cameraFrames,
+      effectiveLyricFrames,
+      presentBuffer,
+      safeFps,
+      timeline,
+      updatePreviewTime,
+    ],
   );
 
   const rebuildPreview = useCallback(
@@ -449,7 +550,7 @@ export default function VisualizerLivePreview(props: Props) {
 
         setPreviewState("ready");
         setPreviewMessage(
-          `${themeName} · ${selectedLyricStyle} · ${selectedPostPreset}`,
+          `${themeName} · ${textMode} · ${selectedLyricStyle} · ${selectedPostPreset}`,
         );
       } catch (error) {
         if (previewInitTokenRef.current !== initToken) return;
@@ -478,6 +579,7 @@ export default function VisualizerLivePreview(props: Props) {
       selectedLyricStyle,
       selectedPostPreset,
       selectedTheme,
+      textMode,
       timeline,
     ],
   );
@@ -575,15 +677,38 @@ export default function VisualizerLivePreview(props: Props) {
       setPreviewMessage("Baking deterministic audio and lyric timelines…");
       setActiveLyric("");
 
-      void bakePreviewSourceTimeline({
-        audioUrl: selectedAudio.url,
-        lrcUrl: selectedLrc?.url ?? null,
-        fps: safeFps,
-      })
-        .then((nextTimeline) => {
+      const directionsPromise = selectedLyricDirections
+        ? fetchTextAsset(
+            selectedLyricDirections.url,
+            "lyric directions",
+          ).then(parseLyricDirections)
+        : Promise.resolve(null);
+
+      void Promise.all([
+        bakePreviewSourceTimeline({
+          audioUrl: selectedAudio.url,
+          lrcUrl:
+            textMode === "lyrics" ? (selectedLrc?.url ?? null) : null,
+          fps: safeFps,
+        }),
+        directionsPromise,
+      ])
+        .then(([nextTimeline, directions]) => {
           if (timelineLoadTokenRef.current !== loadToken) return;
 
-          setTimeline(nextTimeline);
+          const lyricFrames =
+            nextTimeline.lyricFrames && directions
+              ? applyLyricDirectionsToFrameStates({
+                  frames: nextTimeline.lyricFrames,
+                  fps: safeFps,
+                  directions,
+                })
+              : nextTimeline.lyricFrames;
+
+          setTimeline({
+            ...nextTimeline,
+            lyricFrames,
+          });
           updatePreviewTime(0);
 
           const audio = audioRef.current;
@@ -617,6 +742,8 @@ export default function VisualizerLivePreview(props: Props) {
     safeFps,
     selectedAudio,
     selectedLrc,
+    selectedLyricDirections,
+    textMode,
     timelineReloadToken,
     updatePreviewTime,
   ]);
@@ -915,7 +1042,10 @@ export default function VisualizerLivePreview(props: Props) {
               color: "rgba(255,255,255,0.82)",
             }}
           >
-            {activeLyric || "The current lyric line will appear here."}
+            {activeLyric ||
+              (textMode === "none"
+                ? "Text layer disabled."
+                : "The current text will appear here.")}
           </div>
         </div>
       </section>

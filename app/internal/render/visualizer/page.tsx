@@ -15,6 +15,7 @@ import {
   inferRenderFormatName,
   RENDER_FORMAT_NAMES,
   RENDER_FORMATS,
+  type RenderFormatGeometry,
   type RenderFormatName,
 } from "../../../home/player/visualizer/offline/renderFormats";
 import {
@@ -22,6 +23,11 @@ import {
   LYRIC_STYLES,
   type LyricStyleName,
 } from "../../../home/player/visualizer/offline/lyricStyles";
+import {
+  applyLyricDirectionToStyle,
+  directedLyricStyleName,
+} from "../../../home/player/visualizer/offline/lyricDirections";
+import type { TextRenderMode } from "../../../home/player/visualizer/offline/textTimeline";
 import {
   POST_PRESET_NAMES,
   POST_STYLES,
@@ -64,6 +70,13 @@ type RenderControllerOptions = {
   themes: string[];
   audioFiles: AudioFileOption[];
   lrcFiles: AudioFileOption[];
+  lyricDirectionFiles: AudioFileOption[];
+};
+
+type LyricStyleRuntime = {
+  baseStyleName: LyricStyleName;
+  formatGeometry: RenderFormatGeometry;
+  lyricPixelScale: number;
 };
 
 type RenderResponse =
@@ -152,15 +165,23 @@ export default function InternalVisualizerRenderPage() {
   const pixelBufferRef = useRef<Uint8Array | null>(null);
   const lastFrameRef = useRef<OfflineFrame | null>(null);
   const cameraPixelScaleRef = useRef(1);
+  const lyricStyleRuntimeRef = useRef<LyricStyleRuntime | null>(null);
   const [rendererApiReady, setRendererApiReady] = useState(false);
   const [message, setMessage] = useState("Renderer not initialised");
   const [themes, setThemes] = useState<string[]>([]);
 
   const [audioFiles, setAudioFiles] = useState<AudioFileOption[]>([]);
   const [lrcFiles, setLrcFiles] = useState<AudioFileOption[]>([]);
+  const [lyricDirectionFiles, setLyricDirectionFiles] = useState<
+    AudioFileOption[]
+  >([]);
   const [selectedTheme, setSelectedTheme] = useState("nebula");
   const [selectedAudioFile, setSelectedAudioFile] = useState("");
   const [selectedLrcFile, setSelectedLrcFile] = useState("__none__");
+  const [selectedLyricDirectionsFile, setSelectedLyricDirectionsFile] =
+    useState("__auto__");
+  const [textMode, setTextMode] = useState<TextRenderMode>("lyrics");
+  const [promoText, setPromoText] = useState("");
   const [selectedLyricStyle, setSelectedLyricStyle] = useState<LyricStyleName>(
     "ghost-lit-devotional",
   );
@@ -193,6 +214,7 @@ export default function InternalVisualizerRenderPage() {
           postProcessorRef.current = null;
           pixelBufferRef.current = null;
           lastFrameRef.current = null;
+          lyricStyleRuntimeRef.current = null;
 
           canvas.width = config.width;
           canvas.height = config.height;
@@ -237,9 +259,8 @@ export default function InternalVisualizerRenderPage() {
             compositionHeight,
           );
 
-          const sourceLyricStyle = config.lyricStyleName
-            ? LYRIC_STYLES[config.lyricStyleName]
-            : undefined;
+          const baseStyleName = config.lyricStyleName ?? "clean-center";
+          const sourceLyricStyle = LYRIC_STYLES[baseStyleName];
 
           const lyricStyle = applyRenderFormatToLyricStyle(
             sourceLyricStyle,
@@ -255,6 +276,11 @@ export default function InternalVisualizerRenderPage() {
 
           cameraPixelScaleRef.current =
             pixelScale * formatGeometry.cameraPixelScale;
+          lyricStyleRuntimeRef.current = {
+            baseStyleName,
+            formatGeometry,
+            lyricPixelScale,
+          };
 
           rendererRef.current = renderer;
           pixelBufferRef.current = new Uint8Array(
@@ -302,6 +328,30 @@ export default function InternalVisualizerRenderPage() {
         const lyricRenderer = lyricRendererRef.current;
 
         if (lyric && lyricRenderer) {
+          const styleRuntime = lyricStyleRuntimeRef.current;
+
+          if (styleRuntime) {
+            const styleName = directedLyricStyleName(
+              styleRuntime.baseStyleName,
+              lyric.direction,
+            );
+            const formatStyle = applyRenderFormatToLyricStyle(
+              LYRIC_STYLES[styleName],
+              styleRuntime.formatGeometry,
+            );
+            const directedStyle = applyLyricDirectionToStyle(
+              formatStyle ?? {},
+              lyric.direction,
+            );
+
+            lyricRenderer.setStyle(
+              scaleLyricStyle(
+                directedStyle,
+                styleRuntime.lyricPixelScale,
+              ),
+            );
+          }
+
           lyricRenderer.compositeIntoRgbaBuffer(buffer, lyric);
         }
 
@@ -333,6 +383,7 @@ export default function InternalVisualizerRenderPage() {
         pixelBufferRef.current = null;
         lastFrameRef.current = null;
         cameraPixelScaleRef.current = 1;
+        lyricStyleRuntimeRef.current = null;
         setMessage("Renderer disposed");
       },
 
@@ -377,6 +428,7 @@ export default function InternalVisualizerRenderPage() {
       pixelBufferRef.current = null;
       lastFrameRef.current = null;
       cameraPixelScaleRef.current = 1;
+      lyricStyleRuntimeRef.current = null;
 
       if (window.__AFR_RENDERER__ === api) {
         delete window.__AFR_RENDERER__;
@@ -397,6 +449,7 @@ export default function InternalVisualizerRenderPage() {
       setThemes(data.themes);
       setAudioFiles(data.audioFiles);
       setLrcFiles(data.lrcFiles);
+      setLyricDirectionFiles(data.lyricDirectionFiles);
 
       if (data.themes[0]) setSelectedTheme(data.themes[0]);
       if (data.audioFiles[0]) {
@@ -449,6 +502,9 @@ export default function InternalVisualizerRenderPage() {
           themeName: selectedTheme,
           audioFile: selectedAudioFile,
           lrcFile: selectedLrcFile,
+          lyricDirectionsFile: selectedLyricDirectionsFile,
+          textMode,
+          promoText: textMode === "promo" ? promoText : undefined,
           lyricStyleName: selectedLyricStyle,
           postPresetName: selectedPostPreset,
           renderFormatName,
@@ -535,37 +591,96 @@ export default function InternalVisualizerRenderPage() {
           </label>
 
           <label>
-            <div>LRC file</div>
+            <div>Text mode</div>
             <select
-              value={selectedLrcFile}
-              onChange={(event) => setSelectedLrcFile(event.target.value)}
-              style={{ width: "100%" }}
-            >
-              <option value="__none__">No lyrics</option>
-              {lrcFiles.map((lrc) => (
-                <option key={lrc.file} value={lrc.file}>
-                  {lrc.file}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            <div>Lyric style</div>
-            <select
-              value={selectedLyricStyle}
+              value={textMode}
               onChange={(event) =>
-                setSelectedLyricStyle(event.target.value as LyricStyleName)
+                setTextMode(event.target.value as TextRenderMode)
               }
               style={{ width: "100%" }}
             >
-              {LYRIC_STYLE_NAMES.map((styleName) => (
-                <option key={styleName} value={styleName}>
-                  {styleName}
-                </option>
-              ))}
+              <option value="lyrics">Lyrics</option>
+              <option value="promo">Promo text</option>
+              <option value="none">No text</option>
             </select>
           </label>
+
+          {textMode === "lyrics" ? (
+            <>
+              <label>
+                <div>LRC file</div>
+                <select
+                  value={selectedLrcFile}
+                  onChange={(event) => setSelectedLrcFile(event.target.value)}
+                  style={{ width: "100%" }}
+                >
+                  <option value="__none__">No lyrics</option>
+                  {lrcFiles.map((lrc) => (
+                    <option key={lrc.file} value={lrc.file}>
+                      {lrc.file}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                <div>Lyric directions</div>
+                <select
+                  value={selectedLyricDirectionsFile}
+                  onChange={(event) =>
+                    setSelectedLyricDirectionsFile(event.target.value)
+                  }
+                  style={{ width: "100%" }}
+                >
+                  <option value="__auto__">
+                    Auto-match .lyric-directions.json
+                  </option>
+                  <option value="__none__">No line overrides</option>
+                  {lyricDirectionFiles.map((directions) => (
+                    <option key={directions.file} value={directions.file}>
+                      {directions.file}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          ) : null}
+
+          {textMode === "promo" ? (
+            <label>
+              <div>Promo text</div>
+              <textarea
+                value={promoText}
+                onChange={(event) => setPromoText(event.target.value)}
+                placeholder={"GOD DEFEND\nOUT NOW"}
+                rows={4}
+                style={{
+                  width: "100%",
+                  resize: "vertical",
+                  font: "inherit",
+                }}
+              />
+            </label>
+          ) : null}
+
+          {textMode !== "none" ? (
+            <label>
+              <div>Text style</div>
+              <select
+                value={selectedLyricStyle}
+                onChange={(event) =>
+                  setSelectedLyricStyle(event.target.value as LyricStyleName)
+                }
+                style={{ width: "100%" }}
+              >
+                {LYRIC_STYLE_NAMES.map((styleName) => (
+                  <option key={styleName} value={styleName}>
+                    {styleName}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           <label>
             <div>Post preset</div>
@@ -676,7 +791,10 @@ export default function InternalVisualizerRenderPage() {
           </label>
 
           <label>
-            <div>Start sec optional</div>
+            <div>
+              Clip start sec
+              {textMode === "promo" ? " (required)" : " optional"}
+            </div>
             <input
               type="number"
               value={startSec}
@@ -687,7 +805,10 @@ export default function InternalVisualizerRenderPage() {
           </label>
 
           <label>
-            <div>End sec optional</div>
+            <div>
+              Clip end sec
+              {textMode === "promo" ? " (required)" : " optional"}
+            </div>
             <input
               type="number"
               value={endSec}
@@ -708,7 +829,12 @@ export default function InternalVisualizerRenderPage() {
 
           <button
             type="button"
-            disabled={isExporting || !selectedAudioFile}
+            disabled={
+              isExporting ||
+              !selectedAudioFile ||
+              (textMode === "promo" &&
+                (!promoText.trim() || !startSec.trim() || !endSec.trim()))
+            }
             onClick={() => {
               void runExport();
             }}
@@ -727,9 +853,15 @@ export default function InternalVisualizerRenderPage() {
           rendererMessage={message}
           audioFiles={audioFiles}
           lrcFiles={lrcFiles}
+          lyricDirectionFiles={lyricDirectionFiles}
           selectedTheme={selectedTheme}
           selectedAudioFile={selectedAudioFile}
           selectedLrcFile={selectedLrcFile}
+          selectedLyricDirectionsFile={selectedLyricDirectionsFile}
+          textMode={textMode}
+          promoText={promoText}
+          startSec={startSec}
+          endSec={endSec}
           selectedLyricStyle={selectedLyricStyle}
           selectedPostPreset={selectedPostPreset}
           renderFormatName={renderFormatName}
