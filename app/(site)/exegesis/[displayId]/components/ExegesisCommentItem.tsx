@@ -171,6 +171,17 @@ function voteTitle(
   return "Friend tier or higher required to vote";
 }
 
+const COMMENT_SURFACE_COLORS = [
+  "color-mix(in srgb, var(--lxRow) 94%, black 6%)",
+  "color-mix(in srgb, var(--lxRow) 90%, var(--lxSelected) 10%)",
+  "color-mix(in srgb, var(--lxRow) 90%, var(--lxHover) 10%)",
+] as const;
+
+function commentSurfaceForDepth(depth: number): string {
+  const index = Math.max(0, depth) % COMMENT_SURFACE_COLORS.length;
+  return COMMENT_SURFACE_COLORS[index];
+}
+
 function CommentHeader(props: CommentHeaderProps) {
   const {
     comment: c,
@@ -520,22 +531,22 @@ export default function ExegesisCommentItem(
 
   if (c.status === "deleted") return null;
 
-  const depth = c.depth ?? 0;
-  const indentPx = Math.min(72, depth * 12);
+  const depth = Math.max(0, c.depth ?? 0);
+  const surfaceColor = commentSurfaceForDepth(depth);
 
   return (
     <div
       id={`exegesis-c-${c.id}`}
-      className={["group scroll-mt-4", isAdminAuthor ? "relative" : ""].join(
-        " ",
-      )}
-      style={{
-        marginLeft: depth > 0 ? 6 : 0,
-        paddingLeft: indentPx,
-        borderLeft: depth > 0 ? "1px solid rgba(255,255,255,0.08)" : "none",
-      }}
+      className={[
+        "group scroll-mt-4 py-0.5",
+        isAdminAuthor ? "relative" : "",
+      ].join(" ")}
+      data-exegesis-depth={depth}
     >
-      <div className="px-4 py-2 sm:px-5">
+      <div
+        className="rounded-md px-4 py-2 sm:px-5"
+        style={{ backgroundColor: surfaceColor }}
+      >
         <div className="max-w-full">
           <CommentHeader
             comment={c}

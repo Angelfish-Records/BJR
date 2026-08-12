@@ -13,6 +13,51 @@ import type {
 import { resolveAuthorDisplayIdentity } from "@/lib/memberIdentity";
 import { identityFactsFromDTO } from "../exegesisIdentity";
 
+type CommentTreeNode = {
+  comment: CommentDTO;
+  children: CommentTreeNode[];
+};
+
+const THREAD_RAIL_COLORS = [
+  "color-mix(in srgb, var(--lxSelected) 34%, transparent)",
+  "color-mix(in srgb, var(--lxHover) 38%, transparent)",
+  "rgba(255,255,255,0.11)",
+] as const;
+
+function railColorForDepth(depth: number): string {
+  const index = Math.max(0, depth - 1) % THREAD_RAIL_COLORS.length;
+  return THREAD_RAIL_COLORS[index];
+}
+
+function buildCommentForest(comments: CommentDTO[]): CommentTreeNode[] {
+  const nodeById = new Map<string, CommentTreeNode>();
+
+  for (const comment of comments) {
+    nodeById.set(comment.id, {
+      comment,
+      children: [],
+    });
+  }
+
+  const forest: CommentTreeNode[] = [];
+
+  for (const comment of comments) {
+    const node = nodeById.get(comment.id);
+    if (!node) continue;
+
+    const parentId = (comment.parentId ?? "").trim();
+    const parent = parentId ? nodeById.get(parentId) : undefined;
+
+    if (parent && parent !== node) {
+      parent.children.push(node);
+    } else {
+      forest.push(node);
+    }
+  }
+
+  return forest;
+}
+
 export default function ExegesisThreadList(
   props: Readonly<{
     roots: Array<ThreadApiOk["roots"][number]>;
@@ -114,6 +159,85 @@ export default function ExegesisThreadList(
           (allComments.some((c) => (c.depth ?? 0) > previewMaxDepth) ||
             previewComments.length < allComments.length);
 
+        const commentForest = buildCommentForest(visibleComments);
+
+        const renderCommentNode = (
+          node: CommentTreeNode,
+          visualDepth: number,
+        ): React.ReactNode => {
+          const c = node.comment;
+          const ident = identities?.[c.createdByMemberId];
+          const authorIdentity = resolveAuthorDisplayIdentity(
+            identityFactsFromDTO(ident),
+          );
+          const replyBusy = Boolean(replyByCommentId[c.id]?.posting);
+          const isAuthor =
+            Boolean(viewerMemberId) &&
+            c.createdByMemberId === viewerMemberId;
+          const canEdit =
+            canPost && !isLocked && isAuthor && c.status === "live";
+          const editBusy = Boolean(editByCommentId[c.id]?.posting);
+
+          const childDepth = visualDepth + 1;
+
+          return (
+            <div key={c.id}>
+              <ExegesisCommentItem
+                comment={c}
+                authorLabel={authorIdentity.displayName}
+                isAdminAuthor={authorIdentity.isAdmin}
+                canPost={canPost}
+                canReport={canReport}
+                canVote={canVote}
+                isLocked={isLocked}
+                isAuthor={isAuthor}
+                canEdit={canEdit}
+                replyBusy={replyBusy}
+                editBusy={editBusy}
+                viewerKind={viewerKind}
+                replyDraft={replyByCommentId[c.id]}
+                editDraft={editByCommentId[c.id]}
+                reportDraft={reportByCommentId[c.id]}
+                replyMountKey={replyMountKey}
+                editMountKey={editMountKey}
+                onOpenReply={onOpenReply}
+                onOpenReport={onOpenReport}
+                onToggleVote={onToggleVote}
+                onOpenEdit={onOpenEdit}
+                onSubmitEdit={onSubmitEdit}
+                onSubmitReply={onSubmitReply}
+                onSubmitReport={onSubmitReport}
+                onChangeEditDraft={onChangeEditDraft}
+                onChangeReplyDraft={onChangeReplyDraft}
+                onChangeReportDraft={onChangeReportDraft}
+                editWrapRef={(el) => {
+                  editWrapByIdRef.current[c.id] = el;
+                }}
+                replyWrapRef={(el) => {
+                  replyWrapByIdRef.current[c.id] = el;
+                }}
+                reportWrapRef={(el) => {
+                  reportWrapByIdRef.current[c.id] = el;
+                }}
+              />
+
+              {node.children.length > 0 ? (
+                <div
+                  style={{
+                    marginLeft: 5,
+                    paddingLeft: 7,
+                    borderLeft: `1px solid ${railColorForDepth(childDepth)}`,
+                  }}
+                >
+                  {node.children.map((child) =>
+                    renderCommentNode(child, childDepth),
+                  )}
+                </div>
+              ) : null}
+            </div>
+          );
+        };
+
         return (
           <div
             key={root.rootId}
@@ -122,69 +246,13 @@ export default function ExegesisThreadList(
             }}
             className="rounded-md bg-black/20"
           >
-            {visibleComments.map((c) => {
-              const ident = identities?.[c.createdByMemberId];
-              const authorIdentity = resolveAuthorDisplayIdentity(
-                identityFactsFromDTO(ident),
-              );
-              const replyBusy = Boolean(replyByCommentId[c.id]?.posting);
-              const isAuthor =
-                Boolean(viewerMemberId) &&
-                c.createdByMemberId === viewerMemberId;
-              const canEdit =
-                canPost && !isLocked && isAuthor && c.status === "live";
-              const editBusy = Boolean(editByCommentId[c.id]?.posting);
-
-              return (
-                <ExegesisCommentItem
-                  key={c.id}
-                  comment={c}
-                  authorLabel={authorIdentity.displayName}
-                  isAdminAuthor={authorIdentity.isAdmin}
-                  canPost={canPost}
-                  canReport={canReport}
-                  canVote={canVote}
-                  isLocked={isLocked}
-                  isAuthor={isAuthor}
-                  canEdit={canEdit}
-                  replyBusy={replyBusy}
-                  editBusy={editBusy}
-                  viewerKind={viewerKind}
-                  replyDraft={replyByCommentId[c.id]}
-                  editDraft={editByCommentId[c.id]}
-                  reportDraft={reportByCommentId[c.id]}
-                  replyMountKey={replyMountKey}
-                  editMountKey={editMountKey}
-                  onOpenReply={onOpenReply}
-                  onOpenReport={onOpenReport}
-                  onToggleVote={onToggleVote}
-                  onOpenEdit={onOpenEdit}
-                  onSubmitEdit={onSubmitEdit}
-                  onSubmitReply={onSubmitReply}
-                  onSubmitReport={onSubmitReport}
-                  onChangeEditDraft={onChangeEditDraft}
-                  onChangeReplyDraft={onChangeReplyDraft}
-                  onChangeReportDraft={onChangeReportDraft}
-                  editWrapRef={(el) => {
-                    editWrapByIdRef.current[c.id] = el;
-                  }}
-                  replyWrapRef={(el) => {
-                    replyWrapByIdRef.current[c.id] = el;
-                  }}
-                  reportWrapRef={(el) => {
-                    reportWrapByIdRef.current[c.id] = el;
-                  }}
-                />
-              );
-            })}
+            {commentForest.map((node) => renderCommentNode(node, 0))}
 
             {gated ? (
               <div
                 className="mt-2"
                 style={{
-                  paddingLeft: Math.min(72, 3 * 12),
-                  borderLeft: "1px solid rgba(255,255,255,0.08)",
-                  marginLeft: 6,
+                  marginLeft: Math.min(72, previewMaxDepth * 12),
                 }}
               >
                 <button
