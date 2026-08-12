@@ -26,7 +26,22 @@ function parseKind(v: string | null): KindFilter | null {
   return null;
 }
 
-function encodeCursor(createdAtIso: string, id: string) {
+function toCanonicalIsoTimestamp(value: unknown): string | null {
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? value.toISOString() : null;
+  }
+
+  if (typeof value !== "string") return null;
+
+  const timestampMs = Date.parse(value);
+  return Number.isFinite(timestampMs)
+    ? new Date(timestampMs).toISOString()
+    : null;
+}
+
+function encodeCursor(createdAt: unknown, id: string): string | null {
+  const createdAtIso = toCanonicalIsoTimestamp(createdAt);
+  if (!createdAtIso || !id) return null;
   return `${createdAtIso}::${id}`;
 }
 
@@ -35,8 +50,11 @@ function decodeCursor(
 ): { createdAtIso: string; id: string } | null {
   const parts = cursor.split("::");
   if (parts.length !== 2) return null;
-  const [createdAtIso, id] = parts;
+
+  const [rawCreatedAt, id] = parts;
+  const createdAtIso = toCanonicalIsoTimestamp(rawCreatedAt);
   if (!createdAtIso || !id) return null;
+
   return { createdAtIso, id };
 }
 
@@ -103,7 +121,7 @@ export async function GET(req: Request) {
     const items = rows.rows;
     const last = items[items.length - 1] ?? null;
     const nextCursor = last
-      ? encodeCursor(String(last.created_at), String(last.id))
+      ? encodeCursor(last.created_at, String(last.id))
       : null;
 
     return json(200, { ok: true, items, nextCursor });

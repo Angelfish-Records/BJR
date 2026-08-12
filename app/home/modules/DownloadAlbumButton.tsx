@@ -300,7 +300,7 @@ function buttonTextForState(
 ): string {
   if (busy) return "Preparing download…";
   if (coolingDown) {
-    return `Download started. Button disabled for ${Math.ceil(remainingMs / 1000)}s`;
+    return `Download started`;
   }
   return label;
 }

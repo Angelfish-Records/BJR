@@ -516,7 +516,7 @@ async function markQuestionsPublished(params: {
   answer: string;
 }): Promise<void> {
   const { questionIds, createdId, slug, answer } = params;
-  const inPh3 = placeholders(questionIds.length, 3);
+  const inPh4 = placeholders(questionIds.length, 4);
 
   await sql.query(
     `
@@ -527,7 +527,7 @@ async function markQuestionsPublished(params: {
         answer_post_slug = $2,
         admin_reply_text = $3,
         updated_at = now()
-    WHERE id IN (${inPh3})
+    WHERE id IN (${inPh4})
     `,
     [createdId, slug, answer, ...questionIds],
   );
