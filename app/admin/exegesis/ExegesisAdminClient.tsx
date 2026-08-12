@@ -68,7 +68,7 @@ export default function ExegesisAdminClient(
       subtitle={
         mode === "grouping"
           ? "Arrange lyric lines into the discussion groups readers will see."
-          : "Moderate threads, lock or pin discussion, and manage reports."
+          : "Review comments, manage discussion state, and handle reports."
       }
       headerActions={modeActions}
     >
