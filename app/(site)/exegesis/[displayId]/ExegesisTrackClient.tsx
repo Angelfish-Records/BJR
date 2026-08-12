@@ -318,7 +318,8 @@ export default function ExegesisTrackClient(props: ExegesisTrackClientProps) {
     setSort(next);
   }
 
-  const { pendingScrollCommentIdRef } = useExegesisHashState({
+  const { pendingScrollCommentIdRef, hashNavigationVersion } =
+    useExegesisHashState({
     lyrics,
     setSelected,
     setFocusedRootId,
@@ -677,14 +678,52 @@ export default function ExegesisTrackClient(props: ExegesisTrackClientProps) {
 
     const t = globalThis.window.setTimeout(() => {
       const el = document.getElementById(`exegesis-c-${cid}`);
-      if (el) {
-        el.scrollIntoView({ block: "start", behavior: "smooth" });
-        pendingScrollCommentIdRef.current = "";
+      if (!el) return;
+
+      const reducedMotion = prefersReducedMotion();
+
+      el.scrollIntoView({
+        block: "start",
+        behavior: reducedMotion ? "auto" : "smooth",
+      });
+
+      if (!reducedMotion) {
+        const surface =
+          el.querySelector<HTMLElement>(
+            "[data-exegesis-comment-surface]",
+          ) ?? el;
+
+        surface.animate(
+          [
+            {
+              boxShadow:
+                "0 0 0 1px rgba(213,196,224,0), 0 0 0 rgba(98,78,113,0)",
+            },
+            {
+              boxShadow:
+                "0 0 0 1px rgba(213,196,224,0.52), 0 0 22px rgba(98,78,113,0.26)",
+            },
+            {
+              boxShadow:
+                "0 0 0 1px rgba(213,196,224,0), 0 0 0 rgba(98,78,113,0)",
+            },
+          ],
+          {
+            duration: 1100,
+            easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+          },
+        );
       }
+
+      pendingScrollCommentIdRef.current = "";
     }, 40);
 
     return () => globalThis.window.clearTimeout(t);
-  }, [threadKey, pendingScrollCommentIdRef]);
+  }, [
+    threadKey,
+    hashNavigationVersion,
+    pendingScrollCommentIdRef,
+  ]);
 
   const viewerAuthorIdentity = React.useMemo(
     () =>

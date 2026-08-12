@@ -12,6 +12,10 @@ import type {
 } from "../exegesisTypes";
 import { resolveAuthorDisplayIdentity } from "@/lib/memberIdentity";
 import { identityFactsFromDTO } from "../exegesisIdentity";
+import {
+  exegesisCommentEditExpiresAtMs,
+  isExegesisCommentEditWindowOpen,
+} from "@/lib/exegesis/commentPolicy";
 
 type CommentTreeNode = {
   comment: CommentDTO;
@@ -135,6 +139,57 @@ export default function ExegesisThreadList(
     onFocusRoot,
   } = props;
 
+  const [editClockMs, setEditClockMs] = React.useState(
+    () => Date.now(),
+  );
+
+  React.useEffect(() => {
+    const nowMs = Date.now();
+    const timeoutIds: number[] = [];
+
+    timeoutIds.push(
+      globalThis.window.setTimeout(() => {
+        setEditClockMs(Date.now());
+      }, 0),
+    );
+
+    if (viewerMemberId) {
+      for (const root of roots ?? []) {
+        for (const comment of root.comments ?? []) {
+          if (
+            comment.createdByMemberId !== viewerMemberId ||
+            comment.status !== "live"
+          ) {
+            continue;
+          }
+
+          const expiresAtMs = exegesisCommentEditExpiresAtMs(
+            comment.createdAt,
+          );
+
+          if (expiresAtMs === null || expiresAtMs <= nowMs) {
+            continue;
+          }
+
+          timeoutIds.push(
+            globalThis.window.setTimeout(
+              () => {
+                setEditClockMs(Date.now());
+              },
+              Math.max(0, expiresAtMs - nowMs + 50),
+            ),
+          );
+        }
+      }
+    }
+
+    return () => {
+      for (const timeoutId of timeoutIds) {
+        globalThis.window.clearTimeout(timeoutId);
+      }
+    };
+  }, [roots, viewerMemberId]);
+
   if ((roots ?? []).length === 0) {
     return (
       <div className="text-sm opacity-60">
@@ -179,7 +234,11 @@ export default function ExegesisThreadList(
             Boolean(viewerMemberId) &&
             c.createdByMemberId === viewerMemberId;
           const canEdit =
-            canPost && !isLocked && isAuthor && c.status === "live";
+            canPost &&
+            !isLocked &&
+            isAuthor &&
+            c.status === "live" &&
+            isExegesisCommentEditWindowOpen(c.createdAt, editClockMs);
           const editBusy = Boolean(editByCommentId[c.id]?.posting);
 
           const childDepth = visualDepth + 1;

@@ -6,6 +6,7 @@ import { sql } from "@vercel/postgres";
 import { hasAnyEntitlement } from "@/lib/entitlements";
 import { ENTITLEMENTS } from "@/lib/vocab";
 import { validateAndSanitizeTipTapDoc } from "@/lib/exegesis/richText";
+import { EXEGESIS_COMMENT_EDIT_WINDOW_MINUTES } from "@/lib/exegesis/commentPolicy";
 import { correlationIdFromRequest, gateError, jsonOk } from "@/app/api/_gate";
 import {
   bodyRecord,
@@ -239,7 +240,8 @@ target as (
     c.track_id,
     c.group_key,
     c.status,
-    c.created_by_member_id
+    c.created_by_member_id,
+    c.created_at
   from exegesis_comment c
   join params p on c.id = p.comment_id
   limit 1
@@ -273,6 +275,10 @@ guard_row as (
       when t.status = 'deleted' then 'DELETED'
       when t.status = 'hidden' then 'HIDDEN'
       when t.created_by_member_id <> p.member_id then 'FORBIDDEN'
+      when t.created_at
+        + (${EXEGESIS_COMMENT_EDIT_WINDOW_MINUTES}::int * interval '1 minute')
+        <= now()
+        then 'EDIT_WINDOW_EXPIRED'
       else null
     end as err
   from one
@@ -380,6 +386,11 @@ function editGuardFailureResponse(
         code: "INVALID_REQUEST",
         action: "wait",
         message: "You can only edit your own comments.",
+      });
+    case "EDIT_WINDOW_EXPIRED":
+      return jsonErr(correlationId, 409, {
+        ok: false,
+        error: "Comments can only be edited for 15 minutes after posting.",
       });
     case "DELETED":
       return jsonErr(correlationId, 400, {

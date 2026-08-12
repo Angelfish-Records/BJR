@@ -163,6 +163,46 @@ function sanitizeNode(node: PMNode, errors: string[]): PMNode | null {
   return out;
 }
 
+function nodeHasMeaningfulContent(node: PMNode): boolean {
+  const type = safeString(node.type);
+
+  if (type === "hardBreak") return true;
+
+  if (type === "text") {
+    return safeString(node.text).trim().length > 0;
+  }
+
+  return (
+    Array.isArray(node.content) &&
+    node.content.some(nodeHasMeaningfulContent)
+  );
+}
+
+function trimTrailingEmptyTopLevelParagraphs(
+  doc: TipTapDoc,
+): TipTapDoc {
+  const content = [...(doc.content ?? [])];
+
+  while (content.length > 1) {
+    const last = content[content.length - 1];
+
+    if (
+      !last ||
+      safeString(last.type) !== "paragraph" ||
+      nodeHasMeaningfulContent(last)
+    ) {
+      break;
+    }
+
+    content.pop();
+  }
+
+  return {
+    ...doc,
+    content,
+  };
+}
+
 export function validateAndSanitizeTipTapDoc(input: unknown):
   | {
       ok: true;
@@ -200,6 +240,10 @@ export function validateAndSanitizeTipTapDoc(input: unknown):
     return { ok: false, error: "Invalid bodyRich doc." };
   }
 
+  const sanitizedDoc = trimTrailingEmptyTopLevelParagraphs(
+    root as TipTapDoc,
+  );
+
   // derive plain text
   const plainParts: string[] = [];
   const walk = (n: PMNode) => {
@@ -220,7 +264,7 @@ export function validateAndSanitizeTipTapDoc(input: unknown):
       plainParts.push("\n");
     }
   };
-  walk(root);
+  walk(sanitizedDoc);
 
   const plain = normalizeWhitespace(plainParts.join(""));
 
@@ -233,5 +277,5 @@ export function validateAndSanitizeTipTapDoc(input: unknown):
   // For now, we strip and continue; if we want strict reject:
   // if (errors.length) return { ok: false, error: errors[0] };
 
-  return { ok: true, doc: root as TipTapDoc, plain };
+  return { ok: true, doc: sanitizedDoc, plain };
 }

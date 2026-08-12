@@ -31,6 +31,12 @@ export type ShareTarget =
       url: string;
     };
 
+export type SharePayload = Readonly<{
+  title: string;
+  text: string;
+  url: string;
+}>;
+
 type AlbumShareInput = {
   type: "album";
   methodHint?: ShareMethod;
@@ -296,7 +302,7 @@ function isAbortError(err: unknown) {
 }
 
 async function tryNativeShare(
-  target: ShareTarget,
+  target: SharePayload,
 ): Promise<ShareResult | null> {
   if (typeof navigator === "undefined") {
     return null;
@@ -342,7 +348,7 @@ async function copyShareUrl(url: string): Promise<ShareResult> {
   }
 }
 
-export async function performShare(target: ShareTarget): Promise<ShareResult> {
+export async function performShare(target: SharePayload): Promise<ShareResult> {
   const nativeResult = await tryNativeShare(target);
   if (nativeResult) {
     return nativeResult;

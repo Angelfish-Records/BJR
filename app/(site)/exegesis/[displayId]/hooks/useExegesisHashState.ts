@@ -77,6 +77,7 @@ export default function useExegesisHashState(props: {
 
   const pendingScrollCommentIdRef = React.useRef<string>("");
   const openFromHashRef = React.useRef<boolean>(false);
+  const [hashNavigationVersion, setHashNavigationVersion] = React.useState(0);
 
   const { recordingId: lyricsRecordingId, cues, groupMap } = lyrics;
 
@@ -126,6 +127,10 @@ export default function useExegesisHashState(props: {
 
       pendingScrollCommentIdRef.current = commentId;
       openFromHashRef.current = true;
+
+      if (commentId) {
+        setHashNavigationVersion((value) => value + 1);
+      }
     }
 
     function onNativeHashNavigation() {
@@ -174,5 +179,6 @@ export default function useExegesisHashState(props: {
 
   return {
     pendingScrollCommentIdRef,
+    hashNavigationVersion,
   };
 }

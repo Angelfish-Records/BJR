@@ -2,6 +2,7 @@
 "use client";
 
 import React from "react";
+import { performShare } from "@/lib/share";
 import TipTapReadOnly from "../TipTapReadOnly";
 import { MedalIcon, ReplyIcon, ShieldAlertIcon } from "../icons";
 import ExegesisReportForm from "./ExegesisReportForm";
@@ -164,6 +165,144 @@ function TickIcon(props: TickIconProps) {
   );
 }
 
+type ShareIconProps = Readonly<{
+  className?: string;
+}>;
+
+function ShareIcon(props: ShareIconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+      className={props.className}
+    >
+      <circle cx="18" cy="5" r="3" stroke="currentColor" strokeWidth="2" />
+      <circle cx="6" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+      <circle cx="18" cy="19" r="3" stroke="currentColor" strokeWidth="2" />
+      <path
+        d="m8.7 10.7 6.6-4.2M8.7 13.3l6.6 4.2"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function commentShareUrl(comment: CommentDTO): string | null {
+  if (typeof globalThis.window === "undefined") return null;
+
+  // Deliberately build from the canonical visible path rather than the
+  // current query string so transient params/share tokens are not leaked.
+  const url = new URL(
+    globalThis.window.location.pathname,
+    globalThis.window.location.origin,
+  );
+
+  const hash = new URLSearchParams();
+  hash.set("l", comment.lineKey);
+  hash.set("c", comment.id);
+  hash.set("root", comment.rootId);
+
+  url.hash = hash.toString();
+  return url.toString();
+}
+
+function compactCommentShareText(value: string): string {
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (compact.length <= 180) return compact;
+
+  return `${compact.slice(0, 177).trimEnd()}…`;
+}
+
+function CommentShareAction(
+  props: Readonly<{
+    comment: CommentDTO;
+    authorLabel: string;
+  }>,
+) {
+  const { comment, authorLabel } = props;
+  const [copied, setCopied] = React.useState(false);
+  const copiedTimerRef = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current !== null) {
+        globalThis.window.clearTimeout(copiedTimerRef.current);
+      }
+    };
+  }, []);
+
+  async function shareComment() {
+    const url = commentShareUrl(comment);
+    if (!url) return;
+
+    const excerpt = compactCommentShareText(comment.bodyPlain);
+
+    try {
+      const result = await performShare({
+        title: `Exegesis comment · ${authorLabel}`,
+        text: excerpt
+          ? `${authorLabel}: “${excerpt}”`
+          : `View a comment by ${authorLabel} in Exegesis.`,
+        url,
+      });
+
+      // Native sharing supplies its own OS-level confirmation. For the
+      // clipboard fallback, give a brief local acknowledgement.
+      if (!result.ok || result.method !== "copy") return;
+
+      setCopied(true);
+
+      if (copiedTimerRef.current !== null) {
+        globalThis.window.clearTimeout(copiedTimerRef.current);
+      }
+
+      copiedTimerRef.current = globalThis.window.setTimeout(() => {
+        setCopied(false);
+        copiedTimerRef.current = null;
+      }, 1400);
+    } catch {
+      // Sharing is deliberately non-destructive. A browser-level share
+      // failure must not affect the comment or surrounding thread.
+    }
+  }
+
+  const label = copied ? "Link copied" : "Share comment";
+
+  return (
+    <button
+      type="button"
+      className={[
+        "absolute bottom-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-full",
+        "bg-black/25 text-white/55 ring-1 ring-white/[0.06]",
+        "transition-[opacity,color,background-color,box-shadow] duration-150 ease-out",
+        "hover:bg-black/40 hover:text-white/85 hover:ring-white/[0.12]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/25",
+        "md:pointer-events-none md:opacity-0",
+        "md:group-hover:pointer-events-auto md:group-hover:opacity-100",
+        "group-focus-within:pointer-events-auto group-focus-within:opacity-100",
+      ].join(" ")}
+      onClick={() => void shareComment()}
+      title={label}
+      aria-label={label}
+    >
+      {copied ? (
+        <span
+          className="text-sm font-semibold leading-none"
+          aria-hidden="true"
+        >
+          ✓
+        </span>
+      ) : (
+        <ShareIcon className="h-4 w-4" />
+      )}
+    </button>
+  );
+}
+
 function voteTitle(
   canVote: boolean,
   viewerKind: ExegesisCommentItemProps["viewerKind"],
@@ -250,7 +389,7 @@ function CommentHeader(props: CommentHeaderProps) {
           {canPost && !isLocked ? (
             <button
               type="button"
-              className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40"
+              className="rounded-md bg-white/[0.04] px-2 py-1 text-xs text-white/60 transition-colors hover:bg-white/[0.08] hover:text-white/85 disabled:opacity-40"
               disabled={replyBusy || c.status !== "live" || c.depth >= 6}
               onClick={() => onOpenReply(c.id)}
               title={c.depth >= 6 ? "Max thread depth reached" : "Reply"}
@@ -263,7 +402,7 @@ function CommentHeader(props: CommentHeaderProps) {
           {canReport ? (
             <button
               type="button"
-              className="rounded-md bg-white/5 px-2 py-1 text-xs hover:bg-white/10"
+              className="rounded-md bg-white/[0.04] px-2 py-1 text-xs text-white/60 transition-colors hover:bg-white/[0.08] hover:text-white/85"
               onClick={() => onOpenReport(c.id)}
               title="Report"
               aria-label="Report"
@@ -329,7 +468,9 @@ function CommentBody(props: CommentBodyProps) {
   }
 
   return (
-    <div className={isAdminAuthor ? "mt-1 text-white/95" : "mt-1"}>
+    <div
+      className={isAdminAuthor ? "mt-1 pr-9 text-white/95" : "mt-1 pr-9"}
+    >
       {isTipTapDoc(c.bodyRich) ? (
         <TipTapReadOnly doc={c.bodyRich} />
       ) : (
@@ -550,7 +691,8 @@ export default function ExegesisCommentItem(
       data-exegesis-depth={depth}
     >
       <div
-        className="rounded-md px-4 py-2 sm:px-5"
+        className="relative rounded-md px-4 py-2 sm:px-5"
+        data-exegesis-comment-surface=""
         style={{ backgroundColor: surfaceColor }}
       >
         <div className="max-w-full">
@@ -612,6 +754,16 @@ export default function ExegesisCommentItem(
             reportWrapRef={reportWrapRef}
           />
         </div>
+
+        {c.status === "live" &&
+        !editDraft?.open &&
+        !replyDraft?.open &&
+        !reportDraft?.open ? (
+          <CommentShareAction
+            comment={c}
+            authorLabel={authorLabel}
+          />
+        ) : null}
       </div>
     </div>
   );

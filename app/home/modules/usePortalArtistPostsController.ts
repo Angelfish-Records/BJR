@@ -788,7 +788,10 @@ export function usePortalArtistPostsController(
       setThanks(true);
 
       if (thankTimerRef.current) window.clearTimeout(thankTimerRef.current);
-      thankTimerRef.current = window.setTimeout(() => setThanks(false), 2200);
+      thankTimerRef.current = window.setTimeout(
+        () => setThanks(false),
+        12_000,
+      );
     } catch {
       setSubmitErr("Couldn’t submit right now. Try again.");
     } finally {
