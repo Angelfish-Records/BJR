@@ -859,6 +859,85 @@ export default function ExegesisTrackClient(props: ExegesisTrackClientProps) {
           }
         }
 
+        @keyframes afClaimNameSignalShimmer {
+          0%,
+          18% {
+            background-position: 180% 0;
+          }
+          72%,
+          100% {
+            background-position: -80% 0;
+          }
+        }
+
+        @keyframes afClaimNameSweep {
+          0%,
+          22% {
+            transform: translateX(-170%) skewX(-18deg);
+          }
+          68%,
+          100% {
+            transform: translateX(310%) skewX(-18deg);
+          }
+        }
+
+        .afClaimNameSignal {
+          background: linear-gradient(
+            100deg,
+            rgba(210, 194, 220, 0.86) 0%,
+            rgba(210, 194, 220, 0.86) 35%,
+            rgba(255, 255, 255, 1) 48%,
+            rgba(225, 210, 235, 0.94) 59%,
+            rgba(210, 194, 220, 0.86) 100%
+          );
+          background-size: 240% 100%;
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+          animation: afClaimNameSignalShimmer 3.4s ease-in-out infinite;
+        }
+
+        .afClaimNameAction {
+          position: relative;
+          isolation: isolate;
+          overflow: hidden;
+          border: 1px solid rgba(151, 124, 169, 0.48);
+          background: rgba(98, 78, 113, 0.2);
+          color: rgba(255, 255, 255, 0.94);
+          box-shadow: 0 0 14px rgba(98, 78, 113, 0.12);
+        }
+
+        .afClaimNameAction::before {
+          content: "";
+          position: absolute;
+          z-index: -1;
+          top: -30%;
+          bottom: -30%;
+          left: 0;
+          width: 34%;
+          pointer-events: none;
+          background: linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0),
+            rgba(255, 255, 255, 0.14),
+            rgba(255, 255, 255, 0)
+          );
+          transform: translateX(-170%) skewX(-18deg);
+          animation: afClaimNameSweep 3.4s ease-in-out infinite;
+        }
+
+        .afClaimNameAction:hover {
+          border-color: rgba(178, 148, 198, 0.7);
+          background: rgba(98, 78, 113, 0.3);
+          color: rgba(255, 255, 255, 1);
+          box-shadow: 0 0 18px rgba(98, 78, 113, 0.2);
+        }
+
+        .afClaimNameAction > span {
+          position: relative;
+          z-index: 1;
+        }
+
         .afMedalAdamantium {
           background: linear-gradient(
             90deg,
@@ -878,6 +957,17 @@ export default function ExegesisTrackClient(props: ExegesisTrackClientProps) {
             animation: none;
             color: rgba(197, 134, 255, 1);
             background: none;
+          }
+
+          .afClaimNameSignal {
+            animation: none;
+            background: none;
+            color: rgba(225, 210, 235, 0.94);
+          }
+
+          .afClaimNameAction::before {
+            animation: none;
+            display: none;
           }
         }
 

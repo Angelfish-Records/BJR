@@ -41,18 +41,20 @@ export default function ExegesisIdentityPanel({
           Commenting as{" "}
           <span className="font-semibold text-white">{authorLabel}</span>
           {!hasClaimedPublicName && canClaimName ? (
-            <span className="ml-1 text-white/45">· Unlocked</span>
+            <span className="afClaimNameSignal ml-1 font-medium">
+              · Unlocked
+            </span>
           ) : null}
         </div>
 
         {canClaimName && !hasClaimedPublicName ? (
           <button
-            className="inline-flex h-7 shrink-0 items-center justify-center rounded-full px-2.5 text-[11px] text-white/65 transition hover:bg-white/[0.06] hover:text-white/95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+            className="afClaimNameAction inline-flex h-7 shrink-0 items-center justify-center rounded-full px-3 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
             onClick={onToggleClaim}
             title="Claim a public name"
             type="button"
           >
-            Claim name
+            <span>Claim name</span>
           </button>
         ) : null}
       </div>

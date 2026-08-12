@@ -234,20 +234,40 @@ function publishFailureMessage(
   return `Publish failed (${response.status})`;
 }
 
+function buildNotificationNotice(data: PublishOk): string | null {
+  if (!data.notified) return null;
+
+  const { attempted, sent } = data.notified;
+
+  if (attempted === 0) {
+    return "No eligible email recipient was found.";
+  }
+
+  const noun = attempted === 1 ? "email" : "emails";
+
+  if (sent === attempted) {
+    return `Resend accepted ${sent}/${attempted} ${noun}.`;
+  }
+
+  return `Resend accepted ${sent}/${attempted} ${noun}; ${
+    attempted - sent
+  } failed before acceptance.`;
+}
+
 function buildReplyNotice(data: PublishOk): string {
-  const base = `Reply sent for ${kindLabel(data.kind)}`;
+  const base = `Reply processed for ${kindLabel(data.kind)}.`;
+  const notification = buildNotificationNotice(data);
 
-  if (!data.notified) return `${base}.`;
-
-  const delivery = ` (${data.notified.sent}/${data.notified.attempted} delivered)`;
-  return `${base}${delivery}.`;
+  return notification ? `${base} ${notification}` : base;
 }
 
 function getPublishNotice(data: PublishOk): PublishNotice {
+  const notification = buildNotificationNotice(data);
+
   if (data.mode === "published_post" && data.post?.slug) {
     return {
       publishedSlug: data.post.slug,
-      replyNotice: null,
+      replyNotice: notification,
     };
   }
 

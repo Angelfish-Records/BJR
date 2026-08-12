@@ -545,11 +545,15 @@ async function loadPublishedNotificationRows(
       m.email::text AS to_email
     FROM mailbag_questions q
     JOIN members m ON m.id = q.member_id
-    LEFT JOIN email_suppressions s ON s.email = m.email
     WHERE q.id IN (${inPh1})
       AND q.status = 'answered'
       AND q.notify_email_sent_at IS NULL
-      AND s.email IS NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM email_suppressions s
+        WHERE lower(s.email::text) = lower(m.email::text)
+          AND s.reason IN ('email.bounced', 'email.complained')
+      )
     `,
     questionIds,
   );
@@ -557,8 +561,17 @@ async function loadPublishedNotificationRows(
   return result.rows;
 }
 
-function providerIdFromResult(result: unknown): string | null {
-  return (result as { data?: { id?: string } })?.data?.id ?? null;
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+
+  if (typeof error === "object" && error !== null) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) {
+      return message.trim();
+    }
+  }
+
+  return String(error);
 }
 
 async function recordEmailOutbox(params: {
@@ -670,17 +683,41 @@ async function sendPublishedNotifications(params: {
         ],
       });
 
-      await recordEmailOutbox({
-        kind: "mailbag_answered",
-        entityKey: row.question_id,
-        toEmail,
-        fromEmail: config.fromEmail,
-        subject,
-        providerId: providerIdFromResult(result),
-      });
+      if (result.error || !result.data?.id) {
+        console.error("Mailbag answer notification was not accepted by Resend.", {
+          questionId: row.question_id,
+          error: result.error
+            ? errorMessage(result.error)
+            : "Resend returned no email id.",
+        });
+        continue;
+      }
+
+      const providerId = result.data.id;
+
+      try {
+        await recordEmailOutbox({
+          kind: "mailbag_answered",
+          entityKey: row.question_id,
+          toEmail,
+          fromEmail: config.fromEmail,
+          subject,
+          providerId,
+        });
+      } catch (error: unknown) {
+        console.error("Mailbag answer notification outbox write failed.", {
+          questionId: row.question_id,
+          providerId,
+          error: errorMessage(error),
+        });
+      }
 
       sentQuestionIds.push(row.question_id);
-    } catch {
+    } catch (error: unknown) {
+      console.error("Mailbag answer notification send threw.", {
+        questionId: row.question_id,
+        error: errorMessage(error),
+      });
       continue;
     }
   }
@@ -846,19 +883,41 @@ async function sendPrivateReply(params: {
       ],
     });
 
-    providerId = providerIdFromResult(result);
+    if (result.error || !result.data?.id) {
+      console.error("Mailbag private reply was not accepted by Resend.", {
+        submissionId: target.id,
+        error: result.error
+          ? errorMessage(result.error)
+          : "Resend returned no email id.",
+      });
+      return { sent: false, providerId };
+    }
 
-    await recordEmailOutbox({
-      kind: privateOutboxKind(kind),
-      entityKey: target.id,
-      toEmail,
-      fromEmail: config.fromEmail,
-      subject,
-      providerId,
-    });
+    providerId = result.data.id;
+
+    try {
+      await recordEmailOutbox({
+        kind: privateOutboxKind(kind),
+        entityKey: target.id,
+        toEmail,
+        fromEmail: config.fromEmail,
+        subject,
+        providerId,
+      });
+    } catch (error: unknown) {
+      console.error("Mailbag private reply outbox write failed.", {
+        submissionId: target.id,
+        providerId,
+        error: errorMessage(error),
+      });
+    }
 
     return { sent: true, providerId };
-  } catch {
+  } catch (error: unknown) {
+    console.error("Mailbag private reply send threw.", {
+      submissionId: target.id,
+      error: errorMessage(error),
+    });
     return { sent: false, providerId };
   }
 }
