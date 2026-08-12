@@ -276,7 +276,7 @@ function CommentShareAction(
     <button
       type="button"
       className={[
-        "absolute bottom-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-full",
+        "absolute bottom-2 right-2 inline-flex h-7 w-7 items-center justify-center rounded-full",
         "bg-black/25 text-white/55 ring-1 ring-white/[0.06]",
         "transition-[opacity,color,background-color,box-shadow] duration-150 ease-out",
         "hover:bg-black/40 hover:text-white/85 hover:ring-white/[0.12]",
@@ -297,7 +297,7 @@ function CommentShareAction(
           ✓
         </span>
       ) : (
-        <ShareIcon className="h-4 w-4" />
+        <ShareIcon className="h-3.5 w-3.5" />
       )}
     </button>
   );
@@ -469,7 +469,11 @@ function CommentBody(props: CommentBodyProps) {
 
   return (
     <div
-      className={isAdminAuthor ? "mt-1 pr-9 text-white/95" : "mt-1 pr-9"}
+      className={
+        isAdminAuthor
+          ? "mt-1 pb-3 pr-9 text-white/95"
+          : "mt-1 pb-3 pr-9"
+      }
     >
       {isTipTapDoc(c.bodyRich) ? (
         <TipTapReadOnly doc={c.bodyRich} />
