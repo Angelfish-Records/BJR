@@ -181,9 +181,12 @@ export default function useExegesisThread(props: {
     threadUI?.viewer?.kind === "member" ? threadUI.viewer.cap.canPost : false;
 
   const canClaimName =
-    threadUI?.viewer?.kind === "member"
-      ? threadUI.viewer.cap.canClaimName
-      : false;
+    threadUI?.viewer?.kind === "member" &&
+    viewerIdentity != null &&
+    !viewerIdentity.isAdmin &&
+    !viewerIdentity.publicName &&
+    (threadUI.viewer.cap.canClaimName ||
+      viewerIdentity.publicNameUnlockedAt != null);
 
   const rootsForRender = React.useMemo(() => {
     const roots = [...(threadUI?.roots ?? [])];

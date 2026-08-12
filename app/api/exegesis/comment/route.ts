@@ -807,7 +807,6 @@ function buildIdentityMap(
 async function runPostCommitBadgeEffects(params: {
   memberId: string;
   recordingId: string;
-  publicNameUnlockedAt: string | null;
   correlationId: string;
 }): Promise<NewlyAwardedBadge[]> {
   let badges: NewlyAwardedBadge[];
@@ -815,10 +814,7 @@ async function runPostCommitBadgeEffects(params: {
   try {
     badges = await runAutoBadgeAwardsForMember({
       memberId: params.memberId,
-      trigger:
-        params.publicNameUnlockedAt !== null
-          ? "public_name_unlocked"
-          : "exegesis_contribution_created",
+      trigger: "exegesis_contribution_created",
       recordingId: params.recordingId,
       grantedBy: "system",
       correlationId: params.correlationId,
@@ -902,7 +898,6 @@ export async function POST(req: NextRequest) {
     const newlyAwardedBadges = await runPostCommitBadgeEffects({
       memberId: authority.memberId,
       recordingId: command.value.recordingId,
-      publicNameUnlockedAt: row.ident_public_name_unlocked_at,
       correlationId,
     });
 

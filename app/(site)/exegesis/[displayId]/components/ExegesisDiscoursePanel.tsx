@@ -408,12 +408,19 @@ function LoadedDiscourse(props: LoadedDiscourseProps) {
         className={`mt-3 space-y-3 flex-1 ${isMobile ? "afFadeScroll" : ""}`}
         style={{
           overflowY: "auto",
+          overflowX: "hidden",
           overscrollBehavior: isMobile ? "contain" : "auto",
           minHeight: 0,
           paddingBottom: isMobile ? dockHeight : 0,
         }}
       >
-        <div className="mt-3 space-y-3">
+        <div
+          className={`mt-3 space-y-3 ${
+            focusedRootId
+              ? "afThreadViewEnterForward"
+              : "afThreadViewEnterBack"
+          }`}
+        >
           <ExegesisThreadList
             roots={roots}
             identities={identities}

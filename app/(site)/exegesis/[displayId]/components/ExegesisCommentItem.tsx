@@ -25,6 +25,7 @@ type TickIconProps = Readonly<{
 
 type ExegesisCommentItemProps = Readonly<{
   comment: CommentDTO;
+  surfaceIndex: number;
   authorLabel: string;
   isAdminAuthor: boolean;
   canPost: boolean;
@@ -180,8 +181,8 @@ const COMMENT_SURFACE_COLORS = [
   "rgb(37 35 39)",
 ] as const;
 
-function commentSurfaceForDepth(depth: number): string {
-  const index = Math.max(0, depth) % COMMENT_SURFACE_COLORS.length;
+function commentSurfaceForIndex(surfaceIndex: number): string {
+  const index = Math.max(0, surfaceIndex) % COMMENT_SURFACE_COLORS.length;
   return COMMENT_SURFACE_COLORS[index];
 }
 
@@ -502,6 +503,7 @@ export default function ExegesisCommentItem(
 ) {
   const {
     comment: c,
+    surfaceIndex,
     authorLabel,
     isAdminAuthor,
     canPost,
@@ -536,7 +538,7 @@ export default function ExegesisCommentItem(
   if (c.status === "deleted") return null;
 
   const depth = Math.max(0, c.depth ?? 0);
-  const surfaceColor = commentSurfaceForDepth(depth);
+  const surfaceColor = commentSurfaceForIndex(surfaceIndex);
 
   return (
     <div

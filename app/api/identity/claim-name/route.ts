@@ -27,7 +27,7 @@ type ApiOk = {
 type ApiErr = {
   ok: false;
   error: string;
-  code?: "TAKEN" | "NOT_UNLOCKED";
+  code?: "TAKEN" | "NOT_UNLOCKED" | "ALREADY_CLAIMED";
 };
 
 function jsonErr(correlationId: string, status: number, body: ApiErr) {
@@ -160,14 +160,25 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await sql`
+    const claimResult = await sql<{ member_id: string }>`
       update member_identity
       set
         public_name = ${v.value}::citext,
-        public_name_claimed_at = coalesce(public_name_claimed_at, now()),
+        public_name_claimed_at = now(),
         updated_at = now()
       where member_id = ${memberId}::uuid
+        and public_name is null
+        and public_name_claimed_at is null
+      returning member_id
     `;
+
+    if (claimResult.rows.length === 0) {
+      return jsonErr(correlationId, 409, {
+        ok: false,
+        code: "ALREADY_CLAIMED",
+        error: "Public name has already been claimed.",
+      });
+    }
   } catch (error: unknown) {
     const err = error as { code?: string } | null;
 

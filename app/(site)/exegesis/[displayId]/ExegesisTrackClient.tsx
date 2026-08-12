@@ -925,6 +925,40 @@ export default function ExegesisTrackClient(props: ExegesisTrackClientProps) {
             1px -1px rgba(255, 255, 255, 0.05);
         }
 
+        @keyframes afThreadViewEnterForward {
+          from {
+            opacity: 0.42;
+            transform: translate3d(22px, 0, 0);
+          }
+          to {
+            opacity: 1;
+            transform: translate3d(0, 0, 0);
+          }
+        }
+
+        @keyframes afThreadViewEnterBack {
+          from {
+            opacity: 0.42;
+            transform: translate3d(-22px, 0, 0);
+          }
+          to {
+            opacity: 1;
+            transform: translate3d(0, 0, 0);
+          }
+        }
+
+        .afThreadViewEnterForward {
+          animation: afThreadViewEnterForward 220ms
+            cubic-bezier(0.22, 1, 0.36, 1) both;
+          will-change: transform, opacity;
+        }
+
+        .afThreadViewEnterBack {
+          animation: afThreadViewEnterBack 220ms
+            cubic-bezier(0.22, 1, 0.36, 1) both;
+          will-change: transform, opacity;
+        }
+
         .afFadeScroll {
           -webkit-mask-image: linear-gradient(
             to bottom,
@@ -942,6 +976,13 @@ export default function ExegesisTrackClient(props: ExegesisTrackClientProps) {
           );
         }
         @media (prefers-reduced-motion: reduce) {
+          .afThreadViewEnterForward,
+          .afThreadViewEnterBack {
+            animation: none;
+            transform: none;
+            opacity: 1;
+          }
+
           .afFadeScroll {
             -webkit-mask-image: none;
             mask-image: none;

@@ -160,12 +160,16 @@ export default function ExegesisThreadList(
             previewComments.length < allComments.length);
 
         const commentForest = buildCommentForest(visibleComments);
+        let surfaceIndex = 0;
 
         const renderCommentNode = (
           node: CommentTreeNode,
           visualDepth: number,
         ): React.ReactNode => {
           const c = node.comment;
+          const commentSurfaceIndex = surfaceIndex;
+          surfaceIndex += 1;
+
           const ident = identities?.[c.createdByMemberId];
           const authorIdentity = resolveAuthorDisplayIdentity(
             identityFactsFromDTO(ident),
@@ -184,6 +188,7 @@ export default function ExegesisThreadList(
             <div key={c.id}>
               <ExegesisCommentItem
                 comment={c}
+                surfaceIndex={commentSurfaceIndex}
                 authorLabel={authorIdentity.displayName}
                 isAdminAuthor={authorIdentity.isAdmin}
                 canPost={canPost}
