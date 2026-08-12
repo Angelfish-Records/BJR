@@ -123,8 +123,7 @@ export async function POST(req: NextRequest) {
     deleted as (
       update exegesis_comment comment
       set
-        status = 'deleted',
-        updated_at = now()
+        status = 'deleted'
       where comment.id in (
         select subtree.id
         from subtree
