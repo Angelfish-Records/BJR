@@ -1086,17 +1086,27 @@ export default function ExegesisTrackClient(props: ExegesisTrackClientProps) {
               onSubmitEdit={(comment) => void submitEdit(comment)}
               onSubmitReply={(comment) => void postReply(comment)}
               onSubmitReport={(commentId) => void submitReport(commentId)}
-              onChangeEditDraft={(commentId, next) =>
-                setEditByCommentId((prev) => ({
-                  ...prev,
-                  [commentId]: next,
-                }))
+              onChangeEditDraft={(commentId, patch) =>
+                setEditByCommentId((prev) => {
+                  const current = prev[commentId];
+                  if (!current) return prev;
+
+                  return {
+                    ...prev,
+                    [commentId]: { ...current, ...patch },
+                  };
+                })
               }
-              onChangeReplyDraft={(commentId, next) =>
-                setReplyByCommentId((prev) => ({
-                  ...prev,
-                  [commentId]: next,
-                }))
+              onChangeReplyDraft={(commentId, patch) =>
+                setReplyByCommentId((prev) => {
+                  const current = prev[commentId];
+                  if (!current) return prev;
+
+                  return {
+                    ...prev,
+                    [commentId]: { ...current, ...patch },
+                  };
+                })
               }
               onChangeReportDraft={(commentId, next) =>
                 setReportByCommentId((prev) => ({

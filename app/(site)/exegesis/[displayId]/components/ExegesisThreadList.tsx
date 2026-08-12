@@ -50,8 +50,8 @@ export default function ExegesisThreadList(
     onSubmitEdit: (comment: CommentDTO) => void;
     onSubmitReply: (comment: CommentDTO) => void;
     onSubmitReport: (commentId: string) => void;
-    onChangeEditDraft: (commentId: string, next: EditDraft) => void;
-    onChangeReplyDraft: (commentId: string, next: ReplyDraft) => void;
+    onChangeEditDraft: (commentId: string, patch: Partial<EditDraft>) => void;
+    onChangeReplyDraft: (commentId: string, patch: Partial<ReplyDraft>) => void;
     onChangeReportDraft: (commentId: string, next: ReportDraft) => void;
     onFocusRoot: (rootId: string) => void;
   }>,
@@ -93,7 +93,7 @@ export default function ExegesisThreadList(
   if ((roots ?? []).length === 0) {
     return (
       <div className="text-sm opacity-60">
-        {focusedRootId ? "Thread not found." : "Be the first to comment."}
+        {focusedRootId ? "Thread not found." : "No comments yet."}
       </div>
     );
   }

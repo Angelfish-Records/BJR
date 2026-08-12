@@ -48,8 +48,8 @@ type ExegesisCommentItemProps = Readonly<{
   onSubmitEdit: (comment: CommentDTO) => void;
   onSubmitReply: (comment: CommentDTO) => void;
   onSubmitReport: (commentId: string) => void;
-  onChangeEditDraft: (commentId: string, next: EditDraft) => void;
-  onChangeReplyDraft: (commentId: string, next: ReplyDraft) => void;
+  onChangeEditDraft: (commentId: string, patch: Partial<EditDraft>) => void;
+  onChangeReplyDraft: (commentId: string, patch: Partial<ReplyDraft>) => void;
   onChangeReportDraft: (commentId: string, next: ReportDraft) => void;
   editWrapRef?: React.Ref<HTMLDivElement>;
   replyWrapRef?: React.Ref<HTMLDivElement>;
@@ -377,21 +377,18 @@ function EditComposerSection(props: EditComposerSectionProps) {
         }
         onChangePlain={(plain) =>
           onChangeEditDraft(c.id, {
-            ...editDraft,
             plain,
             err: "",
           })
         }
         onChangeDoc={(doc) =>
           onChangeEditDraft(c.id, {
-            ...editDraft,
             doc,
             err: "",
           })
         }
         onToggleToolbar={() =>
           onChangeEditDraft(c.id, {
-            ...editDraft,
             ui: (editDraft.ui ?? "basic") === "full" ? "basic" : "full",
           })
         }
@@ -440,21 +437,18 @@ function ReplyComposerSection(props: ReplyComposerSectionProps) {
         }
         onChangePlain={(plain) =>
           onChangeReplyDraft(c.id, {
-            ...replyDraft,
             plain,
             err: "",
           })
         }
         onChangeDoc={(doc) =>
           onChangeReplyDraft(c.id, {
-            ...replyDraft,
             doc,
             err: "",
           })
         }
         onToggleToolbar={() =>
           onChangeReplyDraft(c.id, {
-            ...replyDraft,
             ui: (replyDraft.ui ?? "basic") === "full" ? "basic" : "full",
           })
         }
