@@ -19,9 +19,9 @@ type CommentTreeNode = {
 };
 
 const THREAD_RAIL_COLORS = [
-  "color-mix(in srgb, var(--lxSelected) 34%, transparent)",
-  "color-mix(in srgb, var(--lxHover) 38%, transparent)",
-  "rgba(255,255,255,0.11)",
+  "rgba(98,78,113,0.46)",
+  "rgba(103,119,124,0.30)",
+  "rgba(255,255,255,0.10)",
 ] as const;
 
 function railColorForDepth(depth: number): string {

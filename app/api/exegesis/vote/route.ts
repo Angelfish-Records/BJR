@@ -225,6 +225,8 @@ async function toggleVote(
           when (select status from c) = 'deleted' then 'DELETED'
           when (select status from c) = 'hidden' then 'HIDDEN'
           when coalesce((select locked from m), false) = true then 'LOCKED'
+          when (select created_by_member_id from c) = ${memberId}::uuid
+            then 'SELF_VOTE'
           else null
         end as err
     ),
@@ -306,6 +308,15 @@ function voteGuardFailureResponse(
         code: "INVALID_REQUEST",
         action: "wait",
         message: "Thread is locked.",
+      });
+    case "SELF_VOTE":
+      return gateError(req, {
+        correlationId,
+        status: 400,
+        domain: "exegesis",
+        code: "INVALID_REQUEST",
+        action: "wait",
+        message: "You can't vote on your own comment.",
       });
     default:
       return jsonErr(correlationId, 400, {

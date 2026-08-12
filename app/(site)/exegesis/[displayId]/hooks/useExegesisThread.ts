@@ -817,6 +817,19 @@ export default function useExegesisThread(props: {
       return;
     }
 
+    const targetComment = thread.roots
+      .flatMap((root) => root.comments)
+      .find((comment) => comment.id === commentId);
+
+    if (
+      targetComment &&
+      viewerMemberId &&
+      targetComment.createdByMemberId === viewerMemberId
+    ) {
+      setThreadErr("You can't vote on your own comment.");
+      return;
+    }
+
     setThreadErr("");
 
     setThread((prev) => {

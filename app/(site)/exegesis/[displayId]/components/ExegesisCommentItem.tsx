@@ -66,6 +66,7 @@ type CommentHeaderProps = Readonly<
     | "canReport"
     | "canVote"
     | "isLocked"
+    | "isAuthor"
     | "replyBusy"
     | "viewerKind"
     | "onOpenReply"
@@ -165,16 +166,18 @@ function TickIcon(props: TickIconProps) {
 function voteTitle(
   canVote: boolean,
   viewerKind: ExegesisCommentItemProps["viewerKind"],
+  isAuthor: boolean,
 ): string {
+  if (isAuthor) return "You can't vote on your own comment";
   if (canVote) return "Vote";
   if (viewerKind === "anon") return "Sign in to vote";
   return "Friend tier or higher required to vote";
 }
 
 const COMMENT_SURFACE_COLORS = [
-  "color-mix(in srgb, var(--lxRow) 94%, black 6%)",
-  "color-mix(in srgb, var(--lxRow) 90%, var(--lxSelected) 10%)",
-  "color-mix(in srgb, var(--lxRow) 90%, var(--lxHover) 10%)",
+  "rgb(40 31 46)",
+  "rgb(29 33 35)",
+  "rgb(37 35 39)",
 ] as const;
 
 function commentSurfaceForDepth(depth: number): string {
@@ -191,6 +194,7 @@ function CommentHeader(props: CommentHeaderProps) {
     canReport,
     canVote,
     isLocked,
+    isAuthor,
     replyBusy,
     viewerKind,
     onOpenReply,
@@ -203,8 +207,8 @@ function CommentHeader(props: CommentHeaderProps) {
   const showBadge = votes > 0;
   const tier = medalTier(votes);
   const tint = votes > 0 ? medalClassForTier(tier) : "text-white/80";
-  const voteDisabled = !canVote;
-  const title = voteTitle(canVote, viewerKind);
+  const voteDisabled = !canVote || isAuthor;
+  const title = voteTitle(canVote, viewerKind, isAuthor);
 
   return (
     <div className="flex items-center justify-between gap-3">
@@ -278,7 +282,7 @@ bg-[rgb(var(--voteBgRgb)/0.55)] hover:bg-[rgb(var(--voteBgRgb)/0.55)]`}
           disabled={voteDisabled}
           onClick={voteDisabled ? undefined : () => onToggleVote(c.id)}
           title={title}
-          aria-label="Vote"
+          aria-label={title}
         >
           <span className="relative inline-flex h-4 w-4 items-center justify-center">
             <MedalIcon className="h-4 w-4" />
@@ -556,6 +560,7 @@ export default function ExegesisCommentItem(
             canReport={canReport}
             canVote={canVote}
             isLocked={isLocked}
+            isAuthor={isAuthor}
             replyBusy={replyBusy}
             viewerKind={viewerKind}
             onOpenReply={onOpenReply}
