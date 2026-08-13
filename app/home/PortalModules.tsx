@@ -6,6 +6,7 @@ import React from "react";
 import { PortableText } from "@portabletext/react";
 import type { PortableTextBlock } from "@portabletext/types";
 import { getAlbumOffer, type AlbumOfferAsset } from "../../lib/albumOffers";
+import { hasAlbumDownloadAccess } from "../../lib/albumDownloadPolicy";
 import { urlFor } from "../../sanity/lib/image";
 import type { PortalMemberSummary } from "../../lib/memberDashboard";
 import type {
@@ -1022,7 +1023,11 @@ function renderPanelsModule(
 function ownsAlbumOffer(albumSlug: string, entitlementKeys: string[]): boolean {
   const offerCfg = getAlbumOffer(albumSlug);
   if (!offerCfg) return false;
-  return entitlementKeys.includes(offerCfg.entitlementKey);
+
+  return hasAlbumDownloadAccess(
+    entitlementKeys,
+    offerCfg.entitlementKey,
+  );
 }
 
 function renderDownloadGridModule(

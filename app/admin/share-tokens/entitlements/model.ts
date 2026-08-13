@@ -1,5 +1,7 @@
 "use client";
 
+import { hasAlbumDownloadAccess } from "@/lib/albumDownloadPolicy";
+import { ENT } from "@/lib/entitlementVocab";
 import type {
   AccessHealth,
   CurrentEntitlementRow,
@@ -116,7 +118,10 @@ export function buildAccessHealth(input: {
     hasStripeCustomer: Boolean(input.memberDetails?.stripe_customer_id),
     hasCataloguePlayback:
       scoped.has("play_album::catalogue") || keys.has("play_album"),
-    hasGodDefendDownload: keys.has("download_album_god-defend"),
+    hasGodDefendDownload: hasAlbumDownloadAccess(
+      Array.from(keys),
+      ENT.downloadAlbum("god-defend"),
+    ),
     failedWebhookCount,
   };
 }

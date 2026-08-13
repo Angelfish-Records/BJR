@@ -4,7 +4,8 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { sql } from "@vercel/postgres";
 
 import { getAlbumOffer } from "../../../../lib/albumOffers";
-import { findEntitlement } from "../../../../lib/entitlements";
+import { albumDownloadAccessKeys } from "../../../../lib/albumDownloadPolicy";
+import { findAnyEntitlement } from "../../../../lib/entitlements";
 import { signGetObjectUrl, assertObjectExists } from "../../../../lib/r2";
 import { normalizeEmail } from "../../../../lib/members";
 
@@ -254,9 +255,15 @@ export async function POST(req: Request) {
     });
   }
 
-  const match = await findEntitlement(memberId, offer.entitlementKey, null, {
-    allowGlobalFallback: true,
-  });
+  const match = await findAnyEntitlement(
+    memberId,
+    albumDownloadAccessKeys(offer.entitlementKey),
+    null,
+    {
+      allowGlobalFallback: true,
+    },
+  );
+
   if (!match) {
     return gateError(req, {
       correlationId,
