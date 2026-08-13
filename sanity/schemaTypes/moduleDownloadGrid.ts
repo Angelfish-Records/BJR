@@ -64,7 +64,7 @@ export const moduleDownloadGrid = defineType({
               title: "Assets to show (optional)",
               type: "array",
               description:
-                "If empty, the portal will show all assets defined in code for this album offer. If set, only these buttons will appear (in this order).",
+                "If empty, the portal will expose all assets defined in code for this album offer. If set, only these formats/archive assets will be available, in this order.",
               of: [
                 {
                   type: "object",
@@ -78,7 +78,7 @@ export const moduleDownloadGrid = defineType({
                     }),
                     defineField({
                       name: "label",
-                      title: "Button label override (optional)",
+                      title: "Download label override (optional)",
                       type: "string",
                     }),
                   ],

@@ -55,14 +55,15 @@ export const moduleDownloads = defineType({
       description: "Copy shown in the “Send as gift” modal.",
     }),
 
-    // Optional: editors choose which asset buttons appear (and label overrides),
-    // while code enforces that the assetId must exist in ALBUM_OFFERS[albumSlug].assets.
+    // Optional: editors choose which downloadable assets are exposed for this
+    // album card, while code enforces that each assetId exists in
+    // ALBUM_OFFERS[albumSlug].assets.
     defineField({
       name: "assets",
       title: "Assets to show (optional)",
       type: "array",
       description:
-        "If empty, the portal will show all assets defined in code for this album offer. If set, only these asset buttons will appear (in this order).",
+        "If empty, the portal will expose all assets defined in code for this album offer. If set, only these formats/archive assets will be available, in this order.",
       of: [
         {
           type: "object",
@@ -78,7 +79,7 @@ export const moduleDownloads = defineType({
             }),
             defineField({
               name: "label",
-              title: "Button label override (optional)",
+              title: "Download label override (optional)",
               type: "string",
               description: "If empty, uses the label from code.",
             }),

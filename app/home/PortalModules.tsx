@@ -428,6 +428,100 @@ function OfferHighlights(
   );
 }
 
+function DownloadFormatSelector(
+  props: Readonly<{
+    assets: AssetsToRender;
+    selectedAssetId: string;
+    onSelect: (assetId: string) => void;
+  }>,
+) {
+  const { assets, selectedAssetId, onSelect } = props;
+
+  if (assets.length <= 1) return null;
+
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      <div
+        style={{
+          fontSize: 12,
+          fontWeight: 650,
+          opacity: 0.66,
+          letterSpacing: "0.02em",
+        }}
+      >
+        Download format
+      </div>
+
+      <div
+        role="group"
+        aria-label="Download format"
+        style={{
+          display: "grid",
+          gridTemplateColumns: `repeat(${assets.length}, minmax(0, 1fr))`,
+          gap: 8,
+          width: "100%",
+        }}
+      >
+        {assets.map(({ asset }) => {
+          const selected = asset.id === selectedAssetId;
+
+          return (
+            <button
+              key={asset.id}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => onSelect(asset.id)}
+              style={{
+                minWidth: 0,
+                minHeight: 48,
+                borderRadius: 12,
+                border: selected
+                  ? "1px solid rgba(255,255,255,0.52)"
+                  : "1px solid rgba(255,255,255,0.14)",
+                background: selected
+                  ? "rgba(255,255,255,0.13)"
+                  : "rgba(255,255,255,0.035)",
+                color: "rgba(255,255,255,0.94)",
+                padding: "8px 6px",
+                display: "grid",
+                placeItems: "center",
+                gap: 2,
+                cursor: "pointer",
+                font: "inherit",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 13,
+                  lineHeight: 1.1,
+                  fontWeight: selected ? 750 : 650,
+                }}
+              >
+                {asset.selectorLabel ?? asset.label}
+              </span>
+
+              {asset.recommended ? (
+                <span
+                  style={{
+                    fontSize: 9,
+                    lineHeight: 1,
+                    opacity: selected ? 0.78 : 0.56,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.055em",
+                    fontWeight: 700,
+                  }}
+                >
+                  Recommended
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function OwnedDownloadActions(
   props: Readonly<{
     albumSlug: string;
@@ -444,6 +538,29 @@ function OwnedDownloadActions(
     assetsToRender,
     missingConfiguredIds,
   } = props;
+
+  const formatAssets = assetsToRender.filter(
+    ({ asset }) => asset.kind === "format",
+  );
+  const archiveAssets = assetsToRender.filter(
+    ({ asset }) => asset.kind === "archive",
+  );
+
+  const preferredFormat =
+    formatAssets.find(({ asset }) => asset.recommended) ??
+    formatAssets[0] ??
+    null;
+
+  const [selectedAssetId, setSelectedAssetId] = React.useState(
+    () => preferredFormat?.asset.id ?? "",
+  );
+
+  const selectedFormat =
+    formatAssets.find(({ asset }) => asset.id === selectedAssetId) ??
+    preferredFormat;
+
+  const primaryAsset =
+    selectedFormat ?? archiveAssets[0] ?? assetsToRender[0] ?? null;
 
   if (offerAssets.length === 0) {
     return (
@@ -464,26 +581,35 @@ function OwnedDownloadActions(
         </div>
       ) : null}
 
-      <div
-        style={{
-          display: "grid",
-          gap: 10,
-          width: "100%",
-          justifyItems: "stretch",
-        }}
-      >
-        {assetsToRender.map(({ asset, labelOverride }, index) => (
-          <DownloadAlbumButton
-            key={asset.id}
-            albumSlug={albumSlug}
-            assetId={asset.id}
-            label={labelOverride ?? asset.label}
-            variant={index === 0 ? "primary" : "ghost"}
-            fullWidth={index === 0}
-            style={index === 0 ? { width: "100%" } : undefined}
-          />
+      <DownloadFormatSelector
+        assets={formatAssets}
+        selectedAssetId={primaryAsset?.asset.id ?? ""}
+        onSelect={setSelectedAssetId}
+      />
+
+      {primaryAsset ? (
+        <DownloadAlbumButton
+          albumSlug={albumSlug}
+          assetId={primaryAsset.asset.id}
+          label={primaryAsset.labelOverride ?? primaryAsset.asset.label}
+          variant="primary"
+          fullWidth
+          style={{ width: "100%" }}
+        />
+      ) : null}
+
+      {archiveAssets
+        .filter(({ asset }) => asset.id !== primaryAsset?.asset.id)
+        .map(({ asset, labelOverride }) => (
+          <div key={asset.id} style={{ textAlign: "center" }}>
+            <DownloadAlbumButton
+              albumSlug={albumSlug}
+              assetId={asset.id}
+              label={labelOverride ?? asset.label}
+              variant="link"
+            />
+          </div>
         ))}
-      </div>
 
       <div style={{ paddingTop: 2, textAlign: "center" }}>
         <GiftAlbumButton
