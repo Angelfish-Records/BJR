@@ -36,7 +36,7 @@ function readFiniteNumber(
   if (value === undefined) return undefined;
 
   if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new Error(`${label} must be a finite number`);
+    throw new TypeError(`${label} must be a finite number`);
   }
 
   if (value < min || value > max) {
@@ -53,7 +53,7 @@ function parseTimestamp(value: string): number {
     throw new Error(`Invalid lyric direction timestamp: ${value}`);
   }
 
-  const numbers = parts.map((part) => Number(part));
+  const numbers = parts.map(Number);
 
   if (numbers.some((part) => !Number.isFinite(part) || part < 0)) {
     throw new Error(`Invalid lyric direction timestamp: ${value}`);
@@ -189,7 +189,7 @@ export function parseLyricDirections(input: string): LyricDirectionsDocument {
   }
 
   if (!Array.isArray(raw.cues)) {
-    throw new Error("Lyric directions sidecar must contain a cues array");
+    throw new TypeError("Lyric directions sidecar must contain a cues array");
   }
 
   const cues = raw.cues.map((entry, index): LyricDirectionCue => {

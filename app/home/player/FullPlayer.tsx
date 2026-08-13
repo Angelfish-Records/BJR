@@ -2220,13 +2220,7 @@ export default function FullPlayer(props: FullPlayerProps) {
               </div>
             </div>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                gap: 12,
-              }}
-            >
+            <div className="afMoreReleasesGrid">
               {browseAlbums.map((a) => {
                 const isActive = effAlbum?.id === a.id;
                 const min = a.policy?.minTierToLoad ?? null;

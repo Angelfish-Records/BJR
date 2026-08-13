@@ -307,15 +307,22 @@ function threadHref(
   );
 }
 
+function statusPillClass(status: CommentStatus): string {
+  if (status === "live") {
+    return "bg-emerald-300/[0.1] text-emerald-100/80";
+  }
+
+  if (status === "hidden") {
+    return "bg-amber-300/[0.1] text-amber-100/80";
+  }
+
+  return "bg-white/[0.06] text-white/45";
+}
+
 function StatusPill(
   props: Readonly<{ status: CommentStatus }>,
 ) {
-  const className =
-    props.status === "live"
-      ? "bg-emerald-300/[0.1] text-emerald-100/80"
-      : props.status === "hidden"
-        ? "bg-amber-300/[0.1] text-amber-100/80"
-        : "bg-white/[0.06] text-white/45";
+  const className = statusPillClass(props.status);
 
   return (
     <span
@@ -1343,7 +1350,7 @@ export default function ExegesisModerator() {
                   onChange={toggleAllVisible}
                   className="h-4 w-4"
                 />
-                Select visible
+                <span>Select visible</span>
               </label>
 
               <div className="flex items-center gap-3">

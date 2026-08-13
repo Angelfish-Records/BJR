@@ -571,8 +571,8 @@ function ManualOverrideSection(
 
             <label style={{ display: "grid", gap: 6 }}>
               <span style={{ fontSize: 12, opacity: 0.66 }}>
-                Admin note
-                <span style={{ opacity: 0.55 }}> · optional</span>
+                Admin note{" "}
+                <span style={{ opacity: 0.55 }}>· optional</span>
               </span>
               <input
                 value={props.reason}

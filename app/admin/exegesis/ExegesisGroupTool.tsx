@@ -240,6 +240,13 @@ function catalogueStatusText(
   return "No catalogue entries";
 }
 
+function selectionStatusText(selectedCount: number): string {
+  if (selectedCount === 0) return "Select lyric lines to begin";
+
+  const noun = selectedCount === 1 ? "line" : "lines";
+  return `${selectedCount} ${noun} selected`;
+}
+
 type VisibleCue = { cue: LyricsApiCue; groupKey: string };
 
 type CueRowProps = Readonly<{
@@ -570,9 +577,7 @@ export default function ExegesisGroupTool() {
       if (!members[groupKey]) members[groupKey] = [];
       members[groupKey].push(cue.lineKey);
       textByLineKey[cue.lineKey] = cue.text;
-      if (firstCueIndexByGroup[groupKey] === undefined) {
-        firstCueIndexByGroup[groupKey] = index;
-      }
+      firstCueIndexByGroup[groupKey] ??= index;
     }
 
     const out: DerivedGroup[] = [];
@@ -965,9 +970,7 @@ export default function ExegesisGroupTool() {
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-black/15 p-3">
           <div>
             <div className="text-sm font-medium opacity-90">
-              {hasSelection
-                ? `${selectedKeys.length} ${selectedKeys.length === 1 ? "line" : "lines"} selected`
-                : "Select lyric lines to begin"}
+              {selectionStatusText(selectedKeys.length)}
             </div>
             <div className="mt-1 text-xs opacity-55">
               Click for one line · Command/Ctrl-click to add or remove · Shift-click for a range

@@ -459,10 +459,8 @@ function CardSubscribeControl(props: CardSubscribeControlProps) {
       {current && <CurrentTierBadge />}
 
       <div
+        className="afMembershipTierCardLayout"
         style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 180px)",
-          columnGap: 18,
           alignItems: "stretch",
           minWidth: 0,
         }}

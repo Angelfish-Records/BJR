@@ -30,11 +30,10 @@ function normalizeReadOnlyDoc(doc: JSONContent): JSONContent {
   const content = [...(doc.content ?? [])];
 
   while (content.length > 1) {
-    const last = content[content.length - 1];
+    const last = content.at(-1);
 
     if (
-      !last ||
-      last.type !== "paragraph" ||
+      last?.type !== "paragraph" ||
       hasMeaningfulContent(last)
     ) {
       break;

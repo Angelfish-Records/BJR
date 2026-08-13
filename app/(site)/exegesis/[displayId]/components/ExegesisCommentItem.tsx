@@ -192,7 +192,7 @@ function ShareIcon(props: ShareIconProps) {
 }
 
 function commentShareUrl(comment: CommentDTO): string | null {
-  if (typeof globalThis.window === "undefined") return null;
+  if (globalThis.window === undefined) return null;
 
   // Deliberately build from the canonical visible path rather than the
   // current query string so transient params/share tokens are not leaked.

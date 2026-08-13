@@ -129,6 +129,7 @@ export function buildPortalArtistPostPortableTextComponents(
     block: {
       normal: (props: PortableTextComponentProps<PortableTextBlock>) => (
         <p
+          className="afJournalProseBody"
           style={{
             margin: "10px 0",
             lineHeight: 1.68,
@@ -142,6 +143,7 @@ export function buildPortalArtistPostPortableTextComponents(
 
       h1: (props: PortableTextComponentProps<PortableTextBlock>) => (
         <h3
+          className="afJournalProseHeading1"
           style={{
             margin: "14px 0 8px",
             fontSize: 16,
@@ -155,6 +157,7 @@ export function buildPortalArtistPostPortableTextComponents(
 
       h2: (props: PortableTextComponentProps<PortableTextBlock>) => (
         <h4
+          className="afJournalProseHeading2"
           style={{
             margin: "14px 0 8px",
             fontSize: 15,
@@ -168,6 +171,7 @@ export function buildPortalArtistPostPortableTextComponents(
 
       h3: (props: PortableTextComponentProps<PortableTextBlock>) => (
         <h5
+          className="afJournalProseHeading3"
           style={{
             margin: "12px 0 6px",
             fontSize: 14,
@@ -191,6 +195,7 @@ export function buildPortalArtistPostPortableTextComponents(
           }}
         >
           <div
+            className="afJournalProseBody"
             style={{ fontSize: 13, lineHeight: 1.65, whiteSpace: "pre-wrap" }}
           >
             {props.children}
@@ -202,6 +207,7 @@ export function buildPortalArtistPostPortableTextComponents(
     list: {
       bullet: (props: { children?: React.ReactNode }) => (
         <ul
+          className="afJournalProseList"
           style={{
             margin: "10px 0",
             paddingLeft: 22,
@@ -217,6 +223,7 @@ export function buildPortalArtistPostPortableTextComponents(
       ),
       number: (props: { children?: React.ReactNode }) => (
         <ol
+          className="afJournalProseList"
           style={{
             margin: "10px 0",
             paddingLeft: 22,
