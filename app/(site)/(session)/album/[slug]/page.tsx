@@ -22,6 +22,7 @@ export async function generateMetadata(props: {
 
   const canonicalPath = `/${encodeURIComponent(doc?.slug ?? albumSlug)}`;
   const canonical = appUrl ? `${appUrl}${canonicalPath}` : canonicalPath;
+  const artworkUrl = normTitle(doc?.artworkUrl) || undefined;
 
   return {
     title: display,
@@ -29,9 +30,21 @@ export async function generateMetadata(props: {
     openGraph: {
       title: display,
       url: canonical,
+      images: artworkUrl
+        ? [
+            {
+              url: artworkUrl,
+              width: 1200,
+              height: 1200,
+              alt: `${display} album artwork`,
+            },
+          ]
+        : undefined,
     },
     twitter: {
+      card: "summary",
       title: display,
+      images: artworkUrl ? [artworkUrl] : undefined,
     },
   };
 }

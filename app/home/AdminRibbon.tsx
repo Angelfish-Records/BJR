@@ -211,6 +211,7 @@ export default function AdminRibbon(
             />
 
             <div
+              className="afAdminRibbonActions"
               style={{
                 display: "flex",
                 gap: 8,

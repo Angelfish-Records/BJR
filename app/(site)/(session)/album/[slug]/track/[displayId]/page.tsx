@@ -35,6 +35,10 @@ export async function generateMetadata(props: {
     canonicalDisplayId,
   )}`;
   const canonical = appUrl ? `${appUrl}${canonicalPath}` : canonicalPath;
+  const artworkUrl = normTitle(doc?.artworkUrl) || undefined;
+  const artworkAlt = albumTitle
+    ? `${albumTitle} album artwork`
+    : `${display} artwork`;
 
   return {
     title: display,
@@ -42,9 +46,21 @@ export async function generateMetadata(props: {
     openGraph: {
       title: display,
       url: canonical,
+      images: artworkUrl
+        ? [
+            {
+              url: artworkUrl,
+              width: 1200,
+              height: 1200,
+              alt: artworkAlt,
+            },
+          ]
+        : undefined,
     },
     twitter: {
+      card: "summary",
       title: display,
+      images: artworkUrl ? [artworkUrl] : undefined,
     },
   };
 }

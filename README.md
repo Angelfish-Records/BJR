@@ -1,4 +1,4 @@
-# Angelfish Records — Brendan John Roch
+# Angelfish Records · Brendan John Roch
 
 This repository contains the official website for **Brendan John Roch**, published and maintained by **Angelfish Records**. The site functions as the canonical home for releases, long-form work, and authenticated fan access, and is designed to evolve alongside the artist’s catalogue and audience.
 

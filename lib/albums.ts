@@ -641,6 +641,7 @@ export type AlbumCanonicalMetadata = {
   title: string | null;
   displayTitle: string | null;
   slug: string | null;
+  artworkUrl: string | null;
 };
 
 export type TrackCanonicalMetadata = {
@@ -649,6 +650,7 @@ export type TrackCanonicalMetadata = {
   albumSlug: string | null;
   trackTitle: string | null;
   displayId: string | null;
+  artworkUrl: string | null;
 };
 
 export async function getAlbumCanonicalMetadataBySlug(
@@ -664,6 +666,9 @@ export async function getAlbumCanonicalMetadataBySlug(
     title: normStr(doc.title) ?? null,
     displayTitle: normStr(doc.displayTitle) ?? null,
     slug: normStr(doc.slug) ?? null,
+    artworkUrl: doc.artwork
+      ? urlFor(doc.artwork).width(1200).height(1200).quality(90).url()
+      : null,
   };
 }
 
@@ -690,6 +695,9 @@ export async function getTrackCanonicalMetadataBySlugAndDisplayId(params: {
     albumSlug: normStr(doc.slug) ?? null,
     trackTitle: normStr(matchingTrack?.title) ?? null,
     displayId: normStr(matchingTrack?.displayId) ?? null,
+    artworkUrl: doc.artwork
+      ? urlFor(doc.artwork).width(1200).height(1200).quality(90).url()
+      : null,
   };
 }
 
