@@ -104,6 +104,270 @@ body {
   }
 }
 
+/* --- Admin UI responsive system --- */
+
+.afAdminPageFrame,
+.afAdminPageContent,
+.afAdminSectionCard,
+.afAdminTableScroller,
+.afAdminCampaignRoot {
+  width: 100%;
+  min-width: 0;
+}
+
+.afAdminTableScroller,
+.afAdminOverlayNav,
+.afAdminPageHeaderActions,
+.afAdminSegmentRail,
+.afAdminBadgeCatalogueRail,
+.afAdminCampaignActions {
+  max-width: 100%;
+}
+
+.afAdminTableScroller {
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.afAdminPageFrame input,
+.afAdminPageFrame select,
+.afAdminPageFrame textarea,
+.afAdminCampaignRoot input,
+.afAdminCampaignRoot select,
+.afAdminCampaignRoot textarea {
+  max-width: 100%;
+}
+
+@media (max-width: 760px) {
+  .afAdminOverlayDialog {
+    width: 100vw !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    padding: 0 !important;
+    place-items: stretch !important;
+  }
+
+  .afAdminOverlayPanel {
+    width: 100vw !important;
+    height: 100dvh !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+  }
+
+  .afAdminOverlayFrame,
+  .afAdminOverlayInner {
+    border-radius: 0 !important;
+  }
+
+  .afAdminOverlayFrame {
+    padding: 0 !important;
+  }
+
+  .afAdminOverlayHeader {
+    padding:
+      calc(10px + env(safe-area-inset-top, 0px))
+      12px
+      10px !important;
+  }
+
+  .afAdminOverlayHeaderGrid {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    grid-template-areas:
+      "title close"
+      "nav nav";
+    gap: 10px 12px !important;
+    align-items: center !important;
+  }
+
+  .afAdminOverlayTitle {
+    grid-area: title;
+    padding-left: 0 !important;
+  }
+
+  .afAdminOverlayNav {
+    grid-area: nav;
+    width: 100%;
+    justify-content: flex-start !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 2px 0 4px !important;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .afAdminOverlayNav::-webkit-scrollbar,
+  .afAdminPageHeaderActions::-webkit-scrollbar,
+  .afAdminSegmentRail::-webkit-scrollbar,
+  .afAdminBadgeCatalogueRail::-webkit-scrollbar,
+  .afAdminCampaignActions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .afAdminOverlayNav > *,
+  .afAdminPageHeaderActions > *,
+  .afAdminSegmentRail > *,
+  .afAdminCampaignActions > * {
+    flex: 0 0 auto;
+  }
+
+  .afAdminOverlayClose {
+    grid-area: close;
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  .afAdminOverlayViewport {
+    min-height: 0;
+  }
+
+  .afAdminPageFrame {
+    max-width: none !important;
+    margin: 0 !important;
+    padding:
+      14px
+      12px
+      calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .afAdminPageHeaderRow {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    align-items: start !important;
+    gap: 12px !important;
+  }
+
+  .afAdminPageTitle {
+    font-size: 22px !important;
+  }
+
+  .afAdminPageHeaderActions {
+    width: 100%;
+    justify-content: flex-start !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .afAdminPageContent {
+    gap: 12px !important;
+  }
+
+  .afAdminSectionCard {
+    padding: 12px !important;
+    border-radius: 12px !important;
+  }
+
+  .afAdminSectionHeaderRight {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .afAdminSegmentRail {
+    display: flex !important;
+    width: 100%;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .afAdminMetricPill {
+    flex: 1 1 120px;
+    min-width: min(120px, 100%) !important;
+  }
+
+  .afAdminStackOnMobile,
+  .afAdminCopyRow {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .afAdminStackOnMobile > button,
+  .afAdminCopyRow > button {
+    width: 100%;
+  }
+
+  .afAdminChartLegend {
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 8px 14px !important;
+  }
+
+  .afAdminBadgeCatalogueRail {
+    grid-template-columns: none !important;
+    grid-auto-flow: column;
+    grid-auto-columns: 120px;
+    justify-content: flex-start !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .afAdminMembershipMetrics,
+  .afAdminMemberHealthGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .afAdminGrantRow {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .afAdminGrantRow > button {
+    align-self: flex-start;
+  }
+
+  .afAdminCampaignRoot {
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding:
+      calc(12px + env(safe-area-inset-top, 0px))
+      12px
+      calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .afAdminCampaignHeader {
+    align-items: flex-start !important;
+    flex-direction: column;
+  }
+
+  .afAdminCampaignTitleRow {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .afAdminCampaignTitle {
+    font-size: 26px !important;
+    letter-spacing: -0.35px !important;
+  }
+
+  .afAdminCampaignActions {
+    width: 100%;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .afAdminCampaignPreview {
+    height: min(440px, 55dvh) !important;
+  }
+}
+
 /* --- Mobile UI hardening: Journal, membership cards, More Releases --- */
 
 .afMembershipTierCardLayout {

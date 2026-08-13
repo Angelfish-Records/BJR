@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     default: "Brendan John Roch",
     template: "%s · Brendan John Roch",
   },
-  description: "A member-owned media system built by Angelfish Records.",
+  description: "Official website for the music of Brendan John Roch.",
   icons: {
     icon: [
       { url: "/favicon.ico" },

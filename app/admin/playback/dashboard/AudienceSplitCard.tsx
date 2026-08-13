@@ -340,6 +340,7 @@ export function AudienceSplitCard(
       subtitle=""
     >
       <div
+        className="afAdminStackOnMobile"
         style={{
           display: "grid",
           gap: 18,

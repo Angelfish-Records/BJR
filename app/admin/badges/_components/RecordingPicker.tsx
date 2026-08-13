@@ -39,6 +39,7 @@ export function RecordingPicker(props: Props) {
       <span>{label}</span>
 
       <div
+        className="afAdminStackOnMobile"
         style={{
           display: "grid",
           gap: 10,

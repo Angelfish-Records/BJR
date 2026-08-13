@@ -237,6 +237,7 @@ function MemberSummary(
 
   return (
     <div
+      className="afAdminMemberHealthGrid"
       style={{
         display: "grid",
         gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
@@ -995,6 +996,7 @@ function GrantAuditSection(props: GrantAuditProps) {
             return (
               <div
                 key={grant.id}
+                className="afAdminGrantRow"
                 style={{
                   display: "flex",
                   gap: 12,

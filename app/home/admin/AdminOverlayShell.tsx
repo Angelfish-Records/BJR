@@ -19,6 +19,7 @@ export default function AdminOverlayShell(props: Props) {
   const { open, activePanel, onClose, onSelectPanel } = props;
 
   const [mounted, setMounted] = React.useState(false);
+  const navRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => setMounted(true), []);
 
@@ -40,6 +41,24 @@ export default function AdminOverlayShell(props: Props) {
     };
   }, [open, onClose]);
 
+  React.useEffect(() => {
+    if (!open || !window.matchMedia("(max-width: 760px)").matches) return;
+
+    const nav = navRef.current;
+    const active = nav?.querySelector<HTMLElement>(
+      '[data-af-admin-active="true"]',
+    );
+    if (!nav || !active) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const centeredLeft =
+        active.offsetLeft - (nav.clientWidth - active.clientWidth) / 2;
+      nav.scrollTo({ left: Math.max(0, centeredLeft), behavior: "auto" });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [open, activePanel]);
+
   if (!mounted || !open) return null;
 
   const panel = getAdminPanel(activePanel);
@@ -47,6 +66,7 @@ export default function AdminOverlayShell(props: Props) {
   return createPortal(
     <dialog
       open
+      className="afAdminOverlayDialog"
       aria-modal="true"
       aria-label="Admin modal"
       style={{
@@ -90,7 +110,7 @@ export default function AdminOverlayShell(props: Props) {
       />
 
       <div
-        className="portalPanel--gold"
+        className="portalPanel--gold afAdminOverlayPanel"
         style={{
           position: "relative",
           zIndex: 1,
@@ -101,7 +121,7 @@ export default function AdminOverlayShell(props: Props) {
         }}
       >
         <div
-          className="portalPanelFrame--gold"
+          className="portalPanelFrame--gold afAdminOverlayFrame"
           style={{
             width: "100%",
             height: "100%",
@@ -110,7 +130,7 @@ export default function AdminOverlayShell(props: Props) {
           }}
         >
           <div
-            className="portalPanelInner--gold"
+            className="portalPanelInner--gold afAdminOverlayInner"
             style={{
               width: "100%",
               height: "100%",
@@ -122,6 +142,7 @@ export default function AdminOverlayShell(props: Props) {
             }}
           >
             <div
+              className="afAdminOverlayHeader"
               style={{
                 position: "relative",
                 padding: "16px 18px 14px",
@@ -148,6 +169,7 @@ export default function AdminOverlayShell(props: Props) {
               />
 
               <div
+                className="afAdminOverlayHeaderGrid"
                 style={{
                   position: "relative",
                   display: "grid",
@@ -156,7 +178,7 @@ export default function AdminOverlayShell(props: Props) {
                   gap: 16,
                 }}
               >
-                <div style={{ minWidth: 0, paddingLeft: 2 }}>
+                <div className="afAdminOverlayTitle" style={{ minWidth: 0, paddingLeft: 2 }}>
                   <div
                     style={{
                       fontSize: 11,
@@ -183,6 +205,8 @@ export default function AdminOverlayShell(props: Props) {
                 </div>
 
                 <div
+                  ref={navRef}
+                  className="afAdminOverlayNav"
                   style={{
                     display: "flex",
                     gap: 8,
@@ -201,6 +225,7 @@ export default function AdminOverlayShell(props: Props) {
                       <button
                         key={item.id}
                         type="button"
+                        data-af-admin-active={active ? "true" : "false"}
                         onClick={() => onSelectPanel(item.id)}
                         style={{
                           height: 34,
@@ -240,6 +265,7 @@ export default function AdminOverlayShell(props: Props) {
 
                 <button
                   type="button"
+                  className="afAdminOverlayClose"
                   onClick={onClose}
                   aria-label="Close"
                   style={{
@@ -269,6 +295,7 @@ export default function AdminOverlayShell(props: Props) {
             </div>
 
             <div
+              className="afAdminOverlayViewport"
               style={{
                 position: "relative",
                 minHeight: 0,

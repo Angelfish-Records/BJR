@@ -85,6 +85,7 @@ export function BadgeCatalogueSection(props: Props) {
       </div>
 
       <div
+        className="afAdminBadgeCatalogueRail"
         style={{
           display: "grid",
           gap: 10,

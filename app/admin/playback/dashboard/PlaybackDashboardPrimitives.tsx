@@ -23,6 +23,7 @@ export function SectionCard(
 ) {
   return (
     <section
+      className="afAdminSectionCard"
       style={{
         border: PANEL_BORDER,
         borderRadius: 14,
@@ -68,7 +69,9 @@ export function SectionCard(
           ) : null}
         </div>
 
-        {props.headerRight ? <div>{props.headerRight}</div> : null}
+        {props.headerRight ? (
+          <div className="afAdminSectionHeaderRight">{props.headerRight}</div>
+        ) : null}
       </div>
 
       {props.children}
@@ -81,6 +84,7 @@ export function TableShell(
 ) {
   return (
     <div
+      className="afAdminTableScroller"
       style={{
         overflowX: "auto",
         borderRadius: 12,
@@ -98,6 +102,7 @@ export function MetricPill(
 ) {
   return (
     <div
+      className="afAdminMetricPill"
       style={{
         minWidth: 120,
         padding: "10px 12px",
@@ -179,6 +184,7 @@ export function TrendRangeToggle(
 
   return (
     <div
+      className="afAdminSegmentRail"
       style={{
         display: "inline-flex",
         gap: 6,

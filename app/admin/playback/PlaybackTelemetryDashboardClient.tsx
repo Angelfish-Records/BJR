@@ -177,6 +177,7 @@ export default function PlaybackTelemetryDashboardClient(
         </SectionCard>
 
         <div
+          className="afAdminStackOnMobile"
           style={{
             display: "grid",
             gap: 16,

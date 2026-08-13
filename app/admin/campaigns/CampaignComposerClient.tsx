@@ -2039,6 +2039,7 @@ export default function CampaignComposerClient() {
         />
       </Head>
       <div
+        className="afAdminCampaignRoot"
         style={{
           maxWidth: UI.maxWidth,
           margin: "24px auto",
@@ -2047,6 +2048,7 @@ export default function CampaignComposerClient() {
         }}
       >
         <div
+          className="afAdminCampaignHeader"
           style={{
             display: "flex",
             alignItems: "center",
@@ -2055,8 +2057,12 @@ export default function CampaignComposerClient() {
             flexWrap: "wrap",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div
+            className="afAdminCampaignTitleRow"
+            style={{ display: "flex", alignItems: "center", gap: 10 }}
+          >
             <h1
+              className="afAdminCampaignTitle"
               style={{
                 margin: 0,
                 fontSize: 34,
@@ -2097,7 +2103,10 @@ export default function CampaignComposerClient() {
             </a>
           </div>
 
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <div
+            className="afAdminCampaignActions"
+            style={{ display: "flex", gap: 10, alignItems: "center" }}
+          >
             <button
               type="button"
               onClick={reset}
@@ -2496,6 +2505,7 @@ export default function CampaignComposerClient() {
               </div>
             ) : (
               <iframe
+                className="afAdminCampaignPreview"
                 title="email-preview"
                 srcDoc={iframeSrcDoc}
                 style={{

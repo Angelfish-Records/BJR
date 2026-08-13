@@ -102,6 +102,7 @@ export function PreviewResultsSection(props: Props) {
       </div>
 
       <div
+        className="afAdminTableScroller"
         style={{
           overflowX: "auto",
           borderRadius: 14,

@@ -313,6 +313,7 @@ export default function AdminMintShareTokenForm({ albums }: Props) {
           </div>
 
           <div
+            className="afAdminStackOnMobile"
             style={{
               display: "grid",
               gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
@@ -402,6 +403,7 @@ export default function AdminMintShareTokenForm({ albums }: Props) {
                   Token
                 </div>
                 <div
+                  className="afAdminCopyRow"
                   style={{
                     display: "grid",
                     gridTemplateColumns: "minmax(0, 1fr) auto",
@@ -426,6 +428,7 @@ export default function AdminMintShareTokenForm({ albums }: Props) {
                     Deep link
                   </div>
                   <div
+                    className="afAdminCopyRow"
                     style={{
                       display: "grid",
                       gridTemplateColumns: "minmax(0, 1fr) auto",

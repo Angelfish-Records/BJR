@@ -26,7 +26,7 @@ export default function AdminPageFrame(props: Props) {
   };
 
   return (
-    <div style={outerStyle}>
+    <div className="afAdminPageFrame" style={outerStyle}>
       <div
         style={{
           display: "grid",
@@ -41,6 +41,7 @@ export default function AdminPageFrame(props: Props) {
           }}
         >
           <div
+            className="afAdminPageHeaderRow"
             style={{
               display: "flex",
               alignItems: "flex-end",
@@ -62,6 +63,7 @@ export default function AdminPageFrame(props: Props) {
                 Admin
               </div>
               <h1
+                className="afAdminPageTitle"
                 style={{
                   margin: "7px 0 0",
                   fontSize: 24,
@@ -90,6 +92,7 @@ export default function AdminPageFrame(props: Props) {
 
             {headerActions ? (
               <div
+                className="afAdminPageHeaderActions"
                 style={{
                   display: "flex",
                   gap: 8,
@@ -114,6 +117,7 @@ export default function AdminPageFrame(props: Props) {
         </div>
 
         <div
+          className="afAdminPageContent"
           style={{
             display: "grid",
             gap: 14,

@@ -232,6 +232,7 @@ export function MembershipDashboardSection(props: Props) {
           </div>
 
           <div
+            className="afAdminMembershipMetrics"
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(3, minmax(0, 1fr))",

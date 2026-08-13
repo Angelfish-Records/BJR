@@ -456,6 +456,7 @@ export function QualifiedPlayTrendChart(
       </div>
 
       <div
+        className="afAdminChartLegend"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(3, minmax(0, max-content))",
