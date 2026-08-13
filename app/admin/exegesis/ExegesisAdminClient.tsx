@@ -72,7 +72,7 @@ export default function ExegesisAdminClient(
       }
       headerActions={modeActions}
     >
-      <div style={{ marginTop: 4 }}>
+      <div style={{ marginTop: 4, minWidth: 0 }}>
         {mode === "grouping" ? <ExegesisGroupTool /> : <ExegesisModerator />}
       </div>
     </AdminPageFrame>

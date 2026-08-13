@@ -278,7 +278,7 @@ function CueRow(props: CueRowProps) {
     <div
       id={`exegesis-line-${cue.lineKey}`}
       className={clsx([
-        "relative w-full rounded-lg border border-white/5 bg-black/20 transition hover:bg-black/25",
+        "relative min-w-0 w-full rounded-lg border border-white/5 bg-black/20 transition hover:bg-black/25",
         selected && "bg-white/10 ring-1 ring-white/30",
         isActiveGroup && "bg-white/5 ring-1 ring-white/20",
       ])}
@@ -299,7 +299,7 @@ function CueRow(props: CueRowProps) {
       <div className="pointer-events-none relative z-10 p-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <div className="text-sm leading-6 opacity-95">{cue.text}</div>
+            <div className="break-words text-sm leading-6 opacity-95">{cue.text}</div>
 
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {groupLabel ? (
@@ -323,10 +323,10 @@ function CueRow(props: CueRowProps) {
             </div>
 
             {showTechnicalDetails ? (
-              <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[11px] opacity-45">
+              <div className="mt-2 flex min-w-0 flex-wrap gap-x-2 gap-y-1 text-[11px] opacity-45">
                 <span>{fmtTimeMs(cue.tMs)}</span>
-                <span>{cue.lineKey}</span>
-                <span>{groupKey}</span>
+                <span className="break-all">{cue.lineKey}</span>
+                <span className="break-all">{groupKey}</span>
               </div>
             ) : null}
           </div>
@@ -408,7 +408,7 @@ function GroupList(props: GroupListProps) {
         key={group.key}
         type="button"
         className={clsx([
-          "w-full rounded-lg border border-white/5 bg-black/20 p-3 text-left transition hover:bg-black/25",
+          "min-w-0 w-full rounded-lg border border-white/5 bg-black/20 p-3 text-left transition hover:bg-black/25",
           isActive && "bg-white/5 ring-1 ring-white/25",
         ])}
         onClick={() => props.onFocusGroup(group.key)}
@@ -893,9 +893,9 @@ export default function ExegesisGroupTool() {
   }
 
   return (
-    <div className="rounded-xl bg-white/5 p-4">
-      <div className="flex items-start justify-between gap-4">
-        <div>
+    <div className="min-w-0 rounded-xl bg-white/5 p-3 sm:p-4">
+      <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
           <div className="text-sm font-semibold opacity-90">Lyric groups</div>
           <div className="mt-1 max-w-2xl text-xs opacity-60">
             Select lyric lines on the left. Create a group, or choose a group on
@@ -907,11 +907,11 @@ export default function ExegesisGroupTool() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex flex-col items-end">
+        <div className="flex min-w-0 w-full items-end gap-2 md:w-auto">
+          <div className="flex min-w-0 flex-1 flex-col items-stretch md:flex-none md:items-end">
             <input
               list="exegesis-recordingId-catalogue"
-              className="w-[360px] max-w-[56vw] rounded-md bg-black/20 px-3 py-2 text-sm outline-none"
+              className="w-full min-w-0 rounded-md bg-black/20 px-3 py-2 text-sm outline-none md:w-[360px] md:max-w-[56vw]"
               placeholder="Choose a track"
               value={recordingIdInput}
               onChange={(event) => setRecordingIdInput(event.target.value)}
@@ -932,7 +932,7 @@ export default function ExegesisGroupTool() {
 
           <button
             type="button"
-            className="rounded-md bg-white/10 px-3 py-2 text-sm hover:bg-white/15 disabled:opacity-40"
+            className="shrink-0 rounded-md bg-white/10 px-3 py-2 text-sm hover:bg-white/15 disabled:opacity-40"
             disabled={busy || !recordingIdInput.trim()}
             onClick={() => void loadGrouping()}
           >
@@ -942,12 +942,12 @@ export default function ExegesisGroupTool() {
       </div>
 
       {err ? (
-        <div className="mt-3 rounded-md bg-white/5 p-3 text-sm">{err}</div>
+        <div className="mt-3 break-words rounded-md bg-white/5 p-3 text-sm">{err}</div>
       ) : null}
 
       {lyrics && showTechnicalDetails ? (
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs opacity-50">
-          <span>{lyrics.recordingId}</span>
+        <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 text-xs opacity-50">
+          <span className="break-all">{lyrics.recordingId}</span>
           <span>·</span>
           <span>lyrics v{lyrics.version}</span>
           {lyrics.geniusUrl ? (
@@ -967,8 +967,8 @@ export default function ExegesisGroupTool() {
       ) : null}
 
       {lyrics ? (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-black/15 p-3">
-          <div>
+        <div className="mt-4 flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl bg-black/15 p-3">
+          <div className="min-w-0">
             <div className="text-sm font-medium opacity-90">
               {selectionStatusText(selectedKeys.length)}
             </div>
@@ -978,7 +978,7 @@ export default function ExegesisGroupTool() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full min-w-0 flex-wrap items-center gap-2 md:w-auto">
             <button
               type="button"
               className="rounded-md bg-white/10 px-3 py-2 text-sm hover:bg-white/15 disabled:opacity-40"
@@ -1034,10 +1034,10 @@ export default function ExegesisGroupTool() {
         </div>
       ) : null}
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-        <div className="rounded-xl bg-black/15 p-3">
+      <div className="mt-4 grid min-w-0 gap-4 lg:grid-cols-[1.6fr_1fr]">
+        <div className="min-w-0 rounded-xl bg-black/15 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <div className="text-sm font-medium opacity-85">Lyrics</div>
               <div className="text-xs opacity-55">
                 {visibleCues.length} shown · {selectedKeys.length} selected
@@ -1065,8 +1065,8 @@ export default function ExegesisGroupTool() {
           </div>
 
           <div
-            className="mt-3 space-y-2"
-            style={{ maxHeight: 620, overflowY: "auto" }}
+            className="mt-3 min-w-0 space-y-2"
+            style={{ maxHeight: 620, minWidth: 0, overflowX: "hidden", overflowY: "auto" }}
           >
             <CueList
               lyrics={lyrics}
@@ -1081,7 +1081,7 @@ export default function ExegesisGroupTool() {
           </div>
         </div>
 
-        <div className="rounded-xl bg-black/15 p-3">
+        <div className="min-w-0 rounded-xl bg-black/15 p-3">
           <div className="flex items-center justify-between gap-2">
             <div>
               <div className="text-sm font-medium opacity-85">Groups</div>
@@ -1092,9 +1092,9 @@ export default function ExegesisGroupTool() {
             <div className="text-xs opacity-55">{canonicalGroups.length}</div>
           </div>
 
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-3 flex min-w-0 items-center gap-2">
             <input
-              className="w-full rounded-md bg-black/20 px-3 py-2 text-sm outline-none"
+              className="w-full min-w-0 rounded-md bg-black/20 px-3 py-2 text-sm outline-none"
               placeholder="Search group lyrics…"
               value={groupSearch}
               onChange={(event) => setGroupSearch(event.target.value)}
@@ -1111,8 +1111,8 @@ export default function ExegesisGroupTool() {
           </div>
 
           <div
-            className="mt-3 space-y-2"
-            style={{ maxHeight: 560, overflowY: "auto" }}
+            className="mt-3 min-w-0 space-y-2"
+            style={{ maxHeight: 560, minWidth: 0, overflowX: "hidden", overflowY: "auto" }}
           >
             <GroupList
               lyrics={lyrics}
@@ -1125,7 +1125,7 @@ export default function ExegesisGroupTool() {
           </div>
 
           {activeGroup?.isCanonical ? (
-            <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/10 pt-3">
+            <div className="mt-3 flex min-w-0 flex-col items-start gap-3 border-t border-white/10 pt-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <div className="text-xs opacity-55">Highlighted</div>
                 <div className="mt-1 text-sm font-medium opacity-90">

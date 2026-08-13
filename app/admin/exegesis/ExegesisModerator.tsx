@@ -121,10 +121,10 @@ type DeleteOk = {
 };
 
 const BUTTON_CLASS =
-  "rounded-md bg-white/[0.06] px-3 py-2 text-xs font-medium text-white/75 transition hover:bg-white/[0.1] hover:text-white disabled:cursor-not-allowed disabled:opacity-35";
+  "shrink-0 whitespace-nowrap rounded-md bg-white/[0.06] px-3 py-2 text-xs font-medium text-white/75 transition hover:bg-white/[0.1] hover:text-white disabled:cursor-not-allowed disabled:opacity-35";
 
 const DANGER_BUTTON_CLASS =
-  "rounded-md bg-red-400/[0.08] px-3 py-2 text-xs font-medium text-red-100/75 transition hover:bg-red-400/[0.14] hover:text-red-50 disabled:cursor-not-allowed disabled:opacity-35";
+  "shrink-0 whitespace-nowrap rounded-md bg-red-400/[0.08] px-3 py-2 text-xs font-medium text-red-100/75 transition hover:bg-red-400/[0.14] hover:text-red-50 disabled:cursor-not-allowed disabled:opacity-35";
 
 function isApiErr(value: unknown): value is ApiErr {
   if (typeof value !== "object" || value === null) return false;
@@ -337,7 +337,7 @@ function MetaPill(
   props: Readonly<{ children: React.ReactNode }>,
 ) {
   return (
-    <span className="rounded-full bg-white/[0.06] px-2 py-1 text-[10px] text-white/55">
+    <span className="shrink-0 rounded-full bg-white/[0.06] px-2 py-1 text-[10px] text-white/55">
       {props.children}
     </span>
   );
@@ -416,7 +416,7 @@ function CommentCard(props: CommentCardProps) {
   const isRoot = row.parentId === null;
 
   return (
-    <article className="rounded-xl border border-white/[0.06] bg-black/20 p-4">
+    <article className="min-w-0 rounded-xl border border-white/[0.06] bg-black/20 p-3 sm:p-4">
       <div className="flex items-start gap-3">
         <input
           type="checkbox"
@@ -470,12 +470,12 @@ function CommentCard(props: CommentCardProps) {
           </div>
 
           {row.lineTextSnapshot ? (
-            <blockquote className="mt-3 border-l-2 border-white/15 pl-3 text-sm italic text-white/50">
+            <blockquote className="mt-3 break-words border-l-2 border-white/15 pl-3 text-sm italic text-white/50">
               {row.lineTextSnapshot}
             </blockquote>
           ) : null}
 
-          <div className="mt-4 whitespace-pre-wrap text-[15px] leading-6 text-white/85">
+          <div className="mt-4 break-words whitespace-pre-wrap text-[15px] leading-6 text-white/85">
             {row.bodyPlain || (
               <span className="italic text-white/35">
                 Deleted comment
@@ -596,7 +596,7 @@ function ThreadCard(props: ThreadCardProps) {
   const subtitle = trackSubtitle(row.recordingId, props.trackMeta);
 
   return (
-    <article className="rounded-xl border border-white/[0.06] bg-black/20 p-4">
+    <article className="min-w-0 rounded-xl border border-white/[0.06] bg-black/20 p-3 sm:p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-sm font-semibold text-white/90">
@@ -621,13 +621,13 @@ function ThreadCard(props: ThreadCardProps) {
       </div>
 
       {row.lineTextSnapshot ? (
-        <blockquote className="mt-3 border-l-2 border-white/15 pl-3 text-sm italic text-white/50">
+        <blockquote className="mt-3 break-words border-l-2 border-white/15 pl-3 text-sm italic text-white/50">
           {row.lineTextSnapshot}
         </blockquote>
       ) : null}
 
       {row.latestCommentPreview ? (
-        <div className="mt-3 text-sm leading-6 text-white/65">
+        <div className="mt-3 break-words text-sm leading-6 text-white/65">
           {row.latestCommentPreview}
         </div>
       ) : (
@@ -723,7 +723,7 @@ function ReportCard(props: ReportCardProps) {
   const isRoot = row.parentId === null;
 
   return (
-    <article className="rounded-xl border border-white/[0.06] bg-black/20 p-4">
+    <article className="min-w-0 rounded-xl border border-white/[0.06] bg-black/20 p-3 sm:p-4">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold text-white/90">
           {row.authorDisplayName}
@@ -757,12 +757,12 @@ function ReportCard(props: ReportCardProps) {
       </div>
 
       {row.lineTextSnapshot ? (
-        <blockquote className="mt-3 border-l-2 border-white/15 pl-3 text-sm italic text-white/50">
+        <blockquote className="mt-3 break-words border-l-2 border-white/15 pl-3 text-sm italic text-white/50">
           {row.lineTextSnapshot}
         </blockquote>
       ) : null}
 
-      <div className="mt-4 whitespace-pre-wrap text-[15px] leading-6 text-white/80">
+      <div className="mt-4 break-words whitespace-pre-wrap text-[15px] leading-6 text-white/80">
         {row.bodyPlain}
       </div>
 
@@ -770,7 +770,7 @@ function ReportCard(props: ReportCardProps) {
         <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/35">
           Report · {row.category}
         </div>
-        <div className="mt-2 text-sm leading-6 text-white/65">
+        <div className="mt-2 break-words text-sm leading-6 text-white/65">
           {row.reason || "No additional reason supplied."}
         </div>
       </div>
@@ -1212,8 +1212,8 @@ export default function ExegesisModerator() {
   }
 
   return (
-    <div>
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="min-w-0">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap gap-2">
           <ViewButton
             active={view === "comments"}
@@ -1237,7 +1237,7 @@ export default function ExegesisModerator() {
           </ViewButton>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <select
             value={limit}
             onChange={(event) => {
@@ -1277,14 +1277,14 @@ export default function ExegesisModerator() {
 
       {view === "comments" ? (
         <section className="mt-6">
-          <div className="rounded-xl bg-white/[0.04] p-4">
-            <div className="flex flex-wrap gap-3">
+          <div className="min-w-0 rounded-xl bg-white/[0.04] p-3 sm:p-4">
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap">
               <select
                 value={timeWindow}
                 onChange={(event) => {
                   setTimeWindow(event.target.value as TimeWindow);
                 }}
-                className="rounded-md border border-white/[0.06] bg-black/20 px-3 py-2 text-sm text-white/75 outline-none"
+                className="w-full min-w-0 rounded-md border border-white/[0.06] bg-black/20 px-3 py-2 text-sm text-white/75 outline-none sm:w-auto"
               >
                 <option value="24h">Last 24 hours</option>
                 <option value="7d">Last 7 days</option>
@@ -1296,7 +1296,7 @@ export default function ExegesisModerator() {
                 onChange={(event) => {
                   setStatusFilter(event.target.value as StatusFilter);
                 }}
-                className="rounded-md border border-white/[0.06] bg-black/20 px-3 py-2 text-sm text-white/75 outline-none"
+                className="w-full min-w-0 rounded-md border border-white/[0.06] bg-black/20 px-3 py-2 text-sm text-white/75 outline-none sm:w-auto"
               >
                 <option value="all">All statuses</option>
                 <option value="live">Live</option>
@@ -1309,7 +1309,7 @@ export default function ExegesisModerator() {
                 onChange={(event) => {
                   setTrackFilter(event.target.value);
                 }}
-                className="min-w-[220px] rounded-md border border-white/[0.06] bg-black/20 px-3 py-2 text-sm text-white/75 outline-none"
+                className="w-full min-w-0 rounded-md border border-white/[0.06] bg-black/20 px-3 py-2 text-sm text-white/75 outline-none sm:w-auto sm:min-w-[220px]"
               >
                 <option value="">All tracks</option>
 
@@ -1334,11 +1334,11 @@ export default function ExegesisModerator() {
                   setSearch(event.target.value);
                 }}
                 placeholder="Search author or comment"
-                className="min-w-[240px] flex-1 rounded-md border border-white/[0.06] bg-black/20 px-3 py-2 text-sm text-white/80 outline-none placeholder:text-white/30"
+                className="w-full min-w-0 flex-1 rounded-md border border-white/[0.06] bg-black/20 px-3 py-2 text-sm text-white/80 outline-none placeholder:text-white/30 sm:min-w-[240px]"
               />
             </div>
 
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="mt-4 flex min-w-0 flex-wrap items-center justify-between gap-3">
               <label className="flex items-center gap-2 text-xs text-white/55">
                 <input
                   type="checkbox"
@@ -1353,7 +1353,7 @@ export default function ExegesisModerator() {
                 <span>Select visible</span>
               </label>
 
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 flex-wrap items-center gap-3">
                 <span className="text-xs text-white/35">
                   {visibleComments.length} shown
                   {selectedIds.size > 0
