@@ -448,6 +448,7 @@ function DownloadFormatSelector(
           fontWeight: 650,
           opacity: 0.66,
           letterSpacing: "0.02em",
+          textAlign: "center",
         }}
       >
         Download format
@@ -474,28 +475,29 @@ function DownloadFormatSelector(
               onClick={() => onSelect(asset.id)}
               style={{
                 minWidth: 0,
-                minHeight: 48,
-                borderRadius: 12,
+                minHeight: 38,
+                borderRadius: 10,
                 border: selected
-                  ? "1px solid rgba(255,255,255,0.52)"
-                  : "1px solid rgba(255,255,255,0.14)",
+                  ? "1px solid rgba(255,255,255,0.38)"
+                  : "1px solid rgba(255,255,255,0.11)",
                 background: selected
-                  ? "rgba(255,255,255,0.13)"
-                  : "rgba(255,255,255,0.035)",
-                color: "rgba(255,255,255,0.94)",
-                padding: "8px 6px",
+                  ? "rgba(255,255,255,0.095)"
+                  : "rgba(255,255,255,0.022)",
+                color: "rgba(255,255,255,0.90)",
+                padding: "5px 6px",
                 display: "grid",
                 placeItems: "center",
-                gap: 2,
+                gap: 1,
                 cursor: "pointer",
                 font: "inherit",
               }}
             >
               <span
                 style={{
-                  fontSize: 13,
-                  lineHeight: 1.1,
-                  fontWeight: selected ? 750 : 650,
+                  fontSize: 10,
+                  lineHeight: 1.05,
+                  fontWeight: selected ? 760 : 700,
+                  letterSpacing: "0.045em",
                 }}
               >
                 {asset.selectorLabel ?? asset.label}
@@ -506,7 +508,7 @@ function DownloadFormatSelector(
                   style={{
                     fontSize: 9,
                     lineHeight: 1,
-                    opacity: selected ? 0.78 : 0.56,
+                    opacity: selected ? 0.72 : 0.52,
                     textTransform: "uppercase",
                     letterSpacing: "0.055em",
                     fontWeight: 700,
@@ -602,17 +604,30 @@ function OwnedDownloadActions(
       {archiveAssets
         .filter(({ asset }) => asset.id !== primaryAsset?.asset.id)
         .map(({ asset, labelOverride }) => (
-          <div key={asset.id} style={{ textAlign: "center" }}>
+          <div
+            key={asset.id}
+            style={{
+              marginTop: -4,
+              textAlign: "center",
+            }}
+          >
             <DownloadAlbumButton
               albumSlug={albumSlug}
               assetId={asset.id}
               label={labelOverride ?? asset.label}
               variant="link"
+              buttonStyle={{
+                padding: "4px 6px",
+                fontSize: 12,
+                fontWeight: 600,
+                color: "rgba(255,255,255,0.70)",
+                textDecorationColor: "rgba(255,255,255,0.24)",
+              }}
             />
           </div>
         ))}
 
-      <div style={{ paddingTop: 2, textAlign: "center" }}>
+      <div style={{ paddingTop: 10, textAlign: "center" }}>
         <GiftAlbumButton
           albumTitle={title}
           albumSlug={albumSlug}
