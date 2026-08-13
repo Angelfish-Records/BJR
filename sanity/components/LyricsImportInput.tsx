@@ -51,6 +51,32 @@ function identityText(text: string): string {
   return text.trim();
 }
 
+function countIdentityTexts(
+  cues: ReadonlyArray<{ text: string }>,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+
+  for (const cue of cues) {
+    const text = identityText(cue.text);
+    counts.set(text, (counts.get(text) ?? 0) + 1);
+  }
+
+  return counts;
+}
+
+function keyedImportCue(
+  cue: ImportLyricCue,
+  key: string,
+): KeyedImportLyricCue {
+  return {
+    _key: key,
+    _type: "cue",
+    tMs: cue.tMs,
+    text: cue.text,
+    ...(typeof cue.endMs === "number" ? { endMs: cue.endMs } : {}),
+  };
+}
+
 function reconcileImportCues(
   existing: ExistingLyricCue[],
   incoming: ImportLyricCue[],
@@ -59,58 +85,63 @@ function reconcileImportCues(
     return {
       ok: true,
       preservedExistingKeys: false,
-      cues: incoming.map((cue) => ({
-        _key: makeKey(),
-        _type: "cue",
-        tMs: cue.tMs,
-        text: cue.text,
-        ...(typeof cue.endMs === "number" ? { endMs: cue.endMs } : {}),
-      })),
+      cues: incoming.map((cue) => keyedImportCue(cue, makeKey())),
     };
   }
 
-  if (existing.length !== incoming.length) {
-    return {
-      ok: false,
-      error:
-        `Import stopped: the existing document has ${existing.length} cues, ` +
-        `but the import has ${incoming.length}. Structural lyric changes require ` +
-        "manual editing or an explicit identity-migration workflow.",
-    };
-  }
+  const existingCounts = countIdentityTexts(existing);
+  const incomingCounts = countIdentityTexts(incoming);
 
-  for (let index = 0; index < existing.length; index += 1) {
-    const current = existing[index];
-    const next = incoming[index];
+  for (const [text, existingCount] of existingCounts) {
+    const incomingCount = incomingCounts.get(text) ?? 0;
+    const existingIndex = existing.findIndex(
+      (cue) => identityText(cue.text) === text,
+    );
 
-    if (!current || !next) {
-      return {
-        ok: false,
-        error: "Import stopped: cue reconciliation failed unexpectedly.",
-      };
-    }
-
-    if (identityText(current.text) !== identityText(next.text)) {
+    if (incomingCount < existingCount) {
       return {
         ok: false,
         error:
-          `Import stopped at cue ${index + 1}: the lyric text differs from the ` +
-          "existing cue sequence. Edit text manually so its existing Exegesis " +
-          "line identity is preserved.",
+          `Import stopped at established cue ${existingIndex + 1}: the incoming ` +
+          "lyrics remove or change established lyric text. Existing Exegesis " +
+          "line identities cannot be removed by re-import. Restore that cue in " +
+          "the LRC, or edit its text manually so its existing identity is retained.",
+      };
+    }
+
+    if (incomingCount > existingCount) {
+      return {
+        ok: false,
+        error:
+          `Import stopped around established cue ${existingIndex + 1}: the incoming ` +
+          "lyrics add another occurrence of text that already has an established " +
+          "Exegesis identity. That match is ambiguous. Add the extra repeated cue " +
+          "manually so the existing line identities cannot shift.",
       };
     }
   }
+
+  const remainingKeysByText = new Map<string, string[]>();
+
+  for (const cue of existing) {
+    const text = identityText(cue.text);
+    const keys = remainingKeysByText.get(text) ?? [];
+    keys.push(cue._key);
+    remainingKeysByText.set(text, keys);
+  }
+
+  const reconciledCues = incoming.map((cue) => {
+    const text = identityText(cue.text);
+    const existingKeys = remainingKeysByText.get(text);
+    const existingKey = existingKeys?.shift();
+
+    return keyedImportCue(cue, existingKey ?? makeKey());
+  });
 
   return {
     ok: true,
     preservedExistingKeys: true,
-    cues: incoming.map((cue, index) => ({
-      _key: existing[index]!._key,
-      _type: "cue",
-      tMs: cue.tMs,
-      text: cue.text,
-      ...(typeof cue.endMs === "number" ? { endMs: cue.endMs } : {}),
-    })),
+    cues: reconciledCues,
   };
 }
 
@@ -307,8 +338,19 @@ export default function LyricsImportInput(props: ArrayOfObjectsInputProps) {
     onChange(PatchEvent.from(patches));
 
     const extra = siblingOffset != null ? ` (offset ${siblingOffset}ms)` : "";
+    const addedCueCount = Math.max(
+      0,
+      reconciled.cues.length - existingCues.length,
+    );
+
     const identityStatus = reconciled.preservedExistingKeys
-      ? " Preserved all existing Exegesis line identities."
+      ? ` Preserved all ${existingCues.length} existing Exegesis line identities.${
+          addedCueCount > 0
+            ? ` Created ${addedCueCount} new ${
+                addedCueCount === 1 ? "line identity" : "line identities"
+              }.`
+            : ""
+        }`
       : "";
 
     setStatus(`Imported ${cues.length} cues.${extra}${identityStatus}`);
@@ -325,8 +367,10 @@ export default function LyricsImportInput(props: ArrayOfObjectsInputProps) {
 
           <Text size={1} muted>
             Existing cue identities are protected. Re-imports may update timing
-            only when the lyric cue sequence is unchanged; structural or text
-            changes must be edited manually.
+            and insert new lyric lines while preserving every established
+            Exegesis line identity. Removing or renaming established cues is
+            blocked. Adding another occurrence of already-established identical
+            text must be done manually because its identity would be ambiguous.
           </Text>
 
           <Button text="Apply import → Cues" tone="primary" onClick={apply} />

@@ -54,15 +54,8 @@ function nextCuesMap(
   recordingId: string,
   cues: CuesByRecordingId[string],
 ): CuesByRecordingId {
-  if (Array.isArray(cues) && cues.length > 0) {
-    return { ...current, [recordingId]: cues };
-  }
-
-  if (Object.hasOwn(current, recordingId)) {
-    return current;
-  }
-
-  return { ...current, [recordingId]: [] };
+  const authoritativeCues = Array.isArray(cues) ? cues : [];
+  return { ...current, [recordingId]: authoritativeCues };
 }
 
 /**
@@ -103,9 +96,14 @@ export function primeLyricsFromAlbumBundle(
 }
 
 /**
- * Ensure lyrics (cues + offset) exist in lyricsSurface for recordingId.
+ * Refresh lyrics (cues + offset) in lyricsSurface for recordingId.
+ *
+ * The album-provided lyric bundle is an immediate optimistic seed, while the
+ * no-store per-track endpoint is authoritative whenever this helper runs.
+ *
  * - Dedupes concurrent calls (module-level inFlight).
- * - Caches "no lyrics" as [] to avoid refetch loops.
+ * - Leaves the optimistic bundle untouched if the refresh fails.
+ * - Replaces stale cues, including replacing them with [] when appropriate.
  * - Safe to call repeatedly from any surface.
  */
 export async function ensureLyricsForTrack(
@@ -114,16 +112,6 @@ export async function ensureLyricsForTrack(
 ): Promise<void> {
   const id = (recordingId ?? "").trim();
   if (!id) return;
-
-  const snap = lyricsSurface.getSnapshot();
-  const existing = snap.cuesByRecordingId[id];
-
-  const knownKey = Object.hasOwn(snap.cuesByRecordingId, id);
-  const hasCues = Array.isArray(existing) && existing.length > 0;
-  const knownNoLyrics =
-    knownKey && Array.isArray(existing) && existing.length === 0;
-
-  if (hasCues || knownNoLyrics) return;
 
   // Already fetching?
   if (inFlight.has(id)) return;
