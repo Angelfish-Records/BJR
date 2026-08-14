@@ -4,9 +4,17 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
 import ExegesisTrackClient from "@/app/(site)/exegesis/[displayId]/ExegesisTrackClient";
 import ExegesisTrackLoadingShell from "@/app/(site)/exegesis/[displayId]/components/ExegesisTrackLoadingShell";
+import ExegesisInlineGateOverlay from "@/app/(site)/exegesis/[displayId]/components/ExegesisInlineGateOverlay";
 import { usePortalViewer } from "@/app/home/PortalViewerProvider";
+import { useGateBroker } from "@/app/home/gating/GateBroker";
+import {
+  gatePayloadFromUnknown,
+  gateResultFromPayload,
+} from "@/app/home/gating/fromPayload";
+import type { GatePayload } from "@/app/home/gating/gateTypes";
 
 type CatalogueOk = {
   ok: true;
@@ -35,6 +43,7 @@ type LyricsApiCue = {
 };
 type LyricsOk = {
   ok: true;
+  embargoed: boolean;
   recordingId: string;
   offsetMs: number;
   version: string;
@@ -51,6 +60,16 @@ type LyricsOk = {
 };
 
 type LyricsErr = { ok: false; error: string };
+
+class LyricsLoadError extends Error {
+  constructor(
+    message: string,
+    readonly gate: GatePayload | null,
+  ) {
+    super(message);
+    this.name = "LyricsLoadError";
+  }
+}
 
 function extractDisplayIdFromPath(pathname: string): string | null {
   // We only care about the canonical path segment, query is separate.
@@ -131,34 +150,58 @@ function loadCatalogueCached(): Promise<CatalogueOk> {
 const TRACK_CACHE = new Map<string, LyricsOk>();
 const TRACK_PROMISES = new Map<string, Promise<LyricsOk>>();
 
-function loadTrackCached(tid: string): Promise<LyricsOk> {
+function trackPromiseKey(
+  recordingId: string,
+  accessIdentityKey: string,
+  shareToken: string | null,
+): string {
+  return `${recordingId}::identity=${accessIdentityKey}::st=${shareToken ?? ""}`;
+}
+
+function loadTrackCached(
+  tid: string,
+  accessIdentityKey: string,
+  shareToken: string | null,
+): Promise<LyricsOk> {
   const key = tid.trim();
   if (!key) return Promise.reject(new Error("Missing recordingId"));
 
+  // Only released lyric payloads enter this long-lived cache. Embargoed lyric
+  // payloads must never survive an auth/share-token identity transition.
   const hit = TRACK_CACHE.get(key);
   if (hit) return Promise.resolve(hit);
 
-  const inflight = TRACK_PROMISES.get(key);
+  const promiseKey = trackPromiseKey(key, accessIdentityKey, shareToken);
+  const inflight = TRACK_PROMISES.get(promiseKey);
   if (inflight) return inflight;
 
   const p = (async () => {
-    const url = `/api/lyrics/by-track?recordingId=${encodeURIComponent(key)}`;
-    const r = await fetch(url, { cache: "no-store" });
-    const j = (await r.json()) as LyricsOk | LyricsErr;
-    if (!j.ok) throw new Error(j.error || "Failed to load lyrics.");
-    TRACK_CACHE.set(key, j);
+    const params = new URLSearchParams({ recordingId: key });
+    if (shareToken) params.set("st", shareToken);
+
+    const r = await fetch(`/api/lyrics/by-track?${params.toString()}`, {
+      cache: "no-store",
+    });
+    const raw: unknown = await r.json();
+    const j = raw as LyricsOk | LyricsErr;
+
+    if (!r.ok || !j.ok) {
+      const message =
+        !j.ok && j.error ? j.error : "Failed to load lyrics.";
+      throw new LyricsLoadError(message, gatePayloadFromUnknown(raw));
+    }
+
+    if (!j.embargoed) {
+      TRACK_CACHE.set(key, j);
+    }
+
     return j;
   })().finally(() => {
-    TRACK_PROMISES.delete(key);
+    TRACK_PROMISES.delete(promiseKey);
   });
 
-  TRACK_PROMISES.set(key, p);
+  TRACK_PROMISES.set(promiseKey, p);
   return p;
-}
-
-function prefetchTrack(tid: string) {
-  // Fire-and-forget warm-up
-  void loadTrackCached(tid).catch(() => {});
 }
 
 function getCachedTrack(tid: string): LyricsOk | null {
@@ -295,10 +338,18 @@ function AlbumCard(
       displayId: string,
       recordingId: string,
     ) => void;
+    onPrefetchTrack: (recordingId: string) => void;
     onPrefetchRoute: (href: string) => void;
   }>,
 ) {
-  const { a, label, search, onOpenTrack, onPrefetchRoute } = props;
+  const {
+    a,
+    label,
+    search,
+    onOpenTrack,
+    onPrefetchTrack,
+    onPrefetchRoute,
+  } = props;
 
   const [tint, setTint] = React.useState<string | null>(null);
 
@@ -412,19 +463,19 @@ function AlbumCard(
               key={tid}
               href={buildTrackHref(displayId, search)}
               onMouseEnter={() => {
-                prefetchTrack(tid);
+                onPrefetchTrack(tid);
                 onPrefetchRoute(buildTrackHref(displayId, search));
               }}
               onFocus={() => {
-                prefetchTrack(tid);
+                onPrefetchTrack(tid);
                 onPrefetchRoute(buildTrackHref(displayId, search));
               }}
               onMouseDown={() => {
-                prefetchTrack(tid);
+                onPrefetchTrack(tid);
                 onPrefetchRoute(buildTrackHref(displayId, search));
               }}
               onTouchStart={() => {
-                prefetchTrack(tid);
+                onPrefetchTrack(tid);
                 onPrefetchRoute(buildTrackHref(displayId, search));
               }}
               onClick={(event) => onOpenTrack(event, displayId, tid)}
@@ -595,9 +646,11 @@ function useCatalogueState(): CatalogueState {
 type LyricsState = Readonly<{
   lyrics: LyricsOk | null;
   lyricsErr: string;
+  lyricsGate: GatePayload | null;
   lyricsLoading: boolean;
   setLyrics: React.Dispatch<React.SetStateAction<LyricsOk | null>>;
   setLyricsErr: React.Dispatch<React.SetStateAction<string>>;
+  setLyricsGate: React.Dispatch<React.SetStateAction<GatePayload | null>>;
   setLyricsLoading: React.Dispatch<React.SetStateAction<boolean>>;
 }>;
 
@@ -606,30 +659,41 @@ function useLyricsState(
   catalogue: CatalogueOk | null,
   catalogueLoading: boolean,
   recordingId: string | null,
+  accessReady: boolean,
+  accessIdentityKey: string,
+  shareToken: string | null,
 ): LyricsState {
   const [lyrics, setLyrics] = React.useState<LyricsOk | null>(null);
   const [lyricsErr, setLyricsErr] = React.useState("");
+  const [lyricsGate, setLyricsGate] = React.useState<GatePayload | null>(null);
   const [lyricsLoading, setLyricsLoading] = React.useState(false);
+  const [loadedAccessKey, setLoadedAccessKey] = React.useState("");
 
   React.useEffect(() => {
     if (!displayId) {
       setLyrics(null);
       setLyricsErr("");
+      setLyricsGate(null);
       setLyricsLoading(false);
+      setLoadedAccessKey("");
       return;
     }
 
     if (!catalogue) {
       setLyrics(null);
       setLyricsErr("");
+      setLyricsGate(null);
       setLyricsLoading(catalogueLoading);
+      setLoadedAccessKey("");
       return;
     }
 
     if (!recordingId) {
       setLyrics(null);
       setLyricsErr("Track not found.");
+      setLyricsGate(null);
       setLyricsLoading(false);
+      setLoadedAccessKey("");
       return;
     }
 
@@ -637,27 +701,61 @@ function useLyricsState(
     const tid = recordingId;
 
     setLyricsErr("");
+    setLyricsGate(null);
 
     const cached = TRACK_CACHE.get(tid);
     if (cached) {
       setLyrics(cached);
+      setLoadedAccessKey("released");
       setLyricsLoading(false);
       return () => {
         alive = false;
       };
     }
 
+    if (!accessReady) {
+      setLyrics(null);
+      setLoadedAccessKey("");
+      setLyricsLoading(true);
+      return () => {
+        alive = false;
+      };
+    }
+
+    const requestAccessKey = trackPromiseKey(
+      tid,
+      accessIdentityKey,
+      shareToken,
+    );
+
     setLyricsLoading(true);
     setLyrics(null);
+    setLoadedAccessKey("");
 
-    loadTrackCached(tid)
+    loadTrackCached(tid, accessIdentityKey, shareToken)
       .then((nextLyrics) => {
         if (!alive) return;
         setLyrics(nextLyrics);
+        setLoadedAccessKey(nextLyrics.embargoed ? requestAccessKey : "released");
+        setLyricsGate(null);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!alive) return;
-        setLyricsErr("Failed to load lyrics.");
+
+        if (error instanceof LyricsLoadError && error.gate) {
+          setLyrics(null);
+          setLoadedAccessKey("");
+          setLyricsErr("");
+          setLyricsGate(error.gate);
+          return;
+        }
+
+        setLoadedAccessKey("");
+        setLyricsErr(
+          error instanceof Error && error.message
+            ? error.message
+            : "Failed to load lyrics.",
+        );
       })
       .finally(() => {
         if (!alive) return;
@@ -667,14 +765,30 @@ function useLyricsState(
     return () => {
       alive = false;
     };
-  }, [catalogue, catalogueLoading, displayId, recordingId]);
+  }, [
+    accessIdentityKey,
+    accessReady,
+    catalogue,
+    catalogueLoading,
+    displayId,
+    recordingId,
+    shareToken,
+  ]);
+
+  const currentAccessKey = recordingId
+    ? trackPromiseKey(recordingId, accessIdentityKey, shareToken)
+    : "";
+  const visibleLyrics =
+    lyrics?.embargoed && loadedAccessKey !== currentAccessKey ? null : lyrics;
 
   return {
-    lyrics,
+    lyrics: visibleLyrics,
     lyricsErr,
+    lyricsGate,
     lyricsLoading,
     setLyrics,
     setLyricsErr,
+    setLyricsGate,
     setLyricsLoading,
   };
 }
@@ -712,24 +826,28 @@ function TrackContent(
     displayId: string;
     lyrics: LyricsOk | null;
     lyricsErr: string;
+    lyricsGate: GatePayload | null;
     lyricsLoading: boolean;
     noCatalogueYet: boolean;
     resolvedTitle: string | null;
     resolvedArtist: string | null;
     backButton: React.ReactNode;
     artworkNode: React.ReactNode;
+    onDismissGate: () => void;
   }>,
 ) {
   const {
     displayId,
     lyrics,
     lyricsErr,
+    lyricsGate,
     lyricsLoading,
     noCatalogueYet,
     resolvedTitle,
     resolvedArtist,
     backButton,
     artworkNode,
+    onDismissGate,
   } = props;
 
   if (lyricsLoading) {
@@ -740,6 +858,47 @@ function TrackContent(
         headerLeading={backButton}
         headerArtwork={artworkNode}
       />
+    );
+  }
+
+  if (lyricsGate) {
+    const showActivationGate = lyricsGate.action !== "wait";
+
+    return (
+      <div className="w-full">
+        <div className="flex min-w-0 items-center gap-3 py-2">
+          <div className="flex shrink-0 items-center justify-center">
+            {backButton}
+          </div>
+          {artworkNode ? (
+            <div className="flex shrink-0 items-center justify-center">
+              {artworkNode}
+            </div>
+          ) : null}
+          <div className="min-w-0 flex-1">
+            {resolvedTitle ? (
+              <h1 className="truncate text-xl font-semibold leading-tight opacity-90">
+                {resolvedTitle}
+              </h1>
+            ) : null}
+            {resolvedArtist ? (
+              <div className="mt-1 truncate text-sm leading-tight opacity-70">
+                {resolvedArtist}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="relative mt-3 min-h-[420px]">
+          <ExegesisInlineGateOverlay
+            open={true}
+            message={lyricsGate.message}
+            dismissible={true}
+            onDismiss={onDismissGate}
+            showActivationGate={showActivationGate}
+          />
+        </div>
+      </div>
     );
   }
 
@@ -800,6 +959,7 @@ function TrackView(
     trackMetaByRecordingId: Record<string, TrackMeta>;
     lyrics: LyricsOk | null;
     lyricsErr: string;
+    lyricsGate: GatePayload | null;
     lyricsLoading: boolean;
     catalogue: CatalogueOk | null;
     catalogueLoading: boolean;
@@ -814,6 +974,7 @@ function TrackView(
     trackMetaByRecordingId,
     lyrics,
     lyricsErr,
+    lyricsGate,
     lyricsLoading,
     catalogue,
     catalogueLoading,
@@ -874,12 +1035,14 @@ function TrackView(
         displayId={displayId}
         lyrics={lyrics}
         lyricsErr={lyricsErr}
+        lyricsGate={lyricsGate}
         lyricsLoading={lyricsLoading}
         noCatalogueYet={noCatalogueYet}
         resolvedTitle={resolvedTitle}
         resolvedArtist={resolvedArtist}
         backButton={backButton}
         artworkNode={artworkNode}
+        onDismissGate={onReturnToIndex}
       />
     </div>
   );
@@ -940,6 +1103,7 @@ function CatalogueIndex(
       displayId: string,
       recordingId: string,
     ) => void;
+    onPrefetchTrack: (recordingId: string) => void;
     onPrefetchRoute: (href: string) => void;
   }>,
 ) {
@@ -949,6 +1113,7 @@ function CatalogueIndex(
     catalogueLoading,
     search,
     onOpenTrack,
+    onPrefetchTrack,
     onPrefetchRoute,
   } = props;
 
@@ -986,6 +1151,7 @@ function CatalogueIndex(
                 label={label}
                 search={search}
                 onOpenTrack={onOpenTrack}
+                onPrefetchTrack={onPrefetchTrack}
                 onPrefetchRoute={onPrefetchRoute}
               />
             </AlbumMasonryItem>
@@ -1011,6 +1177,21 @@ export default function PortalExegesis() {
   const searchParams = useSearchParams();
   const searchParamsString = searchParams?.toString() ?? "";
   const search = searchParamsString ? `?${searchParamsString}` : "";
+  const shareToken =
+    (searchParams?.get("st") ?? searchParams?.get("share") ?? "").trim() ||
+    null;
+  const {
+    isLoaded: authLoaded,
+    isSignedIn,
+    userId,
+    sessionId,
+  } = useAuth();
+  const { reportGate, clearGate } = useGateBroker();
+  const accessIdentityKey = !authLoaded
+    ? "clerk:loading"
+    : isSignedIn
+      ? `clerk:user:${userId ?? ""}:session:${sessionId ?? ""}`
+      : "clerk:anonymous";
 
   const {
     displayId,
@@ -1027,11 +1208,58 @@ export default function PortalExegesis() {
   const {
     lyrics,
     lyricsErr,
+    lyricsGate,
     lyricsLoading,
     setLyrics,
     setLyricsErr,
+    setLyricsGate,
     setLyricsLoading,
-  } = useLyricsState(displayId, catalogue, catalogueLoading, recordingId);
+  } = useLyricsState(
+    displayId,
+    catalogue,
+    catalogueLoading,
+    recordingId,
+    authLoaded,
+    accessIdentityKey,
+    shareToken,
+  );
+
+  React.useEffect(() => {
+    if (!lyricsGate) {
+      clearGate({ domain: "exegesis" });
+      return;
+    }
+
+    const result = gateResultFromPayload({
+      payload: lyricsGate,
+      attempt: { verb: "readLyrics", domain: "exegesis" },
+      isSignedIn: Boolean(isSignedIn),
+      intent: "explicit",
+    });
+
+    if (result.ok) return;
+
+    reportGate({
+      code: result.reason.code,
+      action: result.reason.action,
+      message: result.reason.message,
+      domain: result.reason.domain,
+      uiMode: result.uiMode,
+      correlationId: result.reason.correlationId ?? null,
+    });
+  }, [clearGate, isSignedIn, lyricsGate, reportGate]);
+
+  const prefetchTrackForViewer = React.useCallback(
+    (recordingIdNext: string) => {
+      if (!authLoaded) return;
+      void loadTrackCached(
+        recordingIdNext,
+        accessIdentityKey,
+        shareToken,
+      ).catch(() => {});
+    },
+    [accessIdentityKey, authLoaded, shareToken],
+  );
 
   function prefetchRoute(href: string) {
     const target = (href ?? "").trim();
@@ -1061,11 +1289,14 @@ export default function PortalExegesis() {
     if (cached) {
       setLyrics(cached);
       setLyricsErr("");
+      setLyricsGate(null);
       setLyricsLoading(false);
     } else {
+      setLyrics(null);
       setLyricsErr("");
+      setLyricsGate(null);
       setLyricsLoading(true);
-      prefetchTrack(rid);
+      prefetchTrackForViewer(rid);
     }
 
     if (currentHref !== nextHref) {
@@ -1082,6 +1313,7 @@ export default function PortalExegesis() {
     setExegesisDisplayId(null);
     setLyrics(null);
     setLyricsErr("");
+    setLyricsGate(null);
     setLyricsLoading(false);
 
     if (currentHref !== nextHref) {
@@ -1101,6 +1333,7 @@ export default function PortalExegesis() {
         trackMetaByRecordingId={trackMetaByRecordingId}
         lyrics={lyrics}
         lyricsErr={lyricsErr}
+        lyricsGate={lyricsGate}
         lyricsLoading={lyricsLoading}
         catalogue={catalogue}
         catalogueLoading={catalogueLoading}
@@ -1118,6 +1351,7 @@ export default function PortalExegesis() {
       catalogueLoading={catalogueLoading}
       search={search}
       onOpenTrack={openTrack}
+      onPrefetchTrack={prefetchTrackForViewer}
       onPrefetchRoute={prefetchRoute}
     />
   );

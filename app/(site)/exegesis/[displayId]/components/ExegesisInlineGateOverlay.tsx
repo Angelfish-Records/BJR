@@ -9,6 +9,7 @@ type ExegesisInlineGateOverlayProps = Readonly<{
   message: string;
   dismissible: boolean;
   onDismiss: () => void;
+  showActivationGate?: boolean;
 }>;
 
 export default function ExegesisInlineGateOverlay({
@@ -16,6 +17,7 @@ export default function ExegesisInlineGateOverlay({
   message,
   dismissible,
   onDismiss,
+  showActivationGate = true,
 }: ExegesisInlineGateOverlayProps) {
   if (!open) return null;
 
@@ -46,9 +48,11 @@ export default function ExegesisInlineGateOverlay({
             </div>
           ) : null}
 
-          <ActivationGate>
-            <div />
-          </ActivationGate>
+          {showActivationGate ? (
+            <ActivationGate>
+              <div />
+            </ActivationGate>
+          ) : null}
         </div>
       </div>
     </div>

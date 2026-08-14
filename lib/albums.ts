@@ -601,9 +601,9 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
     .map((t) => t.recordingId)
     .filter((recordingId): recordingId is string => recordingId.length > 0);
 
-  const lyricRecordingIds = Array.from(new Set(recordingIds)).sort((a, b) =>
-    a.localeCompare(b),
-  );
+  const lyricRecordingIds = isEmbargoedByDate
+    ? []
+    : Array.from(new Set(recordingIds)).sort((a, b) => a.localeCompare(b));
 
   const [playCountsByRecordingId, lyricDocs] = await Promise.all([
     getRecordingPlayCountsByRecordingIds(recordingIds),
@@ -633,7 +633,11 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
     albumSlug: normStr(doc.slug) ?? albumSlug,
     album,
     tracks: tracksWithPlayCounts,
-    albumLyrics: { cuesByRecordingId, offsetByRecordingId },
+    // Embargoed lyrics are never serialized into the shared session/API bundle.
+    // Authorized listeners fetch them lazily through the gated by-track endpoint.
+    albumLyrics: isEmbargoedByDate
+      ? null
+      : { cuesByRecordingId, offsetByRecordingId },
   });
 }
 

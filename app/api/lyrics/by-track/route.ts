@@ -1,10 +1,15 @@
 // web/app/api/lyrics/by-track/route.ts
 import "server-only";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { client } from "@/sanity/lib/client";
 import { sql } from "@vercel/postgres";
 import { normalizeLyricCuesFromSanity } from "@/lib/types";
 import type { LyricCue, LyricGroupMap } from "@/lib/types";
+import { correlationIdFromRequest } from "@/app/api/_gate";
+import {
+  persistExegesisEmbargoReadIdentity,
+  resolveExegesisEmbargoReadAccess,
+} from "@/app/api/exegesis/_embargoReadAccess";
 
 export const runtime = "nodejs";
 
@@ -120,7 +125,8 @@ async function resolveRecordingIdFromAlbumDisplayId(args: {
   };
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
+  const correlationId = correlationIdFromRequest(req);
   const { searchParams } = new URL(req.url);
 
   // Back-compat: allow direct internal-id lookups
@@ -159,6 +165,13 @@ export async function GET(req: Request) {
       { status: 400 },
     );
   }
+
+  const embargoAccess = await resolveExegesisEmbargoReadAccess({
+    req,
+    recordingId,
+    correlationId,
+  });
+  if (!embargoAccess.ok) return embargoAccess.response;
 
   // We always fetch lyrics by internal recordingId.
   // Meta is fetched either via (albumSlug+displayId) or a recordingId lookup.
@@ -225,9 +238,10 @@ export async function GET(req: Request) {
     return hit ? { ...c, canonicalGroupKey: hit.canonicalGroupKey } : c;
   });
 
-  return NextResponse.json(
+  const response = NextResponse.json(
     {
       ok: true,
+      embargoed: embargoAccess.embargoed,
 
       // canonical internal id (used for exegesis db + lyrics docs)
       recordingId,
@@ -259,4 +273,7 @@ export async function GET(req: Request) {
       },
     },
   );
+
+  persistExegesisEmbargoReadIdentity(response, embargoAccess);
+  return response;
 }

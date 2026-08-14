@@ -23,6 +23,10 @@ import {
   jsonOk,
   withCorrelationId,
 } from "@/app/api/_gate";
+import {
+  persistExegesisEmbargoReadIdentity,
+  resolveExegesisEmbargoReadAccess,
+} from "@/app/api/exegesis/_embargoReadAccess";
 
 export const runtime = "nodejs";
 
@@ -608,18 +612,35 @@ export async function GET(req: NextRequest) {
   const request = readThreadRequest(req, correlationId);
   if (!request.ok) return request.response;
 
+  const { recordingId, sort } = request.value;
+  const embargoAccess = await resolveExegesisEmbargoReadAccess({
+    req,
+    recordingId,
+    correlationId,
+  });
+  if (!embargoAccess.ok) return embargoAccess.response;
+
   const groupKeyResult = await resolveThreadGroupKey(
     request.value,
     correlationId,
   );
   if (!groupKeyResult.ok) return groupKeyResult.response;
 
-  const { recordingId, sort } = request.value;
   const { groupKey } = groupKeyResult;
 
   const bootstrapRes = jsonOk({ ok: true }, { correlationId });
-  const { anonId } = ensureAnonId(req, bootstrapRes);
-  const viewer = await getViewer(req, anonId);
+  persistExegesisEmbargoReadIdentity(bootstrapRes, embargoAccess);
+
+  const embargoContext = embargoAccess.embargoed
+    ? embargoAccess.context
+    : null;
+  const anonId =
+    embargoContext?.anonId ?? ensureAnonId(req, bootstrapRes).anonId;
+  const viewer: Viewer = embargoContext
+    ? embargoContext.memberId
+      ? { kind: "member", memberId: embargoContext.memberId }
+      : { kind: "anon", anonId }
+    : await getViewer(req, anonId);
   const viewerMemberId =
     viewer.kind === "member" && isUuid(viewer.memberId)
       ? viewer.memberId

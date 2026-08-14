@@ -3,15 +3,22 @@
 
 import { parseTrackLyricsApiOk } from "@/lib/types";
 import type { LyricCue } from "@/lib/types";
+import {
+  readPlaybackShareTokenFromLocation,
+} from "@/app/home/player/playbackAccessClient";
 
 export async function fetchLyricsByrecordingId(
   recordingId: string,
   signal?: AbortSignal,
 ): Promise<{ recordingId: string; cues: LyricCue[]; offsetMs: number } | null> {
-  const res = await fetch(
-    `/api/lyrics/by-track?recordingId=${encodeURIComponent(recordingId)}`,
-    { signal, cache: "no-store" },
-  );
+  const params = new URLSearchParams({ recordingId });
+  const shareToken = readPlaybackShareTokenFromLocation();
+  if (shareToken) params.set("st", shareToken);
+
+  const res = await fetch(`/api/lyrics/by-track?${params.toString()}`, {
+    signal,
+    cache: "no-store",
+  });
   if (!res.ok) return null;
 
   const raw: unknown = await res.json();

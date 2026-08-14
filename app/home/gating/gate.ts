@@ -18,6 +18,7 @@ export type GateVerb =
   | "report"
   | "edit"
   | "claimName"
+  | "readLyrics"
   | "readFullThread"
   | "markSeen";
 
@@ -149,6 +150,7 @@ export function gate(attempt: GateAttempt, ctx: GateContext): GateResult {
   // You can tighten/expand this list per module over time.
   const anonAllowedVerb: boolean =
     attempt.verb === "play" ||
+    attempt.verb === "readLyrics" ||
     attempt.verb === "readFullThread" ||
     attempt.verb === "markSeen";
 

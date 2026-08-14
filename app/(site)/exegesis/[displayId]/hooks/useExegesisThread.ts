@@ -29,8 +29,19 @@ import {
 } from "../exegesisUi";
 import { useBadgeAwardOverlay } from "@/app/home/badges/BadgeAwardOverlayProvider";
 import { normalizeBadgeAwardNotices } from "@/app/home/badges/badgeAwardTypes";
+import {
+  readPlaybackShareTokenFromLocation,
+} from "@/app/home/player/playbackAccessClient";
 
 type ThreadGatePayload = NonNullable<ThreadApiErr["gate"]>;
+
+function withCurrentShareToken(url: string): string {
+  const shareToken = readPlaybackShareTokenFromLocation();
+  if (!shareToken) return url;
+
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}st=${encodeURIComponent(shareToken)}`;
+}
 
 async function fetchVoteRecoveryThread(
   params: Readonly<{
@@ -52,7 +63,9 @@ async function fetchVoteRecoveryThread(
   const url =
     `/api/exegesis/thread?recordingId=${encodeURIComponent(recordingId)}` +
     selector;
-  const response = await fetch(url, { cache: "no-store" });
+  const response = await fetch(withCurrentShareToken(url), {
+    cache: "no-store",
+  });
   const payload = (await response.json()) as ThreadApiOk | ThreadApiErr;
 
   if (!payload.ok) return null;
@@ -251,7 +264,9 @@ export default function useExegesisThread(props: {
           : `&lineKey=${encodeURIComponent(selected.lineKey)}`);
 
       try {
-        const r = await fetch(url, { cache: "no-store" });
+        const r = await fetch(withCurrentShareToken(url), {
+          cache: "no-store",
+        });
         const j = (await r.json()) as ThreadApiOk | ThreadApiErr;
         if (!alive) return;
 
@@ -622,7 +637,7 @@ export default function useExegesisThread(props: {
         `/api/exegesis/thread?recordingId=${encodeURIComponent(recordingId)}` +
         `&groupKey=${encodeURIComponent(groupKey)}`;
 
-      fetch(url, { cache: "no-store" })
+      fetch(withCurrentShareToken(url), { cache: "no-store" })
         .then((r2) => r2.json())
         .then((jj: ThreadApiOk | ThreadApiErr) => {
           if (jj && (jj as ThreadApiOk).ok) {
@@ -789,7 +804,7 @@ export default function useExegesisThread(props: {
         `/api/exegesis/thread?recordingId=${encodeURIComponent(recordingId)}` +
         `&groupKey=${encodeURIComponent(groupKey)}`;
 
-      fetch(url, { cache: "no-store" })
+      fetch(withCurrentShareToken(url), { cache: "no-store" })
         .then((r2) => r2.json())
         .then((jj: ThreadApiOk | ThreadApiErr) => {
           if (jj && (jj as ThreadApiOk).ok) {
