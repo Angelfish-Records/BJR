@@ -442,6 +442,24 @@ function DownloadFormatSelector(
 
   return (
     <div style={{ display: "grid", gap: 8 }}>
+      <style>{`
+        @media (max-width: 330px) {
+          .afDownloadFormatOptions {
+            gap: 5px !important;
+          }
+
+          .afDownloadFormatOption {
+            min-height: 34px !important;
+            padding: 4px 3px !important;
+            border-radius: 9px !important;
+          }
+
+          .afDownloadFormatRecommended {
+            display: none !important;
+          }
+        }
+      `}</style>
+
       <div
         style={{
           fontSize: 12,
@@ -455,6 +473,7 @@ function DownloadFormatSelector(
       </div>
 
       <fieldset
+        className="afDownloadFormatOptions"
         aria-label="Download format"
         style={{
           display: "grid",
@@ -473,7 +492,11 @@ function DownloadFormatSelector(
           return (
             <button
               key={asset.id}
+              className="afDownloadFormatOption"
               type="button"
+              aria-label={`${asset.selectorLabel ?? asset.label}${
+                asset.recommended ? ", recommended" : ""
+              }`}
               aria-pressed={selected}
               onClick={() => onSelect(asset.id)}
               style={{
@@ -508,6 +531,7 @@ function DownloadFormatSelector(
 
               {asset.recommended ? (
                 <span
+                  className="afDownloadFormatRecommended"
                   style={{
                     fontSize: 9,
                     lineHeight: 1,

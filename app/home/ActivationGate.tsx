@@ -908,6 +908,7 @@ function SignedInIdentity(props: SignedInIdentityProps) {
       }}
     >
       <span
+        className="afActivationVerifiedBadge"
         aria-hidden
         style={{
           gridColumn: 1,

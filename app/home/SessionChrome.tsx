@@ -591,6 +591,10 @@ export default function SessionChrome(props: SessionChromeProps) {
     line-height:14px !important;
   }
 }
+
+@media (max-width:330px) {
+  .afTopBarRight .afActivationVerifiedBadge { display:none !important; }
+}
       `}</style>
 
       <div className="afTopBar" style={{ position: "relative", zIndex: 5 }}>
