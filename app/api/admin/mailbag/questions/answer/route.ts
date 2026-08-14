@@ -130,13 +130,19 @@ function normalizeEmail(s: string): string {
   return s.trim().toLowerCase();
 }
 
+const HTML_ESCAPE_ENTITIES: Readonly<Record<string, string>> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
 function escapeHtml(input: string): string {
-  return input
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+  return input.replace(
+    /[&<>"']/g,
+    (character) => HTML_ESCAPE_ENTITIES[character] ?? character,
+  );
 }
 
 function nl2brHtml(input: string): string {

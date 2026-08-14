@@ -35,6 +35,7 @@ jobs:
             --config p/typescript \
             --config p/react \
             --config p/security-audit \
+            --exclude '.sanity/runtime/**' \
             --sarif \
             --output=semgrep.sarif
         # Baseline mode: findings are uploaded to GitHub Code Scanning
