@@ -52,9 +52,9 @@ export default function ExegesisTrackLoadingShell(
       `}</style>
 
       <div className="min-w-0 py-2">
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 items-start gap-3">
           {props.headerLeading ? (
-            <div className="flex shrink-0 items-center justify-center">
+            <div className="mt-1 flex shrink-0 items-center justify-center">
               {props.headerLeading}
             </div>
           ) : (
@@ -62,7 +62,7 @@ export default function ExegesisTrackLoadingShell(
           )}
 
           {props.headerArtwork ? (
-            <div className="flex shrink-0 items-center justify-center">
+            <div className="mt-1 flex shrink-0 items-center justify-center">
               {props.headerArtwork}
             </div>
           ) : (
@@ -86,7 +86,9 @@ export default function ExegesisTrackLoadingShell(
               <div className="mt-2 afShimmerBlock h-4 w-[28%] rounded bg-white/5" />
             )}
 
-            <div className="mt-3 afShimmerBlock h-8 w-8 rounded-md bg-white/5" />
+            {!title && !artist ? (
+              <div className="mt-3 afShimmerBlock h-8 w-8 rounded-md bg-white/5" />
+            ) : null}
           </div>
         </div>
       </div>

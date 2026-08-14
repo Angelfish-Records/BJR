@@ -59,6 +59,32 @@ function minimumTtlSecondsForDuration(durationMs: unknown): number {
   return Math.ceil(durationMs / 1000) + 120;
 }
 
+type StaticM4aRouteDebugEvent =
+  | "static-m4a-route-requested"
+  | "static-m4a-route-token-rejected"
+  | "static-m4a-route-token-invalid"
+  | "static-m4a-route-redirect-issued";
+
+function logStaticM4aRouteDebug(params: {
+  event: StaticM4aRouteDebugEvent;
+  req: NextRequest;
+  albumId: string;
+  playbackId: string;
+  status?: number;
+  correlationId?: string | null;
+}): void {
+  if (process.env.AUDIO_DEBUG_SERVER_LOGS !== "1") return;
+
+  console.info("[audio-debug]", {
+    event: params.event,
+    albumId: params.albumId || null,
+    playbackId: params.playbackId || null,
+    status: params.status ?? null,
+    correlationId: params.correlationId ?? null,
+    ua: params.req.headers.get("user-agent") ?? null,
+  });
+}
+
 async function resolveSingleTokenSample(params: {
   req: NextRequest;
   access: MuxPlaybackAccessContext;
@@ -251,6 +277,13 @@ export async function GET(req: NextRequest) {
     req.nextUrl.searchParams.get("durationMs") ?? "",
   );
 
+  logStaticM4aRouteDebug({
+    event: "static-m4a-route-requested",
+    req,
+    albumId,
+    playbackId,
+  });
+
   const tokenRequest: TokenReq = {
     playbackId,
     albumId,
@@ -274,6 +307,14 @@ export async function GET(req: NextRequest) {
   const tokenResponse = await POST(syntheticPostRequest);
 
   if (!tokenResponse.ok) {
+    logStaticM4aRouteDebug({
+      event: "static-m4a-route-token-rejected",
+      req,
+      albumId,
+      playbackId,
+      status: tokenResponse.status,
+      correlationId: tokenResponse.headers.get("x-correlation-id"),
+    });
     return tokenResponse;
   }
 
@@ -283,6 +324,15 @@ export async function GET(req: NextRequest) {
     .catch(() => null)) as TokenOk | null;
 
   if (tokenPayload?.ok !== true || !tokenPayload.token.trim()) {
+    logStaticM4aRouteDebug({
+      event: "static-m4a-route-token-invalid",
+      req,
+      albumId,
+      playbackId,
+      status: 502,
+      correlationId: tokenResponse.headers.get("x-correlation-id"),
+    });
+
     return muxPlaybackGateError(req, {
       correlationId: correlationIdFromRequest(req),
       status: 502,
@@ -314,6 +364,15 @@ export async function GET(req: NextRequest) {
   if (setCookie) {
     redirect.headers.set("set-cookie", setCookie);
   }
+
+  logStaticM4aRouteDebug({
+    event: "static-m4a-route-redirect-issued",
+    req,
+    albumId,
+    playbackId,
+    status: 307,
+    correlationId,
+  });
 
   return redirect;
 }

@@ -1125,15 +1125,15 @@ export default function ExegesisTrackClient(props: ExegesisTrackClientProps) {
       `}</style>
 
       <div className="min-w-0 py-2">
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 items-start gap-3">
           {props.headerLeading ? (
-            <div className="flex shrink-0 items-center justify-center">
+            <div className="mt-1 flex shrink-0 items-center justify-center">
               {props.headerLeading}
             </div>
           ) : null}
 
           {props.headerArtwork ? (
-            <div className="flex shrink-0 items-center justify-center">
+            <div className="mt-1 flex shrink-0 items-center justify-center">
               {props.headerArtwork}
             </div>
           ) : null}

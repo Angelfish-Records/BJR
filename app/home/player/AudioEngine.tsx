@@ -729,6 +729,10 @@ export default function AudioEngine() {
   const staticM4aProgressProofRef = React.useRef<string | null>(null);
   const autoAdvanceKeyRef = React.useRef<string | null>(null);
   const suppressPauseDeckRef = React.useRef<DeckId | null>(null);
+  const programmaticPauseCountByDeckRef = React.useRef<Record<DeckId, number>>({
+    a: 0,
+    b: 0,
+  });
 
   const srcNodeByDeckRef = React.useRef<
     Record<DeckId, MediaElementAudioSourceNode | null>
@@ -1004,9 +1008,22 @@ export default function AudioEngine() {
       const a = getAudio(deckId);
       if (!a) return;
 
+      const expectsPauseEvent = !a.paused;
+
+      if (expectsPauseEvent) {
+        programmaticPauseCountByDeckRef.current[deckId] += 1;
+      }
+
       try {
         a.pause();
-      } catch {}
+      } catch {
+        if (expectsPauseEvent) {
+          programmaticPauseCountByDeckRef.current[deckId] = Math.max(
+            0,
+            programmaticPauseCountByDeckRef.current[deckId] - 1,
+          );
+        }
+      }
 
       if (opts?.destroyHls !== false && hlsByDeckRef.current[deckId]) {
         try {
@@ -3565,6 +3582,24 @@ export default function AudioEngine() {
 
     const markPaused = (deckId: DeckId) => {
       debugMediaEvent(deckId, "media-paused");
+
+      const pendingProgrammaticPauses =
+        programmaticPauseCountByDeckRef.current[deckId];
+
+      if (pendingProgrammaticPauses > 0) {
+        programmaticPauseCountByDeckRef.current[deckId] =
+          pendingProgrammaticPauses - 1;
+
+        sendAudioDebug({
+          event: "media-programmatic-pause-ignored",
+          albumId: pRef.current.queueContextId ?? null,
+          recordingId: pRef.current.current?.recordingId ?? null,
+          playbackId: pRef.current.current?.muxPlaybackId ?? null,
+          source: `AudioEngine.${deckId}`,
+          detail: `remaining=${pendingProgrammaticPauses - 1};active=${activeDeckRef.current}`,
+        });
+        return;
+      }
 
       if (suppressPauseDeckRef.current === deckId) {
         sendAudioDebug({
