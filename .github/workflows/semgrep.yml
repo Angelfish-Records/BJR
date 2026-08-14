@@ -1,0 +1,46 @@
+# .github/workflows/semgrep.yml
+name: Semgrep
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: '28 14 * * 4'   # weekly
+  workflow_dispatch:        # manual run button
+
+permissions:
+  contents: read
+  security-events: write    # needed to upload SARIF
+
+jobs:
+  semgrep:
+    name: Semgrep Scan
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    if: (github.actor != 'dependabot[bot]')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep (Community Edition – no account needed)
+        run: |
+          semgrep scan \
+            --config p/default \
+            --config p/typescript \
+            --config p/react \
+            --config p/security-audit \
+            --sarif \
+            --output=semgrep.sarif \
+            --error
+        # --error makes the job fail if high-severity findings exist
+        # Remove --error if you only want warnings for now
+
+      - name: Upload SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
