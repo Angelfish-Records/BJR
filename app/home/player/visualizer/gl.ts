@@ -55,7 +55,8 @@ export function createShader(
       // ignore diagnostic failures
     }
 
-    console.error(`[gl] ${typeName} shader compile failed`, {
+    console.error("[gl] shader compile failed", {
+      typeName,
       infoLog: infoLog || null,
       version,
       shadingLanguageVersion,
@@ -65,7 +66,10 @@ export function createShader(
     });
 
     if (VERBOSE_GL_DEBUG) {
-      console.error(`[gl] ${typeName} shader source:\n${numberedSource}`);
+      console.error("[gl] shader source", {
+        typeName,
+        numberedSource,
+      });
     }
 
     gl.deleteShader(sh);
@@ -114,8 +118,12 @@ export function createProgram(
       });
 
       if (VERBOSE_GL_DEBUG) {
-        console.error(`[gl] LINK vertex shader source:\n${numberedVsSource}`);
-        console.error(`[gl] LINK fragment shader source:\n${numberedFsSource}`);
+        console.error("[gl] LINK vertex shader source", {
+          numberedSource: numberedVsSource,
+        });
+        console.error("[gl] LINK fragment shader source", {
+          numberedSource: numberedFsSource,
+        });
       }
 
       throw new Error(`program link failed: ${infoLog || "empty info log"}`);

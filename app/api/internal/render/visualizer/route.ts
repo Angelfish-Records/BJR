@@ -164,6 +164,48 @@ function safeStem(filename: string): string {
     .slice(0, 80);
 }
 
+function resolveRecordingId(
+  recordingId: string,
+  audioFile: string,
+): string {
+  const requested = recordingId.trim();
+  const normalized = safeStem(requested || audioFile);
+
+  if (!normalized) {
+    throw new Error("Unable to derive a safe recordingId");
+  }
+
+  if (requested && normalized !== requested) {
+    throw new Error("Invalid recordingId");
+  }
+
+  return normalized;
+}
+
+function resolveManifestPath(
+  manifestDir: string,
+  recordingId: string,
+  themeName: ThemeName,
+): string {
+  const manifestRoot = path.resolve(manifestDir);
+  const candidate = path.resolve(
+    manifestRoot,
+    `${recordingId}_${themeName}.json`,
+  );
+  const relative = path.relative(manifestRoot, candidate);
+
+  if (
+    relative === "" ||
+    relative.startsWith(`..${path.sep}`) ||
+    relative === ".." ||
+    path.isAbsolute(relative)
+  ) {
+    throw new Error("Invalid visualizer manifest path");
+  }
+
+  return candidate;
+}
+
 function assertNumber(
   name: string,
   value: number,
@@ -474,7 +516,10 @@ export async function POST(req: Request): Promise<NextResponse> {
           )
         : undefined;
 
-    const recordingId = body.recordingId.trim() || safeStem(body.audioFile);
+    const recordingId = resolveRecordingId(
+      body.recordingId,
+      body.audioFile,
+    );
     const textVariant =
       textMode === "lyrics" ? "" : `_${textMode}`;
     const outputDir =
@@ -517,9 +562,10 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
     await fs.mkdir(manifestDir, { recursive: true });
 
-    const manifestPath = path.join(
+    const manifestPath = resolveManifestPath(
       manifestDir,
-      `${recordingId}_${body.themeName}.json`,
+      recordingId,
+      body.themeName,
     );
 
     await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2));

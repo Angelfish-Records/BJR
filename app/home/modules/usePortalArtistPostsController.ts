@@ -284,13 +284,13 @@ export function usePortalArtistPostsController(
   const mountIdRef = React.useRef(mountId);
 
   React.useEffect(() => {
-    const tag = `[PortalArtistPosts ${mountId}]`;
-    console.log(`${tag} MOUNT`, {
+    console.log("[PortalArtistPosts] MOUNT", {
+      mountId,
       href: typeof window !== "undefined" ? window.location.href : "(ssr)",
     });
 
     return () => {
-      console.log(`${tag} UNMOUNT`);
+      console.log("[PortalArtistPosts] UNMOUNT", { mountId });
     };
   }, [mountId]);
 
@@ -547,7 +547,8 @@ export function usePortalArtistPostsController(
           nextCursor,
         });
 
-        console.log(`[PortalArtistPosts ${mountIdRef.current}] fetchPage`, {
+        console.log("[PortalArtistPosts] fetchPage", {
+          mountId: mountIdRef.current,
           nextCursor,
           pageSize,
           minVisibility,
@@ -572,8 +573,9 @@ export function usePortalArtistPostsController(
 
         if (filterAtCall !== postTypeFilter) {
           console.log(
-            `[PortalArtistPosts ${mountIdRef.current}] stale response ignored`,
+            "[PortalArtistPosts] stale response ignored",
             {
+              mountId: mountIdRef.current,
               filterAtCall,
               currentFilter: postTypeFilter,
               nextCursor,
@@ -585,8 +587,9 @@ export function usePortalArtistPostsController(
         const nextPosts = parsed.posts;
 
         console.log(
-          `[PortalArtistPosts ${mountIdRef.current}] fetchPage success`,
+          "[PortalArtistPosts] fetchPage success",
           {
+            mountId: mountIdRef.current,
             nextCursor,
             receivedPosts: nextPosts.length,
             nextCursorFromResponse: parsed.nextCursor,
@@ -613,8 +616,9 @@ export function usePortalArtistPostsController(
       } catch (error) {
         if (isAbortError(error)) {
           console.log(
-            `[PortalArtistPosts ${mountIdRef.current}] fetchPage aborted`,
+            "[PortalArtistPosts] fetchPage aborted",
             {
+              mountId: mountIdRef.current,
               nextCursor,
             },
           );
@@ -624,8 +628,9 @@ export function usePortalArtistPostsController(
         const message = fetchErrorMessage(error);
 
         console.log(
-          `[PortalArtistPosts ${mountIdRef.current}] fetchPage error`,
+          "[PortalArtistPosts] fetchPage error",
           {
+            mountId: mountIdRef.current,
             nextCursor,
             message,
           },
@@ -660,8 +665,9 @@ export function usePortalArtistPostsController(
     if (typeof window === "undefined") return;
 
     console.log(
-      `[PortalArtistPosts ${mountIdRef.current}] initial-load effect`,
+      "[PortalArtistPosts] initial-load effect",
       {
+        mountId: mountIdRef.current,
         postTypeFilter,
         pageSize,
         minVisibility,
@@ -681,7 +687,8 @@ export function usePortalArtistPostsController(
   }, [deepSlug, posts.length]);
 
   React.useEffect(() => {
-    console.log(`[PortalArtistPosts ${mountIdRef.current}] render-state`, {
+    console.log("[PortalArtistPosts] render-state", {
+      mountId: mountIdRef.current,
       loading,
       refreshing,
       postsLength: posts.length,
