@@ -578,6 +578,19 @@ export default function SessionChrome(props: SessionChromeProps) {
   .afTopBarRight { grid-column:2; justify-self:end; width:100%; display:flex; align-items:center; justify-content:flex-end; align-self:stretch; }
   .afTopBarRightInner { margin-left:auto; max-width:520px; height:100%; display:flex; flex-direction:column; justify-content:center; }
 }
+
+@media (max-width:340px) {
+  .afTopBarControls { column-gap:6px; }
+  .afTopBarLeft { gap:6px; }
+  .afTopBarLeft .afTopBarBtn { width:44px !important; height:44px !important; }
+  .afTopBarRight .afActivationAccountRow { gap:0 8px !important; }
+  .afTopBarRight .afActivationEmailInput {
+    height:30px !important;
+    padding:0 8px !important;
+    font-size:11px !important;
+    line-height:14px !important;
+  }
+}
       `}</style>
 
       <div className="afTopBar" style={{ position: "relative", zIndex: 5 }}>

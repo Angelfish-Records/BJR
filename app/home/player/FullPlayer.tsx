@@ -1942,6 +1942,7 @@ export default function FullPlayer(props: FullPlayerProps) {
           {albumTitle}
         </div>
         <div
+          className="afAlbumDescription"
           style={{
             maxWidth: 540,
             fontSize: 12,
@@ -2485,6 +2486,13 @@ export default function FullPlayer(props: FullPlayerProps) {
 
         @media (prefers-reduced-motion: reduce){
           .afEq i{ animation: none; }
+        }
+
+        @media (max-width: 340px){
+          .afAlbumDescription{
+            width: calc(100% - 16px);
+            box-sizing: border-box;
+          }
         }
 
                            .afTransportRow{

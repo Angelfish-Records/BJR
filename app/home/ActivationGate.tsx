@@ -1205,6 +1205,7 @@ function AccountControl(props: AccountControlProps) {
       style={{ margin: 0 }}
     >
       <div
+        className="afActivationAccountRow"
         style={{
           display: "flex",
           alignItems: "center",
@@ -1251,6 +1252,7 @@ function AccountControl(props: AccountControlProps) {
             >
               <input
                 ref={emailInputRef}
+                className="afActivationEmailInput"
                 type="email"
                 placeholder="Enter email for access"
                 value={email}
