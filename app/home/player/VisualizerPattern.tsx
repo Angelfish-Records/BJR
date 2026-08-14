@@ -363,8 +363,6 @@ export function VisualizerSnapshotCanvas(
     // Cache contexts + a backbuffer to avoid blanking on transient draw failures.
     const resources = createCanvasRenderResources();
 
-    let scheduler: FrameScheduler;
-
     const tick = () => {
 
       const dst = canvasRef.current;
@@ -423,11 +421,11 @@ export function VisualizerSnapshotCanvas(
       scheduler.schedule();
     };
 
-    scheduler = createFrameScheduler(() => fpsRef.current, tick);
+    const scheduler = createFrameScheduler(() => fpsRef.current, tick);
     scheduler.schedule();
 
     return scheduler.cancel;
-  }, [shouldRender, srcRef]);
+  }, [shouldRender, sizeRef, srcRef]);
 
   return (
     <canvas
@@ -498,8 +496,6 @@ function VisualizerRingGlowCanvas(
     if (!shouldRender) return;
 
     const resources = createCanvasRenderResources();
-
-    let scheduler: FrameScheduler;
 
     const tick = () => {
 
@@ -614,11 +610,11 @@ function VisualizerRingGlowCanvas(
       scheduler.schedule();
     };
 
-    scheduler = createFrameScheduler(() => fpsRef.current, tick);
+    const scheduler = createFrameScheduler(() => fpsRef.current, tick);
     scheduler.schedule();
 
     return scheduler.cancel;
-  }, [shouldRender, srcRef]);
+  }, [shouldRender, sizeRef, srcRef]);
 
   // CSS size is controlled by parent, but we set explicit dimensions for clarity
   const pad = ringPx + glowPx;
