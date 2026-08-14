@@ -1028,6 +1028,13 @@ export default function AudioEngine() {
     [getAudio],
   );
 
+  const discardInactiveDeck = React.useCallback((): void => {
+    const inactiveDeck = otherDeck(activeDeckRef.current);
+
+    standbyRef.current = null;
+    stopDeck(inactiveDeck);
+  }, [stopDeck]);
+
   const hardStopAll = React.useCallback(() => {
     try {
       tokenAbortRef.current?.abort();
@@ -1670,7 +1677,7 @@ export default function AudioEngine() {
         return false;
       }
 
-      if (args.seq !== loadSeq.current && args.reason === "active") {
+      if (args.seq !== loadSeq.current) {
         return false;
       }
 
@@ -1818,11 +1825,11 @@ export default function AudioEngine() {
         detail: `seq=${args.seq}`,
       });
 
-      stopDeck(args.deckId);
-
-      if (args.seq !== loadSeq.current && args.reason === "active") {
+      if (args.seq !== loadSeq.current) {
         return false;
       }
+
+      stopDeck(args.deckId);
 
       audio.crossOrigin = "anonymous";
       audio.preload =
@@ -2001,8 +2008,7 @@ export default function AudioEngine() {
       const attachKey = `${playbackId}:${pRef.current.reloadNonce}`;
 
       loadSeq.current += 1;
-      standbyRef.current = null;
-
+      discardInactiveDeck();
       stopDeck(activeDeck);
 
       audio.crossOrigin = "anonymous";
@@ -2082,7 +2088,7 @@ export default function AudioEngine() {
         },
       );
     },
-    [getAudio, getShareTokenFromLocation, stopDeck],
+    [discardInactiveDeck, getAudio, getShareTokenFromLocation, stopDeck],
   );
 
   React.useEffect(() => {
@@ -2134,16 +2140,16 @@ export default function AudioEngine() {
         return true;
       }
 
+      const seq = loadSeq.current;
       const ac = new AbortController();
+
       const token = await ensureTokenForTrack({
         track,
         signal: ac.signal,
         surfaceGate,
       });
 
-      if (!token) return false;
-
-      const seq = loadSeq.current;
+      if (!token || seq !== loadSeq.current) return false;
 
       const ok = await attachTrackToDeck({
         deckId,
@@ -2152,6 +2158,8 @@ export default function AudioEngine() {
         seq,
         reason: "standby",
       });
+
+      if (seq !== loadSeq.current) return false;
 
       const meta = metaByDeckRef.current[deckId];
 
@@ -2346,7 +2354,7 @@ export default function AudioEngine() {
 
     const seq = ++loadSeq.current;
 
-    standbyRef.current = null;
+    discardInactiveDeck();
     telemetrySessionIdRef.current = newPlaybackSessionId();
     telemetryShareAttributionRef.current = readQueueSharePlaybackAttribution(s);
 
@@ -2391,6 +2399,7 @@ export default function AudioEngine() {
     await playNewlyAttachedDeck(activeDeck, shouldPlayAttached);
   }, [
     attachTrackToDeck,
+    discardInactiveDeck,
     ensureTokenForTrack,
     getCachedTokenForPlaybackId,
     hardStopAll,

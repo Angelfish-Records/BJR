@@ -25,6 +25,8 @@ type CatalogueAlbum = {
   albumSlug: string | null;
   albumTitle: string | null;
   albumCatalogueId: string | null;
+  releaseAt: string | null;
+  embargoNote: string | null;
   coverUrl: string | null;
   tracks: CatalogueTrack[];
 
@@ -47,6 +49,8 @@ type CatalogueQueryResult = {
     albumSlug?: string | null;
     albumTitle?: string | null;
     albumCatalogueId?: string | null;
+    releaseAt?: string | null;
+    embargoNote?: string | null;
     artwork?: unknown;
     tracks?: AlbumDocTrack[];
   }>;
@@ -83,6 +87,8 @@ export async function GET() {
             "albumTitle": title,
             "albumSlug": slug.current,
             "albumCatalogueId": catalogueId,
+            releaseAt,
+            embargoNote,
             artwork,
             "tracks": tracks[]{
               recordingId,
@@ -132,6 +138,8 @@ export async function GET() {
           albumSlug: asTrimmedString(a?.albumSlug) || null,
           albumTitle: asTrimmedString(a?.albumTitle) || null,
           albumCatalogueId: asTrimmedString(a?.albumCatalogueId) || null,
+          releaseAt: asTrimmedString(a?.releaseAt) || null,
+          embargoNote: asTrimmedString(a?.embargoNote) || null,
           coverUrl,
           tracks: normTracks,
           recordingIds,

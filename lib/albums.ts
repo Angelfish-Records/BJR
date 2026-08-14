@@ -14,6 +14,7 @@ import {
   normalizeLyricCuesFromSanity,
 } from "@/lib/types";
 import { getRecordingPlayCountsByRecordingIds } from "@/lib/recordingListenTotals";
+import { isReleaseEmbargoed } from "@/lib/embargo";
 
 export type AlbumDocTrack = {
   recordingId: string;
@@ -539,10 +540,7 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
   // This remains outside the long-lived catalogue cache. An album must become
   // non-embargoed as its release timestamp passes, without a fresh publish.
   const releaseAt = doc.releaseAt ?? null;
-  const releaseAtMs = releaseAt ? Date.parse(releaseAt) : Number.NaN;
-  const isEmbargoedByDate = Boolean(
-    releaseAt && Number.isFinite(releaseAtMs) && releaseAtMs > Date.now(),
-  );
+  const isEmbargoedByDate = isReleaseEmbargoed(releaseAt);
 
   const embargoNote = normStr(doc.embargoNote) ?? null;
 

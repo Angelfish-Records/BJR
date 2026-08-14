@@ -20,6 +20,8 @@ import {
   gateResultFromPayload,
 } from "@/app/home/gating/fromPayload";
 import type { GatePayload } from "@/app/home/gating/gateTypes";
+import { isReleaseEmbargoed, resolveEmbargoNote } from "@/lib/embargo";
+import type { Tier } from "@/lib/types";
 
 type CatalogueOk = {
   ok: true;
@@ -28,6 +30,8 @@ type CatalogueOk = {
     albumSlug: string | null;
     albumTitle: string | null;
     albumCatalogueId: string | null;
+    releaseAt: string | null;
+    embargoNote: string | null;
     coverUrl?: string | null; // ✅ add (source from same place as FullPlayer)
     recordingIds: string[]; // legacy
     tracks?: Array<{
@@ -334,11 +338,21 @@ async function extractCoverTint(url: string): Promise<string | null> {
   return out;
 }
 
+function albumAccessId(
+  album: CatalogueOk["albums"][number],
+): string {
+  return (album.albumCatalogueId ?? album.albumId).trim();
+}
+
 function AlbumCard(
   props: Readonly<{
     a: CatalogueOk["albums"][number];
     label: string;
     search: string;
+    viewerTier: Tier;
+    viewerIsSignedIn: boolean;
+    hasShareToken: boolean;
+    embargoAccessAllowed: boolean | undefined;
     onOpenTrack: (
       event: React.MouseEvent<HTMLAnchorElement>,
       displayId: string,
@@ -353,6 +367,10 @@ function AlbumCard(
     a,
     label,
     search,
+    viewerTier,
+    viewerIsSignedIn,
+    hasShareToken,
+    embargoAccessAllowed,
     onOpenTrack,
     onPrefetchTrack,
     onPrefetchRoute,
@@ -384,6 +402,16 @@ function AlbumCard(
   const glowCol = tint
     ? borderGradient.replaceAll("0.45", "0.18")
     : "rgba(255,255,255,0.06)";
+  const isEmbargoed = isReleaseEmbargoed(a.releaseAt);
+  const hasEmbargoAccess = embargoAccessAllowed === true;
+  const disableAnonymousTracks =
+    isEmbargoed && !viewerIsSignedIn && !hasEmbargoAccess;
+  const showFriendEmbargoNote = Boolean(
+    isEmbargoed &&
+      viewerTier === "friend" &&
+      !hasEmbargoAccess &&
+      (!hasShareToken || embargoAccessAllowed === false),
+  );
 
   return (
     <div
@@ -451,6 +479,11 @@ function AlbumCard(
             <div className="text-2xl font-extrabold tracking-tight text-white leading-tight truncate">
               {label}
             </div>
+            {showFriendEmbargoNote ? (
+              <div className="mt-2 max-w-sm text-xs font-medium leading-5 text-white/65">
+                {resolveEmbargoNote(a.embargoNote)}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -464,6 +497,32 @@ function AlbumCard(
           const trackLabel = (t.title ?? "").trim() || displayId;
           const n =
             typeof t.trackNo === "number" && t.trackNo > 0 ? t.trackNo : i + 1;
+
+          const rowContent = (
+            <>
+              <span className="min-w-0 flex items-baseline gap-2">
+                <span className="w-6 shrink-0 text-[11px] opacity-40 tabular-nums">
+                  {n}
+                </span>
+                <span className="truncate">{trackLabel}</span>
+              </span>
+
+              <span className="text-xs opacity-45">Lyrics</span>
+            </>
+          );
+
+          if (disableAnonymousTracks) {
+            return (
+              <div
+                key={tid}
+                aria-disabled="true"
+                className="pointer-events-none flex cursor-default select-none items-baseline justify-between rounded-md bg-black/20 px-3 py-2 text-sm opacity-40"
+                title="Lyrics unavailable before release"
+              >
+                {rowContent}
+              </div>
+            );
+          }
 
           return (
             <Link
@@ -486,24 +545,12 @@ function AlbumCard(
                 onPrefetchRoute(buildTrackHref(displayId, search));
               }}
               onClick={(event) =>
-                onOpenTrack(
-                  event,
-                  displayId,
-                  tid,
-                  (a.albumCatalogueId ?? a.albumId).trim(),
-                )
+                onOpenTrack(event, displayId, tid, albumAccessId(a))
               }
               className="flex items-baseline justify-between rounded-md bg-black/20 px-3 py-2 text-sm hover:bg-white/10"
               title={displayId}
             >
-              <span className="min-w-0 flex items-baseline gap-2">
-                <span className="w-6 shrink-0 text-[11px] opacity-40 tabular-nums">
-                  {n}
-                </span>
-                <span className="truncate">{trackLabel}</span>
-              </span>
-
-              <span className="text-xs opacity-45">Lyrics</span>
+              {rowContent}
             </Link>
           );
         })}
@@ -655,6 +702,95 @@ function useCatalogueState(): CatalogueState {
   }, []);
 
   return { catalogue, catalogueErr, catalogueLoading };
+}
+
+type EmbargoAccessSnapshot = Readonly<{
+  contextKey: string;
+  allowedByAlbumAccessId: Record<string, boolean>;
+}>;
+
+function useEmbargoAccessAllowedByAlbumAccessId(
+  params: Readonly<{
+    catalogue: CatalogueOk | null;
+    authLoaded: boolean;
+    viewerIsSignedIn: boolean;
+    accessIdentityKey: string;
+    shareToken: string | null;
+  }>,
+): Readonly<Record<string, boolean>> {
+  const contextKey = `${params.accessIdentityKey}::st=${
+    params.shareToken ?? ""
+  }`;
+  const [snapshot, setSnapshot] = React.useState<EmbargoAccessSnapshot>({
+    contextKey: "",
+    allowedByAlbumAccessId: {},
+  });
+
+  React.useEffect(() => {
+    if (!params.catalogue || !params.authLoaded) return;
+    if (!params.viewerIsSignedIn && !params.shareToken) return;
+
+    const accessIds = Array.from(
+      new Set(
+        params.catalogue.albums
+          .filter((album) => isReleaseEmbargoed(album.releaseAt))
+          .map(albumAccessId)
+          .filter(Boolean),
+      ),
+    );
+
+    if (accessIds.length === 0) return;
+
+    let alive = true;
+
+    void Promise.all(
+      accessIds.map(async (accessId) => {
+        const request = {
+          catalogueId: accessId,
+          shareToken: params.shareToken,
+          accessIdentityKey: params.accessIdentityKey,
+        };
+
+        try {
+          const decision =
+            getCachedPlaybackAccessDecision(request) ??
+            (await fetchPlaybackAccessDecision(request));
+
+          return [accessId, decision.allowed] as const;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((entries) => {
+      if (!alive) return;
+
+      const allowedByAlbumAccessId: Record<string, boolean> = {};
+
+      for (const entry of entries) {
+        if (!entry) continue;
+        allowedByAlbumAccessId[entry[0]] = entry[1];
+      }
+
+      setSnapshot({
+        contextKey,
+        allowedByAlbumAccessId,
+      });
+    });
+
+    return () => {
+      alive = false;
+    };
+  }, [
+    contextKey,
+    params.accessIdentityKey,
+    params.authLoaded,
+    params.catalogue,
+    params.shareToken,
+    params.viewerIsSignedIn,
+  ]);
+
+  if (snapshot.contextKey !== contextKey) return {};
+  return snapshot.allowedByAlbumAccessId;
 }
 
 type LyricsState = Readonly<{
@@ -1112,6 +1248,10 @@ function CatalogueIndex(
     catalogueErr: string;
     catalogueLoading: boolean;
     search: string;
+    viewerTier: Tier;
+    viewerIsSignedIn: boolean;
+    hasShareToken: boolean;
+    embargoAccessAllowedByAlbumAccessId: Readonly<Record<string, boolean>>;
     onOpenTrack: (
       event: React.MouseEvent<HTMLAnchorElement>,
       displayId: string,
@@ -1127,6 +1267,10 @@ function CatalogueIndex(
     catalogueErr,
     catalogueLoading,
     search,
+    viewerTier,
+    viewerIsSignedIn,
+    hasShareToken,
+    embargoAccessAllowedByAlbumAccessId,
     onOpenTrack,
     onPrefetchTrack,
     onPrefetchRoute,
@@ -1158,6 +1302,10 @@ function CatalogueIndex(
         {albums.map((album) => {
           const label =
             album.albumTitle || album.albumSlug || album.albumId || "Album";
+          const accessId = albumAccessId(album);
+          const embargoAccessAllowed = accessId
+            ? embargoAccessAllowedByAlbumAccessId[accessId]
+            : undefined;
 
           return (
             <AlbumMasonryItem key={album.albumId}>
@@ -1165,6 +1313,10 @@ function CatalogueIndex(
                 a={album}
                 label={label}
                 search={search}
+                viewerTier={viewerTier}
+                viewerIsSignedIn={viewerIsSignedIn}
+                hasShareToken={hasShareToken}
+                embargoAccessAllowed={embargoAccessAllowed}
                 onOpenTrack={onOpenTrack}
                 onPrefetchTrack={onPrefetchTrack}
                 onPrefetchRoute={onPrefetchRoute}
@@ -1203,6 +1355,7 @@ export default function PortalExegesis() {
   } = useAuth();
   const { reportGate, clearGate } = useGateBroker();
   const { openMembershipModal } = useMembershipModal();
+  const { tier: viewerTier, isSignedIn: viewerIsSignedIn } = usePortalViewer();
   const accessIdentityKey = !authLoaded
     ? "clerk:loading"
     : isSignedIn
@@ -1216,6 +1369,14 @@ export default function PortalExegesis() {
     setIsReturningToIndex,
   } = useExegesisDisplayState(pathname);
   const { catalogue, catalogueErr, catalogueLoading } = useCatalogueState();
+  const embargoAccessAllowedByAlbumAccessId =
+    useEmbargoAccessAllowedByAlbumAccessId({
+      catalogue,
+      authLoaded,
+      viewerIsSignedIn,
+      accessIdentityKey,
+      shareToken,
+    });
   const { recordingIdByDisplayId, trackMetaByRecordingId } = React.useMemo(
     () => buildCatalogueIndexes(catalogue),
     [catalogue],
@@ -1418,6 +1579,12 @@ export default function PortalExegesis() {
       catalogueErr={catalogueErr}
       catalogueLoading={catalogueLoading}
       search={search}
+      viewerTier={viewerTier}
+      viewerIsSignedIn={viewerIsSignedIn}
+      hasShareToken={Boolean(shareToken)}
+      embargoAccessAllowedByAlbumAccessId={
+        embargoAccessAllowedByAlbumAccessId
+      }
       onOpenTrack={openTrack}
       onPrefetchTrack={prefetchTrackForViewer}
       onPrefetchRoute={prefetchRoute}

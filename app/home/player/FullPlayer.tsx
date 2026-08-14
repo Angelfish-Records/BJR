@@ -23,6 +23,7 @@ import type {
 import { primeLyricsFromAlbumBundle } from "./lyrics/ensureLyricsForTrack";
 import { deriveShareContext, shareAlbum, shareTrack } from "./share";
 import { PatternRingGlow } from "./VisualizerPattern";
+import { resolveEmbargoNote } from "@/lib/embargo";
 
 const LIVE_LISTENER_COUNT_ENABLED =
   process.env.NEXT_PUBLIC_LIVE_LISTENER_COUNT_ENABLED !== "false";
@@ -861,9 +862,7 @@ function EmbargoNotices(
     shareTokenRedemptionLimit: string | null;
   }>,
 ) {
-  const note =
-    props.embargoNote?.trim() ||
-    "Playback disabled pre-release. Patrons have instant early access.";
+  const note = resolveEmbargoNote(props.embargoNote);
   const hasShareTokenDetails = Boolean(
     props.shareTokenExpiryLabel || props.shareTokenRedemptionLimit,
   );

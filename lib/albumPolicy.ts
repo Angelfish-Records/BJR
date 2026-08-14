@@ -1,6 +1,7 @@
 // web/lib/albumPolicy.ts
 import "server-only";
 import { client } from "@/sanity/lib/client";
+import { isReleaseEmbargoed } from "@/lib/embargo";
 
 export type TierName = "friend" | "patron" | "partner";
 
@@ -77,8 +78,5 @@ export function isEmbargoed(
   policy: AlbumPolicy | null,
   nowMs = Date.now(),
 ): boolean {
-  if (!policy?.releaseAt) return false;
-  const t = Date.parse(policy.releaseAt);
-  if (!Number.isFinite(t)) return false;
-  return nowMs < t;
+  return isReleaseEmbargoed(policy?.releaseAt, nowMs);
 }
