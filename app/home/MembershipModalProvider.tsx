@@ -60,13 +60,20 @@ export function MembershipModalProvider(
   const [isMembershipOpen, setIsMembershipOpen] =
     React.useState(false);
 
+  const openMembershipModal = React.useCallback(() => {
+    setIsMembershipOpen(true);
+  }, []);
+  const closeMembershipModal = React.useCallback(() => {
+    setIsMembershipOpen(false);
+  }, []);
+
   const value = React.useMemo<Ctx>(
     () => ({
       isMembershipOpen,
-      openMembershipModal: () => setIsMembershipOpen(true),
-      closeMembershipModal: () => setIsMembershipOpen(false),
+      openMembershipModal,
+      closeMembershipModal,
     }),
-    [isMembershipOpen],
+    [closeMembershipModal, isMembershipOpen, openMembershipModal],
   );
 
   return (

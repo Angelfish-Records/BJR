@@ -8,8 +8,13 @@ import { useAuth } from "@clerk/nextjs";
 import ExegesisTrackClient from "@/app/(site)/exegesis/[displayId]/ExegesisTrackClient";
 import ExegesisTrackLoadingShell from "@/app/(site)/exegesis/[displayId]/components/ExegesisTrackLoadingShell";
 import ExegesisInlineGateOverlay from "@/app/(site)/exegesis/[displayId]/components/ExegesisInlineGateOverlay";
+import { useMembershipModal } from "@/app/home/MembershipModalProvider";
 import { usePortalViewer } from "@/app/home/PortalViewerProvider";
 import { useGateBroker } from "@/app/home/gating/GateBroker";
+import {
+  fetchPlaybackAccessDecision,
+  getCachedPlaybackAccessDecision,
+} from "@/app/home/player/playbackAccessClient";
 import {
   gatePayloadFromUnknown,
   gateResultFromPayload,
@@ -22,6 +27,7 @@ type CatalogueOk = {
     albumId: string;
     albumSlug: string | null;
     albumTitle: string | null;
+    albumCatalogueId: string | null;
     coverUrl?: string | null; // ✅ add (source from same place as FullPlayer)
     recordingIds: string[]; // legacy
     tracks?: Array<{
@@ -337,6 +343,7 @@ function AlbumCard(
       event: React.MouseEvent<HTMLAnchorElement>,
       displayId: string,
       recordingId: string,
+      albumAccessId: string,
     ) => void;
     onPrefetchTrack: (recordingId: string) => void;
     onPrefetchRoute: (href: string) => void;
@@ -478,7 +485,14 @@ function AlbumCard(
                 onPrefetchTrack(tid);
                 onPrefetchRoute(buildTrackHref(displayId, search));
               }}
-              onClick={(event) => onOpenTrack(event, displayId, tid)}
+              onClick={(event) =>
+                onOpenTrack(
+                  event,
+                  displayId,
+                  tid,
+                  (a.albumCatalogueId ?? a.albumId).trim(),
+                )
+              }
               className="flex items-baseline justify-between rounded-md bg-black/20 px-3 py-2 text-sm hover:bg-white/10"
               title={displayId}
             >
@@ -1102,6 +1116,7 @@ function CatalogueIndex(
       event: React.MouseEvent<HTMLAnchorElement>,
       displayId: string,
       recordingId: string,
+      albumAccessId: string,
     ) => void;
     onPrefetchTrack: (recordingId: string) => void;
     onPrefetchRoute: (href: string) => void;
@@ -1187,6 +1202,7 @@ export default function PortalExegesis() {
     sessionId,
   } = useAuth();
   const { reportGate, clearGate } = useGateBroker();
+  const { openMembershipModal } = useMembershipModal();
   const accessIdentityKey = !authLoaded
     ? "clerk:loading"
     : isSignedIn
@@ -1267,16 +1283,68 @@ export default function PortalExegesis() {
     void router.prefetch(target);
   }
 
-  function openTrack(
+  async function openTrack(
     event: React.MouseEvent<HTMLAnchorElement>,
     displayIdNext: string,
     recordingIdNext: string,
+    albumAccessId: string,
   ) {
     event.preventDefault();
 
     const did = (displayIdNext ?? "").trim();
     const rid = (recordingIdNext ?? "").trim();
+    const accessId = (albumAccessId ?? "").trim();
     if (!did || !rid) return;
+
+    if (accessId) {
+      const accessRequest = {
+        catalogueId: accessId,
+        shareToken,
+        accessIdentityKey,
+      };
+
+      try {
+        const decision =
+          getCachedPlaybackAccessDecision(accessRequest) ??
+          (await fetchPlaybackAccessDecision(accessRequest));
+
+        if (decision.embargoed && !decision.allowed) {
+          clearGate({ domain: "exegesis" });
+
+          if (decision.action === "subscribe") {
+            if (isSignedIn) {
+              openMembershipModal();
+            } else {
+              reportGate({
+                code: "EMBARGO",
+                action: "subscribe",
+                message:
+                  decision.reason ??
+                  "This album is not released yet. Upgrade for early access.",
+                domain: "exegesis",
+                uiMode: "spotlight",
+                correlationId: decision.corr,
+              });
+            }
+
+            return;
+          }
+
+          reportGate({
+            code: "EMBARGO",
+            action: decision.action ?? "wait",
+            message: decision.reason ?? "This album is not released yet.",
+            domain: "exegesis",
+            uiMode: "global",
+            correlationId: decision.corr,
+          });
+          return;
+        }
+      } catch {
+        // The protected lyrics/thread APIs remain authoritative. A transient
+        // client preflight failure must not strand navigation to released lyrics.
+      }
+    }
 
     const nextHref = buildTrackHref(did, search);
     const currentHref = `${pathname}${search}`;

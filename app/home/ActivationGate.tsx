@@ -1687,16 +1687,17 @@ export default function ActivationGate(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, phase]);
 
-  // Modal: billing dropdown isn't used (keep state clean)
+  // Placement only owns local presentation state. Membership modal visibility
+  // is global and must not be cleared by another ActivationGate instance mounting.
   useEffect(() => {
-    if (placement === "modal") closeMembershipModal();
     setCancelTipOpen(false);
-  }, [placement, closeMembershipModal]);
+  }, [placement]);
 
-  // Close billing if auth state changes
+  // A signed-out transition invalidates membership controls. canManageBilling only
+  // controls subscription-management affordances; it must not close plan selection.
   useEffect(() => {
-    if (!isActive || !canManageBilling) closeMembershipModal();
-  }, [isActive, canManageBilling, closeMembershipModal]);
+    if (!isActive) closeMembershipModal();
+  }, [isActive, closeMembershipModal]);
 
   // Close membership modal via Escape (but don't interfere with OTP)
   useEffect(() => {
