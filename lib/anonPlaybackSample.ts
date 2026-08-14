@@ -123,7 +123,7 @@ async function readSampleState(
   return row ? rowToSample(row) : null;
 }
 
-async function claimExpiredOrEmptySample(params: {
+async function claimRequestedSample(params: {
   anonId: string;
   albumId: string;
   tracks: AnonPlaybackSampleTrack[];
@@ -155,7 +155,6 @@ async function claimExpiredOrEmptySample(params: {
       tracks = excluded.tracks,
       expires_at = excluded.expires_at,
       updated_at = now()
-    where anon_playback_sample_state.expires_at <= now()
     returning
       sample_id,
       album_id,
@@ -169,35 +168,15 @@ async function claimExpiredOrEmptySample(params: {
   return readSampleState(params.anonId);
 }
 
-function buildSampleTracks(params: {
+function findRequestedSampleTrack(params: {
   tracks: AnonPlaybackSampleTrack[];
-  startPlaybackId: string;
-  maxTracks: number;
-}): AnonPlaybackSampleTrack[] | null {
-  const startIndex = params.tracks.findIndex(
-    (track) => track.playbackId === params.startPlaybackId,
+  requestedPlaybackId: string;
+}): AnonPlaybackSampleTrack | null {
+  return (
+    params.tracks.find(
+      (track) => track.playbackId === params.requestedPlaybackId,
+    ) ?? null
   );
-
-  if (startIndex < 0) return null;
-
-  const ordered = [
-    ...params.tracks.slice(startIndex),
-    ...params.tracks.slice(0, startIndex),
-  ];
-
-  const out: AnonPlaybackSampleTrack[] = [];
-  const seenPlaybackIds = new Set<string>();
-
-  for (const track of ordered) {
-    if (seenPlaybackIds.has(track.playbackId)) continue;
-
-    seenPlaybackIds.add(track.playbackId);
-    out.push(track);
-
-    if (out.length >= params.maxTracks) break;
-  }
-
-  return out.length > 0 ? out : null;
 }
 
 export async function resolveAnonPlaybackSample(params: {
@@ -214,46 +193,36 @@ export async function resolveAnonPlaybackSample(params: {
     return { ok: false, reason: "invalid_start" };
   }
 
-  const existing = await readSampleState(anonId);
-
-  if (existing && isLive(existing)) {
-    if (
-      existing.albumId === albumId &&
-      includesPlaybackId(existing, requestedPlaybackId)
-    ) {
-      return { ok: true, sample: existing };
-    }
-
-    return { ok: false, reason: "sample_reserved" };
-  }
-
+  // Completion, not selection, consumes anonymous playback capacity.
+  // Check the authoritative distinct-completion ledger on every issuance.
   const distinctCompleted = await countAnonDistinctCompletedTracks({
     anonId,
     sinceDays: ANON_PLAYBACK_POLICY.windowDays,
   });
 
-  const remainingTracks =
-    ANON_PLAYBACK_POLICY.distinctTrackCap - distinctCompleted;
-
-  if (remainingTracks <= 0) {
+  if (distinctCompleted >= ANON_PLAYBACK_POLICY.distinctTrackCap) {
     return { ok: false, reason: "cap_reached" };
   }
 
-  const candidateTracks = buildSampleTracks({
+  const requestedTrack = findRequestedSampleTrack({
     tracks: params.tracks,
-    startPlaybackId: requestedPlaybackId,
-    maxTracks: remainingTracks,
+    requestedPlaybackId,
   });
 
-  if (!candidateTracks) {
+  if (!requestedTrack) {
     return { ok: false, reason: "invalid_start" };
   }
+
+  // Only the track actually requested is signed into this anonymous sample.
+  // Skipping it does not consume a cap slot; qualification happens separately
+  // through the >=90% completion ledger.
+  const candidateTracks = [requestedTrack];
 
   const expiresAt = new Date(
     Date.now() + ANON_PLAYBACK_POLICY.sampleSessionTtlSeconds * 1000,
   );
 
-  const claimed = await claimExpiredOrEmptySample({
+  const claimed = await claimRequestedSample({
     anonId,
     albumId,
     tracks: candidateTracks,

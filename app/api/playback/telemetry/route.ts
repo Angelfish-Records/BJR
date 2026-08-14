@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { sql } from "@vercel/postgres";
 import {
+  countAnonDistinctCompletedTracks,
   logPlaybackTelemetryComplete,
   logPlaybackTelemetryPlay,
   logPlaybackTelemetryProgress,
@@ -18,11 +19,17 @@ import {
 import { markOverlayAnnouncedForAwardedBadges } from "@/lib/badgeAwardAnnouncementServer";
 import { ensureAnonId, persistAnonId } from "@/lib/anon";
 import {
+  ANON_PLAYBACK_POLICY,
+  hasReachedAnonPlaybackCap,
+} from "@/lib/anonPlaybackPolicy";
+import {
   recordShareTokenPlaybackEvent,
   resolveShareTokenPlaybackContext,
 } from "@/lib/shareTokenPlaybackContext";
 
 type PlaybackTelemetryEvent = "play" | "progress" | "complete";
+
+const QUALIFIED_COMPLETION_RATIO = 0.9;
 
 type PlaybackTelemetryRequest = {
   event?: PlaybackTelemetryEvent;
@@ -532,6 +539,59 @@ type TelemetryProcessingParams = NormalizedPlaybackTelemetry & {
   occurredAtIso: string;
 };
 
+type AnonymousPlaybackCapState = {
+  anonymousCapReached: boolean;
+  cap: {
+    used: number;
+    max: number;
+    windowDays: number;
+  };
+};
+
+function isQualifiedCompletion(
+  telemetry: NormalizedPlaybackTelemetry,
+): boolean {
+  if (telemetry.event !== "complete") return true;
+
+  const durationMs = telemetry.durationMs ?? 0;
+
+  return (
+    durationMs > 0 &&
+    telemetry.progressMs / durationMs >= QUALIFIED_COMPLETION_RATIO
+  );
+}
+
+async function resolveAnonymousPlaybackCapState(params: {
+  memberId: string | null;
+  hasShareAttribution: boolean;
+  telemetry: NormalizedPlaybackTelemetry;
+  anonId: string;
+}): Promise<AnonymousPlaybackCapState | null> {
+  if (
+    params.memberId ||
+    params.hasShareAttribution ||
+    params.telemetry.event !== "complete"
+  ) {
+    return null;
+  }
+
+  const used = await countAnonDistinctCompletedTracks({
+    anonId: params.anonId,
+    sinceDays: ANON_PLAYBACK_POLICY.windowDays,
+  });
+
+  return {
+    anonymousCapReached: hasReachedAnonPlaybackCap({
+      distinctCompletedTracks: used,
+    }),
+    cap: {
+      used,
+      max: ANON_PLAYBACK_POLICY.distinctTrackCap,
+      windowDays: ANON_PLAYBACK_POLICY.windowDays,
+    },
+  };
+}
+
 function telemetryResponse(
   body: Record<string, unknown>,
   status: number,
@@ -853,6 +913,19 @@ export async function POST(req: NextRequest) {
   }
 
   const telemetry = normalized.value;
+
+  if (!isQualifiedCompletion(telemetry)) {
+    return telemetryResponse(
+      {
+        ok: true,
+        ignored: true,
+        reason: "completion_below_threshold",
+      },
+      200,
+      correlationId,
+    );
+  }
+
   const { userId } = await auth();
   const memberId = userId ? await getMemberIdByClerkUserId(userId) : null;
   const { anonId, isNew: isNewAnonId } = ensureAnonId(req);
@@ -896,8 +969,19 @@ export async function POST(req: NextRequest) {
   });
 
   if (!inserted) {
+    const anonymousCapState = await resolveAnonymousPlaybackCapState({
+      memberId,
+      hasShareAttribution: shareAttribution !== null,
+      telemetry,
+      anonId,
+    });
+
     return telemetryResponseWithAnon(
-      { ok: true, deduped: true },
+      {
+        ok: true,
+        deduped: true,
+        ...(anonymousCapState ?? {}),
+      },
       200,
       correlationId,
       anonId,
@@ -920,8 +1004,19 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  const anonymousCapState = await resolveAnonymousPlaybackCapState({
+    memberId,
+    hasShareAttribution: shareAttribution !== null,
+    telemetry,
+    anonId,
+  });
+
   return telemetryResponseWithAnon(
-    { ok: true, newlyAwardedBadges },
+    {
+      ok: true,
+      newlyAwardedBadges,
+      ...(anonymousCapState ?? {}),
+    },
     200,
     correlationId,
     anonId,

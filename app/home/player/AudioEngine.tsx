@@ -777,6 +777,7 @@ export default function AudioEngine() {
     expiresAtMs: number;
     playbackIds: ReadonlySet<string>;
   } | null>(null);
+  const anonymousCapReachedRef = React.useRef(false);
 
   const engineBlockedRef = React.useRef(false);
   const lastPlaybackGateRef = React.useRef<GatePayload | null>(null);
@@ -1052,6 +1053,32 @@ export default function AudioEngine() {
     stopDeck(inactiveDeck);
   }, [stopDeck]);
 
+  const revokeAnonymousFuturePlaybackAuthority = React.useCallback((): void => {
+    anonymousCapReachedRef.current = true;
+
+    try {
+      albumSessionAbortRef.current?.abort();
+    } catch {}
+    albumSessionAbortRef.current = null;
+
+    try {
+      tokenAbortRef.current?.abort();
+    } catch {}
+    tokenAbortRef.current = null;
+
+    // Invalidate asynchronous standby attachment work, but deliberately leave
+    // the currently playing active deck untouched so the third qualified track
+    // may finish normally.
+    loadSeq.current += 1;
+
+    albumSessionCacheRef.current.clear();
+    albumSessionInFlightRef.current.clear();
+    tokenCacheRef.current.clear();
+    anonSampleSessionRef.current = null;
+
+    discardInactiveDeck();
+  }, [discardInactiveDeck]);
+
   const hardStopAll = React.useCallback(() => {
     try {
       tokenAbortRef.current?.abort();
@@ -1100,6 +1127,10 @@ export default function AudioEngine() {
         return false;
       }
 
+      if (args.mode === "sample" && anonymousCapReachedRef.current) {
+        return false;
+      }
+
       if (args.mode === "sample") {
         tokenCacheRef.current.clear();
         albumSessionCacheRef.current.clear();
@@ -1144,6 +1175,10 @@ export default function AudioEngine() {
         isUserLoaded && isSignedIn !== true && !shareToken;
 
       if (isAnonymousWithoutShare) {
+        if (anonymousCapReachedRef.current) {
+          return null;
+        }
+
         const sample = anonSampleSessionRef.current;
 
         if (
@@ -2896,6 +2931,26 @@ export default function AudioEngine() {
             announceBadges(badges);
           }
 
+          const anonymousCapReached =
+            json &&
+            typeof json === "object" &&
+            "anonymousCapReached" in json &&
+            (json as { anonymousCapReached?: unknown }).anonymousCapReached ===
+              true;
+
+          if (anonymousCapReached) {
+            revokeAnonymousFuturePlaybackAuthority();
+
+            sendAudioDebug({
+              event: "anonymous-qualified-cap-authority-revoked",
+              albumId: pRef.current.queueContextId ?? null,
+              recordingId: payload.recordingId,
+              playbackId: pRef.current.current?.muxPlaybackId ?? null,
+              source: "AudioEngine",
+              detail: "current-track-preserved;future-anonymous-authority-cleared",
+            });
+          }
+
           return response.ok;
         })
         .catch(() => false);
@@ -3818,6 +3873,7 @@ export default function AudioEngine() {
     prepareStandbyForTrack,
     prefetchCurrentQueueAlbumSession,
     promoteStandby,
+    revokeAnonymousFuturePlaybackAuthority,
   ]);
 
   React.useEffect(() => {
