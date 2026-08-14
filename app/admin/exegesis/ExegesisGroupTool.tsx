@@ -453,6 +453,46 @@ function GroupList(props: GroupListProps) {
   });
 }
 
+function activeGroupLabelFor(
+  activeGroup: DerivedGroup | null,
+  groupOrdinalByKey: Record<string, number>,
+): string | null {
+  if (!activeGroup) return null;
+
+  const ordinal = groupOrdinalByKey[activeGroup.key];
+  return ordinal ? `Group ${ordinal}` : null;
+}
+
+function LyricsTechnicalDetails(
+  props: Readonly<{
+    lyrics: LyricsApiOk | null;
+    show: boolean;
+  }>,
+) {
+  if (!props.lyrics || !props.show) return null;
+
+  return (
+    <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 text-xs opacity-50">
+      <span className="break-all">{props.lyrics.recordingId}</span>
+      <span>·</span>
+      <span>lyrics v{props.lyrics.version}</span>
+      {props.lyrics.geniusUrl ? (
+        <>
+          <span>·</span>
+          <a
+            className="underline underline-offset-2 opacity-80 hover:opacity-95"
+            href={props.lyrics.geniusUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Genius
+          </a>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 export default function ExegesisGroupTool() {
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
@@ -864,12 +904,10 @@ export default function ExegesisGroupTool() {
       recordingIdInput.trim() === loadedRecordingId,
   );
   const hasSelection = selectedKeys.length > 0;
-  const activeGroupOrdinal = activeGroup
-    ? groupOrdinalByKey[activeGroup.key] ?? null
-    : null;
-  const activeGroupLabel = activeGroupOrdinal
-    ? `Group ${activeGroupOrdinal}`
-    : null;
+  const activeGroupLabel = activeGroupLabelFor(
+    activeGroup,
+    groupOrdinalByKey,
+  );
   const knownRecordingIdsStatus = catalogueStatusText(
     knownIdsBusy,
     knownIdsErr,
@@ -945,26 +983,10 @@ export default function ExegesisGroupTool() {
         <div className="mt-3 break-words rounded-md bg-white/5 p-3 text-sm">{err}</div>
       ) : null}
 
-      {lyrics && showTechnicalDetails ? (
-        <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 text-xs opacity-50">
-          <span className="break-all">{lyrics.recordingId}</span>
-          <span>·</span>
-          <span>lyrics v{lyrics.version}</span>
-          {lyrics.geniusUrl ? (
-            <>
-              <span>·</span>
-              <a
-                className="underline underline-offset-2 opacity-80 hover:opacity-95"
-                href={lyrics.geniusUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Genius
-              </a>
-            </>
-          ) : null}
-        </div>
-      ) : null}
+      <LyricsTechnicalDetails
+        lyrics={lyrics}
+        show={showTechnicalDetails}
+      />
 
       {lyrics ? (
         <div className="mt-4 flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl bg-black/15 p-3">

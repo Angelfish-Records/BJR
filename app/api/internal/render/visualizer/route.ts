@@ -338,6 +338,23 @@ function resolveLyricDirectionsAsset(
   return asset;
 }
 
+function assertPromoSettings(
+  body: RenderRequest,
+  textMode: TextRenderMode,
+): void {
+  if (textMode !== "promo") return;
+
+  if (!body.promoText?.trim()) {
+    throw new Error("promoText is required when textMode is promo");
+  }
+
+  if (body.startSec === undefined || body.endSec === undefined) {
+    throw new Error(
+      "Promo exports require both startSec and endSec",
+    );
+  }
+}
+
 function assertRenderSettings(body: RenderRequest): void {
   const textMode = body.textMode ?? "lyrics";
 
@@ -388,17 +405,7 @@ function assertRenderSettings(body: RenderRequest): void {
     throw new Error("endSec must be greater than startSec");
   }
 
-  if (textMode === "promo") {
-    if (!body.promoText?.trim()) {
-      throw new Error("promoText is required when textMode is promo");
-    }
-
-    if (body.startSec === undefined || body.endSec === undefined) {
-      throw new Error(
-        "Promo exports require both startSec and endSec",
-      );
-    }
-  }
+  assertPromoSettings(body, textMode);
 }
 
 export async function GET(req: Request): Promise<NextResponse> {

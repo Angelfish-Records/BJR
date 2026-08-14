@@ -454,14 +454,17 @@ function DownloadFormatSelector(
         Download format
       </div>
 
-      <div
-        role="group"
+      <fieldset
         aria-label="Download format"
         style={{
           display: "grid",
           gridTemplateColumns: `repeat(${assets.length}, minmax(0, 1fr))`,
           gap: 8,
           width: "100%",
+          minWidth: 0,
+          margin: 0,
+          padding: 0,
+          border: 0,
         }}
       >
         {assets.map(({ asset }) => {
@@ -520,7 +523,7 @@ function DownloadFormatSelector(
             </button>
           );
         })}
-      </div>
+      </fieldset>
     </div>
   );
 }

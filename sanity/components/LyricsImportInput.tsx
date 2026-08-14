@@ -278,6 +278,24 @@ function makeKey() {
   throw new Error("Unable to create secure lyrics import key");
 }
 
+function identityImportStatus(
+  preservedExistingKeys: boolean,
+  existingCueCount: number,
+  addedCueCount: number,
+): string {
+  if (!preservedExistingKeys) return "";
+
+  const preserved =
+    ` Preserved all ${existingCueCount} existing Exegesis line identities.`;
+
+  if (addedCueCount === 0) return preserved;
+
+  const identityLabel =
+    addedCueCount === 1 ? "line identity" : "line identities";
+
+  return `${preserved} Created ${addedCueCount} new ${identityLabel}.`;
+}
+
 export default function LyricsImportInput(props: ArrayOfObjectsInputProps) {
   const { value, onChange } = props;
 
@@ -343,15 +361,11 @@ export default function LyricsImportInput(props: ArrayOfObjectsInputProps) {
       reconciled.cues.length - existingCues.length,
     );
 
-    const identityStatus = reconciled.preservedExistingKeys
-      ? ` Preserved all ${existingCues.length} existing Exegesis line identities.${
-          addedCueCount > 0
-            ? ` Created ${addedCueCount} new ${
-                addedCueCount === 1 ? "line identity" : "line identities"
-              }.`
-            : ""
-        }`
-      : "";
+    const identityStatus = identityImportStatus(
+      reconciled.preservedExistingKeys,
+      existingCues.length,
+      addedCueCount,
+    );
 
     setStatus(`Imported ${cues.length} cues.${extra}${identityStatus}`);
   }, [importText, onChange, value]);

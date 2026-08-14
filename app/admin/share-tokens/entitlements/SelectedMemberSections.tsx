@@ -328,6 +328,76 @@ function grantModeFromFields(
   return "";
 }
 
+function SubscriptionAccessSection(
+  props: Readonly<{
+    hasStripeCustomer: boolean;
+    reconcileBusy: boolean;
+    onReconcileStripe: () => Promise<void>;
+  }>,
+) {
+  const reconcileDisabled =
+    !props.hasStripeCustomer || props.reconcileBusy;
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 8,
+        paddingTop: 14,
+        borderTop: "1px solid rgba(255,255,255,0.08)",
+      }}
+    >
+      <div>
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 800,
+            opacity: 0.78,
+          }}
+        >
+          Subscription access
+        </div>
+        <div
+          style={{
+            marginTop: 3,
+            maxWidth: 620,
+            fontSize: 11,
+            lineHeight: 1.45,
+            opacity: 0.52,
+          }}
+        >
+          Re-check this member&apos;s Stripe subscriptions and refresh
+          subscription-derived grants. This does not reconcile one-off album
+          purchases.
+        </div>
+      </div>
+
+      <div>
+        <button
+          type="button"
+          onClick={() => {
+            void props.onReconcileStripe();
+          }}
+          disabled={reconcileDisabled}
+          style={{
+            ...subtleButtonStyle,
+            opacity: reconcileDisabled ? 0.45 : 1,
+            cursor: reconcileDisabled ? "default" : "pointer",
+          }}
+        >
+          {props.reconcileBusy ? "Syncing…" : "Sync subscription access"}
+        </button>
+      </div>
+
+      {!props.hasStripeCustomer ? (
+        <div style={{ fontSize: 11, opacity: 0.46 }}>
+          No Stripe customer is linked to this member.
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ManualOverrideSection(
   props: Readonly<{
     albums: AlbumForScope[];
@@ -603,68 +673,11 @@ function ManualOverrideSection(
             </div>
           </div>
 
-          <div
-            style={{
-              display: "grid",
-              gap: 8,
-              paddingTop: 14,
-              borderTop: "1px solid rgba(255,255,255,0.08)",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 800,
-                  opacity: 0.78,
-                }}
-              >
-                Subscription access
-              </div>
-              <div
-                style={{
-                  marginTop: 3,
-                  maxWidth: 620,
-                  fontSize: 11,
-                  lineHeight: 1.45,
-                  opacity: 0.52,
-                }}
-              >
-                Re-check this member&apos;s Stripe subscriptions and
-                refresh subscription-derived grants. This does not
-                reconcile one-off album purchases.
-              </div>
-            </div>
-
-            <div>
-              <button
-                type="button"
-                onClick={() => {
-                  void props.onReconcileStripe();
-                }}
-                disabled={!hasStripeCustomer || props.reconcileBusy}
-                style={{
-                  ...subtleButtonStyle,
-                  opacity:
-                    !hasStripeCustomer || props.reconcileBusy ? 0.45 : 1,
-                  cursor:
-                    !hasStripeCustomer || props.reconcileBusy
-                      ? "default"
-                      : "pointer",
-                }}
-              >
-                {props.reconcileBusy
-                  ? "Syncing…"
-                  : "Sync subscription access"}
-              </button>
-            </div>
-
-            {!hasStripeCustomer ? (
-              <div style={{ fontSize: 11, opacity: 0.46 }}>
-                No Stripe customer is linked to this member.
-              </div>
-            ) : null}
-          </div>
+          <SubscriptionAccessSection
+            hasStripeCustomer={hasStripeCustomer}
+            reconcileBusy={props.reconcileBusy}
+            onReconcileStripe={props.onReconcileStripe}
+          />
         </div>
       ) : null}
     </div>

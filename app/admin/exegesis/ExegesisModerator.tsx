@@ -410,6 +410,88 @@ type CommentCardProps = Readonly<{
   ) => Promise<void>;
 }>;
 
+type CommentActionsProps = Readonly<
+  Pick<
+    CommentCardProps,
+    "row" | "trackMeta" | "disabled" | "onHide" | "onDelete" | "onPin"
+  > & {
+    isRoot: boolean;
+  }
+>;
+
+function CommentActions(props: CommentActionsProps) {
+  const { row } = props;
+
+  return (
+    <div className="mt-4 flex flex-wrap gap-2">
+      <a
+        href={commentHref(row, props.trackMeta)}
+        target="_blank"
+        rel="noreferrer"
+        className={BUTTON_CLASS}
+      >
+        Open comment
+      </a>
+
+      {row.status === "live" ? (
+        <button
+          type="button"
+          className={BUTTON_CLASS}
+          disabled={props.disabled}
+          onClick={() => {
+            void props.onHide(row.id, "hidden");
+          }}
+        >
+          Hide
+        </button>
+      ) : null}
+
+      {row.status === "hidden" ? (
+        <button
+          type="button"
+          className={BUTTON_CLASS}
+          disabled={props.disabled}
+          onClick={() => {
+            void props.onHide(row.id, "live");
+          }}
+        >
+          Unhide
+        </button>
+      ) : null}
+
+      {props.isRoot && row.status !== "deleted" ? (
+        <button
+          type="button"
+          className={BUTTON_CLASS}
+          disabled={props.disabled}
+          onClick={() => {
+            void props.onPin(
+              row.recordingId,
+              row.groupKey,
+              row.pinned ? null : row.id,
+            );
+          }}
+        >
+          {row.pinned ? "Unpin" : "Pin thread"}
+        </button>
+      ) : null}
+
+      {row.status !== "deleted" ? (
+        <button
+          type="button"
+          className={DANGER_BUTTON_CLASS}
+          disabled={props.disabled}
+          onClick={() => {
+            void props.onDelete([row.id]);
+          }}
+        >
+          Delete
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function CommentCard(props: CommentCardProps) {
   const { row } = props;
   const subtitle = trackSubtitle(row.recordingId, props.trackMeta);
@@ -491,72 +573,15 @@ function CommentCard(props: CommentCardProps) {
             </span>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            <a
-              href={commentHref(row, props.trackMeta)}
-              target="_blank"
-              rel="noreferrer"
-              className={BUTTON_CLASS}
-            >
-              Open comment
-            </a>
-
-            {row.status === "live" ? (
-              <button
-                type="button"
-                className={BUTTON_CLASS}
-                disabled={props.disabled}
-                onClick={() => {
-                  void props.onHide(row.id, "hidden");
-                }}
-              >
-                Hide
-              </button>
-            ) : null}
-
-            {row.status === "hidden" ? (
-              <button
-                type="button"
-                className={BUTTON_CLASS}
-                disabled={props.disabled}
-                onClick={() => {
-                  void props.onHide(row.id, "live");
-                }}
-              >
-                Unhide
-              </button>
-            ) : null}
-
-            {isRoot && row.status !== "deleted" ? (
-              <button
-                type="button"
-                className={BUTTON_CLASS}
-                disabled={props.disabled}
-                onClick={() => {
-                  void props.onPin(
-                    row.recordingId,
-                    row.groupKey,
-                    row.pinned ? null : row.id,
-                  );
-                }}
-              >
-                {row.pinned ? "Unpin" : "Pin thread"}
-              </button>
-            ) : null}
-
-            {row.status !== "deleted" ? (
-              <button
-                type="button"
-                className={DANGER_BUTTON_CLASS}
-                disabled={props.disabled}
-                onClick={() => {
-                  void props.onDelete([row.id]);
-                }}
-              >
-                Delete
-              </button>
-            ) : null}
-          </div>
+          <CommentActions
+            row={row}
+            trackMeta={props.trackMeta}
+            disabled={props.disabled}
+            isRoot={isRoot}
+            onHide={props.onHide}
+            onDelete={props.onDelete}
+            onPin={props.onPin}
+          />
 
           <TechnicalDetails
             rows={[
@@ -881,6 +906,39 @@ async function postAdmin(
   }
 
   return payload;
+}
+
+function CommentSelectionControls(
+  props: Readonly<{
+    visibleCount: number;
+    selectedIds: ReadonlySet<string>;
+    disabled: boolean;
+    onDelete: (commentIds: string[]) => Promise<void>;
+  }>,
+) {
+  const selectedCount = props.selectedIds.size;
+
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-3">
+      <span className="text-xs text-white/35">
+        {props.visibleCount} shown
+        {selectedCount > 0 ? ` · ${selectedCount} selected` : ""}
+      </span>
+
+      {selectedCount > 0 ? (
+        <button
+          type="button"
+          className={DANGER_BUTTON_CLASS}
+          disabled={props.disabled}
+          onClick={() => {
+            void props.onDelete(Array.from(props.selectedIds));
+          }}
+        >
+          Delete selected
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 export default function ExegesisModerator() {
@@ -1353,27 +1411,12 @@ export default function ExegesisModerator() {
                 <span>Select visible</span>
               </label>
 
-              <div className="flex min-w-0 flex-wrap items-center gap-3">
-                <span className="text-xs text-white/35">
-                  {visibleComments.length} shown
-                  {selectedIds.size > 0
-                    ? ` · ${selectedIds.size} selected`
-                    : ""}
-                </span>
-
-                {selectedIds.size > 0 ? (
-                  <button
-                    type="button"
-                    className={DANGER_BUTTON_CLASS}
-                    disabled={actionDisabled}
-                    onClick={() => {
-                      void deleteComments(Array.from(selectedIds));
-                    }}
-                  >
-                    Delete selected
-                  </button>
-                ) : null}
-              </div>
+              <CommentSelectionControls
+                visibleCount={visibleComments.length}
+                selectedIds={selectedIds}
+                disabled={actionDisabled}
+                onDelete={deleteComments}
+              />
             </div>
           </div>
 
