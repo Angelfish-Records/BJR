@@ -53,10 +53,16 @@ export class OfflineVisualizerRenderer {
 
     this.frameRenderer.clear(0, 0, 0, 1);
 
+    const trackProgress01 =
+      this.config.durationSec > 0
+        ? Math.max(0, Math.min(1, frame.time / this.config.durationSec))
+        : 0;
+
     this.frameRenderer.renderFrame({
       theme: this.theme,
       time: frame.time,
       frameIndex: frame.frameIndex,
+      trackProgress01,
       audio: frame.audio,
       seed: this.config.seed,
       presentToScreen: opts?.presentToScreen ?? false,

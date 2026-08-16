@@ -3142,6 +3142,28 @@ export default function AudioEngine() {
       });
     };
 
+    const publishTrackProgressForSeek = (
+      audio: HTMLAudioElement,
+      progressMs: number,
+    ): void => {
+      const currentTrack = pRef.current.current;
+      if (!currentTrack) return;
+
+      const currentPlaybackId = (currentTrack.muxPlaybackId ?? "").trim();
+      const durationMs =
+        readFiniteMediaDurationMs(audio) ||
+        (currentPlaybackId
+          ? (pRef.current.assetDurationByPlaybackId[currentPlaybackId] ?? 0)
+          : 0) ||
+        pRef.current.durationByRecordingId[currentTrack.recordingId] ||
+        currentTrack.durationMs ||
+        0;
+
+      if (durationMs > 0) {
+        mediaSurface.setTrackProgress01(progressMs / durationMs);
+      }
+    };
+
     const applyPendingSeek = (deckId: DeckId) => {
       const a = getAudio(deckId);
       if (!a) return;
@@ -3151,8 +3173,11 @@ export default function AudioEngine() {
 
       try {
         a.currentTime = Math.max(0, ms / 1000);
-      } catch {}
+      } catch {
+        return;
+      }
 
+      publishTrackProgressForSeek(a, ms);
       pRef.current.clearPendingSeek();
     };
 
@@ -3536,6 +3561,8 @@ export default function AudioEngine() {
 
       if (durationMs <= 0) return;
 
+      mediaSurface.setTrackProgress01(progressMs / durationMs);
+
       maybeSendProgressHeartbeat(
         deckId,
         recordingId,
@@ -3889,6 +3916,25 @@ export default function AudioEngine() {
       return;
     }
 
+    const player = pRef.current;
+    const currentTrack = player.current;
+
+    if (currentTrack) {
+      const currentPlaybackId = (currentTrack.muxPlaybackId ?? "").trim();
+      const durationMs =
+        readFiniteMediaDurationMs(a) ||
+        (currentPlaybackId
+          ? (player.assetDurationByPlaybackId[currentPlaybackId] ?? 0)
+          : 0) ||
+        player.durationByRecordingId[currentTrack.recordingId] ||
+        currentTrack.durationMs ||
+        0;
+
+      if (durationMs > 0) {
+        mediaSurface.setTrackProgress01(ms / durationMs);
+      }
+    }
+
     pRef.current.clearPendingSeek();
   }, [getActiveAudio, p.seekNonce, p.pendingSeekMs]);
 
@@ -3908,7 +3954,23 @@ export default function AudioEngine() {
 
     if (p.intent === "pause") {
       playIntentRef.current = false;
+
+      // Explicit pause intent is authoritative. Internal deck teardown can
+      // leave a queued programmatic-pause suppression behind, but that must
+      // never prevent the active transport from publishing its paused state.
+      programmaticPauseCountByDeckRef.current[activeDeckRef.current] = 0;
+
       a.pause();
+      mediaSurface.setStatus("paused");
+
+      if (hasMediaSession()) {
+        try {
+          navigator.mediaSession.playbackState = "paused";
+        } catch {}
+      }
+
+      pRef.current.setStatusExternal("paused");
+      pRef.current.setLoadingReasonExternal(undefined);
       pRef.current.clearIntent();
       return;
     }

@@ -66,12 +66,16 @@ type Props = Readonly<{
   audioFiles: readonly RenderAssetOption[];
   lrcFiles: readonly RenderAssetOption[];
   lyricDirectionFiles: readonly RenderAssetOption[];
+  imageFiles: readonly RenderAssetOption[];
   selectedTheme: string;
   selectedAudioFile: string;
   selectedLrcFile: string;
   selectedLyricDirectionsFile: string;
   textMode: TextRenderMode;
   promoText: string;
+  promoFooterText: string;
+  selectedPromoIconFile: string;
+  selectedPromoArtworkFile: string;
   startSec: string;
   endSec: string;
   selectedLyricStyle: LyricStyleName;
@@ -251,12 +255,16 @@ export default function VisualizerLivePreview(props: Props) {
     audioFiles,
     lrcFiles,
     lyricDirectionFiles,
+    imageFiles,
     selectedTheme,
     selectedAudioFile,
     selectedLrcFile,
     selectedLyricDirectionsFile,
     textMode,
     promoText,
+    promoFooterText,
+    selectedPromoIconFile,
+    selectedPromoArtworkFile,
     startSec,
     endSec,
     selectedLyricStyle,
@@ -332,6 +340,24 @@ export default function VisualizerLivePreview(props: Props) {
     textMode,
   ]);
 
+  const selectedPromoIcon = useMemo(
+    () =>
+      textMode === "promo" && selectedPromoIconFile !== "__none__"
+        ? (imageFiles.find((item) => item.file === selectedPromoIconFile) ??
+          null)
+        : null,
+    [imageFiles, selectedPromoIconFile, textMode],
+  );
+
+  const selectedPromoArtwork = useMemo(
+    () =>
+      textMode === "promo" && selectedPromoArtworkFile !== "__none__"
+        ? (imageFiles.find((item) => item.file === selectedPromoArtworkFile) ??
+          null)
+        : null,
+    [imageFiles, selectedPromoArtworkFile, textMode],
+  );
+
   const exportWidth = Math.max(16, Math.floor(width));
   const exportHeight = Math.max(16, Math.floor(height));
   const exportFps = clamp(fps, 1, 120);
@@ -374,6 +400,20 @@ export default function VisualizerLivePreview(props: Props) {
 
     return timeline.lyricFrames;
   }, [endSec, promoText, safeFps, startSec, textMode, timeline]);
+
+  const promoFooterFrames = useMemo(() => {
+    if (!timeline || textMode !== "promo" || !promoFooterText.trim()) {
+      return null;
+    }
+
+    return bakePromoTextFrameStates({
+      text: promoFooterText,
+      fps: safeFps,
+      durationSec: timeline.durationSec,
+      startSec: optionalSeconds(startSec),
+      endSec: optionalSeconds(endSec),
+    });
+  }, [endSec, promoFooterText, safeFps, startSec, textMode, timeline]);
 
   const cameraFrames = useMemo(() => {
     if (!timeline) return [];
@@ -468,6 +508,7 @@ export default function VisualizerLivePreview(props: Props) {
 
       const sequenceFrameIndex = renderSequenceRef.current;
       const lyric = effectiveLyricFrames?.[sourceFrameIndex];
+      const promoFooter = promoFooterFrames?.[sourceFrameIndex];
       const camera = cameraFrames[sourceFrameIndex];
 
       const frame: OfflineFrame = {
@@ -479,6 +520,7 @@ export default function VisualizerLivePreview(props: Props) {
           time: timeSec,
         },
         ...(lyric ? { lyric } : {}),
+        ...(promoFooter ? { promoFooter } : {}),
         ...(camera ? { camera } : {}),
       };
 
@@ -498,6 +540,7 @@ export default function VisualizerLivePreview(props: Props) {
     [
       cameraFrames,
       effectiveLyricFrames,
+      promoFooterFrames,
       presentBuffer,
       safeFps,
       timeline,
@@ -536,6 +579,14 @@ export default function VisualizerLivePreview(props: Props) {
           compositionWidth: exportWidth,
           compositionHeight: exportHeight,
           pixelScale: previewScale,
+          promoFooterEnabled:
+            textMode === "promo" && Boolean(promoFooterText.trim()),
+          promoIconUrl: selectedPromoIcon?.url,
+          promoArtworkUrl: selectedPromoArtwork?.url,
+          promoStartSec:
+            textMode === "promo" ? optionalSeconds(startSec) : undefined,
+          promoEndSec:
+            textMode === "promo" ? optionalSeconds(endSec) : undefined,
         });
 
         if (previewInitTokenRef.current !== initToken) return;
@@ -578,7 +629,12 @@ export default function VisualizerLivePreview(props: Props) {
       seed,
       selectedLyricStyle,
       selectedPostPreset,
+      selectedPromoArtwork,
+      selectedPromoIcon,
       selectedTheme,
+      promoFooterText,
+      startSec,
+      endSec,
       textMode,
       timeline,
     ],

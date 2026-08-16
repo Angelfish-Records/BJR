@@ -63,6 +63,7 @@ export default function VisualizerCanvas(
     const engine = new VisualizerEngine({
       canvas,
       getAudio,
+      getTrackProgress01: () => mediaSurface.getTrackProgress01(),
       theme: createBlankTheme(),
       performanceProfile: variant === "fullscreen" ? "fullscreen" : "inline",
       stageVariant: variant,

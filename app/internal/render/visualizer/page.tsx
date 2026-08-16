@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import VisualizerLivePreview from "./VisualizerLivePreview";
 import { FramePostProcessor } from "../../../home/player/visualizer/offline/FramePostProcessor";
+import { PromoImageRenderer } from "../../../home/player/visualizer/offline/PromoImageRenderer";
 import {
   LyricTextRenderer,
   type LyricTextStyle,
@@ -71,6 +72,7 @@ type RenderControllerOptions = {
   audioFiles: AudioFileOption[];
   lrcFiles: AudioFileOption[];
   lyricDirectionFiles: AudioFileOption[];
+  imageFiles: AudioFileOption[];
 };
 
 type LyricStyleRuntime = {
@@ -157,10 +159,20 @@ function scalePostStyle(
   };
 }
 
+function promoFooterAnchorY01(
+  portraitComposition: boolean,
+  hasArtwork: boolean,
+): number {
+  if (!portraitComposition) return 0.9;
+  return hasArtwork ? 0.895 : 0.79;
+}
+
 export default function InternalVisualizerRenderPage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rendererRef = useRef<OfflineVisualizerRenderer | null>(null);
   const lyricRendererRef = useRef<LyricTextRenderer | null>(null);
+  const promoFooterRendererRef = useRef<LyricTextRenderer | null>(null);
+  const promoImageRendererRef = useRef<PromoImageRenderer | null>(null);
   const postProcessorRef = useRef<FramePostProcessor | null>(null);
   const pixelBufferRef = useRef<Uint8Array | null>(null);
   const lastFrameRef = useRef<OfflineFrame | null>(null);
@@ -175,6 +187,7 @@ export default function InternalVisualizerRenderPage() {
   const [lyricDirectionFiles, setLyricDirectionFiles] = useState<
     AudioFileOption[]
   >([]);
+  const [imageFiles, setImageFiles] = useState<AudioFileOption[]>([]);
   const [selectedTheme, setSelectedTheme] = useState("nebula");
   const [selectedAudioFile, setSelectedAudioFile] = useState("");
   const [selectedLrcFile, setSelectedLrcFile] = useState("__none__");
@@ -182,6 +195,11 @@ export default function InternalVisualizerRenderPage() {
     useState("__auto__");
   const [textMode, setTextMode] = useState<TextRenderMode>("lyrics");
   const [promoText, setPromoText] = useState("");
+  const [promoFooterText, setPromoFooterText] = useState("");
+  const [selectedPromoIconFile, setSelectedPromoIconFile] =
+    useState("__none__");
+  const [selectedPromoArtworkFile, setSelectedPromoArtworkFile] =
+    useState("__none__");
   const [selectedLyricStyle, setSelectedLyricStyle] = useState<LyricStyleName>(
     "ghost-lit-devotional",
   );
@@ -209,8 +227,11 @@ export default function InternalVisualizerRenderPage() {
       init: async (config) => {
         try {
           rendererRef.current?.dispose();
+          promoImageRendererRef.current?.dispose();
           rendererRef.current = null;
           lyricRendererRef.current = null;
+          promoFooterRendererRef.current = null;
+          promoImageRendererRef.current = null;
           postProcessorRef.current = null;
           pixelBufferRef.current = null;
           lastFrameRef.current = null;
@@ -267,6 +288,31 @@ export default function InternalVisualizerRenderPage() {
             formatGeometry,
           );
 
+          const portraitComposition =
+            compositionHeight > compositionWidth * 1.15;
+          const promoFooterStyle = config.promoFooterEnabled
+            ? {
+                ...(lyricStyle ?? {}),
+                ...(lyricStyle?.fontSizePx !== undefined
+                  ? { fontSizePx: lyricStyle.fontSizePx * 0.72 }
+                  : {}),
+                anchorY01: promoFooterAnchorY01(
+                  portraitComposition,
+                  Boolean(config.promoArtworkUrl),
+                ),
+                maxWidth01: Math.min(
+                  lyricStyle?.maxWidth01 ?? 0.76,
+                  portraitComposition ? 0.82 : 0.68,
+                ),
+                previousGhostOpacity: 0,
+                nextEchoOpacity: 0,
+                trailOpacity: 0,
+                lineStartScaleImpulse:
+                  (lyricStyle?.lineStartScaleImpulse ?? 0) * 0.5,
+                lineStartShakePx: 0,
+              }
+            : undefined;
+
           const postStyle = config.postPresetName
             ? POST_STYLES[config.postPresetName]
             : POST_STYLES.none;
@@ -282,6 +328,16 @@ export default function InternalVisualizerRenderPage() {
             lyricPixelScale,
           };
 
+          const promoImageRenderer =
+            config.promoIconUrl || config.promoArtworkUrl
+              ? await PromoImageRenderer.create(config.width, config.height, {
+                  iconUrl: config.promoIconUrl,
+                  artworkUrl: config.promoArtworkUrl,
+                  startSec: config.promoStartSec,
+                  endSec: config.promoEndSec,
+                })
+              : null;
+
           rendererRef.current = renderer;
           pixelBufferRef.current = new Uint8Array(
             config.width * config.height * 4,
@@ -291,6 +347,14 @@ export default function InternalVisualizerRenderPage() {
             config.height,
             scaleLyricStyle(lyricStyle, lyricPixelScale),
           );
+          promoFooterRendererRef.current = promoFooterStyle
+            ? new LyricTextRenderer(
+                config.width,
+                config.height,
+                scaleLyricStyle(promoFooterStyle, lyricPixelScale),
+              )
+            : null;
+          promoImageRendererRef.current = promoImageRenderer;
           postProcessorRef.current = new FramePostProcessor(
             config.width,
             config.height,
@@ -324,6 +388,14 @@ export default function InternalVisualizerRenderPage() {
 
         renderer.readPixelsInto(buffer);
 
+        const promoImageRenderer = promoImageRendererRef.current;
+        if (promoImageRenderer) {
+          promoImageRenderer.compositeIntoRgbaBuffer(
+            buffer,
+            lastFrameRef.current?.time ?? 0,
+          );
+        }
+
         const lyric = lastFrameRef.current?.lyric;
         const lyricRenderer = lyricRendererRef.current;
 
@@ -355,6 +427,13 @@ export default function InternalVisualizerRenderPage() {
           lyricRenderer.compositeIntoRgbaBuffer(buffer, lyric);
         }
 
+        const promoFooter = lastFrameRef.current?.promoFooter;
+        const promoFooterRenderer = promoFooterRendererRef.current;
+
+        if (promoFooter && promoFooterRenderer) {
+          promoFooterRenderer.compositeIntoRgbaBuffer(buffer, promoFooter);
+        }
+
         const sourceCamera = lastFrameRef.current?.camera;
         const cameraScale = cameraPixelScaleRef.current;
         const camera =
@@ -377,8 +456,11 @@ export default function InternalVisualizerRenderPage() {
 
       dispose: () => {
         rendererRef.current?.dispose();
+        promoImageRendererRef.current?.dispose();
         rendererRef.current = null;
         lyricRendererRef.current = null;
+        promoFooterRendererRef.current = null;
+        promoImageRendererRef.current = null;
         postProcessorRef.current = null;
         pixelBufferRef.current = null;
         lastFrameRef.current = null;
@@ -422,8 +504,11 @@ export default function InternalVisualizerRenderPage() {
     return () => {
       setRendererApiReady(false);
       rendererRef.current?.dispose();
+      promoImageRendererRef.current?.dispose();
       rendererRef.current = null;
       lyricRendererRef.current = null;
+      promoFooterRendererRef.current = null;
+      promoImageRendererRef.current = null;
       postProcessorRef.current = null;
       pixelBufferRef.current = null;
       lastFrameRef.current = null;
@@ -450,6 +535,7 @@ export default function InternalVisualizerRenderPage() {
       setAudioFiles(data.audioFiles);
       setLrcFiles(data.lrcFiles);
       setLyricDirectionFiles(data.lyricDirectionFiles);
+      setImageFiles(data.imageFiles);
 
       if (data.themes[0]) setSelectedTheme(data.themes[0]);
       if (data.audioFiles[0]) {
@@ -505,6 +591,12 @@ export default function InternalVisualizerRenderPage() {
           lyricDirectionsFile: selectedLyricDirectionsFile,
           textMode,
           promoText: textMode === "promo" ? promoText : undefined,
+          promoFooterText:
+            textMode === "promo" ? promoFooterText : undefined,
+          promoIconFile:
+            textMode === "promo" ? selectedPromoIconFile : undefined,
+          promoArtworkFile:
+            textMode === "promo" ? selectedPromoArtworkFile : undefined,
           lyricStyleName: selectedLyricStyle,
           postPresetName: selectedPostPreset,
           renderFormatName,
@@ -647,20 +739,78 @@ export default function InternalVisualizerRenderPage() {
           ) : null}
 
           {textMode === "promo" ? (
-            <label>
-              <div>Promo text</div>
-              <textarea
-                value={promoText}
-                onChange={(event) => setPromoText(event.target.value)}
-                placeholder={"GOD DEFEND\nOUT NOW"}
-                rows={4}
-                style={{
-                  width: "100%",
-                  resize: "vertical",
-                  font: "inherit",
-                }}
-              />
-            </label>
+            <>
+              <label>
+                <div>Promo text · above artwork</div>
+                <textarea
+                  value={promoText}
+                  onChange={(event) => setPromoText(event.target.value)}
+                  placeholder={"Brendan John Roch\nGOD DEFEND"}
+                  rows={4}
+                  style={{
+                    width: "100%",
+                    resize: "vertical",
+                    font: "inherit",
+                  }}
+                />
+              </label>
+
+              <label>
+                <div>Promo icon</div>
+                <select
+                  value={selectedPromoIconFile}
+                  onChange={(event) =>
+                    setSelectedPromoIconFile(event.target.value)
+                  }
+                  style={{ width: "100%" }}
+                >
+                  <option value="__none__">No icon</option>
+                  {imageFiles.map((image) => (
+                    <option key={`icon-${image.file}`} value={image.file}>
+                      {image.file}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                <div>Promo album art</div>
+                <select
+                  value={selectedPromoArtworkFile}
+                  onChange={(event) =>
+                    setSelectedPromoArtworkFile(event.target.value)
+                  }
+                  style={{ width: "100%" }}
+                >
+                  <option value="__none__">No album art</option>
+                  {imageFiles.map((image) => (
+                    <option key={`artwork-${image.file}`} value={image.file}>
+                      {image.file}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                <div>Promo footer text · below artwork</div>
+                <textarea
+                  value={promoFooterText}
+                  onChange={(event) => setPromoFooterText(event.target.value)}
+                  placeholder="Streaming Now"
+                  rows={2}
+                  style={{
+                    width: "100%",
+                    resize: "vertical",
+                    font: "inherit",
+                  }}
+                />
+              </label>
+
+              <div style={{ fontSize: 11, opacity: 0.58, lineHeight: 1.45 }}>
+                Promo images are optional. Put PNG, JPEG, WebP, or SVG assets in
+                web/public/render-test and refresh this page to select them.
+              </div>
+            </>
           ) : null}
 
           {textMode !== "none" ? (
@@ -854,12 +1004,16 @@ export default function InternalVisualizerRenderPage() {
           audioFiles={audioFiles}
           lrcFiles={lrcFiles}
           lyricDirectionFiles={lyricDirectionFiles}
+          imageFiles={imageFiles}
           selectedTheme={selectedTheme}
           selectedAudioFile={selectedAudioFile}
           selectedLrcFile={selectedLrcFile}
           selectedLyricDirectionsFile={selectedLyricDirectionsFile}
           textMode={textMode}
           promoText={promoText}
+          promoFooterText={promoFooterText}
+          selectedPromoIconFile={selectedPromoIconFile}
+          selectedPromoArtworkFile={selectedPromoArtworkFile}
           startSec={startSec}
           endSec={endSec}
           selectedLyricStyle={selectedLyricStyle}

@@ -16,6 +16,7 @@ type PerformanceProfile = "inline" | "fullscreen";
 type EngineOpts = {
   canvas: HTMLCanvasElement;
   getAudio: () => AudioFeatures;
+  getTrackProgress01?: () => number;
   theme: Theme; // initial (can be blank)
   performanceProfile?: PerformanceProfile;
   stageVariant: StageVariant;
@@ -119,6 +120,7 @@ export class VisualizerEngine {
   private readonly gl: WebGL2RenderingContext;
 
   private readonly getAudio: () => AudioFeatures;
+  private readonly getTrackProgress01: () => number;
 
   private ro: ResizeObserver | null = null;
   private raf: number | null = null;
@@ -195,6 +197,7 @@ export class VisualizerEngine {
   constructor(opts: EngineOpts) {
     this.canvas = opts.canvas;
     this.getAudio = opts.getAudio;
+    this.getTrackProgress01 = opts.getTrackProgress01 ?? (() => 0);
     this.currentTheme = opts.theme;
     this.performanceProfile = opts.performanceProfile ?? "inline";
     this.stageVariant = opts.stageVariant;
@@ -520,6 +523,10 @@ export class VisualizerEngine {
 
     const gl = this.gl;
     const audio = this.getAudio();
+    const rawTrackProgress01 = this.getTrackProgress01();
+    const trackProgress01 = Number.isFinite(rawTrackProgress01)
+      ? clamp(rawTrackProgress01, 0, 1)
+      : 0;
     const time = tNowMs / 1000;
 
     // Route B: render into presentFbo, never into default framebuffer.
@@ -527,9 +534,15 @@ export class VisualizerEngine {
     gl.disable(gl.BLEND);
 
     if (this.mode.mode === "transition") {
-      this.renderTransitionFrame(tNowMs, dtSec, time, audio);
+      this.renderTransitionFrame(
+        tNowMs,
+        dtSec,
+        time,
+        audio,
+        trackProgress01,
+      );
     } else {
-      this.renderSteadyFrame(time, audio);
+      this.renderSteadyFrame(time, audio, trackProgress01);
     }
 
     // Present pass: draw presentFbo.tex to the default framebuffer
@@ -546,6 +559,7 @@ export class VisualizerEngine {
     dtSec: number,
     time: number,
     audio: AudioFeatures,
+    trackProgress01: number,
   ): void {
     if (this.mode.mode !== "transition") return;
 
@@ -568,6 +582,7 @@ export class VisualizerEngine {
     this.frameRenderer!.renderFrame({
       theme: toTheme ?? this.currentTheme,
       time,
+      trackProgress01,
       audio,
       target: toFbo,
       presentToScreen: false,
@@ -612,7 +627,11 @@ export class VisualizerEngine {
     this.freeTransitionResources();
   }
 
-  private renderSteadyFrame(time: number, audio: AudioFeatures): void {
+  private renderSteadyFrame(
+    time: number,
+    audio: AudioFeatures,
+    trackProgress01: number,
+  ): void {
     const theme = this.wantPlaying
       ? this.currentTheme
       : (this.idleTheme ?? this.currentTheme);
@@ -621,6 +640,7 @@ export class VisualizerEngine {
     this.frameRenderer!.renderFrame({
       theme,
       time,
+      trackProgress01,
       audio,
       presentToScreen: false,
     });
@@ -828,6 +848,10 @@ export class VisualizerEngine {
     } else {
       // Fallback: render the theme once (should be rare; mainly during very first frames).
       const audio = this.getAudio();
+      const rawTrackProgress01 = this.getTrackProgress01();
+      const trackProgress01 = Number.isFinite(rawTrackProgress01)
+        ? clamp(rawTrackProgress01, 0, 1)
+        : 0;
       const time = tNowMs / 1000;
 
       const snapshotTheme =
@@ -843,6 +867,7 @@ export class VisualizerEngine {
       frameRenderer.renderFrame({
         theme: snapshotTheme,
         time,
+        trackProgress01,
         audio,
         target: fromFbo,
         presentToScreen: false,

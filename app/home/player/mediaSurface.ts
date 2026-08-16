@@ -17,6 +17,7 @@ class MediaSurface {
   private lastTimeMs = 0;
   private lastStatus: MediaStatus = "idle";
   private lastRecordingId: string | null = null;
+  private lastTrackProgress01 = 0;
 
   // Stage “authority”
   private inlineCount = 0;
@@ -39,6 +40,11 @@ class MediaSurface {
 
   setTime(ms: number) {
     this.lastTimeMs = ms;
+
+    if (ms <= 0) {
+      this.lastTrackProgress01 = 0;
+    }
+
     for (const fn of this.listeners) fn({ type: "time", ms });
   }
 
@@ -48,12 +54,26 @@ class MediaSurface {
   }
 
   setTrack(id: string | null) {
+    if (id !== this.lastRecordingId) {
+      this.lastTrackProgress01 = 0;
+    }
+
     this.lastRecordingId = id;
     for (const fn of this.listeners) fn({ type: "track", id });
   }
 
+  setTrackProgress01(progress01: number) {
+    this.lastTrackProgress01 = Number.isFinite(progress01)
+      ? Math.max(0, Math.min(1, progress01))
+      : 0;
+  }
+
   getTimeMs() {
     return this.lastTimeMs;
+  }
+
+  getTrackProgress01() {
+    return this.lastTrackProgress01;
   }
 
   getStatus() {

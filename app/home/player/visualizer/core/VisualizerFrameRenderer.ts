@@ -17,6 +17,7 @@ export type RenderFrameArgs = {
   theme: Theme;
   time: number;
   frameIndex?: number;
+  trackProgress01?: number;
   audio: AudioFeatures;
   seed?: number;
   presentToScreen?: boolean;
@@ -85,6 +86,7 @@ export class VisualizerFrameRenderer {
       args.theme.render(gl, {
         time: args.time,
         frameIndex: args.frameIndex,
+        trackProgress01: args.trackProgress01,
         width: target.w,
         height: target.h,
         dpr: this.dpr,

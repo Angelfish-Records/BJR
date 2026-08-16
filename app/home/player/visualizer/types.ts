@@ -23,6 +23,13 @@ export type VisualizerRenderMode = "realtime" | "offline";
 export type ThemeRenderOptions = {
   time: number;
   frameIndex?: number;
+
+  /**
+   * Normalized whole-recording position. Unlike `time`, this freezes on pause
+   * and jumps on seek, so themes can compose a deterministic long-form arc.
+   */
+  trackProgress01?: number;
+
   width: number;
   height: number;
   dpr: number;

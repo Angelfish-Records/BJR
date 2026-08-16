@@ -23,7 +23,7 @@ out vec4 fragColor;
 
 uniform vec2 uRes;
 uniform float uTime;
-uniform float uAge;
+uniform float uTrackProgress;
 uniform float uEnergy;
 
 float hash(vec2 p) {
@@ -95,32 +95,32 @@ float band(float value, float centre, float innerWidth, float outerWidth) {
 }
 
 void main() {
-    float time = max(uTime, 0.0);
-  float age = min(max(uAge, 0.0), 600.0);
+  float time = max(uTime, 0.0);
+  float trackProgress = clamp(uTrackProgress, 0.0, 1.0);
+  float journey = trackProgress * trackProgress * (3.0 - 2.0 * trackProgress);
   float t = time * 0.10;
   float e = clamp(uEnergy, 0.0, 1.0);
 
-  // Theme-lifetime camera move, independent of track time.
-  //
-  // 1 min  ≈ 1.31x
-  // 3 min  ≈ 1.72x
-  // 5 min  ≈ 1.95x
-  // 7 min  ≈ 2.07x
-  // 10 min ≈ 2.17x
-  //
-  // This is intentionally substantial: the ring and shadow should feel
-  // increasingly enormous rather than merely breathing in place.
-  float cameraProgress = 1.0 - exp(-age * 0.0048);
-  float cameraZoom = 1.0 + 1.24 * cameraProgress;
+  // Whole-track narrative: the viewer should feel as though they are
+  // falling into the black hole. In this coordinate system, that means the
+  // scene scale must decrease over the life of the track so the hole grows.
+  float cameraScale = mix(1.0, 0.54, journey);
 
-  vec2 p = (vUv - 0.5) * vec2(uRes.x / uRes.y, 1.0);
-  p *= cameraZoom;
+  vec2 viewP = (vUv - 0.5) * vec2(uRes.x / uRes.y, 1.0);
+  vec2 cameraOffset = vec2(
+    0.0,
+    mix(0.012, 0.002, journey)
+  );
 
-  // The event horizon is intentionally immovable. No travelling centre point.
+  vec2 p = (viewP - cameraOffset) * cameraScale;
+
+  // The event horizon remains spatially fixed; the apparent descent comes from
+  // camera ingress and framing rather than a travelling singularity.
   vec2 d = p;
 
-  // Mild vertical compression: recognisably oblate without becoming a flat eye.
-  float oblateness = 1.22;
+  // Slightly more oblate later in the fall, helping the approach feel deeper
+  // without flattening the system into an eye-shaped graphic.
+  float oblateness = mix(1.18, 1.28, journey);
   vec2 orbital = vec2(d.x, d.y * oblateness);
 
   float r = length(orbital);
@@ -135,16 +135,19 @@ void main() {
 
   float umbraMask = 1.0 - smoothstep(0.082, 0.112, r);
 
-  float pull = 0.44 + 0.54 * e;
+  // Structural lensing should feel physically continuous rather than music-
+  // driven. Audio will brighten and energise the system later instead.
+  float pull = 0.64;
   float lens = 1.0 / (1.0 + pull * 2.35 / (0.13 + r * 2.25));
-  float swirl = t * 1.42 + pull * 1.92 / (0.14 + r);
+  float swirl = t * 1.42 + 1.32 / (0.18 + r);
 
   vec2 q = rot(swirl * (1.0 - smoothstep(0.06, 1.18, r))) * orbital;
   q *= 1.0 + 0.88 * lens;
 
-  // This remains the main luminous ring you already liked.
-  float ringRadius = 0.366 + 0.012 * sin(t * 1.45);
-  float ringWidth = 0.016 + 0.014 * e;
+  // Keep the main luminous ring stable; its energy should read through
+  // brightness and surrounding activity rather than large shape changes.
+  float ringRadius = 0.366 + 0.006 * sin(t * 1.10);
+  float ringWidth = 0.020;
   float ring = band(r, ringRadius, ringWidth, 0.108);
 
   float diskNoise = ridged(
@@ -170,18 +173,18 @@ void main() {
   corona *= 1.0 - horizonMask;
 
   // ---------------------------------------------------------------------------
-  // Coherent lensed accretion disc.
+  // Observer-facing accretion disc.
   //
-  // The visible plane is one deliberately selected lower-front ellipse arc.
-  // Its width controls the system's scale; its angular window independently
-  // controls how much curvature is visible. No rear branch is drawn.
+  // The structure should read as a near side-on disc plane protruding toward
+  // the viewer: the front arc is visibly thicker, while the more distant back
+  // shoulders are thinner and stay close to the main arc rather than ballooning
+  // upward like a frontal oval. So flatten the ellipse strongly, preserve the
+  // settled front overlap on the central shadow, and shorten the shoulder run.
   // ---------------------------------------------------------------------------
 
-  // Restore the tighter scale: the plane still projects beyond the photon
-  // ring, but no longer reads as a second full halo.
-  float discHalfWidth = ringRadius * 1.50;
-  float discHalfHeight = 0.135;
-  float discCentreY = 0.015;
+  float discHalfWidth = ringRadius * 1.66;
+  float discHalfHeight = mix(0.118, 0.102, journey);
+  float discCentreY = mix(0.070, 0.076, journey);
 
   vec2 discSpace = vec2(
     d.x / discHalfWidth,
@@ -191,9 +194,8 @@ void main() {
   float discRadius = length(discSpace);
   float discAngle = atan(discSpace.y, discSpace.x);
 
-  // Approximate the ellipse's signed distance in display space. This lets
-  // the accretion plane inherit the same apparent thickness as the main ring,
-  // instead of becoming narrow at its crown and fat at its side extremities.
+  // Approximate the ellipse's signed distance in display space so the visible
+  // near-side branch inherits the same apparent thickness grammar as the ring.
   vec2 discGradient = vec2(
     discSpace.x / discHalfWidth,
     discSpace.y / discHalfHeight
@@ -204,70 +206,159 @@ void main() {
     0.0001
   );
 
-  // Match the main ring's inner thickness and outer falloff exactly.
-  float discBand = 1.0 - smoothstep(
-    ringWidth,
-    0.108,
-    discDistance
-  );
-
-  // Use the same angular/radial texture grammar as ringMatter.
   float discTexture = ridged(
     vec2(
-      discAngle * 2.15,
-      discRadius * 3.95
-    ) + vec2(t * 0.72, -t * 0.28)
+      discAngle * 1.90,
+      discRadius * 3.66
+    ) + vec2(t * 0.60, -t * 0.19)
   );
 
-  float discMatter = discBand * smoothstep(
-    0.34,
-    0.97,
+  float discTextureMatter = smoothstep(
+    0.44,
+    0.96,
     discTexture
   );
 
-  // The observer-facing centre of the ellipse is -PI / 2. The endpoint is
-  // derived from the photon-ring radius, so the arc dies just after its
-  // shoulders have turned back toward the lower side quadrants of the ring.
-  float frontArcDistance = abs(discAngle + 1.57079632679);
-  float discAttachmentX = ringRadius * 1.40;
-  float discEndpointAngle = acos(clamp(
-    discAttachmentX / discHalfWidth,
-    0.0,
-    0.999
+  const float HALF_PI = 1.57079632679;
+  float discArcCenter = HALF_PI;
+  float frontArcDistance = abs(atan(
+    sin(discAngle - discArcCenter),
+    cos(discAngle - discArcCenter)
   ));
-  float discArcHalfSpan = 1.57079632679 - discEndpointAngle;
 
-  // This replaces the old screen-space X range. It exposes one continuous
-  // lower-front arc, feathers its endpoints, and makes the far/back branch
-  // geometrically nonexistent rather than merely faint.
+  // The front of the disc is the nearest part, so let it stay visibly thicker.
+  float frontOuterWidth = mix(
+    0.104,
+    0.074,
+    smoothstep(0.0, HALF_PI, frontArcDistance)
+  );
+
+  float discFrontBand = 1.0 - smoothstep(
+    ringWidth * 0.90,
+    frontOuterWidth,
+    discDistance
+  );
+
   float discArcMask = 1.0 - smoothstep(
-    discArcHalfSpan - 0.160,
-    discArcHalfSpan,
+    HALF_PI,
+    HALF_PI + 0.060,
     frontArcDistance
   );
 
-  float discFrontWeight = 1.0 - smoothstep(
-    -0.020,
-    0.100,
-    discSpace.y
-  );
-
-  float discFront = discMatter
-    * discFrontWeight
+  float discFront =
+    discFrontBand
+    * discTextureMatter
     * discArcMask;
 
-  // Brighten the actual approach to the photon ring rather than an arbitrary
-  // X range. This gives the shoulders a deliberate attachment point while
-  // letting the outer tips disappear cleanly.
-  float discAttachment = discArcMask
-    * discBand
+  // Keep the quarter-ellipse fillet idea, but reduce the outer tail and make
+  // the disc itself own more of the silhouette. The fillet should start a bit
+  // inboard of the disc's maximum width, stay close to the existing arc, and
+  // only shift toward ring-like behaviour near the actual fusion zone.
+  float shoulderOuterX = discHalfWidth * 0.94;
+  float shoulderJoinX = ringRadius * 1.00;
+  float shoulderStartY = discCentreY;
+  float shoulderJoinY = discCentreY - mix(0.068, 0.062, journey);
+
+  float shoulderSpanX = max(
+    shoulderOuterX - shoulderJoinX,
+    0.0001
+  );
+
+  float shoulderSpanY = max(
+    shoulderStartY - shoulderJoinY,
+    0.0001
+  );
+
+  vec2 shoulderSpace = vec2(
+    (abs(d.x) - shoulderOuterX) / shoulderSpanX,
+    (d.y - shoulderJoinY) / shoulderSpanY
+  );
+
+  float shoulderRadius = length(shoulderSpace);
+
+  vec2 shoulderGradient = vec2(
+    shoulderSpace.x / shoulderSpanX,
+    shoulderSpace.y / shoulderSpanY
+  );
+
+  float shoulderDistance = abs(shoulderRadius - 1.0) / max(
+    length(shoulderGradient),
+    0.0001
+  );
+
+  float shoulderXMask =
+    smoothstep(-1.06, -0.96, shoulderSpace.x)
     * (
       1.0 - smoothstep(
-        0.026,
-        0.102,
-        abs(r - ringRadius)
+        -0.02,
+        0.04,
+        shoulderSpace.x
       )
     );
+
+  float shoulderYMask =
+    smoothstep(-0.05, 0.04, shoulderSpace.y)
+    * (
+      1.0 - smoothstep(
+        0.96,
+        1.04,
+        shoulderSpace.y
+      )
+    );
+
+  float shoulderQuadrantMask =
+    shoulderXMask
+    * shoulderYMask;
+
+  float shoulderProgress = clamp(
+    -shoulderSpace.x,
+    0.0,
+    1.0
+  );
+
+  float shoulderCurve = shoulderProgress
+    * shoulderProgress
+    * (3.0 - 2.0 * shoulderProgress);
+
+  // Start thinner and taper a little faster so the fillet doesn't read as a
+  // separate broad tail extending out from the disc.
+  float shoulderOuterWidth = mix(
+    0.048,
+    0.024,
+    shoulderCurve
+  );
+
+  float shoulderBand = 1.0 - smoothstep(
+    ringWidth * 0.90,
+    shoulderOuterWidth,
+    shoulderDistance
+  );
+
+  float discShoulder =
+    shoulderBand
+    * shoulderQuadrantMask
+    * (0.46 + 0.54 * discTextureMatter);
+
+  float shoulderRoot = discShoulder * (1.0 - smoothstep(
+    0.12,
+    0.46,
+    shoulderCurve
+  ));
+
+  float ringProximity = 1.0 - smoothstep(
+    0.018,
+    0.094,
+    abs(r - ringRadius)
+  );
+
+  float discAttachment =
+    discShoulder
+    * ringProximity
+    * smoothstep(0.60, 0.96, shoulderCurve);
+
+  float shoulderJoin =
+    discShoulder
+    * smoothstep(0.70, 0.98, shoulderCurve);
 
   // Stable star field: no frame-stepped twinkling or popping.
   vec2 starGrid = floor((p + 1.55) * 176.0);
@@ -300,11 +391,11 @@ void main() {
   vec3 violet = vec3(0.165, 0.095, 0.285);
   vec3 amber = vec3(0.930, 0.560, 0.250);
   vec3 blue = vec3(0.250, 0.600, 1.000);
-   vec3 white = vec3(0.960, 0.980, 1.000);
+  vec3 white = vec3(0.960, 0.980, 1.000);
 
   vec3 col = deep;
 
-  col += violet * filaments * (0.25 + 0.28 * e);
+  col += violet * filaments * (0.20 + 0.20 * e);
 
   vec3 ringColour = mix(
     amber,
@@ -312,20 +403,28 @@ void main() {
     smoothstep(-1.0, 1.0, sin(a * 2.0 + t))
   );
 
-  // Give the upright ring a restrained local lift at the real disc/ring
-  // approach points, helping the shoulder arcs read as connected rather than
-  // merely overlaid.
+  // Keep the core structure bright but not blown out.
   col += ringColour
     * ringMatter
-    * (0.44 + 0.58 * e + 0.10 * discAttachment);
-  col += white * lensGlow * (0.040 + 0.15 * e);
-  col += vec3(0.18, 0.36, 0.72) * corona * (0.12 + 0.24 * e);
+    * (0.34 + 0.34 * e + 0.16 * discAttachment);
+  col += white * lensGlow * (0.018 + 0.072 * e);
+  col += vec3(0.18, 0.36, 0.72) * corona * (0.10 + 0.18 * e);
 
-  // The plane shares the main ring's colour and texture language rather
-  // than becoming a separately lit white-blue object.
-  vec3 accretionColour = ringColour;
+  // The observer-facing branch should feel warmer and denser than the ring,
+  // while remaining visibly ring-like across a broader structural arc.
+  vec3 accretionColour = mix(
+    amber,
+    mix(amber, white, 0.20),
+    0.30
+  );
 
-  col += white * starField * (0.16 + 0.28 * e);
+  vec3 shoulderColour = mix(
+    accretionColour,
+    ringColour,
+    smoothstep(0.42, 0.96, shoulderCurve)
+  );
+
+  col += white * starField * (0.14 + 0.20 * e);
 
   // The black shadow removes the background and the upright ring's interior.
   // The selected lower-front accretion arc is drawn afterwards, allowing it
@@ -336,18 +435,48 @@ void main() {
   // Photon-ring edge comes back after the black shadow.
   col += mix(amber, blue, 0.52 + 0.48 * sin(a * 2.0 + t))
     * photonRing
-    * (0.42 + 0.34 * e);
+    * (0.36 + 0.24 * e);
+
+  float discCore = 1.0 - smoothstep(
+    0.0,
+    0.82,
+    abs(discSpace.x)
+  );
 
   col += accretionColour
     * discFront
-    * (0.44 + 0.58 * e + 0.18 * discAttachment);
+    * (0.18 + 0.18 * e + 0.24 * discCore + 0.14 * discAttachment);
+
+  // Keep the fillet visually subordinate to the front disc. Most of the early
+  // shoulder should still read as accretion-disc material, with ring-like
+  // behaviour only arriving close to the actual fusion zone.
+  col += accretionColour
+    * shoulderRoot
+    * (0.12 + 0.12 * e);
+
+  col += shoulderColour
+    * discShoulder
+    * (0.08 + 0.09 * e);
+
+  col += ringColour
+    * shoulderJoin
+    * (0.08 + 0.10 * e);
+
+  col += mix(white, ringColour, 0.24)
+    * discAttachment
+    * (0.010 + 0.022 * e);
+
+  col += white
+    * discFront
+    * (discCore * 0.20)
+    * (0.008 + 0.026 * e);
 
   float edgeVignette = 1.0 - smoothstep(0.78, 1.45, length(p));
   col *= 0.52 + 0.84 * edgeVignette;
 
-  col *= 0.88 + 0.32 * e;
+  col *= 0.92 + 0.18 * e;
 
-  fragColor = vec4(col, 1.0);
+  fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }
 `;
 
@@ -359,9 +488,8 @@ export function createEventHorizonTheme(): Theme {
   } | null = null;
   let uRes: WebGLUniformLocation | null = null;
   let uTime: WebGLUniformLocation | null = null;
-  let uAge: WebGLUniformLocation | null = null;
+  let uTrackProgress: WebGLUniformLocation | null = null;
   let uEnergy: WebGLUniformLocation | null = null;
-  let themeStartedAtMs: number | null = null;
 
   return {
     name: "event-horizon",
@@ -370,11 +498,9 @@ export function createEventHorizonTheme(): Theme {
       program = createProgram(gl, VS, FS);
       tri = makeFullscreenTriangle(gl);
 
-      themeStartedAtMs = performance.now();
-
       uRes = gl.getUniformLocation(program, "uRes");
       uTime = gl.getUniformLocation(program, "uTime");
-      uAge = gl.getUniformLocation(program, "uAge");
+      uTrackProgress = gl.getUniformLocation(program, "uTrackProgress");
       uEnergy = gl.getUniformLocation(program, "uEnergy");
     },
 
@@ -384,14 +510,9 @@ export function createEventHorizonTheme(): Theme {
       gl.useProgram(program);
       gl.bindVertexArray(tri.vao);
 
-      const themeAgeSeconds =
-        themeStartedAtMs === null
-          ? 0
-          : (performance.now() - themeStartedAtMs) / 1000;
-
       gl.uniform2f(uRes, opts.width, opts.height);
       gl.uniform1f(uTime, opts.time);
-      gl.uniform1f(uAge, themeAgeSeconds);
+      gl.uniform1f(uTrackProgress, opts.trackProgress01 ?? 0);
       gl.uniform1f(uEnergy, opts.audio.energy);
 
       gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -407,7 +528,6 @@ export function createEventHorizonTheme(): Theme {
 
       if (program) gl.deleteProgram(program);
       program = null;
-      themeStartedAtMs = null;
     },
   };
 }

@@ -54,6 +54,9 @@ type RenderRequest = {
   lyricDirectionsFile?: string;
   textMode?: TextRenderMode;
   promoText?: string;
+  promoFooterText?: string;
+  promoIconFile?: string;
+  promoArtworkFile?: string;
   lyricStyleName?: LyricStyleName;
   postPresetName?: PostPresetName;
   renderFormatName?: RenderFormatName;
@@ -318,6 +321,10 @@ async function listLyricDirectionFiles(): Promise<RenderAssetOption[]> {
   return listRenderAssets(/\.lyric-directions\.json$/i);
 }
 
+async function listImageFiles(): Promise<RenderAssetOption[]> {
+  return listRenderAssets(/\.(png|jpe?g|webp|svg)$/i);
+}
+
 function assertThemeName(themeName: string): void {
   if (!isThemeName(themeName)) {
     throw new Error(`Invalid themeName: ${themeName}`);
@@ -374,6 +381,26 @@ function resolveLyricDirectionsAsset(
   if (!asset && !isAuto) {
     throw new Error(
       `Lyric directions file not found in web/public/render-test: ${filename}`,
+    );
+  }
+
+  return asset;
+}
+
+function resolveOptionalRenderAsset(
+  files: readonly RenderAssetOption[],
+  requestedFile: string | undefined,
+  label: string,
+): RenderAssetOption | undefined {
+  if (!requestedFile || requestedFile === "__none__") {
+    return undefined;
+  }
+
+  const asset = files.find((item) => item.file === requestedFile);
+
+  if (!asset) {
+    throw new Error(
+      `${label} file not found in web/public/render-test: ${requestedFile}`,
     );
   }
 
@@ -465,11 +492,13 @@ export async function GET(req: Request): Promise<NextResponse> {
     );
   }
 
-  const [audioFiles, lrcFiles, lyricDirectionFiles] = await Promise.all([
-    listAudioFiles(),
-    listLrcFiles(),
-    listLyricDirectionFiles(),
-  ]);
+  const [audioFiles, lrcFiles, lyricDirectionFiles, imageFiles] =
+    await Promise.all([
+      listAudioFiles(),
+      listLrcFiles(),
+      listLyricDirectionFiles(),
+      listImageFiles(),
+    ]);
 
   return NextResponse.json(
     {
@@ -477,6 +506,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       audioFiles,
       lrcFiles,
       lyricDirectionFiles,
+      imageFiles,
       sourceRevision,
     },
     {
@@ -493,11 +523,13 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     assertThemeName(body.themeName);
 
-    const [audioFiles, lrcFiles, lyricDirectionFiles] = await Promise.all([
-      listAudioFiles(),
-      listLrcFiles(),
-      listLyricDirectionFiles(),
-    ]);
+    const [audioFiles, lrcFiles, lyricDirectionFiles, imageFiles] =
+      await Promise.all([
+        listAudioFiles(),
+        listLrcFiles(),
+        listLyricDirectionFiles(),
+        listImageFiles(),
+      ]);
 
     assertRenderSettings(body);
 
@@ -513,6 +545,22 @@ export async function POST(req: Request): Promise<NextResponse> {
             lyricDirectionFiles,
             lrc,
             body.lyricDirectionsFile,
+          )
+        : undefined;
+    const promoIcon =
+      textMode === "promo"
+        ? resolveOptionalRenderAsset(
+            imageFiles,
+            body.promoIconFile,
+            "Promo icon",
+          )
+        : undefined;
+    const promoArtwork =
+      textMode === "promo"
+        ? resolveOptionalRenderAsset(
+            imageFiles,
+            body.promoArtworkFile,
+            "Promo artwork",
           )
         : undefined;
 
@@ -543,6 +591,12 @@ export async function POST(req: Request): Promise<NextResponse> {
       lyricDirectionsPath: lyricDirections?.path,
       textMode,
       promoText: textMode === "promo" ? body.promoText?.trim() : undefined,
+      promoFooterText:
+        textMode === "promo" ? body.promoFooterText?.trim() : undefined,
+      promoIconUrl: promoIcon?.url,
+      promoIconPath: promoIcon?.path,
+      promoArtworkUrl: promoArtwork?.url,
+      promoArtworkPath: promoArtwork?.path,
       lyricStyleName: body.lyricStyleName,
       postPresetName: body.postPresetName,
       outputDir,

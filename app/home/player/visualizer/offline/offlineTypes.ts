@@ -20,6 +20,17 @@ export type OfflineRenderConfig = {
   renderFormatName?: RenderFormatName;
 
   /**
+   * Optional promo overlay controls. Static imagery and footer text are
+   * composited before camera/post processing. URLs are browser-readable
+   * public asset URLs.
+   */
+  promoFooterEnabled?: boolean;
+  promoIconUrl?: string;
+  promoArtworkUrl?: string;
+  promoStartSec?: number;
+  promoEndSec?: number;
+
+  /**
    * Full composition dimensions used to resolve format-aware typography,
    * post-processing, and camera scale.
    *
@@ -48,6 +59,7 @@ export type OfflineFrame = {
   time: number;
   audio: AudioFeatureFrame;
   lyric?: LyricFrameState;
+  promoFooter?: LyricFrameState;
   camera?: CameraFrameState;
 };
 
