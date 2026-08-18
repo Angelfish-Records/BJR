@@ -311,7 +311,6 @@ async function resolveMemberIdFromSession(
         kind: (session.metadata?.kind ?? "") || null,
         album_slug: (session.metadata?.albumSlug ?? "") || null,
       },
-      marketingOptIn: true,
     });
     return { memberId: ensured.id, customerId };
   }
@@ -493,7 +492,6 @@ async function finalizeGiftPurchase(
     email: recipientEmail,
     source: "gift_paid",
     sourceDetail: { album_slug: albumSlug, stripe_session_id: session.id },
-    marketingOptIn: true,
   });
 
   await sql`
@@ -530,11 +528,13 @@ async function finalizeGiftPurchase(
   `;
   if (gate.rowCount === 0) return;
 
-  // Suppression check
+  // Gift delivery is transactional. A voluntary marketing unsubscribe must
+  // not block it, but hard deliverability suppressions still do.
   const sup = await sql`
     select 1
     from email_suppressions
     where email::citext = ${recipientEmail}::citext
+      and reason in ('email.bounced', 'email.complained')
     limit 1
   `;
   if ((sup.rowCount ?? 0) > 0) return;

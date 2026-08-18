@@ -17,6 +17,7 @@ export type RenderFormatProfile = {
   lyricAnchorY01?: number;
   lyricMaxWidthMultiplier: number;
   lyricLineHeightMultiplier: number;
+  lyricMaxLines: number;
 };
 
 export type RenderFormatGeometry = {
@@ -26,6 +27,7 @@ export type RenderFormatGeometry = {
   lyricAnchorY01?: number;
   lyricMaxWidthMultiplier: number;
   lyricLineHeightMultiplier: number;
+  lyricMaxLines: number;
 };
 
 export const RENDER_FORMAT_NAMES: RenderFormatName[] = [
@@ -47,6 +49,7 @@ export const RENDER_FORMATS: Record<
     cameraMultiplier: 1,
     lyricMaxWidthMultiplier: 1,
     lyricLineHeightMultiplier: 1,
+    lyricMaxLines: 3,
   },
 
   "vertical-9:16": {
@@ -59,6 +62,7 @@ export const RENDER_FORMATS: Record<
     lyricAnchorY01: 0.48,
     lyricMaxWidthMultiplier: 1.08,
     lyricLineHeightMultiplier: 0.96,
+    lyricMaxLines: 4,
   },
 
   "square-1:1": {
@@ -71,6 +75,7 @@ export const RENDER_FORMATS: Record<
     lyricAnchorY01: 0.52,
     lyricMaxWidthMultiplier: 1.04,
     lyricLineHeightMultiplier: 0.98,
+    lyricMaxLines: 3,
   },
 };
 
@@ -124,6 +129,7 @@ export function getRenderFormatGeometry(
     lyricAnchorY01: profile.lyricAnchorY01,
     lyricMaxWidthMultiplier: profile.lyricMaxWidthMultiplier,
     lyricLineHeightMultiplier: profile.lyricLineHeightMultiplier,
+    lyricMaxLines: profile.lyricMaxLines,
   };
 }
 
@@ -152,5 +158,6 @@ export function applyRenderFormatToLyricStyle(
             style.lineHeight * geometry.lyricLineHeightMultiplier,
         }
       : {}),
+    maxLines: geometry.lyricMaxLines,
   };
 }

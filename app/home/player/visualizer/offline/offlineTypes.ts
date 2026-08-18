@@ -7,6 +7,7 @@ import type { LyricFrameState } from "./lyricTypes";
 import type { LyricStyleName } from "./lyricStyles";
 import type { PostPresetName } from "./postStyles";
 import type { RenderFormatName } from "./renderFormats";
+import type { TextRenderMode } from "./textTimeline";
 
 export type OfflineRenderConfig = {
   width: number;
@@ -18,6 +19,14 @@ export type OfflineRenderConfig = {
   lyricStyleName?: LyricStyleName;
   postPresetName?: PostPresetName;
   renderFormatName?: RenderFormatName;
+  textMode?: TextRenderMode;
+
+  /**
+   * Optional persistent track identity. When trackTitle is present, the
+   * renderer derives a compact top-right label from the selected lyric style.
+   */
+  artistName?: string;
+  trackTitle?: string;
 
   /**
    * Optional promo overlay controls. Static imagery and footer text are
@@ -68,6 +77,8 @@ export type VisualizerExportManifest = {
   recordingId: string;
   themeName: ThemeName;
   renderFormatName?: RenderFormatName;
+  artistName?: string;
+  trackTitle?: string;
   seed: number;
   width: number;
   height: number;

@@ -81,7 +81,6 @@ export async function POST(req: Request) {
       email,
       source: "clerk",
       sourceDetail: { event_type: evt.type },
-      marketingOptIn: true,
     });
 
     // 2) Ensure baseline “Friend” entitlement exists.

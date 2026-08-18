@@ -8,6 +8,9 @@ export type LyricTextStyle = {
   letterSpacingPx: number;
   lineHeight: number;
   maxWidth01: number;
+  maxLines: number;
+  minimumFontScale: number;
+  balanceLines: boolean;
   align: "left" | "center" | "right";
   anchorX01: number;
   anchorY01: number;
@@ -57,6 +60,9 @@ const DEFAULT_STYLE: LyricTextStyle = {
   letterSpacingPx: 0,
   lineHeight: 1.18,
   maxWidth01: 0.76,
+  maxLines: 3,
+  minimumFontScale: 0.82,
+  balanceLines: true,
   align: "center",
   anchorX01: 0.5,
   anchorY01: 0.74,
@@ -98,6 +104,7 @@ type TextLayerInput = {
   yOffsetPx: number;
   scale: number;
   blurPx: number;
+  effectScale?: number;
   progress01?: number;
   shakePx?: number;
 };
@@ -106,15 +113,18 @@ type TextBlock = {
   lines: string[];
   font: string;
   fontSizePx: number;
+  letterSpacingPx: number;
   lineHeightPx: number;
   anchorX: number;
   startY: number;
+  topY: number;
   blockWidth: number;
   blockHeight: number;
 };
 
-type LetterSpacingCapableContext = CanvasRenderingContext2D & {
+type TypographySpacingCapableContext = CanvasRenderingContext2D & {
   letterSpacing?: string;
+  fontKerning?: "auto" | "normal" | "none";
 };
 
 function clamp01(value: number): number {
@@ -243,15 +253,26 @@ export class LyricTextRenderer {
     this.layerCtx.clearRect(0, 0, this.width, this.height);
 
     if (lyric.previousText?.trim()) {
+      const renderPixelScale = Math.max(
+        0.5,
+        Math.min(4, Math.min(this.width, this.height) / 720),
+      );
+      const ghostPresence = hasActive
+        ? 1 - easeInOutSine(lyric.lineProgress01)
+        : 0;
+
       this.drawTextLayer(this.layerCtx, {
         text: lyric.previousText,
         opacity:
           this.style.previousGhostOpacity *
           this.style.opacity *
-          clamp01(1 - lyric.lineProgress01 * 0.72),
-        yOffsetPx: this.style.fontSizePx * this.style.previousGhostYOffsetEm,
-        scale: 0.92,
-        blurPx: 1.6,
+          ghostPresence,
+        yOffsetPx:
+          this.style.fontSizePx *
+          (this.style.previousGhostYOffsetEm - 0.34),
+        scale: 0.82,
+        blurPx: 2.8 * renderPixelScale,
+        effectScale: 0.34,
       });
     }
 
@@ -281,12 +302,18 @@ export class LyricTextRenderer {
     if (lyric.nextText?.trim() && lyric.timeToNextLineSec !== null) {
       const echoWindow01 = clamp01(1 - lyric.timeToNextLineSec / 1.4);
 
+      const renderPixelScale = Math.max(
+        0.5,
+        Math.min(4, Math.min(this.width, this.height) / 720),
+      );
+
       this.drawTextLayer(this.layerCtx, {
         text: lyric.nextText,
         opacity: this.style.nextEchoOpacity * this.style.opacity * echoWindow01,
         yOffsetPx: this.style.fontSizePx * this.style.nextEchoYOffsetEm,
         scale: 0.9,
-        blurPx: 2.4,
+        blurPx: 2.4 * renderPixelScale,
+        effectScale: 0.48,
       });
     }
 
@@ -342,13 +369,22 @@ export class LyricTextRenderer {
     ctx: CanvasRenderingContext2D,
     input: TextLayerInput,
   ): void {
-    const { text, opacity, yOffsetPx, scale, blurPx, progress01, shakePx } =
-      input;
+    const {
+      text,
+      opacity,
+      yOffsetPx,
+      scale,
+      blurPx,
+      effectScale = 1,
+      progress01,
+      shakePx,
+    } = input;
 
     if (opacity <= 0) return;
 
     const block = this.measureTextBlock(text, yOffsetPx, scale);
     const revealProgress = progress01 ?? 1;
+    const resolvedEffectScale = Math.max(0, effectScale);
 
     ctx.save();
 
@@ -369,10 +405,10 @@ export class LyricTextRenderer {
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = this.style.fill;
 
-    this.applyLetterSpacing(ctx, this.style.letterSpacingPx);
+    this.applyLetterSpacing(ctx, block.letterSpacingPx);
 
     if (this.style.shadowBlurPx && this.style.shadowColor) {
-      ctx.shadowBlur = this.style.shadowBlurPx;
+      ctx.shadowBlur = this.style.shadowBlurPx * resolvedEffectScale;
       ctx.shadowColor = this.style.shadowColor;
     }
 
@@ -383,9 +419,9 @@ export class LyricTextRenderer {
       ctx.beginPath();
       ctx.rect(
         clipX,
-        block.startY - block.lineHeightPx,
+        block.topY,
         clipWidth,
-        block.blockHeight + block.lineHeightPx,
+        block.blockHeight,
       );
       ctx.clip();
     }
@@ -397,7 +433,7 @@ export class LyricTextRenderer {
       const y = block.startY + i * block.lineHeightPx;
       const x = block.anchorX + (shakePx ?? 0);
 
-      this.drawTextLine(ctx, line, x, y);
+      this.drawTextLine(ctx, line, x, y, resolvedEffectScale);
     }
 
     ctx.restore();
@@ -408,6 +444,7 @@ export class LyricTextRenderer {
     line: string,
     x: number,
     y: number,
+    effectScale: number,
   ): void {
     if (
       this.style.contrastStroke &&
@@ -416,9 +453,10 @@ export class LyricTextRenderer {
     ) {
       ctx.save();
       ctx.strokeStyle = this.style.contrastStroke;
-      ctx.lineWidth = this.style.contrastStrokeWidthPx;
+      ctx.lineWidth = this.style.contrastStrokeWidthPx * effectScale;
       ctx.lineJoin = "round";
-      ctx.shadowBlur = this.style.contrastShadowBlurPx ?? 0;
+      ctx.shadowBlur =
+        (this.style.contrastShadowBlurPx ?? 0) * effectScale;
       ctx.shadowColor = this.style.contrastShadowColor ?? "rgba(0,0,0,0)";
       ctx.strokeText(line, x, y);
       ctx.restore();
@@ -430,7 +468,7 @@ export class LyricTextRenderer {
       this.style.strokeWidthPx > 0
     ) {
       ctx.strokeStyle = this.style.stroke;
-      ctx.lineWidth = this.style.strokeWidthPx;
+      ctx.lineWidth = this.style.strokeWidthPx * effectScale;
       ctx.lineJoin = "round";
       ctx.strokeText(line, x, y);
     }
@@ -444,12 +482,12 @@ export class LyricTextRenderer {
     opacity: number,
     revealProgress: number,
   ): void {
-    const padX = this.style.fontSizePx * 0.55;
-    const padY = this.style.fontSizePx * 0.35;
+    const padX = block.fontSizePx * 0.55;
+    const padY = block.fontSizePx * 0.35;
     const fullWidth = block.blockWidth + padX * 2;
     const visibleWidth = fullWidth * clamp01(revealProgress);
     const x = this.clipX(block.anchorX, fullWidth);
-    const y = block.startY - block.lineHeightPx - padY * 0.35;
+    const y = block.topY - padY * 0.8;
     const h = block.blockHeight + padY * 1.6;
 
     ctx.save();
@@ -490,42 +528,75 @@ export class LyricTextRenderer {
     yOffsetPx: number,
     scale: number,
   ): TextBlock {
-    const fontSizePx = this.style.fontSizePx * scale;
-    const font = `${this.style.fontWeight} ${fontSizePx}px ${this.style.fontFamily}`;
     const maxWidth = this.width * this.style.maxWidth01;
-    const lines = this.wrapText(text, maxWidth, font);
+    const minimumScale = Math.max(0.5, Math.min(1, this.style.minimumFontScale));
+    const requestedScale = Math.max(0.01, scale);
+
+    let resolvedScale = requestedScale;
+    let fontSizePx = this.style.fontSizePx * resolvedScale;
+    let letterSpacingPx = this.style.letterSpacingPx * resolvedScale;
+    let font = `${this.style.fontWeight} ${fontSizePx}px ${this.style.fontFamily}`;
+    let lines = this.wrapText(text, maxWidth, font, letterSpacingPx);
+
+    while (
+      lines.length > this.style.maxLines &&
+      resolvedScale > requestedScale * minimumScale + 0.001
+    ) {
+      resolvedScale = Math.max(
+        requestedScale * minimumScale,
+        resolvedScale - 0.025,
+      );
+      fontSizePx = this.style.fontSizePx * resolvedScale;
+      letterSpacingPx = this.style.letterSpacingPx * resolvedScale;
+      font = `${this.style.fontWeight} ${fontSizePx}px ${this.style.fontFamily}`;
+      lines = this.wrapText(text, maxWidth, font, letterSpacingPx);
+    }
 
     this.frameCtx.font = font;
-    this.applyLetterSpacing(this.frameCtx, this.style.letterSpacingPx);
+    this.applyLetterSpacing(this.frameCtx, letterSpacingPx);
 
     const blockWidth = lines.reduce((max, line) => {
-      const measured = this.frameCtx.measureText(line).width;
-      return Math.max(max, measured);
+      return Math.max(max, this.measureLineWidth(line, font, letterSpacingPx));
     }, 0);
 
+    const metrics = this.frameCtx.measureText("Hgj");
+    const ascent =
+      metrics.actualBoundingBoxAscent > 0
+        ? metrics.actualBoundingBoxAscent
+        : fontSizePx * 0.76;
+    const descent =
+      metrics.actualBoundingBoxDescent > 0
+        ? metrics.actualBoundingBoxDescent
+        : fontSizePx * 0.24;
     const lineHeightPx = fontSizePx * this.style.lineHeight;
-    const blockHeight = lines.length * lineHeightPx;
+    const blockHeight =
+      ascent + descent + Math.max(0, lines.length - 1) * lineHeightPx;
     const anchorX = this.width * this.style.anchorX01;
     const anchorY = this.height * this.style.anchorY01 + yOffsetPx;
-    const startY = anchorY - blockHeight / 2 + lineHeightPx * 0.72;
+    const topY = anchorY - blockHeight / 2;
+    const startY = topY + ascent;
 
     return {
       lines,
       font,
       fontSizePx,
+      letterSpacingPx,
       lineHeightPx,
       anchorX,
       startY,
+      topY,
       blockWidth,
       blockHeight,
     };
   }
 
-  private wrapText(text: string, maxWidth: number, font: string): string[] {
+  private wrapText(
+    text: string,
+    maxWidth: number,
+    font: string,
+    letterSpacingPx: number,
+  ): string[] {
     const lines: string[] = [];
-
-    this.frameCtx.font = font;
-    this.applyLetterSpacing(this.frameCtx, this.style.letterSpacingPx);
 
     for (const sourceLine of text.replace(/\r\n?/g, "\n").split("\n")) {
       const words = splitWords(sourceLine);
@@ -535,33 +606,123 @@ export class LyricTextRenderer {
         continue;
       }
 
-      let current = "";
-
-      for (const word of words) {
-        const candidate = current ? `${current} ${word}` : word;
-        const measured = this.frameCtx.measureText(candidate);
-
-        if (measured.width <= maxWidth || !current) {
-          current = candidate;
-        } else {
-          lines.push(current);
-          current = word;
-        }
-      }
-
-      if (current) lines.push(current);
+      lines.push(
+        ...(this.style.balanceLines
+          ? this.wrapWordsBalanced(words, maxWidth, font, letterSpacingPx)
+          : this.wrapWordsGreedy(words, maxWidth, font, letterSpacingPx)),
+      );
     }
 
     return lines;
+  }
+
+  private wrapWordsGreedy(
+    words: string[],
+    maxWidth: number,
+    font: string,
+    letterSpacingPx: number,
+  ): string[] {
+    const lines: string[] = [];
+    let current = "";
+
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word;
+      const measured = this.measureLineWidth(candidate, font, letterSpacingPx);
+
+      if (measured <= maxWidth || !current) {
+        current = candidate;
+      } else {
+        lines.push(current);
+        current = word;
+      }
+    }
+
+    if (current) lines.push(current);
+    return lines;
+  }
+
+  private wrapWordsBalanced(
+    words: string[],
+    maxWidth: number,
+    font: string,
+    letterSpacingPx: number,
+  ): string[] {
+    if (words.length <= 1) return words;
+
+    type Candidate = {
+      cost: number;
+      lines: string[];
+    };
+
+    const memo = new Map<number, Candidate | null>();
+    const widthCache = new Map<string, number>();
+    const measure = (line: string): number => {
+      const cached = widthCache.get(line);
+      if (cached !== undefined) return cached;
+      const width = this.measureLineWidth(line, font, letterSpacingPx);
+      widthCache.set(line, width);
+      return width;
+    };
+
+    const solve = (start: number): Candidate | null => {
+      if (start >= words.length) return { cost: 0, lines: [] };
+      if (memo.has(start)) return memo.get(start) ?? null;
+
+      let best: Candidate | null = null;
+      let line = "";
+
+      for (let end = start; end < words.length; end += 1) {
+        line = line ? `${line} ${words[end]}` : words[end];
+        const width = measure(line);
+
+        if (width > maxWidth && end > start) break;
+
+        const tail = solve(end + 1);
+        if (!tail) continue;
+
+        const isFinalLine = end === words.length - 1;
+        const slack01 = Math.max(0, maxWidth - width) / Math.max(1, maxWidth);
+        const ragCost = slack01 * slack01 * (isFinalLine ? 0.18 : 1);
+        const linePenalty = 0.015;
+        const widowPenalty =
+          isFinalLine && end === start && words.length - start > 1 ? 0.2 : 0;
+        const cost = ragCost + linePenalty + widowPenalty + tail.cost;
+
+        if (!best || cost < best.cost) {
+          best = { cost, lines: [line, ...tail.lines] };
+        }
+      }
+
+      memo.set(start, best);
+      return best;
+    };
+
+    return (
+      solve(0)?.lines ??
+      this.wrapWordsGreedy(words, maxWidth, font, letterSpacingPx)
+    );
+  }
+
+  private measureLineWidth(
+    line: string,
+    font: string,
+    letterSpacingPx: number,
+  ): number {
+    this.frameCtx.font = font;
+    this.applyLetterSpacing(this.frameCtx, letterSpacingPx);
+    return this.frameCtx.measureText(line).width;
   }
 
   private applyLetterSpacing(
     ctx: CanvasRenderingContext2D,
     letterSpacingPx: number,
   ): void {
-    const letterSpacingCtx = ctx as LetterSpacingCapableContext;
-    if ("letterSpacing" in letterSpacingCtx) {
-      letterSpacingCtx.letterSpacing = `${letterSpacingPx}px`;
+    const spacingCtx = ctx as TypographySpacingCapableContext;
+    if ("fontKerning" in spacingCtx) {
+      spacingCtx.fontKerning = "normal";
+    }
+    if ("letterSpacing" in spacingCtx) {
+      spacingCtx.letterSpacing = `${letterSpacingPx}px`;
     }
   }
 

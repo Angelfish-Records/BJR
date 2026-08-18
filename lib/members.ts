@@ -83,10 +83,14 @@ export async function getMemberIdByEmail(
  * Canonical Clerk bridge.
  *
  * Policy:
- * 1) Prefer canonical lookup by clerk_user_id. If found, update email + consent_latest_at + source_detail.
+ * 1) Prefer canonical lookup by clerk_user_id. If found, update identity metadata only.
  * 2) Else claim existing row by email ONLY if unclaimed (clerk_user_id is null).
  * 3) If email exists but is already claimed by another clerk_user_id, throw loud.
  * 4) Else insert a new member row with clerk_user_id + email.
+ *
+ * Marketing consent is deliberately outside this ownership boundary. Identity,
+ * Clerk, Stripe, gift, checkout, and entitlement provisioning must preserve an
+ * existing marketing preference and create fresh members opted out by default.
  *
  * Provisioning contract:
  * - Any member returned from this function must have baseline TIER_FRIEND entitlement.
@@ -98,6 +102,7 @@ export async function ensureMemberByClerk(params: {
   email: string;
   source?: string;
   sourceDetail?: Record<string, unknown>;
+  // Deprecated compatibility input: provisioning is consent-neutral and ignores it.
   marketingOptIn?: boolean;
 }): Promise<{ id: string; created: boolean }> {
   const clerkUserId = (params.clerkUserId ?? "").toString().trim();
@@ -108,7 +113,6 @@ export async function ensureMemberByClerk(params: {
 
   const source = params.source ?? "clerk";
   const sourceDetail = params.sourceDetail ?? {};
-  const marketingOptIn = params.marketingOptIn ?? true;
 
   // 1) Prefer canonical lookup by clerk_user_id
   const byClerk = await sql`
@@ -122,8 +126,6 @@ export async function ensureMemberByClerk(params: {
     await sql`
       update members
       set email = ${email},
-          consent_latest_at = now(),
-          marketing_opt_in = ${marketingOptIn},
           source_detail = members.source_detail || ${JSON.stringify(sourceDetail)}::jsonb
       where id = ${id}
     `;
@@ -136,8 +138,6 @@ export async function ensureMemberByClerk(params: {
   const claimed = await sql`
     update members
       set clerk_user_id = ${clerkUserId},
-          consent_latest_at = now(),
-          marketing_opt_in = ${marketingOptIn},
           source_detail = members.source_detail || ${JSON.stringify(sourceDetail)}::jsonb
     where email = ${email}
       and clerk_user_id is null
@@ -178,10 +178,10 @@ export async function ensureMemberByClerk(params: {
       ${clerkUserId},
       ${source},
       ${JSON.stringify(sourceDetail)}::jsonb,
-      now(),
-      now(),
       null,
-      ${marketingOptIn}
+      null,
+      null,
+      false
     )
     returning id, (xmax = 0) as created
   `;
@@ -207,6 +207,7 @@ export async function ensureMemberByEmail(params: {
   email: string;
   source?: string;
   sourceDetail?: Record<string, unknown>;
+  // Deprecated compatibility input: provisioning is consent-neutral and ignores it.
   marketingOptIn?: boolean;
 }): Promise<{ id: string; created: boolean }> {
   const email = normalizeEmail(params.email);
@@ -214,7 +215,6 @@ export async function ensureMemberByEmail(params: {
 
   const source = params.source ?? "unknown";
   const sourceDetail = params.sourceDetail ?? {};
-  const marketingOptIn = params.marketingOptIn ?? true;
 
   try {
     const ins = await sql`
@@ -231,10 +231,10 @@ export async function ensureMemberByEmail(params: {
         ${email},
         ${source},
         ${JSON.stringify(sourceDetail)}::jsonb,
-        now(),
-        now(),
         null,
-        ${marketingOptIn}
+        null,
+        null,
+        false
       )
       returning id
     `;
@@ -248,9 +248,7 @@ export async function ensureMemberByEmail(params: {
     if (e?.code === "23505") {
       const upd = await sql`
         update members
-        set consent_latest_at = now(),
-            marketing_opt_in = ${marketingOptIn},
-            source_detail = members.source_detail || ${JSON.stringify(sourceDetail)}::jsonb
+        set source_detail = members.source_detail || ${JSON.stringify(sourceDetail)}::jsonb
         where email = ${email}
         returning id
       `;

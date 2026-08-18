@@ -155,7 +155,6 @@ async function prepareCheckoutIdentity(params: {
       email,
       source: "checkout",
       sourceDetail: { intent: "stripe_checkout", tier },
-      marketingOptIn: true,
     });
 
     return { ok: true, customer: undefined };

@@ -642,6 +642,7 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumPlayerBundle> {
 export type AlbumCanonicalMetadata = {
   title: string | null;
   displayTitle: string | null;
+  artist: string | null;
   slug: string | null;
   artworkUrl: string | null;
 };
@@ -667,6 +668,7 @@ export async function getAlbumCanonicalMetadataBySlug(
   return {
     title: normStr(doc.title) ?? null,
     displayTitle: normStr(doc.displayTitle) ?? null,
+    artist: normStr(doc.artist) ?? null,
     slug: normStr(doc.slug) ?? null,
     artworkUrl: doc.artwork
       ? urlFor(doc.artwork).width(1200).height(1200).quality(90).url()

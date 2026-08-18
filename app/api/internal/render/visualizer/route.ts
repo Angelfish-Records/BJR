@@ -53,6 +53,8 @@ type RenderRequest = {
   lrcFile?: string;
   lyricDirectionsFile?: string;
   textMode?: TextRenderMode;
+  artistName?: string;
+  trackTitle?: string;
   promoText?: string;
   promoFooterText?: string;
   promoIconFile?: string;
@@ -217,6 +219,22 @@ function assertNumber(
 ): void {
   if (!Number.isFinite(value) || value < min || value > max) {
     throw new Error(`Invalid ${name}: ${value}`);
+  }
+}
+
+function assertOptionalLabelText(
+  name: string,
+  value: string | undefined,
+  maxLength: number,
+): void {
+  if (value === undefined) return;
+
+  if (typeof value !== "string") {
+    throw new TypeError(`${name} must be a string`);
+  }
+
+  if (value.trim().length > maxLength) {
+    throw new Error(`${name} must be ${maxLength} characters or fewer`);
   }
 }
 
@@ -474,6 +492,8 @@ function assertRenderSettings(body: RenderRequest): void {
     throw new Error("endSec must be greater than startSec");
   }
 
+  assertOptionalLabelText("artistName", body.artistName, 120);
+  assertOptionalLabelText("trackTitle", body.trackTitle, 160);
   assertPromoSettings(body, textMode);
 }
 
@@ -590,6 +610,8 @@ export async function POST(req: Request): Promise<NextResponse> {
       lyricDirectionsUrl: lyricDirections?.url,
       lyricDirectionsPath: lyricDirections?.path,
       textMode,
+      artistName: body.artistName?.trim() || undefined,
+      trackTitle: body.trackTitle?.trim() || undefined,
       promoText: textMode === "promo" ? body.promoText?.trim() : undefined,
       promoFooterText:
         textMode === "promo" ? body.promoFooterText?.trim() : undefined,

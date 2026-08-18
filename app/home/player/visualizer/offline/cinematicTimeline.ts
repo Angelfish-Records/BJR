@@ -24,12 +24,12 @@ export function bakeCameraFrameStates(input: {
     const rotation = Math.sin(t * 0.041 + seed * 0.07) * 0.012;
 
     return {
-      zoom: 1.025 + bass * 0.018 + lineStart * 0.022 - silence * 0.012,
-      rotationRad: rotation + lineStart * 0.008,
-      offsetX: driftX + Math.sin(t * 23.1) * lineStart * 0.006,
-      offsetY: driftY + Math.cos(t * 19.7) * lineStart * 0.005,
-      shake: lineStart * 0.9 + energy * 0.18,
-      exposure: 1 + bass * 0.035 + lineStart * 0.04,
+      zoom: 1.025 + bass * 0.018 + lineStart * 0.012 - silence * 0.012,
+      rotationRad: rotation + lineStart * 0.003,
+      offsetX: driftX + Math.sin(t * 23.1) * lineStart * 0.0025,
+      offsetY: driftY + Math.cos(t * 19.7) * lineStart * 0.002,
+      shake: lineStart * 0.35 + energy * 0.18,
+      exposure: 1 + bass * 0.035 + lineStart * 0.022,
     };
   });
 }

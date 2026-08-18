@@ -89,7 +89,6 @@ async function resolveSubscriptionMemberId(
     email,
     source: "stripe",
     sourceDetail: { stripe_customer_id: customerId },
-    marketingOptIn: true,
   });
 
   return ensured.id;

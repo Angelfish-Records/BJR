@@ -34,9 +34,9 @@ function buildTitle(opts: {
     return `${leaf} · ${siteName}`;
   }
 
-  // No track title available => fall back to album or fallback leaf
+  // No active track title available => keep the artist/site identity first.
   const leaf = album || fallbackLeaf;
-  return `${leaf} · ${siteName}`;
+  return `${siteName} · ${leaf}`;
 }
 
 export default function TrackTitleSync(props: {
@@ -64,12 +64,16 @@ export default function TrackTitleSync(props: {
   const queueAlbumTitle = p.queueContextTitle ?? "";
 
   const derived = React.useMemo(() => {
-    const trackTitle = clean(curTitle || q0Title);
+    // Album routes prime a current/queue entry before the listener presses play.
+    // Do not let that idle preparation overwrite the server-rendered album identity
+    // with a track title.
+    const trackTitle =
+      status === "idle" ? "" : clean(curTitle || q0Title);
     const artist = clean(queueArtist);
     const album = clean(queueAlbumTitle);
 
-    // If we have a queued track but state is idle, treat it as paused-ish for title UX.
-    const effectiveStatus = status === "idle" && (curId || q0Id) ? "paused" : status;
+    const effectiveStatus =
+      status === "idle" && (curId || q0Id) ? "paused" : status;
 
     return buildTitle({
       siteName,

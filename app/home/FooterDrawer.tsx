@@ -49,8 +49,11 @@ export default function FooterDrawer(
             location. Public participation is pseudonymous by default; members
             may optionally claim a public display name for use in community
             surfaces. We use your email to authenticate access, manage your
-            account, send necessary account and transactional notices, and send
-            first-party release or event communications where permitted. Access
+            account, and send necessary account and transactional notices.
+            Marketing emails about releases, events, and other news are optional
+            and are sent only when you actively opt in. You can unsubscribe from
+            marketing at any time without affecting account or transactional
+            messages. Access
             decisions, entitlements, member identity records, community
             participation, and playback telemetry are stored first-party in Neon
             Postgres. Streaming is delivered through Mux using short-lived

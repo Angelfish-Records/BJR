@@ -71,6 +71,8 @@ type Props = Readonly<{
   selectedAudioFile: string;
   selectedLrcFile: string;
   selectedLyricDirectionsFile: string;
+  artistName: string;
+  trackTitle: string;
   textMode: TextRenderMode;
   promoText: string;
   promoFooterText: string;
@@ -260,6 +262,8 @@ export default function VisualizerLivePreview(props: Props) {
     selectedAudioFile,
     selectedLrcFile,
     selectedLyricDirectionsFile,
+    artistName,
+    trackTitle,
     textMode,
     promoText,
     promoFooterText,
@@ -576,6 +580,9 @@ export default function VisualizerLivePreview(props: Props) {
           lyricStyleName: selectedLyricStyle,
           postPresetName: selectedPostPreset,
           renderFormatName: resolvedRenderFormatName,
+          textMode,
+          artistName: artistName.trim() || undefined,
+          trackTitle: trackTitle.trim() || undefined,
           compositionWidth: exportWidth,
           compositionHeight: exportHeight,
           pixelScale: previewScale,
@@ -617,6 +624,7 @@ export default function VisualizerLivePreview(props: Props) {
       }
     },
     [
+      artistName,
       exportHeight,
       exportWidth,
       previewScale,
@@ -637,6 +645,7 @@ export default function VisualizerLivePreview(props: Props) {
       endSec,
       textMode,
       timeline,
+      trackTitle,
     ],
   );
 

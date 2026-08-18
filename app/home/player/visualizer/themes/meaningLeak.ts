@@ -1,5 +1,5 @@
 // web/app/home/player/visualizer/themes/meaningLeak.ts
-// too jittery but the overall visual is promising
+// Grungy recursive salience field with autonomous disorientation and deterministic swoon episodes.
 import type { Theme } from "../types";
 import { createProgram, makeFullscreenTriangle } from "../gl";
 
@@ -23,6 +23,7 @@ out vec4 fragColor;
 
 uniform vec2  uRes;
 uniform float uTime;
+uniform float uTrackProgress;
 uniform float uEnergy;
 uniform float uRms;
 uniform float uBass;
@@ -108,6 +109,12 @@ float easeInOut(float x) {
   return x*x*(3.0 - 2.0*x);
 }
 
+float episodeWindow(float x, float center, float width) {
+  float distanceToCenter = abs(x - center);
+  float envelope = 1.0 - smoothstep(width * 0.18, width, distanceToCenter);
+  return easeInOut(envelope);
+}
+
 vec2 rotate2(vec2 p, float a) {
   float s = sin(a);
   float c = cos(a);
@@ -116,140 +123,514 @@ vec2 rotate2(vec2 p, float a) {
 
 void main() {
   vec2 uv = vUv;
-  vec2 p = (uv * uRes - 0.5 * uRes) / min(uRes.x, uRes.y);
+  vec2 viewP =
+    (uv * uRes - 0.5 * uRes)
+    / min(uRes.x, uRes.y);
 
   float e = clamp(uEnergy, 0.0, 1.0);
   float rms = clamp(uRms, 0.0, 1.0);
   float bass = clamp(uBass, 0.0, 1.0);
   float mid = clamp(uMid, 0.0, 1.0);
   float treble = clamp(uTreble, 0.0, 1.0);
+  float trackProgress = clamp(uTrackProgress, 0.0, 1.0);
 
-  // Playback detector: uses rms when present, else energy.
+  // Playback affects local contrast, colour, pressure and edge response.
+  // It never owns the structural clock or the global camera.
   float drive = max(e, rms);
-
-  // Transition: baseline -> active.
   float play = smoothstep(0.025, 0.16, drive);
 
-  // Directed manga-panel motion:
-  // slow underlying continuity, with occasional eased jumps/zooms instead of constant twitch.
-  float shotClock = uTime * mix(0.08, 0.18, play);
+  // Long-form verb: SWOON.
+  //
+  // The narrative is intentionally non-monotonic. Deterministic encroachment
+  // episodes arrive and recede across the recording, so pause/seek/offline
+  // rendering always land in the same perceptual chapter.
+  float swoon = 0.0;
+  swoon = max(
+    swoon,
+    episodeWindow(trackProgress, 0.16, 0.040) * 0.52
+  );
+  swoon = max(
+    swoon,
+    episodeWindow(trackProgress, 0.34, 0.052) * 0.74
+  );
+  swoon = max(
+    swoon,
+    episodeWindow(trackProgress, 0.53, 0.043) * 0.60
+  );
+  swoon = max(
+    swoon,
+    episodeWindow(trackProgress, 0.72, 0.060) * 0.88
+  );
+  swoon = max(
+    swoon,
+    episodeWindow(trackProgress, 0.90, 0.045) * 0.68
+  );
+
+  float pushPull =
+    0.91
+    + 0.09 * sin(
+      uTime * 0.58
+      + trackProgress * 11.0
+    );
+
+  float encroach = clamp(
+    swoon * pushPull,
+    0.0,
+    1.0
+  );
+
+  // A slow double pulse gives the peripheral pressure a vascular character
+  // without synchronising the whole frame to the music.
+  float beatPhase = fract(uTime * 1.02);
+
+  float beatA = 1.0 - smoothstep(
+    0.0,
+    0.085,
+    abs(beatPhase - 0.12)
+  );
+
+  float beatB = 1.0 - smoothstep(
+    0.0,
+    0.095,
+    abs(beatPhase - 0.30)
+  );
+
+  float bloodBeat = clamp(
+    beatA * beatA
+      + 0.58 * beatB * beatB,
+    0.0,
+    1.0
+  );
+
+  // Keep Meaning Leak's disorienting shot language, but make it autonomous.
+  // The world wanders because this theme is unstable, not because a transient
+  // shook the entire canvas.
+  float shotClock = uTime * 0.115;
   float shotId = floor(shotClock);
   float shotPhase = fract(shotClock);
   float shotEase = easeInOut(shotPhase);
 
-  vec2 shotSeed = vec2(shotId, shotId * 1.37 + 12.4);
-  vec2 nextSeed = vec2(shotId + 1.0, (shotId + 1.0) * 1.37 + 12.4);
+  vec2 shotSeed = vec2(
+    shotId,
+    shotId * 1.37 + 12.4
+  );
 
-  vec2 shotA = vec2(hash12(shotSeed), hash12(shotSeed + 8.1)) - 0.5;
-  vec2 shotB = vec2(hash12(nextSeed), hash12(nextSeed + 8.1)) - 0.5;
-  vec2 shotPan = mix(shotA, shotB, shotEase) * (0.12 + 0.18 * play);
+  vec2 nextSeed = vec2(
+    shotId + 1.0,
+    (shotId + 1.0) * 1.37 + 12.4
+  );
 
-  float zoomA = mix(0.92, 1.22, hash12(shotSeed + 17.0));
-  float zoomB = mix(0.92, 1.22, hash12(nextSeed + 17.0));
-  float zoom = mix(1.0, mix(zoomA, zoomB, shotEase), play);
+  vec2 shotA = vec2(
+    hash12(shotSeed),
+    hash12(shotSeed + 8.1)
+  ) - 0.5;
 
-  float angleA = (hash12(shotSeed + 23.0) - 0.5) * 0.22;
-  float angleB = (hash12(nextSeed + 23.0) - 0.5) * 0.22;
-  float angle = mix(angleA, angleB, shotEase) * play;
+  vec2 shotB = vec2(
+    hash12(nextSeed),
+    hash12(nextSeed + 8.1)
+  ) - 0.5;
 
-  // Sparse impact jitter: intentional snap, not permanent shimmer.
-  float impact = pow(1.0 - shotPhase, 10.0) * play * smoothstep(0.25, 0.9, bass + treble);
-  vec2 impactJitter = vec2(
+  vec2 shotPan = mix(
+    shotA,
+    shotB,
+    shotEase
+  ) * 0.18;
+
+  float zoomA = mix(
+    0.94,
+    1.18,
+    hash12(shotSeed + 17.0)
+  );
+
+  float zoomB = mix(
+    0.94,
+    1.18,
+    hash12(nextSeed + 17.0)
+  );
+
+  float zoom = mix(
+    zoomA,
+    zoomB,
+    shotEase
+  );
+
+  float angleA =
+    (hash12(shotSeed + 23.0) - 0.5)
+    * 0.18;
+
+  float angleB =
+    (hash12(nextSeed + 23.0) - 0.5)
+    * 0.18;
+
+  float angle = mix(
+    angleA,
+    angleB,
+    shotEase
+  );
+
+  // Retain a very small deterministic shot-boundary snap, independent of audio.
+  float shotSnap =
+    pow(1.0 - shotPhase, 12.0)
+    * 0.22;
+
+  vec2 snapJitter = vec2(
     hash12(vec2(shotId, 91.7)) - 0.5,
     hash12(vec2(shotId, 42.3)) - 0.5
-  ) * impact * 0.055;
+  ) * shotSnap * 0.022;
 
-  p = rotate2((p + shotPan + impactJitter) / zoom, angle);
+  float tunnelZoom =
+    1.0
+    + encroach * (
+      0.075
+      + 0.025 * sin(uTime * 0.65)
+    );
 
-  // Inline stability: widen tiny details at low internal res
-  float resMin = min(uRes.x, uRes.y);
-  float soft = clamp((520.0 / max(240.0, resMin)), 0.9, 1.7);
+  angle +=
+    sin(uTime * 0.43)
+    * encroach
+    * 0.018;
 
- // Time: much slower field evolution. The camera now provides motion,
-  // so the texture itself can stop boiling.
-  float tBase = uTime * 0.026;
-  float tPlay = uTime * (0.036 + 0.018 * mid) * (1.0 - 0.14 * bass);
-  float t = mix(tBase, tPlay, play);
+  vec2 p = rotate2(
+    (viewP + shotPan + snapJitter)
+      / (zoom * tunnelZoom),
+    angle
+  );
 
-  // Base field (full-coverage)
+  // Tunnel vision remains screen-centred even while the world underneath pans.
+  vec2 tunnelCentre = vec2(
+    sin(uTime * 0.17),
+    cos(uTime * 0.13)
+  ) * encroach * 0.024;
+
+  float screenRadius = length(
+    viewP - tunnelCentre
+  );
+
+  float clearRadius = mix(
+    1.16,
+    0.56,
+    encroach
+  );
+
+  // Each vascular beat briefly tightens the aperture.
+  clearRadius -=
+    encroach
+    * bloodBeat
+    * 0.024;
+
+  float peripheralMask = smoothstep(
+    clearRadius * 0.70,
+    clearRadius * 1.08,
+    screenRadius
+  );
+
+  float acuityLoss =
+    peripheralMask
+    * encroach;
+
+  // Inline stability: widen tiny details at low internal resolution.
+  float resMin = min(
+    uRes.x,
+    uRes.y
+  );
+
+  float soft = clamp(
+    520.0 / max(240.0, resMin),
+    0.9,
+    1.7
+  );
+
+  // Structural field evolution is autonomous. Audio no longer changes the
+  // master clock or the displacement of the world texture.
+  float t = max(uTime, 0.0) * 0.032;
+
   vec2 q = p;
-  q += 0.08 * vec2(sin(t*0.9), cos(t*0.7));
+  q += 0.08 * vec2(
+    sin(t * 0.9),
+    cos(t * 0.7)
+  );
 
-  // Flow advection (subtle in baseline, stronger in play)
   vec2 v = flow(q, t);
-  q += v * (0.035 + 0.070 * play) * (0.55 + 0.45 * mid);
 
-  // “world texture”
-  float f0 = fbm(q*1.35 + vec2(0.0, t*0.35));
-  float f1 = fbm(q*2.25 - vec2(t*0.22, t*0.18));
-  float field = clamp(0.62*f0 + 0.38*f1, 0.0, 1.0);
+  float flowStrength =
+    0.062
+    + 0.010 * sin(uTime * 0.11);
 
-  // Salience: image “notices itself” (edges/curvature/contrast)
-  // Use derivative-based sample steps for stability across changing internal res.
-  vec2 px = 1.0 / max(uRes, vec2(1.0));
+  q += v * flowStrength;
+
+  // World texture. During a swoon, the peripheral high-frequency layer is
+  // progressively replaced by the lower-frequency layer: a cheap single-pass
+  // approximation of loss of acuity rather than an extra blur pass.
+  float f0 = fbm(
+    q * 1.35
+      + vec2(0.0, t * 0.35)
+  );
+
+  float f1 = fbm(
+    q * 2.25
+      - vec2(t * 0.22, t * 0.18)
+  );
+
+  float softenedF1 = mix(
+    f1,
+    f0,
+    acuityLoss * 0.84
+  );
+
+  float field = clamp(
+    0.62 * f0
+      + 0.38 * softenedF1,
+    0.0,
+    1.0
+  );
+
+  // Salience: image "notices itself" through edge/curvature significance.
+  vec2 px = 1.0 / max(
+    uRes,
+    vec2(1.0)
+  );
+
   vec2 s = px * (2.0 * soft);
 
-  float fx1 = fbm((q + vec2(s.x, 0.0))*1.35 + vec2(0.0, t*0.35));
-  float fx2 = fbm((q - vec2(s.x, 0.0))*1.35 + vec2(0.0, t*0.35));
-  float fy1 = fbm((q + vec2(0.0, s.y))*1.35 + vec2(0.0, t*0.35));
-  float fy2 = fbm((q - vec2(0.0, s.y))*1.35 + vec2(0.0, t*0.35));
+  float fx1 = fbm(
+    (q + vec2(s.x, 0.0)) * 1.35
+      + vec2(0.0, t * 0.35)
+  );
 
-  vec2 grad = vec2(fx1 - fx2, fy1 - fy2) / max(1e-6, (2.0*max(s.x, s.y)));
+  float fx2 = fbm(
+    (q - vec2(s.x, 0.0)) * 1.35
+      + vec2(0.0, t * 0.35)
+  );
+
+  float fy1 = fbm(
+    (q + vec2(0.0, s.y)) * 1.35
+      + vec2(0.0, t * 0.35)
+  );
+
+  float fy2 = fbm(
+    (q - vec2(0.0, s.y)) * 1.35
+      + vec2(0.0, t * 0.35)
+  );
+
+  vec2 grad = vec2(
+    fx1 - fx2,
+    fy1 - fy2
+  ) / max(
+    1e-6,
+    2.0 * max(s.x, s.y)
+  );
+
   float gmag = length(grad);
 
-  // Curvature proxy: gradient direction change via second-order finite diff
-  float fxx = fx1 + fx2 - 2.0*f0;
-  float fyy = fy1 + fy2 - 2.0*f0;
-  float curv = abs(fxx) + abs(fyy);
+  float fxx =
+    fx1
+    + fx2
+    - 2.0 * f0;
 
-  // Salience combines edge + curvature, boosted by treble, gated by play
-  float sal = (0.85*gmag + 0.65*curv);
- sal *= (0.62 + 0.58 * treble);
-  sal *= (0.20 + 0.80*play);
-  sal = clamp(sal * 2.2, 0.0, 1.0);
+  float fyy =
+    fy1
+    + fy2
+    - 2.0 * f0;
 
-  // Meaning leak: contrast increases selectively where salience exists
-  float k = (0.06 + 0.34 * play) * (0.58 + 0.42 * drive);
-  float shaped = softContrast(field, k * sal);
+  float curv =
+    abs(fxx)
+    + abs(fyy);
 
-  // Base color (restrained), then local chroma condensation under salience
-  vec3 col = palette(shaped, play);
+  float sal =
+    0.85 * gmag
+    + 0.65 * curv;
 
-  // Halo: soft “edge significance” without drawing outlines
-  // Subtle chromatic fringe aligned to gradient direction, scaled by salience.
-  vec2 dir = normalize(grad + vec2(1e-6, 1e-6));
-  float fringePx = (0.55 + 0.95 * play) * (0.45 + 0.55 * treble) * soft;
-  vec2 off = dir * fringePx * px;
+  // Mids and treble illuminate significance rather than move the field.
+  sal *=
+    0.60
+    + 0.24 * mid
+    + 0.34 * treble;
+
+  sal *=
+    0.34
+    + 0.66 * play;
+
+  // Loss of acuity suppresses fine peripheral salience during encroachment.
+  sal *=
+    1.0
+    - 0.48 * acuityLoss;
+
+  sal = clamp(
+    sal * 2.2,
+    0.0,
+    1.0
+  );
+
+  float contrastAmount =
+    (0.07 + 0.31 * play)
+    * (0.62 + 0.38 * drive);
+
+  float shaped = softContrast(
+    field,
+    contrastAmount * sal
+  );
+
+  vec3 col = palette(
+    shaped,
+    play
+  );
+
+  // Chromatic significance fringe. The peripheral offset grows during a swoon
+  // so edges smear chromatically even while fine luminance detail softens.
+  vec2 dir = normalize(
+    grad + vec2(1e-6)
+  );
+
+  float fringePx =
+    (0.55 + 0.90 * play)
+    * (0.48 + 0.52 * treble)
+    * soft
+    * (1.0 + 1.15 * acuityLoss);
+
+  vec2 off =
+    dir
+    * fringePx
+    * px;
 
   float lC = shaped;
-  float lR = clamp(softContrast(clamp(0.62*fbm((q + off)*1.35 + vec2(0.0, t*0.35)) + 0.38*f1, 0.0, 1.0), k * sal), 0.0, 1.0);
-  float lB = clamp(softContrast(clamp(0.62*fbm((q - off)*1.35 + vec2(0.0, t*0.35)) + 0.38*f1, 0.0, 1.0), k * sal), 0.0, 1.0);
 
-  // build a very subtle fringe; keep it adult
-  vec3 fringe = vec3(lR - lC, 0.0, lC - lB);
-  fringe *= (0.06 + 0.16*play) * sal;
+  float lR = clamp(
+    softContrast(
+      clamp(
+        0.62 * fbm(
+          (q + off) * 1.35
+            + vec2(0.0, t * 0.35)
+        ) + 0.38 * softenedF1,
+        0.0,
+        1.0
+      ),
+      contrastAmount * sal
+    ),
+    0.0,
+    1.0
+  );
+
+  float lB = clamp(
+    softContrast(
+      clamp(
+        0.62 * fbm(
+          (q - off) * 1.35
+            + vec2(0.0, t * 0.35)
+        ) + 0.38 * softenedF1,
+        0.0,
+        1.0
+      ),
+      contrastAmount * sal
+    ),
+    0.0,
+    1.0
+  );
+
+  vec3 fringe = vec3(
+    lR - lC,
+    0.0,
+    lC - lB
+  );
+
+  fringe *=
+    (0.06 + 0.15 * play)
+    * sal
+    * (1.0 + 0.70 * acuityLoss);
 
   col += fringe;
 
-  // “importance glow”: lift highlights where salience peaks, but cap hard whites (SCREEN-safe)
-  float glow = smoothstep(0.20, 0.95, sal) * (0.06 + 0.18*play) * (0.55 + 0.45*drive);
-  col += vec3(0.95, 0.95, 1.00) * glow * smoothstep(0.55, 0.98, shaped);
+  float glow =
+    smoothstep(0.20, 0.95, sal)
+    * (0.06 + 0.17 * play)
+    * (0.58 + 0.42 * drive);
 
-  // Baseline: add a tiny film grain-like microtexture so idle isn’t dead
-    // Slower, coarser grain. Enough texture to breathe, not enough to buzz.
-  float grainTime = floor(uTime * 8.0) / 8.0;
-  float grain = noise(uv * uRes * 0.22 + vec2(grainTime * 0.35, -grainTime * 0.27));
-  col += vec3(grain - 0.5) * (0.006 + 0.008 * (1.0 - play));
+  col +=
+    vec3(0.95, 0.95, 1.00)
+    * glow
+    * smoothstep(
+      0.55,
+      0.98,
+      shaped
+    );
 
-  // vignette
-  float r = length(p);
-  float vig = smoothstep(1.35, 0.25, r);
-  col *= 0.55 + 0.70 * vig;
+  // Grunge remains coarse and slow enough not to become video noise.
+  float grainTime =
+    floor(uTime * 7.0)
+    / 7.0;
 
-  // global breathing (very gentle)
-  col *= 0.90 + 0.16 * drive;
+  float grain = noise(
+    uv * uRes * 0.20
+      + vec2(
+        grainTime * 0.31,
+        -grainTime * 0.25
+      )
+  );
 
-  fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+  col +=
+    vec3(grain - 0.5)
+    * (0.008 + 0.010 * (1.0 - play));
+
+  // Reuse the grain as a dirty vascular modulation rather than paying for
+  // another procedural layer.
+  float vascularTexture = smoothstep(
+    0.42,
+    0.88,
+    grain
+  );
+
+  float vascularPressure =
+    peripheralMask
+    * encroach
+    * (0.30 + 0.70 * bass)
+    * (0.52 + 0.48 * bloodBeat)
+    * (0.72 + 0.28 * vascularTexture);
+
+  vec3 bloodTint = vec3(
+    0.16,
+    0.010,
+    0.024
+  );
+
+  vec3 vascularColour =
+    col * vec3(0.78, 0.58, 0.62)
+    + bloodTint * 0.22;
+
+  col = mix(
+    col,
+    vascularColour,
+    vascularPressure * 0.44
+  );
+
+  // Stable base vignette plus the intermittent closing visual field.
+  float baseVignette =
+    1.0 - smoothstep(
+      0.25,
+      1.35,
+      screenRadius
+    );
+
+  col *=
+    0.55
+    + 0.70 * baseVignette;
+
+  float tunnelDark =
+    peripheralMask
+    * encroach;
+
+  col *=
+    1.0
+    - tunnelDark
+      * (0.30 + 0.08 * bloodBeat);
+
+  // Keep whole-frame musical breathing very restrained.
+  col *=
+    0.98
+    + 0.04 * drive;
+
+  fragColor = vec4(
+    clamp(col, 0.0, 1.0),
+    1.0
+  );
 }
 `;
 
@@ -262,6 +643,7 @@ export function createMeaningLeakTheme(): Theme {
 
   let uRes: WebGLUniformLocation | null = null;
   let uTime: WebGLUniformLocation | null = null;
+  let uTrackProgress: WebGLUniformLocation | null = null;
   let uEnergy: WebGLUniformLocation | null = null;
   let uRms: WebGLUniformLocation | null = null;
   let uBass: WebGLUniformLocation | null = null;
@@ -291,6 +673,7 @@ export function createMeaningLeakTheme(): Theme {
       tri = makeFullscreenTriangle(gl);
       uRes = gl.getUniformLocation(program, "uRes");
       uTime = gl.getUniformLocation(program, "uTime");
+      uTrackProgress = gl.getUniformLocation(program, "uTrackProgress");
       uEnergy = gl.getUniformLocation(program, "uEnergy");
       uRms = gl.getUniformLocation(program, "uRms");
       uBass = gl.getUniformLocation(program, "uBass");
@@ -320,6 +703,7 @@ export function createMeaningLeakTheme(): Theme {
 
       gl.uniform2f(uRes, opts.width, opts.height);
       gl.uniform1f(uTime, opts.time);
+      gl.uniform1f(uTrackProgress, opts.trackProgress01 ?? 0);
       gl.uniform1f(uEnergy, smoothEnergy);
       gl.uniform1f(uRms, smoothRms);
       gl.uniform1f(uBass, smoothBass);

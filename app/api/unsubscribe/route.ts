@@ -3,6 +3,7 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import { verifyUnsubscribeToken, normalizeEmail } from "@/lib/unsubscribe";
+import { setMarketingPreference } from "@/lib/marketingConsent";
 
 export const runtime = "nodejs";
 
@@ -17,22 +18,21 @@ function redirectToInvalid(req: NextRequest) {
   return NextResponse.redirect(url, 303);
 }
 
-async function ensureSuppressionRow(
-  email: string,
-  reason: string,
-  source: string,
-) {
-  // No guarantee of unique constraint in schema JSON, so do a safe "update-then-insert".
-  const upd = await sql`
-    update email_suppressions
-    set reason = ${reason}, source = ${source}, last_seen_at = now()
-    where lower(email) = lower(${email})
-  `;
-  if ((upd.rowCount ?? 0) > 0) return;
-
+async function preserveEmailLevelOptOut(email: string) {
+  // This fallback is only for a valid unsubscribe token that no longer resolves
+  // to a member row. Do not overwrite a harder bounce/complaint suppression.
   await sql`
     insert into email_suppressions (email, reason, source, first_seen_at, last_seen_at)
-    values (${email}, ${reason}, ${source}, now(), now())
+    values (${email}, 'unsubscribe', 'unsubscribe_page', now(), now())
+    on conflict (email) do update set
+      source = case
+        when email_suppressions.reason = 'unsubscribe' then excluded.source
+        else email_suppressions.source
+      end,
+      last_seen_at = case
+        when email_suppressions.reason = 'unsubscribe' then now()
+        else email_suppressions.last_seen_at
+      end
   `;
 }
 
@@ -60,22 +60,24 @@ export async function POST(req: NextRequest) {
   const memberId = vr.payload.memberId ? String(vr.payload.memberId) : null;
 
   try {
-    // 1) Suppress globally for marketing mailouts (your enqueue already LEFT JOINs email_suppressions).
-    await ensureSuppressionRow(email, "unsubscribe", "unsubscribe_page");
+    const member = await sql<{ id: string }>`
+      select id
+      from members
+      where lower(email::text) = lower(${email})
+        and (${memberId}::text is null or id::text = ${memberId})
+      limit 1
+    `;
 
-    // 2) Flip member opt-in off (belt + braces; view should exclude them)
-    if (memberId) {
-      await sql`
-        update members
-        set marketing_opt_in = false, updated_at = now()
-        where id = ${memberId}::uuid
-      `;
+    const resolvedMemberId = member.rows[0]?.id ?? null;
+    if (resolvedMemberId) {
+      await setMarketingPreference({
+        memberId: resolvedMemberId,
+        optedIn: false,
+        source: "unsubscribe_page",
+        metadata: { surface: "campaign_unsubscribe" },
+      });
     } else {
-      await sql`
-        update members
-        set marketing_opt_in = false, updated_at = now()
-        where lower(email::text) = lower(${email})
-      `;
+      await preserveEmailLevelOptOut(email);
     }
 
     return redirectToDone(req);

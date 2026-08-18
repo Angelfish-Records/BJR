@@ -1409,17 +1409,27 @@ export default function FullPlayer(props: FullPlayerProps) {
       cur?.recordingId &&
       effTracks.some((t) => t.recordingId === cur.recordingId),
     );
-    const trackTitle = curInThisAlbum
+    const shouldUseTrackTitle = Boolean(
+      curInThisAlbum &&
+      (route.displayId || p.status !== "idle" || p.intent === "play"),
+    );
+    const trackTitle = shouldUseTrackTitle
       ? cur?.title?.trim() || cur?.recordingId || ""
       : "";
 
     const aTitle = (effAlbum?.title?.trim() || "").trim();
-    const artist = (effAlbum?.artist?.trim() || "").trim();
+    const artist =
+      (effAlbum?.artist?.trim() || "").trim() || "Brendan John Roch";
 
-    // Format: "Track · Album · Artist" (falls back gracefully)
-    const next = trackTitle
-      ? [trackTitle, aTitle, artist].filter(Boolean).join(" · ")
-      : [aTitle, artist].filter(Boolean).join(" · ");
+    let next = [aTitle, artist].filter(Boolean).join(" · ");
+
+    // A generic album route is also allowed to be the site's dynamic front
+    // door. While playback is merely primed, keep the artist identity first.
+    if (isPublicAlbumRoute && !route.displayId && !shouldUseTrackTitle) {
+      next = [artist, aTitle].filter(Boolean).join(" · ");
+    } else if (trackTitle) {
+      next = [trackTitle, aTitle, artist].filter(Boolean).join(" · ");
+    }
 
     if (next) document.title = next;
 
@@ -1434,6 +1444,8 @@ export default function FullPlayer(props: FullPlayerProps) {
     effAlbum?.title,
     effAlbum?.artist,
     effTracks,
+    isPublicAlbumRoute,
+    route.displayId,
     p,
   ]);
 

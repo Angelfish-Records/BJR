@@ -2,8 +2,14 @@
 import type { Metadata } from "next";
 import { getAlbumCanonicalMetadataBySlug } from "@/lib/albums";
 
+const SITE_ARTIST = "Brendan John Roch";
+
 function normTitle(value: string | null | undefined): string {
   return (value ?? "").trim();
+}
+
+function albumMetadataDescription(albumTitle: string, artist: string): string {
+  return `${albumTitle} by ${artist}. Listen, explore lyrics, writing, and other projects directly from the official website of ${artist}.`;
 }
 
 export async function generateMetadata(props: {
@@ -19,17 +25,23 @@ export async function generateMetadata(props: {
 
   const display =
     normTitle(doc?.displayTitle) || normTitle(doc?.title) || decodedSlug;
+  const artist = normTitle(doc?.artist) || SITE_ARTIST;
+  const title = `${artist} · ${display}`;
+  const description = albumMetadataDescription(display, artist);
 
   const canonicalPath = `/${encodeURIComponent(doc?.slug ?? albumSlug)}`;
   const canonical = appUrl ? `${appUrl}${canonicalPath}` : canonicalPath;
   const artworkUrl = normTitle(doc?.artworkUrl) || undefined;
 
   return {
-    title: display,
+    title: { absolute: title },
+    description,
     alternates: { canonical },
     openGraph: {
-      title: display,
+      title,
+      description,
       url: canonical,
+      siteName: SITE_ARTIST,
       images: artworkUrl
         ? [
             {
@@ -43,7 +55,8 @@ export async function generateMetadata(props: {
     },
     twitter: {
       card: "summary",
-      title: display,
+      title,
+      description,
       images: artworkUrl ? [artworkUrl] : undefined,
     },
   };

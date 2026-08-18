@@ -28,6 +28,7 @@ import {
   applyLyricDirectionToStyle,
   directedLyricStyleName,
 } from "../../../home/player/visualizer/offline/lyricDirections";
+import type { LyricFrameState } from "../../../home/player/visualizer/offline/lyricTypes";
 import type { TextRenderMode } from "../../../home/player/visualizer/offline/textTimeline";
 import {
   POST_PRESET_NAMES,
@@ -167,11 +168,227 @@ function promoFooterAnchorY01(
   return hasArtwork ? 0.895 : 0.79;
 }
 
+function primaryFontFamily(fontFamily: string): string {
+  return fontFamily.split(",")[0]?.trim().replace(/^["']|["']$/g, "") ?? "";
+}
+
+async function ensureRenderFontsReady(): Promise<void> {
+  if (!("fonts" in document)) {
+    throw new Error("FontFaceSet is unavailable; deterministic text rendering cannot continue");
+  }
+
+  const requirements = new Map<string, { family: string; weight: number }>();
+
+  for (const style of Object.values(LYRIC_STYLES)) {
+    const family = style.fontFamily ? primaryFontFamily(style.fontFamily) : "";
+    const weight = style.fontWeight ?? 400;
+    if (!family) continue;
+    requirements.set(`${family}:${weight}`, { family, weight });
+  }
+
+  const probeText = "Brendan John Roch — typography 0123456789";
+  const missing: string[] = [];
+
+  for (const requirement of requirements.values()) {
+    const family = JSON.stringify(requirement.family);
+    const descriptor = `${requirement.weight} 64px ${family}`;
+    const faces = await document.fonts.load(descriptor, probeText);
+
+    if (faces.length === 0 || !document.fonts.check(descriptor, probeText)) {
+      missing.push(`${requirement.family} ${requirement.weight}`);
+    }
+  }
+
+  await document.fonts.ready;
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Required offline render fonts failed to load: ${missing.join(", ")}`,
+    );
+  }
+}
+
+function derivePromoFooterStyle(
+  lyricStyle: Partial<LyricTextStyle> | undefined,
+  portraitComposition: boolean,
+  hasArtwork: boolean,
+): Partial<LyricTextStyle> | undefined {
+  if (!lyricStyle) return undefined;
+
+  return {
+    ...lyricStyle,
+    ...(lyricStyle.fontSizePx !== undefined
+      ? { fontSizePx: lyricStyle.fontSizePx * 0.6 }
+      : {}),
+    ...(lyricStyle.letterSpacingPx !== undefined
+      ? { letterSpacingPx: lyricStyle.letterSpacingPx * 0.72 }
+      : {}),
+    ...(lyricStyle.strokeWidthPx !== undefined
+      ? { strokeWidthPx: lyricStyle.strokeWidthPx * 0.62 }
+      : {}),
+    ...(lyricStyle.contrastStrokeWidthPx !== undefined
+      ? { contrastStrokeWidthPx: lyricStyle.contrastStrokeWidthPx * 0.56 }
+      : {}),
+    ...(lyricStyle.contrastShadowBlurPx !== undefined
+      ? { contrastShadowBlurPx: lyricStyle.contrastShadowBlurPx * 0.52 }
+      : {}),
+    ...(lyricStyle.shadowBlurPx !== undefined
+      ? { shadowBlurPx: lyricStyle.shadowBlurPx * 0.48 }
+      : {}),
+    anchorY01: promoFooterAnchorY01(portraitComposition, hasArtwork),
+    maxWidth01: Math.min(
+      lyricStyle.maxWidth01 ?? 0.76,
+      portraitComposition ? 0.82 : 0.68,
+    ),
+    lineHeight: Math.max(1.04, lyricStyle.lineHeight ?? 1.08),
+    maxLines: portraitComposition ? 2 : 1,
+    minimumFontScale: 0.76,
+    previousGhostOpacity: 0,
+    nextEchoOpacity: 0,
+    trailOpacity: 0,
+    lineStartScaleImpulse: 0,
+    lineStartBlurPx: 0,
+    lineStartShakePx: 0,
+    revealMode: "none",
+  };
+}
+
+type TrackIdentityStyles = {
+  artist: Partial<LyricTextStyle>;
+  title: Partial<LyricTextStyle>;
+};
+
+type TrackIdentityText = {
+  artistName: string;
+  trackTitle: string;
+};
+
+function deriveTrackIdentityStyles(
+  lyricStyle: Partial<LyricTextStyle> | undefined,
+  portraitComposition: boolean,
+): TrackIdentityStyles | undefined {
+  if (!lyricStyle) return undefined;
+
+  const baseFontSize = lyricStyle.fontSizePx ?? 52;
+  const baseLetterSpacing = lyricStyle.letterSpacingPx ?? 0;
+  const anchorX01 = portraitComposition ? 0.92 : 0.945;
+
+  const common: Partial<LyricTextStyle> = {
+    ...lyricStyle,
+    align: "right",
+    anchorX01,
+    lineHeight: 1,
+    maxLines: 1,
+    minimumFontScale: 0.68,
+    balanceLines: false,
+    strokeWidthPx: (lyricStyle.strokeWidthPx ?? 0) * 0.42,
+    contrastStrokeWidthPx:
+      (lyricStyle.contrastStrokeWidthPx ?? 0) * 0.42,
+    contrastShadowBlurPx:
+      (lyricStyle.contrastShadowBlurPx ?? 0) * 0.32,
+    shadowBlurPx: (lyricStyle.shadowBlurPx ?? 0) * 0.28,
+    previousGhostOpacity: 0,
+    nextEchoOpacity: 0,
+    trailOpacity: 0,
+    lineStartScaleImpulse: 0,
+    lineStartBlurPx: 0,
+    lineStartShakePx: 0,
+    revealMode: "none",
+    backgroundVeilOpacity: 0,
+    backgroundVeilMode: "none",
+  };
+
+  return {
+    artist: {
+      ...common,
+      fontSizePx: Math.max(13, Math.min(18, baseFontSize * 0.28)),
+      letterSpacingPx: Math.max(
+        0.5,
+        baseLetterSpacing * 0.18 + 0.7,
+      ),
+      anchorY01: portraitComposition ? 0.035 : 0.055,
+      maxWidth01: portraitComposition ? 0.52 : 0.34,
+      opacity: Math.min(0.68, lyricStyle.opacity ?? 1),
+    },
+    title: {
+      ...common,
+      fontSizePx: Math.max(17, Math.min(23, baseFontSize * 0.35)),
+      letterSpacingPx: Math.max(
+        0.15,
+        baseLetterSpacing * 0.16 + 0.38,
+      ),
+      anchorY01: portraitComposition ? 0.06 : 0.09,
+      maxWidth01: portraitComposition ? 0.62 : 0.42,
+      opacity: Math.min(0.9, lyricStyle.opacity ?? 1),
+    },
+  };
+}
+
+function deriveCopyrightLabelStyle(
+  lyricStyle: Partial<LyricTextStyle> | undefined,
+  portraitComposition: boolean,
+): Partial<LyricTextStyle> | undefined {
+  if (!lyricStyle) return undefined;
+
+  const baseFontSize = lyricStyle.fontSizePx ?? 52;
+  const baseLetterSpacing = lyricStyle.letterSpacingPx ?? 0;
+
+  return {
+    ...lyricStyle,
+    align: "center",
+    anchorX01: 0.5,
+    anchorY01: portraitComposition ? 0.984 : 0.98,
+    maxWidth01: portraitComposition ? 0.84 : 0.62,
+    lineHeight: 1,
+    maxLines: 1,
+    minimumFontScale: 0.9,
+    balanceLines: false,
+    fontSizePx: Math.max(9, Math.min(13, baseFontSize * 0.18)),
+    letterSpacingPx: Math.max(0.32, baseLetterSpacing * 0.12 + 0.42),
+    strokeWidthPx: (lyricStyle.strokeWidthPx ?? 0) * 0.24,
+    contrastStrokeWidthPx:
+      (lyricStyle.contrastStrokeWidthPx ?? 0) * 0.24,
+    contrastShadowBlurPx:
+      (lyricStyle.contrastShadowBlurPx ?? 0) * 0.16,
+    shadowBlurPx: (lyricStyle.shadowBlurPx ?? 0) * 0.16,
+    previousGhostOpacity: 0,
+    nextEchoOpacity: 0,
+    trailOpacity: 0,
+    lineStartScaleImpulse: 0,
+    lineStartBlurPx: 0,
+    lineStartShakePx: 0,
+    revealMode: "none",
+    backgroundVeilOpacity: 0,
+    backgroundVeilMode: "none",
+    opacity: Math.min(0.56, lyricStyle.opacity ?? 1),
+  };
+}
+
+function staticTextFrame(text: string): LyricFrameState {
+  return {
+    activeLineIndex: 0,
+    activeText: text,
+    previousText: null,
+    nextText: null,
+    lineProgress01: 0.5,
+    lineAgeSec: 1,
+    timeToNextLineSec: null,
+    isLineStart: false,
+    isLineEnd: false,
+    silence01: 0,
+  };
+}
+
 export default function InternalVisualizerRenderPage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rendererRef = useRef<OfflineVisualizerRenderer | null>(null);
   const lyricRendererRef = useRef<LyricTextRenderer | null>(null);
   const promoFooterRendererRef = useRef<LyricTextRenderer | null>(null);
+  const trackArtistRendererRef = useRef<LyricTextRenderer | null>(null);
+  const trackTitleRendererRef = useRef<LyricTextRenderer | null>(null);
+  const trackIdentityTextRef = useRef<TrackIdentityText | null>(null);
+  const copyrightRendererRef = useRef<LyricTextRenderer | null>(null);
+  const copyrightTextRef = useRef<string | null>(null);
   const promoImageRendererRef = useRef<PromoImageRenderer | null>(null);
   const postProcessorRef = useRef<FramePostProcessor | null>(null);
   const pixelBufferRef = useRef<Uint8Array | null>(null);
@@ -206,6 +423,8 @@ export default function InternalVisualizerRenderPage() {
   const [selectedPostPreset, setSelectedPostPreset] =
     useState<PostPresetName>("gold-devotional");
   const [recordingId, setRecordingId] = useState("test_render");
+  const [artistName, setArtistName] = useState("Brendan John Roch");
+  const [trackTitle, setTrackTitle] = useState("");
   const [renderFormatName, setRenderFormatName] =
     useState<RenderFormatName>("landscape-16:9");
   const [width, setWidth] = useState(1280);
@@ -231,6 +450,11 @@ export default function InternalVisualizerRenderPage() {
           rendererRef.current = null;
           lyricRendererRef.current = null;
           promoFooterRendererRef.current = null;
+          trackArtistRendererRef.current = null;
+          trackTitleRendererRef.current = null;
+          trackIdentityTextRef.current = null;
+          copyrightRendererRef.current = null;
+          copyrightTextRef.current = null;
           promoImageRendererRef.current = null;
           postProcessorRef.current = null;
           pixelBufferRef.current = null;
@@ -253,9 +477,7 @@ export default function InternalVisualizerRenderPage() {
             throw new Error("WebGL2 is unavailable");
           }
 
-          if ("fonts" in document) {
-            await document.fonts.ready;
-          }
+          await ensureRenderFontsReady();
 
           const renderer = new OfflineVisualizerRenderer(gl, config);
           await renderer.init();
@@ -291,26 +513,24 @@ export default function InternalVisualizerRenderPage() {
           const portraitComposition =
             compositionHeight > compositionWidth * 1.15;
           const promoFooterStyle = config.promoFooterEnabled
-            ? {
-                ...(lyricStyle ?? {}),
-                ...(lyricStyle?.fontSizePx !== undefined
-                  ? { fontSizePx: lyricStyle.fontSizePx * 0.72 }
-                  : {}),
-                anchorY01: promoFooterAnchorY01(
-                  portraitComposition,
-                  Boolean(config.promoArtworkUrl),
-                ),
-                maxWidth01: Math.min(
-                  lyricStyle?.maxWidth01 ?? 0.76,
-                  portraitComposition ? 0.82 : 0.68,
-                ),
-                previousGhostOpacity: 0,
-                nextEchoOpacity: 0,
-                trailOpacity: 0,
-                lineStartScaleImpulse:
-                  (lyricStyle?.lineStartScaleImpulse ?? 0) * 0.5,
-                lineStartShakePx: 0,
-              }
+            ? derivePromoFooterStyle(
+                lyricStyle,
+                portraitComposition,
+                Boolean(config.promoArtworkUrl),
+              )
+            : undefined;
+
+          const identityTrackTitle = config.trackTitle?.trim() ?? "";
+          const identityArtistName = config.artistName?.trim() ?? "";
+          const trackIdentityStyles = identityTrackTitle
+            ? deriveTrackIdentityStyles(lyricStyle, portraitComposition)
+            : undefined;
+          const copyrightNotice =
+            config.textMode === "lyrics"
+              ? `© Angelfish Records ${new Date().getFullYear()}`
+              : "";
+          const copyrightLabelStyle = copyrightNotice
+            ? deriveCopyrightLabelStyle(lyricStyle, portraitComposition)
             : undefined;
 
           const postStyle = config.postPresetName
@@ -354,6 +574,44 @@ export default function InternalVisualizerRenderPage() {
                 scaleLyricStyle(promoFooterStyle, lyricPixelScale),
               )
             : null;
+          trackArtistRendererRef.current =
+            trackIdentityStyles && identityArtistName
+              ? new LyricTextRenderer(
+                  config.width,
+                  config.height,
+                  scaleLyricStyle(
+                    trackIdentityStyles.artist,
+                    lyricPixelScale,
+                  ),
+                )
+              : null;
+          trackTitleRendererRef.current = trackIdentityStyles
+            ? new LyricTextRenderer(
+                config.width,
+                config.height,
+                scaleLyricStyle(
+                  trackIdentityStyles.title,
+                  lyricPixelScale,
+                ),
+              )
+            : null;
+          trackIdentityTextRef.current = identityTrackTitle
+            ? {
+                artistName: identityArtistName,
+                trackTitle: identityTrackTitle,
+              }
+            : null;
+          copyrightRendererRef.current = copyrightLabelStyle
+            ? new LyricTextRenderer(
+                config.width,
+                config.height,
+                scaleLyricStyle(
+                  copyrightLabelStyle,
+                  lyricPixelScale,
+                ),
+              )
+            : null;
+          copyrightTextRef.current = copyrightNotice || null;
           promoImageRendererRef.current = promoImageRenderer;
           postProcessorRef.current = new FramePostProcessor(
             config.width,
@@ -451,6 +709,33 @@ export default function InternalVisualizerRenderPage() {
           postProcessor.processIntoRgbaBuffer(buffer, frameIndex, camera);
         }
 
+        const trackIdentity = trackIdentityTextRef.current;
+        const trackArtistRenderer = trackArtistRendererRef.current;
+        const trackTitleRenderer = trackTitleRendererRef.current;
+        const copyrightNotice = copyrightTextRef.current;
+        const copyrightRenderer = copyrightRendererRef.current;
+
+        if (trackIdentity?.artistName && trackArtistRenderer) {
+          trackArtistRenderer.compositeIntoRgbaBuffer(
+            buffer,
+            staticTextFrame(trackIdentity.artistName),
+          );
+        }
+
+        if (trackIdentity?.trackTitle && trackTitleRenderer) {
+          trackTitleRenderer.compositeIntoRgbaBuffer(
+            buffer,
+            staticTextFrame(trackIdentity.trackTitle),
+          );
+        }
+
+        if (copyrightNotice && copyrightRenderer) {
+          copyrightRenderer.compositeIntoRgbaBuffer(
+            buffer,
+            staticTextFrame(copyrightNotice),
+          );
+        }
+
         return buffer;
       },
 
@@ -460,6 +745,11 @@ export default function InternalVisualizerRenderPage() {
         rendererRef.current = null;
         lyricRendererRef.current = null;
         promoFooterRendererRef.current = null;
+        trackArtistRendererRef.current = null;
+        trackTitleRendererRef.current = null;
+        trackIdentityTextRef.current = null;
+        copyrightRendererRef.current = null;
+        copyrightTextRef.current = null;
         promoImageRendererRef.current = null;
         postProcessorRef.current = null;
         pixelBufferRef.current = null;
@@ -508,6 +798,11 @@ export default function InternalVisualizerRenderPage() {
       rendererRef.current = null;
       lyricRendererRef.current = null;
       promoFooterRendererRef.current = null;
+      trackArtistRendererRef.current = null;
+      trackTitleRendererRef.current = null;
+      trackIdentityTextRef.current = null;
+      copyrightRendererRef.current = null;
+      copyrightTextRef.current = null;
       promoImageRendererRef.current = null;
       postProcessorRef.current = null;
       pixelBufferRef.current = null;
@@ -585,6 +880,8 @@ export default function InternalVisualizerRenderPage() {
         },
         body: JSON.stringify({
           recordingId,
+          artistName: artistName.trim() || undefined,
+          trackTitle: trackTitle.trim() || undefined,
           themeName: selectedTheme,
           audioFile: selectedAudioFile,
           lrcFile: selectedLrcFile,
@@ -874,6 +1171,31 @@ export default function InternalVisualizerRenderPage() {
           </label>
 
           <label>
+            <div>Artist name · top-right label</div>
+            <input
+              value={artistName}
+              onChange={(event) => setArtistName(event.target.value)}
+              placeholder="Brendan John Roch"
+              style={{ width: "100%" }}
+            />
+          </label>
+
+          <label>
+            <div>Track title · top-right label</div>
+            <input
+              value={trackTitle}
+              onChange={(event) => setTrackTitle(event.target.value)}
+              placeholder="Leave blank to hide track identity"
+              style={{ width: "100%" }}
+            />
+          </label>
+
+          <div style={{ fontSize: 11, opacity: 0.58, lineHeight: 1.45 }}>
+            Track identity inherits the selected text face and remains fixed
+            across lyric-direction changes.
+          </div>
+
+          <label>
             <div>Format</div>
             <select
               value={renderFormatName}
@@ -1009,6 +1331,8 @@ export default function InternalVisualizerRenderPage() {
           selectedAudioFile={selectedAudioFile}
           selectedLrcFile={selectedLrcFile}
           selectedLyricDirectionsFile={selectedLyricDirectionsFile}
+          artistName={artistName}
+          trackTitle={trackTitle}
           textMode={textMode}
           promoText={promoText}
           promoFooterText={promoFooterText}

@@ -208,7 +208,7 @@ export default function FanMailout(props: FanMailoutProps) {
               >
                 Click here
               </a>{" "}
-              to opt out of future communications.
+              to opt out of future marketing emails.
             </Text>
           ) : null}
         </Container>

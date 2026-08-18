@@ -19,7 +19,7 @@ type Triangle = {
   buf: WebGLBuffer | null;
 };
 
-type SinglePassExtraUniform = {
+type ThemeExtraFloatUniform = {
   name: string;
   getValue: (opts: Parameters<Theme["render"]>[1]) => number;
 };
@@ -27,13 +27,15 @@ type SinglePassExtraUniform = {
 type SinglePassThemeConfig = {
   name: string;
   fragmentShader: string;
-  extraFloatUniforms?: readonly SinglePassExtraUniform[];
+  extraFloatUniforms?: readonly ThemeExtraFloatUniform[];
 };
 
 type PingPongThemeConfig = {
   name: string;
   simFragmentShader: string;
   displayFragmentShader: string;
+  extraFloatUniforms?: readonly ThemeExtraFloatUniform[];
+  resetOnTrackProgressSeek?: boolean;
 };
 
 function disposeTriangle(gl: WebGL2RenderingContext, tri: Triangle | null) {
@@ -56,7 +58,7 @@ export function createSinglePassTheme(config: SinglePassThemeConfig): Theme {
   let uEnergy: WebGLUniformLocation | null = null;
   let extraFloatUniforms: Array<{
     location: WebGLUniformLocation | null;
-    getValue: SinglePassExtraUniform["getValue"];
+    getValue: ThemeExtraFloatUniform["getValue"];
   }> = [];
 
   return {
@@ -129,34 +131,64 @@ export function createPingPongTheme(config: PingPongThemeConfig): Theme {
   let displayTime: WebGLUniformLocation | null = null;
   let displayEnergy: WebGLUniformLocation | null = null;
 
+  let simExtraFloatUniforms: Array<{
+    location: WebGLUniformLocation | null;
+    getValue: ThemeExtraFloatUniform["getValue"];
+  }> = [];
+
+  let displayExtraFloatUniforms: Array<{
+    location: WebGLUniformLocation | null;
+    getValue: ThemeExtraFloatUniform["getValue"];
+  }> = [];
+
+  let lastTrackProgress01: number | null = null;
+
   return {
     name: config.name,
 
     init(gl) {
-      simProgram = createProgram(
+      const nextSimProgram = createProgram(
         gl,
         FULLSCREEN_TRIANGLE_VS,
         config.simFragmentShader,
       );
-      displayProgram = createProgram(
+      const nextDisplayProgram = createProgram(
         gl,
         FULLSCREEN_TRIANGLE_VS,
         config.displayFragmentShader,
       );
+
+      simProgram = nextSimProgram;
+      displayProgram = nextDisplayProgram;
       tri = makeFullscreenTriangle(gl);
       pingpong = createPingPong(gl, 1, 1);
       frame = 0;
+      lastTrackProgress01 = null;
 
-      simPrev = gl.getUniformLocation(simProgram, "uPrev");
-      simRes = gl.getUniformLocation(simProgram, "uRes");
-      simTime = gl.getUniformLocation(simProgram, "uTime");
-      simEnergy = gl.getUniformLocation(simProgram, "uEnergy");
-      simFrame = gl.getUniformLocation(simProgram, "uFrame");
+      simPrev = gl.getUniformLocation(nextSimProgram, "uPrev");
+      simRes = gl.getUniformLocation(nextSimProgram, "uRes");
+      simTime = gl.getUniformLocation(nextSimProgram, "uTime");
+      simEnergy = gl.getUniformLocation(nextSimProgram, "uEnergy");
+      simFrame = gl.getUniformLocation(nextSimProgram, "uFrame");
 
-      displayState = gl.getUniformLocation(displayProgram, "uState");
-      displayRes = gl.getUniformLocation(displayProgram, "uRes");
-      displayTime = gl.getUniformLocation(displayProgram, "uTime");
-      displayEnergy = gl.getUniformLocation(displayProgram, "uEnergy");
+      displayState = gl.getUniformLocation(nextDisplayProgram, "uState");
+      displayRes = gl.getUniformLocation(nextDisplayProgram, "uRes");
+      displayTime = gl.getUniformLocation(nextDisplayProgram, "uTime");
+      displayEnergy = gl.getUniformLocation(nextDisplayProgram, "uEnergy");
+
+      simExtraFloatUniforms = (config.extraFloatUniforms ?? []).map(
+        (uniform) => ({
+          location: gl.getUniformLocation(nextSimProgram, uniform.name),
+          getValue: uniform.getValue,
+        }),
+      );
+
+      displayExtraFloatUniforms = (config.extraFloatUniforms ?? []).map(
+        (uniform) => ({
+          location: gl.getUniformLocation(nextDisplayProgram, uniform.name),
+          getValue: uniform.getValue,
+        }),
+      );
     },
 
     render(gl, opts) {
@@ -167,6 +199,28 @@ export function createPingPongTheme(config: PingPongThemeConfig): Theme {
       ) as WebGLFramebuffer | null;
 
       pingpong.resize(gl, opts.width, opts.height);
+
+      const trackProgress01 = Math.max(
+        0,
+        Math.min(1, opts.trackProgress01 ?? 0),
+      );
+
+      const progressDelta =
+        lastTrackProgress01 == null
+          ? 0
+          : trackProgress01 - lastTrackProgress01;
+
+      const didSeek =
+        config.resetOnTrackProgressSeek === true &&
+        opts.mode !== "offline" &&
+        lastTrackProgress01 != null &&
+        (progressDelta < -0.005 || Math.abs(progressDelta) > 0.035);
+
+      lastTrackProgress01 = trackProgress01;
+
+      if (didSeek) {
+        frame = 0;
+      }
 
       gl.bindVertexArray(tri.vao);
 
@@ -181,9 +235,14 @@ export function createPingPongTheme(config: PingPongThemeConfig): Theme {
       gl.uniform2f(simRes, opts.width, opts.height);
       gl.uniform1f(simTime, opts.time);
       gl.uniform1f(simEnergy, opts.audio.energy);
+
+      for (const uniform of simExtraFloatUniforms) {
+        gl.uniform1f(uniform.location, uniform.getValue(opts));
+      }
+
       const renderFrame = opts.frameIndex ?? frame;
 
-      if (renderFrame === 0) {
+      if (renderFrame === 0 || didSeek) {
         pingpong.reset();
         pingpong.clear(gl);
         gl.bindVertexArray(tri.vao);
@@ -210,6 +269,10 @@ export function createPingPongTheme(config: PingPongThemeConfig): Theme {
       gl.uniform1f(displayTime, opts.time);
       gl.uniform1f(displayEnergy, opts.audio.energy);
 
+      for (const uniform of displayExtraFloatUniforms) {
+        gl.uniform1f(uniform.location, uniform.getValue(opts));
+      }
+
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
       gl.bindTexture(gl.TEXTURE_2D, null);
@@ -232,6 +295,10 @@ export function createPingPongTheme(config: PingPongThemeConfig): Theme {
 
       disposeProgram(gl, displayProgram);
       displayProgram = null;
+
+      simExtraFloatUniforms = [];
+      displayExtraFloatUniforms = [];
+      lastTrackProgress01 = null;
     },
   };
 }

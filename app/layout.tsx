@@ -27,7 +27,11 @@ export const metadata: Metadata = {
     default: "Brendan John Roch",
     template: "%s · Brendan John Roch",
   },
-  description: "Official website for the music of Brendan John Roch.",
+  description:
+    "Listen, explore lyrics, writing, and other projects directly from the official website of Brendan John Roch.",
+  applicationName: "Brendan John Roch",
+  creator: "Brendan John Roch",
+  publisher: "Brendan John Roch",
   icons: {
     icon: [
       { url: "/favicon.ico" },

@@ -61,15 +61,10 @@ function getClerkFirstErrorCode(err: unknown): string | null {
 }
 
 function looksLikeNoAccountError(err: unknown): boolean {
-  const msg = getClerkErrorMessage(err).toLowerCase();
-  const code = (getClerkFirstErrorCode(err) ?? "").toLowerCase();
-
-  if (code.includes("not_found") || code.includes("identifier")) return true;
-  if (msg.includes("couldn't find your account")) return true;
-  if (msg.includes("could not find your account")) return true;
-  if (msg.includes("account not found")) return true;
-
-  return false;
+  return (
+    (getClerkFirstErrorCode(err) ?? "").toLowerCase() ===
+    "form_identifier_not_found"
+  );
 }
 
 const TOGGLE_ANON_BG_OFF = "rgb(10, 10, 14)";
@@ -514,6 +509,8 @@ function OverlayPanel(
 
 type OtpContentProps = Readonly<{
   showSignupPrivacy: boolean;
+  marketingOptIn: boolean;
+  onMarketingOptInChange: (checked: boolean) => void;
   width: number;
   code: string;
   onCodeChange: (next: string) => void;
@@ -526,6 +523,8 @@ type OtpContentProps = Readonly<{
 function OtpContent(props: OtpContentProps) {
   const {
     showSignupPrivacy,
+    marketingOptIn,
+    onMarketingOptInChange,
     width,
     code,
     onCodeChange,
@@ -556,9 +555,50 @@ function OtpContent(props: OtpContentProps) {
               padding: "0 2px",
             }}
           >
-            By entering, you agree to receive occasional emails about releases,
-            events, and account activity. Unsubscribe anytime.
+            Your email is used to verify and operate your account. Necessary
+            account, security, purchase, membership, and gift messages do not
+            depend on marketing consent.
           </div>
+
+          <label
+            style={{
+              width: "100%",
+              display: "grid",
+              gridTemplateColumns: "18px 1fr",
+              gap: 8,
+              alignItems: "start",
+              padding: "8px 2px 2px",
+              boxSizing: "border-box",
+              cursor: isVerifying ? "default" : "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={marketingOptIn}
+              disabled={isVerifying}
+              onChange={(event) =>
+                onMarketingOptInChange(event.target.checked)
+              }
+              style={{
+                width: 16,
+                height: 16,
+                margin: "1px 0 0",
+                accentColor: "var(--accent)",
+              }}
+            />
+            <span
+              style={{
+                fontSize: 11,
+                lineHeight: "15px",
+                opacity: 0.9,
+                textAlign: "left",
+              }}
+            >
+              I’d like occasional emails from Brendan John Roch / Angelfish
+              Records about new releases, events, and other news. I can
+              unsubscribe at any time.
+            </span>
+          </label>
 
           <div
             aria-hidden
@@ -1496,6 +1536,7 @@ export default function ActivationGate(props: Props) {
   const [code, setCode] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [flow, setFlow] = useState<Flow>(null);
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1609,6 +1650,7 @@ export default function ActivationGate(props: Props) {
     setError(null);
     setCode("");
     setFlow(null);
+    setMarketingOptIn(false);
     setIsVerifying(false);
     setIsSending(true);
     setPhase("code");
@@ -1627,15 +1669,38 @@ export default function ActivationGate(props: Props) {
       }
     }
 
+    setFlow("signup");
+
     try {
       await signUp.create({ emailAddress: email });
       await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
-      setFlow("signup");
       setIsSending(false);
     } catch (err) {
       setError(getClerkErrorMessage(err));
+      setFlow(null);
       setIsSending(false);
       setPhase("idle");
+    }
+  }
+
+  async function persistSignupMarketingConsent(): Promise<void> {
+    if (!marketingOptIn) return;
+
+    try {
+      const response = await fetch("/api/account/marketing-consent", {
+        method: "POST",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        console.error("Marketing consent persistence failed", {
+          status: response.status,
+        });
+      }
+    } catch (err) {
+      console.error("Marketing consent persistence failed", {
+        message: getClerkErrorMessage(err),
+      });
     }
   }
 
@@ -1672,6 +1737,7 @@ export default function ActivationGate(props: Props) {
         const sid = (result as unknown as { createdSessionId?: string })
           .createdSessionId;
         if (sid) await setActiveSignUp({ session: sid });
+        await persistSignupMarketingConsent();
         router.refresh();
         return;
       }
@@ -1751,11 +1817,13 @@ export default function ActivationGate(props: Props) {
     void startEmailCode();
   }
 
-  const inlineMaxHeight = showSignupPrivacy ? 620 : 520;
+  const inlineMaxHeight = showSignupPrivacy ? 700 : 520;
 
   const otpNode = (
     <OtpContent
       showSignupPrivacy={showSignupPrivacy}
+      marketingOptIn={marketingOptIn}
+      onMarketingOptInChange={setMarketingOptIn}
       width={EMAIL_W}
       code={code}
       onCodeChange={(next) => setCode(normalizeDigits(next))}
