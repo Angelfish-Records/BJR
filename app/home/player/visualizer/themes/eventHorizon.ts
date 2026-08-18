@@ -36,6 +36,7 @@ uniform float uBass;
 uniform float uMid;
 uniform float uTreble;
 uniform float uCentroid;
+uniform float uViewYSign;
 
 const float PI = 3.14159265359;
 const float TWO_PI = 6.28318530718;
@@ -863,12 +864,13 @@ void main() {
 
   vec2 screenPoint = (vUv - 0.5) * vec2(aspectRatio, 1.0);
 
-  // WebGL UV orientation mirrored the authored camera view in the first ray
-  // topology pass. Flip the screen-space vertical axis once, before ray
-  // construction, so the observer-facing disk sits below the shadow and the
-  // lensed far side rises above it. Camera elevation itself remains fixed.
+  // Realtime presentation and offline readPixels use opposite vertical row
+  // conventions. Preserve the established offline/export composition while
+  // presenting the same authored orientation directly on the live WebGL canvas.
+  // This sign changes presentation only; camera elevation and ray geometry stay
+  // fixed, and no other theme participates in this correction.
   screenPoint.y =
-    -screenPoint.y
+    screenPoint.y * uViewYSign
     - mix(0.012, 0.002, journey);
 
   Ray observerRay = makeCameraRay(screenPoint, cameraScale);
@@ -1099,6 +1101,7 @@ export function createEventHorizonTheme(): Theme {
   let uMid: WebGLUniformLocation | null = null;
   let uTreble: WebGLUniformLocation | null = null;
   let uCentroid: WebGLUniformLocation | null = null;
+  let uViewYSign: WebGLUniformLocation | null = null;
 
   return {
     name: "event-horizon",
@@ -1116,6 +1119,7 @@ export function createEventHorizonTheme(): Theme {
       uMid = gl.getUniformLocation(program, "uMid");
       uTreble = gl.getUniformLocation(program, "uTreble");
       uCentroid = gl.getUniformLocation(program, "uCentroid");
+      uViewYSign = gl.getUniformLocation(program, "uViewYSign");
     },
 
     render(gl, opts) {
@@ -1133,6 +1137,7 @@ export function createEventHorizonTheme(): Theme {
       gl.uniform1f(uMid, opts.audio.mid ?? opts.audio.energy);
       gl.uniform1f(uTreble, opts.audio.treble ?? opts.audio.energy);
       gl.uniform1f(uCentroid, opts.audio.centroid ?? 0.5);
+      gl.uniform1f(uViewYSign, opts.mode === "offline" ? -1 : 1);
 
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
