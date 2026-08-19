@@ -80,6 +80,7 @@ type LyricStyleRuntime = {
   baseStyleName: LyricStyleName;
   formatGeometry: RenderFormatGeometry;
   lyricPixelScale: number;
+  textMode: TextRenderMode;
 };
 
 type RenderResponse =
@@ -165,7 +166,26 @@ function promoFooterAnchorY01(
   hasArtwork: boolean,
 ): number {
   if (!portraitComposition) return 0.9;
-  return hasArtwork ? 0.895 : 0.79;
+  return hasArtwork ? 0.875 : 0.82;
+}
+
+function derivePromoPrimaryStyle(
+  lyricStyle: Partial<LyricTextStyle> | undefined,
+  portraitComposition: boolean,
+  hasArtwork: boolean,
+): Partial<LyricTextStyle> | undefined {
+  if (!lyricStyle || !portraitComposition || !hasArtwork) {
+    return lyricStyle;
+  }
+
+  return {
+    ...lyricStyle,
+    anchorY01: 0.405,
+    maxLines: 4,
+    minimumFontScale: 0.62,
+    fitRegionTop01: 0.24,
+    fitRegionBottom01: 0.47,
+  };
 }
 
 function primaryFontFamily(fontFamily: string): string {
@@ -218,31 +238,31 @@ function derivePromoFooterStyle(
   return {
     ...lyricStyle,
     ...(lyricStyle.fontSizePx !== undefined
-      ? { fontSizePx: lyricStyle.fontSizePx * 0.6 }
+      ? { fontSizePx: lyricStyle.fontSizePx * 0.82 }
       : {}),
     ...(lyricStyle.letterSpacingPx !== undefined
-      ? { letterSpacingPx: lyricStyle.letterSpacingPx * 0.72 }
+      ? { letterSpacingPx: lyricStyle.letterSpacingPx * 0.86 }
       : {}),
     ...(lyricStyle.strokeWidthPx !== undefined
-      ? { strokeWidthPx: lyricStyle.strokeWidthPx * 0.62 }
+      ? { strokeWidthPx: lyricStyle.strokeWidthPx * 0.78 }
       : {}),
     ...(lyricStyle.contrastStrokeWidthPx !== undefined
-      ? { contrastStrokeWidthPx: lyricStyle.contrastStrokeWidthPx * 0.56 }
+      ? { contrastStrokeWidthPx: lyricStyle.contrastStrokeWidthPx * 0.72 }
       : {}),
     ...(lyricStyle.contrastShadowBlurPx !== undefined
-      ? { contrastShadowBlurPx: lyricStyle.contrastShadowBlurPx * 0.52 }
+      ? { contrastShadowBlurPx: lyricStyle.contrastShadowBlurPx * 0.68 }
       : {}),
     ...(lyricStyle.shadowBlurPx !== undefined
-      ? { shadowBlurPx: lyricStyle.shadowBlurPx * 0.48 }
+      ? { shadowBlurPx: lyricStyle.shadowBlurPx * 0.62 }
       : {}),
     anchorY01: promoFooterAnchorY01(portraitComposition, hasArtwork),
     maxWidth01: Math.min(
       lyricStyle.maxWidth01 ?? 0.76,
-      portraitComposition ? 0.82 : 0.68,
+      portraitComposition ? 0.86 : 0.68,
     ),
     lineHeight: Math.max(1.04, lyricStyle.lineHeight ?? 1.08),
     maxLines: portraitComposition ? 2 : 1,
-    minimumFontScale: 0.76,
+    minimumFontScale: 0.82,
     previousGhostOpacity: 0,
     nextEchoOpacity: 0,
     trailOpacity: 0,
@@ -512,11 +532,20 @@ export default function InternalVisualizerRenderPage() {
 
           const portraitComposition =
             compositionHeight > compositionWidth * 1.15;
+          const hasPromoArtwork = Boolean(config.promoArtworkUrl);
+          const primaryTextStyle =
+            config.textMode === "promo"
+              ? derivePromoPrimaryStyle(
+                  lyricStyle,
+                  portraitComposition,
+                  hasPromoArtwork,
+                )
+              : lyricStyle;
           const promoFooterStyle = config.promoFooterEnabled
             ? derivePromoFooterStyle(
                 lyricStyle,
                 portraitComposition,
-                Boolean(config.promoArtworkUrl),
+                hasPromoArtwork,
               )
             : undefined;
 
@@ -546,6 +575,7 @@ export default function InternalVisualizerRenderPage() {
             baseStyleName,
             formatGeometry,
             lyricPixelScale,
+            textMode: config.textMode ?? "lyrics",
           };
 
           const promoImageRenderer =
@@ -565,7 +595,7 @@ export default function InternalVisualizerRenderPage() {
           lyricRendererRef.current = new LyricTextRenderer(
             config.width,
             config.height,
-            scaleLyricStyle(lyricStyle, lyricPixelScale),
+            scaleLyricStyle(primaryTextStyle, lyricPixelScale),
           );
           promoFooterRendererRef.current = promoFooterStyle
             ? new LyricTextRenderer(
@@ -660,7 +690,7 @@ export default function InternalVisualizerRenderPage() {
         if (lyric && lyricRenderer) {
           const styleRuntime = lyricStyleRuntimeRef.current;
 
-          if (styleRuntime) {
+          if (styleRuntime?.textMode === "lyrics") {
             const styleName = directedLyricStyleName(
               styleRuntime.baseStyleName,
               lyric.direction,

@@ -55,23 +55,360 @@ float ropeNoise(float a, float seed, float t){
     0.23 * sin(a*3.73 + seed*4.60 + t*0.17);
 }
 
-// Nearest-cell coordinates for a regular staggered hexagonal lattice.
-// The same screen-space lattice is used later in the draw pass so the visible
-// chamber walls and the rope refraction remain spatially coherent.
-vec2 hexCellLocal(vec2 p, out vec2 centre){
-  const vec2 spacing = vec2(1.0, 1.73205080757);
-  vec2 halfSpacing = spacing * 0.5;
+// Stable peripheral vascular plexus.
+//
+// This is not a warped tiling. Six deterministic root vessels enter from the
+// outer field, divide into unequal daughter branches, and terminate at different
+// depths. The same graph is evaluated in the draw pass, so rope refraction and
+// transient illumination share one biological structure.
+void accumulateVesselSegment(
+  vec2 p,
+  vec2 a,
+  vec2 b,
+  float family,
+  inout float majorDist,
+  inout float minorDist,
+  inout float nearestDist,
+  inout vec2 nearestDir
+){
+  vec2 ba = b - a;
+  float denom = max(
+    dot(ba, ba),
+    0.00001
+  );
 
-  vec2 a = mod(p, spacing) - halfSpacing;
-  vec2 b = mod(p - halfSpacing, spacing) - halfSpacing;
+  float segmentLength = sqrt(
+    denom
+  );
 
-  if(dot(a, a) < dot(b, b)){
-    centre = p - a;
-    return a;
+  vec2 baseDir =
+    ba /
+    max(
+      segmentLength,
+      0.00001
+    );
+
+  vec2 normalDir = vec2(
+    -baseDir.y,
+    baseDir.x
+  );
+
+  float h = clamp(
+    dot(
+      p - a,
+      ba
+    ) / denom,
+    0.0,
+    1.0
+  );
+
+  // Deterministic identity belongs to the vessel itself, not to time/audio.
+  // The endpoint envelope reaches exactly zero at both ends, so daughter
+  // branches still join their parent cleanly even though their bodies meander.
+  float fibreSeed = hash12(
+    a*7.13 +
+    b*11.37 +
+    vec2(
+      2.7 + family*5.1,
+      -4.3 + family*2.9
+    )
+  );
+
+  float phase =
+    fibreSeed *
+    6.28318530718;
+
+  float envelope =
+    sin(
+      3.14159265359*h
+    );
+
+  float primaryWave =
+    sin(
+      phase +
+      h*3.14159265359
+    );
+
+  float secondaryWave =
+    sin(
+      phase*1.73 -
+      h*9.42477796077
+    );
+
+  float fibreAmplitude =
+    segmentLength *
+    mix(
+      0.060,
+      0.115,
+      fibreSeed
+    );
+
+  float centreOffset =
+    envelope *
+    fibreAmplitude *
+    (
+      0.68*primaryWave +
+      0.32*secondaryWave
+    );
+
+  vec2 organicCentre =
+    mix(
+      a,
+      b,
+      h
+    ) +
+    normalDir*centreOffset;
+
+  // Thickness varies along the grown fibre. Dividing the measured distance by
+  // this field makes the same SDF thresholds swell and narrow organically
+  // without changing the higher-level trunk/branch width hierarchy.
+  float thicknessField = clamp(
+    0.94 +
+    0.16*sin(
+      phase*0.83 +
+      h*6.28318530718
+    ) +
+    0.07*sin(
+      phase*1.41 -
+      h*15.7079632679
+    ),
+    0.76,
+    1.20
+  );
+
+  float d =
+    length(
+      p - organicCentre
+    ) /
+    thicknessField;
+
+  // Differentiate the procedural centreline analytically so tangent-based rope
+  // probing follows the curved fibre rather than its original straight chord.
+  float dEnvelope =
+    3.14159265359 *
+    cos(
+      3.14159265359*h
+    );
+
+  float dPrimary =
+    3.14159265359 *
+    cos(
+      phase +
+      h*3.14159265359
+    );
+
+  float dSecondary =
+    -9.42477796077 *
+    cos(
+      phase*1.73 -
+      h*9.42477796077
+    );
+
+  float dOffset =
+    fibreAmplitude *
+    (
+      dEnvelope *
+      (
+        0.68*primaryWave +
+        0.32*secondaryWave
+      ) +
+      envelope *
+      (
+        0.68*dPrimary +
+        0.32*dSecondary
+      )
+    );
+
+  vec2 dir = normalize(
+    ba +
+    normalDir*dOffset +
+    vec2(
+      0.00001,
+      0.00001
+    )
+  );
+
+  if(family > 0.5){
+    majorDist = min(majorDist, d);
+  } else {
+    minorDist = min(minorDist, d);
   }
 
-  centre = p - b;
-  return b;
+  if(d < nearestDist){
+    nearestDist = d;
+    nearestDir = dir;
+  }
+}
+
+vec4 vascularField(vec2 p){
+  const float TAU = 6.28318530718;
+
+  float majorDist = 1e9;
+  float minorDist = 1e9;
+  float nearestDist = 1e9;
+  vec2 nearestDir = vec2(1.0, 0.0);
+
+  for(int root = 0; root < 6; root++){
+    float f = float(root);
+
+    float seedA = hash12(vec2(f + 1.7, 4.3));
+    float seedB = hash12(vec2(f + 7.1, 9.2));
+    float seedC = hash12(vec2(f + 3.9, 14.6));
+
+    float baseAngle =
+      TAU * (
+        f / 6.0
+      ) +
+      0.18 * (
+        seedA - 0.5
+      );
+
+    float bend =
+      (
+        seedB - 0.5
+      ) * 0.52;
+
+    vec2 outer = vec2(
+      cos(baseAngle + 0.10*(seedC - 0.5)),
+      sin(baseAngle + 0.10*(seedC - 0.5))
+    ) * (
+      1.38 + 0.16*seedA
+    );
+
+    vec2 shoulder = vec2(
+      cos(baseAngle + bend*0.46),
+      sin(baseAngle + bend*0.46)
+    ) * (
+      0.88 + 0.09*seedB
+    );
+
+    shoulder += 0.060 * vec2(
+      sin(f*2.37 + 0.8),
+      cos(f*1.91 - 1.2)
+    );
+
+    vec2 inner = vec2(
+      cos(baseAngle + bend),
+      sin(baseAngle + bend)
+    ) * (
+      0.48 + 0.07*seedC
+    );
+
+    inner += 0.045 * vec2(
+      cos(f*1.73 + 2.4),
+      sin(f*2.11 - 0.5)
+    );
+
+    float branchAngleA =
+      baseAngle +
+      0.42 +
+      0.26*(seedC - 0.5);
+
+    float branchAngleB =
+      baseAngle -
+      0.38 -
+      0.24*(seedA - 0.5);
+
+    vec2 branchA = vec2(
+      cos(branchAngleA),
+      sin(branchAngleA)
+    ) * (
+      0.72 + 0.12*seedB
+    );
+
+    vec2 branchB = vec2(
+      cos(branchAngleB),
+      sin(branchAngleB)
+    ) * (
+      0.68 + 0.14*seedC
+    );
+
+    vec2 tipA = vec2(
+      cos(branchAngleA + 0.28 + 0.16*(seedA - 0.5)),
+      sin(branchAngleA + 0.28 + 0.16*(seedA - 0.5))
+    ) * (
+      1.05 + 0.18*seedC
+    );
+
+    vec2 tipB = vec2(
+      cos(branchAngleB - 0.30 - 0.14*(seedB - 0.5)),
+      sin(branchAngleB - 0.30 - 0.14*(seedB - 0.5))
+    ) * (
+      1.00 + 0.20*seedA
+    );
+
+    accumulateVesselSegment(
+      p,
+      outer,
+      shoulder,
+      1.0,
+      majorDist,
+      minorDist,
+      nearestDist,
+      nearestDir
+    );
+
+    accumulateVesselSegment(
+      p,
+      shoulder,
+      inner,
+      1.0,
+      majorDist,
+      minorDist,
+      nearestDist,
+      nearestDir
+    );
+
+    accumulateVesselSegment(
+      p,
+      shoulder,
+      branchA,
+      0.0,
+      majorDist,
+      minorDist,
+      nearestDist,
+      nearestDir
+    );
+
+    accumulateVesselSegment(
+      p,
+      branchA,
+      tipA,
+      0.0,
+      majorDist,
+      minorDist,
+      nearestDist,
+      nearestDir
+    );
+
+    accumulateVesselSegment(
+      p,
+      shoulder,
+      branchB,
+      0.0,
+      majorDist,
+      minorDist,
+      nearestDist,
+      nearestDir
+    );
+
+    accumulateVesselSegment(
+      p,
+      branchB,
+      tipB,
+      0.0,
+      majorDist,
+      minorDist,
+      nearestDist,
+      nearestDir
+    );
+  }
+
+  return vec4(
+    majorDist,
+    minorDist,
+    nearestDir
+  );
 }
 
 void main(){
@@ -130,17 +467,19 @@ void main(){
 
   vec3 prevA = texture(uPrev, uv).rgb;
   vec3 prevB = texture(uPrev, uv2).rgb;
-  vec3 ink = mix(prevA, prevB, 0.46);
+  vec3 ink = mix(prevA, prevB, 0.34);
 
-  // Keep a short bodily afterimage, but make the freshly generated geometry
-  // dominate quickly enough that seeks and stage recreation recompose cleanly.
+  // The trailing should stay bodily but not become a near-solid wash once the
+  // sequence densifies. Retention therefore falls more aggressively as the
+  // long-form assault chapter arrives, preserving black separation between
+  // successive rope passes even later in the piece.
   float decay =
-    0.984 -
-    0.006*tre +
-    0.002*bass -
-    0.003*assault;
+    0.974 -
+    0.008*tre +
+    0.001*bass -
+    0.010*assault;
 
-  ink *= clamp(decay, 0.958, 0.990);
+  ink *= clamp(decay, 0.938, 0.980);
 
   // The whole tunnel has an unreliable vanishing point, but this wandering is
   // autonomous rather than driven by musical peaks.
@@ -166,15 +505,12 @@ void main(){
     localRot * (0.46 + 0.54*assault)
   ) + tunnelCentre;
 
-  // Peripheral honeycomb membrane.
+  // Peripheral vascular tissue.
   //
-  // Compute the chamber only once per fragment, outside the expensive rope
-  // loops. The visible lattice stays screen/world-stable while the rope-distance
-  // query is locally refracted within each chamber. As a ring grows outward it
-  // therefore acquires small discontinuous kinks from cell to cell rather than
-  // carrying a decorative hex pattern around with it.
-  const float honeyScale = 5.20;
-
+  // The old chamber system was still recognisably a hexagonal tiling even after
+  // deformation. The replacement is a fixed branching plexus: trunks divide
+  // into daughter vessels and the ropes are locally refracted where they cross
+  // that tissue. The graph itself never animates.
   float fieldRadius = length(fieldP);
   vec2 fieldDir = normalize(fieldP + vec2(0.0001, 0.0001));
   vec2 fieldTan = vec2(-fieldDir.y, fieldDir.x);
@@ -189,136 +525,80 @@ void main(){
   float shellRad = dot(fieldP, fieldDir);
   float shellTan = dot(fieldP, fieldTan);
 
-  vec2 honeySampleP =
+  vec2 tissueSampleP =
     fieldDir * (
-      shellRad * (1.0 + 0.18*shellWrap)
+      shellRad * (1.0 + 0.14*shellWrap)
     ) +
     fieldTan * (
-      shellTan * (1.0 - 0.12*shellWrap)
+      shellTan * (1.0 - 0.08*shellWrap)
     );
 
-  honeySampleP +=
+  tissueSampleP +=
     fieldDir *
     (
-      0.050 *
+      0.032 *
       shellWrap *
       fieldRadius *
       fieldRadius
     );
 
-  vec2 honeyCentre;
-  vec2 honeyLocal = hexCellLocal(
-    honeySampleP * honeyScale,
-    honeyCentre
+  vec4 vesselSample =
+    vascularField(
+      tissueSampleP
+    );
+
+  float vesselDistance = min(
+    vesselSample.x,
+    vesselSample.y
   );
 
-  vec2 honeyAbs = abs(honeyLocal);
-
-  float honeyMetric = max(
-    honeyAbs.x,
-    0.5*honeyAbs.x +
-      0.86602540378*honeyAbs.y
-  );
-
-  float honeyPresence =
-    0.025 +
-    0.975 * smoothstep(
-      0.34,
-      1.02,
+  float vesselInfluence =
+    (
+      1.0 -
+      smoothstep(
+        0.018,
+        0.090,
+        vesselDistance
+      )
+    ) *
+    smoothstep(
+      0.38,
+      0.74,
       fieldRadius
     );
 
-  float chamberSeed = hash12(
-    honeyCentre * 0.73 +
-    vec2(11.7, -4.9)
+  vec2 vesselTangent = normalize(
+    vesselSample.zw +
+    vec2(0.0001, 0.0001)
   );
 
-  float chamberSeedB = hash12(
-    honeyCentre.yx * 1.11 +
-    vec2(-7.3, 5.2)
+  vec2 vesselNormal = vec2(
+    -vesselTangent.y,
+    vesselTangent.x
   );
 
-  float chamberResponse =
-    honeyPresence *
-    (
-      0.30 +
-      0.70 * smoothstep(
-        0.10,
-        0.48,
-        honeyMetric
-      )
+  float vesselSide =
+    sin(
+      dot(
+        tissueSampleP,
+        vesselTangent
+      ) * 15.0 +
+      dot(
+        tissueSampleP,
+        vesselNormal
+      ) * 4.0
     );
 
-  float chamberOccupancy =
-    honeyPresence *
-    smoothstep(
-      0.08,
-      0.44,
-      honeyMetric
-    );
-
-  float chamberAngle =
-    (
-      chamberSeed - 0.5
-    ) *
-    (
-      0.11 +
-      0.12*assault
-    ) *
-    chamberResponse;
-
-  vec2 warpedHoneyLocal = rot(
-    honeyLocal,
-    chamberAngle
-  );
-
-  float chamberStretch =
-    1.0 +
-    (
-      chamberSeedB - 0.5
-    ) *
-    (
-      0.075 +
-      0.055*assault
-    ) *
-    chamberResponse;
-
-  warpedHoneyLocal.x *= chamberStretch;
-  warpedHoneyLocal.y /= max(
-    chamberStretch,
-    0.86
-  );
-
-  float chamberWall =
-    smoothstep(
-      0.18,
-      0.48,
-      honeyMetric
-    );
-
-  vec2 boundaryNudge =
-    normalize(warpedHoneyLocal + vec2(0.0001, 0.0001)) *
-    (
-      0.028 +
-      0.032*assault
-    ) *
-    chamberWall *
-    chamberOccupancy;
-
-  warpedHoneyLocal += boundaryNudge;
-
-  vec2 warpedFieldP =
-    (
-      honeyCentre +
-      warpedHoneyLocal
-    ) /
-    honeyScale;
-
+  // The biological network bends an approaching rope locally instead of
+  // snapping it from one polygonal chamber transform to another.
   vec2 ropeQuery =
     q +
+    vesselNormal *
+    vesselInfluence *
+    vesselSide *
     (
-      warpedFieldP -
-      fieldP
+      0.008 +
+      0.014*assault
     );
 
   vec3 add = vec3(0.0);
@@ -596,14 +876,14 @@ void main(){
       0.08 + 0.18*glint
     );
 
-    vec3 bloodChamber = mix(
+    vec3 vesselBlood = mix(
       vec3(0.22, 0.020, 0.024),
       vec3(0.70, 0.055, 0.034),
       0.30 + 0.18*cen
     );
 
-    float blooding =
-      chamberOccupancy *
+    float vascularBlooding =
+      vesselInfluence *
       (
         0.38 +
         0.40*assault +
@@ -612,12 +892,16 @@ void main(){
 
     strokeCol = mix(
       strokeCol,
-      bloodChamber,
-      clamp(blooding, 0.0, 1.0)
+      vesselBlood,
+      clamp(
+        vascularBlooding,
+        0.0,
+        1.0
+      )
     );
 
-    float latticeBrush =
-      chamberOccupancy *
+    float vesselBrush =
+      vesselInfluence *
       smoothstep(
         0.12,
         0.46,
@@ -626,7 +910,7 @@ void main(){
 
     strokeCol +=
       vec3(0.10, 0.016, 0.012) *
-      latticeBrush *
+      vesselBrush *
       (
         0.14 +
         0.10*e +
@@ -746,20 +1030,368 @@ vec2 rot(vec2 p, float a){
   return vec2(c*p.x - s*p.y, s*p.x + c*p.y);
 }
 
-vec2 hexCellLocal(vec2 p, out vec2 centre){
-  const vec2 spacing = vec2(1.0, 1.73205080757);
-  vec2 halfSpacing = spacing * 0.5;
+float hash12(vec2 p){
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
 
-  vec2 a = mod(p, spacing) - halfSpacing;
-  vec2 b = mod(p - halfSpacing, spacing) - halfSpacing;
+float sdSegment(vec2 p, vec2 a, vec2 b){
+  vec2 pa = p - a;
+  vec2 ba = b - a;
+  float denom = max(dot(ba, ba), 0.00001);
+  float h = clamp(dot(pa, ba) / denom, 0.0, 1.0);
+  return length(pa - ba*h);
+}
 
-  if(dot(a, a) < dot(b, b)){
-    centre = p - a;
-    return a;
+void accumulateVesselSegment(
+  vec2 p,
+  vec2 a,
+  vec2 b,
+  float family,
+  inout float majorDist,
+  inout float minorDist,
+  inout float nearestDist,
+  inout vec2 nearestDir
+){
+  vec2 ba = b - a;
+  float denom = max(
+    dot(ba, ba),
+    0.00001
+  );
+
+  float segmentLength = sqrt(
+    denom
+  );
+
+  vec2 baseDir =
+    ba /
+    max(
+      segmentLength,
+      0.00001
+    );
+
+  vec2 normalDir = vec2(
+    -baseDir.y,
+    baseDir.x
+  );
+
+  float h = clamp(
+    dot(
+      p - a,
+      ba
+    ) / denom,
+    0.0,
+    1.0
+  );
+
+  // Deterministic identity belongs to the vessel itself, not to time/audio.
+  // The endpoint envelope reaches exactly zero at both ends, so daughter
+  // branches still join their parent cleanly even though their bodies meander.
+  float fibreSeed = hash12(
+    a*7.13 +
+    b*11.37 +
+    vec2(
+      2.7 + family*5.1,
+      -4.3 + family*2.9
+    )
+  );
+
+  float phase =
+    fibreSeed *
+    6.28318530718;
+
+  float envelope =
+    sin(
+      3.14159265359*h
+    );
+
+  float primaryWave =
+    sin(
+      phase +
+      h*3.14159265359
+    );
+
+  float secondaryWave =
+    sin(
+      phase*1.73 -
+      h*9.42477796077
+    );
+
+  float fibreAmplitude =
+    segmentLength *
+    mix(
+      0.060,
+      0.115,
+      fibreSeed
+    );
+
+  float centreOffset =
+    envelope *
+    fibreAmplitude *
+    (
+      0.68*primaryWave +
+      0.32*secondaryWave
+    );
+
+  vec2 organicCentre =
+    mix(
+      a,
+      b,
+      h
+    ) +
+    normalDir*centreOffset;
+
+  // Thickness varies along the grown fibre. Dividing the measured distance by
+  // this field makes the same SDF thresholds swell and narrow organically
+  // without changing the higher-level trunk/branch width hierarchy.
+  float thicknessField = clamp(
+    0.94 +
+    0.16*sin(
+      phase*0.83 +
+      h*6.28318530718
+    ) +
+    0.07*sin(
+      phase*1.41 -
+      h*15.7079632679
+    ),
+    0.76,
+    1.20
+  );
+
+  float d =
+    length(
+      p - organicCentre
+    ) /
+    thicknessField;
+
+  // Differentiate the procedural centreline analytically so tangent-based rope
+  // probing follows the curved fibre rather than its original straight chord.
+  float dEnvelope =
+    3.14159265359 *
+    cos(
+      3.14159265359*h
+    );
+
+  float dPrimary =
+    3.14159265359 *
+    cos(
+      phase +
+      h*3.14159265359
+    );
+
+  float dSecondary =
+    -9.42477796077 *
+    cos(
+      phase*1.73 -
+      h*9.42477796077
+    );
+
+  float dOffset =
+    fibreAmplitude *
+    (
+      dEnvelope *
+      (
+        0.68*primaryWave +
+        0.32*secondaryWave
+      ) +
+      envelope *
+      (
+        0.68*dPrimary +
+        0.32*dSecondary
+      )
+    );
+
+  vec2 dir = normalize(
+    ba +
+    normalDir*dOffset +
+    vec2(
+      0.00001,
+      0.00001
+    )
+  );
+
+  if(family > 0.5){
+    majorDist = min(majorDist, d);
+  } else {
+    minorDist = min(minorDist, d);
   }
 
-  centre = p - b;
-  return b;
+  if(d < nearestDist){
+    nearestDist = d;
+    nearestDir = dir;
+  }
+}
+
+vec4 vascularField(vec2 p){
+  const float TAU = 6.28318530718;
+
+  float majorDist = 1e9;
+  float minorDist = 1e9;
+  float nearestDist = 1e9;
+  vec2 nearestDir = vec2(1.0, 0.0);
+
+  for(int root = 0; root < 6; root++){
+    float f = float(root);
+
+    float seedA = hash12(vec2(f + 1.7, 4.3));
+    float seedB = hash12(vec2(f + 7.1, 9.2));
+    float seedC = hash12(vec2(f + 3.9, 14.6));
+
+    float baseAngle =
+      TAU * (
+        f / 6.0
+      ) +
+      0.18 * (
+        seedA - 0.5
+      );
+
+    float bend =
+      (
+        seedB - 0.5
+      ) * 0.52;
+
+    vec2 outer = vec2(
+      cos(baseAngle + 0.10*(seedC - 0.5)),
+      sin(baseAngle + 0.10*(seedC - 0.5))
+    ) * (
+      1.38 + 0.16*seedA
+    );
+
+    vec2 shoulder = vec2(
+      cos(baseAngle + bend*0.46),
+      sin(baseAngle + bend*0.46)
+    ) * (
+      0.88 + 0.09*seedB
+    );
+
+    shoulder += 0.060 * vec2(
+      sin(f*2.37 + 0.8),
+      cos(f*1.91 - 1.2)
+    );
+
+    vec2 inner = vec2(
+      cos(baseAngle + bend),
+      sin(baseAngle + bend)
+    ) * (
+      0.48 + 0.07*seedC
+    );
+
+    inner += 0.045 * vec2(
+      cos(f*1.73 + 2.4),
+      sin(f*2.11 - 0.5)
+    );
+
+    float branchAngleA =
+      baseAngle +
+      0.42 +
+      0.26*(seedC - 0.5);
+
+    float branchAngleB =
+      baseAngle -
+      0.38 -
+      0.24*(seedA - 0.5);
+
+    vec2 branchA = vec2(
+      cos(branchAngleA),
+      sin(branchAngleA)
+    ) * (
+      0.72 + 0.12*seedB
+    );
+
+    vec2 branchB = vec2(
+      cos(branchAngleB),
+      sin(branchAngleB)
+    ) * (
+      0.68 + 0.14*seedC
+    );
+
+    vec2 tipA = vec2(
+      cos(branchAngleA + 0.28 + 0.16*(seedA - 0.5)),
+      sin(branchAngleA + 0.28 + 0.16*(seedA - 0.5))
+    ) * (
+      1.05 + 0.18*seedC
+    );
+
+    vec2 tipB = vec2(
+      cos(branchAngleB - 0.30 - 0.14*(seedB - 0.5)),
+      sin(branchAngleB - 0.30 - 0.14*(seedB - 0.5))
+    ) * (
+      1.00 + 0.20*seedA
+    );
+
+    accumulateVesselSegment(
+      p,
+      outer,
+      shoulder,
+      1.0,
+      majorDist,
+      minorDist,
+      nearestDist,
+      nearestDir
+    );
+
+    accumulateVesselSegment(
+      p,
+      shoulder,
+      inner,
+      1.0,
+      majorDist,
+      minorDist,
+      nearestDist,
+      nearestDir
+    );
+
+    accumulateVesselSegment(
+      p,
+      shoulder,
+      branchA,
+      0.0,
+      majorDist,
+      minorDist,
+      nearestDist,
+      nearestDir
+    );
+
+    accumulateVesselSegment(
+      p,
+      branchA,
+      tipA,
+      0.0,
+      majorDist,
+      minorDist,
+      nearestDist,
+      nearestDir
+    );
+
+    accumulateVesselSegment(
+      p,
+      shoulder,
+      branchB,
+      0.0,
+      majorDist,
+      minorDist,
+      nearestDist,
+      nearestDir
+    );
+
+    accumulateVesselSegment(
+      p,
+      branchB,
+      tipB,
+      0.0,
+      majorDist,
+      minorDist,
+      nearestDist,
+      nearestDir
+    );
+  }
+
+  return vec4(
+    majorDist,
+    minorDist,
+    nearestDir
+  );
 }
 
 float ropeIntensity(vec3 sampleColour){
@@ -895,12 +1527,13 @@ void main(){
       0.22*e
     );
 
-  // The same hexagonal membrane becomes materially visible toward the edges.
-  // Keep the centre nearly clear so the hurtling tunnel remains the focal event.
-  const float honeyScale = 5.20;
-
-  vec2 shellDir = normalize(px + vec2(0.0001, 0.0001));
-  vec2 shellTan = vec2(-shellDir.y, shellDir.x);
+  // Peripheral vascular tissue.
+  //
+  // The scaffold is now an open dendritic plexus rather than a cell tiling.
+  // Dormant vessels are almost invisible; the user mainly learns the topology
+  // when a passing rope backlights a branch and that charge runs along it.
+  vec2 tissueDir = normalize(px + vec2(0.0001, 0.0001));
+  vec2 tissueTan = vec2(-tissueDir.y, tissueDir.x);
 
   float shellWrap =
     smoothstep(
@@ -909,73 +1542,46 @@ void main(){
       r
     );
 
-  float shellRad = dot(px, shellDir);
-  float shellLat = dot(px, shellTan);
+  float shellRad = dot(px, tissueDir);
+  float shellLat = dot(px, tissueTan);
 
-  vec2 honeySampleP =
-    shellDir * (
-      shellRad * (1.0 + 0.18*shellWrap)
+  vec2 tissueSampleP =
+    tissueDir * (
+      shellRad * (1.0 + 0.14*shellWrap)
     ) +
-    shellTan * (
-      shellLat * (1.0 - 0.12*shellWrap)
+    tissueTan * (
+      shellLat * (1.0 - 0.08*shellWrap)
     );
 
-  honeySampleP +=
-    shellDir *
+  tissueSampleP +=
+    tissueDir *
     (
-      0.050 *
+      0.032 *
       shellWrap *
       r *
       r
     );
 
-  vec2 honeyCentre;
-  vec2 honeyLocal = hexCellLocal(
-    honeySampleP * honeyScale,
-    honeyCentre
-  );
-
-  vec2 honeyAbs = abs(honeyLocal);
-
-  float honeyMetric = max(
-    honeyAbs.x,
-    0.5*honeyAbs.x +
-      0.86602540378*honeyAbs.y
-  );
-
-  float honeyEdgeDistance =
-    0.5 -
-    honeyMetric;
-
-  float honeyAa =
-    fwidth(honeyMetric) *
-    1.20;
-
-  float honeyLine =
-    1.0 -
-    smoothstep(
-      0.018 + honeyAa,
-      0.090 + honeyAa,
-      honeyEdgeDistance
+  vec4 vesselSample =
+    vascularField(
+      tissueSampleP
     );
 
-  float honeyCore =
-    1.0 -
-    smoothstep(
-      0.050 + honeyAa,
-      0.118 + honeyAa,
-      honeyEdgeDistance
-    );
+  float majorDistance = vesselSample.x;
+  float minorDistance = vesselSample.y;
+  float vesselDistance = min(
+    majorDistance,
+    minorDistance
+  );
 
-  float honeyPresence =
-    0.004 +
-    0.996 * smoothstep(
-      0.40,
-      1.06,
+  float tissuePresence =
+    smoothstep(
+      0.42,
+      0.70,
       r
     );
 
-  float honeyOuterFade =
+  float tissueOuterFade =
     1.0 -
     smoothstep(
       1.28,
@@ -983,21 +1589,83 @@ void main(){
       r
     );
 
-  float honeyStructure =
-    honeyLine *
-    honeyPresence *
-    honeyOuterFade;
+  float majorAa =
+    fwidth(majorDistance) *
+    1.35 +
+    0.0008;
 
-  float honeyOcclusion =
-    honeyCore *
-    honeyPresence *
-    honeyOuterFade;
+  float minorAa =
+    fwidth(minorDistance) *
+    1.35 +
+    0.0008;
 
-  float vignette = smoothstep(
-    1.34,
-    0.32,
-    r
-  );
+  float majorLine =
+    1.0 -
+    smoothstep(
+      0.010 + majorAa,
+      0.030 + majorAa,
+      majorDistance
+    );
+
+  float majorCore =
+    1.0 -
+    smoothstep(
+      0.0035 + majorAa,
+      0.014 + majorAa,
+      majorDistance
+    );
+
+  float minorLine =
+    1.0 -
+    smoothstep(
+      0.006 + minorAa,
+      0.021 + minorAa,
+      minorDistance
+    );
+
+  float minorCore =
+    1.0 -
+    smoothstep(
+      0.0025 + minorAa,
+      0.010 + minorAa,
+      minorDistance
+    );
+
+  float vesselStructure =
+    max(
+      majorLine,
+      minorLine * 0.88
+    ) *
+    tissuePresence *
+    tissueOuterFade;
+
+  float vesselCore =
+    max(
+      majorCore,
+      minorCore * 0.90
+    ) *
+    tissuePresence *
+    tissueOuterFade;
+
+  float vesselHalo =
+    (
+      1.0 -
+      smoothstep(
+        0.022,
+        0.085,
+        vesselDistance
+      )
+    ) *
+    tissuePresence *
+    tissueOuterFade;
+
+  float vignette =
+    1.0 -
+    smoothstep(
+      0.32,
+      1.34,
+      r
+    );
 
   float blackout =
     0.92 +
@@ -1016,404 +1684,240 @@ void main(){
     vignette *
     blackout;
 
-  vec3 honeyShadow = vec3(
-    0.014,
-    0.004,
-    0.006
+  vec2 vesselTangent = normalize(
+    vesselSample.zw +
+    vec2(0.0001, 0.0001)
   );
 
-  vec3 honeyEdge = mix(
-    vec3(0.18, 0.030, 0.036),
-    vec3(0.58, 0.105, 0.095),
-    0.28 + 0.34*assault
-  );
-
-  vec3 honeyGlint = mix(
-    vec3(0.32, 0.060, 0.050),
-    vec3(0.82, 0.21, 0.16),
-    0.18 + 0.30*cen
-  );
-
-  float cavityShade =
-    honeyPresence *
-    honeyOuterFade *
-    shellWrap;
-
-  float cavityRim =
-    honeyCore *
-    honeyPresence *
-    honeyOuterFade *
-    (
-      0.42 +
-      0.58 * shellWrap
-    );
-
-  float wallMetricA = abs(
-    0.5 - abs(honeyLocal.x)
-  );
-
-  float wallMetricB = abs(
-    0.5 - abs(
-      0.5*honeyLocal.x +
-      0.86602540378*honeyLocal.y
-    )
-  );
-
-  float wallMetricC = abs(
-    0.5 - abs(
-      -0.5*honeyLocal.x +
-      0.86602540378*honeyLocal.y
-    )
-  );
-
-  float wallMaskA =
-    1.0 -
-    smoothstep(
-      0.008 + honeyAa,
-      0.034 + honeyAa,
-      wallMetricA
-    );
-
-  float wallMaskB =
-    1.0 -
-    smoothstep(
-      0.008 + honeyAa,
-      0.034 + honeyAa,
-      wallMetricB
-    );
-
-  float wallMaskC =
-    1.0 -
-    smoothstep(
-      0.008 + honeyAa,
-      0.034 + honeyAa,
-      wallMetricC
-    );
-
-  float ropeCore = smoothstep(
-    0.075,
-    0.30,
-    ropeIntensity(inkA)
-  );
-
-  float directIntersection =
-    ropeCore *
-    max(
-      wallMaskA,
-      max(
-        wallMaskB,
-        wallMaskC
-      )
-    ) *
-    honeyPresence *
-    honeyOuterFade;
-
-  // Probe a short distance in both directions along each wall family. If a
-  // rope has just intersected that conductor nearby, the travelling pulse on
-  // this pixel is allowed to ignite. This makes the charge visibly causal:
-  // rope strike -> hot node -> current travelling away along the scaffold.
   vec2 pxToUv =
     min(uRes.x, uRes.y) /
     uRes;
 
   float probeDistance =
-    0.090 +
-    0.018*assault;
+    0.060 +
+    0.020*assault;
 
-  vec2 wallDirA = vec2(0.0, 1.0);
-  vec2 wallDirB = vec2(0.86602540378, -0.5);
-  vec2 wallDirC = vec2(0.86602540378, 0.5);
+  vec2 probeNear =
+    vesselTangent *
+    probeDistance *
+    pxToUv;
 
-  vec2 probeA = wallDirA * probeDistance * pxToUv;
-  vec2 probeB = wallDirB * probeDistance * pxToUv;
-  vec2 probeC = wallDirC * probeDistance * pxToUv;
+  vec2 probeFar =
+    vesselTangent *
+    probeDistance *
+    1.85 *
+    pxToUv;
 
-  float nearbyRopeA = max(
+  float currentRope =
     ropeIntensity(
-      texture(
-        uTex,
-        clamp(
-          warpedUv + probeA,
-          vec2(0.001),
-          vec2(0.999)
-        )
-      ).rgb
+      inkA
+    );
+
+  float nearbyRope = max(
+    max(
+      ropeIntensity(
+        texture(
+          uTex,
+          clamp(
+            warpedUv + probeNear,
+            vec2(0.001),
+            vec2(0.999)
+          )
+        ).rgb
+      ),
+      ropeIntensity(
+        texture(
+          uTex,
+          clamp(
+            warpedUv - probeNear,
+            vec2(0.001),
+            vec2(0.999)
+          )
+        ).rgb
+      )
     ),
-    ropeIntensity(
-      texture(
-        uTex,
-        clamp(
-          warpedUv - probeA,
-          vec2(0.001),
-          vec2(0.999)
-        )
-      ).rgb
+    max(
+      ropeIntensity(
+        texture(
+          uTex,
+          clamp(
+            warpedUv + probeFar,
+            vec2(0.001),
+            vec2(0.999)
+          )
+        ).rgb
+      ),
+      ropeIntensity(
+        texture(
+          uTex,
+          clamp(
+            warpedUv - probeFar,
+            vec2(0.001),
+            vec2(0.999)
+          )
+        ).rgb
+      )
     )
   );
 
-  float nearbyRopeB = max(
-    ropeIntensity(
-      texture(
-        uTex,
-        clamp(
-          warpedUv + probeB,
-          vec2(0.001),
-          vec2(0.999)
-        )
-      ).rgb
-    ),
-    ropeIntensity(
-      texture(
-        uTex,
-        clamp(
-          warpedUv - probeB,
-          vec2(0.001),
-          vec2(0.999)
-        )
-      ).rgb
-    )
-  );
-
-  float nearbyRopeC = max(
-    ropeIntensity(
-      texture(
-        uTex,
-        clamp(
-          warpedUv + probeC,
-          vec2(0.001),
-          vec2(0.999)
-        )
-      ).rgb
-    ),
-    ropeIntensity(
-      texture(
-        uTex,
-        clamp(
-          warpedUv - probeC,
-          vec2(0.001),
-          vec2(0.999)
-        )
-      ).rgb
-    )
-  );
-
-  float sourceA =
-    wallMaskA *
-    max(
-      directIntersection,
-      smoothstep(
-        0.070,
-        0.28,
-        nearbyRopeA
-      ) * 0.86
-    ) *
-    honeyPresence *
-    honeyOuterFade;
-
-  float sourceB =
-    wallMaskB *
-    max(
-      directIntersection,
-      smoothstep(
-        0.070,
-        0.28,
-        nearbyRopeB
-      ) * 0.86
-    ) *
-    honeyPresence *
-    honeyOuterFade;
-
-  float sourceC =
-    wallMaskC *
-    max(
-      directIntersection,
-      smoothstep(
-        0.070,
-        0.28,
-        nearbyRopeC
-      ) * 0.86
-    ) *
-    honeyPresence *
-    honeyOuterFade;
-
-  float wallPulseA =
-    wallMaskA *
-    pow(
+  // uTex already contains a short rope afterimage. Keep that causal conduction,
+  // but weight the residue less heavily so branches do not settle into permanent
+  // near-maximum luminosity once many ropes are circulating at once.
+  float vesselCharge =
+    smoothstep(
+      0.060,
+      0.255,
       max(
-        0.0,
-        sin(
-          uTime * 10.4 +
-          honeyCentre.y * 3.1 +
-          honeyLocal.y * 8.8
-        )
-      ),
-      7.0
-    );
-
-  float wallPulseB =
-    wallMaskB *
-    pow(
-      max(
-        0.0,
-        sin(
-          uTime * 9.7 -
-          honeyCentre.x * 2.9 +
-          (
-            0.5*honeyLocal.x -
-            0.86602540378*honeyLocal.y
-          ) * 9.4
-        )
-      ),
-      7.0
-    );
-
-  float wallPulseC =
-    wallMaskC *
-    pow(
-      max(
-        0.0,
-        sin(
-          uTime * 10.9 +
-          honeyCentre.x * 2.4 +
-          (
-            0.5*honeyLocal.x +
-            0.86602540378*honeyLocal.y
-          ) * 8.6
-        )
-      ),
-      7.0
-    );
-
-  float synapticCharge =
-    max(
-      wallPulseA * sourceA,
-      max(
-        wallPulseB * sourceB,
-        wallPulseC * sourceC
+        currentRope,
+        nearbyRope * 0.62
       )
     ) *
+    tissuePresence *
+    tissueOuterFade;
+
+  float ropeCore =
+    smoothstep(
+      0.080,
+      0.30,
+      currentRope
+    );
+
+  float directIntersection =
+    ropeCore *
+    vesselCore;
+
+  float junction =
+    majorLine *
+    minorLine *
+    tissuePresence *
+    tissueOuterFade;
+
+  // Fine longitudinal variation breaks the remaining neon-tube uniformity.
+  // It is fixed in tissue space, so the fibres look textured rather than as if
+  // an animated noise layer were sliding over them.
+  float fibrilTexture =
+    0.82 +
+    0.12*sin(
+      dot(
+        tissueSampleP,
+        vesselTangent
+      )*31.0 +
+      dot(
+        tissueSampleP,
+        vec2(
+          0.73,
+          -0.41
+        )
+      )*7.0
+    ) +
+    0.06*sin(
+      dot(
+        tissueSampleP,
+        vesselTangent
+      )*67.0 +
+      1.9
+    );
+
+  float branchGlow =
+    vesselStructure *
+    vesselCharge *
+    clamp(
+      fibrilTexture,
+      0.64,
+      1.08
+    );
+
+  float backlightGlow =
+    vesselHalo *
+    vesselCharge *
     (
-      0.78 +
-      0.22 * assault
+      0.88 +
+      0.12*fibrilTexture
     );
 
   float impactFlash =
     directIntersection *
     (
-      0.70 +
-      0.30*e
+      0.80 +
+      0.20*e
     );
 
-  float conduitGlow =
-    honeyStructure *
-    max(
-      directIntersection * 0.28,
-      synapticCharge * 0.42
-    );
-
-  vec3 chargeGlow = mix(
-    vec3(0.54, 0.070, 0.052),
-    vec3(1.00, 0.34, 0.16),
-    0.14 + 0.28*cen
+  vec3 vesselShadow = vec3(
+    0.016,
+    0.003,
+    0.005
   );
 
-  vec3 sparkCore = mix(
-    vec3(0.95, 0.22, 0.10),
-    vec3(1.00, 0.58, 0.18),
-    0.22 + 0.18*cen
+  vec3 vesselBlood = mix(
+    vec3(0.44, 0.030, 0.024),
+    vec3(0.92, 0.095, 0.050),
+    0.18 + 0.30*cen
   );
 
-  // Keep the shell physically static. The motion should read as electrical
-  // activity travelling through the fixed superstructure rather than the
-  // hexagonal walls themselves wobbling.
+  vec3 vesselHot = mix(
+    vec3(0.92, 0.18, 0.070),
+    vec3(1.00, 0.54, 0.16),
+    0.20 + 0.22*cen
+  );
+
+  // Dormant tissue is deliberately almost absent. Its dark halo gives the
+  // faintest suggestion of depth, but geometry is discovered primarily by
+  // transient illumination.
   col = mix(
     col,
-    honeyShadow,
-    cavityShade *
-      (
-        0.018 +
-        0.030*shellWrap
-      )
-  );
-
-  col = mix(
-    col,
-    honeyShadow,
-    honeyOcclusion *
-      (
-        0.080 +
-        0.090*assault +
-        0.050*shellWrap
-      )
+    vesselShadow,
+    vesselHalo * 0.004
   );
 
   col +=
-    honeyEdge *
-    honeyStructure *
+    vesselBlood *
+    vesselStructure *
     (
-      0.034 +
-      0.050*assault +
-      0.014*e +
-      0.012*shellWrap
+      0.0008 +
+      0.0014*assault +
+      0.0008*e
+    );
+
+  // Torch-through-tissue response: illumination spreads a short distance along
+  // the local branch and softly reveals the surrounding vessel wall.
+  col +=
+    vesselBlood *
+    backlightGlow *
+    (
+      0.070 +
+      0.070*assault
     );
 
   col +=
-    honeyGlint *
-    honeyCore *
-    honeyPresence *
-    honeyOuterFade *
+    vesselHot *
+    branchGlow *
     (
-      0.010 +
-      0.022*e +
-      0.014*shellWrap
+      0.24 +
+      0.18*assault +
+      0.10*e
     );
 
+  // Bifurcations hold a little more charge, like thicker vascular junctions.
   col +=
-    chargeGlow *
-    conduitGlow *
+    vesselHot *
+    junction *
+    vesselCharge *
     (
-      0.045 +
-      0.070*e
+      0.10 +
+      0.12*assault
     );
 
-  col +=
-    chargeGlow *
-    honeyStructure *
-    synapticCharge *
-    (
-      0.12 +
-      0.16*assault
-    );
-
-  // The actual contact point gets a hotter, slightly iridescent node flash;
-  // the moving current that follows is narrower and more directional.
-  col +=
-    sparkCore *
-    honeyCore *
-    impactFlash *
-    (
-      0.22 +
-      0.26*e
-    );
-
+  // Direct rope/vessel contact is the hottest local event.
   col +=
     mix(
-      vec3(1.00, 0.72, 0.26),
-      vec3(0.86, 0.42, 1.00),
-      0.20 + 0.34*cen
+      vec3(1.00, 0.30, 0.10),
+      vec3(1.00, 0.72, 0.24),
+      0.24 + 0.30*cen
     ) *
-    honeyCore *
     impactFlash *
-    impactFlash *
-    0.16;
-
-  col +=
-    sparkCore *
-    honeyCore *
-    synapticCharge *
     (
-      0.11 +
-      0.14*e
+      0.34 +
+      0.30*e
     );
 
   fragColor = vec4(

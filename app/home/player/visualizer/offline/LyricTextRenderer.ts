@@ -14,6 +14,8 @@ export type LyricTextStyle = {
   align: "left" | "center" | "right";
   anchorX01: number;
   anchorY01: number;
+  fitRegionTop01?: number;
+  fitRegionBottom01?: number;
   fill: string;
   stroke?: string;
   strokeWidthPx?: number;
@@ -529,65 +531,92 @@ export class LyricTextRenderer {
     scale: number,
   ): TextBlock {
     const maxWidth = this.width * this.style.maxWidth01;
-    const minimumScale = Math.max(0.5, Math.min(1, this.style.minimumFontScale));
+    const minimumScale = Math.max(
+      0.5,
+      Math.min(1, this.style.minimumFontScale),
+    );
     const requestedScale = Math.max(0.01, scale);
+    const minimumResolvedScale = requestedScale * minimumScale;
+    const fitRegionTopPx =
+      this.style.fitRegionTop01 !== undefined
+        ? this.height * this.style.fitRegionTop01
+        : Number.NEGATIVE_INFINITY;
+    const fitRegionBottomPx =
+      this.style.fitRegionBottom01 !== undefined
+        ? this.height * this.style.fitRegionBottom01
+        : Number.POSITIVE_INFINITY;
 
     let resolvedScale = requestedScale;
-    let fontSizePx = this.style.fontSizePx * resolvedScale;
-    let letterSpacingPx = this.style.letterSpacingPx * resolvedScale;
-    let font = `${this.style.fontWeight} ${fontSizePx}px ${this.style.fontFamily}`;
-    let lines = this.wrapText(text, maxWidth, font, letterSpacingPx);
+    let block: TextBlock | null = null;
 
-    while (
-      lines.length > this.style.maxLines &&
-      resolvedScale > requestedScale * minimumScale + 0.001
-    ) {
+    while (true) {
+      const fontSizePx = this.style.fontSizePx * resolvedScale;
+      const letterSpacingPx = this.style.letterSpacingPx * resolvedScale;
+      const font = `${this.style.fontWeight} ${fontSizePx}px ${this.style.fontFamily}`;
+      const lines = this.wrapText(text, maxWidth, font, letterSpacingPx);
+
+      this.frameCtx.font = font;
+      this.applyLetterSpacing(this.frameCtx, letterSpacingPx);
+
+      const blockWidth = lines.reduce((max, line) => {
+        return Math.max(
+          max,
+          this.measureLineWidth(line, font, letterSpacingPx),
+        );
+      }, 0);
+
+      const metrics = this.frameCtx.measureText("Hgj");
+      const ascent =
+        metrics.actualBoundingBoxAscent > 0
+          ? metrics.actualBoundingBoxAscent
+          : fontSizePx * 0.76;
+      const descent =
+        metrics.actualBoundingBoxDescent > 0
+          ? metrics.actualBoundingBoxDescent
+          : fontSizePx * 0.24;
+      const lineHeightPx = fontSizePx * this.style.lineHeight;
+      const blockHeight =
+        ascent + descent + Math.max(0, lines.length - 1) * lineHeightPx;
+      const anchorX = this.width * this.style.anchorX01;
+      const anchorY = this.height * this.style.anchorY01 + yOffsetPx;
+      const topY = anchorY - blockHeight / 2;
+      const startY = topY + ascent;
+      const bottomY = topY + blockHeight;
+      const exceedsLineLimit = lines.length > this.style.maxLines;
+      const exceedsFitRegion =
+        topY < fitRegionTopPx - 0.5 || bottomY > fitRegionBottomPx + 0.5;
+
+      block = {
+        lines,
+        font,
+        fontSizePx,
+        letterSpacingPx,
+        lineHeightPx,
+        anchorX,
+        startY,
+        topY,
+        blockWidth,
+        blockHeight,
+      };
+
+      if (
+        (!exceedsLineLimit && !exceedsFitRegion) ||
+        resolvedScale <= minimumResolvedScale + 0.001
+      ) {
+        break;
+      }
+
       resolvedScale = Math.max(
-        requestedScale * minimumScale,
+        minimumResolvedScale,
         resolvedScale - 0.025,
       );
-      fontSizePx = this.style.fontSizePx * resolvedScale;
-      letterSpacingPx = this.style.letterSpacingPx * resolvedScale;
-      font = `${this.style.fontWeight} ${fontSizePx}px ${this.style.fontFamily}`;
-      lines = this.wrapText(text, maxWidth, font, letterSpacingPx);
     }
 
-    this.frameCtx.font = font;
-    this.applyLetterSpacing(this.frameCtx, letterSpacingPx);
+    if (!block) {
+      throw new Error("Failed to resolve lyric text block");
+    }
 
-    const blockWidth = lines.reduce((max, line) => {
-      return Math.max(max, this.measureLineWidth(line, font, letterSpacingPx));
-    }, 0);
-
-    const metrics = this.frameCtx.measureText("Hgj");
-    const ascent =
-      metrics.actualBoundingBoxAscent > 0
-        ? metrics.actualBoundingBoxAscent
-        : fontSizePx * 0.76;
-    const descent =
-      metrics.actualBoundingBoxDescent > 0
-        ? metrics.actualBoundingBoxDescent
-        : fontSizePx * 0.24;
-    const lineHeightPx = fontSizePx * this.style.lineHeight;
-    const blockHeight =
-      ascent + descent + Math.max(0, lines.length - 1) * lineHeightPx;
-    const anchorX = this.width * this.style.anchorX01;
-    const anchorY = this.height * this.style.anchorY01 + yOffsetPx;
-    const topY = anchorY - blockHeight / 2;
-    const startY = topY + ascent;
-
-    return {
-      lines,
-      font,
-      fontSizePx,
-      letterSpacingPx,
-      lineHeightPx,
-      anchorX,
-      startY,
-      topY,
-      blockWidth,
-      blockHeight,
-    };
+    return block;
   }
 
   private wrapText(

@@ -221,7 +221,7 @@ export class PromoImageRenderer {
     if (this.iconImage) {
       this.drawContainedImage(this.iconImage, {
         centerX01: 0.5,
-        centerY01: portrait ? 0.245 : 0.22,
+        centerY01: portrait ? 0.105 : 0.22,
         maxWidth01: portrait ? 0.14 : 0.1,
         maxHeight01: portrait ? 0.08 : 0.14,
         cornerRadiusPx: 0,
@@ -234,9 +234,9 @@ export class PromoImageRenderer {
     if (this.artworkImage) {
       this.drawContainedImage(this.artworkImage, {
         centerX01: 0.5,
-        centerY01: portrait ? 0.72 : 0.76,
-        maxWidth01: portrait ? 0.44 : 0.24,
-        maxHeight01: portrait ? 0.25 : 0.34,
+        centerY01: portrait ? 0.625 : 0.76,
+        maxWidth01: portrait ? 0.46 : 0.24,
+        maxHeight01: portrait ? 0.26 : 0.34,
         cornerRadiusPx: this.width * 0.018,
         shadowBlurPx: this.width * 0.035,
         shadowColor: "rgba(0,0,0,0.72)",

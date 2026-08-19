@@ -125,11 +125,13 @@ export function createPingPongTheme(config: PingPongThemeConfig): Theme {
   let simTime: WebGLUniformLocation | null = null;
   let simEnergy: WebGLUniformLocation | null = null;
   let simFrame: WebGLUniformLocation | null = null;
+  let simDeltaTime: WebGLUniformLocation | null = null;
 
   let displayState: WebGLUniformLocation | null = null;
   let displayRes: WebGLUniformLocation | null = null;
   let displayTime: WebGLUniformLocation | null = null;
   let displayEnergy: WebGLUniformLocation | null = null;
+  let displayDeltaTime: WebGLUniformLocation | null = null;
 
   let simExtraFloatUniforms: Array<{
     location: WebGLUniformLocation | null;
@@ -142,6 +144,7 @@ export function createPingPongTheme(config: PingPongThemeConfig): Theme {
   }> = [];
 
   let lastTrackProgress01: number | null = null;
+  let lastTimeSec: number | null = null;
 
   return {
     name: config.name,
@@ -164,17 +167,23 @@ export function createPingPongTheme(config: PingPongThemeConfig): Theme {
       pingpong = createPingPong(gl, 1, 1);
       frame = 0;
       lastTrackProgress01 = null;
+      lastTimeSec = null;
 
       simPrev = gl.getUniformLocation(nextSimProgram, "uPrev");
       simRes = gl.getUniformLocation(nextSimProgram, "uRes");
       simTime = gl.getUniformLocation(nextSimProgram, "uTime");
       simEnergy = gl.getUniformLocation(nextSimProgram, "uEnergy");
       simFrame = gl.getUniformLocation(nextSimProgram, "uFrame");
+      simDeltaTime = gl.getUniformLocation(nextSimProgram, "uDeltaTime");
 
       displayState = gl.getUniformLocation(nextDisplayProgram, "uState");
       displayRes = gl.getUniformLocation(nextDisplayProgram, "uRes");
       displayTime = gl.getUniformLocation(nextDisplayProgram, "uTime");
       displayEnergy = gl.getUniformLocation(nextDisplayProgram, "uEnergy");
+      displayDeltaTime = gl.getUniformLocation(
+        nextDisplayProgram,
+        "uDeltaTime",
+      );
 
       simExtraFloatUniforms = (config.extraFloatUniforms ?? []).map(
         (uniform) => ({
@@ -218,9 +227,24 @@ export function createPingPongTheme(config: PingPongThemeConfig): Theme {
 
       lastTrackProgress01 = trackProgress01;
 
+      let deltaTimeSec =
+        lastTimeSec == null ? 1 / 60 : opts.time - lastTimeSec;
+
+      if (!Number.isFinite(deltaTimeSec) || deltaTimeSec < 0) {
+        deltaTimeSec = 1 / 60;
+      }
+
+      // Bound long tab/background stalls without making normal adaptive-FPS
+      // operation frame-rate dependent. Themes can normalize legacy per-frame
+      // rates against a 60 Hz reference with uDeltaTime * 60.
+      deltaTimeSec = Math.min(0.08, deltaTimeSec);
+
       if (didSeek) {
         frame = 0;
+        deltaTimeSec = 1 / 60;
       }
+
+      lastTimeSec = opts.time;
 
       gl.bindVertexArray(tri.vao);
 
@@ -235,6 +259,7 @@ export function createPingPongTheme(config: PingPongThemeConfig): Theme {
       gl.uniform2f(simRes, opts.width, opts.height);
       gl.uniform1f(simTime, opts.time);
       gl.uniform1f(simEnergy, opts.audio.energy);
+      gl.uniform1f(simDeltaTime, deltaTimeSec);
 
       for (const uniform of simExtraFloatUniforms) {
         gl.uniform1f(uniform.location, uniform.getValue(opts));
@@ -268,6 +293,7 @@ export function createPingPongTheme(config: PingPongThemeConfig): Theme {
       gl.uniform2f(displayRes, opts.width, opts.height);
       gl.uniform1f(displayTime, opts.time);
       gl.uniform1f(displayEnergy, opts.audio.energy);
+      gl.uniform1f(displayDeltaTime, deltaTimeSec);
 
       for (const uniform of displayExtraFloatUniforms) {
         gl.uniform1f(uniform.location, uniform.getValue(opts));
@@ -299,6 +325,7 @@ export function createPingPongTheme(config: PingPongThemeConfig): Theme {
       simExtraFloatUniforms = [];
       displayExtraFloatUniforms = [];
       lastTrackProgress01 = null;
+      lastTimeSec = null;
     },
   };
 }
