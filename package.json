@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "reset:test-member": "node scripts/reset-test-member.mjs",
+"reset:test-member": "node --env-file=.env.local scripts/reset-test-member.mjs",
     "format": "prettier . --write",
     "format:check": "prettier . --check"
   },

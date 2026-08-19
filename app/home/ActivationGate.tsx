@@ -555,9 +555,9 @@ function OtpContent(props: OtpContentProps) {
               padding: "0 2px",
             }}
           >
-            Your email is used to verify and operate your account. Necessary
-            account, security, purchase, membership, and gift messages do not
-            depend on marketing consent.
+            We use your email to verify and manage your account. Account,
+            security, purchase, membership and gift emails are sent as needed to
+            provide these services and are not marketing.
           </div>
 
           <label
@@ -576,9 +576,7 @@ function OtpContent(props: OtpContentProps) {
               type="checkbox"
               checked={marketingOptIn}
               disabled={isVerifying}
-              onChange={(event) =>
-                onMarketingOptInChange(event.target.checked)
-              }
+              onChange={(event) => onMarketingOptInChange(event.target.checked)}
               style={{
                 width: 16,
                 height: 16,
@@ -594,9 +592,9 @@ function OtpContent(props: OtpContentProps) {
                 textAlign: "left",
               }}
             >
-              I’d like occasional emails from Brendan John Roch / Angelfish
-              Records about new releases, events, and other news. I can
-              unsubscribe at any time.
+              I’d like to receive occasional emails from Brendan John
+              Roch about new releases and events. I
+              can unsubscribe at any time.
             </span>
           </label>
 
@@ -1046,68 +1044,68 @@ function SignedInIdentity(props: SignedInIdentityProps) {
         }}
       >
         <span style={{ opacity: 0.72 }} title={tier}>
-            {tier}
-          </span>
+          {tier}
+        </span>
 
-          {subStatus?.cancelAtPeriodEnd && (
-            <span style={{ position: "relative", display: "inline-flex" }}>
-              <button
-                type="button"
-                onClick={() => onCancelTipOpenChange(!cancelTipOpen)}
-                onMouseEnter={() => onCancelTipOpenChange(true)}
-                onMouseLeave={() => onCancelTipOpenChange(false)}
-                onBlur={() => onCancelTipOpenChange(false)}
-                aria-label={cancelTipText}
+        {subStatus?.cancelAtPeriodEnd && (
+          <span style={{ position: "relative", display: "inline-flex" }}>
+            <button
+              type="button"
+              onClick={() => onCancelTipOpenChange(!cancelTipOpen)}
+              onMouseEnter={() => onCancelTipOpenChange(true)}
+              onMouseLeave={() => onCancelTipOpenChange(false)}
+              onBlur={() => onCancelTipOpenChange(false)}
+              aria-label={cancelTipText}
+              style={{
+                appearance: "none",
+                border: "1px solid rgba(255,255,255,0.16)",
+                background: "rgba(255,255,255,0.06)",
+                color: "rgba(255,255,255,0.82)",
+                width: 18,
+                height: 18,
+                borderRadius: 999,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transform: "translateY(1px)",
+                padding: 0,
+                margin: 0,
+                cursor: "pointer",
+              }}
+            >
+              <ClockIcon size={12} />
+            </button>
+
+            {cancelTipOpen && (
+              <div
+                role="tooltip"
                 style={{
-                  appearance: "none",
-                  border: "1px solid rgba(255,255,255,0.16)",
-                  background: "rgba(255,255,255,0.06)",
-                  color: "rgba(255,255,255,0.82)",
-                  width: 18,
-                  height: 18,
-                  borderRadius: 999,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  transform: "translateY(1px)",
-                  padding: 0,
-                  margin: 0,
-                  cursor: "pointer",
+                  position: "absolute",
+                  top: "calc(100% + 8px)",
+                  right: 0,
+                  zIndex: 80,
+                  minWidth: 220,
+                  maxWidth: 320,
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,255,255,0.14)",
+                  background: "rgba(10,10,14,0.96)",
+                  boxShadow:
+                    "0 18px 42px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04)",
+                  backdropFilter: "blur(10px)",
+                  WebkitBackdropFilter: "blur(10px)",
+                  fontSize: 12,
+                  lineHeight: "16px",
+                  color: "rgba(255,255,255,0.86)",
+                  pointerEvents: "none",
+                  whiteSpace: "normal",
                 }}
               >
-                <ClockIcon size={12} />
-              </button>
-
-              {cancelTipOpen && (
-                <div
-                  role="tooltip"
-                  style={{
-                    position: "absolute",
-                    top: "calc(100% + 8px)",
-                    right: 0,
-                    zIndex: 80,
-                    minWidth: 220,
-                    maxWidth: 320,
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    border: "1px solid rgba(255,255,255,0.14)",
-                    background: "rgba(10,10,14,0.96)",
-                    boxShadow:
-                      "0 18px 42px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04)",
-                    backdropFilter: "blur(10px)",
-                    WebkitBackdropFilter: "blur(10px)",
-                    fontSize: 12,
-                    lineHeight: "16px",
-                    color: "rgba(255,255,255,0.86)",
-                    pointerEvents: "none",
-                    whiteSpace: "normal",
-                  }}
-                >
-                  {cancelTipText}
-                </div>
-              )}
-            </span>
-          )}
+                {cancelTipText}
+              </div>
+            )}
+          </span>
+        )}
 
         <span aria-hidden style={{ opacity: 0.35 }}>
           |
