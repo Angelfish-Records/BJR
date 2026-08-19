@@ -207,6 +207,31 @@ function clearFbo(
   gl.clear(gl.COLOR_BUFFER_BIT);
 }
 
+function blitState(
+  gl: WebGL2RenderingContext,
+  sourceFbo: WebGLFramebuffer,
+  sourceW: number,
+  sourceH: number,
+  targetFbo: WebGLFramebuffer,
+  targetW: number,
+  targetH: number,
+): void {
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, sourceFbo);
+  gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, targetFbo);
+  gl.blitFramebuffer(
+    0,
+    0,
+    sourceW,
+    sourceH,
+    0,
+    0,
+    targetW,
+    targetH,
+    gl.COLOR_BUFFER_BIT,
+    gl.NEAREST,
+  );
+}
+
 export function createPingPong(
   gl: WebGL2RenderingContext,
   w: number,
@@ -266,11 +291,54 @@ export function createPingPong(
 
       if (nextW === api.w && nextH === api.h) return;
 
+      const previousReadFramebuffer = gl2.getParameter(
+        gl2.READ_FRAMEBUFFER_BINDING,
+      ) as WebGLFramebuffer | null;
+      const previousDrawFramebuffer = gl2.getParameter(
+        gl2.DRAW_FRAMEBUFFER_BINDING,
+      ) as WebGLFramebuffer | null;
+      const previousViewport = gl2.getParameter(gl2.VIEWPORT) as Int32Array;
+
+      const sourceFbo = flip ? resources.fboB : resources.fboA;
+      const sourceW = api.w;
+      const sourceH = api.h;
+      const previousResources = resources;
       const nextResources = createResources(gl2, nextW, nextH, useFloat);
-      disposeResources(gl2, resources);
+
+      // Preserve the current logical feedback state across presentation/DPR
+      // resizes. Seed both sides from the same state so reset-to-A semantics
+      // remain deterministic after the resize.
+      blitState(
+        gl2,
+        sourceFbo,
+        sourceW,
+        sourceH,
+        nextResources.fboA,
+        nextW,
+        nextH,
+      );
+      blitState(
+        gl2,
+        sourceFbo,
+        sourceW,
+        sourceH,
+        nextResources.fboB,
+        nextW,
+        nextH,
+      );
+
+      gl2.bindFramebuffer(gl2.READ_FRAMEBUFFER, previousReadFramebuffer);
+      gl2.bindFramebuffer(gl2.DRAW_FRAMEBUFFER, previousDrawFramebuffer);
+      gl2.viewport(
+        previousViewport[0],
+        previousViewport[1],
+        previousViewport[2],
+        previousViewport[3],
+      );
 
       resources = nextResources;
       flip = false;
+      disposeResources(gl2, previousResources);
 
       api.w = nextW;
       api.h = nextH;

@@ -162,16 +162,16 @@ export class VisualizerEngine {
   private snapFbo: RenderTarget | null = null;
   private readonly snapCanvas: HTMLCanvasElement;
   private readonly snapCtx: CanvasRenderingContext2D;
-  private readonly performanceProfile: PerformanceProfile;
-  private readonly snapCapPx: number;
-  private readonly snapFps: number;
+  private performanceProfile: PerformanceProfile;
+  private snapCapPx: number;
+  private snapFps: number;
   private lastSnapAtMs = 0;
   private snapW = 2;
   private snapH = 2;
   private snapBufAB: ArrayBuffer = new ArrayBuffer(2 * 2 * 4);
   private snapBufU8: Uint8Array = new Uint8Array(this.snapBufAB);
 
-  private readonly stageVariant: StageVariant;
+  private stageVariant: StageVariant;
   private themeDebugName = "blank";
   private perfFrames = 0;
   private perfWindowStartMs = 0;
@@ -278,6 +278,42 @@ export class VisualizerEngine {
   /** The stable 2D snapshot canvas that should be registered into visualSurface for sip consumers. */
   getStableSnapshotCanvas(): HTMLCanvasElement {
     return this.snapCanvas;
+  }
+
+  /**
+   * Change only the presentation policy around the same live WebGL world.
+   * Theme instances, feedback textures and transition state remain untouched.
+   */
+  setPresentationContext(variant: StageVariant): void {
+    const nextProfile: PerformanceProfile =
+      variant === "fullscreen" ? "fullscreen" : "inline";
+
+    if (
+      this.stageVariant === variant &&
+      this.performanceProfile === nextProfile
+    ) {
+      return;
+    }
+
+    const previousVariant = this.stageVariant;
+    visualizerPerfSurface.clearMetrics(previousVariant);
+
+    this.stageVariant = variant;
+    this.performanceProfile = nextProfile;
+    this.snapCapPx = pickSnapshotCapPx(nextProfile);
+    this.snapFps = nextProfile === "fullscreen" ? 8 : 12;
+
+    const cfg = getTierConfig(this.tier, nextProfile);
+    this.dprScale = clamp(this.dprScale, cfg.dprMin, cfg.dprMax);
+
+    // A presentation move may radically change the containing box and DPR
+    // policy. Permit one immediate backing-store adaptation without touching
+    // the live theme/simulation state.
+    const nowMs = performance.now();
+    this.cssDirty = true;
+    this.lastTierChangeAtMs = nowMs;
+    this.lastPerfPublishAtMs = 0;
+    this.lastSnapAtMs = 0;
   }
 
   setThemeDebugName(name: string) {

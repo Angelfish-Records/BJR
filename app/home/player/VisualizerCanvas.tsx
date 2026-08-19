@@ -24,6 +24,7 @@ export default function VisualizerCanvas(
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const engineRef = React.useRef<VisualizerEngine | null>(null);
+  const initialVariantRef = React.useRef<StageVariant>(variant);
 
   const [activeStage, setActiveStage] = React.useState<StageVariant | null>(
     () => mediaSurface.getStageVariant(),
@@ -65,8 +66,9 @@ export default function VisualizerCanvas(
       getAudio,
       getTrackProgress01: () => mediaSurface.getTrackProgress01(),
       theme: createBlankTheme(),
-      performanceProfile: variant === "fullscreen" ? "fullscreen" : "inline",
-      stageVariant: variant,
+      performanceProfile:
+        initialVariantRef.current === "fullscreen" ? "fullscreen" : "inline",
+      stageVariant: initialVariantRef.current,
       initialThemeName: themeNameRef.current,
     });
 
@@ -81,6 +83,10 @@ export default function VisualizerCanvas(
         engineRef.current = null;
       }
     };
+  }, []);
+
+  React.useEffect(() => {
+    engineRef.current?.setPresentationContext(variant);
   }, [variant]);
 
   const unregRef = React.useRef<null | (() => void)>(null);

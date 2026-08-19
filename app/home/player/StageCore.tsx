@@ -138,10 +138,10 @@ function StageCore(
           position: "absolute",
           inset: 0,
           zIndex: 1,
+          // Presentation context must not recolour the visualizer. Inline is the
+          // canonical theme appearance; fullscreen changes layout, not exposure.
           background:
-            variant === "inline"
-              ? "radial-gradient(70% 55% at 50% 40%, rgba(0,0,0,0.00), rgba(0,0,0,0.22) 72%), linear-gradient(180deg, rgba(0,0,0,0.14), rgba(0,0,0,0.06) 45%, rgba(0,0,0,0.16))"
-              : "radial-gradient(70% 55% at 50% 40%, rgba(0,0,0,0.00), rgba(0,0,0,0.28) 72%), linear-gradient(180deg, rgba(0,0,0,0.22), rgba(0,0,0,0.10) 45%, rgba(0,0,0,0.24))",
+            "radial-gradient(70% 55% at 50% 40%, rgba(0,0,0,0.00), rgba(0,0,0,0.22) 72%), linear-gradient(180deg, rgba(0,0,0,0.14), rgba(0,0,0,0.06) 45%, rgba(0,0,0,0.16))",
           pointerEvents: "none",
         }}
       />

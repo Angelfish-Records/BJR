@@ -182,6 +182,7 @@ const FullscreenStageOverlay = React.memo(
     cursorHidden: boolean;
     isMobile: boolean;
     showPerfHud: boolean;
+    stageMountRef: React.RefObject<HTMLDivElement | null>;
     onRequestFullscreen: () => void;
     onClose: () => void;
   }) {
@@ -189,6 +190,7 @@ const FullscreenStageOverlay = React.memo(
       cursorHidden,
       isMobile,
       showPerfHud,
+      stageMountRef,
       onRequestFullscreen,
       onClose,
     } = props;
@@ -226,7 +228,11 @@ const FullscreenStageOverlay = React.memo(
             minHeight: 0,
           }}
         >
-          <StageCore variant="fullscreen" lyricsMode="embedded" />
+          <div
+            ref={stageMountRef}
+            data-af-stage-presentation="fullscreen"
+            style={{ position: "absolute", inset: 0 }}
+          />
 
           {!isMobile && (
             <div
@@ -319,7 +325,44 @@ export default function StageInline(
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
 
+  // Keep one StageCore / VisualizerCanvas / WebGL engine alive for the entire
+  // StageInline lifetime. The plain DOM host moves between presentation slots;
+  // the React portal container never changes, so stateful theme history survives.
+  const [stageHost, setStageHost] = React.useState<HTMLDivElement | null>(null);
+  const inlineStageMountRef = React.useRef<HTMLDivElement | null>(null);
+  const fullscreenStageMountRef = React.useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const host = document.createElement("div");
+    host.dataset.afPersistentStageHost = "1";
+    host.style.position = "absolute";
+    host.style.inset = "0";
+    host.style.width = "100%";
+    host.style.height = "100%";
+    host.style.minWidth = "0";
+    host.style.minHeight = "0";
+
+    setStageHost(host);
+
+    return () => {
+      host.remove();
+    };
+  }, []);
+
   const [open, setOpen] = React.useState(false);
+
+  React.useLayoutEffect(() => {
+    if (!stageHost) return;
+
+    const target = open
+      ? fullscreenStageMountRef.current
+      : inlineStageMountRef.current;
+
+    if (!target || stageHost.parentElement === target) return;
+    target.appendChild(stageHost);
+  }, [open, stageHost]);
   const enableIdleCursor = open && !isMobile;
   const cursorHidden = useIdleCursor(enableIdleCursor, 3000);
 
@@ -395,6 +438,7 @@ export default function StageInline(
             cursorHidden={cursorHidden}
             isMobile={isMobile}
             showPerfHud={isAdmin}
+            stageMountRef={fullscreenStageMountRef}
             onRequestFullscreen={handleOverlayRequestFullscreen}
             onClose={handleOverlayClose}
           />,
@@ -402,8 +446,20 @@ export default function StageInline(
         )
       : null;
 
+  const stagePortal = stageHost
+    ? createPortal(
+        <StageCore
+          variant={open ? "fullscreen" : "inline"}
+          lyricsMode="embedded"
+        />,
+        stageHost,
+      )
+    : null;
+
   return (
     <>
+      {stagePortal}
+
       <div
         style={{
           borderRadius: 18,
@@ -414,11 +470,11 @@ export default function StageInline(
           position: "relative",
         }}
       >
-        {!open ? (
-          <div style={{ position: "absolute", inset: 0 }}>
-            <StageCore variant="inline" lyricsMode="embedded" />
-          </div>
-        ) : null}
+        <div
+          ref={inlineStageMountRef}
+          data-af-stage-presentation="inline"
+          style={{ position: "absolute", inset: 0 }}
+        />
 
         <div
           aria-hidden

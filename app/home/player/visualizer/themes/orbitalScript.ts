@@ -2013,6 +2013,12 @@ export function createOrbitalScriptTheme(): Theme {
   let fboB: WebGLFramebuffer | null = null;
   let ping = true;
   let lastTrackProgress01: number | null = null;
+  let lastTimeSec: number | null = null;
+  let simTimeSec: number | null = null;
+  let simAccumulatorSec = 0;
+
+  const simStepSec = 1 / 60;
+  const maxSimStepsPerRender = 5;
 
   let simW = 0;
   let simH = 0;
@@ -2043,22 +2049,70 @@ export function createOrbitalScriptTheme(): Theme {
       return;
     }
 
-    if (fboA) gl.deleteFramebuffer(fboA);
-    if (fboB) gl.deleteFramebuffer(fboB);
-    if (texA) gl.deleteTexture(texA);
-    if (texB) gl.deleteTexture(texB);
+    const previousTexA = texA;
+    const previousTexB = texB;
+    const previousFboA = fboA;
+    const previousFboB = fboB;
+    const previousW = simW;
+    const previousH = simH;
+    const previousSourceFbo = ping ? previousFboA : previousFboB;
+    const previousReadFramebuffer = gl.getParameter(
+      gl.READ_FRAMEBUFFER_BINDING,
+    ) as WebGLFramebuffer | null;
+    const previousDrawFramebuffer = gl.getParameter(
+      gl.DRAW_FRAMEBUFFER_BINDING,
+    ) as WebGLFramebuffer | null;
+    const previousViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
+
+    const nextTexA = createTex(gl, targetW, targetH);
+    const nextTexB = createTex(gl, targetW, targetH);
+    const nextFboA = createFbo(gl, nextTexA);
+    const nextFboB = createFbo(gl, nextTexB);
+
+    if (previousSourceFbo && previousW > 0 && previousH > 0) {
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, previousSourceFbo);
+
+      for (const targetFbo of [nextFboA, nextFboB]) {
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, targetFbo);
+        gl.blitFramebuffer(
+          0,
+          0,
+          previousW,
+          previousH,
+          0,
+          0,
+          targetW,
+          targetH,
+          gl.COLOR_BUFFER_BIT,
+          gl.NEAREST,
+        );
+      }
+
+    } else {
+      clearTex(gl, nextTexA, targetW, targetH);
+      clearTex(gl, nextTexB, targetW, targetH);
+    }
+
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, previousReadFramebuffer);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, previousDrawFramebuffer);
+    gl.viewport(
+      previousViewport[0],
+      previousViewport[1],
+      previousViewport[2],
+      previousViewport[3],
+    );
+
+    if (previousFboA) gl.deleteFramebuffer(previousFboA);
+    if (previousFboB) gl.deleteFramebuffer(previousFboB);
+    if (previousTexA) gl.deleteTexture(previousTexA);
+    if (previousTexB) gl.deleteTexture(previousTexB);
 
     simW = targetW;
     simH = targetH;
-
-    texA = createTex(gl, simW, simH);
-    texB = createTex(gl, simW, simH);
-    fboA = createFbo(gl, texA);
-    fboB = createFbo(gl, texB);
-
-    clearTex(gl, texA, simW, simH);
-    clearTex(gl, texB, simW, simH);
-
+    texA = nextTexA;
+    texB = nextTexB;
+    fboA = nextFboA;
+    fboB = nextFboB;
     ping = true;
   }
 
@@ -2118,16 +2172,33 @@ export function createOrbitalScriptTheme(): Theme {
         lastTrackProgress01 != null &&
         (progressDelta < -0.005 || Math.abs(progressDelta) > 0.035);
 
+      let elapsedSec =
+        lastTimeSec == null ? simStepSec : opts.time - lastTimeSec;
+
+      if (!Number.isFinite(elapsedSec) || elapsedSec < 0) {
+        elapsedSec = simStepSec;
+      }
+
+      elapsedSec = Math.min(simStepSec * maxSimStepsPerRender, elapsedSec);
+      lastTimeSec = opts.time;
+
       if (didSeek) {
         clearTex(gl, texA, simW, simH);
         clearTex(gl, texB, simW, simH);
         ping = true;
+        simAccumulatorSec = simStepSec;
+        simTimeSec = opts.time - simStepSec;
+      } else {
+        if (simTimeSec == null) {
+          simTimeSec = opts.time - simStepSec;
+        }
+        simAccumulatorSec = Math.min(
+          simAccumulatorSec + elapsedSec,
+          simStepSec * maxSimStepsPerRender,
+        );
       }
 
       lastTrackProgress01 = trackProgress01;
-
-      const src = ping ? texA : texB;
-      const dstFbo = ping ? fboB : fboA;
 
       const previousFbo = gl.getParameter(
         gl.FRAMEBUFFER_BINDING,
@@ -2135,17 +2206,11 @@ export function createOrbitalScriptTheme(): Theme {
 
       const previousViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
 
-      gl.bindFramebuffer(gl.FRAMEBUFFER, dstFbo);
-      gl.viewport(0, 0, simW, simH);
       gl.useProgram(progInk);
       gl.bindVertexArray(tri.vao);
 
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, src);
-
       gl.uniform1i(uPrevI, 0);
       gl.uniform2f(uResI, simW, simH);
-      gl.uniform1f(uTimeI, opts.time);
       gl.uniform1f(uTrackProgressI, trackProgress01);
       gl.uniform1f(uEnergyI, energy);
       gl.uniform1f(uBassI, bass);
@@ -2153,7 +2218,30 @@ export function createOrbitalScriptTheme(): Theme {
       gl.uniform1f(uTrebleI, treble);
       gl.uniform1f(uCentroidI, centroid);
 
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      let simSteps = Math.min(
+        maxSimStepsPerRender,
+        Math.floor((simAccumulatorSec + 1e-9) / simStepSec),
+      );
+
+      while (simSteps > 0) {
+        simTimeSec += simStepSec;
+
+        const src = ping ? texA : texB;
+        const dstFbo = ping ? fboB : fboA;
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, dstFbo);
+        gl.viewport(0, 0, simW, simH);
+
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, src);
+        gl.uniform1f(uTimeI, simTimeSec);
+
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+        ping = !ping;
+        simAccumulatorSec = Math.max(0, simAccumulatorSec - simStepSec);
+        simSteps -= 1;
+      }
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, previousFbo);
       gl.viewport(
@@ -2166,7 +2254,7 @@ export function createOrbitalScriptTheme(): Theme {
       gl.useProgram(progDraw);
 
       gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, ping ? texB : texA);
+      gl.bindTexture(gl.TEXTURE_2D, ping ? texA : texB);
 
       gl.uniform1i(uTexD, 0);
       gl.uniform2f(uResD, opts.width, opts.height);
@@ -2181,8 +2269,6 @@ export function createOrbitalScriptTheme(): Theme {
       gl.bindTexture(gl.TEXTURE_2D, null);
       gl.bindVertexArray(null);
       gl.useProgram(null);
-
-      ping = !ping;
     },
 
     dispose(gl) {
@@ -2202,6 +2288,9 @@ export function createOrbitalScriptTheme(): Theme {
       simW = 0;
       simH = 0;
       lastTrackProgress01 = null;
+      lastTimeSec = null;
+      simTimeSec = null;
+      simAccumulatorSec = 0;
 
       if (progInk) gl.deleteProgram(progInk);
       if (progDraw) gl.deleteProgram(progDraw);
