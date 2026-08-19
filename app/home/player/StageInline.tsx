@@ -25,6 +25,49 @@ function lockBodyScroll(lock: boolean) {
   }
 }
 
+type WebkitFullscreenDocument = Document & {
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => void;
+};
+
+type WebkitFullscreenElement = HTMLElement & {
+  webkitRequestFullscreen?: () => void;
+};
+
+function getDeviceFullscreenElement(doc: Document): Element | null {
+  const webkitDoc = doc as WebkitFullscreenDocument;
+  return doc.fullscreenElement ?? webkitDoc.webkitFullscreenElement ?? null;
+}
+
+async function exitDeviceFullscreen(doc: Document): Promise<void> {
+  if (!getDeviceFullscreenElement(doc)) return;
+
+  if (typeof doc.exitFullscreen === "function") {
+    await doc.exitFullscreen();
+    return;
+  }
+
+  const webkitDoc = doc as WebkitFullscreenDocument;
+  if (typeof webkitDoc.webkitExitFullscreen === "function") {
+    webkitDoc.webkitExitFullscreen();
+  }
+}
+
+async function requestDeviceFullscreen(element: HTMLElement): Promise<void> {
+  if (typeof element.requestFullscreen === "function") {
+    await element.requestFullscreen();
+    return;
+  }
+
+  const webkitElement = element as WebkitFullscreenElement;
+  if (typeof webkitElement.webkitRequestFullscreen === "function") {
+    webkitElement.webkitRequestFullscreen();
+    return;
+  }
+
+  throw new Error("Fullscreen API unavailable");
+}
+
 function useIsMobile(breakpointPx = 640) {
   const [isMobile, setIsMobile] = React.useState(false);
 
@@ -183,7 +226,9 @@ const FullscreenStageOverlay = React.memo(
     isMobile: boolean;
     showPerfHud: boolean;
     stageMountRef: React.RefObject<HTMLDivElement | null>;
-    onRequestFullscreen: () => void;
+    deviceFullscreenRootRef: React.RefObject<HTMLDivElement | null>;
+    deviceFullscreenActive: boolean;
+    onToggleDeviceFullscreen: () => void;
     onClose: () => void;
   }) {
     const {
@@ -191,7 +236,9 @@ const FullscreenStageOverlay = React.memo(
       isMobile,
       showPerfHud,
       stageMountRef,
-      onRequestFullscreen,
+      deviceFullscreenRootRef,
+      deviceFullscreenActive,
+      onToggleDeviceFullscreen,
       onClose,
     } = props;
 
@@ -221,11 +268,14 @@ const FullscreenStageOverlay = React.memo(
         }}
       >
         <div
+          ref={deviceFullscreenRootRef}
+          data-af-device-fullscreen-root="1"
           style={{
             position: "relative",
             width: "100%",
             height: "100%",
             minHeight: 0,
+            background: "#000",
           }}
         >
           <div
@@ -277,9 +327,17 @@ const FullscreenStageOverlay = React.memo(
             }}
           >
             <RoundIconButton
-              label="Fullscreen"
-              title="Fullscreen"
-              onClick={onRequestFullscreen}
+              label={
+                deviceFullscreenActive
+                  ? "Exit device fullscreen"
+                  : "Enter device fullscreen"
+              }
+              title={
+                deviceFullscreenActive
+                  ? "Exit device fullscreen"
+                  : "Enter device fullscreen"
+              }
+              onClick={onToggleDeviceFullscreen}
             >
               <IconFullscreen />
             </RoundIconButton>
@@ -331,6 +389,9 @@ export default function StageInline(
   const [stageHost, setStageHost] = React.useState<HTMLDivElement | null>(null);
   const inlineStageMountRef = React.useRef<HTMLDivElement | null>(null);
   const fullscreenStageMountRef = React.useRef<HTMLDivElement | null>(null);
+  const deviceFullscreenRootRef = React.useRef<HTMLDivElement | null>(null);
+  const [deviceFullscreenActive, setDeviceFullscreenActive] =
+    React.useState(false);
 
   React.useEffect(() => {
     if (typeof document === "undefined") return;
@@ -372,64 +433,82 @@ export default function StageInline(
   }, [open]);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setDeviceFullscreenActive(false);
+      return;
+    }
     if (typeof document === "undefined") return;
 
-    const exitFsIfNeeded = async () => {
-      try {
-        if (
-          document.fullscreenElement &&
-          typeof document.exitFullscreen === "function"
-        ) {
-          await document.exitFullscreen();
-        }
-      } catch {
-        // ignore
-      }
+    const syncDeviceFullscreenState = () => {
+      const fullscreenElement = getDeviceFullscreenElement(document);
+      setDeviceFullscreenActive(
+        fullscreenElement === deviceFullscreenRootRef.current,
+      );
     };
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+
+      // Genuine device fullscreen owns the first Escape. When the browser exits
+      // that mode, fullscreenchange updates this state and the soft fullscreen
+      // overlay remains open. A subsequent Escape closes the soft overlay.
+      if (getDeviceFullscreenElement(document)) return;
+
       e.preventDefault();
-      void exitFsIfNeeded().finally(() => setOpen(false));
+      setOpen(false);
     };
 
-    const onFsChange = () => {
-      if (!document.fullscreenElement) setOpen(false);
-    };
+    syncDeviceFullscreenState();
 
     window.addEventListener("keydown", onKey);
-    document.addEventListener("fullscreenchange", onFsChange);
+    document.addEventListener("fullscreenchange", syncDeviceFullscreenState);
+    document.addEventListener(
+      "webkitfullscreenchange",
+      syncDeviceFullscreenState,
+    );
+
     return () => {
       window.removeEventListener("keydown", onKey);
-      document.removeEventListener("fullscreenchange", onFsChange);
+      document.removeEventListener(
+        "fullscreenchange",
+        syncDeviceFullscreenState,
+      );
+      document.removeEventListener(
+        "webkitfullscreenchange",
+        syncDeviceFullscreenState,
+      );
     };
   }, [open]);
-
-  const tryRequestFullscreen = React.useCallback(async () => {
-    if (typeof document === "undefined") return;
-    const el = document.getElementById("af-stage-overlay");
-    if (!el) return;
-    const requestFullscreen = (
-      el as Element & { requestFullscreen?: () => Promise<void> }
-    ).requestFullscreen;
-    if (typeof requestFullscreen !== "function") return;
-    try {
-      await requestFullscreen.call(el);
-    } catch {
-      // ignore
-    }
-  }, []);
 
   const nothingPlaying = p.queue.length === 0 && !p.current?.recordingId;
 
   const handleOverlayClose = React.useCallback(() => {
-    setOpen(false);
+    if (typeof document === "undefined") {
+      setOpen(false);
+      return;
+    }
+
+    void exitDeviceFullscreen(document).finally(() => setOpen(false));
   }, []);
 
-  const handleOverlayRequestFullscreen = React.useCallback(() => {
-    void tryRequestFullscreen();
-  }, [tryRequestFullscreen]);
+  const handleOverlayToggleDeviceFullscreen = React.useCallback(() => {
+    if (typeof document === "undefined") return;
+
+    const fullscreenElement = getDeviceFullscreenElement(document);
+    if (fullscreenElement) {
+      void exitDeviceFullscreen(document);
+      return;
+    }
+
+    const root = deviceFullscreenRootRef.current;
+    if (!root) return;
+
+    // Keep this call in the click's user-activation stack. The old code targeted
+    // the <dialog> itself, which the Fullscreen API does not permit.
+    void requestDeviceFullscreen(root).catch((error: unknown) => {
+      console.warn("[StageInline] device fullscreen request failed", error);
+    });
+  }, []);
 
   const overlay =
     mounted && open
@@ -439,7 +518,9 @@ export default function StageInline(
             isMobile={isMobile}
             showPerfHud={isAdmin}
             stageMountRef={fullscreenStageMountRef}
-            onRequestFullscreen={handleOverlayRequestFullscreen}
+            deviceFullscreenRootRef={deviceFullscreenRootRef}
+            deviceFullscreenActive={deviceFullscreenActive}
+            onToggleDeviceFullscreen={handleOverlayToggleDeviceFullscreen}
             onClose={handleOverlayClose}
           />,
           document.body,

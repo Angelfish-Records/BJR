@@ -8,6 +8,11 @@ import type { PlayerTrack } from "@/lib/types";
 import { muxSignedHlsUrl, muxSignedStaticAudioUrl } from "@/lib/mux";
 import { mediaSurface } from "./mediaSurface";
 import { audioSurface } from "./audioSurface";
+import {
+  averageNormalizedByteSpectrumRange,
+  VISUALIZER_AUDIO_FFT_SIZE,
+  visualizerAudioBandBins,
+} from "./visualizer/audioFeatureBands";
 import type {
   GatePayload,
   GateDomain,
@@ -2590,7 +2595,7 @@ export default function AudioEngine() {
       ctx.addEventListener("statechange", onStateChange);
 
       const analyser = ctx.createAnalyser();
-      analyser.fftSize = 2048;
+      analyser.fftSize = VISUALIZER_AUDIO_FFT_SIZE;
       analyser.smoothingTimeConstant = 0.8;
       analyser.connect(ctx.destination);
       analyserRef.current = analyser;
@@ -2683,23 +2688,33 @@ export default function AudioEngine() {
       const rms = Math.sqrt(sum / time.length);
 
       const n = freq.length;
-      const bassEnd = Math.floor(n * 0.08);
-      const midEnd = Math.floor(n * 0.35);
+      const context = audioCtxRef.current;
+      const sampleRate = context?.sampleRate ?? 48_000;
+      const bands = visualizerAudioBandBins(
+        sampleRate,
+        analyser.fftSize,
+        n,
+      );
 
-      let bass = 0;
-      let mid = 0;
-      let treble = 0;
-
-      for (let i = 0; i < n; i++) {
-        const v = freq[i]! / 255;
-        if (i < bassEnd) bass += v;
-        else if (i < midEnd) mid += v;
-        else treble += v;
-      }
-
-      bass /= bassEnd || 1;
-      mid /= midEnd - bassEnd || 1;
-      treble /= n - midEnd || 1;
+      // Keep the existing Web Audio magnitude domain and analyser smoothing so
+      // the website's tuned excitation envelope remains stable. Only the
+      // semantic ownership of bass/mid/treble changes here: both realtime and
+      // offline now use the same Hz-defined ranges.
+      const bass = averageNormalizedByteSpectrumRange(
+        freq,
+        bands.bassStart,
+        bands.bassEnd,
+      );
+      const mid = averageNormalizedByteSpectrumRange(
+        freq,
+        bands.midStart,
+        bands.midEnd,
+      );
+      const treble = averageNormalizedByteSpectrumRange(
+        freq,
+        bands.trebleStart,
+        bands.trebleEnd,
+      );
 
       let weighted = 0;
       let total = 0;

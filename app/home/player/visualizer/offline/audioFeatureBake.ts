@@ -1,5 +1,9 @@
 // web/app/home/player/visualizer/offline/audioFeatureBake.ts
 import type { AudioFeatures } from "../types";
+import {
+  VISUALIZER_AUDIO_FFT_SIZE,
+  visualizerAudioBandBins,
+} from "../audioFeatureBands";
 import type { AudioFeatureFrame } from "./offlineTypes";
 
 export type AudioFeatureBakeConfig = {
@@ -10,16 +14,7 @@ export type AudioFeatureBakeConfig = {
   smoothing?: number;
 };
 
-type BandBins = {
-  bassStart: number;
-  bassEnd: number;
-  midStart: number;
-  midEnd: number;
-  trebleStart: number;
-  trebleEnd: number;
-};
-
-const DEFAULT_FFT_SIZE = 2048;
+const DEFAULT_FFT_SIZE = VISUALIZER_AUDIO_FFT_SIZE;
 const DEFAULT_SMOOTHING = 0.72;
 const MIN_FFT_SIZE = 256;
 const MAX_FFT_SIZE = 16384;
@@ -165,23 +160,6 @@ function magnitudeSpectrum(frame: Float32Array): Float32Array {
   return spectrum;
 }
 
-function binForHz(hz: number, sampleRate: number, fftSize: number): number {
-  return Math.max(0, Math.floor((hz * fftSize) / sampleRate));
-}
-
-function bandBins(sampleRate: number, fftSize: number): BandBins {
-  const maxBin = Math.floor(fftSize / 2) - 1;
-
-  return {
-    bassStart: binForHz(20, sampleRate, fftSize),
-    bassEnd: Math.min(maxBin, binForHz(250, sampleRate, fftSize)),
-    midStart: Math.min(maxBin, binForHz(250, sampleRate, fftSize)),
-    midEnd: Math.min(maxBin, binForHz(4000, sampleRate, fftSize)),
-    trebleStart: Math.min(maxBin, binForHz(4000, sampleRate, fftSize)),
-    trebleEnd: maxBin,
-  };
-}
-
 function averageSpectrumRange(
   spectrum: Float32Array,
   start: number,
@@ -190,7 +168,7 @@ function averageSpectrumRange(
   let sum = 0;
   let count = 0;
 
-  for (let i = start; i <= end && i < spectrum.length; i += 1) {
+  for (let i = start; i < end && i < spectrum.length; i += 1) {
     sum += spectrum[i] ?? 0;
     count += 1;
   }
@@ -242,7 +220,11 @@ export function bakeAudioFeatureFrames(
   const durationSec = config.durationSec ?? audioBuffer.duration;
   const frameCount = Math.ceil(durationSec * fps);
   const samples = averageChannels(audioBuffer);
-  const bins = bandBins(audioBuffer.sampleRate, fftSize);
+  const bins = visualizerAudioBandBins(
+    audioBuffer.sampleRate,
+    fftSize,
+    Math.floor(fftSize / 2),
+  );
 
   const frames: AudioFeatureFrame[] = [];
 
