@@ -399,6 +399,46 @@ function staticTextFrame(text: string): LyricFrameState {
   };
 }
 
+function normalizeRenderPixelScale(pixelScale: number | undefined): number {
+  if (typeof pixelScale !== "number" || !Number.isFinite(pixelScale)) {
+    return 1;
+  }
+
+  return Math.max(0.1, Math.min(1, pixelScale));
+}
+
+function rendererInitErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Renderer init failed";
+}
+
+function applyDirectedLyricStyle(
+  lyricRenderer: LyricTextRenderer,
+  lyric: LyricFrameState,
+  styleRuntime: LyricStyleRuntime | null,
+): void {
+  if (styleRuntime?.textMode !== "lyrics") return;
+
+  const styleName = directedLyricStyleName(
+    styleRuntime.baseStyleName,
+    lyric.direction,
+  );
+  const formatStyle = applyRenderFormatToLyricStyle(
+    LYRIC_STYLES[styleName],
+    styleRuntime.formatGeometry,
+  );
+  const directedStyle = applyLyricDirectionToStyle(
+    formatStyle ?? {},
+    lyric.direction,
+  );
+
+  lyricRenderer.setStyle(
+    scaleLyricStyle(
+      directedStyle,
+      styleRuntime.lyricPixelScale,
+    ),
+  );
+}
+
 export default function InternalVisualizerRenderPage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rendererRef = useRef<OfflineVisualizerRenderer | null>(null);
@@ -502,12 +542,7 @@ export default function InternalVisualizerRenderPage() {
           const renderer = new OfflineVisualizerRenderer(gl, config);
           await renderer.init();
 
-          const requestedPixelScale = config.pixelScale;
-          const pixelScale =
-            typeof requestedPixelScale === "number" &&
-            Number.isFinite(requestedPixelScale)
-              ? Math.max(0.1, Math.min(1, requestedPixelScale))
-              : 1;
+          const pixelScale = normalizeRenderPixelScale(config.pixelScale);
 
           const compositionWidth = config.compositionWidth ?? config.width;
           const compositionHeight = config.compositionHeight ?? config.height;
@@ -652,9 +687,7 @@ export default function InternalVisualizerRenderPage() {
             `Ready: ${config.themeName} ${config.width}×${config.height} @ ${config.fps}fps`,
           );
         } catch (err) {
-          setMessage(
-            err instanceof Error ? err.message : "Renderer init failed",
-          );
+          setMessage(rendererInitErrorMessage(err));
           throw err;
         }
       },
@@ -688,30 +721,11 @@ export default function InternalVisualizerRenderPage() {
         const lyricRenderer = lyricRendererRef.current;
 
         if (lyric && lyricRenderer) {
-          const styleRuntime = lyricStyleRuntimeRef.current;
-
-          if (styleRuntime?.textMode === "lyrics") {
-            const styleName = directedLyricStyleName(
-              styleRuntime.baseStyleName,
-              lyric.direction,
-            );
-            const formatStyle = applyRenderFormatToLyricStyle(
-              LYRIC_STYLES[styleName],
-              styleRuntime.formatGeometry,
-            );
-            const directedStyle = applyLyricDirectionToStyle(
-              formatStyle ?? {},
-              lyric.direction,
-            );
-
-            lyricRenderer.setStyle(
-              scaleLyricStyle(
-                directedStyle,
-                styleRuntime.lyricPixelScale,
-              ),
-            );
-          }
-
+          applyDirectedLyricStyle(
+            lyricRenderer,
+            lyric,
+            lyricStyleRuntimeRef.current,
+          );
           lyricRenderer.compositeIntoRgbaBuffer(buffer, lyric);
         }
 

@@ -24,7 +24,7 @@ export async function setMarketingPreference(
   const metadata = {
     channel: "email",
     purpose: "releases_events_news",
-    ...(params.metadata ?? {}),
+    ...params.metadata,
   };
 
   const updated = await sql<{ id: string }>`

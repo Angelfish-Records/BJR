@@ -10,7 +10,10 @@ import ExegesisTrackLoadingShell from "@/app/(site)/exegesis/[displayId]/compone
 import ExegesisInlineGateOverlay from "@/app/(site)/exegesis/[displayId]/components/ExegesisInlineGateOverlay";
 import { useMembershipModal } from "@/app/home/MembershipModalProvider";
 import { usePortalViewer } from "@/app/home/PortalViewerProvider";
-import { useGateBroker } from "@/app/home/gating/GateBroker";
+import {
+  useGateBroker,
+  type GateReport,
+} from "@/app/home/gating/GateBroker";
 import {
   fetchPlaybackAccessDecision,
   getCachedPlaybackAccessDecision,
@@ -19,7 +22,10 @@ import {
   gatePayloadFromUnknown,
   gateResultFromPayload,
 } from "@/app/home/gating/fromPayload";
-import type { GatePayload } from "@/app/home/gating/gateTypes";
+import type {
+  GateDomain,
+  GatePayload,
+} from "@/app/home/gating/gateTypes";
 import { isReleaseEmbargoed, resolveEmbargoNote } from "@/lib/embargo";
 import type { Tier } from "@/lib/types";
 
@@ -226,6 +232,79 @@ function buildTrackHref(displayId: string, search: string): string {
 
 function buildIndexHref(search: string): string {
   return `/exegesis${search}`;
+}
+
+function resolveAccessIdentityKey(
+  authLoaded: boolean,
+  isSignedIn: boolean | undefined,
+  userId: string | null | undefined,
+  sessionId: string | null | undefined,
+): string {
+  if (!authLoaded) return "clerk:loading";
+  if (!isSignedIn) return "clerk:anonymous";
+
+  return `clerk:user:${userId ?? ""}:session:${sessionId ?? ""}`;
+}
+
+async function shouldBlockTrackNavigationForAccess(
+  params: Readonly<{
+    accessId: string;
+    shareToken: string | null;
+    accessIdentityKey: string;
+    isSignedIn: boolean;
+    clearGate: (opts?: { domain?: GateDomain }) => void;
+    openMembershipModal: () => void;
+    reportGate: (report: GateReport) => void;
+  }>,
+): Promise<boolean> {
+  const accessRequest = {
+    catalogueId: params.accessId,
+    shareToken: params.shareToken,
+    accessIdentityKey: params.accessIdentityKey,
+  };
+
+  try {
+    const decision =
+      getCachedPlaybackAccessDecision(accessRequest) ??
+      (await fetchPlaybackAccessDecision(accessRequest));
+
+    if (!decision.embargoed || decision.allowed) return false;
+
+    params.clearGate({ domain: "exegesis" });
+
+    if (decision.action === "subscribe") {
+      if (params.isSignedIn) {
+        params.openMembershipModal();
+      } else {
+        params.reportGate({
+          code: "EMBARGO",
+          action: "subscribe",
+          message:
+            decision.reason ??
+            "This album is not released yet. Upgrade for early access.",
+          domain: "exegesis",
+          uiMode: "spotlight",
+          correlationId: decision.corr,
+        });
+      }
+
+      return true;
+    }
+
+    params.reportGate({
+      code: "EMBARGO",
+      action: decision.action ?? "wait",
+      message: decision.reason ?? "This album is not released yet.",
+      domain: "exegesis",
+      uiMode: "global",
+      correlationId: decision.corr,
+    });
+    return true;
+  } catch {
+    // The protected lyrics/thread APIs remain authoritative. A transient
+    // client preflight failure must not strand navigation to released lyrics.
+    return false;
+  }
 }
 
 // ---- cover tint cache (module scope) ----
@@ -1356,11 +1435,12 @@ export default function PortalExegesis() {
   const { reportGate, clearGate } = useGateBroker();
   const { openMembershipModal } = useMembershipModal();
   const { tier: viewerTier, isSignedIn: viewerIsSignedIn } = usePortalViewer();
-  const accessIdentityKey = !authLoaded
-    ? "clerk:loading"
-    : isSignedIn
-      ? `clerk:user:${userId ?? ""}:session:${sessionId ?? ""}`
-      : "clerk:anonymous";
+  const accessIdentityKey = resolveAccessIdentityKey(
+    authLoaded,
+    isSignedIn,
+    userId,
+    sessionId,
+  );
 
   const {
     displayId,
@@ -1457,54 +1537,19 @@ export default function PortalExegesis() {
     const accessId = (albumAccessId ?? "").trim();
     if (!did || !rid) return;
 
-    if (accessId) {
-      const accessRequest = {
-        catalogueId: accessId,
+    if (
+      accessId &&
+      (await shouldBlockTrackNavigationForAccess({
+        accessId,
         shareToken,
         accessIdentityKey,
-      };
-
-      try {
-        const decision =
-          getCachedPlaybackAccessDecision(accessRequest) ??
-          (await fetchPlaybackAccessDecision(accessRequest));
-
-        if (decision.embargoed && !decision.allowed) {
-          clearGate({ domain: "exegesis" });
-
-          if (decision.action === "subscribe") {
-            if (isSignedIn) {
-              openMembershipModal();
-            } else {
-              reportGate({
-                code: "EMBARGO",
-                action: "subscribe",
-                message:
-                  decision.reason ??
-                  "This album is not released yet. Upgrade for early access.",
-                domain: "exegesis",
-                uiMode: "spotlight",
-                correlationId: decision.corr,
-              });
-            }
-
-            return;
-          }
-
-          reportGate({
-            code: "EMBARGO",
-            action: decision.action ?? "wait",
-            message: decision.reason ?? "This album is not released yet.",
-            domain: "exegesis",
-            uiMode: "global",
-            correlationId: decision.corr,
-          });
-          return;
-        }
-      } catch {
-        // The protected lyrics/thread APIs remain authoritative. A transient
-        // client preflight failure must not strand navigation to released lyrics.
-      }
+        isSignedIn: Boolean(isSignedIn),
+        clearGate,
+        openMembershipModal,
+        reportGate,
+      }))
+    ) {
+      return;
     }
 
     const nextHref = buildTrackHref(did, search);

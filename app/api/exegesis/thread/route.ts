@@ -636,11 +636,15 @@ export async function GET(req: NextRequest) {
     : null;
   const anonId =
     embargoContext?.anonId ?? ensureAnonId(req, bootstrapRes).anonId;
-  const viewer: Viewer = embargoContext
-    ? embargoContext.memberId
-      ? { kind: "member", memberId: embargoContext.memberId }
-      : { kind: "anon", anonId }
-    : await getViewer(req, anonId);
+  let viewer: Viewer;
+
+  if (embargoContext?.memberId) {
+    viewer = { kind: "member", memberId: embargoContext.memberId };
+  } else if (embargoContext) {
+    viewer = { kind: "anon", anonId };
+  } else {
+    viewer = await getViewer(req, anonId);
+  }
   const viewerMemberId =
     viewer.kind === "member" && isUuid(viewer.memberId)
       ? viewer.memberId

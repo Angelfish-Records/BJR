@@ -2189,9 +2189,7 @@ export function createOrbitalScriptTheme(): Theme {
         simAccumulatorSec = simStepSec;
         simTimeSec = opts.time - simStepSec;
       } else {
-        if (simTimeSec == null) {
-          simTimeSec = opts.time - simStepSec;
-        }
+        simTimeSec ??= opts.time - simStepSec;
         simAccumulatorSec = Math.min(
           simAccumulatorSec + elapsedSec,
           simStepSec * maxSimStepsPerRender,

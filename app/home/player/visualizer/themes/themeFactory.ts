@@ -251,9 +251,7 @@ export function createPingPongTheme(config: PingPongThemeConfig): Theme {
         pingpong.reset();
         pingpong.clear(gl);
       } else {
-        if (simTimeSec == null) {
-          simTimeSec = opts.time - simStepSec;
-        }
+        simTimeSec ??= opts.time - simStepSec;
         simAccumulatorSec = Math.min(
           simAccumulatorSec + elapsedSec,
           simStepSec * maxSimStepsPerRender,

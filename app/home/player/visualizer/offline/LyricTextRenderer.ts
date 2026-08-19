@@ -159,6 +159,23 @@ function splitWords(text: string): string[] {
   return text.trim().split(/\s+/).filter(Boolean);
 }
 
+function balancedLineCost(
+  width: number,
+  maxWidth: number,
+  isFinalLine: boolean,
+  start: number,
+  end: number,
+  wordCount: number,
+): number {
+  const slack01 = Math.max(0, maxWidth - width) / Math.max(1, maxWidth);
+  const ragCost = slack01 * slack01 * (isFinalLine ? 0.18 : 1);
+  const linePenalty = 0.015;
+  const widowPenalty =
+    isFinalLine && end === start && wordCount - start > 1 ? 0.2 : 0;
+
+  return ragCost + linePenalty + widowPenalty;
+}
+
 function makeCanvas(
   width: number,
   height: number,
@@ -710,12 +727,15 @@ export class LyricTextRenderer {
         if (!tail) continue;
 
         const isFinalLine = end === words.length - 1;
-        const slack01 = Math.max(0, maxWidth - width) / Math.max(1, maxWidth);
-        const ragCost = slack01 * slack01 * (isFinalLine ? 0.18 : 1);
-        const linePenalty = 0.015;
-        const widowPenalty =
-          isFinalLine && end === start && words.length - start > 1 ? 0.2 : 0;
-        const cost = ragCost + linePenalty + widowPenalty + tail.cost;
+        const cost =
+          balancedLineCost(
+            width,
+            maxWidth,
+            isFinalLine,
+            start,
+            end,
+            words.length,
+          ) + tail.cost;
 
         if (!best || cost < best.cost) {
           best = { cost, lines: [line, ...tail.lines] };

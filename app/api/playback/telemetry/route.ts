@@ -980,7 +980,7 @@ export async function POST(req: NextRequest) {
       {
         ok: true,
         deduped: true,
-        ...(anonymousCapState ?? {}),
+        ...anonymousCapState,
       },
       200,
       correlationId,
@@ -1015,7 +1015,7 @@ export async function POST(req: NextRequest) {
     {
       ok: true,
       newlyAwardedBadges,
-      ...(anonymousCapState ?? {}),
+      ...anonymousCapState,
     },
     200,
     correlationId,
