@@ -46,10 +46,7 @@ function safeTestEmailFromPayload(payload) {
 
   if (!candidate || candidate.length > 254) return "";
 
-  for (let index = 0; index < candidate.length; index += 1) {
-    const code = candidate.charCodeAt(index);
-    if (code <= 31 || code === 127) return "";
-  }
+  if (/[\u0000-\u001F\u007F]/u.test(candidate)) return "";
 
   const atIndex = candidate.indexOf("@");
   if (atIndex <= 0 || atIndex !== candidate.lastIndexOf("@")) return "";
