@@ -36,6 +36,7 @@ const STREAMING_PLATFORM_OPTIONS = [
   { title: "Amazon Music", value: "amazonMusic" },
   { title: "Tidal", value: "tidal" },
   { title: "Deezer", value: "deezer" },
+  { title: "Bandcamp", value: "bandcamp" },
 ] as const;
 
 type StreamingPlatform = (typeof STREAMING_PLATFORM_OPTIONS)[number]["value"];

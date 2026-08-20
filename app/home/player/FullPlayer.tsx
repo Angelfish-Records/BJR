@@ -253,7 +253,8 @@ type StreamingPlatform =
   | "youtubeMusic"
   | "amazonMusic"
   | "tidal"
-  | "deezer";
+  | "deezer"
+  | "bandcamp";
 
 type PlatformLink = { platform: StreamingPlatform; url: string };
 
@@ -264,7 +265,8 @@ function isStreamingPlatform(v: unknown): v is StreamingPlatform {
     v === "youtubeMusic" ||
     v === "amazonMusic" ||
     v === "tidal" ||
-    v === "deezer"
+    v === "deezer" ||
+    v === "bandcamp"
   );
 }
 
@@ -370,6 +372,23 @@ function PlatformIcon({ platform }: Readonly<{ platform: StreamingPlatform }>) {
         </svg>
       );
 
+    case "bandcamp":
+      return (
+        <svg {...common} viewBox="0 0 48 48">
+          <circle
+            cx="24"
+            cy="24"
+            r="20"
+            fill="currentColor"
+            opacity="0.18"
+          />
+          <path
+            fill="currentColor"
+            d="M28.36 31.1025H12L19.6398 16.9999H36L28.36 31.1025Z"
+          />
+        </svg>
+      );
+
     default:
       return null;
   }
@@ -387,6 +406,7 @@ function AvailableOnRibbon({
     "amazonMusic",
     "tidal",
     "deezer",
+    "bandcamp",
   ];
 
   const byPlatform = new Map<StreamingPlatform, string>();
