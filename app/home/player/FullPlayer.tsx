@@ -1461,10 +1461,7 @@ export default function FullPlayer(props: FullPlayerProps) {
   const [activeListeners, setActiveListeners] = React.useState<number>(0);
 
   React.useEffect(() => {
-    if (!LIVE_LISTENER_COUNT_ENABLED || !playingish) {
-      setActiveListeners(0);
-      return;
-    }
+    if (!LIVE_LISTENER_COUNT_ENABLED) return;
 
     let cancelled = false;
 
@@ -1519,7 +1516,7 @@ export default function FullPlayer(props: FullPlayerProps) {
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [playingish]);
+  }, []);
 
   const [access, setAccess] = React.useState<AccessState | null>(null);
 

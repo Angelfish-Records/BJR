@@ -7,6 +7,22 @@ import { EVENT_SOURCES, EVENT_TYPES } from "@/lib/vocab";
 export const MARKETING_CONSENT_VERSION = 1;
 export const MARKETING_CONSENT_VERSION_LABEL = "marketing_email_v1";
 
+export async function getMarketingPreference(memberId: string): Promise<boolean> {
+  const result = await sql<{ marketing_opt_in: boolean }>`
+    select marketing_opt_in
+    from members
+    where id = ${memberId}::uuid
+    limit 1
+  `;
+
+  const row = result.rows[0];
+  if (!row) {
+    throw new Error("Marketing preference member not found");
+  }
+
+  return row.marketing_opt_in === true;
+}
+
 type MarketingPreferenceParams = Readonly<{
   memberId: string;
   optedIn: boolean;

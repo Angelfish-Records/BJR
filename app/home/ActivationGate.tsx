@@ -640,6 +640,58 @@ function OtpContent(props: OtpContentProps) {
   );
 }
 
+function MarketingPreferenceSwitch(
+  props: Readonly<{
+    checked: boolean;
+    disabled: boolean;
+    onClick: () => void;
+  }>,
+) {
+  const { checked, disabled, onClick } = props;
+
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-label="Receive marketing email updates"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        width: 44,
+        height: 24,
+        flex: "0 0 auto",
+        borderRadius: 999,
+        border: "1px solid rgba(255,255,255,0.16)",
+        background: checked
+          ? "color-mix(in srgb, var(--accent) 58%, rgba(255,255,255,0.10))"
+          : "rgba(255,255,255,0.07)",
+        position: "relative",
+        padding: 0,
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.58 : 1,
+        transition: "background 160ms ease, opacity 160ms ease",
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          position: "absolute",
+          top: 2,
+          left: 2,
+          width: 18,
+          height: 18,
+          borderRadius: 999,
+          background: "rgba(255,255,255,0.96)",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.30)",
+          transform: `translateX(${checked ? 20 : 0}px)`,
+          transition: "transform 180ms cubic-bezier(.2,.8,.2,1)",
+        }}
+      />
+    </button>
+  );
+}
+
 type MembershipModalProps = Readonly<{
   open: boolean;
   onClose: () => void;
@@ -647,6 +699,10 @@ type MembershipModalProps = Readonly<{
   isPatron: boolean;
   isPartner: boolean;
   subStatus: SubscriptionStatus | null;
+  marketingOptIn: boolean | null;
+  marketingPreferenceBusy: boolean;
+  marketingPreferenceError: string | null;
+  onMarketingPreferenceChange: (optedIn: boolean) => void;
   maxWidth: number;
   minWidth: number;
 }>;
@@ -659,6 +715,10 @@ function MembershipModal(props: MembershipModalProps) {
     isPatron,
     isPartner,
     subStatus,
+    marketingOptIn,
+    marketingPreferenceBusy,
+    marketingPreferenceError,
+    onMarketingPreferenceChange,
     maxWidth,
     minWidth,
   } = props;
@@ -866,6 +926,67 @@ function MembershipModal(props: MembershipModalProps) {
                 Secured by Stripe. Your payment is protected and we will never
                 share your data.
               </span>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 18,
+                padding: "12px 4px 2px",
+                borderTop: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              <div style={{ minWidth: 0, display: "grid", gap: 3 }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    lineHeight: "16px",
+                    fontWeight: 650,
+                    color: "rgba(255,255,255,0.90)",
+                  }}
+                >
+                  Email updates
+                </div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    lineHeight: "15px",
+                    opacity: 0.68,
+                    maxWidth: 620,
+                  }}
+                >
+                  Occasional marketing emails from Brendan John Roch / Angelfish
+                  Records about new releases, events and news. Unsubscribe at any
+                  time.
+                </div>
+                {marketingPreferenceError ? (
+                  <div
+                    role="status"
+                    style={{
+                      fontSize: 10,
+                      lineHeight: "14px",
+                      color: "#ffb4b4",
+                    }}
+                  >
+                    {marketingPreferenceError}
+                  </div>
+                ) : marketingOptIn === null || marketingPreferenceBusy ? (
+                  <div
+                    role="status"
+                    style={{ fontSize: 10, lineHeight: "14px", opacity: 0.52 }}
+                  >
+                    {marketingOptIn === null ? "Loading preference…" : "Saving…"}
+                  </div>
+                ) : null}
+              </div>
+
+              <MarketingPreferenceSwitch
+                checked={marketingOptIn === true}
+                disabled={marketingOptIn === null || marketingPreferenceBusy}
+                onClick={() => onMarketingPreferenceChange(marketingOptIn !== true)}
+              />
             </div>
 
             {(isPatron || isPartner) && (
@@ -1544,6 +1665,13 @@ export default function ActivationGate(props: Props) {
 
   const [subStatus, setSubStatus] = useState<SubscriptionStatus | null>(null);
   const [cancelTipOpen, setCancelTipOpen] = useState(false);
+  const [membershipMarketingOptIn, setMembershipMarketingOptIn] = useState<
+    boolean | null
+  >(null);
+  const [marketingPreferenceBusy, setMarketingPreferenceBusy] = useState(false);
+  const [marketingPreferenceError, setMarketingPreferenceError] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     if (!isActive) {
@@ -1594,6 +1722,54 @@ export default function ActivationGate(props: Props) {
     useMembershipModal();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const emailInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (placement !== "topbar" || !isActive || !isMembershipOpen) {
+      setMembershipMarketingOptIn(null);
+      setMarketingPreferenceBusy(false);
+      setMarketingPreferenceError(null);
+      return;
+    }
+
+    let alive = true;
+    setMembershipMarketingOptIn(null);
+    setMarketingPreferenceBusy(true);
+    setMarketingPreferenceError(null);
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/account/marketing-consent", {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        });
+        const raw: unknown = await response.json().catch(() => null);
+        const data =
+          typeof raw === "object" && raw !== null
+            ? (raw as Record<string, unknown>)
+            : null;
+
+        if (!response.ok || data?.ok !== true) {
+          throw new Error("Unable to load email preference.");
+        }
+        if (typeof data.marketingOptIn !== "boolean") {
+          throw new Error("Email preference response was invalid.");
+        }
+        if (!alive) return;
+
+        setMembershipMarketingOptIn(data.marketingOptIn);
+      } catch {
+        if (!alive) return;
+        setMarketingPreferenceError("Unable to load email preference.");
+      } finally {
+        if (alive) setMarketingPreferenceBusy(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [isActive, isMembershipOpen, placement]);
 
   const emailValid = useMemo(() => {
     const value = email.trim();
@@ -1699,6 +1875,45 @@ export default function ActivationGate(props: Props) {
       console.error("Marketing consent persistence failed", {
         message: getClerkErrorMessage(err),
       });
+    }
+  }
+
+  async function updateMembershipMarketingPreference(
+    optedIn: boolean,
+  ): Promise<void> {
+    if (membershipMarketingOptIn === null || marketingPreferenceBusy) return;
+
+    const previous = membershipMarketingOptIn;
+    setMembershipMarketingOptIn(optedIn);
+    setMarketingPreferenceBusy(true);
+    setMarketingPreferenceError(null);
+
+    try {
+      const response = await fetch("/api/account/marketing-consent", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ optedIn, surface: "membership_modal" }),
+      });
+      const raw: unknown = await response.json().catch(() => null);
+      const data =
+        typeof raw === "object" && raw !== null
+          ? (raw as Record<string, unknown>)
+          : null;
+
+      if (!response.ok || data?.ok !== true) {
+        throw new Error("Unable to save email preference.");
+      }
+      if (typeof data.marketingOptIn !== "boolean") {
+        throw new Error("Email preference response was invalid.");
+      }
+
+      setMembershipMarketingOptIn(data.marketingOptIn);
+    } catch {
+      setMembershipMarketingOptIn(previous);
+      setMarketingPreferenceError("Unable to save email preference.");
+    } finally {
+      setMarketingPreferenceBusy(false);
     }
   }
 
@@ -1832,7 +2047,11 @@ export default function ActivationGate(props: Props) {
     />
   );
 
-  const membershipModalOpen = isMembershipOpen && isActive;
+  // ActivationGate is mounted in both topbar and spotlight presentations.
+  // The persistent topbar instance exclusively owns the global membership modal
+  // so one open action cannot render duplicate fixed dialogs.
+  const membershipModalOpen =
+    placement === "topbar" && isMembershipOpen && isActive;
   const membershipModal = (
     <MembershipModal
       open={membershipModalOpen}
@@ -1841,6 +2060,12 @@ export default function ActivationGate(props: Props) {
       isPatron={isPatron}
       isPartner={isPartner}
       subStatus={subStatus}
+      marketingOptIn={membershipMarketingOptIn}
+      marketingPreferenceBusy={marketingPreferenceBusy}
+      marketingPreferenceError={marketingPreferenceError}
+      onMarketingPreferenceChange={(optedIn) => {
+        void updateMembershipMarketingPreference(optedIn);
+      }}
       maxWidth={BILLING_MODAL_MAX_W}
       minWidth={BILLING_MODAL_MIN_W}
     />
