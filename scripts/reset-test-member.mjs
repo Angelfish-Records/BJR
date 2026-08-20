@@ -45,8 +45,22 @@ function safeTestEmailFromPayload(payload) {
     typeof payload?.testEmail === "string" ? payload.testEmail : "";
 
   if (!candidate || candidate.length > 254) return "";
-  if (/[\u0000-\u001F\u007F]/.test(candidate)) return "";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate)) return "";
+
+  for (let index = 0; index < candidate.length; index += 1) {
+    const code = candidate.charCodeAt(index);
+    if (code <= 31 || code === 127) return "";
+  }
+
+  const atIndex = candidate.indexOf("@");
+  if (atIndex <= 0 || atIndex !== candidate.lastIndexOf("@")) return "";
+
+  const domain = candidate.slice(atIndex + 1);
+  if (!domain || domain.length > 253) return "";
+
+  const dotIndex = domain.lastIndexOf(".");
+  if (dotIndex <= 0 || dotIndex === domain.length - 1) return "";
+
+  if (candidate.includes(" ")) return "";
 
   return candidate;
 }
