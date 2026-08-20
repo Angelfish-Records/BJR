@@ -122,7 +122,9 @@ function toCount(value: unknown): number {
 }
 
 function difference(left: Set<string>, right: Set<string>): string[] {
-  return [...left].filter((value) => !right.has(value)).sort();
+  return [...left]
+    .filter((value) => !right.has(value))
+    .sort((leftValue, rightValue) => leftValue.localeCompare(rightValue));
 }
 
 async function deleteClerkUser(
@@ -331,6 +333,13 @@ function blockerLabels(
   return blockers;
 }
 
+function blockerResponseInit(
+  blockers: readonly string[],
+): ResponseInit | undefined {
+  if (blockers.length > 0) return { status: 409 };
+  return undefined;
+}
+
 async function cleanupAddressWithoutMember(email: string) {
   const client = await db.connect();
 
@@ -494,6 +503,48 @@ async function verifyClean(email: string) {
   };
 }
 
+async function handleMissingMember(
+  params: Readonly<{
+    testEmail: string;
+    body: ResetRequestBody | null;
+    dryRun: boolean;
+    schemaDrift: Awaited<ReturnType<typeof inspectSchemaDrift>>;
+  }>,
+): Promise<NextResponse> {
+  const { testEmail, body, dryRun, schemaDrift } = params;
+
+  if (dryRun) {
+    return NextResponse.json({
+      ok: true,
+      dryRun: true,
+      testEmail,
+      memberFound: false,
+      blockers: [],
+      schemaDrift,
+      residualAddressState: await verifyClean(testEmail),
+    });
+  }
+
+  if (normalizeEmail(body?.confirmEmail ?? "") !== testEmail) {
+    return NextResponse.json(
+      { ok: false, error: "Exact test-email confirmation required" },
+      { status: 400 },
+    );
+  }
+
+  const cleanup = await cleanupAddressWithoutMember(testEmail);
+
+  return NextResponse.json({
+    ok: true,
+    dryRun: false,
+    testEmail,
+    memberFound: false,
+    addressStateCleared: true,
+    cleanup,
+    verification: await verifyClean(testEmail),
+  });
+}
+
 export async function POST(req: NextRequest) {
   const adminSecret = mustEnv("ADMIN_NUKE_SECRET");
   if ((req.headers.get("x-admin-secret") ?? "") !== adminSecret) {
@@ -531,35 +582,11 @@ export async function POST(req: NextRequest) {
   const member = await loadMember(testEmail);
 
   if (!member) {
-    if (dryRun) {
-      return NextResponse.json({
-        ok: true,
-        dryRun: true,
-        testEmail,
-        memberFound: false,
-        blockers: [],
-        schemaDrift,
-        residualAddressState: await verifyClean(testEmail),
-      });
-    }
-
-    if (normalizeEmail(body?.confirmEmail ?? "") !== testEmail) {
-      return NextResponse.json(
-        { ok: false, error: "Exact test-email confirmation required" },
-        { status: 400 },
-      );
-    }
-
-    const cleanup = await cleanupAddressWithoutMember(testEmail);
-
-    return NextResponse.json({
-      ok: true,
-      dryRun: false,
+    return handleMissingMember({
       testEmail,
-      memberFound: false,
-      addressStateCleared: true,
-      cleanup,
-      verification: await verifyClean(testEmail),
+      body,
+      dryRun,
+      schemaDrift,
     });
   }
 
@@ -582,7 +609,7 @@ export async function POST(req: NextRequest) {
         blockers,
         schemaDrift,
       },
-      blockers.length > 0 ? { status: 409 } : undefined,
+      blockerResponseInit(blockers),
     );
   }
 

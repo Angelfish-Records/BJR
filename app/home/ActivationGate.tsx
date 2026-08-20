@@ -707,6 +707,24 @@ type MembershipModalProps = Readonly<{
   minWidth: number;
 }>;
 
+type MarketingPreferenceStatus = Readonly<{
+  text: string;
+  kind: "error" | "progress";
+}>;
+
+function getMarketingPreferenceStatus(
+  error: string | null,
+  marketingOptIn: boolean | null,
+  busy: boolean,
+): MarketingPreferenceStatus | null {
+  if (error) return { text: error, kind: "error" };
+  if (marketingOptIn === null) {
+    return { text: "Loading preference…", kind: "progress" };
+  }
+  if (busy) return { text: "Saving…", kind: "progress" };
+  return null;
+}
+
 function MembershipModal(props: MembershipModalProps) {
   const {
     open,
@@ -722,6 +740,12 @@ function MembershipModal(props: MembershipModalProps) {
     maxWidth,
     minWidth,
   } = props;
+
+  const marketingPreferenceStatus = getMarketingPreferenceStatus(
+    marketingPreferenceError,
+    marketingOptIn,
+    marketingPreferenceBusy,
+  );
 
   if (!open) return null;
 
@@ -961,25 +985,27 @@ function MembershipModal(props: MembershipModalProps) {
                   Records about new releases, events and news. Unsubscribe at any
                   time.
                 </div>
-                {marketingPreferenceError ? (
-                  <div
-                    role="status"
+                {marketingPreferenceStatus && (
+                  <output
+                    aria-live="polite"
+                    aria-atomic="true"
                     style={{
+                      display: "block",
                       fontSize: 10,
                       lineHeight: "14px",
-                      color: "#ffb4b4",
+                      color:
+                        marketingPreferenceStatus.kind === "error"
+                          ? "#ffb4b4"
+                          : undefined,
+                      opacity:
+                        marketingPreferenceStatus.kind === "progress"
+                          ? 0.52
+                          : undefined,
                     }}
                   >
-                    {marketingPreferenceError}
-                  </div>
-                ) : marketingOptIn === null || marketingPreferenceBusy ? (
-                  <div
-                    role="status"
-                    style={{ fontSize: 10, lineHeight: "14px", opacity: 0.52 }}
-                  >
-                    {marketingOptIn === null ? "Loading preference…" : "Saving…"}
-                  </div>
-                ) : null}
+                    {marketingPreferenceStatus.text}
+                  </output>
+                )}
               </div>
 
               <MarketingPreferenceSwitch
@@ -1753,7 +1779,7 @@ export default function ActivationGate(props: Props) {
           throw new Error("Unable to load email preference.");
         }
         if (typeof data.marketingOptIn !== "boolean") {
-          throw new Error("Email preference response was invalid.");
+          throw new TypeError("Email preference response was invalid.");
         }
         if (!alive) return;
 
@@ -1905,7 +1931,7 @@ export default function ActivationGate(props: Props) {
         throw new Error("Unable to save email preference.");
       }
       if (typeof data.marketingOptIn !== "boolean") {
-        throw new Error("Email preference response was invalid.");
+        throw new TypeError("Email preference response was invalid.");
       }
 
       setMembershipMarketingOptIn(data.marketingOptIn);

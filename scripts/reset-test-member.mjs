@@ -34,24 +34,34 @@ async function post(body) {
   try {
     payload = JSON.parse(text);
   } catch {
-    payload = { raw: text };
+    payload = null;
   }
 
   return { response, payload };
 }
 
+function safeTestEmailFromPayload(payload) {
+  const candidate =
+    typeof payload?.testEmail === "string" ? payload.testEmail : "";
+
+  if (!candidate || candidate.length > 254) return "";
+  if (/[\u0000-\u001F\u007F]/.test(candidate)) return "";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate)) return "";
+
+  return candidate;
+}
+
 const dry = await post({ dryRun: true });
 
 console.log("\n--- TEST MEMBER RESET DRY RUN ---");
-console.log(JSON.stringify(dry.payload, null, 2));
+console.log("Dry-run response received.");
 
 if (!dry.response.ok) {
   console.error(`\nReset refused by server (HTTP ${dry.response.status}).`);
   process.exit(1);
 }
 
-const testEmail =
-  typeof dry.payload?.testEmail === "string" ? dry.payload.testEmail : "";
+const testEmail = safeTestEmailFromPayload(dry.payload);
 
 if (!testEmail) {
   console.error("\nServer did not return the configured test email.");
@@ -63,7 +73,7 @@ const blockers = Array.isArray(dry.payload?.blockers)
   : [];
 
 if (blockers.length > 0) {
-  console.error("\nReset blocked:", blockers.join(", "));
+  console.error("\nReset blocked by server-reported dependency state.");
   process.exit(1);
 }
 
@@ -89,7 +99,7 @@ const executed = await post({
 });
 
 console.log("\n--- TEST MEMBER RESET RESULT ---");
-console.log(JSON.stringify(executed.payload, null, 2));
+console.log("Execution response received.");
 
 if (!executed.response.ok || executed.payload?.ok !== true) {
   console.error(`\nReset failed (HTTP ${executed.response.status}).`);
