@@ -372,22 +372,23 @@ function PlatformIcon({ platform }: Readonly<{ platform: StreamingPlatform }>) {
         </svg>
       );
 
-    case "bandcamp":
+    case "bandcamp": {
+      const bandcampIcon = {
+        width: 22,
+        height: 22,
+        "aria-hidden": true as const,
+      };
+
       return (
-        <svg {...common} viewBox="0 0 48 48">
-          <circle
-            cx="24"
-            cy="24"
-            r="20"
-            fill="currentColor"
-            opacity="0.18"
-          />
+        <svg {...bandcampIcon} viewBox="0 0 48 48">
+          <circle cx="24" cy="24" r="20" fill="rgba(255,255,255,0.82)" />
           <path
-            fill="currentColor"
+            fill="rgba(0,0,0,0.82)"
             d="M28.36 31.1025H12L19.6398 16.9999H36L28.36 31.1025Z"
           />
         </svg>
       );
+    }
 
     default:
       return null;
