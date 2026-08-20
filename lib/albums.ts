@@ -285,16 +285,21 @@ const getCachedFeaturedAlbumSlugDoc = unstable_cache(
   },
 );
 
-const getCachedAlbumDocumentBySlug = unstable_cache(
-  async (slug: string): Promise<AlbumDoc | null> => {
-    return client.fetch<AlbumDoc | null>(albumBySlugQuery, { slug });
-  },
-  ["album-document-by-slug-v1"],
-  {
-    revalidate: STATIC_CATALOGUE_REVALIDATE_SECONDS,
-    tags: ["albums"],
-  },
-);
+async function getCachedAlbumDocumentBySlug(
+  slug: string,
+): Promise<AlbumDoc | null> {
+  // The complete album document contains editorial/runtime metadata such as
+  // description, platform links, artwork, policy and track configuration.
+  // Fetch it request-fresh so ordinary Sanity publishes do not depend on the
+  // external revalidation webhook succeeding before visitors see the change.
+  //
+  // Broader catalogue surfaces and lyrics retain their explicit caches below.
+  return client.fetch<AlbumDoc | null>(
+    albumBySlugQuery,
+    { slug },
+    { cache: "no-store" },
+  );
+}
 
 const getCachedLyricsByRecordingIds = unstable_cache(
   async (recordingIds: string[]): Promise<TrackLyricsDoc[]> => {
