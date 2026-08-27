@@ -2298,9 +2298,7 @@ export default function FullPlayer(props: FullPlayerProps) {
                       padding: 12,
                       borderRadius: 16,
                       border: "none",
-                      background: isActive
-                        ? "color-mix(in srgb, var(--accent) 10%, rgba(255,255,255,0.05))"
-                        : "rgba(255,255,255,0.03)",
+                      background: "transparent",
                       color: "rgba(255,255,255,0.92)",
                       cursor: disabled ? "default" : "pointer",
                       opacity: disabled ? 0.72 : 1,
