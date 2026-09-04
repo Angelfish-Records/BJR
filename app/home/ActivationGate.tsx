@@ -405,11 +405,24 @@ function OtpBoxes(
             }}
             inputMode="numeric"
             pattern="[0-9]*"
+            autoComplete={i === 0 ? "one-time-code" : "off"}
             value={d === "_" ? "" : d}
             disabled={disabled}
             onChange={(e) => {
               const n = normalizeDigits(e.target.value);
-              const ch = n.slice(-1);
+
+              // Mobile OTP autofill can inject the complete one-time code into
+              // the focused first box in one input event. Treat a multi-digit
+              // insertion as a bulk OTP payload rather than collapsing it to
+              // the final digit.
+              if (n.length > 1) {
+                onChange(n);
+                const idx = Math.min(5, n.length - 1);
+                setTimeout(() => focus(idx), 0);
+                return;
+              }
+
+              const ch = n;
               const arr = value.split("");
               while (arr.length < 6) arr.push("");
               arr[i] = ch;

@@ -44,7 +44,10 @@ type ThemeName =
   | "singularity-nursery"
   | "reef-wall"
   | "crystal-cathedral"
-  | "wormhole-throat";
+  | "wormhole-throat"
+  | "apparatus"
+  | "censorium"
+  | "lockstep";
 
 type RenderRequest = {
   recordingId: string;
@@ -98,6 +101,9 @@ const THEMES: ThemeName[] = [
   "reef-wall",
   "crystal-cathedral",
   "wormhole-throat",
+  "apparatus",
+  "censorium",
+  "lockstep",
 ];
 
 const PREVIEW_SOURCE_EXTENSIONS = /\.(css|ts|tsx)$/i;

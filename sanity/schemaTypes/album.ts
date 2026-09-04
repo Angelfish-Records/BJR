@@ -21,6 +21,9 @@ const THEME_OPTIONS = [
   { title: "Coral Reef Wall", value: "reef-wall" },
   { title: "Temporal Crystal Cathedral", value: "crystal-cathedral" },
   { title: "Wormhole Throat", value: "wormhole-throat" },
+  { title: "The Apparatus", value: "apparatus" },
+  { title: "Censorium", value: "censorium" },
+  { title: "Lockstep", value: "lockstep" },
 ];
 
 const TIER_OPTIONS = [

@@ -24,6 +24,9 @@ type SingularityMod = typeof import("../themes/singularityNursery");
 type ReefMod = typeof import("../themes/coralReefWall");
 type CathedralMod = typeof import("../themes/temporalCrystalCathedral");
 type WormholeMod = typeof import("../themes/wormholeThroat");
+type ApparatusMod = typeof import("../themes/apparatus");
+type CensoriumMod = typeof import("../themes/censorium");
+type LockstepMod = typeof import("../themes/lockstep");
 
 export type ThemeName =
   | "nebula"
@@ -44,7 +47,10 @@ export type ThemeName =
   | "singularity-nursery"
   | "reef-wall"
   | "crystal-cathedral"
-  | "wormhole-throat";
+  | "wormhole-throat"
+  | "apparatus"
+  | "censorium"
+  | "lockstep";
 
 const themeCache = new Map<ThemeName, ThemeFactory>();
 
@@ -142,6 +148,18 @@ export function canonicalThemeName(raw: string | undefined | null): ThemeName {
     case "wormhole":
       return "wormhole-throat";
 
+    case "the-apparatus":
+    case "apparatus":
+      return "apparatus";
+
+    case "censorium":
+    case "overprint":
+      return "censorium";
+
+    case "lockstep":
+    case "phase-lock":
+      return "lockstep";
+
     case "nebula":
     default:
       return "nebula";
@@ -222,6 +240,18 @@ const THEME_LOADERS: Record<ThemeName, () => Promise<ThemeFactory>> = {
   "wormhole-throat": async () =>
     ((await import("../themes/wormholeThroat")) as WormholeMod)
       .createWormholeThroatTheme,
+
+  apparatus: async () =>
+    ((await import("../themes/apparatus")) as ApparatusMod)
+      .createApparatusTheme,
+
+  censorium: async () =>
+    ((await import("../themes/censorium")) as CensoriumMod)
+      .createCensoriumTheme,
+
+  lockstep: async () =>
+    ((await import("../themes/lockstep")) as LockstepMod)
+      .createLockstepTheme,
 };
 
 export async function loadThemeFactory(
