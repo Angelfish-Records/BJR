@@ -14,6 +14,7 @@ type UploadStatusResponse =
       ready: boolean;
       assetId?: string;
       playbackId?: string | null;
+      staticAudioStatus?: string;
     }
   | { ok: false; error: string };
 
@@ -45,7 +46,7 @@ export default function MuxUploader(
   async function pollUntilReady(
     id: string,
   ): Promise<{ assetId?: string; playbackId: string }> {
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 240; i++) {
       const res = await fetch("/api/mux/upload-status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -55,14 +56,21 @@ export default function MuxUploader(
       if (!data.ok)
         throw new Error(data.error || "Failed to read upload status");
 
-      setStatus(data.status || "processing");
+      const muxStatus = data.status || "processing";
+      setStatus(
+        data.staticAudioStatus && data.staticAudioStatus !== "ready"
+          ? `${muxStatus} / audio ${data.staticAudioStatus}`
+          : muxStatus,
+      );
 
       const pb = data.playbackId ?? null;
       if (data.ready && pb) return { assetId: data.assetId, playbackId: pb };
 
       await new Promise((r) => setTimeout(r, 1500));
     }
-    throw new Error("Timed out waiting for playbackId");
+    throw new Error(
+      "Timed out waiting for playback ID and static audio rendition",
+    );
   }
 
   async function handleFile(file: File) {

@@ -26,12 +26,29 @@ export async function POST(req: Request) {
 
   const asset = await mux.video.assets.retrieve(assetId);
   const playbackId = asset.playback_ids?.[0]?.id;
+  const staticAudio = asset.static_renditions?.files?.find(
+    (file) => file.name === "audio.m4a" || file.resolution === "audio-only",
+  );
+  const staticAudioStatus = staticAudio?.status ?? "preparing";
+
+  if (staticAudioStatus === "errored" || staticAudioStatus === "skipped") {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `Static audio rendition ${staticAudioStatus}`,
+      },
+      { status: 502 },
+    );
+  }
+
+  const ready = Boolean(playbackId) && staticAudioStatus === "ready";
 
   return NextResponse.json({
     ok: true,
     status: upload.status,
-    ready: Boolean(playbackId),
+    ready,
     assetId,
-    playbackId: playbackId ?? null,
+    playbackId: ready ? playbackId : null,
+    staticAudioStatus,
   });
 }
