@@ -1,7 +1,7 @@
 // web/lib/embargo.ts
 
 export const DEFAULT_EMBARGO_NOTE =
-  "Disabled pre-release. Patrons have instant early access.";
+  "Patrons have instant early access.";
 
 export function isReleaseEmbargoed(
   releaseAt: string | null | undefined,
