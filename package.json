@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-"reset:test-member": "node --env-file=.env.local scripts/reset-test-member.mjs",
+    "reset:test-member": "node --env-file=.env.local scripts/reset-test-member.mjs",
     "format": "prettier . --write",
     "format:check": "prettier . --check"
   },
@@ -30,7 +30,7 @@
     "@vercel/postgres": "^0.10.0",
     "hls.js": "^1.6.15",
     "jose": "^6.1.3",
-    "next": "16.3.1",
+    "next": "16.3.5",
     "next-sanity": "^11.6.12",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -47,11 +47,12 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.3.1",
+    "eslint-config-next": "16.3.5",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
   "overrides": {
-    "@sanity/uuid": "3.0.3"
+    "@sanity/uuid": "3.0.3",
+    "adm-zip": "0.6.1"
   }
 }
